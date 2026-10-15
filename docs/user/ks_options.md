@@ -151,6 +151,17 @@ and density-fitted execution remain excluded from incremental mode, and the
 legacy selector retains its PBE0 RKS restriction. No default or numerical/
 performance qualification changes with this planning guard.
 
+Screened incremental builds retain the last full-density J/K anchor: every
+delta is relative to that density, and does not replace the anchor with another
+screened reconstruction. This prevents screening omissions from accumulating
+through a chain of delta builds without forcing full/delta alternation. The
+`GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL` control sets the maximum
+number of delta builds between full refreshes (default 8; 0 disables periodic
+refresh). The optional density-RMS gate can still request an earlier full build.
+Unscreened exact-linear providers may advance the anchor after each delta.
+The `anchor_updates` diagnostic counts those advances, not fixed-anchor deltas.
+These experimental policies remain off by default and are not speedup guarantees.
+
 Incremental solves return to full-density J/K builds once the density-change and
 physical-residual gates are satisfied, even if the energy-change gate is not yet
 satisfied. This full-density energy refinement keeps the original DIIS history

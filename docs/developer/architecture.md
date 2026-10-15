@@ -487,6 +487,16 @@ SCF comparison baseline. The original energy and density tolerances still
 apply, but an already converged fixed point may finish after one Graph replay
 instead of an artificial two-replay minimum. The diagnostic
 `GENERATIVEQC_FINAL_FOCK_REBUILD=1` restores the complete rebuild for A/B checks.
+Opt-in incremental Direct-J/K normally retains strict full physical
+finalization. A provenance-matched, unchanged-geometry resident warm bucket
+may reuse the ordinary force-ready path only when every item's actual delta
+build count is zero. The driver restores the last full-anchor density, paired
+with its physical Fock, pre-DIIS residual, energy and tracked determinant
+orbitals; it does not publish the proposed next density with the old Fock.
+Any delta in the bucket, unproven/external seed, changed geometry or explicit
+final-rebuild request preserves canonical finalization. This narrowly bounded
+CUDA HF optimization does not change KS finalization or enable incremental
+J/K by default.
 Component-unrolled/Rys quartet kernels and finer AO-level task compaction
 remain subsequent scheduler work. Direct quartets
 always operate on normalized Cartesian source AOs. For a public real-spherical

@@ -58,7 +58,7 @@ struct Consumer {
   bool incremental_direct_jk=true, incremental_anchored=false, pending_incremental_delta=false;
   bool incremental_energy_refinement=false;
   unsigned incremental_energy_full_builds=0;
-  bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=false;
+  bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=true;
   unsigned incremental_delta_updates=0;
   std::size_t elements=1,matrix=1;
   int stream=0;
@@ -73,14 +73,17 @@ struct Consumer {
   Consumer() {
     options.incremental_direct_jk=true;
     options.screening_tolerance=0.0;
-    options.incremental_direct_jk_rebuild_interval=0;
+    options.incremental_direct_jk_rebuild_interval=3;
     scf::ResolvedFockBuild strategy;
     strategy.backend=scf::FockBackend::Cuda;
     strategy.screening_tolerance=1e-12;
     strategy.spec.coulomb.present=true;
     strategy.spec.coulomb.approximation=scf::FockApproximation::Exact;
     const bool fock_binding=true,fitted_coulomb=false;
-    std::optional<scf::ResolvedFockBuild> range_correction;
+    std::optional<scf::ResolvedFockBuild> range_correction(strategy);
+    range_correction->spec.coulomb.present=false;
+    range_correction->spec.exchange.present=true;
+    range_correction->spec.exchange.approximation=scf::FockApproximation::Exact;
     struct {bool any_lower_precision()const{return false;}} precision_schedule;
 """
     unit += source[policy_start:policy_end]
@@ -98,9 +101,10 @@ struct Consumer {
     final_closure=closure;
     const auto* input=prepare_incremental_jk_density();
     // Independent linear J/K oracle for the actual reconstruction controller.
-    jv=2*(*input); kv=3*(*input);
+    jv=2*(*input); kv=3*(*input); rv=5*(*input);
     finalize_incremental_jk_components();
-    require(jv==2*d && kv==3*d,"full/delta raw J/K reconstruction changed the operator");
+    require(jv==2*d && kv==3*d && rv==5*d,
+            "full/delta raw J/K/range-K reconstruction changed the operator");
     ++output.iterations;
     d+=0.125;
   }
@@ -147,18 +151,24 @@ int main(int argc,char** argv) {
     const unsigned accepted=std::stoul(argv[1]);
     Consumer c;
     require(c.incremental_direct_jk && c.incremental_direct_jk_policy.active &&
-                c.incremental_direct_jk_policy.effective_rebuild_interval==1,
-            "native options bypassed the prepared provider screening cadence");
-    for(unsigned i=0;i<accepted;++i)c.build(false);
+                c.incremental_direct_jk_policy.effective_rebuild_interval==3 &&
+                c.incremental_direct_jk_policy.fixed_full_density_anchor,
+            "native options bypassed the prepared provider full-anchor policy");
+    for(unsigned i=0;i<accepted;++i) {
+      const double anchor=c.a;
+      const bool delta=c.incremental_delta_admitted();
+      c.build(false);
+      if(delta) require(c.a==anchor,"screened delta replaced the full-density anchor");
+    }
     c.build(true);
     const auto& work=c.output.incremental_direct_jk;
-    const auto full=(accepted+1)/2,delta=accepted/2;
+    const auto full=(accepted+3)/4,delta=accepted-full;
     require(work.anchor_full_builds==full && work.delta_builds==delta,
-            "screened controller did not alternate accepted full/delta builds");
+            "screened controller did not honor the requested full-anchor cadence");
     require(work.periodic_rebuilds==full-1 && work.post_scf_full_builds==1,
             "periodic and final full builds lost their distinct accounting");
     if(accepted==2) require(work.periodic_rebuilds==0,"early convergence invented a refresh");
-    if(accepted>=3) require(work.periodic_rebuilds>0,"required refresh branch did not execute");
+    if(accepted>=5) require(work.periodic_rebuilds>0,"required refresh branch did not execute");
   } catch(const std::exception& error) {std::cerr<<error.what();return 1;}
   return 0;
 }

@@ -238,11 +238,12 @@ __global__ void prepare_incremental_direct_jk_kernel(
   }
 }
 
-/** Advance the retained full-Fock/density anchor after one completed Direct-J/K build. */
+/** Only full builds replace a screened anchor; unscreened anchors may roll forward. */
 __global__ void finalize_incremental_direct_jk_kernel(
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf, const double* density,
-    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
-    double* fock, std::uint32_t* delta_updates, const std::uint8_t* full_build) {
+    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
+    bool fixed_full_density_anchor, const double* density, const double* hcore,
+    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
+    std::uint32_t* delta_updates, const std::uint8_t* full_build) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
@@ -255,8 +256,10 @@ __global__ void finalize_incremental_direct_jk_kernel(
   const double combined =
       fock[element] + anchor_fock[element] - hcore[system * matrix_size + physical_element];
   fock[element] = combined;
-  anchor_density[element] = density[element];
-  anchor_fock[element] = combined;
+  if (!fixed_full_density_anchor || full_build[system] != 0U) {
+    anchor_density[element] = density[element];
+    anchor_fock[element] = combined;
+  }
   if (local == 0U) {
     delta_updates[system] = full_build[system] != 0U ? 0U : delta_updates[system] + 1U;
   }
@@ -371,12 +374,13 @@ void launch_prepare_incremental_direct_jk_kernel(
 
 void launch_finalize_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
-    std::int32_t spin_count, std::int32_t nbf, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
-    std::uint32_t* delta_updates, const std::uint8_t* full_build) {
+    std::int32_t spin_count, std::int32_t nbf, bool fixed_full_density_anchor,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* fock, std::uint32_t* delta_updates,
+    const std::uint8_t* full_build) {
   finalize_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, density, hcore, active, anchor_density, anchor_fock, fock,
-      delta_updates, full_build);
+      batch_size, spin_count, nbf, fixed_full_density_anchor, density, hcore, active,
+      anchor_density, anchor_fock, fock, delta_updates, full_build);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

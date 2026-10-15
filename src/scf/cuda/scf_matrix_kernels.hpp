@@ -91,11 +91,12 @@ void launch_prepare_incremental_direct_jk_kernel(
     unsigned long long* full_build_count, unsigned long long* delta_build_count,
     double* max_abs_delta_density);
 
-/** Combine h+G(ΔD) with the retained full-Fock anchor, then advance the exact anchor. */
+/** Reconstruct h+G(D). Screened deltas leave the last full-density anchor intact. */
 void launch_finalize_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
-    std::int32_t spin_count, std::int32_t nbf, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* fock,
-    std::uint32_t* delta_updates, const std::uint8_t* full_build);
+    std::int32_t spin_count, std::int32_t nbf, bool fixed_full_density_anchor,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* fock, std::uint32_t* delta_updates,
+    const std::uint8_t* full_build);
 
 }  // namespace generativeqc::scf::cuda_execution

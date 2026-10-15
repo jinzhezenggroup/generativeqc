@@ -1039,8 +1039,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   const bool bounded_direct_streaming = plan.bounded_direct_streaming;
   const bool incremental_direct_jk = plan.incremental_direct_jk;
-  // #990 always performs an ordinary full final build. Do not publish a
-  // retained iteration Fock through the converged-Fock shortcut.
+  // Screened incremental iterations cannot license retained-Fock publication.
+  // A provenance-matched warm solve may prove below that it used no deltas.
   const bool reuse_converged_fock = plan.reuse_converged_fock && !incremental_direct_jk;
   const bool mixed_precision_fock = plan.mixed_precision_fock;
   const double mixed_precision_fock_threshold = plan.mixed_precision_fock_threshold;
@@ -1148,7 +1148,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // force/reuse capability, not on whether a particular warm seed has valid
   // provenance; unproven seeds still execute the copy but cannot publish it.
   const bool track_force_final_orbitals =
-      options.compute_forces && !options.export_physical_reference && reuse_converged_fock;
+      options.compute_forces && !options.export_physical_reference && plan.reuse_converged_fock;
   // Copy the tiny seed vector locally before invalidating residency. Any
   // early CUDA or validation failure below may have partially changed the
   // device density; only a fully successful execution republishes it.
@@ -3229,9 +3229,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const bool incremental_iteration_enabled =
       incremental_direct_jk && !bounded_direct_count_diagnostic &&
       !bounded_direct_aot_only_diagnostic && !bounded_direct_fock_only_diagnostic;
-  // The shared SCF policy owns the conservative refresh rule for a lower that
-  // screens on delta-density magnitude. Device execution only consumes the
-  // already-resolved cadence.
+  // Screened anchors remain fixed between full refreshes, so honoring the
+  // requested cadence cannot accumulate a chain of delta screening omissions.
   const std::uint32_t incremental_rebuild_interval =
       static_cast<std::uint32_t>(incremental_direct_jk_policy.effective_rebuild_interval);
   if (incremental_direct_jk) {
@@ -3295,8 +3294,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     launch_finalize_incremental_direct_jk_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-        static_cast<std::int32_t>(nbf), density_input, hcore, active, incremental_anchor_density,
-        incremental_anchor_fock, fock, incremental_delta_updates, incremental_full_build);
+        static_cast<std::int32_t>(nbf), incremental_direct_jk_policy.fixed_full_density_anchor,
+        density_input, hcore, active, incremental_anchor_density, incremental_anchor_fock, fock,
+        incremental_delta_updates, incremental_full_build);
     return cudaPeekAtLastError();
   };
 
@@ -3405,9 +3405,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // the legacy canonical correction as a bounded fallback/A-B path.
   const bool stationary_force_required =
       options.compute_forces && !options.export_physical_reference;
-  const bool scf_force_ready_state =
+  bool scf_force_ready_state =
       stationary_force_required && reuse_converged_fock && force_ready_seed_provenance;
-  const bool force_finalization_fallback = stationary_force_required && !scf_force_ready_state;
+  bool force_finalization_fallback = stationary_force_required && !scf_force_ready_state;
   plan.last_direct_final_state = {};
   if (stationary_force_required) {
     plan.last_direct_final_state.route = scf_force_ready_state
@@ -3911,6 +3911,53 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       fill_global_failure(outputs,
                           status != GENERATIVEQC_STATUS_SUCCESS ? status : cuda_status(cuda_error));
       return outputs;
+    }
+  }
+  std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
+  bool incremental_delta_counts_downloaded = false;
+  if (incremental_iteration_enabled && stationary_force_required && plan.reuse_converged_fock &&
+      all_systems_warm && force_ready_seed_provenance) {
+    // The option alone must not force canonicalization when the complete bucket
+    // used ordinary full-density Focks. Inspect actual work, not iteration count;
+    // any delta or unproven seed retains the strict bounded fallback.
+    cuda_error = runtime::residency_memcpy_async(
+        residency_execution, SourceRole::iteration, SourceSite::hf_final_fock_count,
+        SourcePayload::incremental_delta_count, host_incremental_delta_build_count.data(),
+        incremental_delta_build_count, batch_size * sizeof(unsigned long long),
+        cudaMemcpyDeviceToHost, resources.stream_);
+    if (cuda_error == cudaSuccess) {
+      cuda_error = runtime::residency_stream_synchronize(
+          residency_execution, SourceRole::iteration, SourceSite::hf_final_fock_fence,
+          resources.stream_);
+    }
+    if (cuda_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+    incremental_delta_counts_downloaded = true;
+    if (std::all_of(host_incremental_delta_build_count.begin(),
+                    host_incremental_delta_build_count.end(),
+                    [](unsigned long long count) { return count == 0ULL; })) {
+      // Incremental convergence normally advances to P_(n+1). Its full anchor
+      // still owns P_n, paired with the physical F(P_n), pre-DIIS residual,
+      // energy and tracked orbital frame. Restore that certified generation,
+      // rather than publishing F(P_n) alongside the proposed new density.
+      launch_select_converged_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
+                                     static_cast<std::int32_t>(batch_size), converged, failed,
+                                     active);
+      launch_copy_selected_matrices_kernel(
+          blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
+          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
+          static_cast<std::int32_t>(nbf), active, incremental_anchor_density, density);
+      cuda_error = cudaPeekAtLastError();
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+      scf_force_ready_state = true;
+      force_finalization_fallback = false;
+      plan.last_direct_final_state.route = CudaDirectFinalStateRoute::scf_force_ready;
+      plan.last_direct_final_state.fallback_reason = CudaDirectFinalStateFallbackReason::none;
     }
   }
   std::uint32_t post_scf_physical_fock_builds = 0;
@@ -5244,7 +5291,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   std::vector<std::uint32_t> host_iterations(batch_size);
   std::vector<double> host_incremental_max_abs_delta_density(batch_size, 0.0);
   std::vector<unsigned long long> host_incremental_full_build_count(batch_size, 0ULL);
-  std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_full_admitted_shell_quartets(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_delta_admitted_shell_quartets(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_full_admitted_quartet_tiles(batch_size, 0ULL);
@@ -5292,7 +5338,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       {host_incremental_delta_build_count.data(),
        incremental_direct_jk ? static_cast<const void*>(incremental_delta_build_count)
                              : static_cast<const void*>(iterations),
-       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U,
+       incremental_direct_jk && !incremental_delta_counts_downloaded
+           ? batch_size * sizeof(unsigned long long)
+           : 0U,
        SourcePayload::incremental_delta_count},
       {host_incremental_full_admitted_shell_quartets.data(),
        incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_shell_quartets)
@@ -5582,7 +5630,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       // accepted full refresh after the first anchor, including density-RMS
       // refreshes as well as cadence-driven refreshes.
       result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
-      result.incremental_direct_jk.anchor_updates = delta_builds;
+      result.incremental_direct_jk.anchor_updates =
+          incremental_direct_jk_policy.fixed_full_density_anchor ? 0U : delta_builds;
       result.incremental_direct_jk.max_abs_delta_density =
           host_incremental_max_abs_delta_density[system];
       result.incremental_direct_jk.bypass_full_builds = 0U;
