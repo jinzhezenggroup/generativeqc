@@ -20,6 +20,15 @@ def df_derivative_inventory(
         "precision": "fp64",
         "maximum_boys_order": 11 if auxiliary_g else 10,
         "lowering": "gaussian_moment_polynomials",
+        "radial_kernels": {
+            "coulomb": {"omega": "zero", "kernel": "1/r"},
+            "long_range": {
+                "omega": "positive-finite-runtime",
+                "kernel": "erf(omega*r)/r",
+                "moment_substitution": "t=omega/hypot(omega,sqrt(rho))*u",
+                "center_response": "fixed-exponents-and-omega",
+            },
+        },
         "programs": [
             integral_to_payload(
                 build_df_derivative_ir(family, angular, weighted=weighted)
@@ -53,6 +62,7 @@ def emit_df_geometry_cuda(
     *,
     moments: typing.Any = "boys_values(total+1,rho*distance,g.f,work);",
     compensated: bool = False,
+    range_separated: bool = False,
 ) -> typing.Any:
     """Share primitive geometry between polynomial and Rys derivative lowering.
 
@@ -76,6 +86,22 @@ def emit_df_geometry_cuda(
   boys_values(total+1,rho*distance,g.f,work);
   g.prefactor=34.986836655249725694/(p*q*sqrt(p+q))*exp(-alpha*beta/p*ab2);
 }"""
+    if range_separated:
+        source = (
+            source.replace(
+                "BoysWork* work=nullptr)", "BoysWork* work=nullptr,double omega=0.0)"
+            )
+            .replace(
+                "  boys_values(total+1,rho*distance,g.f,work);",
+                """  // t=sqrt(theta)*u maps the erf kernel to the same moment polynomials.
+  // Exponents are fixed under center differentiation, including theta.
+  double scale=1.0,theta=1.0;
+  if(omega>0.0) { scale=omega/hypot(omega,sqrt(rho));theta=scale*scale; }
+  g.sx*=theta;g.sy*=theta;
+  boys_values(total+1,(rho*theta)*distance,g.f,work);""",
+            )
+            .replace("*exp(-alpha*beta/p*ab2);", "*exp(-alpha*beta/p*ab2)*scale;")
+        )
     source = source.replace("prepare_geometry(", name + "(", 1).replace(
         "boys_values(total+1,rho*distance,g.f,work);", moments, 1
     )
@@ -173,6 +199,10 @@ def emit_df_derivatives_cuda(
     F_11 and role-checked internal raising. It is emitted into a separate
     namespace; requesting it does not promote any public force capability.
 
+    Positive omega selects the same radial kernel in the metric and the
+    three-center response. Zero preserves Coulomb. Long-range production uses
+    only the FP64 policy; other emitted candidates need separate qualification.
+
     The optional float candidate narrows polynomial inputs, DAG temporaries,
     moment products and derivative sums, not just the output storage. Gaussian
     geometry and Boys preparation retain FP64 before an explicit narrowing
@@ -225,12 +255,12 @@ struct Geometry {
 };
 __DF_GEOMETRY_PREPARATION__
 __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angular a,
-    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0,bool responses=true) {
   const double invalid=NAN;
   if (order(a)>3 || order(b)>3 || order(c)>3 || !(alpha>0) || !(gamma>0) ||
       (!metric && !(beta>0))) return {invalid,{invalid,invalid,invalid},{invalid,invalid,invalid},{invalid,invalid,invalid}};
   Geometry geometry;
-  prepare_geometry(alpha,A,beta,B,gamma,C,order(a)+order(b)+order(c),geometry);
+  prepare_geometry(alpha,A,beta,B,gamma,C,order(a)+order(b)+order(c),geometry,nullptr,omega);
   const auto& pa=geometry.pa;const auto& pb=geometry.pb;const auto& dx=geometry.dx;
   __DF_MOMENT_INPUTS__
   const __DF_ARITHMETIC__ sx=geometry.sx,sy=geometry.sy,ip=geometry.ip,iq=geometry.iq;
@@ -243,6 +273,7 @@ __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angula
   }
   Response result{};
   result.value=prefactor*dot(degree[0],base[0],degree[1],base[1],degree[2],base[2],f);
+  if(!responses) return result;
   __DF_ARITHMETIC__ first[3]{},second[3]{};
   for(unsigned axis=0;axis<3;++axis) {
     const unsigned other=(axis+1)%3,last=(axis+2)%3;
@@ -266,12 +297,12 @@ __device__ __noinline__ Response evaluate(bool metric,double alpha,Vec3 A,Angula
   return result;
 }
 /** A metric has two real auxiliary centers; the internal absent B has no basis normalization. */
-__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c) {
-  return evaluate(true,alpha,A,a,0.0,A,{0,0,0},gamma,C,c);
+__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c,double omega=0.0) {
+  return evaluate(true,alpha,A,a,0.0,A,{0,0,0},gamma,C,c,omega);
 }
 __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
-    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
-  return evaluate(false,alpha,A,a,beta,B,b,gamma,C,c);
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,double omega=0.0) {
+  return evaluate(false,alpha,A,a,beta,B,b,gamma,C,c,omega);
 }
 } // namespace generativeqc::scf::generated_df_derivatives
 #endif
@@ -299,7 +330,9 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
             "__DF_ALPHA__", "primitive_alpha" if scalar_type == "float" else "alpha"
         )
         .replace("__DF_BETA__", "primitive_beta" if scalar_type == "float" else "beta")
-        .replace("__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda())
+        .replace(
+            "__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda(range_separated=True)
+        )
         .replace("__device__", "static __device__")
     )
     if auxiliary_g:

@@ -124,6 +124,8 @@ struct DeviceBatch {
    * the bucket total to each result. */
   bool direct_force_fp32{};
   unsigned long long* direct_force_precision_work{};
+  /** DF-only radial identity; zero preserves ordinary Coulomb consumers. */
+  double df_range_omega{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

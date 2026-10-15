@@ -1,0 +1,8 @@
+{
+  "logical_path": "source-validation.json",
+  "stored_path": "source-validation.json.gz",
+  "stored_bytes": 9769,
+  "stored_sha256": "96a2eaee3401210fca537d4fe754ecb27780e8f81aa7f7b53b04142dd63deecd",
+  "decoded_bytes": 149040,
+  "decoded_sha256": "08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569"
+}

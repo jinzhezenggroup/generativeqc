@@ -1241,6 +1241,16 @@ void require_matching_density_fitting_geometry(const core::System& orbital_syste
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> metric_weights, std::span<const double> three_center_weights) {
+  return contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, metric_weights, three_center_weights, 0.0);
+}
+
+std::vector<double> contract_weighted_range_density_fitting_derivative(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    std::span<const double> metric_weights, std::span<const double> three_center_weights,
+    double omega) {
+  if (!std::isfinite(omega) || omega < 0.0)
+    throw std::invalid_argument("DF range omega must be finite and nonnegative");
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
   const std::size_t public_nbf = molecule::ao_count(orbital_system);
   const std::size_t public_naux = molecule::ao_count(auxiliary_system);
@@ -1264,7 +1274,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   const std::size_t ncoord = checked_product(orbital_system.atoms.size(), std::size_t{3});
   if (!generated_supported) {
     const DensityFittingIntegralData full =
-        build_density_fitting_integrals(orbital_system, auxiliary_system, true);
+        build_density_fitting_integrals(orbital_system, auxiliary_system, true, omega);
     std::vector<double> result(ncoord, 0.0);
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
       const double* dm = full.metric_derivative.data() + coordinate * metric_size;
@@ -1323,7 +1333,7 @@ std::vector<double> contract_weighted_density_fitting_derivative(
                                 second_primitive.coefficient;
           const auto response = generated_df_cpu::metric_derivative(
               first_primitive.exponent, first_center, angular(first.angular),
-              second_primitive.exponent, second_center, angular(second.angular));
+              second_primitive.exponent, second_center, angular(second.angular), omega);
           scatter(first.shell->atom_index, weight, response.first);
           scatter(second.shell->atom_index, weight, response.third);
         }
@@ -1354,7 +1364,8 @@ std::vector<double> contract_weighted_density_fitting_derivative(
               const auto response = generated_df_cpu::three_center_derivative(
                   first_primitive.exponent, first_center, angular(first.angular),
                   second_primitive.exponent, second_center, angular(second.angular),
-                  auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular));
+                  auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular),
+                  omega);
               scatter(first.shell->atom_index, weight, response.first);
               scatter(second.shell->atom_index, weight, response.second);
               scatter(auxiliary.shell->atom_index, weight, response.third);
@@ -1368,7 +1379,9 @@ std::vector<double> contract_weighted_density_fitting_derivative(
 }
 DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
                                                            const core::System& auxiliary_system,
-                                                           bool include_derivatives) {
+                                                           bool include_derivatives, double omega) {
+  if (!std::isfinite(omega) || omega < 0.0)
+    throw std::invalid_argument("DF range omega must be finite and nonnegative");
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
 
   DensityFittingIntegralData cartesian;
@@ -1385,6 +1398,8 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                   [](const AoView& ao) { return ao.shell->angular_momentum <= 3; });
   const bool generated_derivatives = include_derivatives && generated_supported;
   const bool generated_values = !include_derivatives && generated_supported;
+  if (omega > 0.0 && !generated_supported)
+    throw std::invalid_argument("long-range DF requires generated s/p/d/f coverage");
   if (generated_derivatives) {
     using GeneratedAngular = generated_df_cpu::Angular;
     using GeneratedVec3 = generated_df_cpu::Vec3;
@@ -1420,7 +1435,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                 component_factor * first_primitive.coefficient * second_primitive.coefficient;
             const auto response = generated_df_cpu::metric_derivative(
                 first_primitive.exponent, first_center, angular(first.angular),
-                second_primitive.exponent, second_center, angular(second.angular));
+                second_primitive.exponent, second_center, angular(second.angular), omega);
             cartesian.metric[item] += weight * response.value;
             scatter(cartesian.metric_derivative, metric_size, item, first.shell->atom_index, weight,
                     response.first);
@@ -1456,7 +1471,8 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                 const auto response = generated_df_cpu::three_center_derivative(
                     first_primitive.exponent, first_center, angular(first.angular),
                     second_primitive.exponent, second_center, angular(second.angular),
-                    auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular));
+                    auxiliary_primitive.exponent, auxiliary_center, angular(auxiliary.angular),
+                    omega);
                 cartesian.three_center[item] += weight * response.value;
                 scatter(cartesian.three_center_derivative, tensor_size, item,
                         first.shell->atom_index, weight, response.first);
@@ -1497,9 +1513,10 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
             const double weight =
                 component_factor * first_primitive.coefficient * second_primitive.coefficient;
             cartesian.metric[item] +=
-                weight * generated_df_cpu::metric_value(
-                             first_primitive.exponent, first_center, angular(first.angular),
-                             second_primitive.exponent, second_center, angular(second.angular));
+                weight * generated_df_cpu::metric_value(first_primitive.exponent, first_center,
+                                                        angular(first.angular),
+                                                        second_primitive.exponent, second_center,
+                                                        angular(second.angular), omega);
           }
         }
       }
@@ -1531,7 +1548,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                                  first_primitive.exponent, first_center, angular(first.angular),
                                  second_primitive.exponent, second_center, angular(second.angular),
                                  auxiliary_primitive.exponent, auxiliary_center,
-                                 angular(auxiliary.angular));
+                                 angular(auxiliary.angular), omega);
               }
             }
           }
@@ -1660,7 +1677,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
 std::vector<double> contract_weighted_density_fitting_derivative(
     const core::System& orbital_system, const core::System& auxiliary_system,
     std::span<const double> three_center_weights, std::span<const double> metric_weights,
-    std::size_t maximum_bytes) {
+    std::size_t maximum_bytes, double omega) {
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
   if (!maximum_bytes)
     throw std::invalid_argument("density-fitting derivative contraction requires a memory budget");
@@ -1681,8 +1698,8 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   }
   // The canonical entry consumes generated derivatives directly. Preserve its
   // metric-first argument order; this compatibility overload is three-center-first.
-  return contract_weighted_density_fitting_derivative(orbital_system, auxiliary_system,
-                                                      metric_weights, three_center_weights);
+  return contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, metric_weights, three_center_weights, omega);
 }
 
 DensityFittingIntegralData transform_density_fitting_integrals(

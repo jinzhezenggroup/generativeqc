@@ -36,8 +36,9 @@ struct PreparedCudaFockBinding {
 /** Return the ordinary-stream device binding when the prepared plan can
  * execute its complete requested value-side Fock model through one resident
  * provider. The value seam covers exact full-range Coulomb plus exact full-/
- * short-/long-range exchange, and full-range density-fitted J/K when every
- * requested term shares the fitted owner. Qualified exact SR/LR value
+ * short-/long-range exchange, full-range density-fitted J/K and a dedicated
+ * long-range fitted exchange owner. Requested terms must share one radial
+ * metric when fitted. Qualified exact SR/LR value
  * execution may reuse the owner's conservative full-range Schwarz screening.
  * Derivatives use the separate capability binding below so value identity does
  * not become derivative identity. Mixed-provider compositions fail closed

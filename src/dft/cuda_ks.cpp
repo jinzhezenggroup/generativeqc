@@ -1030,17 +1030,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const bool correction_identity =
           fock_binding && correction.backend == scf::FockBackend::Cuda &&
           spec.spin == strategy.spec.spin && spec.derivative_order == 0 && !spec.coulomb.present &&
-          spec.exchange.present && spec.exchange.approximation == scf::FockApproximation::Exact &&
+          spec.exchange.present &&
+          (spec.exchange.approximation == scf::FockApproximation::Exact ||
+           (spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+            fitted_coulomb &&
+            correction.metric_relative_threshold == strategy.metric_relative_threshold)) &&
           spec.exchange.op == scf::FockOperator::LongRange && spec.exchange.omega > 0.0 &&
           correction.screening_tolerance == strategy.screening_tolerance;
       if (!correction_identity)
         throw std::invalid_argument(
-            "CUDA KS range correction must be one compatible exact long-range exchange term");
+            "CUDA KS range correction requires compatible exact or operator-matched fitted LR "
+            "exchange");
       if (fitted_coulomb) {
         if (!range_provider || range_provider->strategy() != correction ||
             !range_provider->matches_system(provider.system()))
           throw std::invalid_argument(
-              "fitted CUDA RSH requires a separate prepared Direct range provider");
+              "fitted CUDA RSH requires a separate prepared range provider");
         range_fock_binding = scf::prepared_cuda_fock_binding(*range_provider);
         if (!range_fock_binding || range_fock_binding.device_id != fock_binding.device_id ||
             range_fock_binding.nbf != fock_binding.nbf)

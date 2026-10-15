@@ -23,6 +23,14 @@ struct CudaDensityFittingIntegralSource {
   void* implementation{};
 };
 
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return 0.0;
+  return static_cast<const cuda_execution::CudaDensityFittingIntegralSourceImpl*>(
+             source->implementation)
+      ->batch.df_range_omega;
+}
+
 namespace {
 using namespace cuda_execution;
 

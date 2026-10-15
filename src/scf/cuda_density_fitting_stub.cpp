@@ -110,6 +110,11 @@ std::size_t cuda_density_fitting_integral_source_coordinate_count(
   return 0U;
 }
 
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource*) noexcept {
+  return 0.0;
+}
+
 CudaDensityFittingSourceCounters cuda_density_fitting_integral_source_counters(
     const CudaDensityFittingIntegralSource*) noexcept {
   return {};

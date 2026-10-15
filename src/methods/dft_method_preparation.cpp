@@ -475,11 +475,22 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
     const auto correction_backend =
         backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    const auto correction =
-        scf::resolve_fock_build(scf::make_rsh_correction_fock_spec(
-                                    fock.spin, execution_plan.short_range_exchange,
-                                    execution_plan.long_range_exchange, execution_plan.range_omega),
-                                correction_backend, options.screening_tolerance);
+    const char* range_mode = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
+    if (range_mode && std::string_view(range_mode) != "df" &&
+        std::string_view(range_mode) != "direct")
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "GENERATIVEQC_DF_RANGE_EXCHANGE must be df or direct");
+    execution_plan.density_fitted_range_exchange =
+        fock.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        (!range_mode || std::string_view(range_mode) == "df");
+    const auto correction = scf::resolve_fock_build(
+        scf::make_rsh_correction_fock_spec(
+            fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,
+            execution_plan.range_omega,
+            execution_plan.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                         : scf::FockApproximation::Exact),
+        correction_backend, options.screening_tolerance,
+        options.density_fitting_relative_threshold);
     scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
                                     execution_plan.nonlocal_parameters);
   }

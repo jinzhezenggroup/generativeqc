@@ -151,9 +151,9 @@ int main(int argc, char** argv) {
   std::vector<DensityFittingDensityResponse> terms;
   for (std::size_t t=0;t<nt;++t)
     terms.push_back({std::span<const double>(densities.data()+t*matrix,matrix), coefficients[t],
-                     mode == "mixed" && t == 0 ? 0.27 : 0.0});
+                     mode.starts_with("mixed") && t == 0 ? 0.27 : 0.0});
   CudaDfMetricView metric{root.data(),vectors.data(),eigenvalues.data(),threshold,bool(full),17};
-  const auto capacity=cuda_df_response_workspace_elements(n,a,nt,tile);
+  const auto capacity=cuda_df_response_workspace_elements(n,a,nt,tile,!full);
   constexpr std::size_t guard=23;
   constexpr double sentinel=-987654.25;
   std::vector<double> storage(capacity+2*guard,sentinel);
@@ -163,7 +163,7 @@ int main(int argc, char** argv) {
   std::vector<std::size_t> visits(a), writes(matrix*a);
   std::size_t fitted_calls=0, raw_calls=0, consumers=0, metric_consumers=0;
   std::function<void(std::size_t,std::size_t,double*)> reader;
-  if (mode != "raw" && mode != "raw_scalar")
+  if (mode != "raw" && mode != "raw_scalar" && !mode.starts_with("mixed_raw"))
     reader=[&](std::size_t begin,std::size_t count,double* destination) {
       require(begin+count <= a && count <= tile,"reader exceeded panel bounds");
       if (++fitted_calls == 2 && failure == "reader") throw std::runtime_error("reader failure");
@@ -181,7 +181,8 @@ int main(int argc, char** argv) {
   try {
     status=contract_cuda_df_response_weights(
       n,a,terms,densities.data(),metric,tile,workspace,test_stream,test_stream,
-      mode == "fitted_serial",mode != "fitted_scalar" && mode != "raw_scalar",
+      mode == "fitted_serial",mode != "fitted_scalar" && mode != "raw_scalar" &&
+      mode != "mixed_raw_scalar",
       [&](std::size_t p,double* destination) {
         require(p<a,"raw reader exceeded domain");
         ++raw_calls; ++visits[p];
@@ -304,6 +305,7 @@ def streamed_probe(
         "left_density_kernel",
         "symmetrize_kernel",
         "cuda_df_response_workspace_elements",
+        "contract_whitened_response",
         "contract_streamed_coulomb_response",
         "contract_full_rank_panels",
     ):
@@ -466,9 +468,9 @@ def test_actual_response_matches_energy_finite_differences(
     data = _fixture(truncated)
     result = _run(streamed_probe, data, mode, 2)
     assert result["status"] == 0
-    assert result["visits"] == [1] * data["a"]
+    assert all(1 <= visits <= (2 if truncated else 1) for visits in result["visits"])
     if truncated or mode != "stream":
-        assert result["raw_calls"] == data["a"]
+        assert data["a"] <= result["raw_calls"] <= (2 if truncated else 1) * data["a"]
         assert result["fitted_calls"] == 0
     raw = data["raw"]
     metric = (data["vectors"] * data["eigenvalues"]) @ data["vectors"].T
@@ -543,6 +545,55 @@ def test_exchange_terms_keep_complete_response(streamed_probe: Path) -> None:
         rtol=2e-13,
     )
     assert result["counters"].get("response_streamed_coulomb_fitted_panels", 0) == 0
+
+
+@pytest.mark.parametrize("tile", (1, 2, 5))
+@pytest.mark.parametrize("mode", ("mixed_raw", "mixed_raw_scalar"))
+def test_truncated_exchange_response_preserves_subspace_motion(
+    streamed_probe: Path, tile: int, mode: str
+) -> None:
+    """Independent energy differences exercise discarded raw directions and both adjoints."""
+    data = _fixture(truncated=True)
+    n, a = data["n"], data["a"]
+    densities = data["densities"].reshape(-1, n, n)
+    data["densities"] = (0.5 * (densities + densities.transpose(0, 2, 1))).reshape(
+        -1, n * n
+    )
+    raw = data["raw"].reshape(n, n, a)
+    data["raw"] = (0.5 * (raw + raw.transpose(1, 0, 2))).reshape(n * n, a)
+    metric = (data["vectors"] * data["eigenvalues"]) @ data["vectors"].T
+    result = _run(streamed_probe, data, mode, tile)
+    assert result["status"] == 0
+    assert all(visits <= 2 for visits in result["visits"])
+
+    def energy(raw_values: np.ndarray, metric_values: np.ndarray) -> float:
+        eigenvalues, eigenvectors = np.linalg.eigh(metric_values)
+        keep = eigenvalues > data["threshold"] * eigenvalues[-1]
+        fitted = (
+            raw_values @ eigenvectors[:, keep] / np.sqrt(eigenvalues[keep])
+        ).reshape(n, n, -1)
+        density = data["densities"][0].reshape(n, n)
+        exchange = np.einsum("ij,jkq,kl,liq->", density, fitted, density, fitted)
+        return _energy(data, raw_values, metric_values) - 0.27 * exchange
+
+    rng = np.random.default_rng(2515)
+    raw_delta = rng.normal(size=(n, n, a))
+    raw_delta = (0.5 * (raw_delta + raw_delta.transpose(1, 0, 2))).reshape(n * n, a)
+    metric_delta = rng.normal(size=(a, a))
+    metric_delta = 0.5 * (metric_delta + metric_delta.T)
+    step = 1e-5
+    for delta_raw, delta_metric in (
+        (raw_delta, np.zeros_like(metric)),
+        (np.zeros_like(data["raw"]), metric_delta),
+    ):
+        numeric = (
+            energy(data["raw"] + step * delta_raw, metric + step * delta_metric)
+            - energy(data["raw"] - step * delta_raw, metric - step * delta_metric)
+        ) / (2 * step)
+        analytic = np.sum(
+            np.reshape(result["weights"], data["raw"].shape) * delta_raw
+        ) + np.sum(np.reshape(result["metric"], metric.shape) * delta_metric)
+        assert analytic == pytest.approx(numeric, abs=3e-7)
 
 
 @pytest.mark.parametrize(

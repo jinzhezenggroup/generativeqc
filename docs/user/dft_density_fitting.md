@@ -17,25 +17,38 @@ take precedence, and `initial_guess=None` restores Hcore. See
 CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
-trajectory optimization. FP64 range-separated energies may use a mixed
-composition: the ordinary full-range J/K primary is density fitted, while the
-omega-dependent long-range exchange correction remains an exact Direct
-provider. CUDA orders the independent provider streams with device events; it
-does not add a successful-path host fence. WB97M-V energy composes this mixed
-J/K owner with the existing self-consistent VV10 path.
+trajectory optimization. For the qualified molecular range-exchange/VV10
+composition (including WB97M-V), DF defaults to **complete RI-J/K**: the
+full-range J/K owner and the long-range K owner are both fitted. The latter uses
+its own `erf(omega*r)/r` three-center integrals and auxiliary metric, with the
+same auxiliary basis and relative rank cutoff as the full-range owner. It does
+not reuse Coulomb-whitened factors for a different radial operator. CUDA orders
+the independent provider streams with device events, without a successful-path
+host fence.
 
-This mixed composition is not range-separated RI-K: there are still no
-omega-dependent DF metric/three-center integrals. FP64 CPU and CUDA analytic forces
-also support the qualified range-exchange/nonlocal source inventory:
-the full-range DF J/K response and exact Direct LR response differentiate the
-same mixed Hamiltonian used by SCF, including self-consistent VV10, Pulay and
-moving-grid response. Admission follows the resolved primitive graph and
+FP64 CPU and CUDA analytic-force implementations differentiate both fitted
+operators, including auxiliary-center and metric response, self-consistent VV10,
+Pulay and moving-grid response. Admission follows the resolved primitive graph and
 generated provider capabilities, not a functional-name whitelist. Other
 range-separated/nonlocal inventories remain rejected, as do ECP DF and
 automatic mixed precision. Full-range DF forces
 continue to differentiate the same auxiliary basis and Coulomb metric used by
 the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
+
+`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` explicitly selects the retained mixed
+scheme: full-range DF J/K plus exact Direct LR. The default is `df`; other values
+are rejected. This selection is frozen when preparing a calculation. A missing
+LR fitting capability or insufficient memory is an error, not permission to
+silently switch Hamiltonians. Native snapshots authenticate the actual LR
+approximation, so derivatives never infer it from the current environment.
+Range-fitted orbital and auxiliary shells currently require s/p/d/f coverage.
+On CUDA, an explicit `density_fitting_memory_budget_bytes` is split between the
+two prepared radial owners; zero retains each owner's automatic admission.
+
+**VV10 itself is not an RI-J/K integral.** Its nonlocal correlation remains the
+existing self-consistent grid-pair evaluation; complete DF-J/K does not replace
+that kernel with a low-rank approximation or remove its quadratic grid work.
 
 The canonical r2SCAN-3c composite has a separate DF force-composition
 admission: its versioned def2-mTZVPP basis is fixed, the fitted r2SCAN
@@ -46,7 +59,7 @@ derivative compositions are qualified. This does not admit ECP or unsupported
 auxiliary/basis domains, nor does admission alone establish a successful
 source-matched independent CUDA qualification.
 
-The CUDA mixed force planner dry-queries the native LR derivative capacity under the
+In explicit mixed mode, the CUDA force planner dry-queries the native LR derivative capacity under the
 live final-state token before AO/Becke tile admission. It charges that independent
 owner alongside the complete nonlocal/grid inventory, with the same conservative
 bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.
@@ -56,22 +69,23 @@ must not be interpreted as a whole-force peak-memory bound. Both the final-state
 lease and orbital/auxiliary geometry bindings are checked on replay.
 
 CPU uses the same resolved-provider validation, fitted J/K response, and native
-five-source composer as CUDA. Its existing compiler-generated range derivative
-consumer traverses **only exact LR**, weighted by the difference between the LR
-and SR exchange coefficients; it never substitutes exact SR/full-range exchange
-for fitted K. Semilocal, VV10, Pulay, nuclear and moving-grid sources reuse the
+five-source composer as CUDA. Complete RI-K obtains the LR response from its own
+fitted provider and traverses no Direct LR quartets. Explicit mixed mode instead
+uses the compiler-generated **exact LR** derivative, weighted by the difference
+between LR and SR exchange coefficients; it never substitutes exact SR/full-range
+exchange for fitted K. Semilocal, VV10, Pulay, nuclear and moving-grid sources reuse the
 existing complete CPU stationary consumer. Production execution does not call
 PySCF or a reference oracle.
 
-The CPU mixed-force domain covers all-electron s/p/d/f orbitals, at most
+The CPU RSH-DF force domain covers all-electron s/p/d/f orbitals, at most
 8 atoms, 64 AOs and 128 primitives, with native unpruned grids and distinct
 nuclei. Its 256 MiB additional numeric inventory excludes DF response internals,
 Python/compiler objects and opaque BLAS/runtime storage, so it is not a complete
 force or process-memory bound. The fitted consumer also enforces 32,000,000 primitive
-records and 100,000,000 grid-pair visits; the exact LR quartet traversal and
-quadratic VV10 work are included. These semantic limits describe generated
+records and 100,000,000 grid-pair visits; quadratic VV10 work and, in mixed mode,
+the exact LR quartet traversal are included. These semantic limits describe generated
 consumer work; native DF response work is separately owned and unreported.
-The exact LR schedule visits each canonical eightfold quartet once and sums
+In explicit mixed mode, the exact LR schedule visits each canonical eightfold quartet once and sums
 its distinct compiler-generated density weights before differentiation. Packed
 public-AO coefficients retain Cartesian normalization and real-spherical
 pullbacks. CPU and CUDA share the same bounded Hermite/forward-AD recurrence
@@ -183,6 +197,12 @@ folded density, applies its symmetric metric root to that charge, and emits
 bounded three-center and metric cotangents. It does not repeatedly refit AO
 panels or construct exchange-style AO Gram matrices. Rank-deficient metrics,
 mixed J/K terms and diagnostic algebra retain their general response routes.
+Rank-truncated response differentiates the whitened factors before forming
+quadratic products and includes retained/discarded eigenspace motion. CUDA
+charges one complete whitened tensor in addition to its bounded raw/weight
+panels; insufficient response budget fails explicitly rather than reverting
+to an unstable raw-Gram adjoint or to Direct exchange. Full-rank occupied and
+resident paths retain their existing admission contracts.
 `GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects the original bounded-panel
 route for qualification; the default is `auto`. Both preserve the same metric
 gauge, auxiliary-center response and derivative consumer.
@@ -207,5 +227,19 @@ identical moving quadrature (absolute energy gate `1e-8 Eh`, force gate
 `3e-7 Eh/bohr`, physical residual below `1e-9`). GPU acceptance
 requires `GENERATIVEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
 
+`tests/python/test_range_separated_df.py` independently reconstructs PySCF's
+omega-dependent fitting metric for RKS/UKS energies and displaced-energy force
+checks (energy `2e-8 Eh`, directional force `3e-7 Eh/bohr`). A deliberately small
+auxiliary basis distinguishes complete RI-K from the legacy mixed Hamiltonian.
+The same gates cover the retained cc-pVDZ-JKFIT auxiliary with SVP/TZVP
+orbitals, open-shell response, and fixed-geometry force replay. CPU materialized
+and weighted derivatives use the same inverse-square-root response.
+Raw contracted Cartesian/spherical s/p/d/f values and center derivatives are
+compared with libcint over multiple omega values in `test_df_derivatives.py`.
+CUDA implementations require separate real-device qualification; CPU evidence
+and successful compilation are not substitutes for that execution.
+
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.
+The [range-separated RI-K decision](../../.agents/notes/implemented/numerics/2026-10-15-range-separated-density-fitting.md)
+records radial ownership, response consistency and numerical qualification conditions.

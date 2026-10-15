@@ -452,14 +452,6 @@
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
     },
     {
-      "bytes": 149040,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue377-379-df",
-      "path": "benchmarks/results/issue377-379-df/source-validation.json",
-      "role": "decision-or-audit-record",
-      "sha256": "08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569"
-    },
-    {
       "bytes": 219056,
       "classification": "required-compact-accepted-evidence",
       "family": "issue394-deferred",
