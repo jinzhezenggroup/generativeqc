@@ -28,10 +28,17 @@ For p points, a tile-active AOs, and r occupied orbitals:
 - Hybrid density/tau: p (a^2 + 3 a r) products.
 - Four occupied panels: 4 p a r products.
 
-The proposed hybrid only saves these products if r < a. With local-AO
-sparsity, a may be much smaller than the full-basis nao. Packing,
-occupancy, memory, potential construction, SCF work and factor lifetime
-could also negate a product-count win. No method-name specialization.
+The hybrid count obeys 4 * hybrid = density + 3 * occupied.
+Thus it is **never the cheapest route by product count**: when r < a,
+four occupied panels are cheaper than hybrid; when r > a, four dense
+panels are cheaper; at equality all three match. This motivates a
+measured crossover between the existing *four D* and *four B* producers
+rather than adding a dominated hybrid CUDA kernel.
+
+With local-AO sparsity, a may be much smaller than full-basis nao.
+Packing, occupancy, memory, potential construction, SCF work and
+factor lifetime can change actual wall-time ordering even when the
+arithmetic counts are ordered. No method-name specialization.
 
 A subsequent native implementation requires a source generation/density
 witness (not user-supplied or DIIS-mixed D), bounded device leases,
