@@ -48,9 +48,16 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.hpp"
     ARGS --output "${_cpks}"
     COMMENT "Generating compiler-AD native RKS/UKS response maps")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}"
+  set(_grid "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_grid_response.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_grid}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_wb97mv_grid_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.hpp"
+    ARGS --output "${_grid}"
+    COMMENT "Generating compiler-AD native WB97M-V grid response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -78,5 +85,8 @@ function(generativeqc_add_hessian_aot target inventory)
       "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
     set_target_properties(generativeqc_cuda_cpks_probe PROPERTIES
       CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
+    add_executable(generativeqc_cuda_wb97mv_grid_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_grid_probe.cpp")
+    target_link_libraries(generativeqc_cuda_wb97mv_grid_probe PRIVATE ${target})
   endif()
 endfunction()

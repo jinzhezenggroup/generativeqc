@@ -252,11 +252,40 @@ separately. `src/response/cuda_ks_cpks_reference.hpp` adapts that actual live
 batch/item/token to the CPKS callback, checking all bound pointers, dimensions,
 producer stream and current CUDA device. It cannot be moved while borrowed.
 
+`src/dft/cuda_wb97mv_grid.hpp` supplies the separate native fixed-grid
+WB97M-V semilocal plus bilateral VV10 density-response component. It borrows
+validated packed AoBasis, immutable device quadrature and the exact reference
+density under a live authenticator. RKS uses total D; UKS retains both physical
+spin blocks, including semilocal cross-spin and total-density VV10 coupling.
+Scalar coefficient/JVPs reuse compiler AD and the incumbent Libxc work policy;
+the AO potential is the TensorIR density adjoint of the existing feature map.
+Signed/indefinite directions never require an occupied/PSD factorization.
+
+The caller-owned arena includes the complete dense first-AO-jet panel, retained
+fields, staged potentials, map scratch and bounded pair tiles. The reference
+fixes VV10's density mask on **both** legs, and its active-count squared must
+fit the separate ordered-pair work limit before pair work starts. Tile capacity
+does not bound total work. Native work receipts distinguish reference pairs,
+response pairs and attempted response actions. Calls reject capture and fence
+at finite/symmetry/authentication gates; failed actions do not publish outputs.
+The retained native value potential and its response are qualified against
+independent Libxc potentials plus a real-space VV10 oracle, including displaced
+potential differences, real-spherical d/f records and unequal spin densities.
+Exact empty-spin acceptance uses the original pinned upstream Maple C in
+libquadmath and an explicit displacement-convergence study; binary64 Libxc
+has the previously diagnosed Stoll cancellation at that boundary. The oracle
+is test-only, never a runtime fallback.
+This is a correctness-first dense component, not a scaling/performance claim
+or a live prepared molecular-provider binding. It does not supply J/K, nuclear
+grid motion, integral/DF/ECP derivatives or stationary Hessian assembly.
+
 The native CPKS component is independently qualified against displaced
 self-consistent generalized eigensolves of a linear coupled-spin test functional,
-**not** a complete molecular WB97M-V provider. Physical native integral/grid/XC/
-VV10/DF/ECP induced-Fock actions, complete shell coverage and stationary molecular
-assembly still require integration. Production CLI Hessian/HVP commands still
+**not** a complete molecular WB97M-V provider. The physical grid component still
+needs a prepared-owner binding and composition with exact/fitted J/K and the
+correct long-range correction. Complete shell coverage, moving-grid/integral/
+DF/ECP response and stationary molecular assembly also require integration.
+Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 
 For a source build with a verified compiler-cache launcher configured:
@@ -266,7 +295,8 @@ cmake -S . -B build/cuda-release-sm120 \
   -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON
 cmake --build build/cuda-release-sm120 --target \
   generativeqc_hessian_aot_probe generativeqc_cuda_gmres_probe \
-  generativeqc_cuda_cpks_probe generativeqc_ks_resident_frame_tests
+  generativeqc_cuda_cpks_probe generativeqc_cuda_wb97mv_grid_probe \
+  generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_hessian_aot_cuda.py
@@ -276,17 +306,25 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_CUDA_CPKS_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_cpks_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_ks_cpks.py
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
 ```
 
+For the exact empty-spin grid tests, also set
+`GENERATIVEQC_WB97MV_WIDE_ORACLE` to the independent upstream quad executable
+emitted by `tools/qualify_wb97mv_tail.py::oracle_source` from the pinned archive
+and built with a verified compiler cache. Without it those boundary cases are
+explicitly skipped, not qualified. No quad/Python oracle runs in production.
+
 The Python test driver supplies independent quadrature/Libxc/real-space oracles;
-each numerical leaf executes in the standalone native process, including a
-test with unavailable Python paths and an empty executable search path.
-These tests validate only the compiled leaves and generic solver. The
-prepared-state/source owner, tensor contractions and reductions, coupled-spin
-CPKS, full-rank DF metric
-response, complete moving-grid/VV10/ECP assembly, full integral coverage and
+numerical leaves and response components execute in standalone native processes,
+including tests with unavailable Python paths and an empty executable search
+path. These validate components, not a complete stationary molecular endpoint.
+The physical prepared-source composition, full-rank DF metric response, complete
+moving-grid/ECP assembly, full integral coverage and
 production CLI wiring are **not** implemented by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.
 
