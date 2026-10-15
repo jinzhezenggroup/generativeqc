@@ -26,7 +26,8 @@ def projection_work(active: int, occupied: int, points: int) -> dict[str, int]:
         raise ValueError("nonnegative integral AO, rank and point counts required")
     return {
         "four_density_jets": 4 * points * active * active,
-        "one_density_three_occupied": points * (active * active + 3 * active * occupied),
+        "one_density_three_occupied": points
+        * (active * active + 3 * active * occupied),
         "four_occupied_jets": 4 * points * active * occupied,
     }
 
@@ -48,9 +49,13 @@ def hybrid_features(jets, density, factor, ids=None):
         ids = np.arange(len(d))
     else:
         ids = np.asarray(ids)
-        if (ids.ndim != 1 or ids.dtype.kind not in "iu"
-                or np.any(ids < 0) or np.any(ids >= len(d))
-                or np.any(ids[1:] <= ids[:-1])):
+        if (
+            ids.ndim != 1
+            or ids.dtype.kind not in "iu"
+            or np.any(ids < 0)
+            or np.any(ids >= len(d))
+            or np.any(ids[1:] <= ids[:-1])
+        ):
             raise ValueError("AO map must be sorted, unique and in bounds")
     if jets.shape[2] != len(ids):
         raise ValueError("AO map and jets disagree")
@@ -72,9 +77,12 @@ def hybrid_features(jets, density, factor, ids=None):
 def water_atoms(replicas: int):
     if type(replicas) is not int or not (1 <= replicas <= 64):
         raise ValueError("replicas must be 1..64")
-    local = ((8, (0., 0., 0.)), (1, (1.4, 0.1, 1.1)), (1, (-1.2, 0.2, 1.3)))
-    return [(z, (x + 12 * (i % 8), y + 12 * (i // 8), h))
-            for i in range(replicas) for z, (x, y, h) in local]
+    local = ((8, (0.0, 0.0, 0.0)), (1, (1.4, 0.1, 1.1)), (1, (-1.2, 0.2, 1.3)))
+    return [
+        (z, (x + 12 * (i % 8), y + 12 * (i // 8), h))
+        for i in range(replicas)
+        for z, (x, y, h) in local
+    ]
 
 
 def active_ids(ao, cutoff=1e-16):
@@ -107,7 +115,9 @@ def benchmark(args):
     }
     for replicas in args.replicas:
         atoms = water_atoms(replicas)
-        with NativeAO(atoms, basis="def2-svp", representation="real_spherical") as basis:
+        with NativeAO(
+            atoms, basis="def2-svp", representation="real_spherical"
+        ) as basis:
             n, rank = basis.nao, 5 * replicas
             if rank > n:
                 raise RuntimeError("occupied rank exceeds AO count")
@@ -129,7 +139,7 @@ def benchmark(args):
                 center + rng.normal(scale=0.7, size=center.shape)
             )
             tiles = [
-                points[i:i + args.tile_points]
+                points[i : i + args.tile_points]
                 for i in range(0, len(points), args.tile_points)
             ]
             selected = [active_ids(basis.evaluate(tile, order=1)) for tile in tiles]
@@ -140,15 +150,24 @@ def benchmark(args):
                 max_error = {"rho": 0.0, "gradient": 0.0, "tau": 0.0}
                 source_stats = {}
                 with CudaGrid(
-                    basis, artifact, order=1, tile_points=args.tile_points,
+                    basis,
+                    artifact,
+                    order=1,
+                    tile_points=args.tile_points,
                     active_ao_capacity=n if mode == "indexed" else None,
-                    orbital_capacity=(rank, rank), orbital_tile=args.orbital_tile,
-                    features_only=True, ingredients=("rho", "gradient", "tau"),
+                    orbital_capacity=(rank, rank),
+                    orbital_tile=args.orbital_tile,
+                    features_only=True,
+                    ingredients=("rho", "gradient", "tau"),
                 ) as cuda:
                     for repeat in range(args.warmups + args.repeats):
                         # Alternating route order; uploads and AO-map
                         # preparation are outside the measured feature calls.
-                        order = ("density_matrix", "orbitals") if repeat % 2 == 0 else ("orbitals", "density_matrix")
+                        order = (
+                            ("density_matrix", "orbitals")
+                            if repeat % 2 == 0
+                            else ("orbitals", "density_matrix")
+                        )
                         for route in order:
                             cuda.set_source(source, stamp=source.stamp, route=route)
                             if cuda.source_kind != route:
@@ -163,7 +182,9 @@ def benchmark(args):
                             if repeat == 0:
                                 # Check the exact active maps against the hybrid
                                 # expression; this work is outside all timers.
-                                for tile, ids, output in zip(tiles, maps, outputs, strict=True):
+                                for tile, ids, output in zip(
+                                    tiles, maps, outputs, strict=True
+                                ):
                                     ao = basis.evaluate(tile, order=1)
                                     if ids is not None:
                                         ao = ao[:, :, ids]
@@ -171,7 +192,12 @@ def benchmark(args):
                                     for spin in range(2):
                                         for key, expected in reference.items():
                                             actual = output[key][spin]
-                                            err = float(np.max(np.abs(actual - expected), initial=0.0))
+                                            err = float(
+                                                np.max(
+                                                    np.abs(actual - expected),
+                                                    initial=0.0,
+                                                )
+                                            )
                                             max_error[key] = max(max_error[key], err)
                                             np.testing.assert_allclose(
                                                 actual, expected, rtol=2e-9, atol=2e-10
@@ -179,23 +205,37 @@ def benchmark(args):
                             if repeat >= args.warmups:
                                 samples[route].append(elapsed)
                     times = {route: median(values) for route, values in samples.items()}
-                    work = [projection_work(a, rank, len(tile)) for a, tile in zip(counts, tiles, strict=True)]
-                    report["cases"].append({
-                        "atoms": len(atoms), "ao": n, "occupied_per_spin": rank,
-                        "points": len(points), "mode": mode,
-                        "active_ao_per_tile": counts,
-                        "timings_seconds": samples, "medians_seconds": times,
-                        "orbital_over_density_ratio": times["orbitals"] / times["density_matrix"],
-                        "max_abs_hybrid_reference_error": max_error,
-                        "product_counts": {
-                            key: sum(v[key] for v in work) for key in work[0]
-                        },
-                        "source_uploads_excluded_from_timing": source_stats,
-                        "cuda_versions": {
-                            key: cuda.metrics()[key]
-                            for key in ("runtime_version", "driver_version", "cublas_version")
-                        },
-                    })
+                    work = [
+                        projection_work(a, rank, len(tile))
+                        for a, tile in zip(counts, tiles, strict=True)
+                    ]
+                    report["cases"].append(
+                        {
+                            "atoms": len(atoms),
+                            "ao": n,
+                            "occupied_per_spin": rank,
+                            "points": len(points),
+                            "mode": mode,
+                            "active_ao_per_tile": counts,
+                            "timings_seconds": samples,
+                            "medians_seconds": times,
+                            "orbital_over_density_ratio": times["orbitals"]
+                            / times["density_matrix"],
+                            "max_abs_hybrid_reference_error": max_error,
+                            "product_counts": {
+                                key: sum(v[key] for v in work) for key in work[0]
+                            },
+                            "source_uploads_excluded_from_timing": source_stats,
+                            "cuda_versions": {
+                                key: cuda.metrics()[key]
+                                for key in (
+                                    "runtime_version",
+                                    "driver_version",
+                                    "cublas_version",
+                                )
+                            },
+                        }
+                    )
     return report
 
 
@@ -211,7 +251,10 @@ def main():
     parser.add_argument("--cache", default=".artifacts/mgga-occupied-grid-cache")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    if min(args.tile_points, args.points_per_atom, args.orbital_tile, args.warmups) < 1 or args.repeats < 2:
+    if (
+        min(args.tile_points, args.points_per_atom, args.orbital_tile, args.warmups) < 1
+        or args.repeats < 2
+    ):
         parser.error("positive tile/point/priming dimensions and >=2 repeats required")
     result = json.dumps(benchmark(args), indent=2, sort_keys=True)
     if args.output:

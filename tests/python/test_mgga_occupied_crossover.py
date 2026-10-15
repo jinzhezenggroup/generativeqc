@@ -51,7 +51,10 @@ def test_crossovers_use_local_ao_count_not_global_ao_count():
     local = projection_work(48, 160, 64)
     assert dense["one_density_three_occupied"] < dense["four_density_jets"]
     assert local["one_density_three_occupied"] > local["four_density_jets"]
-    assert projection_work(160, 160, 10)["one_density_three_occupied"] == projection_work(160, 160, 10)["four_density_jets"]
+    assert (
+        projection_work(160, 160, 10)["one_density_three_occupied"]
+        == projection_work(160, 160, 10)["four_density_jets"]
+    )
     for wrong in ((-1, 1, 2), (3, True, 5), (1, 1, -2)):
         with pytest.raises(ValueError, match="counts"):
             projection_work(*wrong)
