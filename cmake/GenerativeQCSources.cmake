@@ -333,6 +333,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/scf/gradient/hf_gradient.cpp
       src/scf/reference/mean_field.cpp
       src/scf/initial_guess/density.cpp
+      src/scf/occupied_projection.cpp
       src/scf/initial_guess/minao.cpp
       src/scf/initial_guess/huckel.cpp
       src/scf/preliminary_guess.cpp

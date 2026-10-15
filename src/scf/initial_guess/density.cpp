@@ -261,6 +261,21 @@ OccupiedProjectionResult project_occupied_density(
     std::span<const double> source_overlap, std::span<const double> cross_overlap,
     std::size_t source_nbf, std::span<const double> source_coefficients, std::size_t occupied,
     double occupation, double maximum_residual) {
+  return project_occupied_density_with_controls(target, target_orthogonalizer, source_overlap,
+                                                cross_overlap, source_nbf, source_coefficients,
+                                                occupied, occupation, maximum_residual, {});
+}
+
+OccupiedProjectionResult project_occupied_density_with_controls(
+    const integrals::IntegralData& target, const Matrix& target_orthogonalizer,
+    std::span<const double> source_overlap, std::span<const double> cross_overlap,
+    std::size_t source_nbf, std::span<const double> source_coefficients, std::size_t occupied,
+    double occupation, double maximum_residual, const OccupiedProjectionControls& controls) {
+  if (!std::isfinite(controls.validation_tolerance) || controls.validation_tolerance <= 0.0 ||
+      !std::isfinite(controls.minimum_squared_norm) || controls.minimum_squared_norm < 0.0 ||
+      !std::isfinite(controls.relative_gram_threshold) || controls.relative_gram_threshold < 0.0 ||
+      !std::isfinite(controls.residual_zero_tolerance) || controls.residual_zero_tolerance < 0.0)
+    throw std::invalid_argument("occupied projection has invalid acceptance controls");
   const std::size_t target_nbf = target.nbf;
   const auto finite = [](std::span<const double> values) {
     return std::all_of(values.begin(), values.end(),
@@ -314,7 +329,8 @@ OccupiedProjectionResult project_occupied_density(
     }
   }
   result.source_metric_orthogonality_error = source_orthogonality_error;
-  if (!std::isfinite(source_orthogonality_error) || source_orthogonality_error > 1.0e-7)
+  if (!std::isfinite(source_orthogonality_error) ||
+      source_orthogonality_error > controls.validation_tolerance)
     throw std::invalid_argument("source occupied orbitals are not orthonormal in their metric");
 
   // B = S_ts C_s(occ), then Y = S_tt^(-1/2) B.  Y^T Y is the
@@ -350,11 +366,14 @@ OccupiedProjectionResult project_occupied_density(
       gram[index(first, second, occupied)] = value;
     }
   }
-  auto spectral = reference::symmetric_eigen(std::move(gram), occupied);
+  auto spectral = controls.eigen ? controls.eigen(gram, nullptr, nullptr, occupied)
+                                 : reference::symmetric_eigen(std::move(gram), occupied);
   const double minimum_norm = spectral.values.front();
   const double maximum_norm = spectral.values.back();
   if (!(minimum_norm > 0.0) || !std::isfinite(minimum_norm) || !std::isfinite(maximum_norm) ||
-      minimum_norm <= 1.0e-10 * maximum_norm || maximum_norm > 1.0 + 1.0e-7) {
+      minimum_norm <= controls.minimum_squared_norm ||
+      minimum_norm <= controls.relative_gram_threshold * maximum_norm ||
+      maximum_norm > 1.0 + controls.validation_tolerance) {
     throw std::invalid_argument("occupied projection lost rank or exceeds the source norm");
   }
   result.minimum_projected_norm = minimum_norm;
@@ -362,7 +381,7 @@ OccupiedProjectionResult project_occupied_density(
   // residual. Preserve every larger projected-norm loss.
   const double norm_loss = std::max(0.0, 1.0 - minimum_norm);
   result.projection_residual =
-      norm_loss <= 8.0 * std::numeric_limits<double>::epsilon() ? 0.0 : std::sqrt(norm_loss);
+      norm_loss <= controls.residual_zero_tolerance ? 0.0 : std::sqrt(norm_loss);
   if (result.projection_residual > maximum_residual)
     throw std::invalid_argument("occupied projection loses too much source occupied norm");
 
@@ -388,6 +407,21 @@ OccupiedProjectionResult project_occupied_density(
                  orthogonal_projection[nu * occupied + orbital];
       projected[mu * occupied + orbital] = value;
     }
+  }
+  if (controls.measure_normal_equation) {
+    double error = 0.0, right_norm = 0.0;
+    for (std::size_t mu = 0; mu < target_nbf; ++mu) {
+      for (std::size_t orbital = 0; orbital < occupied; ++orbital) {
+        double value = 0.0;
+        for (std::size_t nu = 0; nu < target_nbf; ++nu)
+          value += target.overlap[index(mu, nu, target_nbf)] * projected[nu * occupied + orbital];
+        error = std::hypot(error, value - cross_times_c[mu * occupied + orbital]);
+        right_norm = std::hypot(right_norm, cross_times_c[mu * occupied + orbital]);
+      }
+    }
+    result.normal_equation_residual = error / std::max(1.0, right_norm);
+    if (!std::isfinite(result.normal_equation_residual))
+      throw std::invalid_argument("occupied projection normal equation is non-finite");
   }
   std::vector<double> target_coefficients(target_nbf * occupied, 0.0);
   for (std::size_t mu = 0; mu < target_nbf; ++mu) {
@@ -424,7 +458,8 @@ OccupiedProjectionResult project_occupied_density(
     }
   }
   result.target_metric_orthogonality_error = target_orthogonality_error;
-  if (!std::isfinite(target_orthogonality_error) || target_orthogonality_error > 1.0e-7)
+  if (!std::isfinite(target_orthogonality_error) ||
+      target_orthogonality_error > controls.validation_tolerance)
     throw std::invalid_argument("projected occupied orbitals failed target-metric orthogonality");
 
   result.coefficients = target_coefficients;
@@ -447,7 +482,8 @@ OccupiedProjectionResult project_occupied_density(
           result.density[index(mu, nu, target_nbf)] * target.overlap[index(nu, mu, target_nbf)];
   const double expected_trace = occupation * static_cast<double>(occupied);
   if (!std::isfinite(electron_trace) ||
-      std::abs(electron_trace - expected_trace) > 1.0e-7 * std::max(1.0, expected_trace))
+      std::abs(electron_trace - expected_trace) >
+          controls.validation_tolerance * std::max(1.0, expected_trace))
     throw std::invalid_argument("occupied projection failed the target electron trace");
 
   return result;
