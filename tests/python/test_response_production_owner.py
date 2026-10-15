@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 import generativeqc.response_operator as production_operator
@@ -10,6 +12,7 @@ import generativeqc.response_problem as production_problem
 import generativeqc.response_solver as production_solver
 import generativeqc.response_xc as production_xc
 import generativeqc.rks_response as production_rks
+import pytest
 
 import tools.generativeqc_response as response_api
 from tools.generativeqc_response import krylov as solver_shim
@@ -100,19 +103,125 @@ def test_installed_response_owners_never_import_tools() -> None:
         assert not any(name == "tools" or name.startswith("tools.") for name in imports)
 
 
-def test_tools_response_shims_contain_no_scientific_definitions() -> None:
-    for relative in (
-        "tools/generativeqc_response/problem.py",
-        "tools/generativeqc_response/operators.py",
-        "tools/generativeqc_response/xc.py",
-    ):
-        tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
-        definitions = {
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        }
-        assert definitions == set()
+def _run_isolated(code: str, *arguments: str) -> None:
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(ROOT), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+_RESPONSE_ALGEBRA = """
+from types import SimpleNamespace
+import numpy as np
+
+layout = problem.RotationLayout((0,), (1, 2))
+np.testing.assert_array_equal(layout.pack([[2.0, -1.0]]), [2.0, -1.0])
+np.testing.assert_array_equal(
+    layout.density_matrix([2.0, -1.0]),
+    [[0.0, 4.0, -2.0], [4.0, 0.0, 0.0], [-2.0, 0.0, 0.0]],
+)
+np.testing.assert_array_equal(
+    layout.generator_matrix([2.0, -1.0]),
+    [[0.0, 2.0, -1.0], [-2.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+)
+reference = SimpleNamespace(
+    algorithm="RHF", converged=True, nmo=3, nocc=1,
+    identity="synthetic-reference", electron_count=2,
+)
+snapshot = problem.ResponseProblem(reference, layout, "rhf", "operator", "model")
+operator = operators.DenseMatrixResponseOperator(
+    snapshot, [[3.0, 1.0], [0.0, 2.0]], backend_identity="synthetic-dense",
+)
+np.testing.assert_array_equal(operator.apply([2.0, -1.0]), [5.0, -2.0])
+np.testing.assert_array_equal(operator.apply_transpose([2.0, -1.0]), [6.0, 0.0])
+try:
+    layout.validate_vector([1.0])
+except ValueError as error:
+    assert "shape" in str(error)
+else:
+    raise AssertionError("response layout accepted a wrong-sized vector")
+try:
+    problem.RotationLayout((0,), (1,), ("alpha", "beta"))
+except problem.ResponseUnsupported:
+    pass
+else:
+    raise AssertionError("restricted response layout accepted two spin blocks")
+"""
+
+
+@pytest.mark.parametrize("first_import", ["production", "shim"])
+def test_response_shims_preserve_public_objects_in_both_import_orders(
+    first_import: str,
+) -> None:
+    _run_isolated(
+        """
+import importlib
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path[:0] = [str(root / "python"), str(root)]
+contracts = (
+    ("response_problem", "problem", (
+        "ResponseCompatibilityError", "ResponseProblem", "ResponseSolveError",
+        "ResponseUnsupported", "RotationLayout",
+    )),
+    ("response_operator", "operators", (
+        "CPKSResponseOperator", "DenseMatrixResponseOperator", "RHFResponseOperator",
+        "cpks_operator_identity", "rhf_operator_identity", "validate_rotation_layout",
+    )),
+    ("response_xc", "xc", (
+        "FixedDensityXCDerivativeKernel", "density_feature_response",
+    )),
+)
+for production_name, shim_name, _ in contracts:
+    importlib.import_module(
+        "generativeqc." + production_name if sys.argv[2] == "production"
+        else "tools.generativeqc_response." + shim_name
+    )
+for production_name, shim_name, names in contracts:
+    production_name = "generativeqc." + production_name
+    shim_name = "tools.generativeqc_response." + shim_name
+    production = importlib.import_module(production_name)
+    shim = importlib.import_module(shim_name)
+    assert set(names) <= set(shim.__all__)
+    for name in names:
+        assert getattr(shim, name) is getattr(production, name), name
+problem = importlib.import_module("tools.generativeqc_response.problem")
+operators = importlib.import_module("tools.generativeqc_response.operators")
+"""
+        + _RESPONSE_ALGEBRA,
+        first_import,
+    )
+
+
+def test_production_response_imports_and_algebra_execute_without_tools() -> None:
+    _run_isolated(
+        """
+import importlib.abc
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "python"))
+attempts = []
+class BlockTools(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "tools" or fullname.startswith("tools."):
+            attempts.append(fullname)
+            raise AssertionError("production response imported " + fullname)
+        return None
+sys.meta_path.insert(0, BlockTools())
+from generativeqc import response_problem as problem
+from generativeqc import response_operator as operators
+from generativeqc import response_solver, response_xc, rks_response
+"""
+        + _RESPONSE_ALGEBRA
+        + "\nassert not attempts, attempts\n"
+    )
 
 
 def test_tools_native_ks_no_longer_defines_rks_response() -> None:
