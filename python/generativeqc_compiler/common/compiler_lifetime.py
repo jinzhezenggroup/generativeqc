@@ -13,17 +13,20 @@ import signal
 import stat
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 OWNER_FD_ENV = "GENERATIVEQC_COMPILER_OWNER_FD"
+_OWNERSHIP_ATTRIBUTE = "_generativeqc_ownership"
 
 
-class _OwnedProcess(subprocess.Popen):
-    """A watchdog process with explicitly owned cancellation descriptors."""
+@dataclass
+class _ProcessOwnership:
+    """Typed cancellation state attached only after a watchdog is launched."""
 
-    _generativeqc_cancel_writer: int | None = None
-    _generativeqc_group_reader: int | None = None
+    cancel_writer: int | None
+    group_reader: int | None
 
 
 def start_owned_process(
@@ -49,7 +52,7 @@ def start_owned_process(
         os.close(cancel_write)
         raise
     try:
-        process = _OwnedProcess(
+        process = subprocess.Popen(
             [
                 sys.executable,
                 "-I",
@@ -72,20 +75,20 @@ def start_owned_process(
         os.close(cancel_read)
         os.close(group_write)
     # Only the Python owner holds this writer. Its death also requests cleanup.
-    process._generativeqc_cancel_writer = cancel_write
-    process._generativeqc_group_reader = group_read
+    setattr(process, _OWNERSHIP_ATTRIBUTE, _ProcessOwnership(cancel_write, group_read))
     return process
 
 
 def cancel_owned_process(process: subprocess.Popen) -> bool:
     """Ask a watchdog to reclaim its group; return false for ordinary launches."""
-    if not isinstance(process, _OwnedProcess):
+    ownership = getattr(process, _OWNERSHIP_ATTRIBUTE, None)
+    if not isinstance(ownership, _ProcessOwnership):
         return False
-    descriptor = process._generativeqc_cancel_writer
+    descriptor = ownership.cancel_writer
     if descriptor is not None:
-        process._generativeqc_cancel_writer = None
+        ownership.cancel_writer = None
         os.close(descriptor)
-    reader = process._generativeqc_group_reader
+    reader = ownership.group_reader
     try:
         try:
             process.wait(timeout=1)
@@ -112,7 +115,7 @@ def cancel_owned_process(process: subprocess.Popen) -> bool:
     finally:
         if reader is not None:
             os.close(reader)
-            process._generativeqc_group_reader = None
+            ownership.group_reader = None
     return True
 
 
