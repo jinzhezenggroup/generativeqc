@@ -1,6 +1,6 @@
 # Decision: share r2SCAN branches only in the FP64 stationary consumer
 
-Status: implemented; 12/48-atom direct and DF endpoints qualified
+Status: implemented; 12/48 qualified; 96 science passes, performance admission blocked
 Date: 2026-10-15
 
 ## Problem
@@ -113,8 +113,55 @@ time falls 1.22-15.15%, depending on the cohort; moved-warm falls 1.32-14.97%.
 Do not hide the 0.5% direct-3c/48 cold or 0.6% DF-3c/12 cold regressions, or
 extrapolate the point-kernel gain to the full endpoint. In particular, direct
 3c/48 has only a 1.2% warm improvement: its expensive integral work is unchanged.
-No 96-atom population is measured here, no SCF-tail problem is declared fixed,
-and no broader 48/96 convergence/promotion gate is closed by this campaign.
+The original campaign in this section does not measure 96 atoms. The separate
+follow-up below does not establish an SCF-tail fix or close the broader 48/96
+convergence/performance promotion gate.
+
+## Independent 96-atom follow-up: performance admission blocked
+
+A separate campaign reuses the exact frozen control/candidate core libraries
+and force artifacts on n1, in finite paired Slurm jobs 8553-8556. All four
+method/Hamiltonian pairs complete both 12-call arms: 96 additional native calls.
+An independent local recheck binds the compressed audit to the raw native JSON
+hashes and frozen core hashes, recomputes each energy/force error against its
+retained geometry oracle, and verifies paired protocols, phase populations,
+timing medians and iteration/Fock counts. All 96 science gates pass without
+relaxation; maximum errors are 2.196429704781622e-10 Eh and
+1.565123594962636e-10 Eh/Bohr.
+
+Entries again give complete **cold/warm/moved/moved-warm** seconds. Warm and
+moved-warm include all five samples, each with one iteration and one Fock build.
+The cold/moved Fock columns must not be normalized away.
+
+| Method | DF | Master seconds | Candidate seconds | Master cold/moved Focks | Candidate cold/moved Focks |
+| --- | --- | --- | --- | --- | --- |
+| r2scan | none | 115.484/17.031/109.905/17.095 | 114.984/16.584/82.556/16.411 | 19/17 | 19/12 |
+| r2scan | cuda | 107.700/14.352/79.981/14.317 | 106.796/13.361/79.055/13.351 | 18/12 | 18/12 |
+| r2scan-3c | none | 459.939/91.234/354.766/91.225 | 430.366/90.519/423.968/90.950 | 26/19 | 24/24 |
+| r2scan-3c | cuda | 208.266/21.979/131.868/21.622 | 205.188/20.480/273.798/19.861 | 25/13 | 25/13 |
+
+The direct r2SCAN-3c moved endpoint is **19.506% slower**, with Fock builds
+changing from 19 to 24. The DF r2SCAN-3c moved endpoint is **107.631% slower**
+despite matching 13-build work. Its telemetry records a large preparation/owner
+lookup interval. Concurrent host integrity audits also experienced I/O waits;
+this context does not establish a unique compilation, file-hashing or branch
+schedule cause. Retain the complete timing rather than discarding the negative
+or substituting a selected subphase. Conversely, direct r2SCAN's moved work
+drops from 17 to 12 builds, so its elapsed-time reduction cannot be attributed
+solely to the force optimization, even though SCF point source is preserved.
+
+All warm medians improve, by 0.784-6.909%, but those gains do not establish an
+unconditional all-phase 96-atom performance admission. PR #2520 remains draft;
+the SCF-tail and all-phase performance gates remain open. No additional GPU
+rerun, source change or relaxed acceptance is used to turn these data green.
+
+The independent original records are retained under
+`/home/jzzeng/codes/qc-r2scan-m062x-20261014/.artifacts/r2scan-semilo-cse-20261015/remote-endpoints/force-only-96/`.
+A compact compressed audit and timings are copied to this campaign's ignored
+`independent-96/` directory. The compressed `audited-endpoints.json.xz` SHA-256
+is `ed4d6a1b18a9de19c8b26ab2c812d1585499c7dc2c1e5877f18d8597be6f1509`;
+the uncompressed JSON SHA-256 is
+`7ec2d1ab03541795d6003fe3f81a7a21adee0cd4e65907c29ecb1c2562a9dd54`.
 
 ## Reproduction and receipts
 
