@@ -277,28 +277,46 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
             )
         )
     lines.extend(("  }", "}"))
-    semilocal = resolve_method("M06-2X", spin="unpolarized").primitives[0].functional
+    for method_index, identifier in enumerate(("M06-2X", "MN15")):
+        for spin in ("unpolarized", "polarized"):
+            semilocal = resolve_method(identifier, spin=spin).primitives[0].functional
+            lines.extend(
+                (
+                    f"namespace force_point_{method_index}_{spin} {{",
+                    "using std::isfinite;",
+                    _emit_composed_point(
+                        SPLIT_HYBRIDS[identifier]["functional_code"], semilocal
+                    ),
+                    "}",
+                )
+            )
     lines.extend(
         (
-            "namespace force_integer_power_point {",
-            "using std::isfinite;",
-            _emit_composed_point(SPLIT_HYBRIDS["M06-2X"]["functional_code"], semilocal),
-            "}",
-            'extern "C" void evaluate_force(bool restricted, const double* input, double* output) {',
+            'extern "C" void evaluate_force(int method, bool restricted, const double* input, double* output) {',
             "  const double gradient[2][3] = {{input[2],input[3],input[4]}, {input[5],input[6],input[7]}};",
-            "  const auto value = restricted",
-            "      ? force_integer_power_point::stationary_evaluate_point<true>(input,gradient,input+8)",
-            "      : force_integer_power_point::stationary_evaluate_point<false>(input,gradient,input+8);",
-            "  output[0] = value.energy;",
-            "  for (unsigned spin=0; spin<2; ++spin) {",
-            "    output[spin+1] = value.rho[spin];",
-            "    for (unsigned coordinate=0; coordinate<3; ++coordinate)",
-            "      output[3+3*spin+coordinate] = value.gradient[spin][coordinate];",
-            "    output[9+spin] = value.kinetic[spin];",
-            "  }",
-            "}",
+            "  switch (method) {",
         )
     )
+    for method_index in range(2):
+        lines.extend(
+            (
+                f"    case {method_index}: {{",
+                "  const auto store_force = [output](const auto& value) {",
+                "  output[0] = value.energy;",
+                "  for (unsigned spin=0; spin<2; ++spin) {",
+                "    output[spin+1] = value.rho[spin];",
+                "    for (unsigned coordinate=0; coordinate<3; ++coordinate)",
+                "      output[3+3*spin+coordinate] = value.gradient[spin][coordinate];",
+                "    output[9+spin] = value.kinetic[spin];",
+                "  }",
+                "  };",
+                f"  if (restricted) store_force(force_point_{method_index}_unpolarized::stationary_evaluate_point<true>(input,gradient,input+8));",
+                f"  else store_force(force_point_{method_index}_polarized::stationary_evaluate_point<false>(input,gradient,input+8));",
+                "  break;",
+                "}",
+            )
+        )
+    lines.extend(("  }", "}"))
     source = directory / "probe.cpp"
     source.write_text("\n".join(lines), encoding="utf-8")
     library = directory / "probe.so"
@@ -325,7 +343,7 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     pointer = ctypes.POINTER(ctypes.c_double)
     loaded.evaluate.argtypes = (ctypes.c_int, ctypes.c_bool, pointer, pointer)
     loaded.evaluate.restype = None
-    loaded.evaluate_force.argtypes = (ctypes.c_bool, pointer, pointer)
+    loaded.evaluate_force.argtypes = (ctypes.c_int, ctypes.c_bool, pointer, pointer)
     loaded.evaluate_force.restype = None
     return loaded
 
@@ -407,8 +425,9 @@ def test_equal_spin_points_match_independent_libxc(
 
 
 @pytest.mark.parametrize("restricted", (False, True))
+@pytest.mark.parametrize(("method", "libxc_code"), ((0, "450,236"), (1, "268,269")))
 def test_integer_power_force_point_matches_independent_libxc_and_finite_difference(
-    compiled_points: ctypes.CDLL, restricted: bool
+    compiled_points: ctypes.CDLL, restricted: bool, method: int, libxc_code: str
 ) -> None:
     """Exercise the production force emitter, including Cartesian and tau ABIs."""
     pytest.importorskip("pyscf")
@@ -434,7 +453,7 @@ def test_integer_power_force_point_matches_independent_libxc_and_finite_differen
     )
     features = np.column_stack((density, sigma, kinetic))
     exc, derivatives, _, _ = libxc.eval_xc(
-        "450,236", libxc_density(features), spin=1, deriv=1
+        libxc_code, libxc_density(features), spin=1, deriv=1
     )
     reference_gradient = np.empty_like(gradient)
     reference_gradient[:, 0] = (
@@ -459,6 +478,7 @@ def test_integer_power_force_point_matches_independent_libxc_and_finite_differen
         output = np.empty((len(values), 11))
         for point, result in zip(values, output, strict=True):
             compiled_points.evaluate_force(
+                method,
                 restricted,
                 point.ctypes.data_as(pointer),
                 result.ctypes.data_as(pointer),

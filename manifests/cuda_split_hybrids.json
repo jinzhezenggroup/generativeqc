@@ -10,14 +10,5 @@
   ],
   "cuda_fp64_local_ao": [
     "M06-2X"
-  ],
-  "cuda_scalar_schedules": [
-    {
-      "method": "M06-2X",
-      "consumer": "stationary_force",
-      "spin": "unpolarized",
-      "scalar_type": "double",
-      "lower_integer_powers": true
-    }
   ]
 }

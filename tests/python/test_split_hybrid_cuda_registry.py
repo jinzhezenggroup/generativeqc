@@ -15,17 +15,13 @@ from generativeqc.ks import (
 )
 from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.method import resolve_method
-from generativeqc_compiler.xc._generated_split_hybrids import (
-    CUDA_SMALL_INTEGER_POWER_SCHEDULES,
-    SPLIT_HYBRIDS,
-)
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 from tools.generate_xc_split_hybrid_registry import (
     GGA_CODE_BASE,
     MGGA_CODE_BASE,
     _manifest_cuda_fp64_local_ao,
-    _manifest_cuda_small_integer_power_schedules,
     emit_dft_point_consumers,
     emit_python_registry,
     emit_registry,
@@ -194,59 +190,3 @@ def test_local_ao_qualification_is_independent_of_df(tmp_path: Path) -> None:
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(payload))
     assert not _manifest_cuda_fp64_local_ao(path)
-
-
-def test_scalar_schedule_admission_is_explicit_and_generated() -> None:
-    """Only the independently qualified complete-force consumer opts in."""
-    assert _manifest_cuda_small_integer_power_schedules() == frozenset(
-        {("M06-2X", "stationary_force", "unpolarized", "double")}
-    )
-    assert CUDA_SMALL_INTEGER_POWER_SCHEDULES == frozenset(
-        {
-            (
-                SPLIT_HYBRIDS["M06-2X"]["functional_code"],
-                "stationary_force",
-                "unpolarized",
-                "double",
-            )
-        }
-    )
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    (
-        ("method", "unregistered"),
-        ("consumer", "scf_point"),
-        ("spin", "invalid"),
-        ("scalar_type", "float"),
-        ("lower_integer_powers", False),
-        ("unexpected_field", True),
-    ),
-)
-def test_scalar_schedule_manifest_rejects_unqualified_entries(
-    tmp_path: Path, field: str, value: object
-) -> None:
-    payload = json.loads((ROOT / "manifests/cuda_split_hybrids.json").read_text())
-    payload["cuda_scalar_schedules"][0][field] = value
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(payload))
-    with pytest.raises(MapleImportError, match="qualified FP64 stationary-force"):
-        _manifest_cuda_small_integer_power_schedules(path)
-
-
-def test_scalar_schedule_manifest_rejects_duplicate_entries(tmp_path: Path) -> None:
-    payload = json.loads((ROOT / "manifests/cuda_split_hybrids.json").read_text())
-    payload["cuda_scalar_schedules"].append(dict(payload["cuda_scalar_schedules"][0]))
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(payload))
-    with pytest.raises(MapleImportError, match="duplicate CUDA scalar schedule"):
-        _manifest_cuda_small_integer_power_schedules(path)
-
-
-def test_scalar_schedule_manifest_is_fail_closed_when_absent(tmp_path: Path) -> None:
-    payload = json.loads((ROOT / "manifests/cuda_split_hybrids.json").read_text())
-    del payload["cuda_scalar_schedules"]
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(payload))
-    assert not _manifest_cuda_small_integer_power_schedules(path)

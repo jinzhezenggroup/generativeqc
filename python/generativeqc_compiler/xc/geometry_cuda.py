@@ -49,8 +49,9 @@ def _emit_composed_point(
     """Reuse the energy consumer's exact generated graph and boundary policy.
 
     The force consumer never differentiates clipping or substitutes an interior
-    point formula. Qualified scalar schedules are selected by functional code,
-    consumer, spin, and precision without altering the SCF point consumer.
+    point formula. Imported programs use the same bounded FP64 force schedule
+    for either spin and every functional, without altering any SCF point graph.
+    Curated programs already lower the same bounded powers after AD.
     """
     polarized = replace(semilocal, spin="polarized")
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
@@ -80,9 +81,7 @@ def _emit_composed_point(
         }:
             raise ValueError("stationary split-hybrid point composition mismatch")
         schedule = select_xc_scalar_schedule(
-            code,
             consumer=XcScalarConsumer.STATIONARY_FORCE,
-            spin=semilocal.spin,
             scalar_type=scalar_type,
         )
         body, _, selected = emit_split_hybrid_device_body(
