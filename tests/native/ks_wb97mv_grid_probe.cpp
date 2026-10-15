@@ -11,6 +11,7 @@
 
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_one_electron_response.hpp"
+#include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
 #include "dft/semilocal_family.hpp"
 #include "molecule/basis.hpp"
@@ -61,9 +62,10 @@ void run(bool unrestricted, const std::string& mode) {
   const bool fock = mode == "fock" || mode == "df-fock";
   const bool nuclear = mode == "nuclear" || mode == "df-nuclear";
   const bool one_electron = mode == "one-electron" || mode == "df-one-electron";
+  const bool nuclear_jk = mode == "nuclear-jk" || mode == "df-nuclear-jk";
   const bool geometry = mode == "geometry" || mode == "df-geometry" || nuclear;
   const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear" ||
-                      mode == "df-one-electron";
+                      mode == "df-one-electron" || mode == "df-nuclear-jk";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -260,6 +262,55 @@ void run(bool unrestricted, const std::string& mode) {
     array("integral_weights", weights);
     std::cout << ",\"integral_device_bytes\":" << one_electron_response.work().device_bytes;
   }
+  dft::CudaKsWb97mvNuclearJk nuclear_jk_response;
+  double *jk_motion{}, *jk_storage{};
+  dft::CudaWb97mvJkOutput jk_output;
+  const auto jk_count = 1 + 2 * elements + 6 * shape.atoms;
+  if (nuclear_jk) {
+    jk_motion = storage.allocate(3 * shape.atoms);
+    jk_storage = storage.allocate(jk_count);
+    jk_output = {jk_storage, jk_storage + 1, jk_storage + 1 + elements,
+                 jk_storage + 1 + 2 * elements, jk_storage + 1 + 2 * elements + 3 * shape.atoms};
+    std::vector<double> motion(3 * shape.atoms);
+    for (std::size_t index = 0; index < motion.size(); ++index)
+      motion[index] = 0.15 * std::sin(index + 2.0);
+    check(cudaMemcpyAsync(jk_motion, motion.data(), motion.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    auto options = dft::CudaWb97mvJkOptions{};
+    if (fitted) {
+      require(nuclear_jk_response.prepare(*batch, 0, token, options, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "DF source silently replaced fitted primary with exact J/K");
+      options.part = dft::CudaWb97mvJkPart::correction;
+    }
+    auto insufficient = options;
+    insufficient.max_workspace_bytes = 1;
+    require(nuclear_jk_response.prepare(*batch, 0, token, insufficient, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "native J/K adapter ignored arena admission");
+    require(nuclear_jk_response.prepare(*batch, 0, token, options, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    check(nuclear_jk_response.apply(jk_motion, input, jk_output, lease.stream));
+    if (!fitted) {
+      dft::CudaKsResidentFockBinding source;
+      require(methods::detail::dft_cuda_resident_fock_sources(*batch, 0, token, source, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail);
+      const auto accepted = download(source.fock, elements),
+                 core = download(source.hcore, shape.nao * shape.nao);
+      const auto calculated = download(jk_output.fock, elements);
+      for (std::size_t index = 0; index < elements; ++index)
+        require(std::abs(accepted[index] - core[index % core.size()] - value[index] -
+                         calculated[index]) < 3e-8,
+                "native J/K source differs from actual accepted WB97M-V Fock");
+    }
+    array("jk_energy", download(jk_output.energy, 1));
+    array("jk_matrices", download(jk_output.fock, 2 * elements));
+    array("jk_vectors", download(jk_output.gradient, 6 * shape.atoms));
+    array("jk_motion", motion);
+    std::cout << ",\"jk_device_bytes\":" << nuclear_jk_response.work().workspace_bytes;
+  }
   dft::CudaGridGeometryResponse geometry_response;
   double *geometry_left{}, *geometry_right{}, *geometry_ao{}, *geometry_weights{};
   if (geometry) {
@@ -422,6 +473,15 @@ void run(bool unrestricted, const std::string& mode) {
                 download(integral_vectors, vector_sentinel.size()) == vector_sentinel,
             "revoked native one-electron adapter published partial output");
   }
+  if (nuclear_jk) {
+    const std::vector<double> jk_sentinel(jk_count, 27);
+    check(cudaMemcpy(jk_storage, jk_sentinel.data(), jk_count * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    require(nuclear_jk_response.apply(jk_motion, input, jk_output, lease.stream) ==
+                    cudaErrorInvalidResourceHandle &&
+                download(jk_storage, jk_count) == jk_sentinel,
+            "revoked native J/K adapter published partial output");
+  }
   std::vector<double> sentinel(elements, 27);
   check(cudaMemcpyAsync(output, sentinel.data(), elements * sizeof(double), cudaMemcpyHostToDevice,
                         lease.stream));
@@ -465,11 +525,12 @@ int main(int argc, char** argv) {
         (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock" ||
                                      mode == "geometry" || mode == "df-geometry" ||
                                      mode == "nuclear" || mode == "df-nuclear" ||
-                                     mode == "one-electron" || mode == "df-one-electron"))) &&
+                                     mode == "one-electron" || mode == "df-one-electron" ||
+                                     mode == "nuclear-jk" || mode == "df-nuclear-jk"))) &&
             (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
         "usage: ks_wb97mv_grid_probe rks|uks "
         "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
-        "electron]");
+        "electron|nuclear-jk|df-nuclear-jk]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {

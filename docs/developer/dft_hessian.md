@@ -448,8 +448,40 @@ libcint/PySCF values. The standalone probe starts from the native System
 normalizer/AoBasis; actual RKS/UKS Direct/DF owner tests also compare primal H/S
 with the accepted native frame and verify revocation without publication.
 
-Complete ERI/DF/ECP shell coverage, their nuclear response and stationary molecular
-assembly still require integration.
+`src/dft/cuda_wb97mv_nuclear_jk.hpp` supplies the separate native ordered-quartet
+J/K nuclear source. Compiler TensorIR VJP/JVP generates the RKS/UKS energy,
+integral weight and its right-density response, four density-incidence Fock
+contributions, and frozen-density nuclear Fock motion. The exact operator uses
+full-range primary plus exact LR correction; individual Coulomb/SR/LR parts are
+available for independent qualification. Signed symmetric D and dD are allowed.
+Fock nuclear motion holds D fixed, while the stationary mixed nuclear vector
+retains right dD; consumers must not double count CPKS relaxation.
+
+The mandatory bounded shell-quartet cache stores raw value/twelve gradients/
+twelve gradient JVPs once per primitive component. Through f its maximum is
+25*10,000 FP64 values, not a molecular ERI tensor. Public Cartesian/spherical
+polynomial terms gather this cache instead of repeating integral work for every
+public quartet or left coordinate. Native deterministic incidence/physical-atom
+reductions publish energy, Fock, frozen-density Fock direction, weighted gradient
+and HVP jointly after finite/symmetry/live-owner gates. Separate primitive,
+projection-term, reduction-term and arena budgets fail before execution; actions
+allocate nothing, execute no Python and perform no CPU numerical contractions.
+
+`src/dft/cuda_ks_wb97mv_nuclear_jk.hpp` binds actual accepted D and normalized
+basis/topology from live KS grid/Fock owners. It shares complete WB97M-V model
+admission with the induced-Fock provider. **DF owners admit only the exact LR
+correction here**; fitted primary J/K nuclear response remains separate and is
+never silently replaced by exact integrals. All ordered requested integral
+components must already be linked. Build-time closure can be selected with
+`tools/complete_hessian_aot_inventory.py --families eri --max-angular <0..3>
+--radials full_range long_range short_range`; generation/admission alone is not
+numerical angular qualification. `tests/python/test_native_wb97mv_nuclear_jk.py`
+qualifies s/p numerical components and actual RKS/UKS Direct/DF owner lifetimes;
+injected CUDA-free closure tests additionally check largest through-f storage
+and work admission, not through-f integral numerics.
+
+Complete ERI/DF/ECP numerical shell coverage, fitted/ECP nuclear response and
+stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 
@@ -505,9 +537,9 @@ The Python test driver supplies independent quadrature/Libxc/real-space oracles;
 numerical leaves and response components execute in standalone native processes,
 including tests with unavailable Python paths and an empty executable search
 path. These validate components, not a complete stationary molecular endpoint.
-Nuclear J/K sources, full-rank DF metric response, complete stationary
-integral/ECP assembly, full integral coverage and
-production CLI wiring are **not** implemented by this package. Therefore it
+The H/S and exact J/K nuclear source components do not supply full-rank DF
+metric response, complete stationary integral/ECP assembly, full integral coverage
+or production CLI wiring. These remain **unimplemented** by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.
 
 ### Representation, spin and fitting

@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "dft/cuda_ks_grid_reference.hpp"
+#include "dft/cuda_ks_wb97mv_model.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
 #include "dft/semilocal_family.hpp"
 #include "molecule/basis.hpp"
@@ -13,6 +14,52 @@
 #include "scf/cuda_fock_execution.hpp"
 
 namespace generativeqc::dft {
+bool cuda_ks_wb97mv_model_matches(const CudaKsFinalStateToken& expected,
+                                  const CudaKsResidentFockBinding& source) {
+  if (!source) return false;
+  namespace maps = generativeqc_wb97mv_fock_maps;
+  const auto& model = expected.identity.model;
+  const auto& strategy = source.primary->strategy();
+  const auto& spec = strategy.spec;
+  const auto occupation = source.spins == 1 ? 2.0 : 1.0;
+  if (!(model.version == 1 &&
+        model.scf_domain_version == semilocal_family_domain_version(SemilocalFamily::Wb97mv) &&
+        model.functional == semilocal_family_code(SemilocalFamily::Wb97mv) &&
+        model.spins == source.spins && model.device == source.device_id &&
+        model.semilocal_exchange_scale == 1 && model.semilocal_correlation_scale == 1 &&
+        model.nonlocal_correlation &&
+        model.nonlocal_correlation->variant == nlc::Vv10Variant::vv10 &&
+        model.nonlocal_correlation->b == maps::nonlocal_b &&
+        model.nonlocal_correlation->c == maps::nonlocal_c &&
+        model.nonlocal_correlation->coefficient == maps::nonlocal_coefficient &&
+        model.nonlocal_density_domain == nlc::Vv10DensityDomain::MolecularV1))
+    return false;
+  if (!(strategy == expected.identity.determinant.model &&
+        strategy.backend == scf::FockBackend::Cuda && spec.version == 1 &&
+        spec.derivative_order == 0 &&
+        spec.spin ==
+            (source.spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted) &&
+        spec.coulomb.present && spec.coulomb.coefficient == 1 &&
+        spec.coulomb.op == scf::FockOperator::FullRange && spec.coulomb.omega == 0 &&
+        spec.exchange.present && spec.exchange.op == scf::FockOperator::FullRange &&
+        spec.exchange.omega == 0 &&
+        spec.exchange.coefficient == -maps::short_exchange / occupation &&
+        spec.coulomb.approximation == spec.exchange.approximation &&
+        (spec.coulomb.approximation == scf::FockApproximation::Exact ||
+         spec.coulomb.approximation == scf::FockApproximation::DensityFitted)))
+    return false;
+  if (!source.correction || !model.range_correction ||
+      *source.correction != *model.range_correction)
+    return false;
+  const auto& correction = source.correction->spec;
+  return source.correction->backend == scf::FockBackend::Cuda && correction.version == 1 &&
+         correction.derivative_order == 0 && correction.spin == spec.spin &&
+         !correction.coulomb.present && correction.exchange.present &&
+         correction.exchange.op == scf::FockOperator::LongRange &&
+         correction.exchange.approximation == scf::FockApproximation::Exact &&
+         correction.exchange.omega == maps::omega &&
+         correction.exchange.coefficient == -maps::range_correction / occupation;
+}
 namespace {
 namespace maps = generativeqc_wb97mv_fock_maps;
 
@@ -121,49 +168,9 @@ struct CudaKsWb97mvResponse::Impl {
   }
 
   void validate_model() {
-    const auto& model = expected.identity.model;
-    const auto& strategy = source.primary->strategy();
-    const auto& spec = strategy.spec;
-    const auto occupation = source.spins == 1 ? 2.0 : 1.0;
-    require(
-        model.version == 1 &&
-            model.scf_domain_version == semilocal_family_domain_version(SemilocalFamily::Wb97mv) &&
-            model.functional == semilocal_family_code(SemilocalFamily::Wb97mv) &&
-            model.spins == source.spins && model.device == source.device_id &&
-            model.semilocal_exchange_scale == 1 && model.semilocal_correlation_scale == 1 &&
-            model.nonlocal_correlation &&
-            model.nonlocal_correlation->variant == nlc::Vv10Variant::vv10 &&
-            model.nonlocal_correlation->b == maps::nonlocal_b &&
-            model.nonlocal_correlation->c == maps::nonlocal_c &&
-            model.nonlocal_correlation->coefficient == maps::nonlocal_coefficient &&
-            model.nonlocal_density_domain == nlc::Vv10DensityDomain::MolecularV1,
-        "physical response requires the complete native WB97M-V model");
-    require(strategy == expected.identity.determinant.model &&
-                strategy.backend == scf::FockBackend::Cuda && spec.version == 1 &&
-                spec.derivative_order == 0 &&
-                spec.spin ==
-                    (source.spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted) &&
-                spec.coulomb.present && spec.coulomb.coefficient == 1 &&
-                spec.coulomb.op == scf::FockOperator::FullRange && spec.coulomb.omega == 0 &&
-                spec.exchange.present && spec.exchange.op == scf::FockOperator::FullRange &&
-                spec.exchange.omega == 0 &&
-                spec.exchange.coefficient == -maps::short_exchange / occupation &&
-                spec.coulomb.approximation == spec.exchange.approximation &&
-                (spec.coulomb.approximation == scf::FockApproximation::Exact ||
-                 spec.coulomb.approximation == scf::FockApproximation::DensityFitted),
-            "physical response requires matched full-range exact or fitted J/K");
-    require(source.correction && model.range_correction &&
-                *source.correction == *model.range_correction,
-            "physical response requires the actual exact LR correction owner");
-    const auto& correction = source.correction->spec;
-    require(source.correction->backend == scf::FockBackend::Cuda && correction.version == 1 &&
-                correction.derivative_order == 0 && correction.spin == spec.spin &&
-                !correction.coulomb.present && correction.exchange.present &&
-                correction.exchange.op == scf::FockOperator::LongRange &&
-                correction.exchange.approximation == scf::FockApproximation::Exact &&
-                correction.exchange.omega == maps::omega &&
-                correction.exchange.coefficient == -maps::range_correction / occupation,
-            "physical response cannot replace exact LR exchange with fitted or full exchange");
+    require(cuda_ks_wb97mv_model_matches(expected, source),
+            "physical response requires matched native WB97M-V grid, primary J/K and exact LR "
+            "correction");
   }
 
   cudaError_t gate() {

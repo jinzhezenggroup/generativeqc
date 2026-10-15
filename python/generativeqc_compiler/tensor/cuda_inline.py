@@ -164,6 +164,41 @@ def lower_inline_cuda_output(
                 node.inputs[0].spec.shape,
                 node.attrs["axes"],
             )
+        elif node.op == "add":
+            coefficients = tuple(_fraction(item) for item in node.attrs["coefficients"])
+            values[node] = tuple(
+                "("
+                + " + ".join(
+                    value
+                    if coefficient == 1
+                    else f"({exact_cuda_literal(coefficient)} * {value})"
+                    for value, coefficient in zip(operands, coefficients, strict=True)
+                )
+                + ")"
+                for operands in zip(
+                    *(values[child] for child in node.inputs), strict=True
+                )
+            )
+        elif node.op == "reshape":
+            values[node] = values[node.inputs[0]]
+        elif node.op in ("slice", "broadcast"):
+            source = node.inputs[0]
+            selected = []
+            for linear in range(node.spec.size):
+                coordinates = _coordinates(linear, node.spec.shape)
+                if node.op == "slice":
+                    coordinates = tuple(
+                        coordinate + begin
+                        for coordinate, (begin, _) in zip(
+                            coordinates, node.attrs["ranges"], strict=True
+                        )
+                    )
+                else:
+                    coordinates = tuple(
+                        coordinates[axis] for axis in node.attrs["axes"]
+                    )
+                selected.append(values[source][_flat(coordinates, source.spec.shape)])
+            values[node] = tuple(selected)
         elif node.op == "einsum":
             operands = [values[item] for item in node.inputs]
             domains: dict[int, int] = {}

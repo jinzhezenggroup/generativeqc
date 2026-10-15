@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_nuclear_jk.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Live KS nuclear J/K adapter ownership/lifetime and accepted-density binding. Documents exact versus fitted-primary/LR-correction boundaries without introducing numerical algebra or advertising a complete stationary Hessian endpoint.",
+  "regions": []
+}

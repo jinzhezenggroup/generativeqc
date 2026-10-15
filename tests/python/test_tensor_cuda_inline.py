@@ -9,10 +9,14 @@ from generativeqc_compiler.tensor import (
     IndexSpace,
     Program,
     TensorSpec,
+    add,
+    broadcast,
     einsum,
     exp,
     input_tensor,
     reduce_sum,
+    reshape,
+    slice_tensor,
 )
 from generativeqc_compiler.tensor.cuda_inline import (
     exact_cuda_literal,
@@ -91,6 +95,39 @@ def test_inline_cuda_rejects_missing_live_input_binding() -> None:
     program = _optional_diagnostic_program()
     with pytest.raises(ValueError, match="missing inline CUDA input binding: density"):
         lower_inline_cuda_output(program, output="force", bindings={})
+
+
+def test_inline_cuda_structural_maps_preserve_row_major_coordinates() -> None:
+    """Permuted broadcast axes, offset slices and reshape compose without copies."""
+    row = Index("r", IndexSpace("rows", "batch", 2))
+    column = Index("c", IndexSpace("columns", "batch", 3))
+    repeat = Index("b", IndexSpace("replicas", "batch", 4))
+    flat = Index("f", IndexSpace("flattened", "batch", 8))
+    source = input_tensor("source", TensorSpec((row, column), role="input"))
+    expanded = broadcast(source, (column, repeat, row), axes=(2, 0))
+    selected = slice_tensor(expanded, ((1, 3), (1, 3), (0, 2)))
+    vector = reshape(selected, (flat,))
+    combined = add(vector, vector, coefficients=(Fraction(-2, 3), Fraction(5, 7)))
+    lowered = lower_inline_cuda_output(
+        Program({"value": reduce_sum(combined, axes=(0,))}),
+        output="value",
+        bindings={"source": tuple(str(value) for value in (2, -3, 7, 11, 13, -17))},
+    )
+    actual = eval(lowered.expression, {"__builtins__": {}})  # noqa: S307
+    assert actual == pytest.approx(2 * (-3 + 13 + 7 - 17) * (-2 / 3 + 5 / 7))
+
+
+def test_inline_cuda_broadcasts_scalar_and_retains_zero_coefficient_inputs() -> None:
+    index = Index("r", IndexSpace("rows", "batch", 3))
+    scalar = input_tensor("scalar", TensorSpec(role="input"))
+    expanded = broadcast(scalar, (index,), axes=())
+    result = add(expanded, expanded, coefficients=(Fraction(1, 3), 0))
+    lowered = lower_inline_cuda_output(
+        Program({"value": reduce_sum(result, axes=(0,))}),
+        output="value",
+        bindings={"scalar": "7.0"},
+    )
+    assert eval(lowered.expression, {"__builtins__": {}}) == pytest.approx(7.0)  # noqa: S307
 
 
 def test_exact_cuda_literal_and_scalar_binding_contract() -> None:
