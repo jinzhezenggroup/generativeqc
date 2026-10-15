@@ -380,10 +380,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${core_hotspots_c[@]}"; do
       pinned_core_owner["${path}"]=2
     done
-    # The function-scoped WB97M-V Hessian gates must start with the worker
-    # frontiers: the cold water HVP otherwise starts near the end of core-a.
-    # Follow its existing modulo owner, including after new files are added.
-    fresh_frontier_paths=(tests/python/test_wb97mv_hessian.py)
+    # Start both function-scoped WB97M-V Hessian suites early: cold RKS water
+    # and UKS H3 HVPs otherwise become late tails. Follow each file's existing
+    # modulo owner, including on the merge-composed CI tree.
+    fresh_frontier_paths=(
+      tests/python/test_wb97mv_hessian.py
+      tests/python/test_wb97mv_uks_hessian.py
+    )
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
       core-b) target_bucket=1 ;;

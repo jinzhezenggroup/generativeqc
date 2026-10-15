@@ -510,11 +510,14 @@ def test_fresh_frontiers_reject_invalid_worker_counts(workers: int) -> None:
 )
 @pytest.mark.parametrize("bucket", range(3))
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+@pytest.mark.parametrize(
+    "hessian",
+    ("tests/python/test_wb97mv_hessian.py", "tests/python/test_wb97mv_uks_hessian.py"),
+)
 def test_hessian_frontier_follows_selected_owner_without_changing_coverage(
-    event: str, bucket: int, presence: str, tmp_path: Path
+    event: str, bucket: int, presence: str, hessian: str, tmp_path: Path
 ) -> None:
     """Early execution must neither pin ownership nor introduce a test target."""
-    hessian = "tests/python/test_wb97mv_hessian.py"
     ordinary = [
         f"tests/python/test_early_{index:02d}.py" for index in range(6 + bucket)
     ]
@@ -554,8 +557,22 @@ def test_hessian_frontier_follows_selected_owner_without_changing_coverage(
 
 @pytest.mark.parametrize("filtered", (False, True))
 @pytest.mark.parametrize("mode", ("worksteal", "load", "serial"))
+@pytest.mark.parametrize(
+    "fresh_suites",
+    (
+        (("test_frontier_fresh.py", 8),),
+        (
+            ("test_uccsd_t_lambda.py", 17),
+            ("test_wb97mv_hessian.py", 10),
+            ("test_wb97mv_uks_hessian.py", 4),
+        ),
+    ),
+)
 def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
-    filtered: bool, mode: str, tmp_path: Path
+    filtered: bool,
+    mode: str,
+    fresh_suites: tuple[tuple[str, int], ...],
+    tmp_path: Path,
 ) -> None:
     """Observe parallel startup and unchanged serial/-k selection behavior."""
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
@@ -576,13 +593,13 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
         "def test_drop(value):\n    assert value >= 0\n",
         encoding="utf-8",
     )
-    fresh = tmp_path / "test_frontier_fresh.py"
-    fresh.write_text(
-        "import pytest\n"
-        "@pytest.mark.parametrize('value', range(8))\n"
-        "def test_fresh(value):\n    assert value >= 0\n",
-        encoding="utf-8",
-    )
+    for name, count in fresh_suites:
+        (tmp_path / name).write_text(
+            "import pytest\n"
+            f"@pytest.mark.parametrize('value', range({count}))\n"
+            "def test_fresh(value):\n    assert value >= 0\n",
+            encoding="utf-8",
+        )
     command = [
         sys.executable,
         "-m",
@@ -596,10 +613,10 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
         "-n",
         "0" if mode == "serial" else "4",
         f"--dist={'no' if mode == 'serial' else mode}",
-        "--ci-fresh-priority=test_frontier_fresh.py",
+        *(f"--ci-fresh-priority={name}" for name, _ in fresh_suites),
         "-q",
         str(normal),
-        str(fresh),
+        *(str(tmp_path / name) for name, _ in fresh_suites),
     ]
     if filtered:
         command.extend(("-k", "not test_drop"))
@@ -629,9 +646,8 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
     ]
     assert len(records) == (1 if mode == "serial" else 4)
     if mode == "worksteal":
-        assert all(
-            entries[0].startswith("test_frontier_fresh.py::") for entries in records
-        )
+        prefixes = tuple(f"{name}::" for name, _ in fresh_suites)
+        assert all(entries[0].startswith(prefixes) for entries in records)
     actual = Counter(node for entries in records for node in entries)
     expected = Counter(
         f"test_frontier_ordinary.py::test_ordinary[{value}]" for value in range(32)
@@ -641,7 +657,9 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
             f"test_frontier_ordinary.py::test_drop[{value}]" for value in range(8)
         )
     expected.update(
-        f"test_frontier_fresh.py::test_fresh[{value}]" for value in range(8)
+        f"{name}::test_fresh[{value}]"
+        for name, count in fresh_suites
+        for value in range(count)
     )
     assert actual == expected
     if mode == "serial":
