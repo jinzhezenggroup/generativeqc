@@ -1184,6 +1184,16 @@ def solve(
             + recycle.projection_bytes(operator.dimension)
             + recycle.update_bytes(operator.dimension)
         )
+        if (
+            recycle._native_owner is not None
+            and recycle._native_allowed
+            and initial_guess is None
+            and b.dtype == np.float64
+            and not b.flags.aligned
+        ):
+            # Plan the streamed compatibility transition without changing the
+            # retained owner's mode before whole-solve admission succeeds.
+            reservation += 2 * operator.dimension * 8
     required = _single_workspace_bytes(operator.dimension, options) + reservation
     # Old best-cycle and current Arnoldi vectors may overlap. Resident recycle
     # replacement additionally overlaps both old and new retained spaces.

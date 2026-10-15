@@ -289,3 +289,72 @@ def test_selected_library_load_error_is_not_optional(
         with pytest.raises(OSError) as caught:
             space.initial_guess(current, np.ones(3))
         assert caught.value is injected
+
+
+@pytest.mark.parametrize("explicit_guess", [False, True])
+def test_unaligned_projection_selects_compatibility_before_whole_solve_admission(
+    library: Any, explicit_guess: bool
+) -> None:
+    """A refused transition preserves subsequent aligned-request admission."""
+    dimension = 10
+    operator = MatrixOperator(np.diag(np.arange(1.0, dimension + 1)))
+    rhs = np.ndarray(
+        (dimension,), dtype=np.float64, buffer=bytearray(dimension * 8 + 1), offset=1
+    )
+    rhs[:] = np.arange(1.0, dimension + 1)
+    controls = {"restart": 3, "max_iterations": 100, "atol": 1e-10}
+
+    def seed(space: KrylovRecycleSpace) -> None:
+        space.update(
+            operator.problem, result(np.eye(dimension)[0], np.empty((dimension, 0)))
+        )
+
+    def check_solution(answer: Any) -> None:
+        assert answer.converged
+        np.testing.assert_allclose(answer.solution, np.ones(dimension), atol=1e-9)
+        true_residual = np.linalg.norm(rhs - operator.matrix @ answer.solution)
+        target = max(controls["atol"], GMRESOptions().rtol * np.linalg.norm(rhs))
+        assert true_residual <= target
+
+    with KrylovRecycleSpace(operator.problem, max_vectors=8) as reference:
+        seed(reference)
+        native_bound = solve(
+            operator, rhs.copy(), options=GMRESOptions(**controls), recycle=reference
+        ).workspace_bytes
+    operator.actions = 0
+    with KrylovRecycleSpace(operator.problem, max_vectors=8) as space:
+        seed(space)
+        before = space.identity
+        answer = solve(
+            operator,
+            rhs,
+            options=GMRESOptions(**controls, max_workspace_bytes=native_bound),
+            recycle=space,
+            initial_guess=np.zeros(dimension) if explicit_guess else None,
+        )
+        if explicit_guess:
+            check_solution(answer)
+        else:
+            assert answer.reason == "workspace_limit"
+            assert answer.workspace_bytes == native_bound + 2 * dimension * 8
+            assert operator.actions == 0
+            assert space.identity == before
+            aligned = solve(
+                operator,
+                rhs.copy(),
+                options=GMRESOptions(**controls, max_workspace_bytes=native_bound),
+                recycle=space,
+            )
+            check_solution(aligned)
+    if not explicit_guess:
+        with KrylovRecycleSpace(operator.problem, max_vectors=8) as space:
+            seed(space)
+            complete_bound = native_bound + 2 * dimension * 8
+            answer = solve(
+                operator,
+                rhs,
+                options=GMRESOptions(**controls, max_workspace_bytes=complete_bound),
+                recycle=space,
+            )
+            assert answer.workspace_bytes == complete_bound
+            check_solution(answer)
