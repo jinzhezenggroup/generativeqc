@@ -150,10 +150,11 @@ fake report was `COMPLETE` with delta 200 and allowance 250. Its retained result
 manifest SHA-256 is
 `92986f4a9a80165d5bcde69b48dae9ca9da80bf421b4f7d2c614e999768c7f96`.
 
-## Missing qualification
+## Qualification sequence
 
-The fake Linux ABI/forwarding protocol is qualified, but the shim has not run in
-the actual a308 CUDA endpoint process. A fake PASS does not prove real CUDA
+At the end of the fake-only stage, the Linux ABI/forwarding protocol was
+qualified, but the shim had not run in the actual a308 CUDA endpoint process.
+A fake PASS does not prove real CUDA
 library loading, actual retained-memory values, complete endpoint execution,
 scientific acceptance or performance. Actual-device use must still inspect the
 production library with:
@@ -175,9 +176,11 @@ sccache g++ -std=c++20 -O2 -fPIC -shared \
 
 The completed fake qualification used one 1-CPU/4-GiB CPU instance for 756
 seconds at the observed 0 points/hour, effective HIGH priority, and stopped 144
-seconds before its platform timer. The diagnostic-only device attempt still
-needs one compatible sm90 H100/H200 for at most 0.1 hour, no restart, with an
-observed upper bound of 0.1 point at 1 point/hour. A clean scientific retry is a
+seconds before its platform timer. The later diagnostic-only device attempt was
+planned for one compatible sm90 H100/H200 for at most 0.1 hour, no restart. At
+the observed quote of 1 point/hour, 0.1 point was a nominal planning estimate;
+the billing minimum and actual allocation/billing boundaries were not verified,
+so this is not an observed cost upper bound. A clean scientific retry remains a
 separate, currently unapproved gate.
 
 The first bounded Linux preflight on `pytorch:25.06-py3:25.06` found no

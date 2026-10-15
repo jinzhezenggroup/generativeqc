@@ -48,6 +48,17 @@ and the separate parent-NVTX diagnostic are distinct experiments.
 run artifact, requires exact work and endpoint energy bits across two clean
 runs plus one diagnostic, and excludes diagnostic wall from the clean pair.
 
+The campaign retains the original oracle bytes as a run artifact, bound to the
+frozen oracle/input identity. The report recomputes all four scientific gates
+from that oracle and the retained endpoint, then compares the recorded gates
+and complete semantic work to those raw observations. Matching receipt `PASS`
+flags, matching energy bits and fresh artifact hashes alone are insufficient:
+three equally invalid runs could otherwise agree. Scientific dimensions and
+control/work fields retain integer typing, including Boolean rejection. A
+changed input/oracle or binary fails the campaign, and the same clean directory
+cannot supply both clean samples. These receipt checks establish internal
+consistency, not the independent oracle's scientific provenance by themselves.
+
 ## Rejected alternatives
 
 - Summed kernel or API durations as additive wall phases double-count overlap.
@@ -65,6 +76,14 @@ plus SQLite/identity/tail/loss/failure/opaque-phase controls. Scientific tests
 retain the existing absolute gates: total energy 1e-8 Eh, (T) 1e-10 Eh and
 expanded physical replay 1e-10. These host checks validate the reporter and
 gate handling, not execution of a large CC endpoint on a GPU.
+
+Hand-authored negative controls keep all three run receipts equal and refresh
+their artifact hashes while introducing nonfinite/wrong energies, failed
+residuals, mixed precision, force work, missing/forged work and gates, widened
+limits, changed oracle binding or invalid execution identity. The old report
+accepted all 26 such controls; recomputation now rejects them. A fake native
+process also verifies exact oracle retention and input/oracle/binary mutation
+refusal. Neither fixture execution is real native/device evidence.
 
 The historical `benchmarks/results/df-cc-native-copy-roundtrips-20261010/`
 contains a pair-enabled-parent ethane230 observation: 165.499 to 160.893 s,

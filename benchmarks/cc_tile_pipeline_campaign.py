@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import time
 from contextlib import nullcontext
@@ -77,14 +78,52 @@ def checksum(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def check_identity(identity: dict) -> None:
+    """Require all source, oracle and execution identities used by the campaign."""
+    if not isinstance(identity, dict):
+        raise TypeError("campaign identity must be an object")
+    for key, digits in (
+        ("source_commit", 40),
+        *(
+            (name, 64)
+            for name in (
+                "library_sha256",
+                "executable_sha256",
+                "input_sha256",
+                "oracle_sha256",
+                "environment_sha256",
+            )
+        ),
+    ):
+        value = identity.get(key)
+        if (
+            not isinstance(value, str)
+            or re.fullmatch(f"[0-9a-f]{{{digits}}}", value) is None
+        ):
+            raise ValueError(f"missing/invalid campaign identity: {key}")
+    for key in ("device_uuid", "run_id"):
+        if not isinstance(identity.get(key), str) or not identity[key].strip():
+            raise ValueError(f"missing campaign identity: {key}")
+    if identity.get("oracle_input_sha256") != identity["input_sha256"]:
+        raise ValueError("same-Hamiltonian independent oracle input receipt required")
+
+
 def check_science(record: dict, oracle: dict) -> dict:
     """Keep the existing independent energy/(T)/physical replay gates exact."""
+    if not isinstance(record, dict) or not isinstance(oracle, dict):
+        raise TypeError("endpoint and independent oracle must be objects")
+    for item, keys in ((record, ("nbf", "naux")), (oracle, ("nocc", "nvir", "naux"))):
+        if any(type(item.get(key)) is not int or item[key] <= 0 for key in keys):
+            raise ValueError("positive integer scientific dimensions required")
     if (
         record.get("nbf") != oracle["nocc"] + oracle["nvir"]
         or record.get("naux") != oracle["naux"]
     ):
         raise ValueError("independent oracle dimensions mismatch")
-    if record.get("forces_requested") != 0:
+    if (
+        type(record.get("forces_requested")) is not int
+        or record["forces_requested"] != 0
+    ):
         raise ValueError("energy-only contract violated")
     for key in ("ccsd_mixed_evaluations", "ccsd_fp32_gemm_calls", "triples_fp32_gemms"):
         if type(record.get(key)) is not int or record[key] != 0:
@@ -108,8 +147,8 @@ def check_science(record: dict, oracle: dict) -> dict:
             abs(record["triples_energy"] - oracle["triples_energy"]),
             1e-10,
         ),
-        ("physical_replay_r1", record["ccsd_replay_r1_max"], 1e-10),
-        ("physical_replay_r2", record["ccsd_replay_r2_max"], 1e-10),
+        ("physical_replay_r1", record.get("ccsd_replay_r1_max"), 1e-10),
+        ("physical_replay_r2", record.get("ccsd_replay_r2_max"), 1e-10),
     ):
         if type(value) not in (float, int) or not math.isfinite(value) or value < 0:
             raise ValueError(f"missing/nonfinite scientific observation: {name}")
@@ -140,8 +179,7 @@ def main() -> int:
     parser.add_argument("--diagnostic", action="store_true")
     args = parser.parse_args()
     identity = json.loads(args.identity.read_text())
-    if identity.get("oracle_input_sha256") != identity.get("input_sha256"):
-        raise ValueError("same-Hamiltonian independent oracle input receipt required")
+    check_identity(identity)
     # These are the only environment values recorded; never serialize credentials.
     environment = {
         key: os.environ.get(key)
@@ -171,7 +209,12 @@ def main() -> int:
     ):
         if identity.get(key) != checksum(path):
             raise ValueError(f"frozen {key} mismatch")
+    oracle_bytes = args.oracle.read_bytes()
+    if hashlib.sha256(oracle_bytes).hexdigest() != identity["oracle_sha256"]:
+        raise ValueError("independent oracle changed during preflight")
+    oracle = json.loads(oracle_bytes)
     args.output.mkdir(parents=True, exist_ok=False)
+    (args.output / "oracle.json").write_bytes(oracle_bytes)
     # Resolve the actual loader choice before timing, using this frozen executable.
     loader = subprocess.run(
         ["ldd", str(args.executable.resolve())],
@@ -235,9 +278,7 @@ def main() -> int:
                 receipt["outcome"] = "FAIL"
                 return 2
             record = json.loads(output.read_text())
-            receipt["science"] = check_science(
-                record, json.loads(args.oracle.read_text())
-            )
+            receipt["science"] = check_science(record, oracle)
             receipt["outcome"] = receipt["science"]["status"]
             receipt["work"] = {key: record[key] for key in WORK}
             return 0 if receipt["outcome"] == "PASS" else 2
@@ -246,7 +287,14 @@ def main() -> int:
                 checksum(args.library) == identity["library_sha256"]
                 and checksum(args.executable) == identity["executable_sha256"]
             )
-            if not receipt["binary_identity_unchanged"]:
+            receipt["input_identity_unchanged"] = (
+                checksum(args.input) == identity["input_sha256"]
+                and checksum(args.oracle) == identity["oracle_sha256"]
+            )
+            if not (
+                receipt["binary_identity_unchanged"]
+                and receipt["input_identity_unchanged"]
+            ):
                 receipt["outcome"] = "FAIL"
             receipt["elapsed_wall_ns"] = time.perf_counter_ns() - started
             receipt["artifacts"] = {
@@ -255,8 +303,13 @@ def main() -> int:
                 if p.is_file() and p != receipt_path
             }
             receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
-            if not receipt["binary_identity_unchanged"]:
-                raise ValueError("binary changed during endpoint execution")
+            if not (
+                receipt["binary_identity_unchanged"]
+                and receipt["input_identity_unchanged"]
+            ):
+                raise ValueError(
+                    "binary/input/oracle changed during endpoint execution"
+                )
 
 
 if __name__ == "__main__":

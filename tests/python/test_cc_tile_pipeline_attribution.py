@@ -1,11 +1,13 @@
 """Hand-clock and discrete independent oracles for attribution, not CC math."""
 
 import gzip
+import hashlib
 import json
 import random
 import sqlite3
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -19,6 +21,7 @@ from benchmarks.cc_tile_pipeline_attribution import (
 )
 from benchmarks.cc_tile_pipeline_attribution import main as attribution_main
 from benchmarks.cc_tile_pipeline_campaign import WORK, check_science
+from benchmarks.cc_tile_pipeline_campaign import main as campaign_main
 from benchmarks.cc_tile_pipeline_campaign_report import compare_runs
 
 
@@ -361,6 +364,9 @@ def test_campaign_scientific_gates_preserve_negative_samples(
         result = check_science(record, oracle)
         assert result["status"] == ("PASS" if defect is None else "FAIL")
         assert result["gates"]["total_energy_error"]["limit"] == 1e-8
+        assert result["gates"]["triples_energy_error"]["limit"] == 1e-10
+        assert result["gates"]["physical_replay_r1"]["limit"] == 1e-10
+        assert result["gates"]["physical_replay_r2"]["limit"] == 1e-10
 
 
 def test_cli_retains_deterministic_bounded_segment_ledger(
@@ -424,28 +430,47 @@ def test_cli_rejects_report_overwriting_segment_ledger(
 def campaign_run(tmp_path: Path, name: str, *, diagnostic: bool) -> Path:
     directory = tmp_path / name
     directory.mkdir()
-    endpoint = {"total_energy": -79.0, "triples_energy": -0.01}
+    endpoint = dict.fromkeys(WORK, 1)
+    endpoint.update(
+        nbf=230,
+        naux=488,
+        forces_requested=0,
+        total_energy=-79.0,
+        triples_energy=-0.01,
+        ccsd_replay_r1_max=1e-12,
+        ccsd_replay_r2_max=1e-12,
+        ccsd_mixed_evaluations=0,
+        ccsd_fp32_gemm_calls=0,
+        triples_fp32_gemms=0,
+    )
+    oracle = {
+        "nocc": 9,
+        "nvir": 221,
+        "naux": 488,
+        "total_energy": -79.0,
+        "triples_energy": -0.01,
+    }
     (directory / "endpoint.json").write_text(json.dumps(endpoint))
+    (directory / "oracle.json").write_text(json.dumps(oracle))
     (directory / "native.log").write_text("retained\n")
     artifacts = {
         path.name: {"sha256": checksum(path), "size": path.stat().st_size}
         for path in directory.iterdir()
     }
     identity = fixture()[0]["identity"]
+    identity["oracle_sha256"] = checksum(directory / "oracle.json")
+    identity["oracle_input_sha256"] = identity["input_sha256"]
     receipt = {
         "schema": "generativeqc.cc-tile-campaign.v1",
         "identity": identity,
         "diagnostic": diagnostic,
         "outcome": "PASS",
+        "exit_code": 0,
         "binary_identity_unchanged": True,
+        "input_identity_unchanged": True,
         "process_wall_ns": 100 if diagnostic else 80 + len(name),
-        "science": {
-            "status": "PASS",
-            "gates": {
-                "total_energy_error": {"value": 0.0, "limit": 1e-8, "passed": True}
-            },
-        },
-        "work": {"ccsd_iterations": 20, "ccsd_gemm_calls": 50},
+        "science": check_science(endpoint, oracle),
+        "work": {key: endpoint[key] for key in WORK},
         "artifacts": artifacts,
     }
     (directory / "receipt.json").write_text(json.dumps(receipt))
@@ -464,6 +489,13 @@ def test_campaign_report_keeps_diagnostic_out_of_clean_timing(tmp_path: Path) ->
     assert result["clean_process_wall_median_ns"] == 87.5
     assert result["diagnostic_process_wall_ns"] == 100
     assert result["diagnostic_wall_used_for_timing"] is False
+
+
+def test_campaign_report_rejects_the_same_clean_run_twice(tmp_path: Path) -> None:
+    clean = campaign_run(tmp_path, "clean", diagnostic=False)
+    diagnostic = campaign_run(tmp_path, "diagnostic", diagnostic=True)
+    with pytest.raises(ValueError, match="distinct"):
+        compare_runs([clean, clean, diagnostic])
 
 
 @pytest.mark.parametrize("defect", ["identity", "work", "energy", "artifact", "shape"])
@@ -494,5 +526,198 @@ def test_campaign_report_rejects_mismatched_or_incomplete_runs(
         }
     if defect in ("identity", "work", "energy"):
         (runs[1] / "receipt.json").write_text(json.dumps(receipt))
+    with pytest.raises(ValueError):
+        compare_runs(runs)
+
+
+@pytest.mark.parametrize("changed", [None, "input", "oracle", "library", "executable"])
+def test_campaign_runner_retains_frozen_oracle_and_rejects_changed_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, changed: str | None
+) -> None:
+    fixture_run = campaign_run(tmp_path, "fixture", diagnostic=False)
+    oracle = fixture_run / "oracle.json"
+    oracle_bytes = oracle.read_bytes()
+    endpoint = (fixture_run / "endpoint.json").read_bytes()
+    paths = {"oracle": oracle}
+    for key in ("input", "library", "executable"):
+        paths[key] = tmp_path / key
+        paths[key].write_bytes(key.encode())
+    environment = {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "CUDA_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": str(tmp_path),
+    }
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    identity = json.loads((fixture_run / "receipt.json").read_text())["identity"]
+    for key, path in paths.items():
+        identity[f"{key}_sha256"] = checksum(path)
+    identity["oracle_input_sha256"] = identity["input_sha256"]
+    identity["environment_sha256"] = hashlib.sha256(
+        json.dumps(environment, sort_keys=True).encode()
+    ).hexdigest()
+    identity_path = tmp_path / "identity.json"
+    identity_path.write_text(json.dumps(identity))
+    output = tmp_path / "run"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "campaign.py",
+            *(
+                argument
+                for key, path in paths.items()
+                for argument in (f"--{key}", str(path))
+            ),
+            "--identity",
+            str(identity_path),
+            "--output",
+            str(output),
+        ],
+    )
+    monkeypatch.setattr(
+        "benchmarks.cc_tile_pipeline_campaign.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout=f"libgenerativeqc.so.0 => {paths['library'].resolve()} (0x0)\n"
+        ),
+    )
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            Path(command[2]).write_bytes(endpoint)
+
+        def wait(self, timeout: int) -> int:
+            if changed:
+                paths[changed].write_bytes(b"changed during native execution")
+            return 0
+
+    monkeypatch.setattr("benchmarks.cc_tile_pipeline_campaign.subprocess.Popen", Native)
+    if changed:
+        with pytest.raises(ValueError, match="changed during endpoint"):
+            campaign_main()
+    else:
+        assert campaign_main() == 0
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["outcome"] == ("FAIL" if changed else "PASS")
+    assert receipt["input_identity_unchanged"] is (changed not in ("input", "oracle"))
+    assert receipt["binary_identity_unchanged"] is (
+        changed not in ("library", "executable")
+    )
+    assert (output / "oracle.json").read_bytes() == oracle_bytes
+    assert (
+        receipt["artifacts"]["oracle.json"]["sha256"]
+        == hashlib.sha256(oracle_bytes).hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "nonfinite-energy",
+        "wrong-energy",
+        "nonfinite-residual",
+        "failed-residual",
+        "mixed-precision",
+        "force",
+        "missing-work",
+        "forged-work",
+        "missing-gate",
+        "forged-gate",
+        "widened-limit",
+        "bool-gate-value",
+        "nonfinite-limit",
+        "missing-oracle",
+        "wrong-oracle",
+        "empty-identity",
+        "invalid-source",
+        "wrong-oracle-input",
+        "bool-dimension",
+        "float-dimension",
+        "zero-dimension",
+        "bool-force",
+        "failed-exit",
+        "bool-exit",
+        "changed-input",
+        "truthy-binary-identity",
+    ],
+)
+def test_campaign_report_recomputes_even_identical_forged_passes(
+    tmp_path: Path, defect: str
+) -> None:
+    """Cross-run agreement and fresh hashes cannot validate false PASS claims."""
+    runs = [
+        campaign_run(tmp_path, "clean-a", diagnostic=False),
+        campaign_run(tmp_path, "clean-b", diagnostic=False),
+        campaign_run(tmp_path, "diagnostic", diagnostic=True),
+    ]
+    for directory in runs:
+        receipt = json.loads((directory / "receipt.json").read_text())
+        endpoint = json.loads((directory / "endpoint.json").read_text())
+        if defect == "nonfinite-energy":
+            endpoint["total_energy"] = float("nan")
+        elif defect == "wrong-energy":
+            endpoint["total_energy"] += 1e-7
+        elif defect == "nonfinite-residual":
+            endpoint["ccsd_replay_r1_max"] = float("nan")
+        elif defect == "failed-residual":
+            endpoint["ccsd_replay_r2_max"] = 1e-6
+        elif defect == "mixed-precision":
+            endpoint["ccsd_fp32_gemm_calls"] = 1
+        elif defect == "force":
+            endpoint["forces_requested"] = 1
+        elif defect == "missing-work":
+            endpoint.pop("ccsd_q_operations")
+        elif defect == "forged-work":
+            receipt["work"]["ccsd_gemm_calls"] += 1
+        elif defect == "missing-gate":
+            receipt["science"]["gates"].pop("physical_replay_r2")
+        elif defect == "forged-gate":
+            receipt["science"]["gates"]["physical_replay_r2"]["value"] = 0.0
+        elif defect == "widened-limit":
+            receipt["science"]["gates"]["total_energy_error"]["limit"] = 1.0
+        elif defect == "bool-gate-value":
+            receipt["science"]["gates"]["total_energy_error"]["value"] = False
+        elif defect == "nonfinite-limit":
+            receipt["science"]["gates"]["total_energy_error"]["limit"] = float("nan")
+        elif defect == "missing-oracle":
+            (directory / "oracle.json").unlink()
+        elif defect == "wrong-oracle":
+            oracle = json.loads((directory / "oracle.json").read_text())
+            oracle["total_energy"] -= 0.1
+            (directory / "oracle.json").write_text(json.dumps(oracle))
+        elif defect == "empty-identity":
+            receipt["identity"] = {}
+        elif defect == "invalid-source":
+            receipt["identity"]["source_commit"] = "not-a-commit"
+        elif defect == "wrong-oracle-input":
+            receipt["identity"]["oracle_input_sha256"] = "0" * 64
+        elif defect == "bool-dimension":
+            endpoint["naux"] = True
+        elif defect == "float-dimension":
+            endpoint["nbf"] = 230.0
+        elif defect == "zero-dimension":
+            endpoint["naux"] = 0
+        elif defect == "bool-force":
+            endpoint["forces_requested"] = False
+        elif defect == "failed-exit":
+            receipt["exit_code"] = 1
+        elif defect == "bool-exit":
+            receipt["exit_code"] = False
+        elif defect == "changed-input":
+            receipt["input_identity_unchanged"] = False
+        else:
+            receipt["binary_identity_unchanged"] = 1
+        (directory / "endpoint.json").write_text(json.dumps(endpoint))
+        # Rehash deliberately: the negative control survives ordinary integrity
+        # checks and differs only in its unsupported scientific claim.
+        receipt["artifacts"] = {
+            path.name: {"sha256": checksum(path), "size": path.stat().st_size}
+            for path in directory.iterdir()
+            if path.name != "receipt.json"
+        }
+        (directory / "receipt.json").write_text(json.dumps(receipt))
     with pytest.raises(ValueError):
         compare_runs(runs)
