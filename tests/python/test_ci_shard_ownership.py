@@ -505,6 +505,53 @@ def test_fresh_frontiers_reject_invalid_worker_counts(workers: int) -> None:
         _frontier_indices((True, False), workers)
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("bucket", range(3))
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_hessian_frontier_follows_selected_owner_without_changing_coverage(
+    event: str, bucket: int, presence: str, tmp_path: Path
+) -> None:
+    """Early execution must neither pin ownership nor introduce a test target."""
+    hessian = "tests/python/test_wb97mv_hessian.py"
+    ordinary = [
+        f"tests/python/test_early_{index:02d}.py" for index in range(6 + bucket)
+    ]
+    ordinary.extend(f"tests/python/test_zlater_{index}.py" for index in range(6))
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*ordinary, *([hessian] if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "untracked":
+        (tmp_path / hessian).touch()
+    elif presence == "missing":
+        (tmp_path / hessian).unlink()
+    all_targets = []
+    for owner, shard in enumerate(("core-a", "core-b", "core-c")):
+        distribution, targets, extra = _selection(event, shard, root=tmp_path)
+        assert distribution == "worksteal"
+        assert targets == inventory[owner::3]
+        all_targets.extend(targets)
+        priorities = [
+            argument.split("=", 1)[1]
+            for argument in extra
+            if argument.startswith("--ci-fresh-priority=")
+        ]
+        assert priorities == ([hessian] if tracked and owner == bucket else [])
+        assert ("tools.pytest_ci_fresh_frontier" in extra) == bool(priorities)
+        assert all(
+            hessian not in argument
+            for argument in extra
+            if not argument.startswith("--ci-fresh-priority=")
+        )
+    assert Counter(all_targets) == Counter(inventory)
+
+
 @pytest.mark.parametrize("filtered", (False, True))
 @pytest.mark.parametrize("mode", ("worksteal", "load", "serial"))
 def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
