@@ -3845,6 +3845,18 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
     if (!candidate || layout.response || layout.nao != frame.nao || layout.spins != frame.spins ||
         layout.npoint != grid.point_count || reinterpret_cast<void*>(grid.stream) != frame.stream)
       throw std::logic_error("CUDA KS resident basis/grid storage is inconsistent");
+    const auto quadrature = impl_->grid.cuda_view();
+    if (quadrature) {
+      if (quadrature.device != frame.device_id || quadrature.points != grid.points ||
+          quadrature.weights != grid.weights || quadrature.point_count != grid.point_count)
+        throw std::logic_error("CUDA KS moving-grid source is not its actual XC quadrature");
+      const auto& spec = impl_->grid.spec();
+      candidate.atomic_weights = quadrature.atomic_weights;
+      candidate.points_per_atom = spec.radial_points * spec.angular_polar * spec.angular_azimuth;
+      candidate.partition_iterations = spec.partition_iterations;
+      candidate.coincident_tolerance = spec.coincident_tolerance;
+      candidate.quadrature_owner = quadrature.owner;
+    }
     binding = candidate;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::invalid_argument& error) {

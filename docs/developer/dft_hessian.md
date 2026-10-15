@@ -336,8 +336,45 @@ PySCF raw/full-range/LR integrals, Libxc/VV10 potential differences and displace
 generalized-eigenprojector dense solves provide numerical acceptance; the
 synthetic displaced-SCF tests remain separate regression coverage.
 
-Complete shell coverage, moving-grid/integral/DF/ECP nuclear response and
-stationary molecular assembly still require integration.
+`src/dft/cuda_grid_geometry.hpp` supplies the separate native moving-grid
+**geometry source**. It caches ordinary AO spatial jets through order three
+from the existing AOT Gaussian AD and returns first/mixed-second geometry
+responses for the value/gradient prefix. Its build-time Taylor AD uses
+point-owner motion minus basis-center motion, including the correct mixed
+spatial multiplicities for Cartesian and real-spherical records.
+
+Moving Becke weights borrow the actual immutable CUDA pre-partition atomic
+measure, owner ordering and partition policy through `CudaKsGridReference`.
+Host-only quadratures retain fixed-grid capability but do not acquire moving
+geometry by dividing partitioned weights or rebuilding a CPU quadrature.
+Preparation verifies the supplied primal partitioned weights in dimensionless
+partition units, using the actual atomic measure to account for far-radial
+roundoff amplification. A zero atomic measure requires a zero reference weight.
+Scalar norm,
+ratio, smooth switching and mixed product derivatives are compiler-generated;
+native traversal retains common binary scaling for the entire four-component
+product jet. Exact-zero factors need no division by a factor. Pair-center jets
+are prepared once per action and reused across bounded point tiles, without
+atom-count-specific compilation. Point-pair visits and cached/output AO values
+have checked semantic-work bounds independent of the workspace bound. A separate
+conservative Gaussian primitive/polynomial-term bound admits preparation work;
+small AO outputs alone do not bound contraction cost. Packed basis indices,
+primitive ranges/exponents and supported polynomial records are device-validated
+before the existing trusted AO leaf or nuclear-direction indexing executes.
+
+The caller supplies one arena and disjoint AO/weight outputs. Both are staged,
+finite-checked and reauthenticated before publication on the original ordinary
+stream. Capture, coincident centers, multiatom point-center norm singularities,
+invalid primal measures/weights and revoked owners reject. One-atom quadratures
+need no norm differentiation and allow a point at the center. A CUDA error
+during final publication invalidates both outputs. Independent polynomial
+Gaussian and displaced extended-precision Becke-value tests cover mixed
+derivatives, translation/swap symmetry and actual native RKS/UKS Direct/DF
+grid ownership with Python/compiler paths unavailable.
+
+This geometry source does **not** yet assemble the moving XC/VV10 frozen Fock
+or stationary energy contraction. Complete shell coverage, integral/DF/ECP
+nuclear response and stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 
@@ -350,6 +387,7 @@ cmake --build build/cuda-release-sm120 --target \
   generativeqc_hessian_aot_probe generativeqc_cuda_gmres_probe \
   generativeqc_cuda_cpks_probe generativeqc_cuda_wb97mv_grid_probe \
   generativeqc_ks_wb97mv_grid_probe \
+  generativeqc_cuda_grid_geometry_probe \
   generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
@@ -370,6 +408,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_fock.py
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_grid_geometry_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_native_grid_geometry.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
 ```

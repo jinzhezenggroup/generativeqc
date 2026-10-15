@@ -60,10 +60,17 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_response.hpp"
     ARGS --output "${_fock}"
     COMMENT "Generating compiler-AD native WB97M-V physical Fock response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}"
+  set(_geometry "${CMAKE_CURRENT_BINARY_DIR}/generated/response/grid_geometry_response.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_geometry}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_grid_geometry_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.hpp"
+    ARGS --output "${_geometry}"
+    COMMENT "Generating compiler-AD native moving-grid geometry response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
@@ -99,5 +106,8 @@ function(generativeqc_add_hessian_aot target inventory)
     add_executable(generativeqc_ks_wb97mv_grid_probe
       "${PROJECT_SOURCE_DIR}/tests/native/ks_wb97mv_grid_probe.cpp")
     target_link_libraries(generativeqc_ks_wb97mv_grid_probe PRIVATE ${target} generativeqc)
+    add_executable(generativeqc_cuda_grid_geometry_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_grid_geometry_probe.cpp")
+    target_link_libraries(generativeqc_cuda_grid_geometry_probe PRIVATE ${target})
   endif()
 endfunction()

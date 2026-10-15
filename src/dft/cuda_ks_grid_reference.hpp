@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "dft/cuda_grid_geometry.hpp"
 #include "dft/cuda_wb97mv_grid.hpp"
 #include "methods/dft_method.hpp"
 
@@ -64,6 +65,33 @@ class CudaKsGridReference {
     if (!ready_) return {};
     return {binding_.basis,     binding_.points,
             binding_.weights,   binding_.density,
+            binding_.device_id, reinterpret_cast<cudaStream_t>(binding_.stream),
+            authenticate,       this};
+  }
+
+  /** Native quadrature capability only: no division by partition weights and
+   * no host atomic-measure reconstruction. Host-only grids return no shape. */
+  CudaGridGeometryShape geometry_shape() const noexcept {
+    if (!ready_ || !binding_.atomic_weights || !binding_.points_per_atom ||
+        !binding_.quadrature_owner)
+      return {};
+    return {binding_.atoms, binding_.primitives, binding_.nao, binding_.point_count,
+            binding_.points_per_atom};
+  }
+
+  CudaGridGeometryOptions geometry_options() const noexcept {
+    CudaGridGeometryOptions options;
+    if (geometry_shape().atoms) {
+      options.partition_iterations = binding_.partition_iterations;
+      options.coincident_tolerance = binding_.coincident_tolerance;
+    }
+    return options;
+  }
+
+  CudaGridGeometryReference geometry_reference() noexcept {
+    if (!geometry_shape().atoms) return {};
+    return {binding_.basis,     binding_.points,
+            binding_.weights,   binding_.atomic_weights,
             binding_.device_id, reinterpret_cast<cudaStream_t>(binding_.stream),
             authenticate,       this};
   }

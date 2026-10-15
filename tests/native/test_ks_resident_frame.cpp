@@ -145,8 +145,19 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
                                                   grid_weights, atomic_weights, grid_count,
                                                   detail) == GENERATIVEQC_STATUS_SUCCESS &&
               grid_device == grid_binding.device_id && grid_points == grid_binding.points &&
-              grid_weights == grid_binding.weights && grid_count == grid_binding.point_count,
+              grid_weights == grid_binding.weights && grid_count == grid_binding.point_count &&
+              atomic_weights && grid_binding.atomic_weights == atomic_weights &&
+              grid_binding.points_per_atom == 24 * 12 * 24 &&
+              grid_binding.partition_iterations == 3 &&
+              grid_binding.coincident_tolerance == 1e-12 && grid_binding.quadrature_owner,
           "grid reference does not borrow the actual immutable molecular quadrature");
+  const auto geometry_lease = grid_reference.geometry_reference();
+  require(geometry_lease.atomic_weights == atomic_weights && geometry_lease.points == grid_points &&
+              geometry_lease.weights == grid_weights &&
+              grid_reference.geometry_shape().points_per_atom == grid_binding.points_per_atom &&
+              grid_reference.geometry_options().partition_iterations == 3 &&
+              geometry_lease.authenticate(geometry_lease.owner) == cudaSuccess,
+          "moving-grid adapter detached from the actual atomic measure/policy");
   require(borrow_grid(1, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
           "missing prepared-batch item retained a grid reference");
   require(borrow_fock(1, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !fock_binding,
@@ -250,7 +261,9 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
   const auto retained = frame;
   require(plan.resident_final_grid(token, native_grid, detail) == GENERATIVEQC_STATUS_SUCCESS &&
               native_grid && native_grid.density == frame.density && native_grid.nao == frame.nao &&
-              native_grid.spins == frame.spins && native_grid.stream == frame.stream,
+              native_grid.spins == frame.spins && native_grid.stream == frame.stream &&
+              !native_grid.atomic_weights && !native_grid.points_per_atom &&
+              !native_grid.quadrature_owner,
           "native grid is not bound to its canonical frame");
   const auto retained_grid = native_grid;
   require(plan.resident_final_grid(token, native_grid, detail) == GENERATIVEQC_STATUS_SUCCESS &&

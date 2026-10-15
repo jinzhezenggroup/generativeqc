@@ -20,6 +20,14 @@ struct CudaKsResidentGridBinding {
   unsigned spins{};
   void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
+  /** Optional exact pre-partition measure/policy from a retained native CUDA
+   * quadrature owner. Host-built grids remain valid fixed-grid leases, but do
+   * not acquire moving-grid capability by reconstructing atomic measures. */
+  const double* atomic_weights{};
+  std::size_t points_per_atom{};
+  unsigned partition_iterations{};
+  double coincident_tolerance{};
+  std::uint64_t quadrature_owner{};
 
   bool operator==(const CudaKsResidentGridBinding&) const = default;
 

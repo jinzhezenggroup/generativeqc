@@ -58,6 +58,8 @@ void array(const char* name, const std::vector<double>& values) {
 void run(bool unrestricted, const std::string& mode) {
   const bool physical = mode == "physical";
   const bool fock = mode == "fock" || mode == "df-fock";
+  const bool geometry = mode == "geometry" || mode == "df-geometry";
+  const bool fitted = mode == "df-fock" || mode == "df-geometry";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -111,7 +113,7 @@ void run(bool unrestricted, const std::string& mode) {
   descriptor.screening_tolerance = 1e-14;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
   descriptor.density_fitting_mode =
-      mode == "df-fock" ? GENERATIVEQC_DENSITY_FITTING_CUDA : GENERATIVEQC_DENSITY_FITTING_NONE;
+      fitted ? GENERATIVEQC_DENSITY_FITTING_CUDA : GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.density_fitting_relative_threshold = 1e-10;
   descriptor.ks_options = &options;
   core::ContextState context;
@@ -194,6 +196,56 @@ void run(bool unrestricted, const std::string& mode) {
   array("curvature", curvature);
   array("potential", value);
   array("response", action);
+  dft::CudaGridGeometryResponse geometry_response;
+  double *geometry_left{}, *geometry_right{}, *geometry_ao{}, *geometry_weights{};
+  if (geometry) {
+    const auto geometry_shape = reference.geometry_shape();
+    const auto geometry_controls = reference.geometry_options();
+    const auto geometry_lease = reference.geometry_reference();
+    require(geometry_shape.atoms == shape.atoms && geometry_shape.points == shape.points &&
+                geometry_shape.points_per_atom * shape.atoms == shape.points &&
+                geometry_controls.partition_iterations == options.partition_iterations &&
+                geometry_controls.coincident_tolerance == options.coincident_tolerance &&
+                geometry_lease.basis == lease.basis && geometry_lease.points == lease.points &&
+                geometry_lease.weights == lease.weights && geometry_lease.atomic_weights &&
+                geometry_lease.stream == lease.stream,
+            "moving-grid source does not borrow the prepared native quadrature");
+    std::size_t geometry_bytes{};
+    check(dft::cuda_grid_geometry_workspace(geometry_shape, geometry_controls, geometry_bytes));
+    auto* geometry_arena = storage.allocate(geometry_bytes / sizeof(double));
+    geometry_left = storage.allocate(3 * shape.atoms);
+    geometry_right = storage.allocate(3 * shape.atoms);
+    geometry_ao = storage.allocate(12 * shape.points * shape.nao);
+    geometry_weights = storage.allocate(3 * shape.points);
+    std::vector<double> left(3 * shape.atoms), right(3 * shape.atoms);
+    for (std::size_t index = 0; index < left.size(); ++index) {
+      left[index] = 0.2 * std::cos(index + 1.0);
+      right[index] = 0.15 * std::sin(index + 2.0);
+    }
+    check(cudaMemcpyAsync(geometry_left, left.data(), left.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    check(cudaMemcpyAsync(geometry_right, right.data(), right.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    array("atomic", download(geometry_lease.atomic_weights, shape.points));
+    array("left", left);
+    array("right", right);
+    const auto prepared = geometry_response.prepare(geometry_shape, geometry_controls,
+                                                    geometry_lease, geometry_arena, geometry_bytes);
+    require(prepared == cudaSuccess,
+            std::string("moving-grid preparation: ") + cudaGetErrorString(prepared));
+    const auto acted = geometry_response.mixed(geometry_left, geometry_right, geometry_ao,
+                                               geometry_weights, lease.stream);
+    require(acted == cudaSuccess, std::string("moving-grid action: ") + cudaGetErrorString(acted));
+    const double* spatial{};
+    check(geometry_response.spatial_jets(spatial));
+    std::cout << ",\"points_per_atom\":" << geometry_shape.points_per_atom
+              << ",\"partition_iterations\":" << geometry_controls.partition_iterations
+              << ",\"geometry_workspace_bytes\":" << geometry_response.work().workspace_bytes
+              << ",\"geometry_action_pairs\":" << geometry_response.work().action_partition_pairs;
+    array("spatial", download(spatial, 20 * shape.points * shape.nao));
+    array("geometry_ao", download(geometry_ao, 12 * shape.points * shape.nao));
+    array("geometry_weights", download(geometry_weights, 3 * shape.points));
+  }
   dft::CudaKsWb97mvResponse full_response;
   if (fock) {
     dft::CudaKsWb97mvResponseOptions full_controls;
@@ -284,6 +336,22 @@ void run(bool unrestricted, const std::string& mode) {
             "physical induced Fock accepted a revoked molecular owner");
     require(download(output, elements) == sentinel, "revoked physical Fock published output");
   }
+  if (geometry) {
+    const std::vector<double> ao_sentinel(12 * shape.points * shape.nao, 27);
+    const std::vector<double> weight_sentinel(3 * shape.points, 27);
+    check(cudaMemcpyAsync(geometry_ao, ao_sentinel.data(), ao_sentinel.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    check(cudaMemcpyAsync(geometry_weights, weight_sentinel.data(),
+                          weight_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice,
+                          lease.stream));
+    const double* spatial{};
+    require(geometry_response.mixed(geometry_left, geometry_right, geometry_ao, geometry_weights,
+                                    lease.stream) == cudaErrorInvalidResourceHandle &&
+                geometry_response.spatial_jets(spatial) == cudaErrorInvalidResourceHandle &&
+                !spatial && download(geometry_ao, ao_sentinel.size()) == ao_sentinel &&
+                download(geometry_weights, weight_sentinel.size()) == weight_sentinel,
+            "revoked molecular geometry published partial output");
+  }
   std::cout << ",\"revoked_without_publication\":true}\n";
 }
 }  // namespace
@@ -294,9 +362,10 @@ int main(int argc, char** argv) {
   try {
     const std::string mode = argc == 3 ? argv[2] : "grid";
     require(
-        (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock"))) &&
+        (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock" ||
+                                     mode == "geometry" || mode == "df-geometry"))) &&
             (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
-        "usage: ks_wb97mv_grid_probe rks|uks [physical|fock|df-fock]");
+        "usage: ks_wb97mv_grid_probe rks|uks [physical|fock|df-fock|geometry|df-geometry]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {
