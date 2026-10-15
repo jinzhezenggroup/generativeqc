@@ -118,17 +118,35 @@ The host suite uses independent hand-authored events for:
 
 No production source fingerprint, AST shape or internal call count is pinned.
 
+## Prepared fake ELF qualification
+
+`benchmarks/rhf_provider_retention_fake/` contains a self-contained Linux-only
+qualification that has not yet been executed. Its fake provider exports each of
+the seven targets under the production import version and under a deliberately
+different default `FAKE_PROVIDER_9.9` version. A version-pinned driver runs both
+without and with the observer; byte-identical result JSON plus provider-side
+expected/default call counters is the forwarding oracle. The fake cuBLAS create
+path makes a nested exact-version memory query so the trace must also prove the
+thread-local `provider_internal` boundary.
+
+The hand-authored verifier separately checks provider and resolution failures,
+fresh-file `O_EXCL` behavior and mode `0600`, the 512-event bound and loss
+counters, one injected host write failure followed by a terminal record, exact
+symbol versions, and a complete fake 200-byte report. Compiler, SDK-header,
+launcher, source, DSO, driver and case-exit evidence is retained in the result
+directory. The fixed a308 production source/library/endpoint hashes remain
+provenance only: neither the fake library nor a CPU PASS is a production, CUDA-
+device or scientific oracle.
+
 ## Missing qualification
 
 This Windows host has no available Linux distro, ELF compiler, `sccache`,
 `readelf`, `nm` or `objdump`; no tool was installed. The shim is therefore
-uncompiled and its forwarding/version protocol is unverified. A future bounded
-qualification should first use a fake provider DSO with multiple symbol versions
-and a different default version. It must prove that each versioned import reaches
-the intended shim and that `RTLD_NEXT` resolves the corresponding real
-implementation while preserving arguments, output pointers, status and
-nested-call tagging. Compile/readelf success alone is insufficient. Then inspect
-the shim with:
+uncompiled and its forwarding/version protocol is unverified. The prepared
+bounded qualification must still prove that each versioned import reaches the
+intended shim and that `RTLD_NEXT` resolves the corresponding real implementation
+while preserving arguments, output pointers, status and nested-call tagging.
+Compile/readelf success alone is insufficient. Then inspect the shim with:
 
 ```bash
 readelf -WsW libgenerativeqc.so | grep -E 'cudaMemGetInfo|cublas(Create|Set)|cusolverDn(Create|Set)'
