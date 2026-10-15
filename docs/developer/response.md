@@ -262,6 +262,39 @@ storage is charged by batch admission and method-owned scratch is separate.
 
 ### Installed solver policies
 
+Positive-dimensional CPU host-vector calls to `solve` use the shared C++
+`response::solve_gmres` controller when the installed library exposes the public
+response protocol. This also covers the individual solves in sequential and
+recycled `solve_many`. The C++ owner performs Arnoldi orthogonalization,
+right-preconditioned Givens solves, true-residual acceptance and bounded storage
+admission; method-specific physical actions and live-reference checks retain
+their existing owners. See the [native API](../reference/native_api.md#response-controller)
+for standalone C/C++ use without Python or an execution context.
+
+The admitted Python path accepts no preconditioner or `DiagonalPreconditioner`.
+Explicit vector engines, device providers, solution consumers, general
+preconditioners, zero-dimensional problems and blocked multi-RHS solves retain
+their existing controllers. An absent library/additive protocol also preserves
+compatibility. A selected library's load error or native solve failure is not
+permission to retry Python arithmetic. Multi-RHS scheduling and recycle-space
+projection/update remain Python-owned; this is not a complete native molecular
+Hessian/HVP endpoint.
+
+Native and compatibility controllers solve the same scientific linear problem
+and require the true, unpreconditioned residual to meet the requested tolerance.
+Givens versus least-squares arithmetic and checkpoint scheduling can produce
+different iteration/action histories; diagnostics report actual work, not
+fabricated bit-identical counts. Native timings use a native monotonic clock.
+
+`benchmarks/cpu_cpks_endpoint.py` records complete CPU LDA/PBE RKS/UKS endpoint
+samples, including construction, SCF, response preparation, multi-RHS solves,
+true-residual checks and cleanup. Run with `PYTHONPATH=python:.`, an explicit
+`GENERATIVEQC_LIBRARY`, `--source-sha` and an ignored `--output` destination.
+Parent comparisons require the parent's Python tree **and** native library.
+Keep numerical residual/solution gates and actual semantic work alongside
+timings; per-case first-use samples share a process/cache and are not independent
+compiler-cold measurements. See [performance qualification](../maintainer/performance_engineering.md).
+
 `solve` implements restarted GMRES with a true residual at every configured
 checkpoint. It reports the actual residual, iteration count, operator actions,
 orthogonalization/operator/recycling timings, workspace bytes, and a non-success reason.
