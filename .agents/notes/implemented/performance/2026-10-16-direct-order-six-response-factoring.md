@@ -44,6 +44,18 @@ barriers. These probe resources are not the production kernel's resources.
 Existing independent Hermite-value finite differences cover all pair partitions
 of orders four through six, all nuclear centers, full/LR limits and exponent
 scales. Added common-center geometries check the zero radial-displacement limit.
+All 300 additional correlated-Gaussian quadrature checks pass against independent
+raised/lowered analytic integrals, covering all four pair partitions, three
+axis rotations, full/LR radial limits, repeated/common centers, diffuse and
+separated geometries. Both spatial and retained scalar consumers are checked.
+Compute Sanitizer memcheck and synccheck report zero errors for the CUDA probe.
+
+Separate instrumented GPU launches count entered constant-Jacobian products,
+not enumerated candidates: 75,497,472 to 1,179,648 for full masks,
+68,633,856 to 1,072,404 for partial masks, and 2,359,296 to 36,864 for singleton
+masks, in each pair partition. This is a 64-fold reduction in that specific
+source operation, not a hardware instruction/FLOP count or a whole-kernel work
+reduction. Counted launches are excluded from performance timings.
 Complete source-matched endpoint and linked-runtime qualification are pending.
 
 ## Rejected reuse alternatives
