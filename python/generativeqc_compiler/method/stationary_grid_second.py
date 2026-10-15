@@ -19,7 +19,10 @@ from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
 from generativeqc_compiler.integral.expr import Graph
-from generativeqc_compiler.method.nonlocal_pair import vv10_grid_pair_expression
+from generativeqc_compiler.method.nonlocal_pair import (
+    vv10_grid_beta,
+    vv10_grid_pair_expression,
+)
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -480,7 +483,7 @@ class StationaryGridSecondOrder:
         tile = min(64, int(math.sqrt(max(0, remaining) / (32 * node_count))))
         if count and tile < 1:
             raise MemoryError("VV10 AD pair tile exceeds grid_budget_bytes")
-        beta = (3 / float(primitive.spec.b) ** 2) ** 0.75 / 32
+        beta = vv10_grid_beta(primitive.spec)
         factor = float(primitive.coefficient)
         for start in range(0, count, max(1, tile)):
             row = indices[start : start + tile]

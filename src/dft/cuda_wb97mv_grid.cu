@@ -2,15 +2,19 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 #include "dft/cuda_wb97mv_grid.hpp"
 #include "dft/hessian_aot.hpp"
 #include "response/wb97mv_grid_response.cuh"
+#include "response/wb97mv_nuclear_grid.cuh"
 
 namespace generativeqc::dft {
 namespace {
 namespace maps = generativeqc_wb97mv_grid_maps;
 namespace ad = generativeqc_wb97mv_grid_ad;
+namespace nuclear_maps = generativeqc_wb97mv_nuclear_maps;
+namespace nuclear_ad = generativeqc_wb97mv_nuclear_ad;
 
 bool product(std::size_t left, std::size_t right, std::size_t& value) noexcept {
   if (right && left > std::numeric_limits<std::size_t>::max() / right) return false;
@@ -23,6 +27,11 @@ struct Layout {
   std::size_t status{}, count{}, active{}, ao{}, base{}, direction{}, coefficients{};
   std::size_t reference{}, candidate{}, pairs{}, tensor{}, tensor_bytes{};
   maps::Extents extents{};
+  std::size_t full_fields{}, base_partial{}, right_partial{}, left_fields{}, mixed_fields{};
+  std::size_t right_ao{}, right_density{}, right_weights{}, right_points{}, zero_density{};
+  std::size_t energy{}, energy_scalar{}, scalar{};
+  std::size_t reference_work{}, direction_work{}, mixed_work{};
+  nuclear_maps::Extents nuclear_extents{};
 };
 
 bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& options,
@@ -58,15 +67,60 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
   if (maps::workspace_features(plan.extents, features) != cudaSuccess ||
       maps::workspace_potential(plan.extents, potential) != cudaSuccess ||
       !product(options.pair_tile_points, options.pair_tile_points, pair_elements) ||
-      !product(pair_elements, 4, pair_elements))
+      !product(pair_elements, options.nuclear_response ? 10 : 4, pair_elements))
     return false;
   plan.tensor_bytes = std::max(features, potential);
+  if (options.nuclear_response) {
+    if (!options.max_nuclear_affine_terms ||
+        !product(shape.points, 5 * shape.spins + 4, plan.full_fields))
+      return false;
+    plan.nuclear_extents = {shape.nao, shape.points, plan.full_fields};
+    using Size = cudaError_t (*)(nuclear_maps::Extents, std::size_t&);
+    for (Size size :
+         {nuclear_maps::workspace_feature_direction, nuclear_maps::workspace_feature_mixed,
+          nuclear_maps::workspace_potential_direction, nuclear_maps::workspace_energy_sum,
+          nuclear_maps::workspace_mixed_contraction}) {
+      std::size_t bytes{};
+      if (size(plan.nuclear_extents, bytes) != cudaSuccess) return false;
+      plan.tensor_bytes = std::max(plan.tensor_bytes, bytes);
+    }
+    std::size_t first_work{}, second_work{}, potential_work{}, sum_work{}, contraction_work{};
+    std::size_t base_work{}, assembly_work{};
+    if (!nuclear_maps::work_feature_direction(plan.nuclear_extents, first_work) ||
+        !nuclear_maps::work_feature_mixed(plan.nuclear_extents, second_work) ||
+        !nuclear_maps::work_potential_direction(plan.nuclear_extents, potential_work) ||
+        !nuclear_maps::work_energy_sum(plan.nuclear_extents, sum_work) ||
+        !nuclear_maps::work_mixed_contraction(plan.nuclear_extents, contraction_work) ||
+        !maps::work_features(plan.extents, base_work) ||
+        !maps::work_potential(plan.extents, assembly_work) ||
+        !nuclear_maps::add_work(plan.reference_work, {base_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.reference_work, {assembly_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.reference_work, {sum_work}) ||
+        !nuclear_maps::add_work(plan.direction_work, {first_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.direction_work, {potential_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.mixed_work, {first_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.mixed_work, {second_work, shape.spins}) ||
+        !nuclear_maps::add_work(plan.mixed_work, {contraction_work}) ||
+        std::max({plan.reference_work, plan.direction_work, plan.mixed_work}) >
+            options.max_nuclear_affine_terms)
+      return false;
+  }
   if (!reserve(1, plan.status) || !reserve(1, plan.count) || !reserve(shape.points, plan.active) ||
       !reserve(plan.ao_elements, plan.ao) || !reserve(plan.fields, plan.base) ||
       !reserve(plan.fields, plan.direction) || !reserve(plan.fields, plan.coefficients) ||
       !reserve(plan.matrices, plan.reference) || !reserve(plan.matrices, plan.candidate) ||
       !reserve(pair_elements, plan.pairs) ||
       !reserve(plan.tensor_bytes / sizeof(double), plan.tensor))
+    return false;
+  if (options.nuclear_response &&
+      (!reserve(plan.full_fields, plan.base_partial) ||
+       !reserve(plan.full_fields, plan.right_partial) ||
+       !reserve(plan.full_fields, plan.left_fields) ||
+       !reserve(plan.full_fields, plan.mixed_fields) || !reserve(plan.ao_elements, plan.right_ao) ||
+       !reserve(plan.matrices, plan.right_density) || !reserve(shape.points, plan.right_weights) ||
+       !reserve(3 * shape.points, plan.right_points) ||
+       !reserve(plan.matrices, plan.zero_density) || !reserve(shape.points, plan.energy) ||
+       !reserve(1, plan.energy_scalar) || !reserve(1, plan.scalar)))
     return false;
   plan.bytes = elements * sizeof(double);
   return plan.bytes <= options.max_workspace_bytes;
@@ -187,6 +241,66 @@ __global__ void local_beta(const double* weights, const std::size_t* active, std
     }
 }
 
+/** The symmetric second leg cancels the energy's half in first-leg partials.
+ * Reduction is row-local and ordered; no floating-point atomic accumulation. */
+__global__ void nuclear_pair_reduce(const double* values, const std::size_t* active,
+                                    std::size_t row_begin, std::size_t rows, std::size_t columns,
+                                    std::size_t points, unsigned spins, double* partials,
+                                    double* energy, bool response, int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < 10 * rows;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto field = index / rows, row = index % rows, point = active[row_begin + row];
+    double value{};
+    for (std::size_t column = 0; column < columns; ++column)
+      value += values[(field * rows + row) * columns + column];
+    if (!field) {
+      if (!response) {
+        energy[point] += value;
+        if (!isfinite(energy[point])) atomicExch(status, 1);
+      }
+    } else if (field <= 5) {
+      for (unsigned spin = 0; spin < spins; ++spin) {
+        auto& target = partials[(5 * spin + field - 1) * points + point];
+        target += value;
+        if (!isfinite(target)) atomicExch(status, 1);
+      }
+    } else {
+      auto& target = partials[(5 * spins + field - 6) * points + point];
+      target += value;
+      if (!isfinite(target)) atomicExch(status, 1);
+    }
+  }
+}
+
+/** Geometry vectors arrive point-major, whereas field cotangents are planar. */
+__global__ void append_geometry(const double* weights, const double* points, std::size_t count,
+                                unsigned spins, double* fields) {
+  for (std::size_t point = blockIdx.x * blockDim.x + threadIdx.x; point < count;
+       point += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    fields[5 * spins * count + point] = weights[point];
+    for (unsigned axis = 0; axis < 3; ++axis)
+      fields[(5 * spins + 1 + axis) * count + point] = points ? points[3 * point + axis] : 0.0;
+  }
+}
+
+cudaError_t moving_features(const CudaWb97mvGridShape& shape, const Layout& plan, double* arena,
+                            const double* ao, const double* density, const double* direction,
+                            double* fields, cudaStream_t stream) noexcept {
+  const auto panel = shape.points * shape.nao;
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  for (unsigned spin = 0; spin < shape.spins; ++spin) {
+    auto* field = fields + 5 * spin * shape.points;
+    const auto error = nuclear_maps::launch_feature_direction(
+        plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
+        arena + plan.ao + 3 * panel, ao, ao + panel, ao + 2 * panel, ao + 3 * panel,
+        direction + spin * plan.matrix, density + spin * plan.matrix, field + shape.points,
+        field + 2 * shape.points, field + 3 * shape.points, field, field + 4 * shape.points,
+        arena + plan.tensor, plan.tensor_bytes, status, stream);
+    if (error != cudaSuccess) return error;
+  }
+  return cudaSuccess;
+}
+
 cudaError_t features(const CudaWb97mvGridShape& shape, const Layout& plan, double* arena,
                      const double* density, double* fields, cudaStream_t stream) noexcept {
   const auto panel = shape.points * shape.nao;
@@ -201,6 +315,27 @@ cudaError_t features(const CudaWb97mvGridShape& shape, const Layout& plan, doubl
     if (error != cudaSuccess) return error;
   }
   return cudaSuccess;
+}
+
+cudaError_t nuclear_buffers(const CudaWb97mvGridShape& shape, const Layout& plan,
+                            const CudaWb97mvGridReference& reference, const void* workspace,
+                            std::initializer_list<std::pair<const double*, std::size_t>> inputs,
+                            double* output, std::size_t output_count) noexcept {
+  const std::pair<const void*, std::size_t> retained[] = {{reference.basis, plan.basis_elements},
+                                                          {reference.points, 3 * shape.points},
+                                                          {reference.weights, shape.points},
+                                                          {reference.density, plan.matrices},
+                                                          {workspace, plan.bytes / sizeof(double)}};
+  for (const auto& [pointer, count] : retained)
+    if (!disjoint(output, output_count, pointer, count)) return cudaErrorInvalidValue;
+  for (const auto& [pointer, count] : inputs) {
+    if (!disjoint(output, output_count, pointer, count) ||
+        !disjoint(pointer, count, workspace, plan.bytes / sizeof(double)))
+      return cudaErrorInvalidValue;
+    const auto error = device_buffer(pointer, reference.device_id);
+    if (error != cudaSuccess) return error;
+  }
+  return device_buffer(output, reference.device_id);
 }
 }  // namespace
 
@@ -219,7 +354,10 @@ cudaError_t CudaWb97mvGridResponse::authenticate(cudaStream_t stream) noexcept {
   auto error = execution(stream, reference_.device_id);
   if (error != cudaSuccess) return error;
   error = reference_.authenticate(reference_.owner);
-  if (error != cudaSuccess) ready_ = false;
+  if (error != cudaSuccess) {
+    ready_ = false;
+    nuclear_ready_ = false;
+  }
   return error;
 }
 
@@ -228,6 +366,7 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                             const CudaWb97mvGridReference& reference,
                                             void* workspace, std::size_t workspace_bytes) noexcept {
   ready_ = false;
+  nuclear_ready_ = false;
   work_ = {};
   Layout plan;
   if (!layout(shape, options, plan) || workspace_bytes < plan.bytes || !reference.authenticate ||
@@ -277,7 +416,9 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   const auto active = work_.active_nonlocal_points;
   if (active && active > options.max_pair_evaluations / active) return cudaErrorInvalidValue;
   ready_ = true;
-  if ((error = evaluate(false)) == cudaSuccess) error = authenticate(reference.stream);
+  if (options.nuclear_response) work_.nuclear_affine_terms = plan.reference_work;
+  error = options.nuclear_response ? evaluate_nuclear(false) : evaluate(false);
+  if (error == cudaSuccess) error = authenticate(reference.stream);
   if (error != cudaSuccess) ready_ = false;
   return error;
 }
@@ -343,8 +484,232 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
   return numerical_status(status, stream);
 }
 
+cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
+  Layout plan;
+  if (!options_.nuclear_response || !layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  const auto stream = reference_.stream;
+  auto* arena = static_cast<double*>(workspace_);
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  auto* active = reinterpret_cast<std::size_t*>(arena + plan.active);
+  auto* partials = arena + (response ? plan.right_partial : plan.base_partial);
+  const auto count = work_.active_nonlocal_points;
+  const auto pair_count = static_cast<std::uint64_t>(count) * count;
+  auto& pairs = response ? work_.nuclear_response_pairs : work_.nuclear_reference_pairs;
+  if (pair_count > UINT64_MAX - pairs ||
+      (!response && pair_count > UINT64_MAX - work_.reference_pairs))
+    return cudaErrorInvalidValue;
+  if (shape_.spins == 1)
+    nuclear_ad::point_1<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+        arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
+        shape_.points, response, partials, arena + plan.energy, status);
+  else
+    nuclear_ad::point_2<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+        arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
+        shape_.points, response, partials, arena + plan.energy, status);
+  auto error = cudaGetLastError();
+  if (error != cudaSuccess) return drain(error, stream);
+  for (std::size_t row = 0; row < count; row += options_.pair_tile_points)
+    for (std::size_t column = 0; column < count; column += options_.pair_tile_points) {
+      const auto rows = std::min(count - row, options_.pair_tile_points);
+      const auto columns = std::min(count - column, options_.pair_tile_points);
+      nuclear_ad::pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
+          arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+          arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
+          active, row, column, rows, columns, response, arena + plan.pairs, status);
+      if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+      pairs += rows * columns;
+      if (!response) work_.reference_pairs += rows * columns;
+      nuclear_pair_reduce<<<maps::blocks(10 * rows), 128, 0, stream>>>(
+          arena + plan.pairs, active, row, rows, columns, shape_.points, shape_.spins, partials,
+          arena + plan.energy, response, status);
+      if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+    }
+  if (count) {
+    nuclear_ad::local<<<maps::blocks(count), 128, 0, stream>>>(
+        arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+        arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins, active,
+        count, response, partials, arena + plan.energy, status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  }
+  const auto panel = shape_.points * shape_.nao;
+  for (unsigned spin = 0; spin < shape_.spins; ++spin) {
+    const auto* base = arena + plan.base_partial + 5 * spin * shape_.points;
+    auto* output = arena + (response ? plan.candidate : plan.reference) + spin * plan.matrix;
+    if (response) {
+      const auto* right = partials + 5 * spin * shape_.points;
+      const auto* motion = arena + plan.right_ao;
+      error = nuclear_maps::launch_potential_direction(
+          plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel,
+          arena + plan.ao + 2 * panel, arena + plan.ao + 3 * panel, base + shape_.points,
+          base + 2 * shape_.points, base + 3 * shape_.points, base, base + 4 * shape_.points,
+          motion, motion + panel, motion + 2 * panel, motion + 3 * panel, right + shape_.points,
+          right + 2 * shape_.points, right + 3 * shape_.points, right, right + 4 * shape_.points,
+          output, arena + plan.tensor, plan.tensor_bytes, status, stream);
+    } else {
+      error = maps::launch_potential(
+          plan.extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
+          arena + plan.ao + 3 * panel, base + shape_.points, base + 2 * shape_.points,
+          base + 3 * shape_.points, base, base + 4 * shape_.points, output, arena + plan.tensor,
+          plan.tensor_bytes, status, stream);
+    }
+    if (error != cudaSuccess) return drain(error, stream);
+  }
+  if (!response) {
+    error = nuclear_maps::launch_energy_sum(plan.nuclear_extents, arena + plan.energy,
+                                            arena + plan.energy_scalar, arena + plan.tensor,
+                                            plan.tensor_bytes, status, stream);
+    if (error != cudaSuccess) return drain(error, stream);
+  }
+  check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
+      arena + (response ? plan.candidate : plan.reference), shape_.nao, shape_.spins,
+      options_.symmetry_absolute_tolerance, options_.symmetry_relative_tolerance, status);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  return numerical_status(status, stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction(
+    const double* ao, const double* weights, const double* points, const double* density,
+    double* potential, cudaStream_t stream) noexcept {
+  nuclear_ready_ = false;
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  Layout plan;
+  if (!options_.nuclear_response || !layout(shape_, options_, plan) ||
+      work_.nuclear_directions == UINT64_MAX ||
+      plan.direction_work > UINT64_MAX - work_.nuclear_affine_terms)
+    return cudaErrorInvalidValue;
+  error = nuclear_buffers(shape_, plan, reference_, workspace_,
+                          {{ao, plan.ao_elements},
+                           {weights, shape_.points},
+                           {points, 3 * shape_.points},
+                           {density, plan.matrices}},
+                          potential, plan.matrices);
+  if (error != cudaSuccess) return error;
+  auto* arena = static_cast<double*>(workspace_);
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess)
+    return drain(error, stream);
+  struct Copy {
+    const double* input;
+    std::size_t count, offset;
+  };
+  for (const auto& [input, count, offset] : {Copy{ao, plan.ao_elements, plan.right_ao},
+                                             {weights, shape_.points, plan.right_weights},
+                                             {points, 3 * shape_.points, plan.right_points},
+                                             {density, plan.matrices, plan.right_density}}) {
+    error = cudaMemcpyAsync(arena + offset, input, count * sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream);
+    if (error != cudaSuccess) return drain(error, stream);
+    maps::finite_input<<<maps::blocks(count), 128, 0, stream>>>(arena + offset, count, status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  }
+  check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
+      arena + plan.right_density, shape_.nao, shape_.spins, options_.symmetry_absolute_tolerance,
+      options_.symmetry_relative_tolerance, status);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  work_.nuclear_affine_terms += plan.direction_work;
+  error = moving_features(shape_, plan, arena, arena + plan.right_ao, reference_.density,
+                          arena + plan.right_density, arena + plan.direction, stream);
+  if (error != cudaSuccess) return drain(error, stream);
+  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if ((error = evaluate_nuclear(true)) != cudaSuccess) return error;
+  if ((error = authenticate(stream)) != cudaSuccess) return error;
+  error = cudaMemcpyAsync(potential, arena + plan.candidate, plan.matrices * sizeof(double),
+                          cudaMemcpyDeviceToDevice, stream);
+  error = drain(error, stream);
+  if (error == cudaSuccess) {
+    nuclear_ready_ = true;
+    ++work_.nuclear_directions;
+  }
+  return error;
+}
+
+cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const double* mixed_ao,
+                                                  const double* left_weights,
+                                                  const double* mixed_weights,
+                                                  const double* left_points, double* output,
+                                                  cudaStream_t stream) noexcept {
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  if (!nuclear_ready_) return cudaErrorInvalidResourceHandle;
+  Layout plan;
+  if (!layout(shape_, options_, plan) || work_.nuclear_contractions == UINT64_MAX ||
+      plan.mixed_work > UINT64_MAX - work_.nuclear_affine_terms)
+    return cudaErrorInvalidValue;
+  error = nuclear_buffers(shape_, plan, reference_, workspace_,
+                          {{left_ao, plan.ao_elements},
+                           {mixed_ao, plan.ao_elements},
+                           {left_weights, shape_.points},
+                           {mixed_weights, shape_.points},
+                           {left_points, 3 * shape_.points}},
+                          output, 1);
+  if (error != cudaSuccess) return error;
+  auto* arena = static_cast<double*>(workspace_);
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess)
+    return drain(error, stream);
+  for (const auto& [input, count] : {std::pair{left_ao, plan.ao_elements},
+                                     {mixed_ao, plan.ao_elements},
+                                     {left_weights, shape_.points},
+                                     {mixed_weights, shape_.points},
+                                     {left_points, 3 * shape_.points}}) {
+    maps::finite_input<<<maps::blocks(count), 128, 0, stream>>>(input, count, status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  }
+  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  work_.nuclear_affine_terms += plan.mixed_work;
+  error = moving_features(shape_, plan, arena, left_ao, reference_.density,
+                          arena + plan.zero_density, arena + plan.left_fields, stream);
+  if (error != cudaSuccess) return drain(error, stream);
+  const auto panel = shape_.points * shape_.nao;
+  const auto* right = arena + plan.right_ao;
+  for (unsigned spin = 0; spin < shape_.spins; ++spin) {
+    auto* fields = arena + plan.mixed_fields + 5 * spin * shape_.points;
+    error = nuclear_maps::launch_feature_mixed(
+        plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
+        arena + plan.ao + 3 * panel, right, right + panel, right + 2 * panel, right + 3 * panel,
+        arena + plan.right_density + spin * plan.matrix, mixed_ao, mixed_ao + panel,
+        mixed_ao + 2 * panel, mixed_ao + 3 * panel, arena + plan.zero_density,
+        reference_.density + spin * plan.matrix, left_ao, left_ao + panel, left_ao + 2 * panel,
+        left_ao + 3 * panel, arena + plan.zero_density, fields + shape_.points,
+        fields + 2 * shape_.points, fields + 3 * shape_.points, fields, fields + 4 * shape_.points,
+        arena + plan.tensor, plan.tensor_bytes, status, stream);
+    if (error != cudaSuccess) return drain(error, stream);
+  }
+  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+      left_weights, left_points, shape_.points, shape_.spins, arena + plan.left_fields);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  append_geometry<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+      mixed_weights, nullptr, shape_.points, shape_.spins, arena + plan.mixed_fields);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  error = nuclear_maps::launch_mixed_contraction(
+      plan.nuclear_extents, arena + plan.base_partial, arena + plan.left_fields,
+      arena + plan.mixed_fields, arena + plan.right_partial, arena + plan.scalar,
+      arena + plan.tensor, plan.tensor_bytes, status, stream);
+  if (error != cudaSuccess) return drain(error, stream);
+  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if ((error = authenticate(stream)) != cudaSuccess) return error;
+  error = cudaMemcpyAsync(output, arena + plan.scalar, sizeof(double), cudaMemcpyDeviceToDevice,
+                          stream);
+  error = drain(error, stream);
+  if (error == cudaSuccess) ++work_.nuclear_contractions;
+  return error;
+}
+
+cudaError_t CudaWb97mvGridResponse::reference_energy(const double*& energy) noexcept {
+  energy = nullptr;
+  auto error = authenticate(reference_.stream);
+  if (error != cudaSuccess) return error;
+  Layout plan;
+  if (!options_.nuclear_response || !layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  energy = static_cast<double*>(workspace_) + plan.energy_scalar;
+  return cudaSuccess;
+}
+
 cudaError_t CudaWb97mvGridResponse::apply(const double* direction, double* output,
                                           cudaStream_t stream) noexcept {
+  nuclear_ready_ = false;
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   Layout plan;

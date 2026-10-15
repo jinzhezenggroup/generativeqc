@@ -372,8 +372,36 @@ Gaussian and displaced extended-precision Becke-value tests cover mixed
 derivatives, translation/swap symmetry and actual native RKS/UKS Direct/DF
 grid ownership with Python/compiler paths unavailable.
 
-This geometry source does **not** yet assemble the moving XC/VV10 frozen Fock
-or stationary energy contraction. Complete shell coverage, integral/DF/ECP
+The last successful geometry action also lends `[left/right,point,xyz]` motion
+gathered from the actual owner-atom directions on CUDA. Any prepare/mixed
+attempt, including a rejected attempt, expires that motion lease.
+
+`CudaWb97mvGridResponse` now has an opt-in `nuclear_response` arena layout.
+`prepare_nuclear_direction` consumes AO, measure, point and signed RKS/UKS
+density directions and publishes the moving grid Fock derivative. It copies
+right-direction inputs and caches the complete semilocal/VV10 field-partial
+JVP once. `nuclear_mixed` combines those retained partials with compiler-AD
+left/mixed AO features and moving weights into a device scalar. Both moving
+VV10 legs, coordinate and weight partials, the local beta term and physical
+tau cotangents participate. No VV10 pair traversal repeats per left coordinate.
+Zero right density gives the frozen nuclear grid Fock; nonzero right density
+includes its total directional response. This is not the integral Fock or a
+complete stationary Hessian.
+
+The ordinary fixed-grid layout remains the default and incurs no nuclear
+storage or traversal. Nuclear admission separately bounds caller arena bytes,
+ordered pair evaluations and compiler-counted materialized affine term visits,
+including AD primal dependencies. All execution stays on the authenticated
+original device/ordinary stream, without allocations, runtime compilation or
+host numerical contraction. Any prepare/apply/right-direction attempt expires
+the armed right cache. Validation, alias, capture, finite-value and live-owner
+gates precede transactional publication. Independent Libxc/real-space VV10
+value/potential differences qualify synthetic s/p/spherical d/f data and actual
+native RKS/UKS Direct/DF geometry. Arbitrary signed molecular directions use
+separate upstream Libxc handles without its optional FHC PSD projection;
+interior positive-definite cases retain the default unmodified oracle.
+
+Complete shell coverage, integral/DF/ECP
 nuclear response and stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
@@ -412,6 +440,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_grid_geometry_probe" \
   GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_native_grid_geometry.py
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_wb97mv_grid_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_nuclear_grid.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
 ```
@@ -427,7 +459,7 @@ numerical leaves and response components execute in standalone native processes,
 including tests with unavailable Python paths and an empty executable search
 path. These validate components, not a complete stationary molecular endpoint.
 The physical prepared-source composition, full-rank DF metric response, complete
-moving-grid/ECP assembly, full integral coverage and
+stationary integral/ECP assembly, full integral coverage and
 production CLI wiring are **not** implemented by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.
 

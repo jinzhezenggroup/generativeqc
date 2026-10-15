@@ -11,10 +11,11 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
 from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.method.nonlocal_pair import vv10_grid_beta
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import _pair_program
 from generativeqc_compiler.method.wb97mv_grid_response import grid_maps, point_program
-from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda
+from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda, emit_affine_work
 
 from tools.generate_df_kernels import write_if_changed
 
@@ -23,6 +24,11 @@ def generate() -> str:
     """Emit immutable kernels; build-time imports never load a runtime or GPU."""
     text = [
         emit_affine_cuda(
+            grid_maps(),
+            namespace="generativeqc_wb97mv_grid_maps",
+            extents={"point": "points", "ao": "nao"},
+        ),
+        emit_affine_work(
             grid_maps(),
             namespace="generativeqc_wb97mv_grid_maps",
             extents={"point": "points", "ao": "nao"},
@@ -107,9 +113,7 @@ def generate() -> str:
                 f" if (!isfinite(value_{index})) atomicExch(status, 1);",
             ]
         )
-    beta = (
-        (3 / float(primitive.spec.b) ** 2) ** 0.75 / 32 * float(primitive.coefficient)
-    )
+    beta = vv10_grid_beta(primitive.spec) * float(primitive.coefficient)
     threshold = float(MOLECULAR_VV10_DENSITY_THRESHOLD)
     text.extend(
         [

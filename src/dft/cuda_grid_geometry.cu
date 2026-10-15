@@ -14,7 +14,7 @@ namespace ad = generativeqc_grid_geometry_ad;
 struct Layout {
   std::size_t bytes{}, spatial{}, candidate_ao{}, candidate_weights{}, pairs{}, distances{},
       products{}, exponents{}, zero{}, status{}, panel{}, basis_elements{}, point_pairs{},
-      ao_primitive_terms{};
+      ao_primitive_terms{}, point_directions{};
 };
 bool product(std::size_t first, std::size_t second, std::size_t& result) {
   if (second && first > SIZE_MAX / second) return false;
@@ -64,6 +64,7 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
          product(4, matrix, count) && append(plan, count, plan.pairs) && product(4, tile, count) &&
          append(plan, count, plan.distances) && append(plan, count, plan.products) &&
          append(plan, tile, plan.exponents) && append(plan, atomic, plan.zero) &&
+         product(6, shape.points, count) && append(plan, count, plan.point_directions) &&
          append(plan, 1, plan.status) && plan.bytes <= options.max_workspace_bytes;
 }
 unsigned blocks(std::size_t count) {
@@ -302,7 +303,8 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
   }
 }
 __global__ void ao_geometry(CudaGridGeometryShape shape, const double* basis, const double* spatial,
-                            const double* left, const double* right, double* output, int* status) {
+                            const double* left, const double* right, double* output,
+                            double* point_directions, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto panel = shape.points * shape.nao;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < panel;
@@ -315,6 +317,10 @@ __global__ void ao_geometry(CudaGridGeometryShape shape, const double* basis, co
     for (unsigned axis = 0; axis < 3; ++axis) {
       left_motion[axis] = left[3 * owner + axis] - left[3 * atom + axis];
       right_motion[axis] = right[3 * owner + axis] - right[3 * atom + axis];
+      if (!orbital) {
+        point_directions[3 * point + axis] = left[3 * owner + axis];
+        point_directions[3 * (shape.points + point) + axis] = right[3 * owner + axis];
+      }
     }
     ad::ao_motion(spatial + index, panel, left_motion, right_motion, values);
     for (unsigned jet = 0; jet < 4; ++jet)
@@ -383,6 +389,7 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
                                               void* workspace,
                                               std::size_t workspace_bytes) noexcept {
   ready_ = false;
+  motion_ready_ = false;
   work_ = {};
   Layout plan;
   if (!layout(shape, options, plan) || workspace_bytes < plan.bytes || !reference.stream ||
@@ -454,11 +461,13 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
 cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* right,
                                             double* ao_output, double* weight_output,
                                             cudaStream_t stream) noexcept {
+  motion_ready_ = false;
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   Layout plan;
   if (!layout(shape_, options_, plan) || work_.attempted_actions == UINT64_MAX ||
       work_.action_partition_pairs > UINT64_MAX - plan.point_pairs ||
+      work_.action_point_values > UINT64_MAX - 6 * shape_.points ||
       work_.action_ao_jet_values > UINT64_MAX - 12 * plan.panel)
     return cudaErrorInvalidValue;
   const void* inputs[] = {reference_.basis,
@@ -493,7 +502,8 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
   if (error != cudaSuccess) return drain(error, stream);
   ao_geometry<<<blocks(plan.panel), 128, 0, stream>>>(
       shape_, reference_.basis, reinterpret_cast<double*>(base + plan.spatial), left, right,
-      reinterpret_cast<double*>(base + plan.candidate_ao), status);
+      reinterpret_cast<double*>(base + plan.candidate_ao),
+      reinterpret_cast<double*>(base + plan.point_directions), status);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   if ((error = gate(status, stream)) != cudaSuccess) return error;
   if ((error = authenticate(stream)) != cudaSuccess) return error;
@@ -507,6 +517,8 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
     ++work_.completed_actions;
     work_.action_partition_pairs += plan.point_pairs;
     work_.action_ao_jet_values += 12 * plan.panel;
+    work_.action_point_values += 6 * shape_.points;
+    motion_ready_ = true;
   }
   return error;
 }
@@ -518,6 +530,17 @@ cudaError_t CudaGridGeometryResponse::spatial_jets(const double*& jets) noexcept
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   jets = reinterpret_cast<double*>(static_cast<char*>(workspace_) + plan.spatial);
+  return cudaSuccess;
+}
+
+cudaError_t CudaGridGeometryResponse::point_directions(const double*& directions) noexcept {
+  directions = nullptr;
+  auto error = authenticate(reference_.stream);
+  if (error != cudaSuccess) return error;
+  if (!motion_ready_) return cudaErrorInvalidResourceHandle;
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  directions = reinterpret_cast<double*>(static_cast<char*>(workspace_) + plan.point_directions);
   return cudaSuccess;
 }
 

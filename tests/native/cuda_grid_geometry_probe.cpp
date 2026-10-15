@@ -175,10 +175,16 @@ void run(const char* fixture, const char* output, bool reject) {
   }
   check(prepared);
   check(response.spatial_jets(jets));
+  const double* point_directions{};
+  require(response.point_directions(point_directions) == cudaErrorInvalidResourceHandle &&
+              !point_directions,
+          "geometry exposed motion before an action");
   check(response.mixed(left_device, right_device, ao_output, weight_output, storage.stream));
+  check(response.point_directions(point_directions));
   std::ofstream capture(output, std::ios::binary);
-  for (const auto& values : {download(jets, 20 * shape.points * shape.nao),
-                             download(ao_output, ao_count), download(weight_output, weight_count)})
+  for (const auto& values :
+       {download(jets, 20 * shape.points * shape.nao), download(ao_output, ao_count),
+        download(weight_output, weight_count), download(point_directions, 6 * shape.points)})
     require(static_cast<bool>(capture.write(reinterpret_cast<const char*>(values.data()),
                                             values.size() * sizeof(double))),
             "probe output write failed");
@@ -195,6 +201,9 @@ void run(const char* fixture, const char* output, bool reject) {
     require(download(ao_output, ao_count) == sentinel_ao &&
                 download(weight_output, weight_count) == sentinel_weights,
             "failed geometry action published partial output");
+    require(response.point_directions(point_directions) == cudaErrorInvalidResourceHandle &&
+                !point_directions,
+            "failed geometry action retained an expired motion lease");
   };
   sentinel();
   require(response.mixed(left_device, right_device, ao_output, weight_output, nullptr) ==

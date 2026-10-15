@@ -55,6 +55,20 @@ def _vv10_pair_factors(
     return first, second, combined, product(product(first, second), combined)
 
 
+def vv10_grid_beta(spec: typing.Any) -> float:
+    """Canonical VV10 local energy coefficient, before the method coefficient."""
+    if spec.variant != VV10:
+        raise UnsupportedNonlocalCorrelation("grid local AD currently requires VV10")
+    return (3 / float(spec.b) ** 2) ** 0.75 / 32
+
+
+def vv10_grid_local_expression(
+    graph: typing.Any, leg: list, spec: typing.Any
+) -> typing.Any:
+    """The local beta energy uses the same total-density/measure field ABI."""
+    return vv10_grid_beta(spec) * leg[0] * leg[5]
+
+
 def vv10_grid_pair_expression(
     graph: typing.Any, first: list, second: list, spec: typing.Any
 ) -> typing.Any:

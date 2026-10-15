@@ -47,6 +47,7 @@ struct CudaGridGeometryWork {
   std::uint64_t action_ao_jet_values{}, action_partition_pairs{};
   std::uint64_t attempted_actions{}, completed_actions{};
   std::uint64_t prepared_ao_primitive_term_bound{};
+  std::uint64_t action_point_values{};
 };
 
 /** Pure host overflow/resource/work admission; does not initialize CUDA. */
@@ -88,6 +89,10 @@ class CudaGridGeometryResponse {
                     double* weight_output, cudaStream_t stream) noexcept;
   /** Borrow [20,point,AO] ordinary spatial jets under the same live lease. */
   cudaError_t spatial_jets(const double*& jets) noexcept;
+  /** Borrow [left/right,point,xyz] from the last successful mixed() action.
+   * Point motion is the actual owner-atom direction gathered on CUDA. The
+   * next prepare/mixed attempt or live-owner revocation expires this lease. */
+  cudaError_t point_directions(const double*& directions) noexcept;
   const CudaGridGeometryWork& work() const noexcept { return work_; }
 
  private:
@@ -99,6 +104,7 @@ class CudaGridGeometryResponse {
   CudaGridGeometryWork work_{};
   void* workspace_{};
   bool ready_{};
+  bool motion_ready_{};
 };
 
 }  // namespace generativeqc::dft

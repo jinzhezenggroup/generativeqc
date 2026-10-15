@@ -18,6 +18,60 @@ if typing.TYPE_CHECKING:
     from .program import Program
 
 
+def emit_affine_work(
+    programs: Mapping[str, Program], *, namespace: str, extents: Mapping[str, str]
+) -> str:
+    """Count scheduled scalar term visits, including AD primal validation.
+
+    This companion to the materializing affine schedule is resource admission,
+    not a FLOP or endpoint-performance estimate. Reductions count their input
+    domain; einsums count the union of label domains. Repeated operands sharing
+    an index do not introduce an extra contraction loop.
+    """
+    if not programs or any(
+        not re.fullmatch(r"[A-Za-z_]\w*", value)
+        for value in (namespace, *programs, *extents.values())
+    ):
+        raise ValueError(
+            "affine work requires nonempty identifier-named programs/extents"
+        )
+    text = [
+        f"namespace {namespace} {{",
+        "inline bool add_work(std::size_t& total, std::initializer_list<std::size_t> factors) {",
+        " std::size_t term = 1;",
+        " for (auto factor : factors) {",
+        "  if (factor && term > std::numeric_limits<std::size_t>::max() / factor) return false;",
+        "  term *= factor;",
+        " }",
+        " if (total > std::numeric_limits<std::size_t>::max() - term) return false;",
+        " total += term; return true;",
+        "}",
+    ]
+    for name, program in programs.items():
+        text.append(
+            f"inline bool work_{name}(Extents shape, std::size_t& terms) {{ terms = 0;"
+        )
+        for node in program.nodes:
+            if node.op == "einsum":
+                spaces = {}
+                for source, labels in zip(
+                    node.inputs, node.attrs["labels"], strict=True
+                ):
+                    spaces.update(zip(labels, source.spec.indices, strict=True))
+                indices = spaces.values()
+            elif node.op == "reduce":
+                indices = node.inputs[0].spec.indices
+            else:
+                indices = node.spec.indices
+            factors = [f"shape.{extents[index.space.name]}" for index in indices]
+            text.append(
+                " if (!add_work(terms, {" + ", ".join(factors) + "})) return false;"
+            )
+        text.append(" return true; }")
+    text.append("}")
+    return "\n".join(text)
+
+
 def emit_affine_cuda(
     programs: Mapping[str, Program], *, namespace: str, extents: Mapping[str, str]
 ) -> str:

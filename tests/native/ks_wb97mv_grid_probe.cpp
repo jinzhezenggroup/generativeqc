@@ -58,8 +58,9 @@ void array(const char* name, const std::vector<double>& values) {
 void run(bool unrestricted, const std::string& mode) {
   const bool physical = mode == "physical";
   const bool fock = mode == "fock" || mode == "df-fock";
-  const bool geometry = mode == "geometry" || mode == "df-geometry";
-  const bool fitted = mode == "df-fock" || mode == "df-geometry";
+  const bool nuclear = mode == "nuclear" || mode == "df-nuclear";
+  const bool geometry = mode == "geometry" || mode == "df-geometry" || nuclear;
+  const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -165,6 +166,7 @@ void run(bool unrestricted, const std::string& mode) {
         }
   }
   dft::CudaWb97mvGridOptions controls;
+  controls.nuclear_response = nuclear;
   controls.max_pair_evaluations = 4'000'000;
   std::size_t bytes{};
   check(dft::cuda_wb97mv_grid_workspace(shape, controls, bytes));
@@ -245,6 +247,27 @@ void run(bool unrestricted, const std::string& mode) {
     array("spatial", download(spatial, 20 * shape.points * shape.nao));
     array("geometry_ao", download(geometry_ao, 12 * shape.points * shape.nao));
     array("geometry_weights", download(geometry_weights, 3 * shape.points));
+    const double* point_directions{};
+    check(geometry_response.point_directions(point_directions));
+    array("point_directions", download(point_directions, 6 * shape.points));
+    if (nuclear) {
+      auto* scalar = storage.allocate(1);
+      const auto panel = 4 * shape.points * shape.nao;
+      check(response.prepare_nuclear_direction(geometry_ao + panel, geometry_weights + shape.points,
+                                               point_directions + 3 * shape.points, input, output,
+                                               lease.stream));
+      check(response.nuclear_mixed(geometry_ao, geometry_ao + 2 * panel, geometry_weights,
+                                   geometry_weights + 2 * shape.points, point_directions, scalar,
+                                   lease.stream));
+      const double* energy{};
+      check(response.reference_energy(energy));
+      array("nuclear_energy", download(energy, 1));
+      array("nuclear_fock", download(output, elements));
+      array("nuclear_mixed", download(scalar, 1));
+      std::cout << ",\"nuclear_reference_pairs\":" << response.work().nuclear_reference_pairs
+                << ",\"nuclear_response_pairs\":" << response.work().nuclear_response_pairs
+                << ",\"nuclear_affine_terms\":" << response.work().nuclear_affine_terms;
+    }
   }
   dft::CudaKsWb97mvResponse full_response;
   if (fock) {
@@ -365,9 +388,11 @@ int main(int argc, char** argv) {
     const std::string mode = argc == 3 ? argv[2] : "grid";
     require(
         (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock" ||
-                                     mode == "geometry" || mode == "df-geometry"))) &&
+                                     mode == "geometry" || mode == "df-geometry" ||
+                                     mode == "nuclear" || mode == "df-nuclear"))) &&
             (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
-        "usage: ks_wb97mv_grid_probe rks|uks [physical|fock|df-fock|geometry|df-geometry]");
+        "usage: ks_wb97mv_grid_probe rks|uks "
+        "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {

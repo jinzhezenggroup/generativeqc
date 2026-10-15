@@ -48,7 +48,7 @@ def _import_roots(
 
 
 @cache
-def point_program(spins: int) -> tuple:
+def _point_terms(spins: int) -> tuple:
     """Return weighted Cartesian feature cotangents and their density JVP.
 
     Fields are [spin,rho/gx/gy/gz/tau,point]. RKS stores total density; UKS
@@ -137,6 +137,15 @@ def point_program(spins: int) -> tuple:
         coefficient_program(spin, "mgga", response=flag) for flag in (False, True)
     ]
     weight = graph.variable("weight")
+    cartesian = tuple(
+        value * (2 if index % 5 == 4 else 1)
+        for coefficients in programs
+        for index, value in enumerate(
+            _import_roots(
+                graph, coefficients.graph, tuple(coefficients.roots), bindings
+            )
+        )
+    )
     outputs = tuple(
         value * weight * (2 if index % 5 == 4 else 1)
         for coefficients in programs
@@ -148,6 +157,45 @@ def point_program(spins: int) -> tuple:
     )
     threshold = graph.constant(DENSITY_THRESHOLD)
     total = graph.sum(densities)
+    masked = tuple(graph.select_le(threshold, total, value, 0) for value in outputs)
+    energy = graph.replace_subexpressions((roots[()],), substitutions)[0]
+    energy_direction = graph.sum(
+        value * delta for value, delta in zip(potential, dwork, strict=True)
+    )
+    return graph, masked, cartesian, energy, energy_direction, total
+
+
+@cache
+def point_program(spins: int) -> tuple:
+    """Fixed-grid compatibility roots from the shared physical work policy."""
+    graph, roots, *_ = _point_terms(spins)
+    return graph, roots
+
+
+@cache
+def point_field_partials(spins: int) -> tuple:
+    """Energy and weighted field partials/JVP including the moving measure.
+
+    Outputs are energy, [rho/gx/gy/gz/tau for each spin,weight] partials,
+    then their direction. The incumbent fixed-branch floor policy is retained:
+    only functional-Hessian seeds and energy-density tangents use floored
+    feature directions; Cartesian coefficient pullbacks retain raw gradients.
+    Position partials vanish for this semilocal component.
+    """
+    graph, _, cartesian, energy, energy_direction, total = _point_terms(spins)
+    count = 5 * spins
+    weight, delta_weight = graph.variable("weight"), graph.variable("dweight")
+    outputs = (
+        weight * energy,
+        *(weight * value for value in cartesian[:count]),
+        energy,
+        *(
+            weight * delta + delta_weight * value
+            for value, delta in zip(cartesian[:count], cartesian[count:], strict=True)
+        ),
+        energy_direction,
+    )
+    threshold = graph.constant(DENSITY_THRESHOLD)
     return graph, tuple(
         graph.select_le(threshold, total, value, 0) for value in outputs
     )

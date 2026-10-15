@@ -66,7 +66,13 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.hpp"
     ARGS --output "${_geometry}"
     COMMENT "Generating compiler-AD native moving-grid geometry response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}"
+  set(_nuclear "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_nuclear_grid.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_nuclear}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_wb97mv_nuclear_grid.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.hpp"
+    ARGS --output "${_nuclear}"
+    COMMENT "Generating compiler-AD native WB97M-V moving-grid response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"

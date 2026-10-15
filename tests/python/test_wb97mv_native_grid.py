@@ -266,6 +266,7 @@ def _independent_potential(
     *,
     wide: Path | None = None,
     libxc_code: str = "wb97m-v",
+    nonlocal_active: np.ndarray | None = None,
 ) -> np.ndarray:
     """Pinned upstream potentials plus independent real-space VV10 derivatives.
 
@@ -314,7 +315,7 @@ def _independent_potential(
             2 * vsigma[:, 2] * fields[1, 1:4] + vsigma[:, 1] * fields[0, 1:4]
         )
     total = fields.sum(axis=0)
-    active = total[0] >= 1e-8
+    active = total[0] >= 1e-8 if nonlocal_active is None else nonlocal_active
     if active.any():
         vrho, vsigma = nonlocal_feature_derivatives_reference(
             fixture["points"][active],

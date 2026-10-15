@@ -11,7 +11,7 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.wb97mv_fock_response import fock_maps
-from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda
+from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda, emit_affine_work
 
 from tools.generate_df_kernels import write_if_changed
 
@@ -43,42 +43,14 @@ def generate() -> str:
         ("nonlocal_coefficient", nonlocal_primitive.coefficient),
     ):
         text.append(f"inline constexpr double {name} = {float(value):.17g};")
-    names = {"orbital": "nao", "auxiliary": "naux", "spin": "spins"}
-    text.extend(
-        [
-            "inline bool add_work(std::size_t& total, std::initializer_list<std::size_t> factors) {",
-            " std::size_t term = 1;",
-            " for (auto factor : factors) {",
-            "  if (factor && term > std::numeric_limits<std::size_t>::max() / factor) return false;",
-            "  term *= factor;",
-            " }",
-            " if (total > std::numeric_limits<std::size_t>::max() - term) return false;",
-            " total += term; return true;",
-            "}",
-        ]
-    )
-    for name, program in programs.items():
-        text.append(
-            f"inline bool work_{name}(Extents shape, std::size_t& terms) {{ terms = 0;"
-        )
-        for node in program.nodes:
-            if node.op == "einsum":
-                spaces = {}
-                for source, labels in zip(
-                    node.inputs, node.attrs["labels"], strict=True
-                ):
-                    spaces.update(zip(labels, source.spec.indices, strict=True))
-                indices = spaces.values()
-            elif node.op == "reduce":
-                indices = node.inputs[0].spec.indices
-            else:
-                indices = node.spec.indices
-            factors = [f"shape.{names[index.space.name]}" for index in indices]
-            text.append(
-                " if (!add_work(terms, {" + ", ".join(factors) + "})) return false;"
-            )
-        text.append(" return true; }")
     text.append("}")
+    text.append(
+        emit_affine_work(
+            programs,
+            namespace="generativeqc_wb97mv_fock_maps",
+            extents={"orbital": "nao", "auxiliary": "naux", "spin": "spins"},
+        )
+    )
     return "\n".join(text) + "\n"
 
 

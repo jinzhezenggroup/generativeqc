@@ -294,11 +294,17 @@ def _native(fixture: dict, tmp_path: Path, *, reject: bool = False) -> tuple:
         return (), receipt
     values = np.fromfile(output, dtype=np.float64)
     panel = len(fixture["points"]) * nao
-    assert len(values) == 32 * panel + 3 * len(fixture["points"])
+    points = len(fixture["points"])
+    assert len(values) == 32 * panel + 9 * points
+    owners = fixture["owner"]
+    np.testing.assert_array_equal(
+        values[32 * panel + 3 * points :].reshape(2, points, 3),
+        np.stack((fixture["left"][owners], fixture["right"][owners])),
+    )
     return (
         values[: 20 * panel].reshape(20, -1, nao),
         values[20 * panel : 32 * panel].reshape(3, 4, -1, nao),
-        values[32 * panel :].reshape(3, -1),
+        values[32 * panel : 32 * panel + 3 * points].reshape(3, -1),
     ), receipt
 
 
@@ -640,6 +646,12 @@ def test_actual_wb97mv_native_quadrature_geometry(spins: int, fitted: bool) -> N
         rtol=3e-11,
     )
     expected = _gaussians(fixture, _indices(3))
+    np.testing.assert_array_equal(
+        np.array(result["point_directions"]).reshape(2, points, 3),
+        np.stack(
+            (fixture["left"][fixture["owner"]], fixture["right"][fixture["owner"]])
+        ),
+    )
     np.testing.assert_allclose(
         np.array(result["spatial"]).reshape(20, points, nao),
         expected,

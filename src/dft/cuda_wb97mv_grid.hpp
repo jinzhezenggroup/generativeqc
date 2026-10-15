@@ -20,6 +20,8 @@ struct CudaWb97mvGridOptions {
   std::size_t pair_tile_points{32};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
+  bool nuclear_response{false};
+  std::uint64_t max_nuclear_affine_terms{1ULL << 34};
 };
 
 /** Immutable native quadrature/basis/density lease, not a detached state label.
@@ -42,6 +44,8 @@ struct CudaWb97mvGridReference {
 struct CudaWb97mvGridWork {
   std::size_t workspace_bytes{}, active_nonlocal_points{};
   std::uint64_t reference_pairs{}, response_pairs{}, response_actions{};
+  std::uint64_t nuclear_reference_pairs{}, nuclear_response_pairs{}, nuclear_affine_terms{};
+  std::uint64_t nuclear_directions{}, nuclear_contractions{};
 };
 
 /** Pure checked sizing. Pair storage and total ordered-pair WORK are separate
@@ -85,17 +89,38 @@ class CudaWb97mvGridResponse {
    * It remains internal, and must not be written or retained after revocation.
    */
   cudaError_t reference_potential(const double*& potential) noexcept;
+  /** Opt-in moving-grid direction, including signed density motion. AO jets are
+   * [4,point,AO], point motion [point,xyz]. Inputs are copied into the arena;
+   * they need not survive this synchronous call. A successful call arms mixed
+   * contractions and publishes [spin,AO,AO] dVxc. Any prepare/apply/direction
+   * attempt expires that cache, including failed attempts. No pair traversal
+   * is repeated for subsequent left-coordinate contractions. */
+  cudaError_t prepare_nuclear_direction(const double* ao, const double* weights,
+                                        const double* points, const double* density,
+                                        double* potential, cudaStream_t stream) noexcept;
+  /** Stationary left nuclear partial with zero left/mixed density motion.
+   * The retained right density response participates in the mixed AO features.
+   * Mixed point motion is zero for affine owner-atom coordinates. The scalar
+   * output is device resident and transactional up to CUDA publication errors. */
+  cudaError_t nuclear_mixed(const double* left_ao, const double* mixed_ao,
+                            const double* left_weights, const double* mixed_weights,
+                            const double* left_points, double* output,
+                            cudaStream_t stream) noexcept;
+  /** Borrow the opt-in prepared grid energy scalar under the live lease. */
+  cudaError_t reference_energy(const double*& energy) noexcept;
   const CudaWb97mvGridWork& work() const noexcept { return work_; }
 
  private:
   cudaError_t authenticate(cudaStream_t stream) noexcept;
   cudaError_t evaluate(bool response) noexcept;
+  cudaError_t evaluate_nuclear(bool response) noexcept;
   CudaWb97mvGridShape shape_{};
   CudaWb97mvGridOptions options_{};
   CudaWb97mvGridReference reference_{};
   CudaWb97mvGridWork work_{};
   void* workspace_{};
   bool ready_{};
+  bool nuclear_ready_{};
 };
 
 }  // namespace generativeqc::dft
