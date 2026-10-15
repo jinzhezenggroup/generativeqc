@@ -1439,16 +1439,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
         };
         const auto point_batch_tiles = point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 32);
         if (point_batch_tiles > 1) {
+          constexpr std::size_t incumbent_point_batch_budget = 32 * 1024 * 1024;
+          const auto automatic_point_batch_budget =
+              product(incumbent_point_batch_budget, xc_layout.work_jets);
           const auto point_batch_budget =
-              point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024);
+              point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", automatic_point_batch_budget);
+          const bool explicit_point_batch_budget =
+              std::getenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES") != nullptr;
+          const bool compact_point_batches =
+              point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0;
+          const bool ragged_point_batches =
+              point_batch_size("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", 1) != 0;
           // A live public ledger also reserves later fleet owners and force
           // workspace. Its currently unused bytes are not an optional allowance,
           // even with an unlimited user budget. Keep the incumbent until a plan
           // explicitly accounts for optional panels across those lifetimes.
           xc->prepare_point_batches(point_batch_tiles,
                                     runtime::active_device_resource_ledger ? 0 : point_batch_budget,
-                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0,
-                                    point_batch_size("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", 1) != 0);
+                                    compact_point_batches, ragged_point_batches);
+          if (!explicit_point_batch_budget && !runtime::active_device_resource_ledger &&
+              automatic_point_batch_budget > incumbent_point_batch_budget &&
+              xc->point_batch_plan().tiles == 1)
+            xc->prepare_point_batches(point_batch_tiles, incumbent_point_batch_budget,
+                                      compact_point_batches, ragged_point_batches);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }

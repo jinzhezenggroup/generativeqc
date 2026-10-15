@@ -171,11 +171,15 @@ Unsupported functional/response pairs fail during preparation. See the
 ### Bounded independent point submissions
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:
-it requests up to 32 original tiles within a 32-MiB **additional** per-owner device
-allowance. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+it requests up to 32 original tiles within an **additional** per-owner device
+allowance of 32 MiB per density-product jet: 32 MiB for a one-jet contraction
+and 128 MiB for a four-jet contraction. This is a resource-shape policy, not a
+functional-name selector. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
 overrides the request; zero or one explicitly retains the one-tile executor.
 `GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
-also retains the incumbent. This scheduling policy does not prune or specialize
+also retains the incumbent; an explicit byte cap is never scaled by the jet count.
+If the automatic larger allowance cannot retain a batch, preparation retries the
+original 32-MiB allowance before falling back to one tile. This scheduling policy does not prune or specialize
 the canonical scientific point source.
 
 Public `resource_budget` and `resource_plan` execution retains one-tile XC under
@@ -190,8 +194,8 @@ silently enlarged.
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
 batch size until complete retained panels fit; tiny domains, response, mixed
-arithmetic, insufficient allowance, and device/global-ledger allocation rejection
-retain the one-tile executor. No device model or molecule-size whitelist is used.
+arithmetic, insufficient allowance, and allocation rejection retain a bounded
+fallback, ultimately the one-tile executor. No device model or molecule-size whitelist is used.
 Prepare maps and arithmetic bindings first. Preparation is forbidden during
 capture or after evaluation; a retained batch also prevents later map discovery
 or a mixed-density rebind. Changed geometry creates and qualifies a new owner.
@@ -233,7 +237,9 @@ one-tile baseline. Compiled-resource evidence includes both the batched point
 kernel and its retained fallback for multi-tile automatic execution. The
 [default decision](../../.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md)
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
-source-specialization/composed ablations belong to the independent #2072 arm.
+the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
+qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
+ablations belong to the independent #2072 arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped

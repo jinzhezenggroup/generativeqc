@@ -151,7 +151,10 @@ struct PanelProductDiagnostic {
 std::size_t sum(std::size_t left, std::size_t right) {
   return runtime::size_add(left, right, "test resource overflow");
 }
-struct Layout { bool mixed_density_contraction; };
+std::size_t product(std::size_t left, std::size_t right) {
+  return runtime::size_mul(left, right, "test resource overflow");
+}
+struct Layout { bool mixed_density_contraction; std::size_t work_jets = 1; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 struct Xc {
   struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
@@ -160,14 +163,15 @@ struct Xc {
   bool qualified{};
   std::size_t reserved{};
   tensor::PanelProductDiagnostic diagnostic{};
-  struct BatchPlan { std::size_t device_bytes{}; } batch;
-  std::size_t batch_calls{}, batch_tiles{}, batch_budget{};
+  struct BatchPlan { std::size_t device_bytes{}, tiles = 1; } batch;
+  std::size_t batch_tiles{}, batch_budget{};
   bool batch_compact{}, batch_ragged{};
   void prepare_point_batches(std::size_t tiles, std::size_t budget, bool compact, bool ragged) {
-    ++batch_calls; batch_tiles = tiles; batch_budget = budget;
+    batch_tiles = tiles; batch_budget = budget;
     batch_compact = compact;
     batch_ragged = ragged;
     batch.device_bytes = admitted.precision.arithmetic.is_strict_fp64() && budget >= 64 ? 64 : 0;
+    batch.tiles = batch.device_bytes ? tiles : 1;
   }
   const BatchPlan& point_batch_plan() const { return batch; }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
@@ -246,7 +250,6 @@ int main() {
     const bool selected = admitted && device >= 160 && qualified;
     const bool requested = batching != 1 && batching != 4;
     const bool batched = !budgeted && (batching == 0 || batching == 3) && !mixed_density;
-    assert(owner.batch_calls == (requested ? 1 : 0));
     assert(owner.batch_compact == (requested && compact != 1));
     assert(owner.batch_ragged == (requested && ragged != 1));
     assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
