@@ -122,3 +122,39 @@ They are not evidence for this default regression; enabling those experiments
 requires their own numerical/resource qualification, not blindly deleting gates.
 Retain the slower baseline, then qualify the default reuse changes with new
 source-matched complete endpoints before claiming a speedup.
+
+## Follow-up qualification
+
+Implementation `ed4eff117` / core SHA256
+`1a4b2f0bbd4bc6c69ca3535bde9ea91fc4fdfb9aa93c12c84d160d2cdc5e4147`
+passes 832 host tests (406 resource skips), 354 generated-pair GPU tests and
+19 native integration tests. Pair memcheck covers 24 mixed cases; four
+changed/unmoved 24/96-AO streaming/resident range probes have zero memcheck
+errors and maximum independent matrix error 2.057e-7.
+
+The combined six-endpoint memcheck is **not clean**: all numerical assertions
+pass, but two optional recurrence-stack reservations report OOM through
+cudaDeviceSetLimit and cudaGetLastError (four API reports; sanitizer exit 99).
+This is the retained optional fallback in direct_coulomb.cpp, not an invalid
+read/write report. Separate fresh-process complete PBE0 and WB97M-V reruns
+both pass with zero sanitizer errors. Keep the combined failure instead of
+reporting those reruns as six clean tests or changing unrelated stack policy.
+
+Three alternating steady complete-endpoint medians (FP64/Fast, seconds),
+with first calls retained separately and the unchanged 48/16/32 grid:
+
+- 3 atoms / 24 AOs: 6.783615 / 4.987146, 1.360220x.
+- 12 atoms / 96 AOs: 24.434694 / 18.176775, 1.344281x.
+
+The 96-AO maximum independent errors are 6.385e-10 Eh energy,
+3.939e-6 Eh/bohr maximum force and 2.285e-6 force RMS. It executes one solve,
+twelve mixed and four strict Focks, zero retries and five nonlocal sweeps.
+Single-call ablations are not paired speedups: default 19.566 s/five sweeps,
+range residency disabled 19.600 s/five sweeps, nonlocal initialization disabled
+29.001 s/twelve sweeps. Initialization is the dominant recovered optimization
+in this fixture; no isolated range-cache timing benefit is established.
+
+The independent 96-atom/768-AO reference exceeded its finite 25-minute job.
+There is no measured native 96-atom speedup and these small-system results
+must not be extrapolated to one. PR #2515 was already merged on October 15,
+2026 at 18:58 Shanghai time; this follow-up is not part of that merged PR.
