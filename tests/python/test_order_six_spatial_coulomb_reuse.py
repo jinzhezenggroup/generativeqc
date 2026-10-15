@@ -4,6 +4,7 @@ import ctypes
 import math
 import shutil
 import subprocess
+from collections.abc import Callable
 from decimal import Decimal, localcontext
 
 import pytest
@@ -13,7 +14,7 @@ from generativeqc_compiler.integral.coulomb_recurrence_cuda import (
 
 
 @pytest.fixture(scope="module")
-def spatial_reuse(tmp_path_factory: pytest.TempPathFactory):
+def spatial_reuse(tmp_path_factory: pytest.TempPathFactory) -> Callable:
     """Compile the emitted scientific arithmetic without a runtime or GPU import."""
     compiler = shutil.which("c++")
     if compiler is None:
@@ -72,7 +73,12 @@ def spatial_reuse(tmp_path_factory: pytest.TempPathFactory):
     return library.evaluate
 
 
-def wick_reference(degrees, rho, difference, boys):
+def wick_reference(
+    degrees: tuple[int, int, int],
+    rho: float,
+    difference: tuple[float, float, float],
+    boys: tuple[float, ...],
+) -> float:
     """Evaluate Gaussian spatial derivatives with independent integer pair counts."""
     with localcontext() as context:
         context.prec = 70
@@ -88,7 +94,7 @@ def wick_reference(degrees, rho, difference, boys):
                     if order:
                         term *= (-2 * decimal_rho) ** order
                     for degree, pair_count, coordinate in zip(
-                        degrees, pairs, decimal_difference
+                        degrees, pairs, decimal_difference, strict=True
                     ):
                         multiplicity = math.factorial(degree) // (
                             2**pair_count
@@ -107,7 +113,7 @@ def wick_reference(degrees, rho, difference, boys):
     "difference", ((0.3, -0.8, 0.6), (0.0, 0.0, 0.0), (-1.2, 0.05, 1.7))
 )
 def test_every_component_domain_matches_independent_wick(
-    spatial_reuse, rho: float, difference: tuple[float, float, float]
+    spatial_reuse: Callable, rho: float, difference: tuple[float, float, float]
 ) -> None:
     """Check all 28 boxes, raised faces, zero coordinates and untouched corners."""
     boys = tuple(0.29 / (order + 1) + (-0.07) ** order for order in range(8))
@@ -130,7 +136,8 @@ def test_every_component_domain_matches_independent_wick(
                         ) + axis_z
                         if (
                             sum(
-                                degree > bound for degree, bound in zip(degrees, bounds)
+                                degree > bound
+                                for degree, bound in zip(degrees, bounds, strict=True)
                             )
                             > 1
                         ):
