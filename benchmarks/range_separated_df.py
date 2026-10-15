@@ -21,6 +21,8 @@ import typing
 from contextlib import closing
 from pathlib import Path
 
+from benchmarks._retention import raw_output_path
+
 WATER = [
     ("O", (0.0, 0.0, 0.0)),
     ("H", (0.1, 1.43, 1.1)),
@@ -60,7 +62,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--geometry-repeats", type=int, default=3)
     parser.add_argument("--build-boundary", required=True)
     parser.add_argument("--source-head")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     arguments = parser.parse_args(argv)
     if arguments.repeats < 1 or arguments.geometry_repeats < 0:
         parser.error("repeats must be positive and geometry-repeats nonnegative")

@@ -263,13 +263,55 @@ def test_cuda_requires_scheduler_before_creation(
     assert not output.exists()
 
 
+def campaign_shell_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str, *, with_venv: bool
+) -> tuple[Path, Path, Path, Path]:
+    """Isolate the shell runner from every real checkout/interpreter/campaign."""
+    import os
+    import shlex
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    checkout = tmp_path / "isolated-checkout"
+    checkout.mkdir()
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    git = commands / "git"
+    git.write_text(
+        '#!/bin/sh\ncase "$*" in\n'
+        f"'rev-parse --show-toplevel') printf '%s\\n' {shlex.quote(str(checkout))};;\n"
+        "'rev-parse HEAD') printf '%040d\\n' 0;;\n"
+        "*) exit 97;;\nesac\n"
+    )
+    git.chmod(0o755)
+    trace = tmp_path / "interpreter-trace"
+    interpreter = commands / "python"
+    if with_venv:
+        # The real runner prepends .venv/bin. A PATH-only stub is unsafe when
+        # running the test inside an actual development/CI virtual environment.
+        interpreter.write_text("#!/bin/sh\necho unexpected-PATH-python >&2\nexit 97\n")
+        interpreter.chmod(0o755)
+        interpreter = checkout / ".venv/bin/python"
+        interpreter.parent.mkdir(parents=True)
+    interpreter.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$0" >> {shlex.quote(str(trace))}\n' + body
+    )
+    interpreter.chmod(0o755)
+    monkeypatch.setenv("PATH", str(commands) + os.pathsep + os.environ["PATH"])
+    return (
+        root / "benchmarks/run_range_separated_df_cpu.sh",
+        checkout,
+        trace,
+        interpreter,
+    )
+
+
+@pytest.mark.parametrize("with_venv", (False, True))
 @pytest.mark.parametrize("kind", ["file", "directory", "symlink", "dangling-symlink"])
 def test_campaign_rejects_existing_output_before_start(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, with_venv: bool
 ) -> None:
-    import os
     import subprocess
-    from pathlib import Path
 
     output = tmp_path / "campaign"
     target = tmp_path / "target"
@@ -284,20 +326,22 @@ def test_campaign_rejects_existing_output_before_start(
             (target / "receipt").write_bytes(b"prior receipt")
         output.symlink_to(target)
     marker = tmp_path / "launched"
-    executable = tmp_path / "python"
-    executable.write_text(f'#!/bin/sh\ntouch "{marker}"\nexit 42\n')
-    executable.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path) + ":" + os.environ["PATH"])
+    script, checkout, trace, _ = campaign_shell_fixture(
+        tmp_path,
+        monkeypatch,
+        f'touch "{marker}"\nexit 42\n',
+        with_venv=with_venv,
+    )
     monkeypatch.setenv("RANGE_DF_EVIDENCE_DIRECTORY", str(output))
     monkeypatch.setenv("RANGE_DF_HARNESS_DIRECTORY", str(tmp_path))
-    root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["bash", str(root / "benchmarks/run_range_separated_df_cpu.sh")],
-        cwd=root,
+        ["bash", str(script)],
+        cwd=checkout,
         capture_output=True,
         check=False,
+        timeout=10,
     )
-    assert result.returncode != 0 and not marker.exists()
+    assert result.returncode != 0 and not marker.exists() and not trace.exists()
     if kind == "file":
         assert output.read_bytes() == b"prior receipt"
     elif kind in {"directory", "symlink"}:
@@ -306,34 +350,34 @@ def test_campaign_rejects_existing_output_before_start(
         assert output.is_symlink() and not target.exists()
 
 
+@pytest.mark.parametrize("with_venv", (False, True))
 def test_campaign_keeps_failed_oracle_receipt_log_and_stage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, with_venv: bool
 ) -> None:
-    import os
     import subprocess
-    from pathlib import Path
 
-    executable = tmp_path / "python"
-    executable.write_text(
-        '#!/bin/sh\ncase "$*" in\n*oracle-all.py*)\n'
+    script, checkout, trace, interpreter = campaign_shell_fixture(
+        tmp_path,
+        monkeypatch,
+        'case "$*" in\n*oracle-all.py*)\n'
         '  echo "independent oracle rejected endpoint"\n'
         '  while [ "$#" -gt 0 ]; do\n'
         '    if [ "$1" = --output ]; then printf "{\\"accepted\\":false}\\n" > "$2"; break; fi\n'
-        "    shift\n  done\n  exit 42;;\n*) exit 0;;\nesac\n"
+        "    shift\n  done\n  exit 42;;\n*) exit 0;;\nesac\n",
+        with_venv=with_venv,
     )
-    executable.chmod(0o755)
     output = tmp_path / "new-campaign"
-    monkeypatch.setenv("PATH", str(tmp_path) + ":" + os.environ["PATH"])
     monkeypatch.setenv("RANGE_DF_EVIDENCE_DIRECTORY", str(output))
     monkeypatch.setenv("RANGE_DF_HARNESS_DIRECTORY", str(tmp_path))
-    root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        ["bash", str(root / "benchmarks/run_range_separated_df_cpu.sh")],
-        cwd=root,
+        ["bash", str(script)],
+        cwd=checkout,
         capture_output=True,
         check=False,
+        timeout=10,
     )
     assert result.returncode == 42
+    assert set(trace.read_text().splitlines()) == {str(interpreter)}
     assert json.loads((output / "oracle-all-cpu.json").read_text()) == {
         "accepted": False
     }

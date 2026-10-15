@@ -700,10 +700,7 @@ void single_execution_retry_errors() {
           "single scheduler lost the explicitly numerical cold retry");
 }
 
-void mixed_df_rsh_cpu_endpoints() {
-  // This CPU-only gate must run even when no CUDA compiler/device is present.
-  // The paired CUDA qualification below cannot catch a broken CPU reference
-  // if the entire block is compiled out.
+void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
   for (const bool wb97mv : {false, true}) {
     double restricted_energy = 0.0;
     for (unsigned spin_case = 0; spin_case < 3; ++spin_case) {
@@ -768,12 +765,18 @@ void mixed_df_rsh_cpu_endpoints() {
           "mixed-DF CPU RSH execution failed");
       const double cold = result.energy;
       // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on this exact
-      // basis/grid: DF full-range J/K with the orbital basis as auxiliary,
-      // and unfitted get_k(omega=0.3) for the LR correction. Generic RSH uses
-      // PBE + 0.2*HF + 0.6*LR_HF(0.3); WB97M-V retains its complete VV10 term.
+      // basis/grid: DF full-range J/K with the orbital basis as auxiliary.
+      // WB97M-V fits its LR correction by default and with the explicit df
+      // selector; direct retains exact get_k(omega=0.3). The fitted oracle
+      // independently whitens libcint LR tensors in normalized auxiliary
+      // coordinates with relative eigenvalue cutoff 1e-10. Generic PBE-RSH
+      // remains exact-LR in all selector modes; WB97M-V retains complete VV10.
       // Reproduce with tools/verify_mixed_df_rsh_cpu.py (H2 and H2- doublet).
-      const double oracle = wb97mv ? (open_shell ? -0.8191434240565644 : -1.2886176659087356)
-                                   : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
+      const bool fitted_range = wb97mv && (!range_mode || std::strcmp(range_mode, "df") == 0);
+      const double oracle =
+          wb97mv ? (fitted_range ? (open_shell ? -0.8133366864606449 : -1.2849268498992195)
+                                 : (open_shell ? -0.8191434240565644 : -1.2886176659087356))
+                 : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
       require(std::abs(cold - oracle) < 2e-10,
               "mixed-DF CPU RSH differs from its independent matched-grid oracle");
       if (!unrestricted) restricted_energy = cold;
@@ -796,9 +799,32 @@ void mixed_df_rsh_cpu_endpoints() {
                                                &rejected) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                   !rejected,
               "mixed-DF CPU RSH accepted unsupported AUTO precision");
-      std::cout << "mixed DF " << (wb97mv ? "WB97M-V" : "PBE-RSH") << ' ' << spin_case
+      std::cout << "mixed DF " << (range_mode ? range_mode : "default") << ' '
+                << (wb97mv ? "WB97M-V" : "PBE-RSH") << ' ' << spin_case
                 << " E=" << std::setprecision(17) << cold << '\n';
     }
+  }
+}
+
+void mixed_df_rsh_cpu_endpoints() {
+  // This CPU-only gate must run even when no CUDA compiler/device is present.
+  // Exercise the default and both explicit Hamiltonians without inheriting the
+  // caller's environment or leaking the selected mode into subsequent tests.
+  struct RestoreRangeMode {
+    const bool present = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE") != nullptr;
+    const std::string value = present ? std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE") : "";
+    ~RestoreRangeMode() {
+      if (present)
+        setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", value.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
+    }
+  } restore_range_mode;
+  for (const char* range_mode : {static_cast<const char*>(nullptr), "df", "direct"}) {
+    require(range_mode ? setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", range_mode, 1) == 0
+                       : unsetenv("GENERATIVEQC_DF_RANGE_EXCHANGE") == 0,
+            "cannot select the mixed-DF CPU RSH Hamiltonian");
+    mixed_df_rsh_cpu_endpoints_for_mode(range_mode);
   }
 }
 
