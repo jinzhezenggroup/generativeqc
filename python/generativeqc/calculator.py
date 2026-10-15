@@ -2211,10 +2211,9 @@ class Calculator:
         only when explicitly requested in ``properties``. Other contexts retain
         their existing conservative capacity allowance.
         """
-        from generativeqc_compiler.common.resources import (
-            ResourceBudget,
-            plan_resources,
-        )
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        from .resources_planning import plan_resources
 
         systems = tuple(
             tuple(Atom.from_value(atom) for atom in system) for system in systems
@@ -2249,6 +2248,7 @@ class Calculator:
         return plan_resources(
             tuple(requests),
             ResourceBudget() if budget is None else budget,
+            library=self._library,
         )
 
     def prepare_batch(

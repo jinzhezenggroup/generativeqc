@@ -30,8 +30,10 @@ inline constexpr std::string_view kFinalAudit = "dft.final_audit";
  * also lower density contractions admitted by the point-program capabilities;
  * a nonlocal graph initially lowers Direct J only. Exact exchange (including
  * SR/LR K), tau, XC point algebra/reductions, nonlocal correlation and final
- * audits remain strict FP64. Budget-Fock admission additionally permits full-range
- * K to share J's FP32 recurrence, with FP64 contraction and final physical Focks.
+ * audits remain strict FP64 in ordinary AUTO. Budget-Fock admission additionally
+ * permits full-range K to share J's FP32 recurrence, independently capable SR/LR
+ * K recurrence and bounded VV10/rVV10 pair algebra. Contraction, accumulation,
+ * radial moments, local scales and final physical Focks remain FP64.
  * The separate application-budget XC warmup keeps
  * J/K strict and instead admits PBE correlation points, AO production and tiled
  * density/potential products with FP32 inner accumulation. Its strict phase
@@ -41,7 +43,8 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
     std::optional<generativeqc_precision_mode> mode,
     const CudaXcFastPathCapabilities& xc_fast_paths, bool fitted_coulomb, bool nonlocal_correlation,
     bool experimental_point = false, bool experimental_contractions = false,
-    scf::CudaFockPrecisionCapabilities budget_fock = {}, bool range_exchange = false) {
+    scf::CudaFockPrecisionCapabilities budget_fock = {}, bool range_exchange = false,
+    bool mixed_range_exchange = false) {
   const bool automatic = mode && *mode == GENERATIVEQC_PRECISION_AUTO;
   if (mode && *mode != GENERATIVEQC_PRECISION_FP64 && !automatic)
     throw std::invalid_argument("CUDA KS received an unknown precision mode");
@@ -74,7 +77,11 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
                                            : runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kTau, runtime::strict_fp64_precision());
   if (range_exchange)
-    schedule.add_region(cuda_ks_precision_region::kRangeExchange, runtime::strict_fp64_precision());
+    schedule.add_region(
+        cuda_ks_precision_region::kRangeExchange,
+        budget_requested && mixed_range_exchange
+            ? runtime::fp32_compute_fp64_accumulation("direct-fock-budget-v3/range-k")
+            : runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kXcPointAlgebra,
                       experimental_point ? runtime::fp32_compute_fp64_accumulation(
                                                "experimental/pbe-correlation-point-v1")
@@ -87,8 +94,10 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
                                                         "pbe-xc-warmup-v1/tiled-contractions"}
                           : runtime::strict_fp64_precision());
   if (nonlocal_correlation)
-    schedule.add_region(cuda_ks_precision_region::kNonlocalCorrelation,
-                        runtime::strict_fp64_precision());
+    schedule.add_region(
+        cuda_ks_precision_region::kNonlocalCorrelation,
+        budget_requested ? runtime::fp32_compute_fp64_accumulation("nonlocal-pair/bounded-fp32-v2")
+                         : runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kFinalAudit, runtime::strict_fp64_precision());
   return schedule;
 }

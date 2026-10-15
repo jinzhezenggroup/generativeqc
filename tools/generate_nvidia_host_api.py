@@ -76,7 +76,7 @@ def called_apis(source: str) -> set[str]:
 
 
 def project_uses(root: Path) -> set[str]:
-    """Discover called APIs, excluding separate xTB and SDK-header owners."""
+    """Discover called APIs across every method, excluding the shared SDK headers."""
     used: set[str] = set()
     for folder in (
         root / "src",
@@ -89,7 +89,7 @@ def project_uses(root: Path) -> set[str]:
             if path.suffix not in SOURCE_SUFFIXES:
                 continue
             rel = path.relative_to(root).as_posix()
-            if rel.startswith(("src/xtb/", "src/runtime/nvidia_host_api/")):
+            if rel.startswith("src/runtime/nvidia_host_api/"):
                 continue
             used.update(called_apis(path.read_text(encoding="utf-8", errors="replace")))
     return used
@@ -195,6 +195,10 @@ def sdk_functions(
             return
         name = node.get("name", "")
         if node.get("kind") == "FunctionDecl" and name.startswith(prefix):
+            # SDK C++ convenience overloads are not exported provider symbols.
+            # Clang preserves the plain name only for the actual C-linkage ABI.
+            if node.get("mangledName") != name:
+                return
             signature = node.get("type", {}).get("qualType", "")
             result = signature.split(" (", 1)[0]
             if result not in ("cublasStatus_t", "cusolverStatus_t"):

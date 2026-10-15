@@ -1,5 +1,7 @@
 include_guard(GLOBAL)
 
+include(GNUInstallDirs)
+
 set(GENERATIVEQC_CPU_LINALG_PROVIDER "auto" CACHE STRING
     "CPU dense-linear-algebra provider: auto, scalar, or openblas")
 set_property(CACHE GENERATIVEQC_CPU_LINALG_PROVIDER PROPERTY STRINGS auto scalar openblas)
@@ -251,5 +253,62 @@ function(generativeqc_configure_cpu_linalg target)
       GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS=0
       GENERATIVEQC_OPENBLAS_HAS_LAPACKE=0)
     message(STATUS "GenerativeQC CPU linear algebra: scalar fallback")
+  endif()
+endfunction()
+
+# The shared loader retains installed sibling names for existing wheel deployments.
+function(generativeqc_configure_private_cpu_linalg target)
+  if(GENERATIVEQC_BUNDLE_XTB_OPENBLAS)
+    if(NOT GENERATIVEQC_PYTHON_WHEEL)
+      message(FATAL_ERROR "GENERATIVEQC_BUNDLE_XTB_OPENBLAS requires GENERATIVEQC_PYTHON_WHEEL=ON")
+    endif()
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      message(FATAL_ERROR "The shared LP64 wheel provider is currently qualified on Linux only")
+    endif()
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _cpu_lp64_processor)
+    if(_cpu_lp64_processor MATCHES "^(x86_64|amd64)$")
+      set(_cpu_lp64_arch x86_64)
+    elseif(_cpu_lp64_processor MATCHES "^(aarch64|arm64)$")
+      set(_cpu_lp64_arch aarch64)
+    else()
+      message(FATAL_ERROR "Unsupported LP64 wheel architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/xtb/resolve-openblas-wheel.py"
+        --manifest "${CMAKE_CURRENT_SOURCE_DIR}/tools/xtb/scipy_openblas32_manifest.json"
+        --platform linux
+        --architecture "${_cpu_lp64_arch}"
+      RESULT_VARIABLE _cpu_lp64_openblas_status
+      OUTPUT_VARIABLE _cpu_lp64_openblas_json
+      ERROR_VARIABLE _cpu_lp64_openblas_error
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _cpu_lp64_openblas_status EQUAL 0)
+      message(FATAL_ERROR
+        "Failed to resolve the reviewed LP64 OpenBLAS provider:\n${_cpu_lp64_openblas_error}")
+    endif()
+    string(JSON _cpu_lp64_openblas_library GET "${_cpu_lp64_openblas_json}" provider_path)
+    string(JSON _cpu_lp64_openblas_prefix GET "${_cpu_lp64_openblas_json}" expected_config_prefix)
+    get_filename_component(_cpu_lp64_openblas_dir "${_cpu_lp64_openblas_library}" DIRECTORY)
+
+    add_library(generativeqc_cpu_lp64_openblas_shim SHARED
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cpu/openblas_lp64_shim.cpp)
+    target_link_libraries(generativeqc_cpu_lp64_openblas_shim PRIVATE "${_cpu_lp64_openblas_library}")
+    target_link_options(generativeqc_cpu_lp64_openblas_shim PRIVATE "LINKER:--no-as-needed")
+    set_target_properties(generativeqc_cpu_lp64_openblas_shim PROPERTIES
+      OUTPUT_NAME generativeqc_xtb_openblas_lp64_shim
+      CXX_VISIBILITY_PRESET hidden
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+      BUILD_RPATH "${_cpu_lp64_openblas_dir}"
+      INSTALL_RPATH "")
+    install(TARGETS generativeqc_cpu_lp64_openblas_shim
+      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    target_compile_definitions(${target} PRIVATE
+      GENERATIVEQC_XTB_CONFIGURED_WHEEL_OPENBLAS=1
+      "GENERATIVEQC_XTB_CONFIGURED_WHEEL_OPENBLAS_CONFIG_PREFIX=\"${_cpu_lp64_openblas_prefix}\"")
+    add_dependencies(${target} generativeqc_cpu_lp64_openblas_shim)
+  elseif(GENERATIVEQC_XTB_CPU_LINALG_LIBRARY)
+    target_compile_definitions(${target} PRIVATE
+      "GENERATIVEQC_XTB_CONFIGURED_CPU_LINALG_RUNTIME=\"${GENERATIVEQC_XTB_CPU_LINALG_LIBRARY}\"")
   endif()
 endfunction()

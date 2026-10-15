@@ -1,21 +1,18 @@
-#ifndef GENERATIVEQC_XTB_BACKENDS_CUDA_CUDA_ATOMICS_CUH
-// xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
-
-#define GENERATIVEQC_XTB_BACKENDS_CUDA_CUDA_ATOMICS_CUH
+#pragma once
 
 #include <cuda_runtime.h>
 
-namespace generativeqc::xtb::detail::cuda {
+namespace generativeqc::runtime {
 
 /*
  * FP64 atomic addition is native from sm_60 onward. CUDA can still compile
- * xtbloom for older targets selected by a toolchain or downstream packager, so
+ * the runtime for older targets selected by a toolchain or downstream packager, so
  * retain the standard integer-CAS fallback there. Comparing integer payloads
  * instead of doubles also guarantees that a NaN already stored at address
  * cannot make the retry loop spin forever.
  */
 __device__ inline double atomic_add_fp64(double* address, double value) noexcept {
-#if !defined(GENERATIVEQC_XTB_FORCE_FP64_ATOMIC_CAS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
+#if !defined(GENERATIVEQC_FORCE_FP64_ATOMIC_CAS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
   return atomicAdd(address, value);
 #else
   auto* bits = reinterpret_cast<unsigned long long*>(address);
@@ -29,6 +26,4 @@ __device__ inline double atomic_add_fp64(double* address, double value) noexcept
 #endif
 }
 
-}  // namespace generativeqc::xtb::detail::cuda
-
-#endif  // GENERATIVEQC_XTB_BACKENDS_CUDA_CUDA_ATOMICS_CUH
+}  // namespace generativeqc::runtime
