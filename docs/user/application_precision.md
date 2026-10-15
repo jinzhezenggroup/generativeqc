@@ -74,7 +74,9 @@ counted once; replay reports mixed-source J/K work but no new recurrence work.
 The shared nonlocal initializer and frozen-potential proposal stages also admit
 budget-selected mixed Focks. Provisional residuals never certify the target or
 trigger residual-based precision switching; their iterations still consume the
-same twelve-iteration mixed cap. Strict refinement leaves the frozen/seed stage,
+same twelve-iteration mixed cap. The initializer reserves its last mixed slot
+for a fresh complete target Fock instead of spending every slot on seed work.
+Strict refinement leaves the frozen/seed stage,
 invalidates nonlinear history and evaluates fresh complete FP64 target Focks.
 Bounded FP32 VV10 pair closures reuse the compiler's rational derivatives and
 energy denominator, rather than losing those optimizations when lowering to float.

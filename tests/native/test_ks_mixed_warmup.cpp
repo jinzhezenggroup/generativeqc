@@ -34,6 +34,11 @@ int main() {
             "provisional nonlocal work must consume the mixed iteration cap");
     require(early.enter_refinement(true, false, 3, 3, 1e-2, true),
             "a provisional stage must not exceed the original solve budget");
+    require(!early.target_refresh_due(true, 22, 100) && early.target_refresh_due(true, 23, 100),
+            "initializers must leave one mixed target Fock within the cap");
+    require(early.target_refresh_due(true, 2, 3) && !early.target_refresh_due(false, 23, 100) &&
+                !early.target_refresh_due(true, 1, 1),
+            "target reservation must respect strict and short solve domains");
     require(!early.enter_refinement(false, true, 100, 100, 1e-8),
             "strict execution must never restart approximate refinement");
     for (const double invalid :

@@ -19,6 +19,14 @@ struct MixedPrecisionWarmup {
   double switch_residual{};
   unsigned max_iterations{};
 
+  /** Leave room for a fresh target Fock before a provisional initializer uses
+   * the mixed budget. This changes proposal timing, never acceptance gates. */
+  bool target_refresh_due(bool mixed_stage, unsigned iterations,
+                          unsigned target_limit) const noexcept {
+    const auto limit = max_iterations ? std::min(max_iterations, target_limit) : target_limit;
+    return mixed_stage && limit > 1 && iterations >= limit - 1;
+  }
+
   /** Provisional operator residuals cannot trigger target-based switching,
    * but initializer/frozen-potential work still consumes the same finite cap. */
   bool enter_refinement(bool mixed_stage, bool converged, unsigned iterations,

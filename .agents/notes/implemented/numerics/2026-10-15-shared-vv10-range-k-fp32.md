@@ -109,6 +109,13 @@ target evaluation. FP32 pair roots reuse the shared rational/unit-reciprocal
 closure under the existing representable-input domain, with a new lowering
 identity and independent Decimal checks at every domain corner.
 
+The first composed 96-AO run passed observable gates but spent all twelve mixed
+iterations in the semilocal initializer: its positive-FP32-nonlocal-work assertion
+correctly failed. Do not weaken that check or report the missing work as mixed.
+Reserve the last existing mixed slot for a complete target evaluation. This
+uses actual FP32 pair work before handoff without increasing the cap, relaxing
+final tolerances or accepting a provisional operator.
+
 Hermite reassociation and canonical fused-RSH experiments also exclude mixed
 arithmetic, but both are opt-in and disabled in both measured default endpoints.
 They are not evidence for this default regression; enabling those experiments

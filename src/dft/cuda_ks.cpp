@@ -3042,6 +3042,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool enter_nonlocal_target =
         (pending_nonlocal_seed || pending_nonlocal_frozen) &&
         (physical.maximum_residual < nonlocal_stage_tolerance ||
+         mixed_warmup.target_refresh_due(mixed_stage, output.iterations, options.max_iterations) ||
          (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
          output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
     if (enter_strict_refinement) {
