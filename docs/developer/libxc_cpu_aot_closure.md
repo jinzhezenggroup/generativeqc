@@ -87,6 +87,29 @@ The C++ job decoder follows LLVM's quoted `sys::printArg` protocol: it consumes
 escaped quotes, backslashes and dollars once, preserves genuine preceding
 backslashes, and rejects malformed or unquoted words. Diagnostic text is never
 executed. The existing Clang C decoder is unchanged.
+The C++ module boundary uses Clang's own preprocessed token dump, validating
+every record and exactly one final EOF before interpreting token spellings.
+Comments and ordinary/multiline raw string literals containing `module` or
+`import` do not select modules. Actual token spellings `module`/`import` are
+conservatively rejected with `unsupported-clangxx-module-token`, including legal
+ordinary identifiers with those contextual spellings. Literal tabs in
+non-whitespace token spellings, unknown diagnostics, malformed or incomplete dump framing are
+outside this narrow observation domain (`unsupported-clangxx-token-stream`).
+It does not promise acceptance of all otherwise valid C++20 sources.
+Token observations use the same verified driver/mode/flags/environment and
+snapshot, with a repeated context digest and the existing finite process owner.
+Both output streams share an anonymous file with a hard 64 MiB process file-size
+budget; reaching it yields `clangxx-token-output-limit`, never a reusable key.
+The observer execs Clang in place; it does not execute diagnostic text, parse C++
+independently, compile an object or introduce a second process/cache owner.
+Macro history is itself compiler-raw-lexed before directive interpretation:
+`-dD` also contains ordinary output, so text inside used or unused raw literals
+cannot impersonate an active definition. The derived anonymous projection has
+an observed end marker and the same hard output budget; malformed/truncated
+records yield `unsupported-clangxx-macro-stream`. Active parallel/profile/debug
+mode definitions and non-native C++11 ABI definitions are rejected. Explicit
+ABI undefinition and observed macro push/pop configuration are conservatively
+outside the domain (`unsupported-clangxx-abi` / `unsupported-clangxx-macro-stack`).
 Clang C++ inherits the Clang dependency-path restrictions below and the C++ PCH,
 module, alternate ABI, target/sysroot and flag restrictions above. Its returned
 closure salt must reach the verified compiler-cache command. Tests execute a

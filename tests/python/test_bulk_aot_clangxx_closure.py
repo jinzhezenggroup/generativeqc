@@ -65,6 +65,51 @@ def fake_clangxx(fake_clang: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
             return replace(
                 result, stderr=" ".join(llvm_quoted(token) for token in tokens)
             )
+        if "-dump-raw-tokens" in command:
+            projected = os.read(kwargs["pass_fds"][1], 1024 * 1024).decode()
+            records = []
+
+            def emit(kind: str, value: str, start: bool = False) -> None:
+                records.append(
+                    kind
+                    + " '"
+                    + value
+                    + "'\t"
+                    + (" [StartOfLine]" if start else "")
+                    + "\tLoc=<fixture:1:1>"
+                )
+
+            for line in projected.splitlines():
+                if line.startswith("#define "):
+                    fields = line.split(maxsplit=2)
+                    name = fields[1]
+                    emit("hash", "#", True)
+                    emit("unknown", " ")
+                    emit("raw_identifier", "define")
+                    emit("unknown", " ")
+                    emit("raw_identifier", name.removesuffix("()"))
+                    if name.endswith("()"):
+                        emit("l_paren", "(")
+                        emit("r_paren", ")")
+                    if len(fields) > 2:
+                        emit("unknown", " ")
+                        emit(
+                            "numeric_constant"
+                            if fields[2][0].isdigit()
+                            else "raw_identifier",
+                            fields[2],
+                        )
+                elif line:
+                    emit("raw_identifier", line, True)
+                emit("unknown", "\n")
+            os.write(kwargs["pass_fds"][0], "\n".join(records).encode())
+            return replace(result, stdout="", stderr="")
+        if "-dump-tokens" in command:
+            data = (
+                b"identifier 'point'\t\tLoc=<fixture:1:1>\neof ''\t\tLoc=<fixture:1:8>"
+            )
+            os.write(kwargs["pass_fds"][0], data)
+            return replace(result, stdout="", stderr="")
         if "-dM" in command:
             return replace(
                 result,
@@ -75,9 +120,13 @@ def fake_clangxx(fake_clang: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
                 result,
                 stderr=f'Selected GCC installation: {gcc}\nSelected multilib: .;@m64\n#include "..." search starts here:\n#include <...> search starts here:\n /usr/include/c++/12\nEnd of search list.',
             )
-        return replace(
+        result = replace(
             result, stdout=result.stdout.replace(str(old_source), str(source))
         )
+        if kwargs.get("pass_fds"):
+            os.write(kwargs["pass_fds"][0], (result.stdout + result.stderr).encode())
+            return replace(result, stdout="", stderr="")
+        return result
 
     monkeypatch.setattr(c, "run_compiler", run)
     return source, manifest
@@ -702,6 +751,8 @@ def test_real_clang_c_and_cxx_identity(
         "_GLIBCXX_USE_CXX11_ABI 0",
         "_GLIBCXX_USE_CXX11_ABI() 1",
         "_GLIBCXX_DEBUG 1",
+        "_GLIBCXX_PARALLEL 1",
+        "_GLIBCXX_PROFILE 1",
         "_LIBCPP_VERSION 180000",
     ],
 )
@@ -713,11 +764,9 @@ def test_alternate_clangxx_abi_rejected(
 
     def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
         result = original(command, timeout, **kwargs)
-        return (
-            replace(result, stdout=result.stdout + "\n#define " + macro)
-            if "-dM" in command
-            else result
-        )
+        if "-dD" in command:
+            os.write(kwargs["pass_fds"][0], ("\n#define " + macro + "\n").encode())
+        return result
 
     monkeypatch.setattr(c, "run_compiler", run)
     rejected = collect(source, manifest)
@@ -877,3 +926,322 @@ def test_real_inactive_abi_definition_keeps_native_abi(
         and after.closure is not None
         and after.closure.cache_key == result.closure.cache_key
     )
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "export module fixture;\n",
+        "module;\nexport module fixture;\n",
+        "#define DECLARE module\nexport DECLARE fixture;\n",
+        "import fixture;\n",
+    ],
+)
+def test_real_cxx_modules_fail_closed(
+    tmp_path: Path, real_clangxx: tuple, declaration: str
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    source.write_text(declaration + "int point() { return 7; }\n")
+    result = collect(source, manifest, compiler=compiler)
+    assert result.reasons == ("unsupported-clangxx-module-token",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_real_cxx_module_words_in_literals_and_inactive_code(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    source.write_text(
+        '#if 0\nexport module fixture;\nimport fixture;\n#endif\n/* module import */\nextern "C" const char* point() { return "module import" R"tag(module import)tag"; }\n'
+    )
+    before = collect(source, manifest, compiler=compiler)
+    assert (
+        not before.reasons
+        and before.closure is not None
+        and before.closure.reusable
+        and before.recipe is not None
+    )
+    obj = tmp_path / "unit.o"
+    built = compile_controlled(
+        [compiler, *before.recipe["flags"], "-c", str(source), "-o", str(obj)],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and before.closure.cache_key == after.closure.cache_key
+    )
+
+
+@pytest.mark.parametrize("name", ["module", "import"])
+def test_real_ordinary_contextual_identifier_is_conservatively_rejected(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    source.write_text("int point() { int " + name + " = 7; return " + name + "; }\n")
+    built = compile_controlled(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *FLAGS,
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "unit.o"),
+        ],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    result = collect(source, manifest, compiler=compiler)
+    assert result.reasons == ("unsupported-clangxx-module-token",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        'import "header.hpp";\n',
+        'export import "header.hpp";\n',
+        '#define IMPORT import\nIMPORT "header.hpp";\n',
+    ],
+)
+def test_real_header_unit_forms_fail_closed(
+    tmp_path: Path, real_clangxx: tuple, declaration: str
+) -> None:
+    compiler, manifest = real_clangxx
+    (tmp_path / "header.hpp").write_text("int header_value();\n")
+    source = tmp_path / "unit.cpp"
+    source.write_text(declaration + "int point() { return 7; }\n")
+    result = collect(source, manifest, compiler=compiler)
+    assert result.reasons and (
+        result.closure is None or result.closure.cache_key is None
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "identifier 'point'\t\tLoc=<fixture:1:1>",
+        "eof ''\t\tLoc=<fixture:1:1>\nidentifier 'module'\t\tLoc=<fixture:1:2>",
+        "eof ''\t\tLoc=<fixture:1:1>\neof ''\t\tLoc=<fixture:1:2>",
+        "warning: identifier 'module'\n" + "eof ''\t\tLoc=<fixture:1:2>",
+    ],
+)
+def test_incomplete_or_ambiguous_token_output_fails_closed(
+    fake_clangxx: tuple, monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    source, manifest = fake_clangxx
+    original = c.run_compiler
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if "-dump-tokens" in command:
+            fd = kwargs["pass_fds"][0]
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, text.encode())
+        return result
+
+    monkeypatch.setattr(c, "run_compiler", run)
+    result = collect(source, manifest)
+    assert result.reasons == ("unsupported-clangxx-token-stream",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_real_token_capture_budget_fails_closed(
+    tmp_path: Path, real_clangxx: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    source.write_text("int point() { return 7; }\n")
+    monkeypatch.setattr(c, "_CLANGXX_TOKEN_BYTES", 128)
+    result = collect(source, manifest, compiler=compiler)
+    assert result.reasons == ("clangxx-token-output-limit",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_real_multiline_raw_strings_do_not_define_abi_modes(
+    tmp_path: Path, real_clangxx: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    source.write_text(
+        'const char* value=R"tag(module\nimport\n#define _GLIBCXX_DEBUG 1\n#define _GLIBCXX_USE_CXX11_ABI 0\n#define _GLIBCXX_PARALLEL 1\n)tag";\n'
+    )
+    result = collect(source, manifest, compiler=compiler)
+    assert (
+        not result.reasons
+        and result.closure is not None
+        and result.closure.reusable
+        and result.recipe is not None
+    )
+    built = compile_controlled(
+        [
+            compiler,
+            *result.recipe["flags"],
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "unit.o"),
+        ],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and after.closure.cache_key == result.closure.cache_key
+    )
+
+
+@pytest.mark.parametrize("transient", [False, True])
+def test_real_parallel_mode_objects_are_not_qualified(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    transient: bool,
+) -> None:
+    compiler, manifest = real_clangxx
+    query = run_compiler(
+        [compiler, "--driver-mode=g++", "--no-default-config", "-print-resource-dir"],
+        30,
+        label="matching OpenMP resource",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert query.returncode == 0 and not query.timed_out
+    include = Path(query.stdout.strip()) / "include"
+    if not (include / "omp.h").is_file():
+        pytest.skip(
+            "matching Clang OpenMP header unavailable; parallel object proof remains unqualified"
+        )
+    source = tmp_path / "parallel.cpp"
+    source.write_text(
+        "#define _GLIBCXX_PARALLEL 1\n#include <algorithm>\n"
+        + ("#undef _GLIBCXX_PARALLEL\n" if transient else "")
+        + "void fixture_sort(int* a,int* b) { std::sort(a,b); }\n"
+    )
+    flags = (*FLAGS, "-I" + str(include))
+    obj = tmp_path / "parallel.o"
+    built = compile_controlled(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *flags,
+            "-c",
+            str(source),
+            "-o",
+            str(obj),
+        ],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    nm = run_compiler(
+        ["/usr/bin/nm", "-C", str(obj)],
+        30,
+        label="independent parallel symbols",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert nm.returncode == 0 and not nm.timed_out
+    assert re.search(
+        r"\bU omp_(?:get_max_threads|get_num_threads|get_thread_num)\b", nm.stdout
+    )
+    rejected = collect(source, manifest, compiler=compiler, flags=flags)
+    assert rejected.reasons == ("unsupported-clangxx-abi",)
+    assert rejected.closure is not None and rejected.closure.cache_key is None
+    (tmp_path / "parallel-rejection.json").write_text(
+        json.dumps(
+            {
+                "header": str(include / "omp.h"),
+                "symbols": nm.stdout,
+                "object_sha256": file_hash(obj),
+                "reasons": rejected.reasons,
+            },
+            indent=2,
+        )
+    )
+
+
+@pytest.mark.parametrize("unused_macro", [False, True])
+def test_real_raw_abi_text_is_not_a_directive(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    unused_macro: bool,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "unit.cpp"
+    literal = 'R"tag(\n#define _GLIBCXX_DEBUG 1\n#define _GLIBCXX_PARALLEL 1\n#define _GLIBCXX_USE_CXX11_ABI 0\n)tag"'
+    text = (
+        ("#define UNUSED " + literal + "\n")
+        if unused_macro
+        else ("const char* data=" + literal + ";\n")
+    )
+    source.write_text(text + "int point(){return 7;}\n")
+    before = collect(source, manifest, compiler=compiler)
+    assert (
+        not before.reasons
+        and before.closure is not None
+        and before.closure.reusable
+        and before.recipe is not None
+    )
+    built = compile_controlled(
+        [
+            compiler,
+            *before.recipe["flags"],
+            "-c",
+            str(source),
+            "-o",
+            str(tmp_path / "unit.o"),
+        ],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and before.closure.cache_key == after.closure.cache_key
+    )
+
+
+@pytest.mark.parametrize("fault", ["missing-sentinel", "trailing-token", "diagnostic"])
+def test_macro_projection_protocol_is_complete_before_policy(
+    fake_clangxx: tuple, monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    source, manifest = fake_clangxx
+    original = c.run_compiler
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if "-dump-raw-tokens" in command:
+            fd = kwargs["pass_fds"][0]
+            os.lseek(fd, 0, os.SEEK_SET)
+            data = os.read(fd, 1024 * 1024).decode()
+            if fault == "missing-sentinel":
+                data = data.replace("generativeqc_macro_end_", "missing_marker_")
+            elif fault == "trailing-token":
+                data += "\nraw_identifier 'extra'\t\tLoc=<fixture:2:1>"
+            else:
+                data = "warning: macro text\n" + data
+            os.ftruncate(fd, 0)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, data.encode())
+        return result
+
+    monkeypatch.setattr(c, "run_compiler", run)
+    result = collect(source, manifest)
+    assert result.reasons == ("unsupported-clangxx-macro-stream",)
+    assert result.closure is not None and result.closure.cache_key is None

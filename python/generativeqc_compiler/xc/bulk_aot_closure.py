@@ -16,6 +16,7 @@ import shlex
 import shutil
 import stat
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,15 @@ SCHEMA = "generativeqc.libxc-cpu-closure/v1"
 # CPATH, GCC_EXEC_PREFIX, LD_PRELOAD, compiler-cache settings, etc. are not inherited.
 CPU_ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"}
 _SIMPLE_FLAGS = frozenset({"-std=c99", "-O0", "-O1", "-O2", "-O3", "-fPIC"})
+_CLANGXX_TOKEN_BYTES = 64 * 1024 * 1024
+# Clang dump records have tab-separated spelling/flags/location fields. Literal
+# newlines are representable; literal tabs in non-whitespace spellings are not.
+_CLANGXX_LITERAL = r"(?:wide_|utf8_|utf16_|utf32_)?string_literal"
+_CLANGXX_RECORD = (
+    rf"(?:{_CLANGXX_LITERAL} '[^\t]*'|unknown '[ \t\r\n\v\f]+'|"
+    rf"(?!(?:eof|unknown|{_CLANGXX_LITERAL})\b)[a-z_][a-z_0-9]* '[^\t\r\n]*')"
+    r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+)
 
 
 def _system_gcc() -> Path:
@@ -261,6 +271,86 @@ def _clang_cxx_job_arguments(line: str) -> list[str]:
     return words
 
 
+def _validate_clang_cxx_tokens(text: str) -> None:
+    """Validate complete Clang token records as data.
+
+    Literal tabs in non-whitespace spellings have ambiguous dump framing and
+    remain unsupported. Ordinary/multiline raw strings are not identifiers.
+    """
+    # Validate every record, exactly one final EOF, and unambiguous field/line
+    # framing before interpreting a spelling. This is not a substring search
+    # through arbitrary diagnostics or source/literal text.
+    eof = r"eof ''\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n)*{eof}", text) is None:
+        raise ValueError("unsupported-clangxx-token-stream")
+    if re.search(r"^[a-z_][a-z_0-9]* '(?:module|import)'\t", text, re.MULTILINE):
+        raise ValueError("unsupported-clangxx-module-token")
+
+
+def _validate_clang_cxx_macro_records(text: str, sentinel: str) -> None:
+    """Read directive records only after Clang raw-lexes its -dD projection.
+
+    The compiler owns literal/comment classification. A fake #define inside a
+    multiline literal is one string token, never a directive event. This reads
+    compiler records, not C++ expressions or a second preprocessor.
+    """
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n?)+", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    suffix = r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    end = (
+        rf"raw_identifier '{re.escape(sentinel)}'{suffix}"
+        rf"(?:\nunknown '[ \t\r\n\v\f]+'{suffix})*"
+    )
+    if re.search(rf"(?:^|\n){end}$", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    directive: list[tuple[str, str]] | None = None
+
+    def check_definition() -> None:
+        if directive is None or len(directive) < 3:
+            return
+        if directive[0] != ("hash", "#"):
+            return
+        action = directive[1]
+        kind, name = directive[2]
+        if action == ("raw_identifier", "pragma") and name in {
+            "push_macro",
+            "pop_macro",
+        }:
+            raise ValueError("unsupported-clangxx-macro-stack")
+        if action == ("raw_identifier", "undef") and name == "_GLIBCXX_USE_CXX11_ABI":
+            raise ValueError("unsupported-clangxx-abi")
+        if action != ("raw_identifier", "define"):
+            return
+        if kind != "raw_identifier":
+            raise ValueError("unsupported-clangxx-macro-stream")
+        if name == "_GLIBCXX_USE_CXX11_ABI":
+            if directive[3:] != [("numeric_constant", "1")]:
+                raise ValueError("unsupported-clangxx-abi")
+        elif name in {
+            "_GLIBCXX_DEBUG",
+            "_GLIBCXX_PARALLEL",
+            "_GLIBCXX_PROFILE",
+            "_LIBCPP_VERSION",
+        }:
+            raise ValueError("unsupported-clangxx-abi")
+
+    for match in re.finditer(_CLANGXX_RECORD, text):
+        head, flags, _ = match[0].rsplit("\t", 2)
+        kind, spelling = head.split(" ", 1)
+        spelling = spelling[1:-1]
+        if kind == "unknown":
+            if "\n" in spelling or "\r" in spelling:
+                check_definition()
+                directive = None
+            continue
+        if kind == "hash" and "[StartOfLine]" in flags:
+            check_definition()
+            directive = []
+        if directive is not None:
+            directive.append((kind, spelling))
+    check_definition()
+
+
 def collect_cpu_closure(
     variant: SourceVariant,
     source_path: Path,
@@ -362,7 +452,13 @@ def collect_cpu_closure(
         ):
             raise ValueError("compiler-selection-changed")
 
-    def query(arguments: list[str], *, diagnostic: bool = False) -> str:
+    def query(
+        arguments: list[str],
+        *,
+        diagnostic: bool = False,
+        token_budget: int | None = None,
+        input_fds: tuple[int, ...] = (),
+    ) -> str:
         check_working_directory()
         check_clang_selection()
         remaining = deadline - time.monotonic()
@@ -372,21 +468,58 @@ def collect_cpu_closure(
             arguments = ["--no-default-config", *arguments]
         if is_clang and is_cxx and "--driver-mode=g++" not in arguments:
             arguments = ["--driver-mode=g++", *arguments]
-        result = run_compiler(
-            [str(path), *arguments],
-            remaining,
-            label="CPU AOT closure",
-            environment=dict(CPU_ENVIRONMENT),
-        )
+        limited = False
+        if token_budget is None:
+            result = run_compiler(
+                [str(path), *arguments],
+                remaining,
+                label="CPU AOT closure",
+                environment=dict(CPU_ENVIRONMENT),
+            )
+            output = result.stderr if diagnostic else result.stdout
+        else:
+            # Keep the existing finite process-group owner. This helper execs
+            # the same verified driver in-place, with both outputs going to an
+            # anonymous bounded file; its fd/limit are observation provenance,
+            # not object compiler flags or a second compiler/cache owner.
+            helper = (
+                "import os,resource,sys; "
+                "fd=int(sys.argv[1]); limit=int(sys.argv[2]); "
+                "resource.setrlimit(resource.RLIMIT_CORE,(0,0)); "
+                "resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit)); "
+                "os.dup2(fd,1); os.dup2(fd,2); "
+                "os.execv(sys.argv[3],sys.argv[3:])"
+            )
+            with tempfile.TemporaryFile() as capture:
+                result = run_compiler(
+                    [
+                        sys.executable,
+                        "-c",
+                        helper,
+                        str(capture.fileno()),
+                        str(token_budget),
+                        str(path),
+                        *arguments,
+                    ],
+                    remaining,
+                    label="CPU AOT token observation",
+                    environment=dict(CPU_ENVIRONMENT),
+                    pass_fds=(capture.fileno(), *input_fds),
+                )
+                limited = os.fstat(capture.fileno()).st_size >= token_budget
+                capture.seek(0)
+                output = "" if limited else capture.read(token_budget).decode("utf-8")
         check_working_directory()
         check_clang_selection()
         if result.timed_out:
             raise TimeoutError
+        if limited:
+            raise ValueError("clangxx-token-output-limit")
         if result.returncode:
             raise ValueError("compiler-command-failed")
         # Remove record terminators only: GCC quotes a filename's terminal
         # space/tab, and trimming that whitespace destroys dependency identity.
-        return (result.stderr if diagnostic else result.stdout).rstrip("\r\n")
+        return output.rstrip("\r\n")
 
     def snapshot(files: tuple[CacheDependency, ...]) -> None:
         for item in files:
@@ -541,18 +674,54 @@ def collect_cpu_closure(
                     r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
                 ):
                     raise ValueError("unsupported-clangxx-abi")
-                # A final -dM table hides definitions restored/undefined after
-                # headers have already selected an ABI. Observe active define
-                # history as well; inactive preprocessor branches do not enter it.
-                macro_history = query([*effective_flags, "-E", "-dD", str(source)])
-                unsupported_abi = re.compile(
-                    r"^#define (?:_GLIBCXX_USE_CXX11_ABI\b(?! 1$)|_GLIBCXX_DEBUG\b|_LIBCPP_VERSION\b)",
-                    re.MULTILINE,
+                # -dD includes ordinary output, so its text is not itself a
+                # directive/event protocol. Let the same Clang raw lexer own
+                # literal boundaries before interpreting active definitions.
+                macro_history = query(
+                    [*effective_flags, "-E", "-dD", str(source)],
+                    token_budget=_CLANGXX_TOKEN_BYTES,
                 )
-                if unsupported_abi.search(macros) or unsupported_abi.search(
-                    macro_history
-                ):
-                    raise ValueError("unsupported-clangxx-abi")
+                sentinel = "generativeqc_macro_end_" + canonical_hash(
+                    {"history": macro_history}
+                )
+                with tempfile.TemporaryFile() as projection:
+                    projection.write(
+                        (macro_history + "\n" + sentinel + "\n").encode("utf-8")
+                    )
+                    projection.flush()
+                    projection.seek(0)
+                    raw_tokens = query(
+                        [
+                            *effective_flags,
+                            "-fsyntax-only",
+                            "-Xclang",
+                            "-dump-raw-tokens",
+                            "-x",
+                            "c++",
+                            f"/proc/self/fd/{projection.fileno()}",
+                        ],
+                        diagnostic=True,
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(projection.fileno(),),
+                    )
+                _validate_clang_cxx_macro_records(raw_tokens, sentinel)
+                # C++20 named modules can compile from .cpp without -fmodules;
+                # neither the driver job nor dependency headers expose that
+                # declaration. Reuse Clang's preprocessed lexer, not a second
+                # C++ parser. Conservatively exclude module/import spellings as
+                # tokens (including otherwise ordinary contextual identifiers).
+                tokens = query(
+                    [
+                        *effective_flags,
+                        "-fsyntax-only",
+                        "-Xclang",
+                        "-dump-tokens",
+                        str(source),
+                    ],
+                    diagnostic=True,
+                    token_budget=_CLANGXX_TOKEN_BYTES,
+                )
+                _validate_clang_cxx_tokens(tokens)
                 search = query(
                     [*effective_flags, "-E", "-v", str(source)], diagnostic=True
                 )
@@ -576,6 +745,7 @@ def collect_cpu_closure(
                     macro_history_sha256=canonical_hash(
                         {"macro_history": macro_history}
                     ),
+                    token_stream_sha256=canonical_hash({"tokens": tokens}),
                     include_search=include_search[1],
                     gcc_installation=gcc_selection[0],
                     # Includes multilib selection and ignored search paths;

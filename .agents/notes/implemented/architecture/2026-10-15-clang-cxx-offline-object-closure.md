@@ -209,3 +209,89 @@ raw stored-object/library bytes are rehashed after download without extracting
 or following links. Accepted remote and client execution exits are zero.
 This toolchain qualification remains separate from latest-head CI, independent
 formal approval, normal protected merge and parent-issue completion.
+
+## Module-boundary correction
+
+Real Clang 18 at `42a6be4a030f2176888bc50069881238b59027ee` compiles
+`export module` in a `.cpp` translation unit, and that collector returns a
+reusable key. Neither `-fno-modules` nor `-fno-cxx-modules` prevents this C++20
+standard-module behavior (the latter is an unused argument). Preserve this
+counterexample; the preceding accepted-domain tests do not qualify modules.
+
+The existing driver/process owner now obtains Clang-produced preprocessed token
+records. Validate the whole diagnostic protocol and exactly one final EOF before
+checking token spellings; do not grep arbitrary source/diagnostic text or build
+a second C++ lexer/parser. Macro-expanded module/import spellings are visible;
+comments and representable ordinary/raw literals are not identifier tokens.
+The conservative domain also excludes ordinary identifiers named `module` or
+`import`, and non-whitespace spellings containing literal tabs. Multiline raw
+literals remain compiler-classified string tokens. Current docs name
+these unsupported reasons rather than claiming full C++20 acceptance.
+
+The observer execs the same verified Clang in place under CPU_ENVIRONMENT and
+the existing finite compiler-process group. Both outputs go to one anonymous fd
+with a hard 64 MiB RLIMIT_FSIZE budget; core dumps are disabled for that observer.
+Limit, truncation, malformed framing and missing/early/duplicate EOF fail closed.
+The complete token digest is bound and rechecked with the other context under
+the immutable caller snapshot. This is bounded observation plumbing, not a new
+object producer, compiler cache, process-tree owner or scientific algebra.
+
+## Definition-record correction and parallel mode
+
+The published `42a6be4a` history guard incorrectly treats raw literal text in
+`-dD` normal output as a directive. The correction raw-lexes that compiler
+projection with the same verified Clang, mode/base flags/environment and finite
+owner. Its complete bounded record protocol and a history-derived terminal
+token are verified before interpreting hash/define/name/value records. Both
+used and unused multiline raw literals remain string tokens; their fake
+`#define` lines are not ABI events. This is compiler-produced metadata framing,
+not a C++ expression parser or execution of diagnostic text.
+
+Active `_GLIBCXX_PARALLEL` and `_GLIBCXX_PROFILE` join the unsupported mode
+definitions. GCC 12's OpenMP header first failed actual Clang compilation due
+to incompatible malloc attributes; that failure remains recorded. Matching
+official LLVM 18 libomp packages were then SHA-256 checked against the signed
+apt index and installed only in this task-owned Notebook. Actual active and
+transient parallel-mode `<algorithm>` objects contain unresolved `omp_*` symbols
+and parallel namespace symbols while `42a6be4a` returns reusable closures for
+both. These actual counterexamples justify the additional mode rejection;
+no OpenMP runtime/scientific endpoint is qualified.
+
+### Final observation-record qualification
+
+LF tree `123d32b84269d467b7ebb4291aca23392ca7bd1e` and delta archive SHA-256
+`4632b6822296fa7a440b61c3f802fc50fbb53a88b3db16016354a45f367c98ea`
+qualify collector/test blobs
+`e72c9981371c892f9e05c613e35ec3db4f036c3d` /
+`356f975f27a1a0e96157e1645592c204c5a535cc` (raw SHA-256
+`327ed068fc29c0e5df0166f2c823efd9fec0bf9073d289110003142636c56059` /
+`557880c2e21a85cc83f98d483a2a25077b31577c5547de687a761d46a5a4d97e`).
+All 11,054 source files match the full manifest before/after execution and controls.
+Subsequent result-only edits to this note leave those qualified blobs unchanged.
+
+- Full Linux closure/cache/store/boundary/publication suite: **249 passed,
+  zero skips**. Same-path/cache repeat: **79 passed, zero skips**. Mixed C15/C++18
+  entries: **78 passed, zero skips, one explicit C cross-comparison deselected**;
+  C18 is restored and checked afterward.
+- Macro-expanded modules, import/header-unit forms, malformed/truncated token
+  protocols, output-budget exhaustion and legal same-name contextual identifiers
+  fail closed. Comments and ordinary/multiline raw literals pass as data. Used
+  and unused raw-macro literals cannot forge ABI definition records.
+- Actual active/transient parallel-mode objects have independent unresolved
+  `omp_*` observations and are rejected. The matching LLVM OpenMP header is part
+  of this task's frozen toolchain; a host without it reports that proof unavailable.
+- Default GCC C/Clang C/G++ complete recipe/payload/key compatibility: **3 passed**.
+  Real omitted/old-salt stale-byte controls: **2 passed**. Test-owned ordinary cache
+  misses/hits remain **1/0 -> 1/1 -> 2/1**. Actual stored object, C++-linked library
+  and seven Decimal rows retain the independent identities recorded above.
+- Windows related checks: **180 passed / 69 native skips**. Compiler structure
+  remains 540 modules / zero errors; changed-file Ruff/format/diff checks pass.
+
+Accepted client and remote exits are zero. The final journal is `abi-final/`
+under the task-owned experiment root. Downloaded ignored archive
+`.cache/pr2525-abi-evidence.tar.gz` SHA-256:
+`1b081c1ecdee4ae1e5fcf15ce56ddc210304c42690aabae4b0ba7b3219dd5574`.
+It retains the previous evidence, module/raw-string/parallel counterexamples,
+GCC-header incompatibility, package hashes, and all raw source/object/library
+receipts. These checks qualify this finite offline object domain; latest-head CI,
+genuinely independent formal approval and actual protected delivery remain separate.
