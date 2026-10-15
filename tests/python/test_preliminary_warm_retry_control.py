@@ -42,8 +42,8 @@ def control_sources() -> tuple[str, str, str, str]:
     dft = (ROOT / "src/methods/dft_method.cpp").read_text()
     hf_retry = between(
         hf,
-        "    const bool has_warm_density = warm_starts_enabled_",
-        "    if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_",
+        "    const bool has_warm_density = item.warm_start_used;",
+        "    finish_item(system_index, execution_system);",
     )
     dft_retry = (
         between(
@@ -157,9 +157,12 @@ HARNESS = r"""
 #include "methods/method.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
+#include "scf/fleet_item.hpp"
 using generativeqc::methods::MethodError;
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
+using scf::execute_fleet_item_attempt;
+using scf::retry_fleet_item_cold;
 namespace core { struct System {}; }
 namespace runtime {
 struct CpuRetainedCapacity { explicit CpuRetainedCapacity(std::size_t) {} };
@@ -178,28 +181,14 @@ struct Options {
     if (!enabled) preliminary_guess.reset();
   }
 };
-struct Native {
-  bool converged{};
-  unsigned iterations{};
-  std::size_t fock_builds{};
-  initial_guess::PreliminaryDiagnostic preliminary_guess;
-};
+using Native = scf::ScfResult;
 struct Warm { std::vector<double> density{1}; };
-struct Item {
-  Native scf;
+struct Item : scf::FleetItemResult {
   std::exception_ptr failure;
-  bool warm_start_used{}, warm_start_fallback{};
-  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
-  generativeqc_status status{GENERATIVEQC_STATUS_SUCCESS};
 };
 std::string scenario;
 unsigned calls{}, preparations{};
 std::vector<bool> policies, seeds;
-generativeqc_status exception_status() {
-  try { throw; }
-  catch (const std::bad_alloc&) { return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
-  catch (...) { return GENERATIVEQC_STATUS_NUMERICAL_FAILURE; }
-}
 // DFT_FAILURE_POLICY
 Native solve(const Options& options, const std::vector<double>* seed) {
   ++calls;
@@ -233,15 +222,18 @@ Native run_fock_strategy_cached(int, const core::System&, const core::System*,
 }
 Item run_hf() {
   Item item;
+  item.warm_start_used = true;
   Options execution_options(shared_policy_enabled);
   // Native resolution has already selected this item's policy at the seam.
   Options item_options;
-  bool warm_starts_enabled_ = true;
   std::vector<std::optional<Warm>> warm_densities_{Warm{}};
   std::vector<int> independent_fock_plans_{0}, cuda_df_orthogonalizers_;
   std::size_t system_index = 0;
   int auxiliary_template_ = 0, device_id_ = -1;
   core::System execution_system;
+  const auto initial_density = [&](std::size_t index) {
+    return &warm_densities_[index]->density;
+  };
   // HF_RETRY
   return item;
 }
@@ -475,20 +467,26 @@ def test_failed_core_retry_is_terminal_for_active_preliminary_policy(
 
 
 @pytest.mark.parametrize(
-    "scenario,calls",
-    [("bad_alloc", 2), ("core_bad_alloc", 3), ("core_runtime_error", 3)],
+    "scenario,calls,status",
+    [
+        ("bad_alloc", 1, "oom"),
+        ("core_bad_alloc", 2, "oom"),
+        ("core_runtime_error", 2, "numerical_failure"),
+    ],
 )
 @pytest.mark.parametrize("shared_policy", [True, False])
-def test_disabled_policy_preserves_existing_hf_outer_retry_behavior(
-    host_control_harness: Path, scenario: str, calls: int, shared_policy: bool
+def test_disabled_hf_policy_uses_the_same_bounded_outer_retry(
+    host_control_harness: Path,
+    scenario: str,
+    calls: int,
+    status: str,
+    shared_policy: bool,
 ) -> None:
-    # This records compatibility with the pre-existing HF catch-all lifecycle;
-    # it is not an endorsement of retrying allocation errors in new policies.
     result = probe(
         host_control_harness, "hf", scenario, policy=False, shared_policy=shared_policy
     )
     assert result["calls"] == calls
-    assert result["status"] == result["success"]
+    assert result["status"] == result[status]
     assert not result["first_policy"] and not result["last_policy"]
     assert result["preparations"] == 0 and result["kind"] == 0
 
