@@ -47,6 +47,7 @@ enum class FockOperator { ShortRange, LongRange };
 struct ScfOptions { enum class XcExecutionSchedule { DeviceFused }; };
 }
 namespace cuda_ks_detail { template<class... T> void reset_control(T...) {} }
+namespace runtime::cuda_trace { void trace_counter(const char*, std::uint64_t) {} }
 int active_scenario = 0;
 struct Region {
   bool bound() const { return false; }
@@ -77,7 +78,8 @@ struct Owner {
   struct { struct { int requested_mode{}; } precision;
     struct { std::uint64_t owner_id{}; std::vector<int> operators; } precision_work;
   } output;
-  std::uint64_t owner = 1;
+  std::uint64_t owner = 1, solve_epoch = 1;
+  std::uint64_t warm_density_generation{}, warm_factor_generation{};
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
   bool device_nonlocal{}, device_chunk_mode{};
   bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
@@ -113,7 +115,8 @@ struct Owner {
   double density[1]{}, warm[1]{}, cold_seed[1]{};
   std::size_t elements = 1;
   struct { std::size_t density_h2d_bytes{}, synchronizations{}; } movement;
-  bool warm_energy_baseline{};
+  bool warm_energy_baseline{}, occupied_fitted_factor_ready{};
+  struct { std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{}; } resource;
   double range_warm_energy{}, range_warm_energy_correction{};
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
   std::unique_ptr<int> phase_source;
@@ -124,6 +127,7 @@ struct Owner {
     if (scenario == 2) throw std::bad_alloc();
   }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
+  void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
@@ -131,6 +135,7 @@ struct Owner {
     // This probe exercises optional source-admission failures; its ordinary
     // begin transaction has no provisional nonlocal initializer.
     const bool nonlocal_initialization = false;
+    const auto initial_synchronizations = movement.synchronizations;
     std::vector<double> prepared;
 """
         + transaction

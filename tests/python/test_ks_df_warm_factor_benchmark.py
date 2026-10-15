@@ -331,3 +331,118 @@ def test_complete_protocol_and_failed_gate_journal_with_gpu_doubles(
             *(["moved-warm"] * 5),
         ]
         assert owner.warm_updates == [True, False, True, False]
+
+
+@pytest.mark.parametrize("engine", ["reference", "native"])
+@pytest.mark.parametrize("existing", ["file", "symlink", "dangling-symlink"])
+def test_runner_reserves_output_before_scientific_work(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, engine: str, existing: str
+) -> None:
+    """Repeated runs cannot destroy successful or failed prior evidence."""
+    monkeypatch.setenv("SLURM_JOB_ID", "host-test-double")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "host-test-double")
+    monkeypatch.delenv("GENERATIVEQC_DF_TRACE", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DF_PROGRESS_TRACE", raising=False)
+    output = tmp_path / "result.json"
+    target = tmp_path / "previous.json"
+    original = b'{"status":"failed","error":"retained diagnostic"}\n'
+    if existing == "file":
+        output.write_bytes(original)
+    else:
+        if existing == "symlink":
+            target.write_bytes(original)
+        output.symlink_to(target)
+
+    def forbidden() -> None:
+        raise AssertionError("existing output reached scientific preparation")
+
+    monkeypatch.setattr(benchmark, "scaling_cases", forbidden)
+    arguments = [
+        "benchmark",
+        engine,
+        "--atoms",
+        "3",
+        "--basis-file",
+        "orbital.json",
+        "--auxiliary-file",
+        "auxiliary.json",
+        "--output",
+        str(output),
+    ]
+    if engine == "native":
+        arguments += ["--reference", "oracle.json"]
+    monkeypatch.setattr("sys.argv", arguments)
+    with pytest.raises(FileExistsError):
+        benchmark.main()
+    if existing == "dangling-symlink":
+        assert output.is_symlink() and not target.exists()
+    else:
+        assert output.read_bytes() == original
+
+
+def test_runner_journals_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An input failure after reservation keeps useful failure context."""
+    monkeypatch.setenv("SLURM_JOB_ID", "host-test-double")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "host-test-double")
+    monkeypatch.delenv("GENERATIVEQC_DF_TRACE", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DF_PROGRESS_TRACE", raising=False)
+    monkeypatch.setitem(sys.modules, "cupy", SimpleNamespace())
+    error = RuntimeError("input preparation failed")
+
+    def fail() -> None:
+        raise error
+
+    monkeypatch.setattr(benchmark, "scaling_cases", fail)
+    output = tmp_path / "result.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "benchmark",
+            "reference",
+            "--atoms",
+            "3",
+            "--basis-file",
+            "orbital.json",
+            "--auxiliary-file",
+            "auxiliary.json",
+            "--output",
+            str(output),
+        ],
+    )
+    with pytest.raises(RuntimeError, match="input preparation failed") as raised:
+        benchmark.main()
+    assert raised.value is error
+    record = json.loads(output.read_text())
+    assert record["status"] == "failed" and record["stage"] == "initialize"
+    assert record["error"] == "RuntimeError: input preparation failed"
+    assert record["engine"] == "reference" and record["records"] == []
+
+
+def test_runner_records_loaded_library_not_requested_environment_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Profile selection can load a different library than the requested path."""
+    import hashlib
+
+    import generativeqc.profiles
+
+    actual = tmp_path / "loaded.so"
+    requested = tmp_path / "requested.so"
+    actual.write_bytes(b"loaded native library")
+    requested.write_bytes(b"different requested library")
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(requested))
+    library = SimpleNamespace(_name=str(actual))
+
+    def probe(loaded: Any, device: int) -> dict:
+        assert loaded is library and device == 3
+        return {"actual_device": device}
+
+    monkeypatch.setattr(generativeqc.profiles, "probe_device", probe)
+    metadata = benchmark.native_build_metadata(
+        SimpleNamespace(_library=library, _device_id=3)
+    )
+    assert metadata["library_path"] == str(actual.resolve())
+    assert metadata["library_sha256"] == hashlib.sha256(actual.read_bytes()).hexdigest()
+    assert metadata["probe"] == {"actual_device": 3}

@@ -15,7 +15,7 @@ import subprocess
 from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -30,6 +30,9 @@ from benchmarks.compare_gpu4pyscf_batch import (
 from benchmarks.df_component_ledger import read_trace
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import configure_reference_full_fock, reference_engine
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def source_provenance() -> dict[str, Any]:
@@ -146,6 +149,43 @@ def main() -> None:
             "use --trace-directory in a separate diagnostic run, not ambient tracing"
         )
 
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    # Reserve once before importing GPU packages or preparing scientific inputs.
+    # The owned stream also avoids reopening a path that another writer replaces.
+    with args.output.open("x", encoding="utf-8") as output:
+        record: dict[str, Any] = {
+            "schema": "generativeqc.ks-df-warm-factor.v1",
+            "engine": args.engine,
+            "variant": args.variant,
+            "functional": args.functional,
+            "atoms": args.atoms,
+            "slurm_job_id": os.environ["SLURM_JOB_ID"],
+            "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+            "status": "running",
+            "records": [],
+        }
+
+        def save(stage: str) -> None:
+            record["stage"] = stage
+            output.seek(0)
+            json.dump(record, output, indent=2)
+            output.write("\n")
+            output.truncate()
+            output.flush()
+
+        try:
+            save("initialize")
+            _execute(args, record, save)
+        except BaseException as error:
+            record.update(status="failed", error=f"{type(error).__name__}: {error}")
+            save(record["stage"])
+            raise
+
+
+def _execute(
+    args: argparse.Namespace, record: dict[str, Any], save: Callable[[str], None]
+) -> None:
+    """Run only after acquiring the fresh output journal."""
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
 
@@ -193,20 +233,22 @@ def main() -> None:
         "force_auxiliary_response": True,
         "frozen_repeats": 5,
     }
-    record: dict[str, Any] = {
-        "schema": "generativeqc.ks-df-warm-factor.v1",
-        "protocol": protocol,
-        "engine": args.engine,
-        "variant": args.variant,
-        "source": source_provenance(),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
-        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
-        "diagnostic": args.trace_directory is not None,
-        "first_k_matrix_audit": args.audit_first_k,
-        "timer": "native cold includes Calculator construction, prepare_batch and complete host-returned E/F; excludes fixture loading and source/library hashing; moved rebuild is inside execute",
-        "records": [],
-        "status": "running",
-    }
+    record.update(
+        {
+            "schema": "generativeqc.ks-df-warm-factor.v1",
+            "protocol": protocol,
+            "engine": args.engine,
+            "variant": args.variant,
+            "source": source_provenance(),
+            "slurm_job_id": os.environ["SLURM_JOB_ID"],
+            "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+            "diagnostic": args.trace_directory is not None,
+            "first_k_matrix_audit": args.audit_first_k,
+            "timer": "native cold includes Calculator construction, prepare_batch and complete host-returned E/F; excludes fixture loading and source/library hashing; moved rebuild is inside execute",
+            "records": [],
+            "status": "running",
+        }
+    )
     oracle = json.loads(args.reference.read_text()) if args.reference else None
     if args.engine == "native" and (
         oracle is None
@@ -217,12 +259,6 @@ def main() -> None:
         raise ValueError(
             "reference must be measured independently on this exact DF protocol"
         )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-
-    def save(stage: str) -> None:
-        record["stage"] = stage
-        args.output.write_text(json.dumps(record, indent=2) + "\n")
-
     owner = None
     construction_seconds = 0.0
     try:

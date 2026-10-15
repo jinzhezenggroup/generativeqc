@@ -171,6 +171,13 @@ int main(int argc, char** argv) {
     return 0;
   }
   assert(mode != "publish-failure");
+  const bool factor_published =
+      mode != "disabled" && mode != "enable-replay" && mode != "bad-option" &&
+      mode != "empty-option" && mode != "no-lease" && mode != "noncanonical" &&
+      mode != "no-frame" && mode != "orthonormal-frame" && mode != "mixed-publication";
+  assert(state.warm_factor_storage == factor_published);
+  assert(state.movement.fitted_warm_factor_publications == (factor_published ? 1U : 0U));
+  if (!factor_published) assert(state.download(state.warm) == original);
   assert(state.warm_energy == 17);
   state.solve_epoch=2;
   const auto frozen=state.download(state.warm);
@@ -306,3 +313,77 @@ def test_exact_warm_factor_lifecycle(warm_factor_probe: Path, mode: str) -> None
     projection = fitted @ occupied
     occupied_k = 2 * projection.T @ projection
     np.testing.assert_allclose(occupied_k, dense_k, atol=1e-13, rtol=1e-13)
+
+
+@pytest.fixture(scope="module")
+def native_matrix_audit_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    """Execute the native comparator with finite and poisoned matrix inputs."""
+    source = (ROOT / "tests/native/test_ks_cuda.cpp").read_text()
+    audit = _definition(source, "void check_fitted_warm_seed_matrices(")
+    comparison = audit[
+        audit.index("  double exchange_error =") : audit.index("  std::cout")
+    ]
+    harness = r"""
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <vector>
+void require(bool passed, const char* message) {
+  if (!passed) throw std::runtime_error(message);
+}
+struct Jk { std::vector<double> coulomb{0.25,0.5}, exchange_alpha{0.25,0.5}; };
+struct Fock { std::vector<double> alpha{0.25,0.5}; };
+int main(int argc, char** argv) {
+  assert(argc == 3);
+  const auto slot=static_cast<unsigned>(std::atoi(argv[1]));
+  const std::string mode=argv[2];
+  Jk dense, factored, reference;
+  Fock dense_fock, factored_fock;
+  std::array<std::vector<double>*,7> inputs{
+    &dense.exchange_alpha, &factored.exchange_alpha, &dense_fock.alpha,
+    &factored_fock.alpha, &factored.coulomb, &reference.coulomb, &reference.exchange_alpha};
+  assert(slot < inputs.size());
+  auto& input=*inputs[slot];
+  if (mode == "nan") input[1]=std::numeric_limits<double>::quiet_NaN();
+  if (mode == "infinity") input[1]=std::numeric_limits<double>::infinity();
+  if (mode == "outside") input[1]+=3e-11;
+  if (mode == "inside") input[1]+=1e-12;
+  const std::size_t matrix=2;
+  bool rejected=false;
+  try {
+"""
+    harness += comparison
+    harness += r"""
+  } catch (const std::runtime_error&) { rejected=true; }
+  assert(rejected == (mode == "nan" || mode == "infinity" || mode == "outside"));
+}
+"""
+    folder = tmp_path_factory.mktemp("ks-native-matrix-audit")
+    cpp, executable = folder / "probe.cpp", folder / "probe"
+    cpp.write_text(harness)
+    native_cxx.build_executable(
+        [cpp], executable, compile_args=("-std=c++17", "-Wall", "-Werror")
+    )
+    return executable
+
+
+@pytest.mark.parametrize("slot", range(7))
+@pytest.mark.parametrize("mode", ["equal", "inside", "outside", "nan", "infinity"])
+def test_native_warm_matrix_comparison_rejects_nonfinite_inputs(
+    native_matrix_audit_probe: Path, slot: int, mode: str
+) -> None:
+    result = subprocess.run(
+        [str(native_matrix_audit_probe), str(slot), mode],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

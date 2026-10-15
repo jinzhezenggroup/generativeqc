@@ -471,13 +471,18 @@ void check_fitted_warm_seed_matrices(const scf::PreparedFockPlan& cpu,
   const auto factored_fock = scf::assemble_fock(gpu.strategy(), gpu.one_electron().hcore, factored);
   double exchange_error = 0, fock_error = 0, oracle_error = 0;
   for (std::size_t element = 0; element < matrix; ++element) {
-    exchange_error = std::max(
-        exchange_error, std::abs(dense.exchange_alpha[element] - factored.exchange_alpha[element]));
-    fock_error =
-        std::max(fock_error, std::abs(dense_fock.alpha[element] - factored_fock.alpha[element]));
+    const double exchange_delta = dense.exchange_alpha[element] - factored.exchange_alpha[element];
+    const double fock_delta = dense_fock.alpha[element] - factored_fock.alpha[element];
+    const double coulomb_oracle_delta = factored.coulomb[element] - reference.coulomb[element];
+    const double exchange_oracle_delta =
+        factored.exchange_alpha[element] - reference.exchange_alpha[element];
+    require(std::isfinite(exchange_delta) && std::isfinite(fock_delta) &&
+                std::isfinite(coulomb_oracle_delta) && std::isfinite(exchange_oracle_delta),
+            "occupied warm-seed K/Fock or independent CPU DF contains a nonfinite difference");
+    exchange_error = std::max(exchange_error, std::abs(exchange_delta));
+    fock_error = std::max(fock_error, std::abs(fock_delta));
     oracle_error =
-        std::max({oracle_error, std::abs(factored.coulomb[element] - reference.coulomb[element]),
-                  std::abs(factored.exchange_alpha[element] - reference.exchange_alpha[element])});
+        std::max({oracle_error, std::abs(coulomb_oracle_delta), std::abs(exchange_oracle_delta)});
   }
   require(exchange_error < 2e-11 && fock_error < 2e-11 && oracle_error < 2e-11,
           "occupied warm-seed K/Fock differs from dense GPU or independent CPU DF");
