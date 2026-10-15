@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -108,14 +107,20 @@ def stationary_route(
     monkeypatch.setattr(runtime, "_plan_stationary_cuda_tile", lambda *a, **k: layout)
     grid_closed = []
 
-    @contextmanager
-    def grid(*args: Any, **kwargs: Any) -> Any:
-        try:
-            yield SimpleNamespace()
-        finally:
+    class Grid:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> SimpleNamespace:
+            return SimpleNamespace()
+
+        def __exit__(self, *args: object) -> None:
+            # Only explicit owner cleanup may satisfy the assertion. A generator
+            # context manager would also close when garbage-collected, masking
+            # a missing ExitStack.close() on prepared construction failure.
             grid_closed.append(True)
 
-    monkeypatch.setattr(runtime, "CudaGrid", grid)
+    monkeypatch.setattr(runtime, "CudaGrid", Grid)
     monkeypatch.setattr(runtime, "_native_grid_artifact", lambda *a, **k: object())
 
     def forbidden(*args: Any, **kwargs: Any) -> Any:
