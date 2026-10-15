@@ -63,6 +63,11 @@ harness error without changing generated scientific code or tolerances.
 
 Scientific candidate: `bbef4e534d31d050474bfee570b606eb10b01c90`.
 Control: merged #2505, `2b256f353b3803d9ffc7fe1e418fd3176e934634`.
+During qualification, #2506 merged at `fdc3cd54b2dbefeafa325959d54dfd7aeeb8c53b`
+on 2026-10-15 at 09:48:02 Asia/Shanghai. Its entire tree equals the original
+`7427602379759611ea05345b0e3598b6240198f8` PR parent already in this feature's
+history. A follow-up PR integrates that exact merged baseline without
+reapplying its obsolete whitelist or relabeling the measured source revisions.
 A one-off source receipt preserves 14 consumer sources byte-for-byte, including
 every SCF/float graph, M06 RKS FP64 force, and all five curated geometry sources.
 Only M06 UKS FP64 force and MN15 RKS/UKS FP64 force change. These fingerprints

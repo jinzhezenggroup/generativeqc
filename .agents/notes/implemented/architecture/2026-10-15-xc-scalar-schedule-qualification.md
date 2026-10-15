@@ -1,6 +1,6 @@
 # Decision: qualify XC scalar optimizations by consumer metadata
 
-Status: superseded in PR #2506; original policy-only rationale retained below
+Status: superseded by the generic consumer policy; original #2506 rationale retained below
 Date: 2026-10-15
 
 The user rejected moving a method-specific exception into manifest metadata as
