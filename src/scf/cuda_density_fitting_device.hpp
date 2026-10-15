@@ -35,4 +35,22 @@ struct CudaDfReadonlySource {
 CudaDfReadonlySource cuda_density_fitting_readonly_source(
     const CudaDensityFittingJkPlan* plan) noexcept;
 
+/** Additional immutable metric-domain evidence for a full-rank second response.
+ * Eigenvalues remain on device in ascending order. This lease has the same
+ * lifetime identity as the raw/whitening source; no mutable J/K scratch is lent.
+ * The consumer still enforces its stronger cutoff-separation contract. */
+struct CudaDfReadonlyMetric {
+  const double* eigenvalues{};
+  double relative_threshold{};
+  std::size_t naux{};
+  std::uint64_t identity{};
+  bool operator==(const CudaDfReadonlyMetric&) const = default;
+  explicit operator bool() const noexcept { return eigenvalues && naux && identity; }
+};
+
+/** Missing, truncated, cutoff-unstable or wrong-current-device owners return an
+ * empty lease. This getter performs no numerical transfer or scratch write. */
+CudaDfReadonlyMetric cuda_density_fitting_readonly_metric(
+    const CudaDensityFittingJkPlan* plan) noexcept;
+
 }  // namespace generativeqc::scf

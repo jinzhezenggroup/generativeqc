@@ -480,7 +480,38 @@ qualifies s/p numerical components and actual RKS/UKS Direct/DF owner lifetimes;
 injected CUDA-free closure tests additionally check largest through-f storage
 and work admission, not through-f integral numerics.
 
-Complete ERI/DF/ECP numerical shell coverage, fitted/ECP nuclear response and
+`src/dft/cuda_wb97mv_df_response.hpp` supplies native full-rank fitted-primary
+algebra from the incumbent stationary DF TensorIR AD. Reference maps return
+energy, spin Fock and raw three-center/metric cotangents. Response maps return
+frozen-D Fock motion and source-weight JVPs retaining dD, dA and the implicit
+inverse motion `-V^-1 dV V^-1`. The physical inverse respects the actual
+whitening orientation `W^T W`; no occupied-density, frozen-metric or symmetric-W
+assumption is made. Generic compiler contraction planning runs before both
+emission and work counting: all scheduled nodes, including AD validation
+dependencies, avoid quartic-orbital or quartic-auxiliary contraction work and
+quartic intermediates. Explicit arena and scalar-term bounds fail before work.
+
+`src/dft/cuda_ks_wb97mv_df_response.hpp` borrows actual accepted D, raw integral
+source, whitening and ascending metric eigenvalues, and binds them to the
+complete native WB97M-V DF model. It prepares retained raw public A on the
+original stream without borrowing or revoking occupied-projection/J/K scratch.
+The single device-byte bound includes retained A and all algebra storage.
+Device-side numerical admission requires the smallest metric eigenvalue to
+exceed `max(1.1 * relative_cutoff, 64 * eps) * largest_eigenvalue`; truncated or
+cutoff-unstable metrics fail without Direct substitution. Signed symmetric dD
+is accepted. Immutable reference weights are retained; actions allocate nothing,
+use no Python/CPU numerical contraction and reauthenticate before all seven
+outputs are published. Raw dA/dV are supplied by a separate integral consumer;
+this algebra adapter does **not** supply nuclear derivatives itself.
+
+`tests/python/test_wb97mv_df_response_compiler.py` checks the compiler maps
+against independent expanded fitted ERIs and source derivatives, including a
+nonsymmetric whitening gauge. `tests/python/test_native_wb97mv_df_response.py`
+compares the compiled maps at runtime-sized signed RKS/UKS shapes and actual KS
+owners against independent NumPy/libcint values, and exercises finite,
+symmetry, alias, capture, stream, cutoff, resource and revocation gates.
+
+Complete ERI/DF/ECP numerical shell coverage, fitted/ECP raw nuclear response and
 stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.

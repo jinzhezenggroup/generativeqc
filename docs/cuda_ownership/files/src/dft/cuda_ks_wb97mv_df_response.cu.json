@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_df_response.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Canonical KS adapter borrows actual accepted D, immutable raw integral/whitening and metric-domain leases, checks the complete WB97M-V DF model, prepares raw public A on the producer stream and charges its retention with algebra scratch. Actions reauthenticate all actual sources and preserve occupied-projection/primary J/K scratch. No derivative equations, reconstructed host numerical basis, Python or runtime compilation.",
+  "regions": []
+}

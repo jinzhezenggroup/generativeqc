@@ -84,7 +84,13 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_nuclear_jk.hpp"
     ARGS --output "${_nuclear_jk}"
     COMMENT "Generating compiler-AD native WB97M-V J/K nuclear response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}"
+  set(_df "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_df_response.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_df}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_wb97mv_df_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.hpp"
+    ARGS --output "${_df}"
+    COMMENT "Generating compiler-AD native WB97M-V fitted-primary response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
@@ -93,6 +99,8 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_one_electron_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_nuclear_jk.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_nuclear_jk.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
@@ -145,5 +153,9 @@ function(generativeqc_add_hessian_aot target inventory)
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_jk_closure_tests.cpp")
     target_link_libraries(generativeqc_cuda_wb97mv_jk_closure_tests PRIVATE ${target})
     add_test(NAME cuda_wb97mv_jk_host_closure COMMAND generativeqc_cuda_wb97mv_jk_closure_tests)
+    add_executable(generativeqc_cuda_wb97mv_df_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_df_probe.cpp")
+    target_link_libraries(generativeqc_cuda_wb97mv_df_probe PRIVATE ${target} generativeqc)
+    add_test(NAME cuda_wb97mv_df_host_admission COMMAND generativeqc_cuda_wb97mv_df_probe --host-only)
   endif()
 endfunction()

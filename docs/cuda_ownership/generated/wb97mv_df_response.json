@@ -1,0 +1,8 @@
+{
+  "name": "wb97mv_df_response",
+  "outputs": [
+    "generated/response/wb97mv_df_response.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/method/wb97mv_df_response.py",
+  "scope": "Build-time WB97M-V full-rank fitted-primary RKS/UKS energy, density/source VJPs, frozen-density Fock JVP, moving source-weight JVPs and implicit inverse JVP. Incumbent stationary DF equations remain the mathematical authority; generic compiler contraction reassociation precedes both CUDA emission and literal semantic-work accounting. Native owners only supply authenticated raw sources, resources, numerical admission and publication. No production Python, occupied-factor approximation or frozen-metric response."
+}
