@@ -33,13 +33,13 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
             "bool materialized_pair_derivative_available(",
             "bool cooperative_pair_derivative_available(",
             "cudaError_t launch_direct_order_seven_force(",
+            "cudaError_t launch_direct_force_materialized_class(",
             "cudaError_t launch_direct_force_class_domains(",
             "cudaError_t launch_direct_force_spatial_spd_low(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
     )
-    production, launches = re.subn(r"<<<([^<>]+)>>>\s*\(", r"(\1, ", definitions)
-    assert launches == 7
+    production = re.sub(r"<<<([^<>]+)>>>\s*\(", r"(\1, ", definitions)
     probe = tmp_path / "split.cpp"
     probe.write_text(PREFIX + production + DRIVER)
     executable = native_cxx.build_executable(
@@ -81,8 +81,32 @@ struct DeviceBatch {
   const void* shell_pair_primitive_offsets{};
   unsigned direct_coulomb_reachable{}, direct_hermite_convolution{};
   unsigned direct_maximum_shell_angular{255};
+  void* direct_force_work{};
+  unsigned batch_size{1}, direct_nbf{17};
+  unsigned direct_order_seven_page_size{32};
+  bool direct_dddd_force_class_major{};
+  bool direct_force_split_low{};
+  bool direct_force_fp32{};
   bool operator==(const DeviceBatch&) const = default;
 };
+// Diagnostics are disabled for this scheduling/fault-injection seam. Their
+// real allocation/capture/drain behavior is qualified separately on CUDA.
+struct DirectForceDiagnostic {
+  explicit DirectForceDiagnostic(cudaStream_t) {}
+  void set_complete_domain(bool) {}
+  void set_schedules(unsigned, bool, bool) {}
+  cudaError_t prepare() { return cudaSuccess; }
+  void* device() { return nullptr; }
+  cudaError_t finish(cudaError_t status) { return status; }
+};
+namespace runtime::cuda_trace {
+struct Shape { std::size_t systems, nbf; };
+struct TraceOperation { TraceOperation(const char*, cudaStream_t, Shape) {} };
+struct TraceRegion {
+  TraceRegion(const char*, cudaStream_t) {}
+  void finish() {}
+};
+}
 struct ShellPairDensityBounds {};
 struct GeneratedShellPairStream {};
 struct DeviceShellClassProfileEntry {};
@@ -106,6 +130,7 @@ struct Event {
   std::size_t bytes{};
   bool cooperative{};
   bool spatial_reuse{};
+  bool class_major{};
   bool operator==(const Event&) const = default;
 };
 std::vector<Event> events;
@@ -145,7 +170,7 @@ cudaError_t cudaMemsetAsync(void* target, int value, std::size_t bytes, cudaStre
   if (error == cudaSuccess) cursor = 0;
   return error;
 }
-template<bool Unrestricted, DirectForceOutputMode Mode>
+template<bool Unrestricted, DirectForceOutputMode Mode, unsigned PageSize = 32>
 void direct_order_seven_force_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     const GeneratedShellPairStream* force_topology, double screening, const double* shell,
@@ -157,6 +182,8 @@ void direct_order_seven_force_kernel(
   assert(Unrestricted == expected_spin && expected_purpose == DirectScreeningPurpose::Force);
   assert((Mode == DirectForceOutputMode::Separate) == expected_separate);
   assert(batch == expected_batch && grid == dim3{7} && block == dim3{256} && stream == stream_id);
+  assert(PageSize == (expected_batch.direct_order_seven_page_size == 8 ? 8 :
+                     expected_batch.direct_order_seven_page_size == 16 ? 16 : 32));
   assert(force_topology == expected_topology && force_topology != nullptr);
   assert(screening == tolerance && shell == &shell_bounds && shell_density == &density_bounds);
   assert(enabled_pointer == &mask_pointer && enabled_mask == mask && state == &class_state);
@@ -190,10 +217,10 @@ void direct_force_class_domain_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
-  last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative});
+  last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative,false,true});
   cursor = 999;
 }
-template<bool Unrestricted, DirectForceOutputMode Mode>
+template<bool Unrestricted, DirectForceOutputMode Mode, unsigned Partition = 0>
 void direct_force_spatial_spd_low_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell, const ShellPairDensityBounds* shell_density,
@@ -264,7 +291,8 @@ int main() {
             for (dim3 block : {dim3{256}, dim3{128}, dim3{64}, dim3{256,2}, dim3{256,1,2}})
               for (std::size_t requested_bytes : {0U, 1024U, 4096U})
                 for (auto schedule : {DirectSpdForceSchedule::Incumbent, DirectSpdForceSchedule::SpatialReuse})
-                  for (bool have_prefix : {false, true}) {
+                  for (bool have_prefix : {false, true})
+                    for (bool dddd : {false, true}) {
                 domain.prefix = have_prefix ? prefix_storage : nullptr;
                 expected_spin = spin;
                 expected_separate = separate;
@@ -273,6 +301,7 @@ int main() {
                 expected_batch = {bool(state_bits & 1), bool(state_bits & 32), state_bits & 2 ? &profile : nullptr,
                     state_bits & 4 ? &profile : nullptr, state_bits & 8 ? 2U : 0U,
                     state_bits & 16 ? 2U : 0U, maximum};
+                expected_batch.direct_dddd_force_class_major = dddd;
                 const bool pair = expected_batch.direct_pair_materialized_derivatives &&
                     expected_batch.shell_primitive_pairs && expected_batch.shell_pair_primitive_offsets &&
                     !expected_batch.direct_coulomb_reachable && !expected_batch.direct_hermite_convolution;
@@ -286,11 +315,11 @@ int main() {
                 std::vector<Event> expected;
                 if (class_domains)
                   expected = {{Launch,-4,false,false,128,requested_bytes},{Peek},
-                              {Reset},{Launch,0,false,false,128,requested_bytes},{Peek},
-                              {Reset},{Launch,4,false,false,128,requested_bytes},{Peek},
-                              {Reset},{Launch,5,false,false,128,requested_bytes},{Peek},
-                              {Reset},{Launch,6,false,false,256,cooperative_workspace,true},{Peek},
-                              {Reset},{Launch,8,true,true,256,workspace},{Peek}};
+                              {Reset},{Launch,0,false,false,128,requested_bytes,false,false,true},{Peek},
+                              {Reset},{Launch,4,false,false,128,requested_bytes,false,false,true},{Peek},
+                              {Reset},{Launch,5,false,false,128,requested_bytes,false,false,true},{Peek},
+                              {Reset},{Launch,6,false,false,256,cooperative_workspace,true,false,true},{Peek},
+                              {Reset},{Launch,8,true,true,256,workspace,false,false,true},{Peek}};
                 else if (spatial)
                   expected = {{Launch,-5,false,false,128,requested_bytes,false,true},{Peek},{Reset},
                               {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
@@ -304,6 +333,9 @@ int main() {
                               {Launch,8,true,true,256,workspace},{Peek}};
                 else
                   expected = {{Launch,-1,pair,false,!pair && block == dim3{256} ? 128U : block.x,workspace},{Peek}};
+                if (split && dddd && expected_topology)
+                  for (auto& event : expected)
+                    if (event.kind == Launch && event.order == 8) event.class_major = true;
                 for (int failed = -1; failed < static_cast<int>(expected.size()); ++failed) {
                   fail_event = failed;
                   events.clear(); last_error = cudaSuccess; cursor = 0;
@@ -327,10 +359,12 @@ int main() {
     for (bool separate : {false, true})
       for (auto purpose : {DirectScreeningPurpose::Fock, DirectScreeningPurpose::Force})
         for (unsigned maximum : {0U, 2U, 3U})
-          for (double k : {0.0, -0.23}) {
+          for (double k : {0.0, -0.23})
+            for (unsigned page : {8U,16U,32U,17U}) {
             expected_spin = spin; expected_separate = separate; expected_purpose = purpose;
             expected_topology = &topology;
             expected_batch = {true,true,&profile,&profile,0,0,maximum};
+            expected_batch.direct_order_seven_page_size = page;
             domain.prefix = prefix_storage; exchange = k;
             events.clear(); last_error = cudaSuccess; cursor = 0; fail_event = -1;
             assert(launch_bounded_direct_shell_quartet_kernel_scaled(

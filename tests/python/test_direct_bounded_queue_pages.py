@@ -115,34 +115,23 @@ int main() {
     assert result.returncode == 0, result.stderr
 
 
-def test_cached_low_ownership_precedes_quartet_screening() -> None:
-    """Reject high orders before screening; only order six consumes spatial reuse."""
+def test_cached_low_ownership_precedes_quartet_screening(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute admission for rejected/generated tasks and split diagnostic domains."""
     source = (ROOT / "src/scf/cuda/direct_force_class_domains.cu").read_text()
-    kernel = _definition(
-        source,
-        "__launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_low_kernel(",
+    kernel = _definition(source, "void direct_force_spatial_spd_low_kernel(")
+    begin = kernel.index("const auto order =")
+    # Retain the complete production admission block; the following CTA fence
+    # belongs to the separately GPU-qualified queue consumer.
+    admission = kernel[begin : kernel.index("__syncthreads();", begin)]
+    admission = admission[: admission.rfind("}")]
+    probe = tmp_path / "admission.cpp"
+    probe.write_text(ADMISSION_PREFIX + admission + ADMISSION_DRIVER)
+    executable = native_cxx.build_executable(
+        [probe], tmp_path / "admission", compile_args=["-std=c++20"]
     )
-    stages = (
-        "if (active",
-        "bounded_direct_block_pair_survives_screening",
-        "bounded_direct_queue_candidate_page",
-        "for (auto packet",
-        "direct_shell_class_angular_order(shell_class) <= 6U",
-        "direct_shell_quartet_survives_screening",
-        "profile_bounded_direct_shell_quartet",
-        "contract_bounded_spd_low_queue<Unrestricted, Mode, true>",
-    )
-    positions = [kernel.index(stage) for stage in stages]
-    assert positions == sorted(positions)
-    drain = _definition(
-        source,
-        "__device__ __forceinline__ void contract_bounded_spd_low_queue(",
-    )
-    assert "direct_force_task_shell_class(batch, task)) != 6U" in drain
-    assert (
-        "Unrestricted, 6U, Mode == DirectForceOutputMode::Separate, SpatialReuse"
-        in drain
-    )
+    subprocess.run([executable], check=True, timeout=30)
 
 
 PREFIX = r"""
@@ -259,4 +248,63 @@ int main() {
       for (bool indexed : {false,true})
         for (unsigned width : {128U,256U}) exercise(counts, seed, indexed, width);
 }
+"""
+
+
+ADMISSION_PREFIX = r"""
+#include <initializer_list>
+#include <cassert>
+#include <cstdint>
+struct ActiveShellQuartetTile { unsigned first_pair, second_pair, tile; };
+struct Counters { unsigned enumerated{}, generated_owned{}, admitted{}, shell_screened{}, angular_rejected{}; };
+Counters counts;
+unsigned screens{}, publications{};
+bool accepted{}, generated_enabled{};
+enum class DirectScreeningPurpose { Force };
+unsigned direct_shell_class_angular_order(unsigned shell_class) { return shell_class; }
+Counters* direct_force_class_work(int, unsigned) { return &counts; }
+template <class T> T atomicAdd(T* target, T value) { auto old=*target; *target+=value; return old; }
+inline unsigned atomicAdd(unsigned* target, unsigned long long value) {
+  return atomicAdd(target, static_cast<unsigned>(value));
+}
+template <bool, DirectScreeningPurpose, class... Args>
+bool direct_shell_quartet_survives_screening(Args...) { ++screens; return accepted; }
+bool bounded_generated_class_enabled(unsigned, const void*, unsigned) { return generated_enabled; }
+void profile_bounded_direct_shell_quartet(int, ActiveShellQuartetTile, const void*) { ++publications; }
+template <unsigned Partition>
+void admit(unsigned shell_class, bool overflow) {
+  constexpr bool Unrestricted=false;
+  const int batch=0;
+  const unsigned first_pair=1, second_pair=0;
+  const ActiveShellQuartetTile task{first_pair,second_pair,0};
+  Counters* traversal=&counts;
+  unsigned generated_overflow[13]{}; generated_overflow[shell_class]=overflow;
+  const void *shell_pair_bounds=nullptr, *shell_pair_density_bounds=nullptr;
+  const void *enabled_mask_pointer=nullptr, *profile=nullptr;
+  const unsigned enabled_mask=0;
+  double screening_tolerance=1e-14, exchange_coefficient=0;
+  ActiveShellQuartetTile queue[1]{};
+  unsigned queue_count=0;
+"""
+
+ADMISSION_DRIVER = r"""
+  assert(queue_count == publications);
+  if(queue_count) assert(queue[0].first_pair==1 && queue[0].second_pair==0);
+}
+template<unsigned Partition> void exercise() {
+  for(unsigned order=0;order<=12;++order)
+    for(bool pass:{false,true}) for(bool generated:{false,true}) for(bool overflow:{false,true}) {
+      counts={}; screens=publications=0; accepted=pass; generated_enabled=generated;
+      admit<Partition>(order,overflow);
+      const bool owns=order<=6 && (Partition==0 || (Partition==6 ? order==6 : order<=5));
+      assert(screens==unsigned(owns));
+      assert(counts.enumerated==unsigned(owns));
+      assert(counts.angular_rejected==unsigned(!owns));
+      assert(counts.shell_screened==unsigned(owns && !pass));
+      assert(counts.generated_owned==unsigned(owns && pass && generated && !overflow));
+      assert(counts.admitted==unsigned(owns && pass && (!generated || overflow)));
+      assert(publications==counts.admitted);
+    }
+}
+int main(){exercise<0>();exercise<5>();exercise<6>();}
 """

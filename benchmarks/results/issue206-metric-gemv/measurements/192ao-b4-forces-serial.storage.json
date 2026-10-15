@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
+  "stored_path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json.gz",
+  "original_bytes": 166398,
+  "stored_bytes": 29777,
+  "original_sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e",
+  "stored_sha256": "9d8211460377d801fa315e27e22f65cf300beb19c5295a20ff45e8b5a45f1355",
+  "original_git_blob": "69eec9c06632aab709c937fbd83ad56ea5c1e5fc",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage change only; every historical numerical value, sample, setting and gate is preserved."
+}

@@ -20,7 +20,9 @@ from tools.generate_nonlocal_pair_native import native_header
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(scope="module", params=(False, True), ids=("ordered", "parallel"))
+@pytest.fixture(
+    scope="module", params=(0, 4, 8), ids=("ordered", "parallel", "parallel-wide")
+)
 def admission_probe(
     tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
 ) -> ct.CDLL:
@@ -57,7 +59,8 @@ def admission_probe(
         + dispatch
         + admission
         + kernel
-        + f"constexpr bool use_parallel = {str(request.param).lower()};\n"
+        + f"constexpr bool use_parallel = {str(bool(request.param)).lower()};\n"
+        + f"constexpr unsigned pair_rows = {request.param or 4};\n"
         + r"""
 template<bool Geometry, bool Mask, bool Admit>
 void launch(size_t n, const double* x, const uint64_t* indices,
@@ -78,7 +81,7 @@ void launch(size_t n, const double* x, const uint64_t* indices,
         n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,indices,count,0.7,0.03125,rejected};
       const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
       generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
-      generated::parallel_pair_kernel<Geometry><<<8,128>>>(input,output);
+      generated::parallel_pair_kernel<Geometry, pair_rows, pair_rows == 8><<<8,128>>>(input,output);
       generated::parallel_pair_zero_rows<<<8,128>>>(input,output);
       generated::parallel_pair_finalize<Geometry><<<(n+127)/128,128>>>(input,output);
     } else {

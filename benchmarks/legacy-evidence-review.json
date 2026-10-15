@@ -227,6 +227,11 @@
       "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     },
+    "readme-wb97mv-20261014": {
+      "owner": "README WB97M-V native endpoint refresh",
+      "reason": "Retain compact direct/DF charts and seven complete source-bound WB97M-V populations; unchanged functionals reference the previous archive. Native 3/12-atom points are remeasured in fresh processes after separate compilation-cache priming, with original 3-atom observations losslessly retained and references shared unchanged. DF/48 remains visible without a matching reference; only incomplete DF/96 is omitted. SVG presentation sharing is pixel-identical and fits the unchanged aggregate budget. No raw run archive, production default promotion or policy-cap change is introduced.",
+      "review_document": "benchmarks/results/readme-wb97mv-20261014/README.md"
+    },
     "vv10-range-followups-20261014": {
       "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
       "reason": "Lossless complete raw JSON, all endpoint force vectors and independent references retain automatic 4 GiB populations, partial 96-atom timeouts and rejected convergence experiments. No experiment becomes a default observation; no sample/deadline/gate or storage-limit change. Detailed source inventories use shared lossless storage.",
@@ -236,9 +241,40 @@
       "owner": "bounded exact-density two-electron response qualification",
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
       "review_document": "benchmarks/results/exact-integral-response-20261014/README.md"
+    },
+    "exact-geometry-response-20261014": {
+      "owner": "bounded exact-density XC geometry response qualification",
+      "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
+      "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
+    },
+    "vv10-wide-pair-20261014": {
+      "owner": "experimental large-domain VV10 pair schedule",
+      "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
+    },
+    "bounded-dft-schedules-2475-2479": {
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts",
+      "bytes": 140660,
+      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "clean-samples-and-source-reconstruction",
+      "bytes": 193076,
+      "sha256": "5b4600add56a2e757eccc25a64100e440183a65b011513368b97a1f0ecd3b2af"
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -246,14 +282,6 @@
       "path": "benchmarks/results/cg01/capabilities.json",
       "role": "decision-or-audit-record",
       "sha256": "1bc9dd514c7396fb9a3dd6a637a654fd6617c6bb00a55858c0c445412d143a2d"
-    },
-    {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.gz",
-      "family": "cpu-eri-coulomb-20261001",
-      "bytes": 311664,
-      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing."
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
@@ -368,6 +396,22 @@
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
+      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
+      "family": "exact-geometry-response-20261014",
+      "bytes": 206880,
+      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    },
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
+    },
+    {
       "bytes": 162452,
       "classification": "required-compact-accepted-evidence",
       "family": "generated-df-values-142",
@@ -382,14 +426,6 @@
       "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json",
       "role": "scientific-record",
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
-    },
-    {
-      "bytes": 166398,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
     },
     {
       "bytes": 143684,
@@ -528,36 +564,12 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
-      "bytes": 230258,
-      "classification": "required-compact-accepted-evidence",
-      "family": "retention-checkout",
-      "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
-      "role": "decision-or-audit-record",
-      "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 185892,
-      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
-      "role": "Complete DF endpoint chart"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 298072,
       "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "bytes": 189107,
-      "sha256": "4bed4aea491bf39a802ac14ecbd3f1a4fa9af107c8d1bd83bb85196ee7701fcd",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete direct endpoint chart"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
@@ -584,6 +596,14 @@
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
     {
+      "bytes": 230258,
+      "classification": "required-compact-accepted-evidence",
+      "family": "retention-checkout",
+      "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
+      "role": "decision-or-audit-record",
+      "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
+    },
+    {
       "path": "benchmarks/results/vv10-range-followups-20261014/campaigns.json.xz",
       "family": "vv10-range-followups-20261014",
       "classification": "required-compact-accepted-evidence",
@@ -592,12 +612,12 @@
       "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
     },
     {
-      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
-      "family": "exact-integral-response-20261014",
-      "bytes": 356132,
-      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
+      "family": "vv10-wide-pair-20261014",
+      "bytes": 183856,
+      "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
+      "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

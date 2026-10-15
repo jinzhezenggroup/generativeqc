@@ -453,6 +453,21 @@ Host/device resource admission can still retain dense execution, so read
 selection actually occurred and inspect actual AO work and XC build counts.
 This policy does not select local force AO maps or change Becke response.
 
+`GENERATIVEQC_CUDA_KS_AO_DISCOVERY=host|device` selects the discovery schedule
+at geometry preparation; `host` remains the default. The experimental `device`
+schedule evaluates the same generated AO jets and `abs(jet)>1e-16` predicate,
+then compacts sorted IDs on the device. It downloads CSR offsets and the error
+status once per bounded chunk (at most 128 tiles). It reuses dead XC scratch
+and the already admitted worst-case map storage; it adds no device allocation.
+Both schedules publish only after validation and drain outstanding borrowers
+on exceptions. Resource refusal retains the existing dense route.
+
+The optional `GENERATIVEQC_DF_PROGRESS_TRACE` preparation trace reports
+`cuda_xc_ao_discovery` with observed tiles, chunks, synchronization count,
+transfer bytes, AO jet work and active counts. These are discovery-only counts;
+frozen-geometry XC calls reuse the map. The public v1 AO-work ABI is unchanged.
+Use separate clean complete endpoints for timing, including geometry preparation.
+
 The targeted `generativeqc_dft_cuda_tests --pbe0-local-ao` gate compares
 scaled-PBE E/V with independent CPU integration and checks empty maps and
 bounded admission. It does not establish complete PBE0 SCF/force accuracy or
@@ -504,3 +519,23 @@ with the current resident D/W. Optional key/result storage is capped at 64 MiB
 and one quarter of the caller allowance; budget refusal, allocation failure and
 explicit disable preserve the ordinary derivative path. This control is not
 qualified for default selection.
+
+`GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE=1` separately enables exact-density
+retention of completed semilocal/nonlocal and nuclear geometry components in
+the composite prepared owner. Current native integral and Pulay sources still
+execute. Geometry/operator/grid changes, failures and explicit disable retire
+the key; active-AO experiments and explicit stationary execution controls bypass
+retention. FP32 semilocal geometry requests also bypass retention so Fast
+precision receipts describe fresh work. Capability fallback and numerical retry
+still compute strict geometry; later strict requests may reuse that result.
+Its host allowance includes
+comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
+uses only remaining admitted capacity. Hits report zero executed geometry and
+pair work. This control is also default-off pending endpoint qualification.
+
+The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
+eight rows per lane and retains row inputs for admitted VV10 domains with at
+least 65,536 active points. Smaller domains use the existing four-row schedule.
+Both branches select using the device count without a host synchronization;
+numerical admission, output ownership, ordered fallback and FP64 roots are
+unchanged. This experiment requires separate complete-endpoint qualification.

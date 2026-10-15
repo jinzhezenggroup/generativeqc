@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 import generativeqc.stationary_nuclear as production
@@ -66,12 +68,93 @@ def test_production_stationary_nuclear_owner_never_imports_tools() -> None:
     assert not any(name == "tools" or name.startswith("tools.") for name in imports)
 
 
-def test_response_shim_contains_no_duplicate_nuclear_algebra() -> None:
-    path = ROOT / "tools/generativeqc_hessian/response.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    definitions = {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-    }
-    assert definitions == set()
+def _run_isolated(code: str, *arguments: str) -> None:
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(ROOT), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_stationary_nuclear_public_algebra_executes_without_tools() -> None:
+    """Keep production imports and basic RHS/metric use independent of tools."""
+    _run_isolated("""
+import importlib.abc
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(sys.argv[1]) / "python"))
+attempts = []
+class BlockTools(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "tools" or fullname.startswith("tools."):
+            attempts.append(fullname)
+            raise AssertionError("production nuclear algebra imported " + fullname)
+        return None
+sys.meta_path.insert(0, BlockTools())
+import numpy as np
+from generativeqc.stationary_nuclear import (
+    metric_density_response_mo,
+    build_stationary_nuclear_rhs,
+    build_rhf_nuclear_rhs,
+)
+overlap = np.array([[1.0, 2.0], [2.0, 3.0]])
+np.testing.assert_array_equal(
+    metric_density_response_mo(overlap, nocc=1), [[-2.0, -2.0], [-2.0, 0.0]]
+)
+frozen = np.array([[1.0, 2.0], [2.0, 4.0]])
+# F_ai - (eps_i + eps_a) * S_ia / 2 = 2 + 0.5.
+for build in (build_stationary_nuclear_rhs, build_rhf_nuclear_rhs):
+    np.testing.assert_array_equal(
+        build(frozen, overlap, np.zeros((2, 2)), [-1.0, 0.5], nocc=1), [[2.5]]
+    )
+assert not attempts, attempts
+""")
+
+
+@pytest.mark.parametrize("first_import", ["production", "shim"])
+def test_response_shim_preserves_public_algebra_in_both_import_orders(
+    first_import: str,
+) -> None:
+    """Public compatibility names are the actual production objects and APIs."""
+    _run_isolated(
+        """
+import importlib
+import sys
+from pathlib import Path
+import numpy as np
+
+root = Path(sys.argv[1])
+sys.path[:0] = [str(root / "python"), str(root)]
+production_name = "generativeqc.stationary_nuclear"
+shim_name = "tools.generativeqc_hessian.response"
+importlib.import_module(production_name if sys.argv[2] == "production" else shim_name)
+production = importlib.import_module(production_name)
+shim = importlib.import_module(shim_name)
+for name in (
+    "metric_density_response_mo",
+    "build_stationary_nuclear_rhs",
+    "build_rhf_nuclear_rhs",
+):
+    assert getattr(shim, name) is getattr(production, name)
+overlap = np.array([[1.0, 2.0], [2.0, 3.0]])
+np.testing.assert_array_equal(
+    shim.metric_density_response_mo(overlap, nocc=1), [[-2.0, -2.0], [-2.0, 0.0]]
+)
+frozen = np.array([[1.0, 2.0], [2.0, 4.0]])
+for build in (shim.build_stationary_nuclear_rhs, shim.build_rhf_nuclear_rhs):
+    np.testing.assert_array_equal(
+        build(frozen, overlap, np.zeros((2, 2)), [-1.0, 0.5], nocc=1), [[2.5]]
+    )
+try:
+    shim.metric_density_response_mo(np.zeros((2, 3)), nocc=1)
+except ValueError as error:
+    assert "square matrix" in str(error)
+else:
+    raise AssertionError("compatibility API accepted a non-square overlap matrix")
+""",
+        first_import,
+    )

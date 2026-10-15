@@ -12,6 +12,7 @@
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_profile.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_force_sources.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -217,6 +218,10 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
   for (unsigned source = 0; source < source_count; ++source)
     any_source = any_source || source_active[source];
   if (!any_source) return true;
+  if (auto* diagnostic = direct_force_class_work(batch, ShellClass)) {
+    atomicAdd(&diagnostic->executed_shells, 1ULL);
+    profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+  }
 
   const std::size_t canonical_pair[2] = {canonical_raw_slot[0] < 2U ? first_pair : second_pair,
                                          canonical_raw_slot[2] < 2U ? first_pair : second_pair};

@@ -19,6 +19,12 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCTests.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSourceIdentity.cmake")
 
 option(GENERATIVEQC_ENABLE_CUDA "Build the CUDA runtime backend" ON)
+set(GENERATIVEQC_CUDA_XC_MATRIX_TILE "16" CACHE STRING
+    "Experimental compiler-owned CUDA XC matrix tile (8, 16, 32); qualified default is 16")
+set_property(CACHE GENERATIVEQC_CUDA_XC_MATRIX_TILE PROPERTY STRINGS 8 16 32)
+if(NOT GENERATIVEQC_CUDA_XC_MATRIX_TILE MATCHES "^(8|16|32)$")
+  message(FATAL_ERROR "GENERATIVEQC_CUDA_XC_MATRIX_TILE must be 8, 16, or 32")
+endif()
 option(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA
        "Coalesce disjoint native FP64 scratch slots across symbolic capacities" ON)
 set(_generativeqc_native_arena_args)

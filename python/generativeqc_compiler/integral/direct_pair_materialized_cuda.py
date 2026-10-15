@@ -20,15 +20,10 @@ def emit_direct_pair_materialized_support() -> str:
 #include "generated_direct_shell_pair_hermite.cuh"
 #include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
+#include "scf/cuda/direct_force_work.hpp"
 #include "scf/cuda/direct_screening.cuh"
 
 namespace generativeqc::scf::cuda_execution {
-
-/** Optional qualification counters. Production passes no allocation. */
-struct MaterializedDirectPairWork {
-  unsigned long long bra_preparations{}, ket_preparations{}, coulomb_preparations{};
-  unsigned long long component_contractions{}, published_components{};
-};
 
 /** Canonical whole-shell owners use fewer idle lanes in small domains.
  * These compile-time bounds cover every s/p/d/f composition, not just the

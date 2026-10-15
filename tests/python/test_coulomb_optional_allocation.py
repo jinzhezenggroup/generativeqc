@@ -25,6 +25,8 @@ STUBS = r"""
 #include <stdexcept>
 #include <vector>
 #include "scf/direct_block_schedule.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
+using generativeqc::scf::cuda_execution::select_direct_order_seven_page_size;
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
 constexpr int cudaLimitStackSize=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
@@ -113,6 +115,8 @@ struct DeviceBatch {
   bool direct_pair_materialized_values=false;
   bool direct_pair_materialized_derivatives=false;
   bool direct_pair_cooperative_derivatives=false;
+  unsigned direct_order_seven_page_size{32};
+  bool direct_dddd_force_class_major{}, direct_force_split_low{};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P

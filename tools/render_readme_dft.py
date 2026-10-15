@@ -132,7 +132,11 @@ def phase_statistics(entry: dict[str, Any], phase: str) -> tuple[float, float, f
 
 
 def render(summary: dict[str, Any], destination: Path) -> None:
-    """Draw all measured sizes, including cold and fixed-density warm execution."""
+    """Draw complete phases with optional per-method publication annotations.
+
+    An omission or non-default setting must stay visible beside the timings;
+    missing references do not suppress completed native endpoints.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
@@ -204,7 +208,11 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         basis = (
             "def2-mTZVPP · includes D4 + gCP" if method == "r2scan-3c" else "def2-SVP"
         )
-        ax.set_title(f"{LABELS[method]}\n{basis}", fontsize=11, loc="left", pad=10)
+        title = f"{LABELS[method]}\n{basis}"
+        annotation = summary.get("panel_annotations", {}).get(method)
+        if annotation:
+            title += f"\n{annotation}"
+        ax.set_title(title, fontsize=11, loc="left", pad=10)
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
         ax.set_xticks(summary["sizes"], [str(size) for size in summary["sizes"]])
@@ -329,6 +337,10 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         "‡ marks completed native calls without an independent accuracy check for that geometry.",
         "A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.",
         *([composite_note.strip()] if composite_note else []),
+        *[
+            f"{LABELS[method]}: {annotation}."
+            for method, annotation in summary.get("panel_annotations", {}).items()
+        ],
         "",
         "## Observed SCF work",
         "",

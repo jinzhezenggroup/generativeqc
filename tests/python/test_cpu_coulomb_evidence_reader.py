@@ -110,33 +110,58 @@ def test_reader_rejects_corrupt_or_unsafe_records(
 @pytest.mark.parametrize(
     "suffix,compress", [("gz", gzip.compress), ("xz", lzma.compress)]
 )
+@pytest.mark.parametrize("changed_identity", ["decoded_bytes", "decoded_sha256"])
 def test_verifier_rejects_changed_decoded_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     suffix: str,
     compress: Callable[[bytes], bytes],
+    changed_identity: str,
 ) -> None:
     module = reader()
     encoded, _ = capsule()
     stored = compress(encoded)
     name = f"records.json.{suffix}"
     (tmp_path / name).write_bytes(stored)
-    (tmp_path / "manifest.json").write_text(
-        json.dumps(
-            {
-                "files": [
-                    {
-                        "path": name,
-                        "bytes": len(stored),
-                        "sha256": hashlib.sha256(stored).hexdigest(),
-                        "decoded_bytes": len(encoded),
-                        "decoded_sha256": "0" * 64,
-                    }
-                ]
-            }
-        )
-    )
+    identity = {
+        "path": name,
+        "bytes": len(stored),
+        "sha256": hashlib.sha256(stored).hexdigest(),
+        "decoded_bytes": len(encoded),
+        "decoded_sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+    identity[changed_identity] = 0 if changed_identity == "decoded_bytes" else "0" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps({"files": [identity]}))
     monkeypatch.setattr(module, "HERE", tmp_path)
     monkeypatch.setattr("sys.argv", ["verify.py"])
     with pytest.raises(ValueError, match="Changed decoded member"):
         module.main()
+
+
+def test_lossless_gzip_to_xz_preserves_capsule_and_failed_records(
+    tmp_path: Path,
+) -> None:
+    encoded, raw = capsule()
+    payload = json.loads(encoded)
+    failure = "Initial oracle pilot failed\nUnicode: α\n".encode()
+    payload["files"].append(
+        {
+            "path": "campaign/failed.txt",
+            "encoding": "utf8",
+            "content": failure.decode(),
+            "bytes": len(failure),
+            "sha256": hashlib.sha256(failure).hexdigest(),
+        }
+    )
+    original = (json.dumps(payload, indent=2) + "\n").encode()
+    gz = tmp_path / "records.json.gz"
+    gz.write_bytes(gzip.compress(original, mtime=0))
+    before = list(reader().members(tmp_path))
+    decoded = gzip.decompress(gz.read_bytes())
+    stored = lzma.compress(decoded, preset=9 | lzma.PRESET_EXTREME)
+    assert stored == lzma.compress(decoded, preset=9 | lzma.PRESET_EXTREME)
+    assert lzma.decompress(stored) == original
+    gz.unlink()
+    (tmp_path / "records.json.xz").write_bytes(stored)
+    assert list(reader().members(tmp_path)) == before
+    assert dict(before) == {"campaign/result.json": raw, "campaign/failed.txt": failure}
