@@ -1912,7 +1912,15 @@ class Calculator:
             if bundled_create is not None and not correlation_auxiliary
             else None
         )
-        if (
+        template_create = getattr(
+            self._library, "generativeqc_system_create_basis_template_v1", None
+        )
+        use_template = (
+            template_create is not None
+            and isinstance(selected_basis, BasisSet)
+            and not correlation_auxiliary
+        )
+        if use_template or (
             bundled_create is not None
             and bundled_name is not None
             and not correlation_auxiliary
@@ -1931,17 +1939,32 @@ class Calculator:
                 ),
             )
             system = ctypes.c_void_p()
-            _native.check(
-                self._library,
-                bundled_create(
+            if bundled_create is not None and bundled_name is not None:
+                status = bundled_create(
                     context,
                     ctypes.byref(descriptor),
                     bundled_name.encode("ascii"),
                     selected_basis.provenance.checksum.encode("ascii"),
                     ctypes.byref(system),
-                ),
-                context=context,
-            )
+                )
+            else:
+                from ._basis_native import NativeBasisTemplate
+
+                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+                if (
+                    source.has_ecp
+                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                ):
+                    raise NotImplementedError(
+                        "ECP density-fitting execution is not yet validated"
+                    )
+                status = template_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    ctypes.byref(source.descriptor),
+                    ctypes.byref(system),
+                )
+            _native.check(self._library, status, context=context)
             return system
         shells = self._shells_for_atoms(atoms, basis)
         checked_integer(len(shells), "shell count", low=1, high=2**32 - 1)

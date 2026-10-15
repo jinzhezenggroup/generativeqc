@@ -59,8 +59,26 @@ compiled source pack; supplying it as the expected checksum binds external
 metadata to that exact catalog. The C++ `System(context, atoms, basis_name, ...)`
 constructor uses the same expansion and existing normalization/validation owner.
 These paths read no basis files, import no Python and invoke no compiler at
-runtime. They do not broaden any method/backend capability. Custom data continue
-through the validated descriptor constructors.
+runtime. They do not broaden any method/backend capability.
+
+For caller-supplied FP64 data, `generativeqc_system_create_basis_template_v1`
+accepts the same atom-only system descriptor and an element-local template
+descriptor. Shared exponents and row-major general contractions are expanded in
+atom, shell and contraction-row order, retaining zero coefficients. Scalar ECP
+terms carry their nonnegative source angular channels; the greatest channel of
+each element becomes the local potential. The compiled catalog, canonical-file
+CLI adapter and Python `BasisSet` adapter share this expansion owner. Existing
+descriptor constructors retain normalization and scientific/backend admission.
+The C++ `System(context, atoms, template_descriptor, ...)` overload provides the
+same copying, synchronous lifetime contract. Array ranges and expanded uint32
+capacities are checked before expansion; no system is published on failure.
+
+Template arrays are numerical inputs, not authenticated canonical JSON or a
+native model/provenance identity. Format/schema and provenance adapters remain
+outside this constructor. The template route preserves the existing bounded
+scalar ECP scope (orbital s/p/d/f, local channel through g, radial powers 0–4);
+method/backend restrictions still apply. Explicit atom-expanded descriptors
+remain supported for existing clients.
 
 Keep the execution context valid for dependent prepared owners, and release each
 handle with its matching `*_destroy` function. Systems own copied atom/basis

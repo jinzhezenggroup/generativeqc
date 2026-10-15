@@ -30,6 +30,7 @@ endfunction()
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
     src/molecule/basis_catalog.cpp
+    src/molecule/basis_template.cpp
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
     src/runtime/cuda_provider.cpp

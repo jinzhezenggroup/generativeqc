@@ -265,6 +265,37 @@ class System {
     check(generativeqc_system_create_bundled(context.get(), &descriptor, name.c_str(), nullptr,
                                              &handle_));
   }
+  /** @native-contract generativeqc::System::System-basis-template
+   * @behavior Expand caller-supplied element templates and own the normalized system,
+   * retaining general contraction and scalar ECP source-channel semantics.
+   * @inputs A live Context, nonempty native-domain atom span, initialized v1 template
+   * descriptor, charge, positive multiplicity and Cartesian/spherical representation.
+   * The C template-constructor validation and backend/scientific admission rules apply.
+   * @lifetime Copies all required atom/basis/ECP data; input arrays may die on return.
+   * Prepared consumers retain their own copies after the System is destroyed.
+   * @errors Throws Error for dimension/ABI/record errors or native execution preparation
+   * failures; native allocation errors retain their mapped status. No owner on failure.
+   * @execution Synchronous; serialize with this Context. No I/O, Python or compiler.
+   * @units Coordinates and Gaussian/ECP arrays follow the C atomic-unit contracts.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms,
+         const generativeqc_basis_template_descriptor_v1& basis, std::int32_t charge = 0,
+         std::uint32_t multiplicity = 1,
+         generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid template system dimensions");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    descriptor.basis_representation = representation;
+    check(
+        generativeqc_system_create_basis_template_v1(context.get(), &descriptor, &basis, &handle_));
+  }
   /** @native-contract generativeqc::System::System-ecp
    * @behavior Create an owned scalar-ECP system through the native ECP constructor.
    * @inputs Core counts must match atom_count; scalar term admission follows the C API.

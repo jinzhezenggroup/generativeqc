@@ -7,6 +7,25 @@
 #include "api/handles.hpp"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis_catalog.hpp"
+#include "molecule/basis_template.hpp"
+
+namespace {
+generativeqc_status create_expanded(generativeqc_context* context,
+                                    const generativeqc_system_descriptor& descriptor,
+                                    const generativeqc::molecule::ExpandedBasis& expanded,
+                                    generativeqc_system** system) {
+  auto resolved = descriptor;
+  resolved.shells = expanded.shells.data();
+  resolved.shell_count = static_cast<std::uint32_t>(expanded.shells.size());
+  resolved.primitives = expanded.primitives.data();
+  resolved.primitive_count = static_cast<std::uint32_t>(expanded.primitives.size());
+  if (!expanded.ecp_terms.empty())
+    return generativeqc_system_create_ecp(context, &resolved, expanded.core_electrons.data(),
+                                          expanded.ecp_terms.data(), expanded.ecp_terms.size(),
+                                          system);
+  return generativeqc_system_create(context, &resolved, system);
+}
+}  // namespace
 
 extern "C" {
 
@@ -37,12 +56,30 @@ generativeqc_status generativeqc_system_create_bundled(
     const auto expanded = generativeqc::molecule::expand_bundled_basis(
         basis_name, std::span(descriptor->atoms, descriptor->atom_count),
         static_cast<generativeqc_basis_representation>(descriptor->basis_representation));
-    auto resolved = *descriptor;
-    resolved.shells = expanded.shells.data();
-    resolved.shell_count = static_cast<std::uint32_t>(expanded.shells.size());
-    resolved.primitives = expanded.primitives.data();
-    resolved.primitive_count = static_cast<std::uint32_t>(expanded.primitives.size());
-    return generativeqc_system_create(context, &resolved, system);
+    return create_expanded(context, *descriptor, expanded, system);
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+generativeqc_status generativeqc_system_create_basis_template_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    const generativeqc_basis_template_descriptor_v1* basis, generativeqc_system** system) {
+  if (!context || !descriptor || !basis || !system) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *system = nullptr;
+  if (descriptor->struct_size < sizeof(*descriptor) ||
+      descriptor->abi_version != GENERATIVEQC_ABI_VERSION || basis->struct_size < sizeof(*basis) ||
+      basis->abi_version != GENERATIVEQC_ABI_VERSION)
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!descriptor->atoms || !descriptor->atom_count || descriptor->shells ||
+      descriptor->shell_count || descriptor->primitives || descriptor->primitive_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
+  try {
+    const auto expanded = generativeqc::molecule::expand_basis_template(
+        *basis, std::span(descriptor->atoms, descriptor->atom_count),
+        static_cast<generativeqc_basis_representation>(descriptor->basis_representation));
+    return create_expanded(context, *descriptor, expanded, system);
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
   }

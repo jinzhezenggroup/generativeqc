@@ -259,6 +259,12 @@ def operation_name(owner: str | None, head: list[Token]) -> str:
             owner == "System" and name == "System" and "generativeqc_ecp_term" in params
         ):
             name += "-ecp"
+        elif (
+            owner == "System"
+            and name == "System"
+            and "generativeqc_basis_template_descriptor_v1" in params
+        ):
+            name += "-basis-template"
         elif owner == "System" and name == "System" and "basis_name" in params:
             name += "-bundled"
     return "generativeqc::" + (owner + "::" if owner else "") + name

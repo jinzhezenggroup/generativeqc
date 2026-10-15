@@ -139,11 +139,13 @@ class CatalogLibrary:
         self.mismatched = mismatched
 
     def __getattr__(self, name: str) -> Any:
-        if name == "generativeqc_system_create_bundled":
-            if self.legacy:
-                raise AttributeError(name)
-            if self.mismatched:
-                return self.create_mismatched
+        if self.legacy and name in {
+            "generativeqc_system_create_bundled",
+            "generativeqc_system_create_basis_template_v1",
+        }:
+            raise AttributeError(name)
+        if name == "generativeqc_system_create_bundled" and self.mismatched:
+            return self.create_mismatched
         return getattr(self.library, name)
 
     def create_mismatched(
