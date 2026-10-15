@@ -59,7 +59,9 @@ def _native_composition(
         request_counts.append(len(request.candidates))
         ranks = {
             name: rank
-            for rank, name in enumerate(sorted(c.name for c in request.candidates))
+            for rank, name in enumerate(
+                sorted(candidate.name for candidate in request.candidates)
+            )
         }
         for candidate in request.candidates:
             candidates.extend(

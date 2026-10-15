@@ -67,6 +67,27 @@ def buffer(
     return ResourceEstimate(name, size, space, first, last, kind=kind)
 
 
+def test_zero_only_device_preserves_portable_infeasible_minimum(
+    library: typing.Any,
+) -> None:
+    requests = (
+        request(
+            "coupled",
+            (
+                candidate(
+                    "host-heavy", 0, buffer("host", 100), buffer("zero", 0, "device:0")
+                ),
+                candidate("device-heavy", 1, buffer("device", 8, "device:0")),
+            ),
+        ),
+    )
+    budget = ResourceBudget(host_bytes=0, per_device_bytes=((0, 0),))
+    expected = portable_plan_resources(requests, budget)
+    observed = plan_resources(requests, budget, library=library)
+    assert observed.to_dict() == expected.to_dict()
+    assert "'minimum_across_candidates': 8" in observed.diagnostic
+
+
 @pytest.mark.parametrize("seed", range(100))
 def test_native_composition_matches_independent_portable_model(
     library: typing.Any, monkeypatch: pytest.MonkeyPatch, seed: int

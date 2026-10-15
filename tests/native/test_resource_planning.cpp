@@ -58,6 +58,9 @@ void test_headroom_and_lifetimes() {
       "sparse final phase lost device overlap");
   require(result.resident[kDeviceSpace].bytes == 4 && !result.resident[5].present,
           "workspace was incorrectly retained");
+  const auto zero = account(std::array<Buffer, 1>{{{0, kFirstDeviceSpace, 0, 0, true}}}, 5);
+  require(!zero.peaks[kFirstDeviceSpace].present && !zero.resident[kFirstDeviceSpace].present,
+          "zero-only device capacity invented a portable peak-map entry");
   rejects([] {
     (void)account(std::array<Buffer, 2>{{{maximum, kPageableSpace, 0, 0, true},
                                          {1, kPinnedSpace, 0, 0, true}}},
