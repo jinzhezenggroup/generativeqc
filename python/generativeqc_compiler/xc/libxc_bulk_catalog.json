@@ -7191,7 +7191,7 @@
       "name": "LDA_X_REL",
       "owner": "src/lda_x_rel.c",
       "parameter_setter": "NULL",
-      "reason": "independent both-spin E/vxc/fxc fixtures required"
+      "reason": "MapleImportError: unknown Maple symbol 'M_C'"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
@@ -8298,7 +8298,7 @@
       "name": "MGGA_XC_CC06",
       "owner": "src/mgga_xc_cc06.c",
       "parameter_setter": "NULL",
-      "reason": "independent both-spin E/vxc/fxc fixtures required"
+      "reason": "MapleImportError: unknown Maple symbol 'u_total'"
     },
     {
       "binding_semantics": "libxc-c-copy-parameters/v1",
