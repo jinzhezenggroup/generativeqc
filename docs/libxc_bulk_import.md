@@ -50,12 +50,12 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | MapleImportError: unknown Maple symbol 'Heaviside' | 2 |
 | MapleImportError: unknown Maple symbol 'KAPPA_PBE' | 4 |
 | MapleImportError: unknown Maple symbol 'LambertW' | 1 |
+| MapleImportError: unknown Maple symbol 'M_C' | 1 |
 | MapleImportError: unknown Maple symbol 'b88_zab' | 1 |
 | MapleImportError: unknown Maple symbol 'beta_Hu_Langreth' | 1 |
 | MapleImportError: unknown Maple symbol 'erfc' | 1 |
 | MapleImportError: unknown Maple symbol 'evalf' | 1 |
 | MapleImportError: unknown Maple symbol 'gga_stoll_par' | 1 |
-| independent both-spin E/vxc/fxc fixtures required | 3 |
 | MapleImportError: unknown Maple symbol 'm_recexp' | 2 |
 | MapleImportError: unknown Maple symbol 'mgga_exchange_nsp' | 2 |
 | MapleImportError: unknown Maple symbol 'mgga_series_w' | 3 |
@@ -69,6 +69,7 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | MapleImportError: unknown Maple symbol 'sigma_spin' | 2 |
 | MapleImportError: unknown Maple symbol 't_vw' | 3 |
 | MapleImportError: unknown Maple symbol 'tanh' | 3 |
+| MapleImportError: unknown Maple symbol 'u_total' | 1 |
 | MapleImportError: unknown Maple symbol 'xc_E1_scaled' | 1 |
 | MapleImportError: unsupported Maple definition name '`diff/br89_x`' | 8 |
 | MapleImportError: unsupported Maple definition name '`diff/fd_int0`' | 2 |
@@ -91,6 +92,7 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | custom parameter setter: set_ext_params | 1 |
 | custom parameter setter: set_ext_params_cpy_lc | 1 |
 | custom parameter setter: set_ext_params_cpy_omega | 18 |
+| independent both-spin E/vxc/fxc fixtures required | 1 |
 | non-3D functional | 17 |
 | non-XC functional (e.g. kinetic) | 64 |
 | non-double parameter layout | 23 |
