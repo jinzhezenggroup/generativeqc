@@ -3,6 +3,11 @@
 Status: implemented; bounded pure-J default, benefit size is not an enablement gate
 Date: 2026-10-15
 
+The exact-direct pure-J default scope below is superseded by the
+[1088-AO endpoint hold](2026-10-16-bound-pure-j-direct-final-validation.md).
+The original measurements and rationale remain historical; changed SCF work
+does not waive the retained failed complete-endpoint nonregression gate.
+
 ## Problem
 
 The defining r²SCAN-3c def2-mTZVPP basis increases the AO count relative to

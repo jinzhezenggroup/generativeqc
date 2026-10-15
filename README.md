@@ -136,6 +136,12 @@ complete native call. Remaining functionals retain their prior evidence.
 Native ωB97M-V at 3/12 atoms uses primed compilation caches but fresh measurement
 processes and Calculators; reference timings remain historical.
 
+The r²SCAN-3c plots retain the **historical measured candidate**, not a timing
+claim for the current checkout. Direct/96 failed moved-endpoint nonregression
+(+15.985%); exact-direct pure-J owners with 1088 or more AOs now default to the
+host proof. Direct/48 and the separately qualified DF defaults remain enabled.
+See the [bounded-default decision](.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md).
+
 **Direct J/K**
 
 ![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/r2scan3c-final-validation-20261015/dft-cold-warm.svg)

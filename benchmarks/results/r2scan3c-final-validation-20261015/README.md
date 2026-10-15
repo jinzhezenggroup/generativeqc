@@ -1,5 +1,13 @@
 # r²SCAN-3c resident final-state proof, 2026-10-15
 
+**Current default scope (2026-10-16):** the
+[superseding decision](../../../.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md)
+holds exact-direct pure-J owners at 1088 AOs and above on the host proof.
+Direct/48 and DF retain their defaults. The tables, plots and archived candidate
+summaries below remain historical measurements of the original policy, not the
+revised default. The original Direct/96 moved comparison still fails the
+verifier; this policy hold neither clears that result nor claims a new timing.
+
 This campaign measures complete **energy + analytic forces**, not isolated
 matrix products or force kernels, from task-start master
 `cb8781fb1bdcfb9166ef07cfed463c0482dea752` plus the retained source patch.
@@ -7,7 +15,7 @@ Both README panels use the defining spherical **def2-mTZVPP** basis for
 r²SCAN-3c; other methods retain their historical def2-SVP observations.
 Changing to a smaller basis is not this optimization.
 
-The implementation automatically admits strict-FP64, all-electron,
+The measured implementation automatically admits strict-FP64, all-electron,
 restricted, full-range pure-J owners with at least **544 AOs**, with either
 exact-direct or density-fitted J. It reuses the existing resident final-state
 proof, removing two redundant full-AO products (eleven to nine) and running
@@ -25,7 +33,7 @@ and retains one cold, five fixed-density warm, one moved and five moved-warm
 endpoints. Compiler caches are retained, not cleared or subtracted from timing.
 SCF iteration/Fock-build counts are preserved without normalization.
 
-| Route / atoms (AOs) | Warm control → default (s) | Reduction | Moved-warm reduction |
+| Route / atoms (AOs) | Warm control → measured candidate (s) | Reduction | Moved-warm reduction |
 | --- | ---: | ---: | ---: |
 | Direct / 48 (544) | 22.409 → 21.951 | 2.045% | 1.868% |
 | Direct / 96 (1088) | 92.089 → 88.312 | 4.101% | 4.068% |
