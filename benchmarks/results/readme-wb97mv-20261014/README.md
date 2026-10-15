@@ -23,6 +23,14 @@ master does not change the measured source identity.
 
 ## Protocol and accuracy
 
+- On 2026-10-15, native 3/12-atom direct and DF populations were remeasured
+  after separate compilation-cache priming runs. Every measured population
+  starts a fresh process and Calculator with the public initializer: no
+  converged density, resident allocation or warm Calculator crosses the
+  process boundary. Priming time is separately retained, not subtracted from
+  a timed call. The 48/96-atom native populations retain their original
+  existing-cache observations. Historical references are unchanged; their
+  compilation-cache readiness is not claimed to match this new native policy.
 - RTX 5090 on `n5` (direct) and `n1` (DF), with each native campaign assigned
   its own GPU by finite Slurm allocations; device visibility is preserved.
   Points through 48 atoms retain the 1800-second limit. Direct/96 uses a
@@ -51,6 +59,25 @@ master does not change the measured source identity.
   complete timings use open markers and `‡`; energy/force errors remain null.
   Completion is **not** claimed as an accuracy pass or a reference speedup.
   Historical mismatched fully fitted LR references are not reused.
+
+## Small-system cold correction
+
+The original 3-atom cold calls included 58.070 s (direct) and 39.210 s (DF)
+in force preparation, versus 2.135/1.507 s at 12 atoms. This component covers
+generated code, artifact loading and resource setup; it is not measured pure
+compiler time. Controlled cache-primed measurements now give direct cold
+**7.299/30.861 s** and DF cold **7.779/29.126 s** at 3/12 atoms, respectively.
+Each point still contains all twelve complete, independently checked calls.
+
+`unprimed-small-points.json.xz` losslessly retains the original two 3-atom
+native populations. Their unchanged reference populations are shared with
+the current reductions and bound by hashes. The original 12-atom controls
+and full summaries remain in Git history at
+`2b256f353b3803d9ffc7fe1e418fd3176e934634` and in ignored raw run storage.
+The original observations are not pooled into the new medians or hidden by
+subtracting setup time. `cache_priming` receipts bind all four separate
+primer outputs, their scheduler allocations and the executed reproduction
+script; primer calls do not count toward the 84 published observations.
 
 ## Omitted DF/96 and negative evidence
 
@@ -95,7 +122,7 @@ PYTHONPATH=.:python python benchmarks/results/readme-wb97mv-20261014/refresh.py
 ```
 
 Replay the tables and figures with the recorded Matplotlib environment and
-Scour 0.38.2 (used only to compact generated SVG markup):
+Scour 0.38.2 and `defusedxml` (used only for safe SVG markup compaction):
 
 ```bash
 PYTHONPATH=.:python python benchmarks/results/readme-wb97mv-20261014/refresh.py \
@@ -107,7 +134,9 @@ within it, the previous campaign's two SVGs are archived as lossless `.svg.xz`
 files, with both compressed and original hashes verified by its audit. Every
 historical measurement, source identity and original figure byte is retained;
 the historical README previews use the existing Git snapshot. New SVGs are
-compacted with Scour, while all timing reductions remain unchanged.
+compacted with Scour and shared presentation classes. This additional markup
+compaction was verified pixel-identical for both pre-refresh figures, freeing
+space for the original small-system observations without raising the budget.
 
 For a new measurement, check out the exact recorded source, build the
 `cuda-release-sm120` Release configuration with verified compiler-cache
@@ -118,9 +147,13 @@ directory and finite allocation:
 ```bash
 GENERATIVEQC_LIBRARY=/path/to/build/libgenerativeqc.so \
   srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --cpus-per-task=8 --time=04:05:00 \
+  --cpus-per-task=8 --time=06:05:00 \
   bash /path/to/readme-wb97mv-20261014/reproduce.sh .artifacts/wb97mv-new
 ```
+
+The allocation bound includes four 1800-second priming populations as well
+as the seven measured populations. `README_BENCHMARK_MODES=none` or `cuda`
+and `README_BENCHMARK_SIZES="3 12"` select just the small-system refresh.
 
 Restore matching `reference.json`, its outcome, and `accuracy-reference-*.json`
 beside each native output before independent accuracy replay. Without them,

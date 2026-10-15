@@ -59,3 +59,6 @@ bound to an existing Git snapshot. No storage policy limit is raised.
 Complete timing still requires successful status, converged SCF and finite
 exported host forces. A future DF/96 refresh should qualify complete-force
 resource admission and independent large-DF numerics, without weakening gates.
+
+The [2026-10-15 cache-priming follow-up](2026-10-15-wb97mv-cache-primed-cold.md)
+supersedes the small-system cold cache policy only; DF/96 remains omitted.

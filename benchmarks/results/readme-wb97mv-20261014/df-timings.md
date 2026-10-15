@@ -30,8 +30,8 @@
 | M06-2X | 12 (96) | 6.467 | 6.940 | 1.031 | 0.591 |
 | M06-2X | 48 (384) | 45.783 | 29.255 | 8.920 | 4.239 |
 | M06-2X | 96 (768) | 150.082 | 95.234 | 36.357 | 22.421 [21.964–28.877]† |
-| ωB97M-V | 3 (24) | 44.671 | 18.880 | 0.370 | 1.665 |
-| ωB97M-V | 12 (96) | 28.172 | 98.457 | 1.373 | 7.824 |
+| ωB97M-V | 3 (24) | 7.779 | 18.880 | 0.375 | 1.665 |
+| ωB97M-V | 12 (96) | 29.126 | 98.457 | 1.388 | 7.824 |
 | ωB97M-V | 48 (384) | 359.464‡ | not run | 14.809‡ | not run |
 
 Warm cells show the median of all five complete endpoints. † marks differing
@@ -39,7 +39,8 @@ SCF work and includes the full range; timings are never normalized by iterations
 ‡ marks completed native calls without an independent accuracy check for that geometry.
 A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
-ωB97M-V: 96: incomplete E+F omitted.
+ωB97M-V: 3/12: native cache primed
+96: incomplete E+F omitted.
 
 ## Observed SCF work
 

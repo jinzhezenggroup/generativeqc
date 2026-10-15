@@ -30,8 +30,8 @@
 | M06-2X | 12 (96) | 7.919 | 25.024 | 1.430 | 1.775 |
 | M06-2X | 48 (384) | 46.884 | 54.767 | 6.824 | 5.294 [4.994–7.289]† |
 | M06-2X | 96 (768) | 150.704 | 97.687 | 20.014 | 13.406 |
-| ωB97M-V | 3 (24) | 63.451 | 27.917 | 0.382 | 2.575 |
-| ωB97M-V | 12 (96) | 30.796 | 109.918 | 1.644 | 8.837 |
+| ωB97M-V | 3 (24) | 7.299 | 27.917 | 0.386 | 2.575 |
+| ωB97M-V | 12 (96) | 30.861 | 109.918 | 1.641 | 8.837 |
 | ωB97M-V | 48 (384) | 255.233 | 1216.489 | 11.444 | 105.410 |
 | ωB97M-V | 96 (768) | 1336.273 | timeout | 59.897 | timeout |
 
@@ -40,6 +40,7 @@ SCF work and includes the full range; timings are never normalized by iterations
 ‡ marks completed native calls without an independent accuracy check for that geometry.
 A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
+ωB97M-V: 3/12: native cache primed.
 
 ## Observed SCF work
 

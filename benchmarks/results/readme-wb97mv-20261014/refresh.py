@@ -12,8 +12,10 @@ import hashlib
 import json
 import lzma
 import math
+from collections import Counter
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 from tools.render_readme_dft import phase_rows, render
 
@@ -45,6 +47,77 @@ def combined_summary(name: str) -> dict[str, Any]:
     return summary
 
 
+def compact_svg_presentation(svg: str) -> str:
+    """Share repeated presentation attributes without changing plot geometry.
+
+    This operates only on renderer-owned SVGs without existing CSS classes.
+    Stroke cap/join attributes stay untouched because Matplotlib's universal
+    rule already controls their cascade. Text whitespace remains significant.
+    """
+    from defusedxml.ElementTree import fromstring
+
+    namespace = "http://www.w3.org/2000/svg"
+    root = fromstring(svg)
+    if any("class" in element.attrib for element in root.iter()):
+        return svg
+    properties = {
+        "fill",
+        "stroke",
+        "stroke-width",
+        "stroke-dasharray",
+        "stroke-dashoffset",
+        "font-family",
+        "font-size",
+        "font-style",
+        "font-weight",
+        "text-anchor",
+        "opacity",
+        "fill-opacity",
+        "stroke-opacity",
+    }
+    combinations = [
+        tuple(
+            sorted(
+                (key, value)
+                for key, value in element.attrib.items()
+                if key in properties
+            )
+        )
+        for element in root.iter()
+    ]
+    classes = {}
+    rules = []
+    for attributes, count in Counter(combinations).items():
+        declarations = ";".join(
+            f"{key}:{value}px" if key == "stroke-width" else f"{key}:{value}"
+            for key, value in attributes
+        )
+        original_bytes = sum(len(key) + len(value) + 4 for key, value in attributes)
+        if count < 2 or count * original_bytes <= count * 18 + len(declarations) + 18:
+            continue
+        name = f"gqc{len(classes)}"
+        classes[attributes] = name
+        rules.append(f".{name}{{{declarations}}}")
+    for element, attributes in zip(root.iter(), combinations, strict=True):
+        if attributes in classes:
+            for key, _value in attributes:
+                del element.attrib[key]
+            element.set("class", classes[attributes])
+        if element.tag not in {f"{{{namespace}}}text", f"{{{namespace}}}tspan"}:
+            if element.text is not None and not element.text.strip():
+                element.text = None
+            for child in element:
+                if child.tail is not None and not child.tail.strip():
+                    child.tail = None
+    definitions = root.find(f"{{{namespace}}}defs")
+    if definitions is None:
+        definitions = ElementTree.SubElement(root, f"{{{namespace}}}defs")
+    ElementTree.SubElement(definitions, f"{{{namespace}}}style").text = "".join(rules)
+    ElementTree.register_namespace("", namespace)
+    ElementTree.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+    return ElementTree.tostring(root, encoding="unicode") + "\n"
+
+
 def render_publication(summary: dict[str, Any], destination: Path) -> None:
     """Compact generated SVG markup without changing the scientific reduction.
 
@@ -68,7 +141,9 @@ def render_publication(summary: dict[str, Any], destination: Path) -> None:
     )
     name = "df-cold-warm.svg" if summary["density_fitting"] else "dft-cold-warm.svg"
     path = destination / name
-    path.write_text(scourString(path.read_text(), options=options))
+    path.write_text(
+        compact_svg_presentation(scourString(path.read_text(), options=options))
+    )
 
 
 def verify() -> None:
@@ -111,6 +186,23 @@ def verify() -> None:
                 raise ValueError(
                     f"incomplete native WB97M-V population: {point['atoms']}"
                 )
+            if point["atoms"] in (3, 12):
+                priming = point.get("cache_priming", {})
+                if not (
+                    priming.get("exit_code") == 0
+                    and priming.get("phase_counts") == PHASE_COUNTS
+                    and priming.get("independently_checked_calls") == 12
+                    and priming.get("fresh_measurement_process") is True
+                    and priming.get("scheduler") == native["scheduler"]
+                    and priming.get("reproducer_sha256")
+                    == hashlib.sha256((ROOT / "reproduce.sh").read_bytes()).hexdigest()
+                    and native["native_experiment"]["public_initialization_policy"]
+                    is True
+                    and native["native_experiment"]["preliminary_provider"] == "none"
+                ):
+                    raise ValueError(
+                        "small native point lacks a successful separate cache primer"
+                    )
             if len(native["records"]) != sum(PHASE_COUNTS.values()):
                 raise ValueError("native population must contain all twelve endpoints")
             for phase, expected in PHASE_COUNTS.items():
@@ -149,6 +241,45 @@ def verify() -> None:
                     ):
                         raise ValueError("independent energy/force acceptance failed")
         combined_summary(name)
+    archive = read_summary(ROOT / "unprimed-small-points.json.xz")
+    for mode, points in archive["populations"].items():
+        current = read_summary(
+            ROOT / ("df-summary.json.xz" if mode == "cuda" else "summary.json.xz")
+        )
+        for point in points:
+            retained = next(
+                candidate
+                for candidate in current["methods"]["wb97m-v"]
+                if candidate["atoms"] == point["atoms"]
+            )
+            for key, value in (
+                ("reference_engine_sha256", retained["engines"]["reference"]),
+                ("independent_references_sha256", retained["independent_references"]),
+            ):
+                digest = hashlib.sha256(
+                    json.dumps(value, sort_keys=True, allow_nan=False).encode()
+                ).hexdigest()
+                if digest != point["reference_bindings"][key]:
+                    raise ValueError(
+                        "unprimed observations lost their original reference binding"
+                    )
+            original = point["engines"]["native"]
+            if (
+                original["source_file_sha256"] != manifest["native_source_file_sha256"]
+                or original["native_build"]["library_sha256"]
+                != manifest["native_library_sha256"]
+            ):
+                raise ValueError(
+                    "unprimed observations have a different source or binary"
+                )
+            if Counter(
+                row["phase"] for row in original["records"]
+            ) != PHASE_COUNTS or not all(
+                row["gate"] is True for row in original["records"]
+            ):
+                raise ValueError(
+                    "unprimed original observations were not preserved completely"
+                )
 
 
 def main() -> None:
