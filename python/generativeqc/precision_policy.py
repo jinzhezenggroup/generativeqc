@@ -1,10 +1,10 @@
-"""Budget-selected mixed arithmetic, strict final SCF and explicit FP64 audits.
+"""Budget-selected shared modules, physical final SCF and explicit FP64 audits.
 
-Fast selects qualified XC arithmetic from TargetErrorBudget and still publishes
-the incumbent FP64-converged state. Admitted stationary gradients also use
-FP32 under the force budget, with bounded numerical FP64 fallback. Qualification does not
-invent a per-call observable difference. TargetAccuracy remains an explicit
-request for a separate relaxed endpoint audit, with its full cost recorded.
+Fast selects supported Direct/XC arithmetic from TargetErrorBudget and publishes
+a physically validated FP64 final state at the selected stationarity allowance.
+Strict-density routes may also narrow stationary gradients, with bounded FP64
+fallback. Qualification does not invent a per-call observable difference.
+TargetAccuracy requests a separate endpoint audit with its full cost recorded.
 """
 
 from __future__ import annotations
@@ -52,6 +52,82 @@ def _budget_target(budget: TargetErrorBudget, *, forces: bool = True) -> TargetA
                 ObservableTarget("forces", "rms", "Eh/bohr", absolute=budget.force_rms)
             )
     return TargetAccuracy(tuple(observables))
+
+
+def _budget_fock_controls(
+    calculator: Calculator, budget: TargetErrorBudget, requested: dict
+) -> dict[str, float]:
+    """Select controls for shared Direct modules, independently of XC identity.
+
+    Native preparation checks the actual provider and basis/resource domain.
+    Older libraries, unsupported providers and tighter budgets stay strict.
+    Explicit caller tolerances are ceilings, never silently loosened.
+    The density ceiling matches the native owner's maximum authenticated force
+    stationarity allowance; it is not an observable-error estimate.
+    """
+    capability = getattr(
+        getattr(calculator, "_library", None),
+        "generativeqc_application_fock_precision_version_v2",
+        None,
+    )
+    ks_options = getattr(calculator, "_ks_options", None)
+    model = getattr(ks_options, "_method_ir", None)
+    if (
+        capability is None
+        or capability() != 2
+        or model is None
+        or model.spin != "unpolarized"
+        or not ks_options.execution_plan.self_consistent
+        or ks_options.xc_schedule != "device_fused"
+        or getattr(calculator, "_density_fitting_mode", None)
+        or budget.energy_abs < 1e-5
+        or budget.force_max_abs < 1e-4
+        or (budget.force_rms is not None and budget.force_rms < 3e-5)
+    ):
+        return {}
+    return {
+        name: min(
+            ceiling, ceiling if requested.get(name) is None else float(requested[name])
+        )
+        for name, ceiling in (
+            ("energy_tolerance", 1e-6),
+            ("density_tolerance", 1e-4),
+            ("screening_tolerance", 1e-10),
+        )
+    }
+
+
+def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
+    """Require executed mixed modules and physical closure, not a method label.
+
+    Pure semilocal graphs have no K work to prove. Use the existing native
+    full-range projection of the exchange graph, including SR/LR decompositions,
+    without relabeling its strict range consumer. Optional residency does not
+    create recurrence work.
+    """
+    options = getattr(calculator, "_ks_options", None)
+    if options is None or getattr(options, "_method_ir", None) is None:
+        return False
+    required = {"coulomb_j", "coulomb_recurrence"}
+    if options.coefficients[2] != 0:
+        required.add("exchange_k")
+    observed = {
+        operator.get("name")
+        for operator in work.get("operators", ())
+        if operator.get("compute") == "fp32"
+        and operator.get("accumulation") == "fp64"
+        and operator.get("arithmetic_mode") == "mixed"
+        and operator.get("count", 0) > 0
+    }
+    return (
+        work.get("operator_work_counters_valid") is True
+        and work.get("complete") is True
+        and work.get("operator_inventory_complete") is True
+        and required <= observed
+        and work.get("strict_stage_fock_builds", 0) >= 2
+        and work.get("strict_refinement_applied") is True
+        and work.get("final_residual_audits", 0) > 0
+    )
 
 
 @dataclass(frozen=True)
@@ -147,13 +223,14 @@ class PrecisionSolve:
     role: str
     requested_precision: str
     seconds: float | None
-    iterations: int
-    force_evaluations: int
+    iterations: int | None
+    force_evaluations: int | None
     fock_builds: int | None
     executed_backend: str
     energy_tolerance: float
     density_tolerance: float
     screening_tolerance: float
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -383,10 +460,12 @@ class PrecisionCalculator:
     Other options have Calculator semantics except ``precision`` and
     ``target_accuracy``, which this facade owns. FP64 without an explicit target
     runs once in FP64; native exact source reuse also benefits ordinary Calculator.
-    Fast selects provisional FP32 XC for admitted CUDA PBE-family RKS and
+    Fast selects provisional FP32 J/full-range K through shared Direct-module
+    capabilities, independently of XC identity; relaxed candidates keep FP64 forces.
+    Other routes select provisional FP32 XC for admitted CUDA PBE-family RKS and
     stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
     RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
-    SCF state stays strict; unsupported budgets/domains use FP64 audits.
+    SCF state stays strict on those other routes; unsupported domains use FP64 audits.
     Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
     still require the audit fallback and have no mixed-arithmetic acceleration.
     Explicit targets/audit profiles cost two full endpoints, or three after
@@ -460,6 +539,7 @@ class PrecisionCalculator:
         )
         self._candidate_precision = "fp64"
         self._fast_native = False
+        self._fast_fock = False
         self._fast_transport_v2 = False
         self._route_reasons = ["fp32_gradient_not_qualified"]
         if policy.profile == "fast":
@@ -474,6 +554,10 @@ class PrecisionCalculator:
                 self._candidate._ks_options is not None or method_transport is not None
             ):
                 candidate_options = dict(self._options)
+                fock_controls = _budget_fock_controls(
+                    self._candidate, policy.budget, options
+                )
+                candidate_options.update(fock_controls)
                 if method_transport is not None:
                     candidate_options["_application_precision_budget"] = policy.budget
                 else:
@@ -499,13 +583,9 @@ class PrecisionCalculator:
                     and getattr(resolved_ks, "_method_ir", None) is not None
                     and resolved_ks.execution_plan.nonlocal_correlation is not None
                 )
-                # Application XC warmup is not qualified for a nonlocal model.
-                # Native AUTO would run strict work anyway; request its actual
-                # strict SCF policy so the independent derivative admission and
-                # ordinary optimized FP64 scheduling stay available.
                 precisions = (
                     ("auto", "fp64")
-                    if resolved_ks is not None and not nonlocal_scf
+                    if resolved_ks is not None and (fock_controls or not nonlocal_scf)
                     else ("fp64",)
                 )
                 if method_transport is None:
@@ -520,6 +600,7 @@ class PrecisionCalculator:
                     self._candidate = candidate
                     self._candidate_precision = precision
                     self._fast_native = True
+                    self._fast_fock = bool(fock_controls) and precision == "auto"
                     self._fast_transport_v2 = method_transport is not None
                     break
                 else:
@@ -728,8 +809,24 @@ class PrecisionCalculator:
                         multiplicity=multiplicity,
                         properties=requested,
                     )
-                except BaseException:
+                except BaseException as error:
                     calculator.clear_cache()
+                    if self._fast_fock and calculator is self._candidate:
+                        solves.append(
+                            PrecisionSolve(
+                                role,
+                                precision,
+                                perf_counter() - solve_started,
+                                None,
+                                None,
+                                None,
+                                "cuda",
+                                calculator._energy_tolerance,
+                                calculator._density_tolerance,
+                                calculator._screening_tolerance,
+                                f"{type(error).__name__}: {error}",
+                            )
+                        )
                     raise
                 finally:
                     # Audit owners run sequentially within the same resource
@@ -788,7 +885,16 @@ class PrecisionCalculator:
         target = self.policy.target
         if reference_factory is None:
             reference_factory = self._reference
-        candidate = solve(candidate_calculator, "candidate", candidate_precision)
+        try:
+            candidate = solve(candidate_calculator, "candidate", candidate_precision)
+        except (RuntimeError, NotImplementedError):
+            if not self._fast_fock:
+                raise
+            route_reasons.append("budget_fock_failed_fp64_fallback")
+            candidate_calculator = reference_factory()
+            candidate_precision = "fp64"
+            fast_native = False
+            candidate = solve(candidate_calculator, "fp64_fallback", "fp64")
         fast_native = self._fast_native and (
             candidate_calculator is self._candidate or self._fast_transport_v2
         )
@@ -844,6 +950,28 @@ class PrecisionCalculator:
             work = candidate.precision or {}
             if (
                 fast_native
+                and self._fast_fock
+                and _budget_fock_work_admitted(candidate_calculator, work)
+            ):
+                validation = PrecisionValidation(
+                    self.policy.profile,
+                    None,
+                    model,
+                    "qualified_budget_fock",
+                    tuple(route_reasons),
+                    (),
+                    (),
+                    tuple(solves),
+                    perf_counter() - started,
+                    reference="direct-fock-budget-v2/shared-module-qualification",
+                    gradient_admission=gradient_admission,
+                    scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
+                )
+                return replace(candidate, precision_validation=validation)
+            if (
+                fast_native
+                and not self._fast_fock
                 and "forces" in requested
                 and qualified_gradient
                 # V2 is emitted only after the complete gradient consumer
@@ -901,6 +1029,7 @@ class PrecisionCalculator:
                 return replace(candidate, precision_validation=validation)
             if (
                 fast_native
+                and not self._fast_fock
                 and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
                 and work.get("operator_work_counters_valid") is True
                 and work.get("complete") is True

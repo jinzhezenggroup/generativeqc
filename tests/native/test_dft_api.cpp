@@ -1654,11 +1654,19 @@ int main() {
         auto auto_method = method;
         auto_method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
         generativeqc_calculation* auto_calculation = nullptr;
-        require(generativeqc_calculation_prepare(cuda_context, cuda_system, &auto_method,
-                                                 &auto_calculation) ==
-                        GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                    auto_calculation == nullptr,
-                "split-global-hybrid public CUDA endpoint lost strict-FP64 admission");
+        require(
+            generativeqc_calculation_prepare(cuda_context, cuda_system, &auto_method,
+                                             &auto_calculation) == GENERATIVEQC_STATUS_SUCCESS &&
+                auto_calculation != nullptr,
+            "split-global-hybrid public CUDA endpoint lost shared AUTO admission");
+        auto auto_result = unconverged;
+        require(generativeqc_calculation_execute(auto_calculation, &auto_result) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    auto_result.converged &&
+                    auto_result.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
+                    std::abs(auto_result.energy - result.energy) < 2e-8,
+                "split-global-hybrid AUTO endpoint differs from strict physical energy");
+        generativeqc_calculation_destroy(auto_calculation);
 
         auto bad_exchange = exchange;
         bad_exchange[0].coefficient -= 0.01;

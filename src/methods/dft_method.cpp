@@ -318,6 +318,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
   const bool application =
+      options.energy_tolerance <= 1e-10 && options.density_tolerance <= 1e-8 &&
+      options.screening_tolerance <= 1e-12 &&
       dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
                                       maximum_angular, execution_plan.spin_channels == 1);
   // Above the retained-pair regime, the incumbent phased strict consumer is

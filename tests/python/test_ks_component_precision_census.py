@@ -63,7 +63,8 @@ using Mode = scf::PrecisionArithmeticMode;
 using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
-  bool pending_mixed_point{}, experimental_mixed_contractions{};
+  bool pending_mixed_point{}, experimental_mixed_contractions{}, pending_mixed_exchange{};
+  bool pending_mixed_resident{};
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
@@ -93,13 +94,18 @@ struct Owner {
         + publication
         + r"""
 };
-std::uint64_t count(const Owner& p, Kind kind, Mode mode = Mode::Strict) {
+std::uint64_t count(const Owner& p, Kind kind, Mode mode = Mode::Strict,
+                    Dtype storage = Dtype::Fp64) {
   std::uint64_t total = 0;
   for (const auto& op : p.output.precision_work.operators) {
-    assert(op.storage == Dtype::Fp64 && op.accumulation == Dtype::Fp64);
+    assert(op.accumulation == Dtype::Fp64);
+    assert(op.storage == Dtype::Fp64 ||
+           (op.storage == Dtype::Fp32 && op.arithmetic_mode == Mode::Mixed &&
+            (op.kind == Kind::CoulombJ || op.kind == Kind::ExchangeK ||
+             op.kind == Kind::CoulombRecurrence)));
     assert(op.reduction == Dtype::Fp64);
     assert(op.compute == (op.arithmetic_mode == Mode::Mixed ? Dtype::Fp32 : Dtype::Fp64));
-    if (op.kind == kind && op.arithmetic_mode == mode) total += op.count;
+    if (op.kind == kind && op.arithmetic_mode == mode && op.storage == storage) total += op.count;
   }
   return total;
 }
@@ -205,6 +211,34 @@ int main() {
   screened.complete(true, false, 0);
   assert(count(screened, Kind::CoulombJ, Mode::Mixed) == 1);
   assert(count(screened, Kind::CoulombRecurrence, Mode::Mixed) == 0);
+  Owner resident;
+  resident.has_range_correction = false;
+  resident.pending_mixed_exchange = resident.pending_mixed_resident = true;
+  resident.record_precision_operator(Kind::CoulombRecurrence, Dtype::Fp32, Mode::Mixed,
+                                      29, Dtype::Fp32);
+  resident.complete(true, false, 0);
+  resident.complete(true, false, 0);
+  assert(count(resident, Kind::CoulombRecurrence, Mode::Mixed, Dtype::Fp32) == 29);
+  assert(count(resident, Kind::CoulombJ, Mode::Mixed, Dtype::Fp32) == 2);
+  assert(count(resident, Kind::ExchangeK, Mode::Mixed, Dtype::Fp32) == 2);
+  resident.pending_mixed_resident = resident.pending_mixed_exchange = false;
+  resident.complete(false, false, 0);
+  assert(count(resident, Kind::ExchangeK) == 1);
+  assert(count(resident, Kind::ExchangeK, Mode::Mixed, Dtype::Fp32) == 2);
+  Owner empty_mixed;
+  empty_mixed.pending_mixed_exchange = true;
+  empty_mixed.complete(true, false, 0);
+  assert(count(empty_mixed, Kind::ExchangeK, Mode::Mixed) == 0);
+  Owner range;
+  range.pending_mixed_exchange = true;
+  range.complete(true, false, 11);
+  assert(count(range, Kind::ExchangeK, Mode::Mixed) == 1);
+  assert(count(range, Kind::ExchangeK) == 1);
+  Owner semilocal;
+  semilocal.has_exchange = semilocal.has_range_correction = false;
+  semilocal.complete(true, false, 11);
+  assert(count(semilocal, Kind::ExchangeK) == 0);
+  assert(count(semilocal, Kind::ExchangeK, Mode::Mixed) == 0);
   Owner nlc;
   nlc.nonlocal_correlation = &nlc;
   nlc.device_nonlocal = true;
@@ -316,6 +350,27 @@ int main() {
     assert(strict.size() == 7 && strict.is_strict_fp64() && !strict.any_lower_precision());
     assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
     assert(strict.audit_owner() == "method-controller");
+    const auto fast_fock = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_AUTO, capabilities, false, false, false, false, {true, true});
+    assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+    assert(!fast_fock.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
+    assert(resolve_cuda_ks_iteration_precision(fast_fock, true, true).is_strict_fp64());
+    for (const bool nonlocal_graph : {false, true}) {
+      const auto pure = resolve_cuda_ks_precision_schedule(
+          GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
+          false, false, {true, false});
+      assert(pure.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+      assert(!pure.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+      const auto hybrid = resolve_cuda_ks_precision_schedule(
+          GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
+          false, false, {true, true}, true);
+      assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+      assert(hybrid.find(cuda_ks_precision_region::kRangeExchange));
+      assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kRangeExchange));
+      assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kNonlocalCorrelation));
+      assert(resolve_cuda_ks_iteration_precision(hybrid, true, true).is_strict_fp64());
+    }
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
     assert(!resolve_cuda_ks_precision_schedule(std::nullopt, capabilities, false, false)
                 .any_lower_precision());

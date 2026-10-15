@@ -72,6 +72,14 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Cache full-range FP32 recurrence values in FP32 storage, never strict ERIs.
+ * Restricted, complete through-d canonical sources only. Publication is atomic
+ * after finite validation; strict callers cannot consume this precision lease.
+ */
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPlan* plan,
+                                                                 std::size_t maximum_bytes,
+                                                                 std::string& detail);
+
 /** Retain exact values of one immutable radial operator, with bounded partial
  * residency. SR/LR values can serve only matching pure-exchange requests; full
  * J/K and a different omega keep their ordinary exact provider. A successful
@@ -182,6 +190,15 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr,
     bool allow_materialized = true);
 
+/** Replay an authenticated full-range FP32 source with FP64 products/scatter.
+ * Requires complete mixed residency; no recurrence or strict-source fallback
+ * can masquerade as this action. Correction/output lifetime matches FP64.
+ */
+generativeqc_status enqueue_cuda_direct_jk_mixed_resident_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
+    int* numerical_error, double threshold, std::uint64_t* census, std::string& detail);
+
 /** Eligibility for the default reuse-preserving shell bilinear derivative.
  * Canonical residency alone does not admit this schedule. No device work is
  * submitted; unavailable shell storage preserves bounded polarization. */
@@ -210,12 +227,14 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
 
 /** Experimental value-only variant: evaluate Coulomb ERI recurrences in FP32
  * while retaining FP64 density reads, screening, accumulation and output.
- * Exchange remains FP64. The optional caller-owned device counter is cleared
+ * Exchange remains FP64 unless mixed_exchange selects restricted full-range
+ * J/K sharing the same FP32 recurrence. The optional device counter is cleared
  * on the provider stream and counts only AO-ERI values actually evaluated by
  * the mixed recurrence after screening and zero-density rejection. The caller
  * must perform a strict FP64 target audit before publishing a converged state. */
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr);
+    int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count = nullptr,
+    bool mixed_exchange = false);
 }  // namespace generativeqc::scf

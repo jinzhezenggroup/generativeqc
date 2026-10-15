@@ -137,8 +137,8 @@
   },
   "files": {
     "README.md": {
-      "bytes": 24425,
-      "sha256": "de1d39c43aabe1e5c567122ef767a9721bd2d08c1cb4b982bb1d4211aca2bd03"
+      "bytes": 24787,
+      "sha256": "a540992ba7d7723ef9f00641f3be7b007db1a673ec7d02816dcc1fd647846ac4"
     },
     "df-cold-warm.svg.xz": {
       "bytes": 12624,
@@ -163,10 +163,6 @@
         "bytes": 189107,
         "sha256": "4bed4aea491bf39a802ac14ecbd3f1a4fa9af107c8d1bd83bb85196ee7701fcd"
       }
-    },
-    "followup-prior.json.xz": {
-      "bytes": 359344,
-      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d"
     },
     "followup-receipts.json.xz": {
       "bytes": 426364,
@@ -356,7 +352,15 @@
   "benchmark_issue_followup": {
     "based_on_pr": 2401,
     "prior_pr_head": "632dfb53fadcea3db1a01de7946c7de1b4f77cc6",
-    "history": "followup-prior.json.xz",
+    "history": {
+      "checkout": "git-history",
+      "source_revision": "cb8781fb1bdcfb9166ef07cfed463c0482dea752",
+      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
+      "git_blob": "8b7cf1984493c94b3819fc4651b2be1b2eba7787",
+      "bytes": 359344,
+      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
+      "reason": "Earlier report snapshots remain exactly recoverable from existing Git history; current endpoint/reference/timeout evidence is unchanged."
+    },
     "updates": [
       {
         "mode": "none",

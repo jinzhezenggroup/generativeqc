@@ -117,21 +117,17 @@ bool parallel_pair_outputs_disjoint(std::size_t npoint, const double* points, co
   return true;
 }
 
-/** Candidate scope: large sm_120 molecular VV10, with an explicit ordered fallback.
+/** Default scope: large molecular VV10, with an explicit ordered fallback.
+ * The generated FP64 atomic/shuffle schedule needs no architecture whitelist.
  * Explicit parallel selection admits small real-device qualification fixtures;
  * neither preference bypasses numerical or output-lease guards. */
-bool prefer_parallel_pairs(std::size_t npoint, int device_id) {
+bool prefer_parallel_pairs(std::size_t npoint) {
   const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
   if (selector && *selector)
     return std::string_view(selector) == "parallel" ||
-           std::string_view(selector) == "parallel-wide";
-  if (npoint < 65536) return false;
-  int major = 0, minor = 0;
-  runtime::cuda_resource_check(
-      cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device_id));
-  runtime::cuda_resource_check(
-      cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device_id));
-  return major == 12 && minor == 0;
+           std::string_view(selector) == "parallel-wide" ||
+           std::string_view(selector) == "parallel-packet";
+  return npoint >= 65536;
 }
 
 unsigned launch_blocks(std::size_t count, unsigned threads) {
@@ -422,7 +418,10 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
-          if (selector && std::string_view(selector) == "parallel-wide") {
+          if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
+            generated::parallel_pair_packet_kernel<Geometry>
+                <<<680, threads, 0, stream>>>(input, output);
+          } else if (selector && std::string_view(selector) == "parallel-wide") {
             // Both kernels use the same admitted device count. Exactly one
             // executes, preserving small-domain occupancy without a host read.
             generated::parallel_pair_kernel<Geometry, 4, false, true>
@@ -810,7 +809,7 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   bool parallel_pairs = false;
   if (parameters.variant == Vv10Variant::vv10 && layout.features && layout.mask_zero_weight_rows &&
       npoint <= (std::uint64_t{1} << 32) && std::fabs(parameters.coefficient) <= 0x1p32) {
-    parallel_pairs = prefer_parallel_pairs(npoint, device_id) &&
+    parallel_pairs = prefer_parallel_pairs(npoint) &&
                      parallel_pair_outputs_disjoint(npoint, points_xyz, density, workspace,
                                                     layout.workspace_bytes, vrho, vsigma,
                                                     point_derivative, weight_derivative);

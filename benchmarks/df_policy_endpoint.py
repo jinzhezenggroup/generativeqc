@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import gzip
 import hashlib
 import json
 import os
@@ -44,6 +45,23 @@ CASES = {
     768: "water-32mer-4s4-def2-svp-spherical",
     864: "water-36mer-water27-derived-def2-svp-spherical",
 }
+
+
+def read_reference_bytes(path: Path) -> bytes:
+    """Read the original oracle bytes across lossless gzip storage migrations.
+
+    Historical commands may still name the expanded JSON path. Only a missing
+    JSON file may use its gzip sibling; invalid existing inputs must fail.
+    Hash the returned expanded bytes so storage does not change oracle identity.
+    """
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        if path.suffix != ".json" or path.is_symlink():
+            raise
+        path = path.with_suffix(".json.gz")
+        data = path.read_bytes()
+    return gzip.decompress(data) if path.suffix == ".gz" else data
 
 
 @contextmanager
@@ -557,7 +575,7 @@ def main() -> None:
                     "initialization failed independent energy/force gates"
                 )
         if args.reference:
-            reference_bytes = args.reference.read_bytes()
+            reference_bytes = read_reference_bytes(args.reference)
             expected_energy, expected_forces = independent_reference(
                 json.loads(reference_bytes),
                 args.aos,

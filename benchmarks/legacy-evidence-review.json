@@ -247,6 +247,11 @@
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
       "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
     },
+    "vv10-warp-packet-20261015": {
+      "owner": "guarded FP64 rotating-partner VV10 pair traversal",
+      "reason": "Compact complete 3/12-atom off/on E/F records, independent references, exact source/library inventory, semantic pair work and sanitizer receipts. Larger original-limit failures remain separately retained; no profiler database, binary, storage-budget increase or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-warp-packet-20261015/README.md"
+    },
     "vv10-wide-pair-20261014": {
       "owner": "experimental large-domain VV10 pair schedule",
       "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
@@ -258,6 +263,9 @@
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     }
   },
+  "schema": "generativeqc.legacy-large-evidence-review.v1",
+  "scope": "Retained current-tree benchmark evidence at or above the review threshold; storage review only, not scientific re-acceptance.",
+  "threshold_bytes": 131072,
   "files": [
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
@@ -436,28 +444,12 @@
       "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9"
     },
     {
-      "bytes": 139337,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue377-379-df",
-      "path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-32mer-4s4-def2-svp-spherical.json",
-      "role": "scientific-record",
-      "sha256": "33164661464fc63b15e277d97755053cec3188f7063e0219624a41676b955aa6"
-    },
-    {
       "bytes": 944957,
       "classification": "test-reference-input",
       "family": "issue377-379-df",
       "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
       "role": "reference-input",
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
-    },
-    {
-      "bytes": 219056,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue394-deferred",
-      "path": "benchmarks/results/issue394-deferred/prototype.patch",
-      "role": "source-provenance",
-      "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
     },
     {
       "bytes": 131267,
@@ -564,14 +556,6 @@
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 359344,
-      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
-      "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
@@ -604,6 +588,14 @@
       "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
     },
     {
+      "path": "benchmarks/results/vv10-warp-packet-20261015/evidence.json.xz",
+      "family": "vv10-warp-packet-20261015",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independent E/F, semantic pair work and source-bound packet qualification",
+      "bytes": 142064,
+      "sha256": "134ddb110994824e29195af84243c8c4bb879db07b2b4b0b943d52cba54e6dc5"
+    },
+    {
       "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
       "family": "vv10-wide-pair-20261014",
       "bytes": 183856,
@@ -611,8 +603,5 @@
       "classification": "required-compact-accepted-evidence",
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     }
-  ],
-  "schema": "generativeqc.legacy-large-evidence-review.v1",
-  "scope": "Retained current-tree benchmark evidence at or above the review threshold; storage review only, not scientific re-acceptance.",
-  "threshold_bytes": 131072
+  ]
 }

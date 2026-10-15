@@ -17,8 +17,9 @@ python benchmarks/results/range-separated-df-stable-20261015/verify.py \
 ```
 
 The final implementation patch is recoverable directly from this PR's Git tree
-against base `5f80ba629b5f20412215cdc690f8fa458ac3fdf8` with
-`git diff --binary <base> <PR-head> -- src python tools tests`; its digest and
+against base `5f80ba629b5f20412215cdc690f8fa458ac3fdf8` and measured source
+`e7e7654930e8c41a349920d18aef41bbe9d3ebf9` with
+`git diff --binary <base> <measured-source> -- src python tools tests`; its digest and
 per-file hashes are retained in the restored final source identity.
 
 ## Matched endpoint
@@ -42,7 +43,7 @@ and relative cutoff. DF-versus-Direct energy agreement alone is not acceptance.
   alternates the declared H1 displacement and original coordinates, including
   provider rebuilding and SCF. No isolated-kernel or force-only ratio is used.
 - CPU is AMD EPYC 7K62, normal Release, scalar native linear algebra. The
-  implementation patch, source hashes and loaded library hashes bind evidence
+  implementation patch, source hashes and reported library hashes bind evidence
   to the measured implementation, not only to an unchanged Git HEAD.
 
 ## CPU conclusion
@@ -57,6 +58,18 @@ not improve that particular endpoint. Geometry changes and forces benefit.
 | SVP | Energy + forces | 6.619 → 4.814 (1.37×) | 3.021 → 2.107 (1.43×) | 5.929 → 4.110 (1.44×) |
 | TZVP | Energy | 25.488 → 5.014 (5.08×) | 1.129 → 1.173 (0.96×) | 25.215 → 4.100 (6.15×) |
 | TZVP | Energy + forces | 40.407 → 7.168 (5.64×) | 15.729 → 3.258 (4.83×) | 40.044 → 6.197 (6.46×) |
+
+These are descriptive three-repeat, noninterleaved observations, not a passed
+five-pair performance-promotion campaign. Warm energy-only medians are slower by
+1.0166% (SVP) and 3.8904% (TZVP); the earlier retained campaign also observes
+0.9267% and 3.4627% slowdowns. Both campaigns have nonoverlapping within-arm
+ranges, so the repeated adverse endpoint must not be dismissed as noise. The
+generic comparison gate requires at least five interleaved pairs and improvement
+beyond max(2%, twice the summed relative MAD); no campaign-specific tolerated
+regression was declared. Numerical qualification of the distinct fitted
+Hamiltonian is separate from accepting this replay tradeoff or promoting a
+performance default. That acceptance remains unresolved; force gains do not
+waive it, and no new optimization or GPU campaign is implied here.
 
 The stable candidate's maximum warm-force replay changes are 7.69e-10 and
 5.50e-11 Eh/bohr for SVP and TZVP respectively, replacing the earlier 1e-6
@@ -122,17 +135,29 @@ controlled small-grid observation, not default-grid or large-system throughput.
 ## Reproduce
 
 From the checkout root with the documented CPU/CUDA builds and dependencies,
-after restoring the evidence into ignored storage:
+after restoring the evidence into ignored storage, choose a new campaign directory.
+The live CPU wrapper rejects an existing file, directory or symlink before any
+endpoint, report, oracle or log opens. Report and unchanged all-endpoint oracle
+commands run inside that same fresh campaign; the progress journal and logs
+retain their failing stage/status and any partial oracle receipts. The live
+endpoint runner reserves each output exclusively,
+journals initialization/preparation/runtime failures and hashes the calculator's
+actually loaded library outside the preparation timer. Calculator creation and
+native preparation remain included in the reported preparation total.
+
+The archived scripts are immutable measurement sources, not safe live rerun
+entrypoints. In particular, their library hashes describe the configured
+`GENERATIVEQC_LIBRARY` file; they did not query a potentially selected CUDA
+profile. No profile substitution is established by the retained records. New
+runs use `python -m benchmarks.range_separated_df`, including for a separately
+scheduled CUDA run; do not infer a new GPU qualification from this runner repair.
+The workload, geometry sequence and numerical oracle gates remain unchanged.
 
 ```bash
 restored=build/validation/range-df-evidence
 export RANGE_DF_HARNESS_DIRECTORY="$restored/range-separated-df-20261015"
 export RANGE_DF_EVIDENCE_DIRECTORY=build/validation/range-df-rerun
-bash "$restored/range-separated-df-stable-20261015/run-cpu.sh"
-export PYTHONPATH=python:tests/python:.
-python "$restored/range-separated-df-stable-20261015/oracle-all.py" \
-  "$RANGE_DF_EVIDENCE_DIRECTORY"/raw/cpu-*.json \
-  --output "$RANGE_DF_EVIDENCE_DIRECTORY/oracle-all-cpu.json"
+bash benchmarks/run_range_separated_df_cpu.sh
 ```
 
 GPU qualification and measurements must use finite Slurm allocations, preserve

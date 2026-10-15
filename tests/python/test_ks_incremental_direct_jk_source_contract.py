@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,11 +60,6 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
         "!precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1"
         in ks
     )
-    assert (
-        "const bool strict_final_closure =\n"
-        "        incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();"
-        in ks
-    )
     assert "++output.incremental_direct_jk.post_scf_full_builds;" in ks
     assert "incremental_anchor_range_exchange" in ks
     assert "output.incremental_direct_jk.anchor_updates" in ks
@@ -94,3 +96,53 @@ def test_cuda_ks_incremental_storage_is_explicitly_budgeted() -> None:
     assert "reserve(incremental_anchor_density, elements);" in ks
     assert "reserve(incremental_delta_density, elements);" in ks
     assert "reserve(incremental_anchor_j, matrix);" in ks
+
+
+def test_cuda_ks_final_closure_domain(tmp_path: Path, native_cxx: NativeCxx) -> None:
+    """Execute the production gate for every existing and budget-Fock domain."""
+    ks = _source("src/dft/cuda_ks.cpp")
+    begin = ks.index("const bool budget_final_validation =")
+    end = ks.index(";", ks.index("const bool strict_final_closure =", begin))
+    gate = ks[begin : end + 1]
+    source = tmp_path / "final_closure.cpp"
+    source.write_text(
+        """
+#include <cassert>
+#include <cmath>
+#include <vector>
+#include <initializer_list>
+struct Provider {
+  struct System { std::vector<int> ecp_terms; } value;
+  const System& system() const { return value; }
+};
+struct Options { double density_tolerance; };
+int main() {
+  for (bool budget_fock : {false, true})
+    for (bool budget_stationarity : {false, true})
+      for (double tolerance : {1e-6, std::nextafter(1e-4, 0.0), 1e-4,
+                               std::nextafter(1e-4, 1.0), 1e-3})
+        for (bool incremental_direct_jk : {false, true})
+          for (unsigned spins : {1U, 2U})
+            for (bool ecp : {false, true}) {
+              Provider provider;
+              if (ecp) provider.value.ecp_terms.push_back(1);
+              const Options options{tolerance};
+"""
+        + gate
+        + """
+              bool expected = incremental_direct_jk || spins == 2 || ecp;
+              if (budget_fock && (!budget_stationarity || tolerance < 1e-4))
+                expected = true;
+              assert(strict_final_closure == expected);
+            }
+}
+""",
+        encoding="utf-8",
+    )
+    executable = native_cxx.build_executable(
+        [source], tmp_path / "final_closure", compile_args=["-std=c++17"]
+    )
+    completed = subprocess.run(
+        [executable], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

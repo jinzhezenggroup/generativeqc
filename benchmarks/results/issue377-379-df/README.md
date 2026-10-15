@@ -146,3 +146,13 @@ a pinned library can have an older reconstruction base.
 Compact endpoint files omit only repeated basis metadata, which is retained
 once, and record the full original JSON hash. Historical provisional probe
 results with an incorrect lane label are excluded from final causal counts.
+
+## Lossless storage
+
+The source-validation record and the GPU4PySCF water-32mer record are retained as
+`.json.gz` files to make room for subsequent DF qualification within the unchanged
+repository storage limit. `gzip -dc FILE.json.gz` restores the exact original JSON
+bytes. Their expanded SHA-256 values remain
+`08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569`
+and `33164661464fc63b15e277d97755053cec3188f7063e0219624a41676b955aa6`,
+respectively. No measured values, scientific decisions or source identities change.

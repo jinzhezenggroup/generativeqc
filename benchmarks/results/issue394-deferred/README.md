@@ -6,7 +6,8 @@ measurement. Work stopped when the user requested consolidation; the running
 full-library build was interrupted. This is an unqualified prototype, not a
 measured performance failure or a production optimization.
 
-`prototype.patch` preserves the source and tests against
+`prototype.patch.gz` losslessly preserves the original `prototype.patch` source
+and tests against
 `1c3f2ab8d6df6f06bee526b89a807511ef726301`. It contains identity response folding,
 one-shell ownership, independently generated one/two-root quadrature, SSS moment
 IR lowering, explicit math policy and immutable prepared-source provenance.
@@ -37,3 +38,20 @@ convergence and strict numerical gates must be preserved.
 All real GPU validation must use finite Slurm `main` allocations with
 `--gres=gpu:5090:1` and preserve the assigned device visibility. No new benchmark
 or GPU validation was run to prepare this consolidation.
+
+## Restore the archived patch
+
+`prototype-storage.json` binds both the compressed bytes and the exact original
+bytes recorded in unchanged `status.json`. Decode with `gzip -dc` for inspection.
+The supported offline Git recovery tool also verifies the original identity and
+refuses an existing output destination:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue394-deferred/prototype.patch \
+  --manifest benchmarks/results/issue394-deferred/prototype-storage.json \
+  --output .artifacts/issue394-prototype.patch
+```
+
+Recovery uses existing commit `5c9ce272b4a5a367a9b962e31a76248b4d5bc59c`;
+no external archive, release asset or rewritten history is required.

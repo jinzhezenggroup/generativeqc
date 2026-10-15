@@ -65,6 +65,10 @@ struct FinalStateLimits {
   // only that original candidate to prove stationarity; correction steps,
   // forced rebuilds and physical-reference export remain canonical.
   bool allow_stationary_reuse{};
+  /** Explicit method-owner budget for physical stationarity and density
+   * consistency. Absence preserves strict historical gates. This never
+   * relaxes electron trace, idempotency or canonical diagonalization. */
+  std::optional<double> stationarity_tolerance;
 };
 
 struct FinalStateDiagnostic {

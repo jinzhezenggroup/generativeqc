@@ -42,6 +42,7 @@ struct generativeqc_ks_snapshot {
   std::vector<generativeqc::scf::reference::Matrix> stationary_density;
   std::vector<generativeqc::scf::reference::Matrix> stationary_weighted_density;
   double energy{};
+  double stationarity_tolerance{1e-8};
   bool all_electron{};
 };
 
@@ -286,6 +287,7 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
                            std::all_of(source.system.atoms.begin(), source.system.atoms.end(),
                                        [](const auto& atom) { return atom.ecp_core == 0; });
     result->energy = state.components.total();
+    result->stationarity_tolerance = state.stationarity_tolerance.value_or(1e-8);
     const auto& identity = state.identity;
     const auto n = state.orbitals.at(0).values.size();
     auto& values = result->values;
@@ -379,6 +381,21 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
     result->stationary_weighted_density = std::move(source.state.weighted_density);
     std::copy(info.begin(), info.end(), metadata);
     *output = result.release();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+/** Authenticate the method-owner physical allowance, never a Python estimate. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value) {
+  if (!batch || !snapshot || !value) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    *value = snapshot->stationarity_tolerance;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);

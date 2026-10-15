@@ -142,6 +142,11 @@ qualification root; earlier failures/pre-promotion runs are retained separately.
 
 ## References
 
+The fixed 32-MiB automatic allowance is superseded by
+`2026-10-15-xc-point-capacity-by-work-shape.md`: 32 MiB per density-product jet,
+with exact explicit caps and an automatic 32-MiB retry. The historical evidence
+and limits in this note remain unchanged.
+
 - #2073; PR #2081; default-promotion owner #1598; source-specialization sibling #2072.
 - `2026-10-07-xc-point-batches.md`
 - `docs/developer/xc_native_cuda.md`

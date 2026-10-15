@@ -301,7 +301,12 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                double* coulomb, double* alpha_exchange,
                                                double* beta_exchange, int* numerical_error,
                                                bool mixed_coulomb, std::string& detail,
-                                               std::uint64_t* mixed_coulomb_work_count) {
+                                               std::uint64_t* mixed_coulomb_work_count,
+                                               bool mixed_exchange) {
+  if (mixed_exchange && !mixed_coulomb) {
+    detail = "mixed exchange requires the shared mixed Coulomb recurrence";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   if (!mixed_coulomb && mixed_coulomb_work_count) {
     detail = "prepared CUDA Fock received a mixed-work counter for strict execution";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -322,7 +327,7 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
     return mixed_coulomb ? enqueue_cuda_direct_jk_device_mixed_j(
                                exact, plan.strategy().spec, density, beta, matrix_elements, coulomb,
                                alpha_exchange, beta_exchange, numerical_error, detail,
-                               mixed_coulomb_work_count)
+                               mixed_coulomb_work_count, mixed_exchange)
                          : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
                                                          matrix_elements, coulomb, alpha_exchange,
                                                          beta_exchange, numerical_error, detail);

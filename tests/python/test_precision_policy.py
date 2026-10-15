@@ -216,6 +216,199 @@ def test_fast_unsupported_backend_records_explicit_fp64_audit(
     assert report.budget == TargetErrorBudget(1e-5, 1e-4, 3e-5)
 
 
+@pytest.mark.parametrize(
+    "method",
+    (
+        "lda-rks",
+        "pbe-rks",
+        "pbe0-rks",
+        "b3lyp-rks",
+        "r2scan-rks",
+        "m06-2x-rks",
+        "wb97m-v-rks",
+    ),
+)
+def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
+    method: str,
+) -> None:
+    from generativeqc.ks import resolve_ks_options
+
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(
+            generativeqc_application_fock_precision_version_v2=lambda: 2
+        ),
+        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
+        _density_fitting_mode=0,
+        _dispersion_method_ir=None,
+    )
+    budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
+    select = implementation._budget_fock_controls
+    assert select(calculator, budget, {}) == {
+        "energy_tolerance": 1e-6,
+        "density_tolerance": 1e-4,
+        "screening_tolerance": 1e-10,
+    }
+    strict = {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-14,
+    }
+    assert select(calculator, budget, strict) == strict
+    for requested, expected in ((1e-6, 1e-6), (5e-5, 5e-5), (1e-2, 1e-4)):
+        selected = select(calculator, budget, {"density_tolerance": requested})
+        assert selected["density_tolerance"] == expected
+        assert selected["energy_tolerance"] == 1e-6
+        assert selected["screening_tolerance"] == 1e-10
+    for tighter in (
+        TargetErrorBudget(1e-6, 1e-4),
+        TargetErrorBudget(1e-5, 1e-5),
+        TargetErrorBudget(1e-5, 1e-4, 1e-5),
+    ):
+        assert select(calculator, tighter, {}) == {}
+    calculator._density_fitting_mode = 1
+    assert select(calculator, budget, {}) == {}
+    calculator._density_fitting_mode = 0
+    calculator._dispersion_method_ir = object()
+    assert select(calculator, budget, {})["density_tolerance"] == 1e-4
+    calculator._dispersion_method_ir = None
+    calculator._ks_options = resolve_ks_options(
+        method, KsOptions(grid=GridSpec(24, 8, 16))
+    )
+    assert select(calculator, budget, {})["density_tolerance"] == 1e-4
+    calculator._ks_options = resolve_ks_options(
+        method, KsOptions(grid=GridSpec(48, 16, 32), xc_schedule="host_unfused")
+    )
+    assert select(calculator, budget, {}) == {}
+    calculator._library = SimpleNamespace()
+    assert select(calculator, budget, {}) == {}
+    calculator._ks_options = resolve_ks_options(
+        method, KsOptions(grid=GridSpec(48, 16, 32))
+    )
+    calculator._library = SimpleNamespace(
+        generativeqc_application_fock_precision_version_v1=lambda: 1
+    )
+    assert select(calculator, budget, {}) == {}
+
+
+@pytest.mark.parametrize("missing", [None, "exchange_k", "coulomb_recurrence"])
+def test_budget_fock_requires_actual_fp32_exchange_work(
+    backend: SimpleNamespace, missing: str | None
+) -> None:
+    work = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": True,
+        "strict_stage_fock_builds": 2,
+        "mixed_stage_fock_builds": 5,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": name,
+                "compute": "fp32",
+                "accumulation": "fp64",
+                "arithmetic_mode": "mixed",
+                "count": 0 if name == missing else 5,
+            }
+            for name in ("coulomb_j", "exchange_k", "coulomb_recurrence")
+        ],
+    }
+    backend.outputs = [result(executed_backend="cuda", precision=work)]
+    if missing:
+        backend.outputs.append(result(executed_backend="cuda"))
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._fast_fock = True
+    from generativeqc.ks import resolve_ks_options
+
+    calculator._candidate._ks_options = resolve_ks_options(
+        "pbe0-rks", KsOptions(grid=GridSpec(48, 16, 32))
+    )
+    output = calculator.singlepoint(ATOMS)
+    report = output.precision_validation
+    assert report.status == ("observed_met" if missing else "qualified_budget_fock")
+    assert report.solve_count == (2 if missing else 1)
+
+
+def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
+    backend: SimpleNamespace,
+) -> None:
+    backend.outputs = [
+        RuntimeError("injected Fock failure"),
+        result(executed_backend="cuda"),
+        result(executed_backend="cuda"),
+    ]
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._fast_fock = True
+    report = calculator.singlepoint(ATOMS).precision_validation
+    assert report.status == "observed_met" and report.solve_count == 3
+    assert "budget_fock_failed_fp64_fallback" in report.fallback_reasons
+    assert report.solves[0].error == "RuntimeError: injected Fock failure"
+    assert report.solves[0].iterations is None and report.solves[0].fock_builds is None
+
+
+@pytest.mark.parametrize(
+    ("method", "has_exchange"),
+    (
+        ("pbe-rks", False),
+        ("r2scan-rks", False),
+        ("b3lyp-rks", True),
+        ("m06-2x-rks", True),
+        ("wb97m-v-rks", True),
+    ),
+)
+def test_budget_fock_evidence_follows_the_exchange_graph(
+    method: str, has_exchange: bool
+) -> None:
+    """J-only graphs do not invent K, and strict range work cannot prove mixed K."""
+    from generativeqc.ks import resolve_ks_options
+
+    calculator = SimpleNamespace(
+        _ks_options=resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32)))
+    )
+    work = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": True,
+        "strict_stage_fock_builds": 2,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": name,
+                "compute": "fp32",
+                "accumulation": "fp64",
+                "arithmetic_mode": "mixed",
+                "count": 5,
+            }
+            for name in ("coulomb_j", "coulomb_recurrence")
+        ],
+    }
+    select = implementation._budget_fock_work_admitted
+    assert select(calculator, work) is not has_exchange
+    work["operators"].append(
+        {
+            "name": "exchange_k",
+            "compute": "fp64",
+            "accumulation": "fp64",
+            "arithmetic_mode": "strict",
+            "count": 5,
+        }
+    )
+    assert select(calculator, work) is not has_exchange
+    work["operators"].append(
+        {
+            "name": "exchange_k",
+            "compute": "fp32",
+            "accumulation": "fp64",
+            "arithmetic_mode": "mixed",
+            "count": 5,
+        }
+    )
+    assert select(calculator, work)
+    work["strict_refinement_applied"] = False
+    assert not select(calculator, work)
+
+
 def test_fast_budget_selects_native_arithmetic_without_an_extra_solve(
     backend: SimpleNamespace,
 ) -> None:
@@ -615,7 +808,7 @@ def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize("method", ("m06-2x-rks", "mn15-rks"))
 @pytest.mark.parametrize("profile", ("fast", "audit_auto"))
-def test_split_hybrid_policy_retains_strict_scf_when_auto_is_unavailable(
+def test_split_hybrid_policy_uses_the_shared_auto_scf(
     cuda_constructor: None, method: str, profile: str
 ) -> None:
     calculator = PrecisionCalculator(
@@ -625,20 +818,20 @@ def test_split_hybrid_policy_retains_strict_scf_when_auto_is_unavailable(
         ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
         policy=profile,
     )
-    assert calculator._candidate_precision == "fp64"
+    assert calculator._candidate_precision == "auto"
     assert calculator._candidate.capabilities.supported_properties == {
         "energy",
         "forces",
     }
     assert calculator.capabilities.supported_properties == {"energy", "forces"}
-    with pytest.raises(NotImplementedError, match="split-global-hybrid SCF"):
-        Calculator(
-            method=method,
-            device="cuda",
-            precision="auto",
-            initial_guess=None,
-            ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
-        )
+    direct = Calculator(
+        method=method,
+        device="cuda",
+        precision="auto",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
+    )
+    assert direct.capabilities.supported_properties == {"energy", "forces"}
 
 
 @pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "m06-2x-rks"))
