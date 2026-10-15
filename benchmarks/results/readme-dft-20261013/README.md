@@ -268,9 +268,14 @@ independent CUDA tests qualify the changes; intrusive
 profilers, setup failures and compiler-forbidden controls stay outside clean
 benchmark populations.
 
-[followup-prior.json.xz](followup-prior.json.xz) losslessly retains #2401's prior
-summaries, manifest and report, including failed probes, timeouts and all scalar
-observations. The old unqualified DF probes also remain in the current DF summary
+The earlier `followup-prior.json.xz` report snapshot remains byte-for-byte in
+existing Git history, including failed probes, timeouts and scalar observations.
+Its revision, blob, size and SHA-256 are recorded under
+`benchmark_issue_followup.history` in `manifest.json`. Recover it without a new
+external archive using
+`git show cb8781fb1bdcfb9166ef07cfed463c0482dea752:benchmarks/results/readme-dft-20261013/followup-prior.json.xz > .artifacts/followup-prior.json.xz`.
+Current endpoint/reference records and numerical gates are unchanged. The old
+unqualified DF probes also remain in the current DF summary
 as historical observations. [source-campaigns.json.xz](source-campaigns.json.xz),
 [force-memory.json.xz](force-memory.json.xz) and the
 [reference replay audit](reference-replay-audit.json) retain earlier evidence.

@@ -247,6 +247,11 @@
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
       "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
     },
+    "vv10-warp-packet-20261015": {
+      "owner": "guarded FP64 rotating-partner VV10 pair traversal",
+      "reason": "Compact complete 3/12-atom off/on E/F records, independent references, exact source/library inventory, semantic pair work and sanitizer receipts. Larger original-limit failures remain separately retained; no profiler database, binary, storage-budget increase or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-warp-packet-20261015/README.md"
+    },
     "vv10-wide-pair-20261014": {
       "owner": "experimental large-domain VV10 pair schedule",
       "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
@@ -572,14 +577,6 @@
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 359344,
-      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
-      "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
@@ -610,6 +607,14 @@
       "role": "Exact source-bound endpoint records, reference force vectors and final failure outcomes",
       "bytes": 244288,
       "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
+    },
+    {
+      "path": "benchmarks/results/vv10-warp-packet-20261015/evidence.json.xz",
+      "family": "vv10-warp-packet-20261015",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independent E/F, semantic pair work and source-bound packet qualification",
+      "bytes": 142064,
+      "sha256": "134ddb110994824e29195af84243c8c4bb879db07b2b4b0b943d52cba54e6dc5"
     },
     {
       "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",

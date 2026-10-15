@@ -1,0 +1,100 @@
+{
+  "schema": "generativeqc.vv10-packet-default.v1",
+  "base_commit": "cb8781fb1bdcfb9166ef07cfed463c0482dea752",
+  "native_source_identity": "9f72f8400dd4c6a2fdc8967a91b855f30c3765db1c9a49c54e7c9bea1fcfcbb4",
+  "library_sha256": "6d9c1fd0cb2face995e15ff9881615417c9bf8495880be29f8ec8296f2b1eb80",
+  "default_enabled": true,
+  "automatic_scope": "Existing molecular/numerical/output admission; sm_120; at least 65536 nominal points",
+  "passed_tests": {
+    "host.xml": 238,
+    "admission-oracle.xml": 752,
+    "runtime.xml": 47,
+    "default-memcheck.xml": 6,
+    "default-synccheck.xml": 6,
+    "molecular-oracle.xml": 6
+  },
+  "points": [
+    {
+      "atoms": 3,
+      "prefix": "endpoint-default/wb97m-v/3/",
+      "phases_seconds": {
+        "cold": 7.385411774972454,
+        "warm": 0.3830439989687875,
+        "moved": 5.563496242044494,
+        "moved-warm": 0.38281074492260814
+      },
+      "work_by_phase": {
+        "cold": {
+          "calls": 1,
+          "iterations": 23,
+          "fock_builds": 24,
+          "scf_pair_sweeps": 3
+        },
+        "warm": {
+          "calls": 5,
+          "iterations": 5,
+          "fock_builds": 5,
+          "scf_pair_sweeps": 0
+        },
+        "moved": {
+          "calls": 1,
+          "iterations": 16,
+          "fock_builds": 17,
+          "scf_pair_sweeps": 3
+        },
+        "moved-warm": {
+          "calls": 5,
+          "iterations": 5,
+          "fock_builds": 5,
+          "scf_pair_sweeps": 0
+        }
+      },
+      "energy_error_max": 9.094947017729282e-13,
+      "force_error_max": 5.529332547382637e-11
+    },
+    {
+      "atoms": 12,
+      "prefix": "endpoint-default/wb97m-v/12/",
+      "phases_seconds": {
+        "cold": 29.845015644910745,
+        "warm": 1.6397407399490476,
+        "moved": 18.948243514983915,
+        "moved-warm": 1.655768214026466
+      },
+      "work_by_phase": {
+        "cold": {
+          "calls": 1,
+          "iterations": 36,
+          "fock_builds": 37,
+          "scf_pair_sweeps": 4
+        },
+        "warm": {
+          "calls": 5,
+          "iterations": 5,
+          "fock_builds": 5,
+          "scf_pair_sweeps": 0
+        },
+        "moved": {
+          "calls": 1,
+          "iterations": 17,
+          "fock_builds": 18,
+          "scf_pair_sweeps": 3
+        },
+        "moved-warm": {
+          "calls": 5,
+          "iterations": 5,
+          "fock_builds": 5,
+          "scf_pair_sweeps": 0
+        }
+      },
+      "energy_error_max": 3.183231456205249e-12,
+      "force_error_max": 2.249433972423276e-11
+    }
+  ],
+  "evidence": {
+    "path": "evidence.json.xz",
+    "bytes": 127676,
+    "sha256": "e40db39a37437315c288303537e6e15b258f80e56422f9ee1aaac5183de74994",
+    "uncompressed_sha256": "2c79f2881a46fbb0ce78fc7d030fe8558fdcf23782cdc238c09c1069d279c223"
+  }
+}

@@ -117,14 +117,15 @@ bool parallel_pair_outputs_disjoint(std::size_t npoint, const double* points, co
   return true;
 }
 
-/** Candidate scope: large sm_120 molecular VV10, with an explicit ordered fallback.
+/** Default scope: large sm_120 molecular VV10, with an explicit ordered fallback.
  * Explicit parallel selection admits small real-device qualification fixtures;
  * neither preference bypasses numerical or output-lease guards. */
 bool prefer_parallel_pairs(std::size_t npoint, int device_id) {
   const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
   if (selector && *selector)
     return std::string_view(selector) == "parallel" ||
-           std::string_view(selector) == "parallel-wide";
+           std::string_view(selector) == "parallel-wide" ||
+           std::string_view(selector) == "parallel-packet";
   if (npoint < 65536) return false;
   int major = 0, minor = 0;
   runtime::cuda_resource_check(
@@ -422,7 +423,10 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
-          if (selector && std::string_view(selector) == "parallel-wide") {
+          if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
+            generated::parallel_pair_packet_kernel<Geometry>
+                <<<680, threads, 0, stream>>>(input, output);
+          } else if (selector && std::string_view(selector) == "parallel-wide") {
             // Both kernels use the same admitted device count. Exactly one
             // executes, preserving small-domain occupancy without a host read.
             generated::parallel_pair_kernel<Geometry, 4, false, true>
