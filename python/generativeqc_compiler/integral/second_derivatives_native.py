@@ -113,7 +113,7 @@ def emit_second_derivative_primitive(
             "full_range": "Full",
             "long_range": "Long",
             "short_range": "Short",
-        }[radial.family.value]
+        }[radial.family]
         lines += [
             "  Geometry geometry{};",
             "  if (!generativeqc::integrals::make_eri_geometry<Geometry, 14>(exponents, centers,",
