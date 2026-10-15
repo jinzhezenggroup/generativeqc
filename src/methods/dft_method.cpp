@@ -667,6 +667,17 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
+  generativeqc_status resident_fock_sources(const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->resident_final_fock_sources(expected, binding, detail);
+#endif
+    detail = "resident Fock sources require a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
   generativeqc_status resident_grid_reference(const dft::CudaKsFinalStateToken& expected,
                                               dft::CudaKsResidentGridBinding& binding,
                                               std::string& detail) {
@@ -2674,6 +2685,17 @@ class KsPreparedBatch final : public PreparedBatch,
                                              std::string& detail, bool prepare) override {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->resident_orbital_frame(expected, binding, detail, prepare);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_fock_sources(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_fock_sources(expected, binding, detail);
     binding = {};
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

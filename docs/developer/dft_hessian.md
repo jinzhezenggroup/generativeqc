@@ -298,16 +298,46 @@ default Libxc and independently qualify physical indefinite tangents. Both use
 the same value/response gates as the standalone component. These tests cover
 the live fixed-grid component only, not a complete molecular Hessian.
 This is a correctness-first dense component, not a scaling/performance claim.
-The live prepared-owner adapter binds its basis/grid/density storage, not a
-complete physical induced-Fock provider. It does not supply J/K, nuclear
-grid motion, integral/DF/ECP derivatives or stationary Hessian assembly.
+The grid adapter alone authenticates basis/grid/density storage, not a complete
+physical model. `src/dft/cuda_ks_wb97mv_response.hpp` now supplies the enclosing
+live-owner physical induced-Fock component. It verifies the entire native
+WB97M-V identity, spin populations, primary approximation and exact LR
+correction, then reconstructs **the actual accepted F** from H, full-range J/K,
+exact LR exchange and the retained semilocal/VV10 value potential before exposing
+an action. Copied labels do not replace reborrowing the actual source pointers.
+The host-only `CudaKsResidentFockBinding` is available only after scalar canonical
+validation, and is revoked by a new solve just like the orbital/grid leases.
 
-The native CPKS component is independently qualified against displaced
-self-consistent generalized eigensolves of a linear coupled-spin test functional,
-**not** a complete molecular WB97M-V provider. The live-bound grid component still
-needs composition with exact/fitted J/K and the
-correct long-range correction. Complete shell coverage, moving-grid/integral/
-DF/ECP response and stationary molecular assembly also require integration.
+Exact J/K and LR actions use an independent, unscreened canonical Direct source
+on the borrowed producer stream, with caller-owned compensation and census
+planes. Geometry-only screening makes the operator linear for arbitrary signed
+directions. The primary SCF source's scratch/caches are not replayed or mutated.
+For admitted single-system, full-rank DF sources, a read-only source seam borrows
+the immutable raw-integral source and actual whitening operator. Raw values are
+generated directly into separate response storage without device switching or
+revoking occupied-projection leases. The compiler forms W-transpose-W in the
+source's declared layout, then reuses the **density VJP of the existing fitted
+energy**. It does not fit LR exchange, substitute full exchange or apply an
+occupied-factor RI-K formula to an indefinite density direction. Missing raw
+sources or device whitening, rank-truncated metrics, and mixed primary
+approximations fail closed.
+
+This correctness schedule materializes raw three-centers, inverse and affine
+intermediates. Device bytes, conservative Direct ERI work and compiler-enumerated
+IR scalar-term visits have separate checked bounds; the latter include retained
+AD primal validation dependencies. Optional canonical Direct storage is an
+explicit admission requirement, not permission for a density-screened fallback.
+No endpoint performance claim follows from this schedule. Preparation allocates;
+actions do not allocate, compile, run Python/CPU contractions or switch devices.
+They support the coupled `solve_cuda_cpks` callback and reauthenticate before
+publication. Real molecular RKS/UKS Direct/DF tests exercise both the physical
+action and CPKS D/W responses with Python/compiler paths unavailable. Independent
+PySCF raw/full-range/LR integrals, Libxc/VV10 potential differences and displaced
+generalized-eigenprojector dense solves provide numerical acceptance; the
+synthetic displaced-SCF tests remain separate regression coverage.
+
+Complete shell coverage, moving-grid/integral/DF/ECP nuclear response and
+stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 
@@ -337,6 +367,9 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py \
   -k live_molecular
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_fock.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
 ```

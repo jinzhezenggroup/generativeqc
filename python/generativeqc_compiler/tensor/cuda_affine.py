@@ -23,7 +23,7 @@ def emit_affine_cuda(
 ) -> str:
     """Emit checked borrowed-arena launchers, binding spaces by identity/name.
 
-    Only FP64 input, uniform constant, add, multiply, einsum, transpose and
+    Only FP64 input, uniform constant, add, multiply, einsum, sum-reduce, transpose and
     broadcast are admitted. Slices, selections, nonuniform witness literals and
     other operations fail at generation time. Empty contractions sum to zero.
     All device arithmetic and finite checks run on the caller's CUDA stream.
@@ -120,6 +120,7 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
                 "add",
                 "multiply",
                 "einsum",
+                "reduce",
                 "transpose",
                 "broadcast",
             ):
@@ -142,7 +143,9 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
             dimensions = dims(node)
             coordinates = [f"coordinate_{axis}" for axis in range(len(dimensions))]
             indexed_dimensions = (
-                dimensions if node.op in ("einsum", "transpose", "broadcast") else []
+                dimensions
+                if node.op in ("einsum", "reduce", "transpose", "broadcast")
+                else []
             )
             for axis, extent in enumerate(indexed_dimensions):
                 text.append(
@@ -176,8 +179,14 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
                     f"operand_0[{address(input_coordinates, dims(node.inputs[0]))}]"
                 )
             else:
-                labels = node.attrs["labels"]
-                output_labels = node.attrs["output"]
+                if node.op == "reduce":
+                    labels = (tuple(range(len(node.inputs[0].spec.indices))),)
+                    output_labels = tuple(
+                        axis for axis in labels[0] if axis not in node.attrs["axes"]
+                    )
+                else:
+                    labels = node.attrs["labels"]
+                    output_labels = node.attrs["output"]
                 label_dimensions = {}
                 for source, source_labels in zip(node.inputs, labels, strict=True):
                     label_dimensions.update(
@@ -193,7 +202,9 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
                         f"    for (std::size_t {coordinate} = 0; {coordinate} < "
                         f"{label_dimensions[label]}; ++{coordinate}) {{"
                     )
-                terms = [factor(node.attrs["coefficient"])]
+                terms = [
+                    factor((1, 1) if node.op == "reduce" else node.attrs["coefficient"])
+                ]
                 for operand, (source, source_labels) in enumerate(
                     zip(node.inputs, labels, strict=True)
                 ):

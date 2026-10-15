@@ -54,14 +54,22 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.hpp"
     ARGS --output "${_grid}"
     COMMENT "Generating compiler-AD native WB97M-V grid response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}"
+  set(_fock "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_fock_response.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_fock}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_wb97mv_fock_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_response.hpp"
+    ARGS --output "${_fock}"
+    COMMENT "Generating compiler-AD native WB97M-V physical Fock response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
-  target_include_directories(${target} PUBLIC "${PROJECT_SOURCE_DIR}/src")
+  target_include_directories(${target} PUBLIC "${PROJECT_SOURCE_DIR}/src"
+    PRIVATE "${PROJECT_SOURCE_DIR}/include")
   target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(${target} PUBLIC CUDA::cudart)
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")

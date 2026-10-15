@@ -4,13 +4,16 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "dft/cuda_ks_grid_reference.hpp"
+#include "dft/cuda_ks_wb97mv_response.hpp"
 #include "dft/semilocal_family.hpp"
 #include "molecule/basis.hpp"
+#include "response/cuda_ks_cpks_reference.hpp"
 
 namespace {
 using namespace generativeqc;
@@ -52,7 +55,9 @@ void array(const char* name, const std::vector<double>& values) {
 /** Test-only molecular fixture: the production adapter borrows all panels from
  * this actual batch. Host observations below feed independent oracle tests;
  * they are not part of native preparation or response execution. */
-void run(bool unrestricted, bool physical) {
+void run(bool unrestricted, const std::string& mode) {
+  const bool physical = mode == "physical";
+  const bool fock = mode == "fock" || mode == "df-fock";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -105,6 +110,9 @@ void run(bool unrestricted, bool physical) {
   descriptor.density_tolerance = 1e-10;
   descriptor.screening_tolerance = 1e-14;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  descriptor.density_fitting_mode =
+      mode == "df-fock" ? GENERATIVEQC_DENSITY_FITTING_CUDA : GENERATIVEQC_DENSITY_FITTING_NONE;
+  descriptor.density_fitting_relative_threshold = 1e-10;
   descriptor.ks_options = &options;
   core::ContextState context;
   context.requested_backend = context.executed_backend = GENERATIVEQC_BACKEND_CUDA;
@@ -186,6 +194,83 @@ void run(bool unrestricted, bool physical) {
   array("curvature", curvature);
   array("potential", value);
   array("response", action);
+  dft::CudaKsWb97mvResponse full_response;
+  if (fock) {
+    dft::CudaKsWb97mvResponseOptions full_controls;
+    full_controls.grid = controls;
+    for (unsigned bound = 0; bound < 3; ++bound) {
+      auto insufficient = full_controls;
+      if (bound == 0) insufficient.max_device_bytes = 1;
+      if (bound == 1) insufficient.max_affine_term_visits = 1;
+      if (bound == 2) insufficient.max_direct_eri_evaluations = 1;
+      require(full_response.prepare(*batch, 0, token, insufficient, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "physical response ignored its explicit capacity/work bound");
+    }
+    require(full_response.prepare(*batch, 0, token, full_controls, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    check(full_response.apply(input, output, lease.stream));
+    array("fock_response", download(output, elements));
+    dft::CudaKsResidentFockBinding fock_source;
+    dft::CudaKsResidentOrbitalFrameBinding frame;
+    require(methods::detail::dft_cuda_resident_fock_sources(
+                *batch, 0, token, fock_source, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                methods::detail::dft_cuda_resident_orbital_frame(*batch, 0, token, frame, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    array("hcore", download(fock_source.hcore, shape.nao * shape.nao));
+    array("fock", download(fock_source.fock, elements));
+    array("overlap", download(frame.overlap, shape.nao * shape.nao));
+    require(full_response.apply(input, input, lease.stream) == cudaErrorInvalidValue &&
+                full_response.apply(input, const_cast<double*>(frame.density), lease.stream) ==
+                    cudaErrorInvalidValue &&
+                download(lease.density, elements) == density,
+            "physical response accepted aliased output or changed its reference");
+    std::vector<double> bad_input = direction;
+    bad_input[0] = std::numeric_limits<double>::quiet_NaN();
+    const std::vector<double> unchanged(elements, 27);
+    check(cudaMemcpyAsync(input, bad_input.data(), elements * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    check(cudaMemcpyAsync(output, unchanged.data(), elements * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    require(full_response.apply(input, output, lease.stream) == cudaErrorInvalidValue &&
+                download(output, elements) == unchanged,
+            "nonfinite physical response published an output");
+    check(cudaMemcpyAsync(input, direction.data(), elements * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    response::CudaKsCpksReference cpks_reference(*batch, 0, token);
+    require(cpks_reference.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    response::CudaCpksOptions cpks_controls;
+    cpks_controls.gmres.restart = 12;
+    cpks_controls.gmres.max_iterations = 120;
+    cpks_controls.gmres.absolute_tolerance = 1e-12;
+    cpks_controls.gmres.relative_tolerance = 1e-10;
+    const auto cpks_shape = cpks_reference.shape();
+    std::size_t cpks_bytes{};
+    check(response::cuda_cpks_workspace(cpks_shape, cpks_controls, cpks_bytes));
+    auto* cpks_arena = storage.allocate((cpks_bytes + sizeof(double) - 1) / sizeof(double));
+    auto* overlap_direction = storage.allocate(shape.nao * shape.nao);
+    auto* weighted_direction = storage.allocate(elements);
+    check(cudaMemsetAsync(overlap_direction, 0, shape.nao * shape.nao * sizeof(double),
+                          lease.stream));
+    response::CudaCpksResult cpks_result;
+    check(response::solve_cuda_cpks(cpks_shape, cpks_controls, cpks_reference.reference(), input,
+                                    overlap_direction, dft::CudaKsWb97mvResponse::induced_fock,
+                                    &full_response, output, weighted_direction, cpks_arena,
+                                    cpks_bytes, lease.stream, cpks_result));
+    require(cpks_result.converged(), "physical molecular CPKS did not converge");
+    array("cpks_density", download(output, elements));
+    array("cpks_weighted", download(weighted_direction, elements));
+    const auto work = full_response.work();
+    std::cout << ",\"capacity_alias_finite_gates\":true,\"cpks_actions\":"
+              << cpks_result.induced_fock_actions << ",\"fock_actions\":" << work.actions
+              << ",\"fock_device_bytes\":" << work.device_bytes
+              << ",\"affine_reference_terms\":" << work.affine_reference_terms
+              << ",\"affine_action_terms\":" << work.affine_action_terms
+              << ",\"reference_eris\":" << work.reference_eris
+              << ",\"response_eris\":" << work.response_eris;
+  }
   solve();
   std::vector<double> sentinel(elements, 27);
   check(cudaMemcpyAsync(output, sentinel.data(), elements * sizeof(double), cudaMemcpyHostToDevice,
@@ -194,6 +279,11 @@ void run(bool unrestricted, bool physical) {
               reference.shape().nao == 0,
           "native grid response accepted a revoked molecular owner");
   require(download(output, elements) == sentinel, "revoked molecular response published output");
+  if (fock) {
+    require(full_response.apply(input, output, lease.stream) == cudaErrorInvalidResourceHandle,
+            "physical induced Fock accepted a revoked molecular owner");
+    require(download(output, elements) == sentinel, "revoked physical Fock published output");
+  }
   std::cout << ",\"revoked_without_publication\":true}\n";
 }
 }  // namespace
@@ -202,10 +292,12 @@ int main(int argc, char** argv) {
   int devices{};
   if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
   try {
-    require((argc == 2 || (argc == 3 && std::string(argv[2]) == "physical")) &&
-                (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
-            "usage: ks_wb97mv_grid_probe rks|uks [physical]");
-    run(std::string(argv[1]) == "uks", argc == 3);
+    const std::string mode = argc == 3 ? argv[2] : "grid";
+    require(
+        (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock"))) &&
+            (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
+        "usage: ks_wb97mv_grid_probe rks|uks [physical|fock|df-fock]");
+    run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

@@ -367,6 +367,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
+  mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
@@ -3176,12 +3177,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return identity;
   }
 
-  CudaKsFinalStateToken token() const {
+  const CudaKsFinalStateToken& token_reference() const {
     if (!final_state_ready || !output.converged || is_active || is_pending || is_failed ||
         !solve_epoch || !final_generation)
       throw std::invalid_argument("CUDA KS owner has no successful current final state");
-    return {1, final_identity()};
+    // Model/basis/grid are immutable for this owner. Cache only host identity
+    // metadata, never numerical validation: the live state gates above remain
+    // mandatory on every borrow. Solve epochs do not wrap, and a new generation
+    // rebuilds the snapshot before it can authorize any response consumer.
+    if (!cached_final_token ||
+        cached_final_token->identity.determinant.solve_epoch != solve_epoch ||
+        cached_final_token->identity.determinant.factor.density_generation != final_generation)
+      cached_final_token = CudaKsFinalStateToken{1, final_identity()};
+    return *cached_final_token;
   }
+
+  CudaKsFinalStateToken token() const { return token_reference(); }
 
   void prepare_final_frame() {
     if (!final_frame_ready) {
@@ -3753,7 +3764,7 @@ generativeqc_status CudaKsPlan::resident_final_orbital_frame(
   binding = {};
   detail.clear();
   try {
-    const auto current = impl_->token();
+    const auto& current = impl_->token_reference();
     if (expected.version != 1 || expected != current)
       throw std::invalid_argument("CUDA KS resident orbital-frame token is stale");
     if (!impl_->final_frame_ready || !impl_->final_stationary_weights_ready)
@@ -3782,6 +3793,32 @@ generativeqc_status CudaKsPlan::resident_final_orbital_frame(
     detail = error.what();
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
+}
+
+generativeqc_status CudaKsPlan::resident_final_fock_sources(const CudaKsFinalStateToken& expected,
+                                                            CudaKsResidentFockBinding& binding,
+                                                            std::string& detail) const {
+  binding = {};
+  CudaKsResidentOrbitalFrameBinding frame;
+  const auto status = resident_final_orbital_frame(expected, frame, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  CudaKsResidentFockBinding candidate{frame.device_id,
+                                      &impl_->provider,
+                                      impl_->range_correction ? &*impl_->range_correction : nullptr,
+                                      impl_->hcore,
+                                      impl_->fock,
+                                      frame.nao,
+                                      frame.spins,
+                                      frame.stream,
+                                      frame.owner,
+                                      frame.solve_epoch,
+                                      frame.generation};
+  if (!candidate) {
+    detail = "CUDA KS resident Fock sources are unavailable";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  binding = candidate;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken& expected,

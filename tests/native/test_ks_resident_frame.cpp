@@ -81,6 +81,13 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
   };
   require(borrow_grid(0, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
           "prepared-batch port admitted an unvalidated grid reference");
+  dft::CudaKsResidentFockBinding fock_binding;
+  const auto borrow_fock = [&](std::size_t index, const auto& expected) {
+    return methods::detail::dft_cuda_resident_fock_sources(*batch, index, expected, fock_binding,
+                                                           detail);
+  };
+  require(borrow_fock(0, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !fock_binding,
+          "prepared-batch port admitted unvalidated Fock sources");
   dft::CudaKsGridReference grid_reference(*batch, 0, token);
   require(grid_reference.shape().nao == 0 && !grid_reference.reference().authenticate,
           "unprepared grid adapter published a reference");
@@ -95,6 +102,15 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
           "native CPKS adapter did not authenticate the actual prepared owner");
   require(borrow(0, token, true) == GENERATIVEQC_STATUS_SUCCESS && frame, detail);
   const auto leased = frame;
+  require(borrow_fock(0, token) == GENERATIVEQC_STATUS_SUCCESS && fock_binding &&
+              fock_binding.fock == leased.fock && fock_binding.nao == leased.nao &&
+              fock_binding.spins == leased.spins && fock_binding.stream == leased.stream &&
+              fock_binding.primary->strategy() == token.identity.determinant.model &&
+              fock_binding.correction == nullptr,
+          "prepared Fock source does not match the actual canonical owner");
+  const auto immutable_fock = fock_binding;
+  require(borrow_fock(0, token) == GENERATIVEQC_STATUS_SUCCESS && fock_binding == immutable_fock,
+          "Fock source reauthentication replaced its native owner");
   require(borrow(0, token, false) == GENERATIVEQC_STATUS_SUCCESS &&
               frame.coefficients == leased.coefficients &&
               frame.orbital_energies == leased.orbital_energies,
@@ -133,6 +149,8 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
           "grid reference does not borrow the actual immutable molecular quadrature");
   require(borrow_grid(1, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
           "missing prepared-batch item retained a grid reference");
+  require(borrow_fock(1, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !fock_binding,
+          "missing prepared-batch item retained Fock sources");
   require(borrow(1, token, true) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "missing prepared-batch item retained a frame");
   auto stale = token;
@@ -141,12 +159,16 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
           "prepared-batch port accepted another owner's token");
   require(borrow_grid(0, stale) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
           "prepared-batch grid accepted another owner's token");
+  require(borrow_fock(0, stale) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !fock_binding,
+          "prepared-batch Fock accepted another owner's token");
   const auto warmed = batch->execute(methods::Coordinates(1), false);
   require(warmed[0].status == GENERATIVEQC_STATUS_SUCCESS &&
               warmed[0].calculation.convergence.converged,
           "prepared-batch warm replay failed");
   require(borrow(0, token, false) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "prepared-batch warm replay retained a stale lease");
+  require(borrow_fock(0, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !fock_binding,
+          "prepared-batch warm replay retained stale Fock sources");
   require(reference.authenticate(reference.owner) == cudaErrorInvalidResourceHandle &&
               response_reference.shape().nao == 0 && !response_reference.reference().authenticate,
           "native CPKS adapter retained a stale prepared owner");

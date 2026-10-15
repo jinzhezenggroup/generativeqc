@@ -56,6 +56,17 @@ generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::s
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   dft::CudaKsResidentFockBinding& binding,
+                                                   std::string& detail) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->resident_fock_sources(index, expected, binding, detail);
+  binding = {};
+  detail = "resident Fock sources require a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
                                                      const dft::CudaKsFinalStateToken& expected,
                                                      dft::CudaKsResidentGridBinding& binding,

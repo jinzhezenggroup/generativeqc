@@ -10,6 +10,7 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
 #include "dft/cuda_ks_resident_frame.hpp"
 #include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/grid.hpp"
@@ -309,6 +310,11 @@ class CudaKsPlan {
   generativeqc_status resident_final_orbital_frame(const CudaKsFinalStateToken& expected,
                                                    CudaKsResidentOrbitalFrameBinding& binding,
                                                    std::string& detail) const;
+  /** Borrow actual immutable Fock sources plus accepted F/H on the producer
+   * stream. Requires the existing scalar-validated canonical-frame lease. */
+  generativeqc_status resident_final_fock_sources(const CudaKsFinalStateToken& expected,
+                                                  CudaKsResidentFockBinding& binding,
+                                                  std::string& detail) const;
   /** Zero-transfer immutable basis/grid and accepted density lease. Requires
    * the same canonical validation as resident_final_orbital_frame; host-unfused
    * owners without a resident XC plan fail closed, without staging a copy. */

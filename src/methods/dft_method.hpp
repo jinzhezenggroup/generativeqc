@@ -7,6 +7,7 @@
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
 #include "dft/cuda_ks_resident_frame.hpp"
 #include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
@@ -167,6 +168,13 @@ generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::s
                                                     const dft::CudaKsFinalStateToken& expected,
                                                     dft::CudaKsResidentOrbitalFrameBinding& binding,
                                                     std::string& detail, bool prepare = false);
+
+/** Borrow actual prepared Fock sources and accepted F/H after canonical
+ * validation. No numerical work or provider scratch mutation is authorized. */
+generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   dft::CudaKsResidentFockBinding& binding,
+                                                   std::string& detail);
 
 /** Borrow the actual XC owner's packed basis/quadrature and the exact accepted
  * density after resident canonical preparation. No device/panel allocation, transfer or
