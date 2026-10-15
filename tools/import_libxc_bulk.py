@@ -127,7 +127,8 @@ def independent_pointwise_fixtures() -> set[str]:
     if not by_method:
         raise ValueError("missing independent Libxc bulk fixtures")
     return {
-        name for name, spins in by_method.items()
+        name
+        for name, spins in by_method.items()
         if {"polarized", "unpolarized"} <= spins
     }
 

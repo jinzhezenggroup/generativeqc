@@ -617,7 +617,9 @@ def _generated_libxc_method_specs() -> dict[str, MethodSpec]:
         direct_stem = record["direct_semilocal_stem"]
         if direct_component is not None:
             if not isinstance(direct_component, str):
-                raise UnsupportedMethod("generated Libxc direct component must be a name")
+                raise UnsupportedMethod(
+                    "generated Libxc direct component must be a name"
+                )
             components = ((direct_component, Fraction(1)),)
         elif direct_stem is not None:
             if not isinstance(direct_stem, str):

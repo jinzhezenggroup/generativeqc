@@ -364,7 +364,9 @@ def _select_initializer_branch(
     )
     if switch is None:
         if re.search(r"\bswitch\b", init_body):
-            raise MethodMetadataError("unsupported registration-dependent initializer switch")
+            raise MethodMetadataError(
+                "unsupported registration-dependent initializer switch"
+            )
         return init_body
     if re.search(r"\bswitch\b", init_body[switch.end() :]):
         raise MethodMetadataError("multiple initializer switches are unsupported")
@@ -382,7 +384,13 @@ def _select_initializer_branch(
             if selected:
                 raise MethodMetadataError("duplicate initializer case for Libxc ID")
             selected.append(match.group(2))
-    return init_body[: switch.start()] + "\n" + "".join(selected) + "\n" + init_body[switch.end() :]
+    return (
+        init_body[: switch.start()]
+        + "\n"
+        + "".join(selected)
+        + "\n"
+        + init_body[switch.end() :]
+    )
 
 
 def _init_state(
@@ -428,7 +436,14 @@ def _init_state(
 
 
 def _method_identifier(registration: str) -> str:
-    for prefix in ("HYB_GGA_XC_", "HYB_MGGA_XC_", "HYB_GGA_X_", "HYB_MGGA_X_", "GGA_XC_", "MGGA_XC_"):
+    for prefix in (
+        "HYB_GGA_XC_",
+        "HYB_MGGA_XC_",
+        "HYB_GGA_X_",
+        "HYB_MGGA_X_",
+        "GGA_XC_",
+        "MGGA_XC_",
+    ):
         if registration.startswith(prefix):
             return registration.removeprefix(prefix).replace("_", "-")
     raise MethodMetadataError("hybrid registration is not a supported method owner")
@@ -516,7 +531,9 @@ def extract_method_registrations(
                 )
             else:
                 if setter not in ("NULL", "set_ext_params_cpy"):
-                    raise MethodMetadataError("unsupported nonlocal semilocal parameter setter")
+                    raise MethodMetadataError(
+                        "unsupported nonlocal semilocal parameter setter"
+                    )
                 mix, alpha, beta, omega = None, Fraction(0), Fraction(0), Fraction(0)
             if any(value < 0 for value in (alpha, omega)):
                 raise MethodMetadataError(
@@ -551,7 +568,9 @@ def extract_method_registrations(
                     direct_semilocal_component = registration
             elif registration.startswith(("MGGA_XC_", "GGA_XC_")):
                 if "XC_FLAGS_VV10" not in fields[5]:
-                    raise MethodMetadataError("nonlocal semilocal metadata needs VV10 flag")
+                    raise MethodMetadataError(
+                        "nonlocal semilocal metadata needs VV10 flag"
+                    )
                 components = [(registration, Fraction(1))]
             else:
                 raise MethodMetadataError(
@@ -581,8 +600,11 @@ def extract_method_registrations(
                 flags=fields[5],
                 components=[[name, str(value)] for name, value in components],
                 direct_semilocal_stem=direct_stem,
-                **({"direct_semilocal_component": direct_semilocal_component}
-                   if direct_semilocal_component is not None else {}),
+                **(
+                    {"direct_semilocal_component": direct_semilocal_component}
+                    if direct_semilocal_component is not None
+                    else {}
+                ),
                 **(
                     {
                         "split_exchange_component": split_exchange_component,

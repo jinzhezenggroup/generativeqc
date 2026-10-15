@@ -124,8 +124,6 @@ def test_representable_generated_methods_need_no_named_catalog_edit() -> None:
         assert name in METHOD_CATALOG
 
 
-
-
 def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
     # No manually authored B97M-V or WB97X-V exchange/VV10 constants.
     b97mv = extract_method_registrations(
@@ -187,7 +185,8 @@ def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
         assert spec.nonlocal_correlation.c == Fraction(1, 100)
         method = resolve_method(name, spin="unpolarized")
         semilocal = next(
-            primitive for primitive in method.primitives
+            primitive
+            for primitive in method.primitives
             if primitive.kind == "semilocal_xc"
         )
         provenance = semilocal.functional.to_payload()
@@ -208,11 +207,10 @@ def test_unmodeled_nonlocal_initializer_control_flow_fails_closed() -> None:
     rows = extract_method_registrations(
         modified, "hyb_gga_xc_wb97.c", direct_combined=True
     )
-    result = next(
-        row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V"
-    )
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V")
     assert result["status"] == "blocked"
     assert "initializer" in result["reason"]
+
 
 def test_complex_dynamic_mix_owners_remain_explicitly_blocked() -> None:
     assert set(BLOCKED_LIBXC_METHODS) == {

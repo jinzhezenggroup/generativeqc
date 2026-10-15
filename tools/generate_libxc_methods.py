@@ -92,11 +92,13 @@ def build_catalog() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     for path, sha in _sources():
         fulltree = path.is_relative_to(NONLOCAL_SOURCE_ROOT)
         for record in extract_method_registrations(
-            path.read_text(encoding="utf-8"), path.name,
+            path.read_text(encoding="utf-8"),
+            path.name,
             direct_combined=fulltree,
         ):
             if fulltree and (
-                record["status"] != "generated" or record.get("nonlocal_variant") is None
+                record["status"] != "generated"
+                or record.get("nonlocal_variant") is None
             ):
                 continue
             registration = record["registration"]

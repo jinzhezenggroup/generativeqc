@@ -9,9 +9,9 @@ from pathlib import Path
 
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
 
 from . import _generated_split_hybrids, libxc_bulk
-from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
 from ._generated_split_hybrids import SPLIT_HYBRID_COMPONENTS, SPLIT_HYBRIDS
 from .b88_vwn_maple import b88_vwn_maple_provenance
 from .ityh_maple import ityh_maple_provenance
@@ -75,7 +75,9 @@ AUTO_BULK_COMPONENTS = tuple(
     name for name in POINTWISE_BULK_COMPONENTS if name not in CURATED_COMPONENTS
 )
 COMPONENTS = (
-    CURATED_COMPONENTS + AUTO_BULK_COMPONENTS + tuple(sorted(SPLIT_HYBRID_COMPONENTS))
+    CURATED_COMPONENTS
+    + AUTO_BULK_COMPONENTS
+    + tuple(sorted(SPLIT_HYBRID_COMPONENTS))
     + SOURCE_NONLOCAL_COMPONENTS
 )
 CATALOG = {
@@ -187,14 +189,24 @@ class FunctionalSpec:
         active_names = tuple(
             name for name, coefficient in self.components if coefficient
         )
-        source_only = tuple(name for name in active_names if name in SOURCE_NONLOCAL_COMPONENTS)
+        source_only = tuple(
+            name for name in active_names if name in SOURCE_NONLOCAL_COMPONENTS
+        )
         if source_only:
-            if len(source_only) != 1 or len(active_names) != 1 or self.components[0][1] != 1:
-                raise UnsupportedXC("unqualified nonlocal method requires one intact semilocal source")
+            if (
+                len(source_only) != 1
+                or len(active_names) != 1
+                or self.components[0][1] != 1
+            ):
+                raise UnsupportedXC(
+                    "unqualified nonlocal method requires one intact semilocal source"
+                )
             component = source_only[0]
             record = next(
-                row for row in LIBXC_METHODS.values()
-                if (row.get("direct_semilocal_component") or row["registration"]) == component
+                row
+                for row in LIBXC_METHODS.values()
+                if (row.get("direct_semilocal_component") or row["registration"])
+                == component
                 and row["nonlocal_variant"] is not None
             )
             return {
