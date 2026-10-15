@@ -206,6 +206,68 @@ def _ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> typing.Any:
     )
 
 
+def _native_cpu_fleet_inventory(
+    library: typing.Any, items: typing.Sequence[typing.Any], diis_history: int
+) -> tuple[tuple[dict[str, int], ...], int, int] | None:
+    """Marshal compact metadata to the native retained/workspace fleet owner.
+
+    One query validates and sizes the whole fleet, including per-item phase
+    diagnostics. A rejected discovered query is never retried with older phase
+    queries or portable arithmetic. No provider is loaded by this adapter.
+    """
+    query = getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
+    if query is None:
+        return None
+    dimensions = []
+    for item in items:
+        orbital, auxiliary = item["orbital"], item.get("auxiliary")
+        dimensions.extend(
+            (
+                item["atoms"],
+                orbital["nbf"],
+                orbital["cartesian_nbf"],
+                item["spins"],
+                orbital["maximum_angular"],
+                diis_history,
+                auxiliary["nbf"] if auxiliary else 0,
+                auxiliary["cartesian_nbf"] if auxiliary else 0,
+                auxiliary["maximum_angular"] if auxiliary else 0,
+                _ecp_workspace(item),
+                orbital["shells"],
+                orbital["primitives"],
+                auxiliary["shells"] if auxiliary else 0,
+                auxiliary["primitives"] if auxiliary else 0,
+            )
+        )
+    shapes = (ctypes.c_uint64 * len(dimensions))(
+        *(checked_bytes(value, "CPU HF fleet shape") for value in dimensions)
+    )
+    values = (ctypes.c_uint64 * (3 + 4 * len(items)))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shapes, len(shapes), values, len(values)):
+        raise ValueError("native CPU HF fleet inventory rejected shape or capacity")
+    retained, workspace, peak = (
+        checked_bytes(values[index], "CPU HF fleet capacity") for index in range(3)
+    )
+    if peak != retained + workspace:
+        raise ValueError("native CPU HF fleet inventory returned inconsistent peak")
+    keys = ("preparation", "iteration", "finalization", "integral_state")
+    inventories = tuple(
+        {
+            key: checked_bytes(values[3 + 4 * index + slot], f"CPU {key} capacity")
+            for slot, key in enumerate(keys)
+        }
+        for index in range(len(items))
+    )
+    return inventories, retained, workspace
+
+
 def _cpu_item_inventory(
     item: typing.Any, diis_history: typing.Any, *, library: typing.Any = None
 ) -> dict[str, int]:
@@ -565,11 +627,16 @@ def hf_resource_request(
         "density_fitting_memory_budget_bytes": density_fitting_memory_budget_bytes,
     }
     if executed_backend == "cpu":
+        native_fleet = getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
         controls["host_inventory"] = (
             "native-cpu-v1"
-            if getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
+            if native_fleet is not None
+            or getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
             is not None
             else "portable-metadata-v1"
+        )
+        controls["fleet_inventory"] = (
+            "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
         )
     if executed_backend == "cuda":
         controls.update(
@@ -716,24 +783,33 @@ def hf_resource_request(
             ),
         )
         return ResourceRequest(name, identity, (candidate,), cuda_exclusions)
-    inventories = tuple(
-        _cpu_item_inventory(item, diis_history, library=library) for item in items
-    )
-    retained = sum(
-        8 * (4 * item["spins"] * item["orbital"]["nbf"] ** 2 + 8 * 3 * item["atoms"])
-        + 128
-        * (item["orbital"]["primitives"] + item["orbital"]["shells"] + item["atoms"])
-        + (
-            128 * (item["auxiliary"]["primitives"] + item["auxiliary"]["shells"])
-            if item["auxiliary"]
-            else 0
+    native_inventory = _native_cpu_fleet_inventory(library, items, diis_history)
+    if native_inventory is not None:
+        inventories, retained, peak_work = native_inventory
+    else:
+        inventories = tuple(
+            _cpu_item_inventory(item, diis_history, library=library) for item in items
         )
-        for item in items
-    )
-    peak_work = max(
-        max(row["preparation"], row["iteration"], row["finalization"])
-        for row in inventories
-    )
+        retained = sum(
+            8
+            * (4 * item["spins"] * item["orbital"]["nbf"] ** 2 + 8 * 3 * item["atoms"])
+            + 128
+            * (
+                item["orbital"]["primitives"]
+                + item["orbital"]["shells"]
+                + item["atoms"]
+            )
+            + (
+                128 * (item["auxiliary"]["primitives"] + item["auxiliary"]["shells"])
+                if item["auxiliary"]
+                else 0
+            )
+            for item in items
+        )
+        peak_work = max(
+            max(row["preparation"], row["iteration"], row["finalization"])
+            for row in inventories
+        )
     candidate = ResourceCandidate(
         "cpu-resident",
         "resident",

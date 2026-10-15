@@ -104,15 +104,21 @@ candidates and need not be simultaneously attainable.
 ## Current provider inventory
 
 CPU RHF/UHF calculator plans with a discovered
-`generativeqc_resource_hf_cpu_host_v1` query obtain their per-item phase
-capacities from the same allocation-free C++ owner as the native CLI. Direct
-and density-fitted inventories preserve Cartesian/public integral coexistence,
-forward-mode derivatives, SCF/DIIS matrices and analytic DF response storage.
-Native rejection propagates without a Python retry. Schedule identity records
-the selected sizing owner; library-free dry runs and older libraries retain
-portable metadata sizing without implicitly loading a provider. Fleet retained
-state and budget composition remain frontend-owned; this is not complete
-native admission/lease authority or a full endpoint allocation receipt.
+`generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
+summed fleet retained capacity and maximum serialized workspace from the same
+allocation-free C++ owners as the native CLI. Direct and density-fitted
+inventories preserve Cartesian/public integral coexistence, forward-mode
+derivatives, SCF/DIIS matrices and analytic DF response storage. A single fleet
+query validates every item before publishing any capacities; invalid later
+items, overlapping buffers and aggregate signed-int64 overflow leave output
+unchanged. Native rejection propagates without a Python retry.
+
+Schedule identity records phase and fleet sizing owners separately. Libraries
+with only `generativeqc_resource_hf_cpu_host_v1` retain native phase sizing and
+portable fleet composition; library-free dry runs and older libraries retain
+portable metadata sizing without implicitly loading a provider. Budget
+candidate composition, admission and leases remain frontend-owned; native
+fleet sizing is not complete endpoint/RSS allocation accounting.
 
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_host_v1` query obtain their host capacities from

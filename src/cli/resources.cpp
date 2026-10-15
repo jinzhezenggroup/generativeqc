@@ -123,12 +123,7 @@ Json topology_json(const Topology& shape) {
 
 // These capacities follow the actual Jet/preparation/SCF lifetimes, not an
 // optimistic nbf^4-only estimate. Serialized workspaces do not scale with batch.
-Json hf_inventory(const Topology& orbital, const Topology* auxiliary, Bytes atoms, Bytes spins,
-                  Bytes history, Bytes ecp_workspace) {
-  const auto inventory = scf::cpu_hf_host_resources(
-      {atoms, orbital.nbf, orbital.cartesian_nbf, spins, orbital.angular, history,
-       auxiliary ? auxiliary->nbf : 0, auxiliary ? auxiliary->cartesian_nbf : 0,
-       auxiliary ? auxiliary->angular : 0, ecp_workspace});
+Json hf_inventory(const std::array<Bytes, 4>& inventory) {
   Json result = Json::object();
   for (std::size_t index = 0; index < inventory.size(); ++index)
     result[scf::cpu_hf_host_resource_keys[index]] = inventory[index];
@@ -540,17 +535,21 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   }
   Bytes retained = 0, workspace = 0, device = 0;
   if (cpu && hf) {
-    const auto inventory = hf_inventory(orbital, auxiliary ? &*auxiliary : nullptr, atoms.size(),
-                                        spins, options.diis_history, ecp_workspace);
-    plan["item_inventory"] = inventory;
-    workspace =
-        std::max({inventory["preparation"].get<Bytes>(), inventory["iteration"].get<Bytes>(),
-                  inventory["finalization"].get<Bytes>()});
-    retained =
-        sum({product({8, sum({product({4, spins, orbital.nbf, orbital.nbf}),
-                              product({24, atoms.size()})})}),
-             product({128, sum({orbital.primitives, orbital.shells, atoms.size()})}),
-             auxiliary ? product({128, sum({auxiliary->primitives, auxiliary->shells})}) : 0});
+    scf::CpuHfHostFleetResources fleet;
+    const auto phases =
+        fleet.append({{atoms.size(), orbital.nbf, orbital.cartesian_nbf, spins, orbital.angular,
+                       options.diis_history, auxiliary ? auxiliary->nbf : 0,
+                       auxiliary ? auxiliary->cartesian_nbf : 0, auxiliary ? auxiliary->angular : 0,
+                       ecp_workspace},
+                      orbital.shells,
+                      orbital.primitives,
+                      auxiliary ? auxiliary->shells : 0,
+                      auxiliary ? auxiliary->primitives : 0},
+                     options.batch);
+    plan["item_inventory"] = hf_inventory(phases);
+    const auto aggregate = fleet.inventory();
+    retained = aggregate[0];
+    workspace = aggregate[1];
   } else if (cpu && ks) {
     const auto inventory =
         ks_inventory(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace);
@@ -680,7 +679,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
   }
-  retained = product({options.batch, retained});
+  if (!(cpu && hf)) retained = product({options.batch, retained});
   const Bytes host = sum({retained, workspace});
   plan["peak_bytes"] = {{"pageable", host}, {"host", host}, {"pinned", 0}, {"device", device}};
   if (device) plan["peak_bytes"]["device:" + std::to_string(options.device_id)] = device;

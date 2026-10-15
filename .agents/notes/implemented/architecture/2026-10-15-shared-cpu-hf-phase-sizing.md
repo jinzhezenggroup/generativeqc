@@ -59,3 +59,9 @@ shape service can replace the remaining frontend composition/compatibility.
 `src/scf/hf_host_resources.hpp`;
 `python/generativeqc/resources_hf.py`;
 `.agents/notes/implemented/architecture/2026-10-12-shared-cpu-ks-host-sizing.md`.
+
+## Follow-up
+
+The subsequent `2026-10-15-native-cpu-hf-fleet-sizing.md` note extends native
+ownership to retained fleet capacity and serialized workspace aggregation.
+The initial phase-only ABI remains an explicit compatibility boundary.

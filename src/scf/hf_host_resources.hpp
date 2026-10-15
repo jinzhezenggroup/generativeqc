@@ -9,6 +9,30 @@
 
 namespace generativeqc::scf {
 
+namespace hf_host_resource_detail {
+using Bytes = std::uint64_t;
+inline constexpr Bytes maximum = std::numeric_limits<std::int64_t>::max();
+
+inline Bytes sum(std::initializer_list<Bytes> values) {
+  Bytes result = 0;
+  for (const auto value : values) {
+    if (value > maximum - result) throw std::overflow_error("CPU HF capacity sum overflows");
+    result += value;
+  }
+  return result;
+}
+
+inline Bytes product(std::initializer_list<Bytes> values) {
+  Bytes result = 1;
+  for (const auto value : values) {
+    if (value > maximum || (value && result > maximum / value))
+      throw std::overflow_error("CPU HF capacity product overflows");
+    result *= value;
+  }
+  return result;
+}
+}  // namespace hf_host_resource_detail
+
 /** Compact CPU HF topology, with all auxiliary fields zero for direct HF.
  * ECP workspace comes from the existing two-grid capacity owner. This shape
  * describes numeric/value-metadata bounds, not allocator overhead or RSS.
@@ -30,25 +54,8 @@ inline constexpr std::array<const char*, 4> cpu_hf_host_resource_keys{
  * topology or overflow throws before any caller-visible publication.
  */
 inline std::array<std::uint64_t, 4> cpu_hf_host_resources(const CpuHfHostResourceShape& shape) {
-  using Bytes = std::uint64_t;
-  constexpr Bytes maximum = std::numeric_limits<std::int64_t>::max();
-  const auto sum = [](std::initializer_list<Bytes> values) {
-    Bytes result = 0;
-    for (const auto value : values) {
-      if (value > maximum - result) throw std::overflow_error("CPU HF capacity sum overflows");
-      result += value;
-    }
-    return result;
-  };
-  const auto product = [](std::initializer_list<Bytes> values) {
-    Bytes result = 1;
-    for (const auto value : values) {
-      if (value > maximum || (value && result > maximum / value))
-        throw std::overflow_error("CPU HF capacity product overflows");
-      result *= value;
-    }
-    return result;
-  };
+  using hf_host_resource_detail::product;
+  using hf_host_resource_detail::sum;
   if (!shape.atoms || !shape.orbital_aos || shape.cartesian_aos < shape.orbital_aos ||
       (shape.spins != 1 && shape.spins != 2) || shape.maximum_angular > 4 ||
       shape.auxiliary_maximum_angular > 4 ||
@@ -114,5 +121,54 @@ inline std::array<std::uint64_t, 4> cpu_hf_host_resources(const CpuHfHostResourc
   }
   return {preparation, iteration, finalization, resident};
 }
+
+/** Metadata retained by each prepared item in addition to its phase workspace.
+ * Auxiliary shell/primitive counts must both be zero for a direct-HF item.
+ */
+struct CpuHfHostResourceItem {
+  CpuHfHostResourceShape shape;
+  std::uint64_t orbital_shells, orbital_primitives, auxiliary_shells, auxiliary_primitives;
+};
+
+/** Allocation-free CPU fleet sizing: sum retained owners, maximize workspace.
+ * Homogeneous CLI batches can append a repeated item without materializing it.
+ * Each append validates its complete signed-int64 peak before changing state;
+ * neither an invalid later item nor overflow can leave a partial aggregate.
+ * This is numeric/value-metadata capacity, not admission or allocator receipts.
+ */
+class CpuHfHostFleetResources {
+ public:
+  std::array<std::uint64_t, 4> append(const CpuHfHostResourceItem& item, std::uint64_t copies = 1) {
+    using hf_host_resource_detail::product;
+    using hf_host_resource_detail::sum;
+    const auto phases = cpu_hf_host_resources(item.shape);
+    if (!copies || !item.orbital_shells || item.orbital_shells > item.shape.orbital_aos ||
+        item.orbital_primitives < item.orbital_shells ||
+        (item.shape.auxiliary_aos
+             ? !item.auxiliary_shells || item.auxiliary_shells > item.shape.auxiliary_aos ||
+                   item.auxiliary_primitives < item.auxiliary_shells
+             : item.auxiliary_shells || item.auxiliary_primitives))
+      throw std::invalid_argument("CPU HF fleet requires valid shell/primitive counts");
+    const auto retained =
+        sum({product({8, sum({product({4, item.shape.spins, item.shape.orbital_aos,
+                                       item.shape.orbital_aos}),
+                              product({24, item.shape.atoms})})}),
+             product({128, sum({item.orbital_primitives, item.orbital_shells, item.shape.atoms})}),
+             product({128, sum({item.auxiliary_primitives, item.auxiliary_shells})})});
+    const auto next_retained = sum({retained_, product({copies, retained})});
+    const auto next_workspace = std::max({workspace_, phases[0], phases[1], phases[2]});
+    const auto next_peak = sum({next_retained, next_workspace});
+    retained_ = next_retained;
+    workspace_ = next_workspace;
+    peak_ = next_peak;
+    return phases;
+  }
+
+  /** Stable fleet bridge ordering: retained bytes, workspace bytes, peak bytes. */
+  std::array<std::uint64_t, 3> inventory() const { return {retained_, workspace_, peak_}; }
+
+ private:
+  std::uint64_t retained_{0}, workspace_{0}, peak_{0};
+};
 
 }  // namespace generativeqc::scf

@@ -630,6 +630,49 @@ int generativeqc_resource_hf_cpu_host_v1(const std::uint64_t* shape, std::size_t
   }
 }
 
+/** Shape-only CPU HF fleet inventory with transactional publication.
+ * Each 14-slot item is the ten phase-shape fields followed by orbital and
+ * auxiliary shell/primitive counts. Output is retained/workspace/peak followed
+ * by four phase capacities per item. Input must remain immutable and disjoint
+ * from output. Two bounded scalar passes avoid O(items) native scratch: first
+ * validate the entire fleet, then publish its already validated phase bounds.
+ * No allocation/provider/scientific work occurs on successful requests.
+ */
+int generativeqc_resource_hf_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 14 || !values) return -1;
+  const auto item_count = shape_count / 14;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 3) / 4 ||
+      value_count != 3 + 4 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 14 * index;
+      return scf::CpuHfHostResourceItem{{shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+                                         shape[6], shape[7], shape[8], shape[9]},
+                                        shape[10],
+                                        shape[11],
+                                        shape[12],
+                                        shape[13]};
+    };
+    scf::CpuHfHostFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto phases = scf::cpu_hf_host_resources(item_at(index).shape);
+      std::copy(phases.begin(), phases.end(), values + 3 + 4 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
 /** Shape-only private CPU host inventory, not an execution capability.
  * Successful queries use only scalar/stack storage, without heap/provider work.
  * Shape slots follow CpuKsHostResourceShape's field order (17 unsigned values);

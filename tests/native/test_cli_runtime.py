@@ -274,6 +274,52 @@ class RuntimeTests(unittest.TestCase):
                         ),
                     )
 
+    def test_cpu_hf_cli_fleet_uses_shared_native_aggregation(self) -> None:
+        """Homogeneous CLI batches and native ragged descriptors have equal bounds."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_hf_cpu_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in ("rhf", "uhf"):
+            for fitted in (False, True):
+                with self.subTest(method=method, fitted=fitted):
+                    arguments = ["--method", method, "--batch", "3"]
+                    if fitted:
+                        arguments += ["--density-fitting", "cpu"]
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    orbital, auxiliary = plan["orbital"], plan.get("auxiliary") or {}
+                    item = (
+                        2,
+                        orbital["nbf"],
+                        orbital["cartesian_nbf"],
+                        1 if method == "rhf" else 2,
+                        orbital["maximum_angular"],
+                        8,
+                        auxiliary.get("nbf", 0),
+                        auxiliary.get("cartesian_nbf", 0),
+                        auxiliary.get("maximum_angular", 0),
+                        0,
+                        orbital["shells"],
+                        orbital["primitives"],
+                        auxiliary.get("shells", 0),
+                        auxiliary.get("primitives", 0),
+                    )
+                    shapes = (ctypes.c_uint64 * 42)(*(item * 3))
+                    values = (ctypes.c_uint64 * 15)()
+                    self.assertEqual(query(shapes, len(shapes), values, len(values)), 0)
+                    self.assertEqual(values[0], plan["resident_bytes"]["pageable"])
+                    self.assertEqual(values[2], plan["peak_bytes"]["host"])
+                    self.assertEqual(values[1], values[2] - values[0])
+                    self.assertEqual(list(values[3:7]), list(values[7:11]))
+                    self.assertEqual(list(values[7:11]), list(values[11:15]))
+
     def test_budget_reserve_headroom_and_zero(self) -> None:
         for arguments in (
             ("--host-bytes", "0"),
