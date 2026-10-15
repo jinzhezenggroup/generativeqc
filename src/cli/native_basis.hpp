@@ -9,25 +9,14 @@
 #include <vector>
 
 #include "generativeqc/generativeqc.h"
+#include "molecule/basis_catalog.hpp"
 
 namespace generativeqc::cli {
 
-struct NativeBasisData {
-  std::vector<generativeqc_primitive> primitives;
-  std::vector<generativeqc_shell> shells;
-  generativeqc_basis_representation representation{GENERATIVEQC_BASIS_CARTESIAN};
-  std::vector<std::int32_t> core_electrons;
-  std::vector<generativeqc_ecp_term> ecp_terms;
-  std::string identity;
-};
-
-std::vector<std::string_view> bundled_basis_names();
-
-bool bundled_basis_supports(std::string_view name, int atomic_number);
-
-NativeBasisData expand_bundled_basis(std::string_view name,
-                                     std::span<const generativeqc_atom> atoms,
-                                     generativeqc_basis_representation representation);
+using NativeBasisData = molecule::catalog::BasisData;
+using molecule::catalog::bundled_basis_names;
+using molecule::catalog::bundled_basis_supports;
+using molecule::catalog::expand_bundled_basis;
 
 // Canonical local records retain their declared representation and checksum.
 // BSE format conversion remains explicit build-time work, never a runtime lookup.

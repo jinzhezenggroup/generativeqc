@@ -222,6 +222,11 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_spherical_tests tests/native/test_spherical.cpp)
   generativeqc_native_test(generativeqc_spherical_eri_projection_tests tests/native/test_spherical_eri_projection.cpp)
   generativeqc_native_test(generativeqc_basis_contract_tests tests/native/test_basis_contract.cpp)
+  generativeqc_native_test(generativeqc_basis_catalog_tests tests/native/test_basis_catalog.cpp)
+  add_test(NAME generativeqc_basis_catalog_pack_parity
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/check_basis_catalog_pack.py"
+            "$<TARGET_FILE:generativeqc_basis_catalog_tests>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json")
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_resource_planning_tests tests/native/test_resource_planning.cpp)

@@ -306,6 +306,9 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/molecule/basis.cpp
       src/integrals/minao_basis.cpp
       src/integrals/density_fitting_metric.cpp)
+  generativeqc_add_host_object_component(${target} generativeqc_basis_catalog
+    SOURCES src/molecule/basis_catalog.cpp
+    CODEGEN generativeqc_basis_catalog_codegen)
   generativeqc_add_host_object_component(${target} generativeqc_host_integrals
     SOURCES
       src/integrals/s_integrals.cpp
