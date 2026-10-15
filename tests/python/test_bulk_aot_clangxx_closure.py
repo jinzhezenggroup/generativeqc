@@ -6,6 +6,8 @@ import ctypes
 import json
 import os
 import re
+import shutil
+import sys
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -82,10 +84,40 @@ def fake_clangxx(fake_clang: tuple, monkeypatch: pytest.MonkeyPatch) -> tuple:
 
 
 @pytest.fixture
-def real_clangxx(real_clang: tuple) -> tuple:
-    compiler, manifest = real_clang
-    assert c._system_clangxx() == Path(compiler)
-    return compiler, manifest
+def real_clangxx(tmp_path: Path) -> tuple:
+    if sys.platform != "linux":
+        pytest.skip("native Linux Clang++ qualification runs separately")
+    selected = shutil.which("clang++", path=c.CPU_ENVIRONMENT["PATH"])
+    assert selected is not None, "Linux qualification requires /usr/bin/clang++"
+    compiler = str(Path(selected).resolve())
+    resource = run_compiler(
+        [compiler, "--driver-mode=g++", "--no-default-config", "-print-resource-dir"],
+        30,
+        label="Clang++ fixture resource",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert resource.returncode == 0 and not resource.timed_out, resource.stderr
+    files = {
+        Path(compiler),
+        *(p for p in Path(resource.stdout.strip()).rglob("*") if p.is_file()),
+    }
+    loaded = run_compiler(
+        ["/usr/bin/ldd", compiler],
+        30,
+        label="Clang++ fixture loader",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert loaded.returncode == 0 and not loaded.timed_out, loaded.stderr
+    files.update(Path(p).resolve() for p in loaded.stdout.split() if p.startswith("/"))
+    config = tmp_path / "asserted C++ snapshot contract"
+    config.write_text("controlled native Clang integrated C++20 fixture/v1\n")
+    files.add(config)
+    # Producer assertion: executable/loader/resource/C++ header and search
+    # namespaces (including absent/PCH candidates) stay immutable per bracket.
+    # Enumeration is not proof of completeness. The C entry is independent.
+    return compiler, c.CpuToolchainManifest(
+        tuple(dependency(p) for p in sorted(files)), complete=True
+    )
 
 
 def collect(
@@ -173,6 +205,7 @@ def test_real_cxx_store_execution_and_invalidation(
     for label, options in (
         ("driver_plan", ["-###", "-c", str(source), "-o", "/dev/null"]),
         ("macro_abi", ["-dM", "-E", str(source)]),
+        ("macro_history", ["-dD", "-E", str(source)]),
         ("include_selection", ["-E", "-v", str(source)]),
     ):
         observed = run_compiler(
@@ -183,7 +216,9 @@ def test_real_cxx_store_execution_and_invalidation(
         )
         assert observed.returncode == 0 and not observed.timed_out, observed.stderr
         observations[label] = (
-            observed.stdout if label == "macro_abi" else observed.stderr
+            observed.stdout
+            if label in {"macro_abi", "macro_history"}
+            else observed.stderr
         )
     obj, dep = tmp_path / "point.o", tmp_path / "point.d"
     command = [
@@ -633,8 +668,16 @@ def test_real_clangxx_unopened_probe_and_timeout(
     )
 
 
-def test_real_clang_c_and_cxx_identity(tmp_path: Path, real_clangxx: tuple) -> None:
+def test_real_clang_c_and_cxx_identity(
+    tmp_path: Path, real_clangxx: tuple, real_clang: tuple
+) -> None:
     compiler, manifest = real_clangxx
+    c_compiler, c_manifest = real_clang
+    union = {p.identity: p for p in (*manifest.files, *c_manifest.files)}
+    manifest = c.CpuToolchainManifest(
+        tuple(union[k] for k in sorted(union)), complete=True
+    )
+    c_manifest = manifest
     text = "int point(void) { return 7; }\n"
     cpp, cc = tmp_path / "same.cpp", tmp_path / "same.c"
     cpp.write_text(text)
@@ -643,9 +686,9 @@ def test_real_clang_c_and_cxx_identity(tmp_path: Path, real_clangxx: tuple) -> N
     c_result = c.collect_cpu_closure(
         variant(text),
         cc,
-        compiler=compiler,
+        compiler=c_compiler,
         compiler_family="clang",
-        toolchain=manifest,
+        toolchain=c_manifest,
     )
     assert not cxx_result.reasons and not c_result.reasons
     assert cxx_result.closure is not None and c_result.closure is not None
@@ -654,7 +697,13 @@ def test_real_clang_c_and_cxx_identity(tmp_path: Path, real_clangxx: tuple) -> N
 
 
 @pytest.mark.parametrize(
-    "macro", ["_GLIBCXX_USE_CXX11_ABI 0", "_GLIBCXX_DEBUG 1", "_LIBCPP_VERSION 180000"]
+    "macro",
+    [
+        "_GLIBCXX_USE_CXX11_ABI 0",
+        "_GLIBCXX_USE_CXX11_ABI() 1",
+        "_GLIBCXX_DEBUG 1",
+        "_LIBCPP_VERSION 180000",
+    ],
 )
 def test_alternate_clangxx_abi_rejected(
     fake_clangxx: tuple, monkeypatch: pytest.MonkeyPatch, macro: str
@@ -706,3 +755,125 @@ def test_llvm_diagnostic_identity(word: str) -> None:
 def test_llvm_diagnostic_malformed(text: str) -> None:
     with pytest.raises(ValueError, match="unsupported-clang-job-model"):
         c._clang_cxx_job_arguments(text)
+
+
+@pytest.mark.parametrize("definition", [" 0", "() 1"])
+@pytest.mark.parametrize("restore", ["", "#define _GLIBCXX_USE_CXX11_ABI 1\n"])
+@pytest.mark.parametrize("wrapper", [False, True])
+def test_real_transient_alternate_abi_fails_closed(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    restore: str,
+    wrapper: bool,
+    definition: str,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "transient.cpp"
+    definitions = (
+        "#define _GLIBCXX_USE_CXX11_ABI"
+        + definition
+        + "\n#include <string>\n#undef _GLIBCXX_USE_CXX11_ABI\n"
+        + restore
+    )
+    if wrapper:
+        (tmp_path / "wrapper.hpp").write_text(definitions)
+        definitions = '#include "wrapper.hpp"\n'
+    source.write_text(
+        definitions + 'std::string fixture_value() { return "old ABI"; }\n'
+    )
+    # Independent symbol observation proves that the temporary definition really
+    # selected the old ABI, even though the final macro table hides/restores it.
+    obj = tmp_path / "old-abi.o"
+    built = compile_controlled(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *FLAGS,
+            "-c",
+            str(source),
+            "-o",
+            str(obj),
+        ],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    symbols = run_compiler(
+        ["/usr/bin/nm", "-C", str(obj)],
+        30,
+        label="independent ABI symbols",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert symbols.returncode == 0 and not symbols.timed_out, symbols.stderr
+    assert " T fixture_value()" in symbols.stdout
+    assert "fixture_value[abi:cxx11]" not in symbols.stdout
+    macro_table = run_compiler(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *FLAGS,
+            "-E",
+            "-dM",
+            str(source),
+        ],
+        30,
+        label="final macro state",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert macro_table.returncode == 0 and not macro_table.timed_out
+    assert "#define _GLIBCXX_USE_CXX11_ABI 0" not in macro_table.stdout
+    rejected = collect(source, manifest, compiler=compiler)
+    (tmp_path / "transient-abi.json").write_text(
+        json.dumps(
+            {
+                "symbols": symbols.stdout,
+                "final_macros": macro_table.stdout,
+                "reasons": rejected.reasons,
+                "object_sha256": file_hash(obj),
+            },
+            indent=2,
+        )
+    )
+    assert rejected.reasons == ("unsupported-clangxx-abi",)
+    assert rejected.closure is not None and rejected.closure.cache_key is None
+
+
+def test_real_inactive_abi_definition_keeps_native_abi(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "native.cpp"
+    source.write_text(
+        '#if 0\n#define _GLIBCXX_USE_CXX11_ABI 0\n#endif\n#include <string>\nstd::string fixture_value() { return "native ABI"; }\n'
+    )
+    result = collect(source, manifest, compiler=compiler)
+    assert (
+        not result.reasons
+        and result.closure is not None
+        and result.closure.reusable
+        and result.recipe is not None
+    )
+    obj = tmp_path / "native.o"
+    built = compile_controlled(
+        [compiler, *result.recipe["flags"], "-c", str(source), "-o", str(obj)],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    symbols = run_compiler(
+        ["/usr/bin/nm", "-C", str(obj)],
+        30,
+        label="independent native ABI symbols",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert symbols.returncode == 0 and not symbols.timed_out
+    assert "fixture_value[abi:cxx11]()" in symbols.stdout
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and after.closure.cache_key == result.closure.cache_key
+    )

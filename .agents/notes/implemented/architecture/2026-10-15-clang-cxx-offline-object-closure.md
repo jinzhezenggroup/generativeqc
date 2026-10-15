@@ -138,3 +138,74 @@ transport CR errors, Clang 14/15 incompatibility, and the 150-pass/1-fail/19-err
 and 171-pass/2-fail runs are not relabeled as acceptance. The evidence establishes
 only this offline toolchain object slice, not link closure, installed bundles,
 runtime/scientific/CUDA endpoints or completion of parent #1123.
+
+## Review correction: transient ABI state and independent C++ entry
+
+At `fe801e870c5e6fc463a5658bba013f68a640ca0f`, four real Clang controls define
+`_GLIBCXX_USE_CXX11_ABI=0`, include `<string>` directly or through a wrapper,
+then undefine or restore the macro. Actual `nm -C` object symbols have the old
+ABI while the final `-dM` table hides the zero. All four rejection assertions
+fail on that head; the old collector incorrectly admits the translation unit.
+The preceding accepted-domain measurements do not cover this counterexample.
+
+Clang C++ collection now observes active `-E -dD` macro-definition history,
+rejects unsupported definitions even when later restored, and binds/rechecks
+its digest alongside the final macro table. An inactive-branch control retains
+the default ABI and independently checks the new-ABI symbol. This remains a
+conservative native object domain, not alternate-ABI support.
+
+The C++ test producer now resolves `/usr/bin/clang++` and its resource/loader
+manifest independently. Physical equality with the C entry is not required by
+the production contract and must not be a fixture prerequisite. The explicit
+C/C++ comparison uses each canonical entry and a shared union snapshot.
+These changes require fresh source-matched Linux qualification, required CI and
+independent approval at the new exact head; earlier results/approval cannot
+substitute for this delta.
+
+The history check admits only the native object-like ABI definition `1`.
+An additional four real controls use a function-like ABI macro: its bare use in
+libstdc++ `#if` expressions selects zero, even with a body of `1`. These also
+produce old-ABI symbols and bypass a history regex that assumes whitespace after
+the macro name. The final guard checks the macro-name boundary, rejecting both
+object-like zero and function-like definitions. The failed intermediate four
+controls and an earlier harness parameter-substitution mistake remain separate
+from the final acceptance records.
+
+### Source-matched review-delta qualification
+
+LF tree `64983cd9f20c785dbedc37317bf48fe08b778a38`, delta archive SHA-256
+`36560f66eda0111926cf4a6ad25efacc6cd80dae720c968e5e2726e936c145cf`,
+uses the same starting archive above. All 11,054 source files again match the
+complete manifest before/after the full suite and subsequent controls.
+Qualified collector/test blobs are
+`13f9a0bf9ab3a79cb147ff9b32504207badbd1ac` and
+`f280aaf72609a03371248cce9ca853f3989d341f` (raw SHA-256 respectively
+`b0be6480be500e7c87f826a0df47ce202adc563b913f68ede1e6d1ff31be01ef` and
+`e8248136404a78b2ba3141a620b61d8443e9bccfd14d0f6c5ae7342b46f9d167`).
+Only later result-recording edits to this note differ from that snapshot.
+
+- Full related closure/cache/store/boundary/publication suite: **224 passed,
+  zero skips**. Same-path/persistent-cache C++ repeat: **54 passed, zero skips**.
+  Eight real transient ABI negatives reject; the inactive-branch native-ABI
+  control compiles with the independently observed new-ABI symbol.
+- With canonical C entry at Clang 15 and C++ at Clang 18: **53 passed, zero
+  skips, one explicitly deselected C/C++ cross-comparison**. This proves the
+  C++ fixture no longer depends on physical equality or C driver capability.
+  The C entry is restored to Clang 18 and independently checked afterward.
+- One-off preserved GCC C/Clang C/G++ recipe/payload/key comparison: **3 passed**.
+  Actual stale-byte omitted/old-salt negative controls: **2 passed** (each requires
+  the independent payload oracle failure). Test-owned cache counts retain
+  misses/hits **1/0 -> 1/1 -> 2/1**. Stored object, actual C++-linked library and
+  all seven Decimal rows retain the identities above under the new recipe key.
+- Windows related checks: **171 passed / 53 skipped**; fresh NVCC host-contract
+  controls: **62 passed / 7 skipped**. Native skips are not promoted into evidence.
+  Compiler structure and changed-file Ruff/format/diff checks pass.
+
+The source-matched review journal is the task directory's `review-final/`.
+Downloaded ignored `.cache/pr2525-review-evidence.tar.gz` SHA-256:
+`9586ed60463902d47b944a3cdf3cfdf656e8c5a5ea7b7d12bbc4a9f65e3464a4`.
+It includes the old evidence, red controls and intermediate snapshots; current
+raw stored-object/library bytes are rehashed after download without extracting
+or following links. Accepted remote and client execution exits are zero.
+This toolchain qualification remains separate from latest-head CI, independent
+formal approval, normal protected merge and parent-issue completion.

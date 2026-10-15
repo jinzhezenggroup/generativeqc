@@ -541,10 +541,16 @@ def collect_cpu_closure(
                     r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
                 ):
                     raise ValueError("unsupported-clangxx-abi")
-                if re.search(
-                    r"^#define (?:_GLIBCXX_USE_CXX11_ABI (?!1$)|_GLIBCXX_DEBUG\b|_LIBCPP_VERSION\b)",
-                    macros,
+                # A final -dM table hides definitions restored/undefined after
+                # headers have already selected an ABI. Observe active define
+                # history as well; inactive preprocessor branches do not enter it.
+                macro_history = query([*effective_flags, "-E", "-dD", str(source)])
+                unsupported_abi = re.compile(
+                    r"^#define (?:_GLIBCXX_USE_CXX11_ABI\b(?! 1$)|_GLIBCXX_DEBUG\b|_LIBCPP_VERSION\b)",
                     re.MULTILINE,
+                )
+                if unsupported_abi.search(macros) or unsupported_abi.search(
+                    macro_history
                 ):
                     raise ValueError("unsupported-clangxx-abi")
                 search = query(
@@ -567,6 +573,9 @@ def collect_cpu_closure(
                     raise ValueError("unsupported-clangxx-include-search")
                 context.update(
                     macros=macros,
+                    macro_history_sha256=canonical_hash(
+                        {"macro_history": macro_history}
+                    ),
                     include_search=include_search[1],
                     gcc_installation=gcc_selection[0],
                     # Includes multilib selection and ignored search paths;

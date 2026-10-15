@@ -77,6 +77,9 @@ diagnostics and the actual absolute GCC-compatible toolchain installation select
 by Clang. This domain requires that native GCC selection to be observable;
 alternative standard libraries/toolchain selection remain unsupported. Included
 standard-library configuration headers are hashed as ordinary dependencies.
+Active macro-definition history is also checked and bound: an alternate ABI
+definition is rejected even if a source/header later undefines or restores it.
+Inactive preprocessor branches do not select an ABI and remain supported.
 The caller's immutable snapshot must cover the full C++ header/search, ABI,
 loader and configuration namespaces; observations never infer completeness.
 Clang C and existing GCC/G++ recipes retain their identities and defaults.
