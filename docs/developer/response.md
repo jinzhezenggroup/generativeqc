@@ -322,7 +322,7 @@ existing `1e-12 * max(1, original_norm)` acceptance cutoff. It uses the existing
 scaled native norm and shared CPU linear algebra, not a different response
 operator or an operator-image projection.
 
-The additive [native recycle API](../reference/native_api.md#response-recycle)
+The additive [native recycle API](../reference/native_api.md#cpu-response-recycle-vectors)
 provides shape-only capacities, an opaque owner, generation checks, projection,
 atomic replacement and explicit diagnostic copies. Both signed and repeated
 element strides are borrowed without making an entire Arnoldi panel copy.
