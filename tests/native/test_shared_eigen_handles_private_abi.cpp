@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/types.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"

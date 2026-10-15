@@ -12,7 +12,7 @@
 
 #include "backends/common/gfn2_plan_schema.hpp"
 #include "backends/cuda/gfn2_geometry.cuh"
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 
 namespace generativeqc::xtb::detail::cuda {
 

@@ -8,8 +8,9 @@
 #include <string>
 #include <utility>
 
-#include "nvidia_host_api.h"
 #include "runtime/cuda_descriptor_validation.hpp"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_driver_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 
 namespace generativeqc::xtb::detail {
 namespace {

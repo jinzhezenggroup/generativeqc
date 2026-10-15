@@ -1,6 +1,6 @@
 {
   "adaptations": {
-    "src/runtime/cuda_descriptor_validation.cu": "Delegate temporary device selection and restoration to the shared runtime CUDA device-scope owner; preserve xTB status/diagnostic translation, same-device admission, cleanup-error consumption and failed-restoration retries.",
+    "src/runtime/cuda_descriptor_validation.cu": "Delegate temporary device selection and restoration to the shared runtime CUDA device-scope owner; preserve xTB status/diagnostic translation, same-device admission, cleanup-error consumption and failed-restoration retries. Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
     "src/runtime/cuda_descriptor_validation.hpp": "Replace the private device-state lease with the shared runtime CUDA device scope, retaining the xTB status-returning adapter and borrowed descriptor contracts.",
     "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 science and bounded atom/peer schedules; validate once, retain ordered component sums and fused small-system fallback, and suppress failed-system publication.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
@@ -9,32 +9,35 @@
     "src/backends/cuda/gfn2_hamiltonian_force.cu": "Consume the matching compiler-generated S/D/Q reverse-mode pair adjoints, including spin overlap.",
     "src/backends/cuda/gfn2_pairlist.cu": "Backport xTBloom #487: pass pair-list CUDA kernel descriptors by value so device code never dereferences launcher-stack host references. Consume the same compiler-generated TensorIR/AD coordination pair helper as dense geometry, preserving bitwise CN admission and canonical neighbor accumulation.",
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
-    "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership.",
+    "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
-    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback. Build topology storage with neutral numerical images and identity overlap; remove artificial-geometry CPU evaluators and synthetic energy/force smoke. Retain provider factorization checks, invalidate placeholder factor provenance, and require real CUDA epoch-one refresh before SCC/publication. Transfer solver/Params/Jacobi handle lifetime to the shared prepared symmetric-eigen owner; retain context device restoration, staged provider/BLAS call order, epsilon Jacobi settings, numeric arenas and graph/SCC paths. Add separate default-off, bounded call-owned mixer and density receipts with graph execution-mode and synchronous endpoint evidence. Retain bounded host receipts from settled rejected topology candidates without retaining their device arenas; report actual submitted graph count on bounded fallback. The density diagnostic has a distinct opt-in compiled artifact and an internal before-preparation enable gate.",
-    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, AO contraction arithmetic and bounded shell-pair schedules; retain native ragged traversal, once-per-system validation/seeding, FP64 atomics, thresholds and whole-system failure publication.",
-    "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces. Use compiler-selected 64/256-thread force preflight widths for small/large mean matrix extents; retain once-per-system validation and seed scans, all launches, and fixed 64-lane scientific reductions.",
-    "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
+    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback. Build topology storage with neutral numerical images and identity overlap; remove artificial-geometry CPU evaluators and synthetic energy/force smoke. Retain provider factorization checks, invalidate placeholder factor provenance, and require real CUDA epoch-one refresh before SCC/publication. Transfer solver/Params/Jacobi handle lifetime to the shared prepared symmetric-eigen owner; retain context device restoration, staged provider/BLAS call order, epsilon Jacobi settings, numeric arenas and graph/SCC paths. Add separate default-off, bounded call-owned mixer and density receipts with graph execution-mode and synchronous endpoint evidence. Retain bounded host receipts from settled rejected topology candidates without retaining their device arenas; report actual submitted graph count on bounded fallback. The density diagnostic has a distinct opt-in compiled artifact and an internal before-preparation enable gate. Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
+    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, AO contraction arithmetic and bounded shell-pair schedules; retain native ragged traversal, once-per-system validation/seeding, FP64 atomics, thresholds and whole-system failure publication. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
+    "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces. Use compiler-selected 64/256-thread force preflight widths for small/large mean matrix extents; retain once-per-system validation and seed scans, all launches, and fixed 64-lane scientific reductions. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
+    "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
-    "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
+    "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
-    "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
-    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
+    "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership. Bind unchanged FP64 accumulation calls to the shared runtime atomic primitive; preserve native/CAS arithmetic and existing reduction order.",
     "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile. Consume the shared TensorIR weighted-Gram emitted fragment unchanged in default builds. An opt-in diagnostic build consumes a method-local instrumented sibling that counts actual checked-pair visits and records bounded per-CTA cycles without changing scientific arithmetic.",
     "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies.",
-    "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
+    "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy. Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
     "src/backends/cuda/gfn2_scc_setup_inputs.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_scc_setup_topology.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/runtime/gfn2_cuda_topology_staging.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_eigensolver.cu": "Consume the shared method-neutral symmetric-eigen provider and prepared workspace service; declare exact-capacity/mode domains while shared setup owns transactional maxima and checked Jacobi units; retain padded-capacity Jacobi binding, method arena validation, tridiagonal path, host execution order and every CUDA kernel byte. Consume shared phased generalized-eigen reduction and recovery through backend-only lower-triangular tensor lowering; bind actual solve count independently of physical system count and borrowed pointer-table capacity, preserving host call order, separate compacted recovery, provider selection and every device body. Keep the private CUDA ABI isolated from official provider headers through the shared opaque-handle, raw-32-bit-status generalized phase boundary.",
-    "src/backends/cuda/gfn2_scc_mixer.cu": "Consume candidate-selected shared ordered-history TensorIR scalar algebra and chronological-overlay, full Gram/RHS, strided Cholesky and seeded-correction schedules. Retain native packing, norms, weight/convergence policy, activity guards, launch/barrier order, error wrappers, scratch and persistent publication, and existing compiler FMA policy. Add default-off CTA stage-cycle and actual history-visit receipts without changing the ordered arithmetic."
+    "src/backends/cuda/gfn2_scc_mixer.cu": "Consume candidate-selected shared ordered-history TensorIR scalar algebra and chronological-overlay, full Gram/RHS, strided Cholesky and seeded-correction schedules. Retain native packing, norms, weight/convergence policy, activity guards, launch/barrier order, error wrappers, scratch and persistent publication, and existing compiler FMA policy. Add default-off CTA stage-cycle and actual history-visit receipts without changing the ordered arithmetic.",
+    "src/backends/cuda/gfn2_eigensolver.cuh": "Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
+    "src/backends/cuda/gfn2_scc_iteration.cuh": "Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
+    "src/backends/cuda/gfn2_scc_setup_eigensolver.cuh": "Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior.",
+    "src/runtime/backend.hpp": "Consume the shared runtime NVIDIA host ABI instead of the retired method-local declaration header; preserve provider checks, statuses and scientific behavior."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
   },
   "cpu_snapshot_commit": "5a67cc59ace94c8296e873503b2ae1298e7c2861",
   "cuda_sources": [
-    "src/backends/cuda/cuda_runtime.cu",
     "src/runtime/cuda_descriptor_validation.cu",
     "src/runtime/gfn2_cuda_topology_staging.cu",
     "src/runtime/gfn2_cuda_execution.cu",
@@ -88,16 +91,6 @@
     "src/backends/cuda/gfn2_total_energy.cu"
   ],
   "files": {
-    "src/backends/cuda/cuda_atomics.cuh": {
-      "adapted": true,
-      "upstream_sha256": "57e6a417df9edeacd92b9062859b2ab9182c3e94da908983f591021cde42d7df",
-      "vendored_sha256": "d51ed8756d358fb6d206709875b306fdc7f6e6fe5dea7a8ebf7dd670ad83e174"
-    },
-    "src/backends/cuda/cuda_runtime.cu": {
-      "adapted": true,
-      "upstream_sha256": "ed0b9065a98dcbb191e371ad3680d3a41c21f42a5fc621f8f1e9d6a774010334",
-      "vendored_sha256": "cd36c095b836e77cc03c38fbf6576928f82f8918ff9aee6fb8af5ca66d280df2"
-    },
     "src/backends/cuda/gfn2_aes2.cu": {
       "adapted": true,
       "upstream_sha256": "86ebfe4e4c846f2f2358e75eaa521b98ff2627e0ff1d659ddb4a64be9eb801de",
@@ -111,7 +104,7 @@
     "src/backends/cuda/gfn2_classical_force.cu": {
       "adapted": true,
       "upstream_sha256": "8b210634f051e4ff32a58afeac41f5271b7422f623808a747cb6bb3f075301c3",
-      "vendored_sha256": "b9cfa20ef98058905c86e108675ca445a9c908b454f8419a0d890b6b49986f21"
+      "vendored_sha256": "bff221dadf3c312f53dfbb7b6dd13fd5334be7a1a3ec47327205e0c42742463c"
     },
     "src/backends/cuda/gfn2_classical_force.cuh": {
       "adapted": true,
@@ -121,7 +114,7 @@
     "src/backends/cuda/gfn2_d4.cu": {
       "adapted": true,
       "upstream_sha256": "9e3982dbf865f64d9c7969a6dd4410bfa39fe6c532edb0124063a28d1be5fbb5",
-      "vendored_sha256": "bc063dc815f760d3e98ee49650711311669301e74126c2f168724473522d23a3"
+      "vendored_sha256": "71323c5e12b6110c01ca9fce02c24e53e260a9630de94194bac7ace387a82f87"
     },
     "src/backends/cuda/gfn2_d4.cuh": {
       "adapted": true,
@@ -151,7 +144,7 @@
     "src/backends/cuda/gfn2_eigensolver.cuh": {
       "adapted": true,
       "upstream_sha256": "c6e338e098cbdc9d8623be85c1f27648e03e40bfa51949065d95dd0db1910bbf",
-      "vendored_sha256": "3f1a35fa9d049c72382b75f8fbc34b3f6b71cc901928ce5e448911ba2ab761d9"
+      "vendored_sha256": "3e41bcda4068739a1809a785ac2e7b8abf00f655bd13082aaacbf433bdec3651"
     },
     "src/backends/cuda/gfn2_electric_field.cu": {
       "adapted": true,
@@ -186,7 +179,7 @@
     "src/backends/cuda/gfn2_es2.cu": {
       "adapted": true,
       "upstream_sha256": "1f831ef1b95f4f9a0cdd12629d50cc2b7f5dd2e85d8f9413598ff3a6b862099b",
-      "vendored_sha256": "a50a378a4e65c7b5133e20fce221ce3431fd9bf0bb96f5ff66ca2c538034538d"
+      "vendored_sha256": "e4cee5af3ac92d85192d106befa3caaf09d94b1a8af5401e86efcbabeb794eb7"
     },
     "src/backends/cuda/gfn2_es2.cuh": {
       "adapted": true,
@@ -206,7 +199,7 @@
     "src/backends/cuda/gfn2_external_point_charges.cu": {
       "adapted": true,
       "upstream_sha256": "c281a16ebbf89d9591b63a521a691b35b13872677617599309d015440e9c9790",
-      "vendored_sha256": "3ec0d71a492d82e97fad6b19f1bb3c8067955e0db1b0a92af3099b9d2befa374"
+      "vendored_sha256": "1df73899d7356f47009f3c5d01f65371d0f33c779b56bc3fa96585720e2c5b00"
     },
     "src/backends/cuda/gfn2_external_point_charges.cuh": {
       "adapted": true,
@@ -241,7 +234,7 @@
     "src/backends/cuda/gfn2_h0_force.cu": {
       "adapted": true,
       "upstream_sha256": "ffccf6543aefc02feba9c23913bff8c544f6389a67956535d9e2372f1b50176a",
-      "vendored_sha256": "c971c8d3c64aad76eff73c8a688bb159d304a44edeb66bdca8f2ade69bdcc3d5"
+      "vendored_sha256": "0b8bf01817e899f9fcc335b98a436e8fe5505602ad35913b2d5b2c965cf98fff"
     },
     "src/backends/cuda/gfn2_h0_force.cuh": {
       "adapted": true,
@@ -286,7 +279,7 @@
     "src/backends/cuda/gfn2_integrals.cu": {
       "adapted": true,
       "upstream_sha256": "8da9042b184a7c81650cf9e7f4dbcc4b183cffeee0bf0eab6596b5adb18f99d6",
-      "vendored_sha256": "037e30e6ca6ebff8d9c196f11e2c5ea4adc0c6af9acdd993b576023e4e41cd04"
+      "vendored_sha256": "429ff77fd3e2391dfe1292de26f522586579a2751b10491b9cbd9e7fa6b89f97"
     },
     "src/backends/cuda/gfn2_integrals.cuh": {
       "adapted": true,
@@ -386,7 +379,7 @@
     "src/backends/cuda/gfn2_repulsion.cu": {
       "adapted": true,
       "upstream_sha256": "6a6a587f05ae54ecfa6df1c9fc7b3fadb799cae5c891366d2db5d56ad96d42b1",
-      "vendored_sha256": "70859cb2ac1c54a7e6e2becb16fc0e95037a978a215ddadec0594c061d887c9d"
+      "vendored_sha256": "e7a08ca03a0f9700efcd8441899d5dae53bdff72844b8ccacfd1c207e5d45a5d"
     },
     "src/backends/cuda/gfn2_repulsion.cuh": {
       "adapted": true,
@@ -451,7 +444,7 @@
     "src/backends/cuda/gfn2_scc_iteration.cuh": {
       "adapted": true,
       "upstream_sha256": "ceabc762d5ae800e202f138e56d52c3178d6dbd605e93731c0d18b903a9fdf95",
-      "vendored_sha256": "8ec1f046f1643b8443dca7cdee791fcc4f59350a67e4348e1544cad430dadcbc"
+      "vendored_sha256": "85e482d02362b18b5a1ed186c5f2c38406bfe5f29c6dce0d9b38d0fb3e9e76e4"
     },
     "src/backends/cuda/gfn2_scc_iteration_arena.cu": {
       "adapted": true,
@@ -541,12 +534,12 @@
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": {
       "adapted": true,
       "upstream_sha256": "b53efa1527059556065800aa9c455a3ab361a3e0f639b24a201f9edae81e7f07",
-      "vendored_sha256": "e44357e72042f01ca74da7cf1ef81bab81e33c8b94c7d80928e2e6921033f43f"
+      "vendored_sha256": "b8f4e533b6633cf58cef7fe7dc00d2c329dff69575a707cb7d587dd78d4c2697"
     },
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cuh": {
       "adapted": true,
       "upstream_sha256": "a522550fba995c8b16ad064360d8b258aad7bea544d55ea4498f0d1b3b7aa36b",
-      "vendored_sha256": "67480f1e6c31f995197a1df2f7a31eb427f3bd7fb8e97bac04357b7cb85b92d1"
+      "vendored_sha256": "8626d2a151bc3df449937eda2d3f2d92568d4353dcd1d2edfa209d15a2ead156"
     },
     "src/backends/cuda/gfn2_scc_setup_inputs.cu": {
       "adapted": true,
@@ -601,12 +594,12 @@
     "src/runtime/backend.hpp": {
       "adapted": true,
       "upstream_sha256": "f2c875319f70a2382ac2bc4ac86619b8690530e9a6ec4196492fd0e9d826b967",
-      "vendored_sha256": "b4a7e29a5d9450d289eed00e4c76209ef689d559361e8eb01112cad7f05391ec"
+      "vendored_sha256": "bb791b0393b1c6d671a1f5b609b6a645fa38dd258d2d133cd2ca61b68c46d40d"
     },
     "src/runtime/cuda_descriptor_validation.cu": {
       "adapted": true,
       "upstream_sha256": "7444c235bc128dc181389cf899acd8b31b6af449f2126f9e8f1222c1033ab779",
-      "vendored_sha256": "18d96891564df353d8e499addf89933a989317b00049be2afcc67c329f6cbe27"
+      "vendored_sha256": "0ac979f07ea7c73dd5512ad88c857a8f16d947e18ea096751078bfdd0c407528"
     },
     "src/runtime/cuda_descriptor_validation.hpp": {
       "adapted": true,
@@ -616,7 +609,7 @@
     "src/runtime/gfn2_cuda_execution.cu": {
       "adapted": true,
       "upstream_sha256": "593eb50ce83db6f066748a29f41f09438c3cc142b5fc45408fefccf4fed317af",
-      "vendored_sha256": "e2633c5f8a34ed9488a6dc9b2b966581287695a09bb9f27bffea7c5c3c524bca"
+      "vendored_sha256": "9d80266559f3b5551ddd8c8758d97fb484d52c819767beb871c173896c97ee4c"
     },
     "src/runtime/gfn2_cuda_execution.hpp": {
       "adapted": true,
@@ -632,11 +625,6 @@
       "adapted": true,
       "upstream_sha256": "e98c96a7fef2b1dc9445bf0db0a17e28c955800d75bf7eb3e9b0953ebc4ab29d",
       "vendored_sha256": "ce8928cd1eabb83288f82e86f7367bb9a860575e63c6260b15003280450e0b08"
-    },
-    "src/runtime/nvidia_host_api.h": {
-      "adapted": true,
-      "upstream_sha256": "431b17c4f112feeff647c4331ecbefbdd751ffa58c15c5d1e2efd32f89eeee2b",
-      "vendored_sha256": "38a04029b7cb6f9e9f442f25abac23b39de1ba66c6cd520234336315099b1593"
     }
   },
   "schema_version": 1,
@@ -667,6 +655,24 @@
     "src/runtime/result_owner_cuda.cu": {
       "upstream_sha256": "80f95c4e4d2d107053404f213599ee449bd7a04377276ecf51f00c024d2bbad3",
       "reason": "Standalone result-arena/DLPack API has no GenerativeQC callers."
+    },
+    "src/backends/cuda/cuda_atomics.cuh": {
+      "adapted": true,
+      "upstream_sha256": "57e6a417df9edeacd92b9062859b2ab9182c3e94da908983f591021cde42d7df",
+      "vendored_sha256": "d51ed8756d358fb6d206709875b306fdc7f6e6fe5dea7a8ebf7dd670ad83e174",
+      "reason": "FP64 atomic synchronization now belongs to src/runtime/cuda_atomic.cuh; native/CAS arithmetic and integer NaN retry semantics are retained. Original imported bytes remain in Git history."
+    },
+    "src/backends/cuda/cuda_runtime.cu": {
+      "adapted": true,
+      "upstream_sha256": "ed0b9065a98dcbb191e371ad3680d3a41c21f42a5fc621f8f1e9d6a774010334",
+      "vendored_sha256": "cd36c095b836e77cc03c38fbf6576928f82f8918ff9aee6fb8af5ca66d280df2",
+      "reason": "Unused resolve_cuda_device definition and declaration retired after repository caller audit; live descriptor/resource device ownership uses src/runtime/cuda_device_scope.hpp."
+    },
+    "src/runtime/nvidia_host_api.h": {
+      "adapted": true,
+      "upstream_sha256": "431b17c4f112feeff647c4331ecbefbdd751ffa58c15c5d1e2efd32f89eeee2b",
+      "vendored_sha256": "38a04029b7cb6f9e9f442f25abac23b39de1ba66c6cd520234336315099b1593",
+      "reason": "Duplicate host ABI retired in favor of shared SDK-generated cuBLAS/cuSOLVER declarations and the shared minimal driver ABI under src/runtime/nvidia_host_api/; raw status transport and runtime provider admission remain intact."
     }
   }
 }

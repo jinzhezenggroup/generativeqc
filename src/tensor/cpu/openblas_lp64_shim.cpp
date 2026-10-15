@@ -8,4 +8,4 @@
 // dependency closure. libgenerativeqc itself remains free of a hard BLAS dependency
 // and lazily dlmopens this sibling shim in a new glibc link-map namespace.
 
-static int generativeqc_xtb_openblas_lp64_shim_unit_marker;
+static int generativeqc_openblas_lp64_shim_unit_marker;

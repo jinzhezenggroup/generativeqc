@@ -12,7 +12,12 @@ def test_gfn2_cuda_source_manifest_is_current_and_gfn2_only() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["upstream_commit"] == "3c21f50195389b093941eb5ed6f1143b8802f96e"
     assert manifest["cpu_snapshot_commit"] == "5a67cc59ace94c8296e873503b2ae1298e7c2861"
-    assert len(manifest["cuda_sources"]) == 52
+    sources = manifest["cuda_sources"]
+    assert sources
+    assert len(sources) == len(set(sources))
+    assert set(sources) == {
+        path.relative_to(RUNTIME).as_posix() for path in (RUNTIME / "src").rglob("*.cu")
+    }
     assert manifest["files"]
 
     adapted = []

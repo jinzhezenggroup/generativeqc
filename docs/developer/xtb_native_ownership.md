@@ -52,6 +52,38 @@ restoration without throwing and consumes cleanup errors from CUDA's last-error
 slot. These scopes borrow the caller's thread-local device state; they do not
 own a CUDA context, stream, allocation, or Slurm device visibility.
 
+## Shared infrastructure
+
+Generic support lives outside the method tree:
+
+- `src/runtime/nvidia_host_api/` owns the SDK-generated cuBLAS/cuSOLVER host ABI
+  and minimal borrowed-allocation driver ABI. Unknown provider statuses retain
+  their raw 32-bit representation. The host API usage gate includes xTB calls.
+- `src/runtime/cuda_atomic.cuh` owns FP64 atomic addition, including the integer-CAS
+  fallback for older targets and NaN-safe retry. This does not change scientific
+  summation, reduction ordering, or precision.
+- `src/runtime/cpu_isa.hpp` names internal kernel identities; it does not detect
+  features or select an ISA. Molecular CPU execution explicitly binds baseline
+  kernels. No environment-controlled AVX/FMA policy is active.
+- `src/runtime/parallel_executor.hpp` defines the borrowed synchronous
+  `ChunkExecutor` callback contract. It creates no threads and does not enable
+  parallel execution by itself. Consumers must establish pool lifetime, idle
+  capacity, non-reentrancy and disjoint, allocation-free chunk work.
+- `cmake/GenerativeQCCpuLinalg.cmake` owns shared LP64 provider configuration and
+  the wheel-only shim from `src/tensor/cpu/openblas_lp64_shim.cpp`. The installed
+  `libgenerativeqc_xtb_openblas_lp64_shim.so` name, existing build options and
+  reviewed input resolver are retained for loader/wheel compatibility. Only the
+  shim carries the hard provider dependency; the main library lazily loads the
+  provider in an isolated link-map namespace.
+
+Unused method-local device resolution and CPU feature-policy interfaces are
+retired, not rebound to new implicit behavior. Parameter upload, scientific
+workspace layout, graph admission and SCC policy remain method-owned. See the
+[consolidation rationale](../../.agents/notes/implemented/architecture/2026-10-15-shared-xtb-infrastructure.md)
+for compatibility and qualification boundaries.
+
+## Backend preparation
+
 CUDA topology preparation builds parameter plans, stable storage and descriptors
 without evaluating an artificial molecule on the CPU or executing a synthetic
 energy/force calculation. Numerical binding images are zero-filled except for an

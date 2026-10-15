@@ -12,7 +12,8 @@
 
 #include "runtime/cuda_descriptor_validation.hpp"
 #include "runtime/cuda_device_scope.hpp"
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_driver_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 
 namespace {
 int current_device = 0;

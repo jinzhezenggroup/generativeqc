@@ -14,11 +14,11 @@
 #include "model/gfn2/es2.hpp"
 #include "model/gfn2/es3.hpp"
 #include "model/gfn2/mulliken.hpp"
-#include "model/gfn2/parallel_executor.hpp"
 #include "model/gfn2/periodic_embedding.hpp"
 #include "model/gfn2/scc_mixer.hpp"
 #include "model/gfn2/spin.hpp"
 #include "model/gfn2/wavefunction.hpp"
+#include "runtime/parallel_executor.hpp"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
@@ -280,7 +280,7 @@ generativeqc_xtb_status_t iterate_scc_driver_batch_cpu(
     const CpuLinearAlgebraBackend& backend, const EigensolverOverlapCache& overlap_cache,
     const WavefunctionView& wavefunction, const SccMixerState& mixer_state,
     const SccDriverState& state, const SccDriverWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel = nullptr);
+    const generativeqc::runtime::ChunkExecutor* parallel = nullptr);
 
 }  // namespace generativeqc::xtb::detail::gfn2
 
