@@ -565,7 +565,7 @@ GENERATIVEQC_XTB_INTEGRALS_NOINLINE void multipole_gradient_shell_pair_baseline(
 
 const IntegralKernelTable& integral_baseline_kernels() noexcept {
   static constexpr IntegralKernelTable kernels{&multipole_gradient_shell_pair_baseline,
-                                               CpuIsa::kBaseline};
+                                               generativeqc::runtime::CpuIsa::kBaseline};
   return kernels;
 }
 
@@ -623,7 +623,7 @@ GENERATIVEQC_XTB_INTEGRALS_NOINLINE void multipole_gradient_shell_pair_avx2_fma(
 
 const IntegralKernelTable& integral_avx2_fma_kernels() noexcept {
   static constexpr IntegralKernelTable kernels{&multipole_gradient_shell_pair_avx2_fma,
-                                               CpuIsa::kAvx2Fma};
+                                               generativeqc::runtime::CpuIsa::kAvx2Fma};
   return kernels;
 }
 
@@ -635,9 +635,10 @@ const IntegralKernelTable& integral_avx2_fma_kernels() noexcept {
 }
 #endif
 
-const IntegralKernelTable& integral_kernels_for_cpu_isa(CpuIsa isa) noexcept {
+const IntegralKernelTable& integral_kernels_for_cpu_isa(
+    generativeqc::runtime::CpuIsa isa) noexcept {
 #if defined(GENERATIVEQC_XTB_HAS_AVX2_FMA_KERNELS)
-  if (isa == CpuIsa::kAvx2Fma) {
+  if (isa == generativeqc::runtime::CpuIsa::kAvx2Fma) {
     return integral_avx2_fma_kernels();
   }
 #else
@@ -906,11 +907,10 @@ generativeqc_xtb_status_t evaluate_multipole_cpu(const BasisPlan& basis, const I
   return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-generativeqc_xtb_status_t add_multipole_gradient_cpu(const BasisPlan& basis, const IntegralPlan& plan,
-                                            const double* positions, const double* dE_ddipole,
-                                            const double* dE_dquadrupole, double* gradients,
-                                            void* workspace, std::size_t workspace_size,
-                                            std::string& error, CpuIsa cpu_isa) {
+generativeqc_xtb_status_t add_multipole_gradient_cpu(
+    const BasisPlan& basis, const IntegralPlan& plan, const double* positions,
+    const double* dE_ddipole, const double* dE_dquadrupole, double* gradients, void* workspace,
+    std::size_t workspace_size, std::string& error, generativeqc::runtime::CpuIsa cpu_isa) {
   generativeqc_xtb_status_t status =
       validate_evaluation(basis, plan, positions, workspace, workspace_size, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {

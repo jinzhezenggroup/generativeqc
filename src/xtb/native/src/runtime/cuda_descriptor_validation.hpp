@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 
+#include "runtime/cuda_device_scope.hpp"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail {
@@ -59,23 +60,21 @@ struct CudaValidatedBuffer {
 class ScopedCudaDevice {
  public:
   explicit ScopedCudaDevice(std::int32_t device_id, std::string& error);
-  ~ScopedCudaDevice();
+  ~ScopedCudaDevice() = default;
 
   ScopedCudaDevice(const ScopedCudaDevice&) = delete;
   ScopedCudaDevice& operator=(const ScopedCudaDevice&) = delete;
 
   [[nodiscard]] bool ok() const noexcept { return status_ == GENERATIVEQC_XTB_STATUS_SUCCESS; }
   [[nodiscard]] generativeqc_xtb_status_t status() const noexcept { return status_; }
-  [[nodiscard]] std::int32_t previous_device() const noexcept { return previous_device_; }
-  [[nodiscard]] std::int32_t selected_device() const noexcept { return selected_device_; }
+  [[nodiscard]] std::int32_t previous_device() const noexcept { return device_.previous_device(); }
+  [[nodiscard]] std::int32_t selected_device() const noexcept { return device_.selected_device(); }
 
   [[nodiscard]] generativeqc_xtb_status_t restore(std::string& error);
 
  private:
-  std::int32_t previous_device_ = -1;
-  std::int32_t selected_device_ = -1;
+  generativeqc::runtime::CudaDeviceScope device_;
   generativeqc_xtb_status_t status_ = GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
-  bool restore_pending_ = false;
 };
 
 /*

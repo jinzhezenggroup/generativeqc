@@ -119,9 +119,13 @@ for these strict-FP64 restricted producers:
 - Full-range exact-direct global hybrids with at least 384 AOs. The signed
   exchange coefficient and Direct J/K operators, not a functional name such as
   PBE0 or B3LYP, determine eligibility.
-- All-electron full-range Coulomb-only models with at least 544 AOs, using
-  either exact-direct or density-fitted J. This includes eligible r²SCAN-3c
-  owners; their separate D4/gCP corrections remain part of the complete endpoint.
+- All-electron full-range Coulomb-only models using exact-direct J with
+  **544 ≤ AOs < 1088**, or density-fitted J with at least **544 AOs**.
+  This includes eligible r²SCAN-3c owners; their separate D4/gCP corrections
+  remain part of the complete endpoint. Exact-direct pure-J owners at 1088 AOs
+  and above retain the host proof because the measured Direct/96 moved endpoint
+  failed complete-endpoint nonregression. This hold does not apply to the
+  separately qualified DF or global-hybrid defaults.
 
 Resource and live-generation checks still require the matrix-library handle,
 charged packets and no previously published stationary W/total-D lease. Smaller
@@ -136,7 +140,7 @@ shared strict proof: scientific acceptance gates, dense host exports and the
 orbital-energy expression for KS weighted density remain unchanged.
 
 See the [default-selection decision](../../.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md)
-and [pure-J extension](../../.agents/notes/implemented/performance/2026-10-15-pure-j-resident-final-validation.md)
+and [bounded pure-J policy](../../.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md)
 for their evidence and limits.
 
 ### Experimental incremental Direct-J/K and resource budgets

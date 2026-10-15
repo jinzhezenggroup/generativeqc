@@ -8,7 +8,7 @@
       "start": "__global__ void materialized_canonical_jk_kernel(",
       "stop": "__global__ void canonical_pair_keys_kernel(",
       "role": "runtime",
-      "reason": "Persistent indexed CTA traversal forwards immutable geometry, unchanged AO bounds and independent J/K destinations to the compiler-owned pair recurrence; it introduces no handwritten integral or scatter algebra. Conservative shell-key maxima retain the file's scientific classification."
+      "reason": "Persistent indexed CTA traversal forwards immutable geometry, unchanged AO bounds and independent J/K destinations to the compiler-owned full/SR/LR pair recurrence. Optional FP32 recurrence retains FP64 radial moments, shell contraction and scatter; there is no handwritten integral algebra. Conservative shell-key maxima retain the file's scientific classification."
     },
     {
       "start": "namespace cuda_execution {",

@@ -102,7 +102,7 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
 
     Pure semilocal graphs have no K work to prove. Use the existing native
     full-range projection of the exchange graph, including SR/LR decompositions,
-    without relabeling its strict range consumer. Optional residency does not
+    without confusing separate range recurrence work with full-range K. Optional residency does not
     create recurrence work.
     """
     options = getattr(calculator, "_ks_options", None)

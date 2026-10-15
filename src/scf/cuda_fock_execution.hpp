@@ -202,16 +202,20 @@ generativeqc_status enqueue_prepared_cuda_rsh_values(
     double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
     int* primary_error, int* range_error, std::string& detail);
 
-/** Enqueue a separately resolved long-range exact-exchange correction through
+/** Enqueue a separately resolved short-/long-range exact-exchange correction through
  * the same resident direct-J/K source as the primary prepared owner. The
  * correction must preserve spin and screening identity and contain no Coulomb
  * term. This keeps RSH composition on one stream/source without creating a
- * second CUDA provider owner.
+ * second CUDA provider owner. Mixed execution narrows the shared Cartesian
+ * recurrence, retaining FP64 radial moments and output accumulation. Whole-shell
+ * contraction stays FP64; bounded AO contraction follows the mixed value scalar.
+ * Its optional device counter records executed recurrence work.
  */
 generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail);
+    int* numerical_error, std::string& detail, bool mixed_exchange = false,
+    std::uint64_t* mixed_work_count = nullptr);
 
 }  // namespace generativeqc::scf
 

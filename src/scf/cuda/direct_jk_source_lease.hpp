@@ -19,8 +19,8 @@ namespace generativeqc::scf::cuda_execution {
 class DirectJkSourceLease {
  public:
   /** Radial identity and source precision are immutable. Range leases accept
-   * matching pure K only. Mixed sources are complete restricted full-range
-   * through-d FP32 recurrence/storage, with FP64 products and accumulation;
+   * matching pure K only. Mixed sources use restricted full/SR/LR through-d
+   * FP32 recurrence/storage, with FP64 products and accumulation;
    * a strict phase must retire them and construct a separate FP64 lease. */
   explicit DirectJkSourceLease(cudaStream_t stream,
                                FockOperator source_operator = FockOperator::FullRange,

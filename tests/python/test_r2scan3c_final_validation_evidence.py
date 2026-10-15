@@ -1,6 +1,7 @@
 """Protect the descriptive gates and strict default-route evidence boundary."""
 
 import json
+import lzma
 import runpy
 from pathlib import Path
 
@@ -128,3 +129,21 @@ def test_small_positive_benefit_and_work_attribution_remain_separate() -> None:
     comparison["phases"]["cold"]["passes_nonregression_gate"] = False
     with pytest.raises(ValueError, match="statistics differ"):
         verify(comparison)
+
+
+def test_retained_direct_regression_stays_blocked_under_the_policy_hold() -> None:
+    """Narrowing production admission must not turn failed historical evidence green."""
+    verify = runpy.run_path(str(REDUCER.with_name("refresh.py")))["verify_comparison"]
+    observations = json.loads(
+        lzma.decompress(REDUCER.with_name("observations.json.xz").read_bytes())
+    )
+    for comparison in observations["comparisons"]:
+        if comparison["density_fitting"] == "none" and comparison["atoms"] == 96:
+            moved = comparison["phases"]["moved"]
+            assert moved["work_confounded"]
+            assert not moved["passes_nonregression_gate"]
+            assert moved["relative_reduction"] == pytest.approx(-0.15985183252516988)
+            with pytest.raises(ValueError, match="none/96/moved: complete-endpoint"):
+                verify(comparison)
+        else:
+            verify(comparison)

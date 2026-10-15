@@ -1405,6 +1405,7 @@ def emit_grid_source(
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),
             asset_path("src/runtime/cuda_resources.cuh"),
+            asset_path("src/runtime/cuda_device_scope.hpp"),
             asset_path("src/runtime/resource_cuda.cuh"),
             asset_path("src/runtime/resource_ledger.hpp"),
             asset_path("src/runtime/residency_boundaries.hpp"),

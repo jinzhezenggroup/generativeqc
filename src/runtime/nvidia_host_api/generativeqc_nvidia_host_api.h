@@ -16,6 +16,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Minimum provider versions admitted by the graph-capable execution route.
+ * Runtime version checks still decide whether that route is usable.
+ */
+#define GENERATIVEQC_CUBLAS_MIN_VERSION 120901
+#define GENERATIVEQC_CUSOLVER_MIN_VERSION 11705
+
 #ifdef __cplusplus
 extern "C" {
 #endif

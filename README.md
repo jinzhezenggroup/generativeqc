@@ -130,6 +130,10 @@ independent references are historical, not rerun. Cold includes setup and the
 first E+F call; warm reuses converged density. The water clusters have
 3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
 
+This frozen snapshot predates #2532's bounded default: exact-Direct pure-J
+owners at 1088+ AOs use the host proof. The separate earlier Direct/96 moved
+regression remains held; see the [bounded-default decision](.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md).
+
 **Direct J/K**
 
 ![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/dft-cold-warm.svg)
