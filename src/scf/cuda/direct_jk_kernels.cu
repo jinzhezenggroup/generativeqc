@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <cmath>
-#include <type_traits>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
+#include <type_traits>
 
 #include "generated_direct_contraction.cuh"
 #include "generated_direct_fock_accumulation.cuh"
@@ -227,9 +227,8 @@ __global__ void canonical_jk_kernel(
     generativeqc::integrals::CoulombRange exchange_range, double exchange_omega, double screening,
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_census, double* range_exchange,
-    std::conditional_t<MixedJ, float, double>* source_values,
-    double* coulomb_correction, double* exchange_correction,
-    std::uint64_t* mixed_coulomb_work_count) {
+    std::conditional_t<MixedJ, float, double>* source_values, double* coulomb_correction,
+    double* exchange_correction, std::uint64_t* mixed_coulomb_work_count) {
   static_assert(!PairedRanges || Cartesian);
   static_assert(!MixedJ || !PairedRanges);
   const std::size_t dimension = static_cast<std::size_t>(batch.nbf);
@@ -971,7 +970,7 @@ void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* valu
 }
 
 void launch_independent_jk_mixed_finite_kernel(cudaStream_t stream, const float* values,
-                                              std::size_t count, int* failure) {
+                                               std::size_t count, int* failure) {
   const unsigned blocks = static_cast<unsigned>(std::min<std::size_t>((count + 127) / 128, 65535));
   if (blocks) independent_jk_finite_kernel<<<blocks, 128, 0, stream>>>(values, count, failure);
 }
@@ -1040,8 +1039,7 @@ void launch_canonical_jk_source(
     double exchange_omega, double screening, const double* bounds, const double* density,
     double* coulomb, double* exchange, std::uint64_t* work_census, double* range_exchange = nullptr,
     std::conditional_t<MixedJ, float, double>* source_values = nullptr,
-    double* coulomb_correction = nullptr,
-    double* exchange_correction = nullptr,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max(),
     std::uint64_t* mixed_coulomb_work_count = nullptr) {
   const std::size_t work_count = std::min(
@@ -1209,8 +1207,8 @@ void launch_mixed_resident_canonical_jk_kernel(
   const auto blocks =
       static_cast<unsigned>(std::min<std::size_t>((count + threads - 1U) / threads, 4096U));
   resident_canonical_jk_kernel<false, float><<<blocks, threads, 0, stream>>>(
-      batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
-      same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
+      batch, system, pairs, rows, first_begin, first_count, second_begin, second_count, same_bucket,
+      count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
       coulomb_correction, exchange_correction, screening, bounds);
 }
 

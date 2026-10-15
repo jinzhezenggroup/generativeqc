@@ -1416,8 +1416,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                            plan->resident_mixed_values && !plan->resident_values &&
                            plan->resident_bucket_mask == (1U << 28) - 1 &&
                            plan->resident_operator == FockOperator::FullRange &&
-                           (!spec.exchange.present ||
-                            spec.exchange.op == FockOperator::FullRange)),
+                           (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange)),
                       "mixed resident J/K source identity mismatch");
     direct_jk_require(!mixed_exchange || (mixed_j && !unrestricted && plan->canonical_pairs &&
                                           spec.coulomb.present && spec.exchange.present &&
@@ -1528,9 +1527,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                          : generated_coulomb != nullptr && generated_coulomb->value_capability);
     const bool generated_exchange_available =
         !mixed_exchange && direct_jk_generated_exchange_value_available(*plan, spec);
-    const bool resident = mixed_resident ||
-                          (allow_resident && (!fixed || correction) && !mixed_j &&
-                           direct_jk_resident_matches(plan, spec));
+    const bool resident = mixed_resident || (allow_resident && (!fixed || correction) && !mixed_j &&
+                                             direct_jk_resident_matches(plan, spec));
     const bool md_coulomb = plan->md_j.minimum_bounds && spec.coulomb.present && !fixed &&
                             !mixed_j && !census && spec.derivative_order == 0;
     const auto dispatch = direct_jk_value_dispatch(
@@ -2045,8 +2043,9 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
   });
 }
 
-generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
-    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail) {
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPlan* plan,
+                                                                 std::size_t maximum_bytes,
+                                                                 std::string& detail) {
   const auto layout = prepare_cuda_direct_jk_resident_layout(plan, detail);
   if (layout != GENERATIVEQC_STATUS_SUCCESS) return layout;
   return direct_jk_guard(plan, detail, [&] {
@@ -2057,7 +2056,8 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
       if (offsets[5] != offsets[7])
         throw DirectJkFailure{GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                               "mixed resident Direct source supports through-d shells"};
-    const auto required = cuda_direct_jk_resident_value_bytes(plan) / sizeof(double) * sizeof(float);
+    const auto required =
+        cuda_direct_jk_resident_value_bytes(plan) / sizeof(double) * sizeof(float);
     if (!required || required > maximum_bytes) throw std::bad_alloc();
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
@@ -2096,8 +2096,8 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
               static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
               direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
               offsets[first + 1U] - offsets[first], offsets[second],
-              offsets[second + 1U] - offsets[second], first == second,
-              plan->screening_tolerance, plan->canonical_bounds, lease.values + value_offset, count);
+              offsets[second + 1U] - offsets[second], first == second, plan->screening_tolerance,
+              plan->canonical_bounds, lease.values + value_offset, count);
           direct_jk_check(cudaGetLastError());
           value_offset += count;
           plan->diagnostic.resident_values_submitted = value_offset;
@@ -2464,9 +2464,10 @@ generativeqc_status enqueue_cuda_direct_jk_mixed_resident_device(
     detail = "canonical mixed resident J/K storage is unavailable";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  return enqueue_cuda_direct_jk_device_impl(
-      plan, spec, density, nullptr, elements, coulomb, exchange, nullptr, numerical_error, false,
-      nullptr, threshold, census, detail, correction, correction_elements, true, false, false, true);
+  return enqueue_cuda_direct_jk_device_impl(plan, spec, density, nullptr, elements, coulomb,
+                                            exchange, nullptr, numerical_error, false, nullptr,
+                                            threshold, census, detail, correction,
+                                            correction_elements, true, false, false, true);
 }
 
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(

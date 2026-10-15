@@ -107,8 +107,7 @@ generativeqc_status DirectJkSourceLease::prepare(
   if (systems.size() != 1) return finish(GENERATIVEQC_STATUS_SUCCESS);
   const auto& system = systems.front();
   if (mixed_recurrence_ &&
-      (spins != 1 || bucket_mask != (1U << 28) - 1 ||
-       source_operator_ != FockOperator::FullRange ||
+      (spins != 1 || bucket_mask != (1U << 28) - 1 || source_operator_ != FockOperator::FullRange ||
        std::any_of(system.shells.begin(), system.shells.end(),
                    [](const auto& shell) { return shell.angular_momentum > 2; }))) {
     reason_ = "mixed source requires complete restricted full-range through-d values";
@@ -241,15 +240,16 @@ generativeqc_status DirectJkSourceLease::prepare(
     }
     return finish(cuda_status(error));
   }
-  runtime::df_progress::Scope::number("source_values_requested",
-                                      required_values / (mixed_recurrence_ ? sizeof(float)
-                                                                          : sizeof(double)));
+  runtime::df_progress::Scope::number(
+      "source_values_requested",
+      required_values / (mixed_recurrence_ ? sizeof(float) : sizeof(double)));
   runtime::df_progress::Scope::label("source_precision", mixed_recurrence_ ? "fp32" : "fp64");
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
-  status = mixed_recurrence_
-               ? prepare_cuda_direct_jk_mixed_resident_values(direct_.get(), allowance, reason_)
-               : prepare_cuda_direct_jk_range_resident_values(
-                     direct_.get(), allowance, bucket_mask, source_operator_, source_omega_, reason_);
+  status =
+      mixed_recurrence_
+          ? prepare_cuda_direct_jk_mixed_resident_values(direct_.get(), allowance, reason_)
+          : prepare_cuda_direct_jk_range_resident_values(direct_.get(), allowance, bucket_mask,
+                                                         source_operator_, source_omega_, reason_);
   if (optional_refusal(status)) {
     return refuse_optional();
   }
@@ -289,15 +289,15 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
     detail = "mixed resident source requires restricted density";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  const auto status = mixed_recurrence_
-                          ? enqueue_cuda_direct_jk_mixed_resident_device(
-                                direct_.get(), spec, density, matrix_elements_, coulomb, exchange,
-                                correction, correction_elements_, last_error_, screening, census_,
-                                detail)
-                          : enqueue_cuda_direct_jk_compensated_device(
-                                direct_.get(), spec, density, matrix_elements_, coulomb, exchange,
-                                correction, correction_elements_, last_error_, screening, census_,
-                                detail, true, beta, beta_exchange);
+  const auto status =
+      mixed_recurrence_
+          ? enqueue_cuda_direct_jk_mixed_resident_device(
+                direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
+                correction_elements_, last_error_, screening, census_, detail)
+          : enqueue_cuda_direct_jk_compensated_device(
+                direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
+                correction_elements_, last_error_, screening, census_, detail, true, beta,
+                beta_exchange);
   if (status == GENERATIVEQC_STATUS_SUCCESS) last_screening_ = screening;
   return status;
 }

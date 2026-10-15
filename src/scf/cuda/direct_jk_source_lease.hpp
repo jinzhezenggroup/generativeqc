@@ -25,7 +25,9 @@ class DirectJkSourceLease {
   explicit DirectJkSourceLease(cudaStream_t stream,
                                FockOperator source_operator = FockOperator::FullRange,
                                double omega = 0.0, bool mixed_recurrence = false)
-      : stream_(stream), source_operator_(source_operator), source_omega_(omega),
+      : stream_(stream),
+        source_operator_(source_operator),
+        source_omega_(omega),
         mixed_recurrence_(mixed_recurrence) {}
   ~DirectJkSourceLease();
   DirectJkSourceLease(const DirectJkSourceLease&) = delete;

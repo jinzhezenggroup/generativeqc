@@ -76,8 +76,9 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
  * Restricted, complete through-d canonical sources only. Publication is atomic
  * after finite validation; strict callers cannot consume this precision lease.
  */
-generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
-    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail);
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPlan* plan,
+                                                                 std::size_t maximum_bytes,
+                                                                 std::string& detail);
 
 /** Retain exact values of one immutable radial operator, with bounded partial
  * residency. SR/LR values can serve only matching pure-exchange requests; full

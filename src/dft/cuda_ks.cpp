@@ -439,8 +439,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void prepare_phase_source(bool cold, bool frozen_warm = false) {
     using namespace scf::cuda_execution;
     const bool mixed_source = budget_fock && !strict_refinement;
-    if (phase_source && phase_source->active() &&
-        phase_source->mixed_recurrence() != mixed_source)
+    if (phase_source && phase_source->active() && phase_source->mixed_recurrence() != mixed_source)
       retire_phase_source(true);
     if (experimental_mixed_point && phase_source && phase_source->active()) return;
     // Range residency has its own bounded automatic policy. Never rebuild a
@@ -542,12 +541,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Publication can refuse after ERIs have completed. Include that discarded
     // setup in endpoint work rather than counting only admitted cache reuse.
     movement.phase_resident_values_built += phase_source->completed_value_count();
-    record_precision_operator(scf::PrecisionOperatorKind::CoulombRecurrence,
-                              mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
-                              mixed_source ? scf::PrecisionArithmeticMode::Mixed
-                                           : scf::PrecisionArithmeticMode::Strict,
-                              phase_source->completed_value_count(),
-                              mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64);
+    record_precision_operator(
+        scf::PrecisionOperatorKind::CoulombRecurrence,
+        mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
+        mixed_source ? scf::PrecisionArithmeticMode::Mixed : scf::PrecisionArithmeticMode::Strict,
+        phase_source->completed_value_count(),
+        mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64);
     if (!phase_source->active()) {
       phase_source.reset();
       return;
@@ -570,9 +569,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
                                          std::string& detail, bool use_source = true) {
-    const bool resident_source =
-        use_source && !phase_source_range && phase_source && phase_source->active() &&
-        mixed == phase_source->mixed_recurrence();
+    const bool resident_source = use_source && !phase_source_range && phase_source &&
+                                 phase_source->active() &&
+                                 mixed == phase_source->mixed_recurrence();
     pending_mixed_resident = mixed && resident_source;
     runtime::cuda_trace::TraceOperation trace(
         has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
@@ -708,8 +707,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           pending_mixed_coulomb ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
       const auto source_storage =
           pending_mixed_resident ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
-      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode,
-                                1, source_storage);
+      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode, 1,
+                                source_storage);
       const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
                                             static_cast<std::uint64_t>(has_range_correction);
       record_precision_operator(

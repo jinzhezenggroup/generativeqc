@@ -753,15 +753,14 @@ void endpoint(const Fixture& fixture, bool b3lyp, bool compute_forces) {
 
 int main(int argc, char** argv) {
   try {
-    require(
-        argc == 2 ||
-            (argc == 3 &&
-             (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
-              std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
-              std::string(argv[2]) == "mixed-refinement" ||
-              std::string(argv[2]) == "mixed-source")),
-        "usage: ks-phase-values-probe INPUT "
-        "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
+    require(argc == 2 ||
+                (argc == 3 &&
+                 (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
+                  std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
+                  std::string(argv[2]) == "mixed-refinement" ||
+                  std::string(argv[2]) == "mixed-source")),
+            "usage: ks-phase-values-probe INPUT "
+            "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
     const bool range_oracle = argc == 3 && std::string(argv[2]) == "range-oracle";
     const Fixture fixture(argv[1],
                           argc == 2 || std::string(argv[2]) == "mixed-refinement" ||

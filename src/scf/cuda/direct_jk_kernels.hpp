@@ -73,10 +73,10 @@ constexpr unsigned kIndependentJkThreads = 32;
 
 /** Device-only validity reduction for the allocation-free provider seam. */
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,
-                                        std::size_t count, int* failure);
+                                         std::size_t count, int* failure);
 
 void launch_independent_jk_mixed_finite_kernel(cudaStream_t stream, const float* values,
-                                              std::size_t count, int* failure);
+                                               std::size_t count, int* failure);
 
 /** Exact unscreened public-AO ERI tile for prepared interaction-source consumers.
  * The output is row-major [i,j,k,l] with l fastest. Caller owns storage/stream.
