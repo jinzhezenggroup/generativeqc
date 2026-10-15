@@ -28,7 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Required by the benchmark publication renderer regression; do not skip it.
-test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8"]
+test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
 reference-test = [
   "scipy>=1.10",
