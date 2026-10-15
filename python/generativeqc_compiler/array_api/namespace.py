@@ -14,6 +14,7 @@ from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 from .array import ExactScalar, VibeArray
 
 _GENERIC_SPACE_PREFIX = "_array_extent_"
+_MAX_STATIC_GATHER_POSITIONS = 65_536
 
 
 def _array(value: object, name: str = "operand") -> VibeArray:
@@ -586,7 +587,7 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
         if axis is None
         else _normalized_axes(axis, value.ndim, "flip")
     )
-    if any(value.shape[position] > 65536 for position in axes):
+    if any(value.shape[position] > _MAX_STATIC_GATHER_POSITIONS for position in axes):
         raise ValueError("flip exceeds the bounded static gather index budget")
     node = value.node
     for position in sorted(axes):
@@ -885,16 +886,28 @@ def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
                 "generic symbolic indexing supports integers, slices, None, and ellipsis"
             )
         start, stop, step = item.indices(extent)
-        positions = tuple(range(start, stop, step))
-        if step == 1 and positions:
-            ranges = tuple(
-                (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
-                for axis in range(len(node.spec.shape))
-            )
-            node = tensor_ir.slice_tensor(node, ranges)
+        if step == 1:
+            # A contiguous slice needs only its bounds, not an index tuple.
+            selected_count = max(0, stop - start)
+            if selected_count:
+                ranges = tuple(
+                    (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
+                    for axis in range(len(node.spec.shape))
+                )
+                node = tensor_ir.slice_tensor(node, ranges)
+            else:
+                node = tensor_ir.gather(node, source_axis, ())
         else:
+            # Non-unit strides require an explicit gather map. Check its extent
+            # before TensorIR materializes the map as an immutable tuple.
+            positions = range(start, stop, step)
+            selected_count = len(positions)
+            if selected_count > _MAX_STATIC_GATHER_POSITIONS:
+                raise ValueError(
+                    "symbolic subscript exceeds the bounded static gather index budget"
+                )
             node = tensor_ir.gather(node, source_axis, positions)
-        output_shape.append(len(positions))
+        output_shape.append(selected_count)
         source_axis += 1
     return VibeArray(tensor_ir.reshape(node, _generic_indices(tuple(output_shape))))
 
