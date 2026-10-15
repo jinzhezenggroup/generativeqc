@@ -45,6 +45,7 @@ function(generativeqc_add_hessian_aot target inventory)
   add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
+  generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
   target_include_directories(${target} PUBLIC "${PROJECT_SOURCE_DIR}/src")
   target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

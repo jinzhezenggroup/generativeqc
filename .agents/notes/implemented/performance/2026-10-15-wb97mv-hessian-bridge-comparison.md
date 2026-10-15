@@ -14,7 +14,7 @@ built from numerical candidate `80dfd1bf08f4051c94f883c53896b294d55b3ff1`.
 Do not attribute these timings to the later PR head.
 
 Compact raw H2 timing/matrix samples are retained in
-`benchmarks/results/wb97mv-hessian-bridge-h2-20261015.json`.
+`benchmarks/results/wb97mv-hessian-bridge-h2-20261015.json.xz`.
 Native CLI SHA256 was
 `6cd50d355dbb9278711985fbf3be4b1ea4228e1a808bb17c8dea4227f1ea9af6`;
 DSO SHA256 and the measured comparator SHA256 are in the receipt. The exact
@@ -98,3 +98,27 @@ Keep the negative baseline. Replace Python orchestration with the complete nativ
 compiler-AD consumer, qualify scientific equivalence independently and then
 remeasure the actual required endpoint. Native kernel/AOT compilation success
 or leaf microbenchmarks cannot substitute for that endpoint evidence.
+
+## Lossless retention and runner safeguards
+
+The H2 receipt is now stored as XZ, preserving every decompressed byte, all six
+samples, matrices and the failed 3e-6 gate. Its original 7,714 JSON bytes remain
+recoverable at immutable commit
+`c5554f97a1b688eb42cbc587f0f1dd80e02536a5`, path
+`benchmarks/results/wb97mv-hessian-bridge-h2-20261015.json`.
+The decompressed SHA256 is `e6be73ff0b73004b3360529bf28acbc905d10e104bb96d99c2b329225ff35c1a`.
+The 2,472 stored bytes have SHA256 `821fc217ff946b87f41197f5c4ccdfca649e2044e1cfb892e858b28e0416fb83`.
+No numerical record, negative result or retention limit is removed or relaxed.
+Together with #2528 head `11b0f50bf965d07844e410164ac91f8092d866da`
+and master `4e28477e96d257528a60bcb68c00529f22585bc1`, retained
+results total 67,107,770 bytes, 1,094 below the unchanged 64 MiB cap.
+
+The runner rejects retained/existing destinations before GPU import and reserves
+its output, sample directory and logs exclusively. Updates retain the owned
+output descriptor even if another writer replaces its pathname. Child logs use
+owned descriptors rather than inherited pipes; cancellation waits are finite,
+and Linux systems without task/children use PPid for owned direct-child cleanup.
+Host fault injection covers preserved files/symlinks, replacement/concurrent
+writers, dependency failure, shape/tolerance rejection and timeout cleanup.
+These safeguards do not upgrade the historical failed accuracy/timeout results
+or qualify the unfinished Python-free endpoint.

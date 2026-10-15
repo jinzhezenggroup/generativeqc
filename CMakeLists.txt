@@ -60,9 +60,6 @@ option(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES
 set(GENERATIVEQC_HESSIAN_AOT_INVENTORY
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/hessian_aot_development.json" CACHE FILEPATH
     "Explicit development Hessian AOT leaf inventory; missing entries never use runtime JIT")
-if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES AND NOT GENERATIVEQC_ENABLE_CUDA)
-  message(FATAL_ERROR "Hessian AOT leaves require CUDA")
-endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
@@ -298,6 +295,10 @@ if(GENERATIVEQC_ENABLE_CUDA)
     message(WARNING "CUDA compiler not found; building the CPU reference backend only")
     set(GENERATIVEQC_ENABLE_CUDA OFF)
   endif()
+endif()
+
+if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES AND NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR "Hessian AOT leaves require CUDA")
 endif()
 
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND

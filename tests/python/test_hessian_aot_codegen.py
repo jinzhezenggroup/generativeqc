@@ -119,3 +119,86 @@ runpy.run_path('tools/generate_hessian_aot.py', run_name='__main__')
     assert {item.stem for item in output.glob("*.cu")} == set(inventory.names)
     assert (output / "registry.cpp").is_file()
     assert all(item.stat().st_size for item in output.iterdir())
+
+
+@pytest.mark.parametrize("pool", ["", "bounded_aot"])
+def test_native_leaf_target_preserves_configured_compile_pool(
+    tmp_path: Path, native_cxx: object, pool: str
+) -> None:
+    """Exercise real target wiring with inert CUDA sources, without NVCC."""
+    import shutil
+
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("AOT target configuration requires CMake")
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(HessianTarget LANGUAGES CXX)\n"
+        f'set(PROJECT_SOURCE_DIR "{ROOT}")\n'
+        f'set(Python3_EXECUTABLE "{sys.executable}")\n'
+        "add_library(CUDA::cudart INTERFACE IMPORTED)\n"
+        "function(generativeqc_register_generated_sources)\n"
+        '  cmake_parse_arguments(G "" "GENERATOR" "OUTPUTS;DEPENDS;ARGS;COMMENT" ${ARGN})\n'
+        "  set_source_files_properties(${G_OUTPUTS} PROPERTIES GENERATED TRUE LANGUAGE CXX)\n"
+        "endfunction()\n"
+        f'include("{ROOT}/cmake/GenerativeQCCuda.cmake")\n'
+        f'include("{ROOT}/cmake/GenerativeQCHessianAot.cmake")\n'
+        f'set(_generativeqc_aot_compile_pool "{pool}")\n'
+        "set_property(GLOBAL PROPERTY JOB_POOLS bounded_aot=1)\n"
+        f'generativeqc_add_hessian_aot(leaves "{INVENTORY}")\n'
+        "get_target_property(pool leaves JOB_POOL_COMPILE)\n"
+        'file(WRITE "${CMAKE_BINARY_DIR}/pool.txt" "${pool}")\n'
+    )
+    build = tmp_path / "build"
+    subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(build),
+            f"-DCMAKE_CXX_COMPILER={native_cxx.compiler}",
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={native_cxx.cache}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert (build / "pool.txt").read_text() == (pool or "pool-NOTFOUND")
+
+
+@pytest.mark.parametrize("requested", [False, True])
+def test_requested_native_leaves_cannot_silently_use_cpu_fallback(
+    tmp_path: Path, native_cxx: object, requested: bool
+) -> None:
+    """A missing CUDA compiler must reject an explicit AOT leaf request."""
+    import shutil
+
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("AOT package admission requires CMake")
+    result = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(ROOT),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DCMAKE_CXX_COMPILER={native_cxx.compiler}",
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={native_cxx.cache}",
+            "-DCMAKE_CUDA_COMPILER=NOTFOUND",
+            "-DGENERATIVEQC_ENABLE_CUDA=ON",
+            f"-DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES={'ON' if requested else 'OFF'}",
+            "-DGENERATIVEQC_BUILD_CLI=OFF",
+            "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF",
+            "-DGENERATIVEQC_CPU_LINALG_PROVIDER=scalar",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert (result.returncode != 0) is requested, result.stdout + result.stderr
+    if requested:
+        assert "Hessian AOT leaves require CUDA" in result.stderr
