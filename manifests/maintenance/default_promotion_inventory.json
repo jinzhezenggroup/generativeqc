@@ -42,7 +42,8 @@
       "python/generativeqc_compiler/integral/production_shell_classes.json",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
-      "src/scf/types.hpp"
+      "src/scf/types.hpp",
+      "python/generativeqc_compiler/tensor/ad_program.py"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -1571,6 +1572,26 @@
         "tests/python/test_geometry_response_cache.py",
         ".agents/notes/proposed/2026-10-14-exact-geometry-response-reuse.md",
         "issue:#2426"
+      ]
+    },
+    {
+      "id": "tensor.external-mask-generated-jvp",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:linearize.allow_external_mask_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generated JVP for fixed external Boolean masks on generic finite FP64 arrays remains explicit. All live primal and forward domain checks are retained; only materializing native CPU is qualified. Default Boolean rejection and non-selection generated equations remain unchanged.",
+      "revisit_condition": "Broader dtype, backend, higher-order or public compiled AD admission requires separate source-matched independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_tensor_where_jvp_program.py",
+        "docs/developer/tensor_ir.md"
       ]
     }
   ]
