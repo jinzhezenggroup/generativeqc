@@ -173,6 +173,35 @@ record_run provider_failure.baseline env FAKE_PROVIDER_CASE=provider_failure "$d
 record_run provider_failure.shim env FAKE_PROVIDER_CASE=provider_failure \
   GENERATIVEQC_RHF_PROVIDER_TRACE="$result_directory/provider_failure.trace.jsonl" \
   LD_PRELOAD="$shim" "$driver"
+"$python" - "$result_directory/stdout-parity.json" \
+  "$result_directory/positive.baseline.stdout.json" \
+  "$result_directory/positive.shim.stdout.json" \
+  "$result_directory/provider_failure.baseline.stdout.json" \
+  "$result_directory/provider_failure.shim.stdout.json" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+output, positive_base, positive_shim, failure_base, failure_shim = sys.argv[1:]
+
+
+def compare(baseline_name, shim_name):
+    baseline = Path(baseline_name).read_bytes()
+    shim = Path(shim_name).read_bytes()
+    return {
+        "baseline": {"size": len(baseline), "sha256": hashlib.sha256(baseline).hexdigest()},
+        "shim": {"size": len(shim), "sha256": hashlib.sha256(shim).hexdigest()},
+        "byte_identical": baseline == shim,
+    }
+
+
+value = {
+    "positive": compare(positive_base, positive_shim),
+    "provider_failure": compare(failure_base, failure_shim),
+}
+Path(output).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 record_run overflow.shim env FAKE_PROVIDER_CASE=positive \
   GENERATIVEQC_RHF_PROVIDER_TRACE="$result_directory/overflow.trace.jsonl" \
   LD_PRELOAD="$shim" "$driver" --overflow

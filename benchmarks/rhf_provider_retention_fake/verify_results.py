@@ -123,6 +123,17 @@ def verify_positive_trace(path: Path, *, provider_failure: bool = False) -> None
 
 
 def verify_outputs(root: Path) -> None:
+    parity = json.loads((root / "stdout-parity.json").read_text(encoding="utf-8"))
+    for name in ("positive", "provider_failure"):
+        record = parity[name]
+        require(
+            record["byte_identical"] is True, f"{name} stdout is not byte-identical"
+        )
+        require(
+            record["baseline"] == record["shim"],
+            f"{name} stdout hash or size differs",
+        )
+
     positive_baseline = load_json(root / "positive.baseline.stdout.json")
     positive_shim = load_json(root / "positive.shim.stdout.json")
     require(positive_baseline == positive_shim, "positive baseline/shim output differs")
