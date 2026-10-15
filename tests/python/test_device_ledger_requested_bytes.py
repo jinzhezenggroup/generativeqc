@@ -301,8 +301,8 @@ def ledger_probe(
 ) -> Path:
     """Link actual ledger C APIs; discard unrelated CPU shape-query sections."""
     folder = tmp_path_factory.mktemp("device-ledger-requests")
-    # The production resource translation unit also owns the ECP shape query.
-    # Generate its real policy header instead of relying on a prior CMake build.
+    # The production resource translation unit also owns ECP and D3 queries.
+    # Generate their real headers instead of relying on a prior CMake build.
     subprocess.run(
         [
             sys.executable,
@@ -311,6 +311,20 @@ def ledger_probe(
             str(ROOT / "tools/generate_ecp_kernels.py"),
             "--output",
             str(folder / "generated_ecp_ao.cuh"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(ROOT / "tools/generativeqc_d3/generate_native_data.py"),
+            "--output",
+            str(folder / "d3_data.hpp"),
         ],
         check=True,
         capture_output=True,
