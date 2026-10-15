@@ -37,6 +37,14 @@ struct D3ResourceUsage {
   std::uint32_t maximum_atoms{};
 };
 
+/** Shape-only capacity of the production ragged owner, without allocation or
+ * backend initialization. Counts must describe a realizable nonempty uint32
+ * ragged batch within the per-system physics cap. No budget is admitted here;
+ * prepare() supplies maximum_bytes and applies the local retained-owner cap.
+ */
+D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t systems,
+                                  std::uint64_t atoms, std::uint64_t maximum_atoms);
+
 struct D3CudaOwner;
 
 class D3Plan {

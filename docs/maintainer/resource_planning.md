@@ -152,6 +152,20 @@ host and device ECP owners separately because CUDA dry runs can load their
 layout-query library after sizing host storage. This changes sizing ownership,
 not scientific qualification, native admission/leases or allocation receipts.
 
+D3(BJ) planning uses the already loaded library's private
+`generativeqc_resource_d3_layout_v1` query. This allocation-free shape query and
+`D3Plan::prepare()` share the same C++ retained plan/execution, workspace and
+actual compiled table-layout capacities. CPU uses the largest serialized
+system's workspace; CUDA uses aggregate ragged atom storage. A CUDA selector
+does not initialize CUDA and is available in CPU-only libraries. Native shape
+validation preserves the uint32 ragged-offset and per-system atom bounds.
+The request records native versus portable sizing in its schedule identity;
+old libraries and library-free dry runs retain explicit portable metadata
+sizing, never used after native rejection. Python still presents estimates
+and composes local/global budget decisions, while the prepared native D3 owner
+continues to enforce its local retained-byte cap. These numeric capacities are
+not process RSS receipts or new CUDA scientific qualification.
+
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |
 | CPU direct RHF/UHF | All fleet topology, warm densities and outputs | Largest serialized item: forward-mode Jet/recurrence arrays, Cartesian/public integral coexistence, SCF/DIIS/eigensolver matrices and forces |

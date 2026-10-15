@@ -8,6 +8,7 @@
 
 #include "api/error.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
+#include "dft/dispersion/d3_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
@@ -31,6 +32,32 @@
 #endif
 
 extern "C" {
+
+/** Private allocation-free D3 layout query, shared with D3Plan::prepare().
+ * Six outputs: plan host, execution host, device, tables, workspace and total
+ * retained bytes. CUDA is a selector only, including in CPU-only libraries.
+ * Invalid selectors, shapes and schemas leave the output untouched.
+ */
+int generativeqc_resource_d3_layout_v1(int backend, std::uint64_t systems, std::uint64_t atoms,
+                                       std::uint64_t maximum_atoms, std::uint64_t* values,
+                                       std::size_t value_count) {
+  if (!values || value_count != 6 || (backend != 0 && backend != 1)) return -1;
+  try {
+    const auto usage = generativeqc::dft::dispersion::d3_resource_usage(
+        static_cast<generativeqc_backend>(backend), systems, atoms, maximum_atoms);
+    const std::array<std::uint64_t, 6> inventory{
+        usage.plan_host_bytes,
+        usage.execution_host_bytes,
+        usage.device_bytes,
+        usage.table_bytes,
+        usage.workspace_bytes,
+        usage.plan_host_bytes + usage.execution_host_bytes + usage.device_bytes};
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (const std::exception&) {
+    return -1;
+  }
+}
 
 /** Read immutable source tags from this actual library, with no CUDA or heap
  * work. Null is an unknown tag, not an inferred role/payload classification. */
