@@ -69,3 +69,18 @@ def test_exact_sampled_jet_cutoff_and_replicated_atom_shapes():
     assert len(water_atoms(32)) == 96
     with pytest.raises(ValueError, match="replicas"):
         water_atoms(0)
+
+
+@pytest.mark.parametrize(
+    "active,rank,points",
+    [(0, 0, 1), (8, 3, 5), (48, 160, 64), (160, 160, 10), (768, 160, 64)],
+)
+def test_hybrid_projection_is_never_cheapest_by_product_count(active, rank, points):
+    work = projection_work(active, rank, points)
+    dense, hybrid, orbital = (
+        work["four_density_jets"],
+        work["one_density_three_occupied"],
+        work["four_occupied_jets"],
+    )
+    assert 4 * hybrid == dense + 3 * orbital
+    assert min(dense, orbital) <= hybrid <= max(dense, orbital)
