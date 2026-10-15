@@ -2,23 +2,24 @@
 
 import ctypes
 import math
-import shutil
-import subprocess
 from collections.abc import Callable
 from decimal import Decimal, localcontext
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.integral.coulomb_recurrence_cuda import (
     emit_high_order_coulomb_support,
 )
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
 
 @pytest.fixture(scope="module")
-def spatial_reuse(tmp_path_factory: pytest.TempPathFactory) -> Callable:
+def spatial_reuse(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+) -> Callable:
     """Compile the emitted scientific arithmetic without a runtime or GPU import."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     directory = tmp_path_factory.mktemp("spatial-coulomb-reuse")
     source = directory / "spatial.cpp"
     source.write_text(
@@ -48,21 +49,13 @@ def spatial_reuse(tmp_path_factory: pytest.TempPathFactory) -> Callable:
         "}\n"
     )
     library_path = directory / "spatial.so"
-    command = [
-        compiler,
-        "-O2",
-        "-std=c++17",
-        "-shared",
-        "-fPIC",
-        str(source),
-        "-o",
-        str(library_path),
-    ]
-    cache = shutil.which("sccache") or shutil.which("ccache")
-    if cache:
-        subprocess.run([cache, "--version"], check=True, capture_output=True)
-        command.insert(0, cache)
-    subprocess.run(command, check=True, capture_output=True, timeout=120)
+    native_cxx.build_shared(
+        [source],
+        library_path,
+        compile_args=["-O2", "-std=c++17"],
+        compile_timeout=120,
+        link_timeout=120,
+    )
     library = ctypes.CDLL(str(library_path))
     library.evaluate.argtypes = [
         ctypes.c_uint,
