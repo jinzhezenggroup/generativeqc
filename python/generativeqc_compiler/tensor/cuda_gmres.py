@@ -39,6 +39,12 @@ __device__ void fail(State* state, Status status) {
   atomicCAS(&state->code, 0, static_cast<int>(status));
 }
 
+__device__ int status_code(State* state) {
+  // Peer lanes/blocks can report failure while a vector kernel is entering.
+  // Only the flag is polled here; stream/barrier ordering owns other state.
+  return atomicCAS(&state->code, 0, 0);
+}
+
 __global__ void validate(const double* rhs, const double* diagonal, std::size_t count,
                          double floor, State* state) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -117,7 +123,7 @@ __global__ void cycle(State* state, double* target) {
 
 __global__ void normalize(const double* input, double* output, std::size_t count,
                           const double* divisor, State* state, bool arnoldi) {
-  if (state->code || (arnoldi && state->breakdown)) return;
+  if (status_code(state) || (arnoldi && state->breakdown)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     const double value = input[index] / *divisor;
@@ -128,7 +134,7 @@ __global__ void normalize(const double* input, double* output, std::size_t count
 
 __global__ void precondition(const double* input, const double* diagonal, double* output,
                              std::size_t count, State* state) {
-  if (state->code) return;
+  if (status_code(state)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     const double value = diagonal ? input[index] / diagonal[index] : input[index];
@@ -165,7 +171,7 @@ __global__ void dot(const double* left, const double* right, std::size_t count, 
 
 __global__ void orthogonalize(const double* basis, double* work, std::size_t count,
                               State* state) {
-  if (state->code) return;
+  if (status_code(state)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     const double value = work[index] - state->projection * basis[index];
@@ -222,7 +228,7 @@ __global__ void rotate(double* hessenberg, double* cosine, double* sine, double*
 __global__ void candidate(const double* base, const double* directions,
                           const double* coefficients, double* output, std::size_t count,
                           std::size_t columns, State* state) {
-  if (state->code) return;
+  if (status_code(state)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     double value = base[index];
@@ -235,7 +241,7 @@ __global__ void candidate(const double* base, const double* directions,
 
 __global__ void residual(const double* rhs, const double* image, double* output,
                          std::size_t count, State* state) {
-  if (state->code) return;
+  if (status_code(state)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     const double value = rhs[index] - image[index];

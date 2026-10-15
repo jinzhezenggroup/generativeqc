@@ -217,8 +217,16 @@ def test_gap_floor_refuses_unseparated_response(probe: Path) -> None:
     assert result["status"] == 5 and not result["converged"] and result["untouched"]
 
 
-def test_overflowing_preconditioner_cannot_publish(probe: Path) -> None:
-    result = _solve(probe, np.eye(3), np.ones(3), np.full(3, 1e-310), diagonal_floor=0)
+@pytest.mark.parametrize("dimension", [3, 257, 1025])
+def test_overflowing_preconditioner_cannot_publish(probe: Path, dimension: int) -> None:
+    """Overflow must fail closed across warps, blocks and a partial last block."""
+    result = _solve(
+        probe,
+        np.eye(dimension),
+        np.ones(dimension),
+        np.full(dimension, 1e-310),
+        diagonal_floor=0,
+    )
     assert result["status"] == 5 and not result["converged"] and result["untouched"]
 
 
