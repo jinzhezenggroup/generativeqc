@@ -124,6 +124,96 @@ def test_representable_generated_methods_need_no_named_catalog_edit() -> None:
         assert name in METHOD_CATALOG
 
 
+
+
+def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
+    # No manually authored B97M-V or WB97X-V exchange/VV10 constants.
+    b97mv = extract_method_registrations(
+        (FULL_LIBXC / "mgga_xc_b97mv.c").read_text(),
+        "mgga_xc_b97mv.c",
+        direct_combined=True,
+    )
+    (pure,) = b97mv
+    assert pure["status"] == "generated"
+    assert pure["identifier"] == "B97M-V"
+    assert pure["components"] == [["MGGA_XC_B97M_V", "1"]]
+    assert (pure["nonlocal_variant"], pure["nlc_b"], pure["nlc_c"]) == (
+        "vv10",
+        "6",
+        "1/100",
+    )
+    assert pure["short_range_exchange"] == pure["long_range_exchange"] == "0"
+
+    wb97 = extract_method_registrations(
+        (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text(),
+        "hyb_gga_xc_wb97.c",
+        direct_combined=True,
+    )
+    rows = {row["registration"]: row for row in wb97}
+    vv10 = rows["HYB_GGA_XC_WB97X_V"]
+    assert vv10["status"] == "generated"
+    assert vv10["identifier"] == "WB97X-V"
+    assert vv10["direct_semilocal_component"] == "HYB_GGA_XC_WB97X_V"
+    assert (vv10["short_range_exchange"], vv10["long_range_exchange"]) == (
+        "167/1000",
+        "1",
+    )
+    assert vv10["range_omega"] == "3/10"
+    assert (vv10["nonlocal_variant"], vv10["nlc_b"], vv10["nlc_c"]) == (
+        "vv10",
+        "6",
+        "1/100",
+    )
+    # The shared C initializer enables VV10 only in the -V switch arm.
+    for name in (
+        "HYB_GGA_XC_WB97",
+        "HYB_GGA_XC_WB97X",
+        "HYB_GGA_XC_WB97X_D",
+        "HYB_GGA_XC_WB97X_D3",
+    ):
+        assert rows[name]["status"] == "generated"
+        assert rows[name]["nonlocal_variant"] is None
+
+
+def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
+
+    for name in ("B97M-V", "WB97X-V", "GAS22"):
+        assert name in LIBXC_METHODS
+        spec = METHOD_CATALOG[name]
+        assert spec.nonlocal_correlation is not None
+        assert spec.nonlocal_correlation.b == Fraction(6)
+        assert spec.nonlocal_correlation.c == Fraction(1, 100)
+        method = resolve_method(name, spin="unpolarized")
+        semilocal = next(
+            primitive for primitive in method.primitives
+            if primitive.kind == "semilocal_xc"
+        )
+        provenance = semilocal.functional.to_payload()
+        assert provenance["qualification"] == "representation-only"
+        assert provenance["production_admitted"] is False
+
+    assert METHOD_CATALOG["WB97X-V"].short_range_exchange == Fraction(167, 1000)
+    assert METHOD_CATALOG["WB97X-V"].long_range_exchange == 1
+    assert METHOD_CATALOG["WB97X-V"].range_omega == Fraction(3, 10)
+
+
+def test_unmodeled_nonlocal_initializer_control_flow_fails_closed() -> None:
+    source = (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text()
+    modified = source.replace(
+        "p->nlc_C = 0.01;",
+        "p->nlc_C = 0.01; unknown_parameter_mutation(p);",
+    )
+    rows = extract_method_registrations(
+        modified, "hyb_gga_xc_wb97.c", direct_combined=True
+    )
+    result = next(
+        row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V"
+    )
+    assert result["status"] == "blocked"
+    assert "initializer" in result["reason"]
+
 def test_complex_dynamic_mix_owners_remain_explicitly_blocked() -> None:
     assert set(BLOCKED_LIBXC_METHODS) == {
         "HYB_GGA_XC_APF",
