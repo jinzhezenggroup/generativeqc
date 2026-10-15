@@ -206,7 +206,9 @@ def _ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> typing.Any:
     )
 
 
-def _cpu_item_inventory(item: typing.Any, diis_history: typing.Any) -> typing.Any:
+def _cpu_item_inventory(
+    item: typing.Any, diis_history: typing.Any, *, library: typing.Any = None
+) -> dict[str, int]:
     """Bound the existing resident CPU route by its preparation/iteration phases.
 
     The CPU DF implementation currently retains the ordinary four-center
@@ -218,7 +220,44 @@ def _cpu_item_inventory(item: typing.Any, diis_history: typing.Any) -> typing.An
     Bounds include requested numeric storage and conservative LP64 C++ value
     metadata. Malloc bookkeeping, allocator arenas and language/runtime objects
     remain explicit exclusions, covered by user reserve/headroom when needed.
+
+    A discovered native query owns phase sizing, shared with the native CLI.
+    Rejections propagate; only no-library dry runs and older binaries use the
+    portable bound below. Metadata planning never loads a library implicitly.
     """
+    query = getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
+    if query is not None:
+        orbital, auxiliary = item["orbital"], item.get("auxiliary")
+        dimensions = (
+            item["atoms"],
+            orbital["nbf"],
+            orbital["cartesian_nbf"],
+            item["spins"],
+            orbital["maximum_angular"],
+            diis_history,
+            auxiliary["nbf"] if auxiliary else 0,
+            auxiliary["cartesian_nbf"] if auxiliary else 0,
+            auxiliary["maximum_angular"] if auxiliary else 0,
+            _ecp_workspace(item),
+        )
+        shape = (ctypes.c_uint64 * len(dimensions))(
+            *(checked_bytes(value, "CPU HF host shape") for value in dimensions)
+        )
+        keys = ("preparation", "iteration", "finalization", "integral_state")
+        values = (ctypes.c_uint64 * len(keys))()
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        if query(shape, len(shape), values, len(values)):
+            raise ValueError("native CPU HF host inventory rejected shape or capacity")
+        return {
+            key: checked_bytes(value, f"CPU {key} capacity")
+            for key, value in zip(keys, values, strict=True)
+        }
     orbital, auxiliary = item["orbital"], item.get("auxiliary")
     n, c, d = orbital["nbf"], orbital["cartesian_nbf"], 3 * item["atoms"]
     spin = item["spins"]
@@ -525,6 +564,13 @@ def hf_resource_request(
         "density_fitting": density_fitting,
         "density_fitting_memory_budget_bytes": density_fitting_memory_budget_bytes,
     }
+    if executed_backend == "cpu":
+        controls["host_inventory"] = (
+            "native-cpu-v1"
+            if getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
+            is not None
+            else "portable-metadata-v1"
+        )
     if executed_backend == "cuda":
         controls.update(
             device_id=device_id,
@@ -670,7 +716,9 @@ def hf_resource_request(
             ),
         )
         return ResourceRequest(name, identity, (candidate,), cuda_exclusions)
-    inventories = tuple(_cpu_item_inventory(item, diis_history) for item in items)
+    inventories = tuple(
+        _cpu_item_inventory(item, diis_history, library=library) for item in items
+    )
     retained = sum(
         8 * (4 * item["spins"] * item["orbital"]["nbf"] ** 2 + 8 * 3 * item["atoms"])
         + 128

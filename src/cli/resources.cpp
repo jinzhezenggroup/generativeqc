@@ -10,6 +10,7 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
+#include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
 #include "scf/ks_host_resources.hpp"
 
@@ -124,51 +125,14 @@ Json topology_json(const Topology& shape) {
 // optimistic nbf^4-only estimate. Serialized workspaces do not scale with batch.
 Json hf_inventory(const Topology& orbital, const Topology* auxiliary, Bytes atoms, Bytes spins,
                   Bytes history, Bytes ecp_workspace) {
-  const Bytes n2 = product({orbital.nbf, orbital.nbf});
-  const Bytes c2 = product({orbital.cartesian_nbf, orbital.cartesian_nbf});
-  const Bytes derivatives = product({3, atoms});
-  const Bytes nterms = sum({product({2, n2}), product({n2, n2})});
-  const Bytes cterms = sum({product({2, c2}), product({c2, c2})});
-  const Bytes conventional = sum({product({8, derivatives + 1, nterms}), 8 * derivatives});
-  const Bytes cartesian = sum({product({8, derivatives + 1, cterms}), 8 * derivatives});
-  const Bytes jet = sum({product({8, derivatives + 1}), 64});
-  const Bytes angular = std::max(orbital.angular, auxiliary ? auxiliary->angular : 0);
-  const Bytes order =
-      std::max({4 * orbital.angular, 2 * orbital.angular + (auxiliary ? auxiliary->angular : 0),
-                auxiliary ? 2 * auxiliary->angular : 0});
-  const Bytes hermite = product({6, angular + 3, angular + 3, 2 * angular + 4});
-  const Bytes recurrence = product({jet, sum({product({order + 1, order + 1, order + 1, order + 1}),
-                                              hermite, 256, derivatives})});
-  Bytes preparation = sum(
-      {product({jet, cterms}),
-       std::max(recurrence, sum({cartesian, conventional, product({8, nterms})})), ecp_workspace});
-  Bytes resident = conventional;
-  const Bytes matrix = sum(
-      {product({8, spins, n2, 64 + 2 * (history + 1)}), product({16, history + 1, history + 1})});
-  Bytes iteration = sum({resident, matrix}), finalization = iteration;
-  if (auxiliary) {
-    const Bytes count =
-        sum({product({auxiliary->nbf, auxiliary->nbf}), product({n2, auxiliary->nbf})});
-    const Bytes cart_count = sum({product({auxiliary->cartesian_nbf, auxiliary->cartesian_nbf}),
-                                  product({c2, auxiliary->cartesian_nbf})});
-    const Bytes raw = product({8, derivatives + 1, count});
-    const Bytes cart_raw = product({8, derivatives + 1, cart_count});
-    const Bytes transformed = product({8, n2, auxiliary->nbf});
-    preparation = std::max(
-        {preparation,
-         sum({conventional, product({jet, cart_count}),
-              std::max(recurrence, sum({cart_raw, raw, product({8, count})}))}),
-         sum({conventional, raw, transformed, product({128, auxiliary->nbf, auxiliary->nbf})})});
-    resident = sum({resident, raw, transformed});
-    iteration = sum({resident, matrix, product({8, sum({auxiliary->nbf, 4 * n2})})});
-    finalization = sum({resident, matrix,
-                        product({8, sum({product({32, auxiliary->nbf, auxiliary->nbf}),
-                                         product({2, n2, auxiliary->nbf}), 8 * derivatives})})});
-  }
-  return {{"preparation", preparation},
-          {"iteration", iteration},
-          {"finalization", finalization},
-          {"integral_state", resident}};
+  const auto inventory = scf::cpu_hf_host_resources(
+      {atoms, orbital.nbf, orbital.cartesian_nbf, spins, orbital.angular, history,
+       auxiliary ? auxiliary->nbf : 0, auxiliary ? auxiliary->cartesian_nbf : 0,
+       auxiliary ? auxiliary->angular : 0, ecp_workspace});
+  Json result = Json::object();
+  for (std::size_t index = 0; index < inventory.size(); ++index)
+    result[scf::cpu_hf_host_resource_keys[index]] = inventory[index];
+  return result;
 }
 
 Json ks_inventory(const Topology& shape, Bytes atoms, Bytes spins, const RunOptions& options,

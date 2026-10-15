@@ -223,6 +223,57 @@ class RuntimeTests(unittest.TestCase):
         identity = payload.pop("identity")
         self.assertEqual(identity, digest(payload))
 
+    def test_cpu_hf_cli_uses_shared_native_host_inventory(self) -> None:
+        """The installed CLI and Python bridge use the same phase capacities."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_hf_cpu_host_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in ("rhf", "uhf"):
+            for fitted in (False, True):
+                with self.subTest(method=method, fitted=fitted):
+                    arguments = ["--method", method]
+                    if fitted:
+                        arguments += ["--density-fitting", "cpu"]
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    auxiliary = plan.get("auxiliary") or {}
+                    shape = (ctypes.c_uint64 * 10)(
+                        2,
+                        2,
+                        2,
+                        1 if method == "rhf" else 2,
+                        0,
+                        8,
+                        auxiliary.get("nbf", 0),
+                        auxiliary.get("cartesian_nbf", 0),
+                        auxiliary.get("maximum_angular", 0),
+                        0,
+                    )
+                    values = (ctypes.c_uint64 * 4)()
+                    self.assertEqual(query(shape, len(shape), values, len(values)), 0)
+                    self.assertEqual(
+                        plan["item_inventory"],
+                        dict(
+                            zip(
+                                (
+                                    "preparation",
+                                    "iteration",
+                                    "finalization",
+                                    "integral_state",
+                                ),
+                                values,
+                                strict=True,
+                            )
+                        ),
+                    )
+
     def test_budget_reserve_headroom_and_zero(self) -> None:
         for arguments in (
             ("--host-bytes", "0"),

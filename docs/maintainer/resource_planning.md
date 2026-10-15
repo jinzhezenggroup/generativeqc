@@ -103,6 +103,17 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
+CPU RHF/UHF calculator plans with a discovered
+`generativeqc_resource_hf_cpu_host_v1` query obtain their per-item phase
+capacities from the same allocation-free C++ owner as the native CLI. Direct
+and density-fitted inventories preserve Cartesian/public integral coexistence,
+forward-mode derivatives, SCF/DIIS matrices and analytic DF response storage.
+Native rejection propagates without a Python retry. Schedule identity records
+the selected sizing owner; library-free dry runs and older libraries retain
+portable metadata sizing without implicitly loading a provider. Fleet retained
+state and budget composition remain frontend-owned; this is not complete
+native admission/lease authority or a full endpoint allocation receipt.
+
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_host_v1` query obtain their host capacities from
 the same allocation-free native sizing owner as the installed CLI. The query
