@@ -650,6 +650,23 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
+  generativeqc_status resident_orbital_frame(const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      if (prepare) {
+        dft::KsFinalStateDiagnostic diagnostic;
+        return cuda_->prepare_resident_final_orbital_frame(expected, binding, diagnostic, detail);
+      }
+      return cuda_->resident_final_orbital_frame(expected, binding, detail);
+    }
+#endif
+    detail = "resident orbital frame requires a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
   generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected, int& device,
                                        const double*& alpha, const double*& beta,
                                        std::size_t& matrix_elements, unsigned& spins,
@@ -2638,6 +2655,17 @@ class KsPreparedBatch final : public PreparedBatch,
     if (status == GENERATIVEQC_STATUS_SUCCESS)
       items_[index].stationary_device_allowance = maximum_device_bytes;
     return status;
+  }
+
+  generativeqc_status resident_orbital_frame(std::size_t index,
+                                             const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_orbital_frame(expected, binding, detail, prepare);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   generativeqc_status resident_density(std::size_t index,

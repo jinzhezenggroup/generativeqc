@@ -10,6 +10,7 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_frame.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -301,6 +302,16 @@ class CudaKsPlan {
    * storage. This does not change energy-only/default validation policy. */
   generativeqc_status prepare_resident_final_stationary_weights(
       const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+      KsFinalStateDiagnostic& diagnostic, std::string& detail);
+  /** Zero-transfer complete-frame lease, available only after successful
+   * resident preparation or a canonical weighted final-state read. */
+  generativeqc_status resident_final_orbital_frame(const CudaKsFinalStateToken& expected,
+                                                   CudaKsResidentOrbitalFrameBinding& binding,
+                                                   std::string& detail) const;
+  /** Reuse the shared physical/canonical resident proof and then borrow C/eps.
+   * Stale/capturing/failed states never publish a partial frame binding. */
+  generativeqc_status prepare_resident_final_orbital_frame(
+      const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
       KsFinalStateDiagnostic& diagnostic, std::string& detail);
   /** Borrow final total rho/grad-rho already produced by device-fused
    * nonlocal XC. The binding is available only for the exact current token

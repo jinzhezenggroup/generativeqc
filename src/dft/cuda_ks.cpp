@@ -3747,6 +3747,54 @@ generativeqc_status CudaKsPlan::prepare_resident_final_stationary_weights(
   }
 }
 
+generativeqc_status CudaKsPlan::resident_final_orbital_frame(
+    const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
+    std::string& detail) const {
+  binding = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument("CUDA KS resident orbital-frame token is stale");
+    if (!impl_->final_frame_ready || !impl_->final_stationary_weights_ready)
+      throw std::invalid_argument("CUDA KS orbital frame requires resident canonical validation");
+    CudaKsResidentOrbitalFrameBinding candidate{
+        impl_->device,
+        impl_->final_coefficients,
+        impl_->final_eigenvalues,
+        impl_->density,
+        impl_->fock,
+        impl_->overlap,
+        impl_->n,
+        impl_->spins,
+        {impl_->occupations[0], impl_->spins == 2 ? impl_->occupations[1] : 0},
+        reinterpret_cast<void*>(impl_->stream),
+        impl_->owner,
+        impl_->solve_epoch,
+        impl_->final_generation};
+    if (!candidate) throw std::logic_error("CUDA KS resident orbital-frame storage is unavailable");
+    binding = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
+generativeqc_status CudaKsPlan::prepare_resident_final_orbital_frame(
+    const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
+    KsFinalStateDiagnostic& diagnostic, std::string& detail) {
+  binding = {};
+  CudaKsResidentStationaryWeightsBinding weights;
+  const auto status =
+      prepare_resident_final_stationary_weights(expected, weights, diagnostic, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  return resident_final_orbital_frame(expected, binding, detail);
+}
+
 generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
     const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
     std::string& detail) const {

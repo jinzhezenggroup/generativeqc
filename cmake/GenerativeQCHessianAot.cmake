@@ -42,8 +42,15 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.hpp"
     ARGS --output "${_gmres}"
     COMMENT "Generating numerically device-only native GMRES kernels")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}"
+  set(_cpks "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ks_cpks_maps.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_cpks}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_ks_cpks.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.hpp"
+    ARGS --output "${_cpks}"
+    COMMENT "Generating compiler-AD native RKS/UKS response maps")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
+    "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -63,6 +70,13 @@ function(generativeqc_add_hessian_aot target inventory)
     target_compile_options(generativeqc_cuda_gmres_probe PRIVATE
       "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
     set_target_properties(generativeqc_cuda_gmres_probe PROPERTIES
+      CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
+    add_executable(generativeqc_cuda_cpks_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_cpks_probe.cu")
+    target_link_libraries(generativeqc_cuda_cpks_probe PRIVATE ${target})
+    target_compile_options(generativeqc_cuda_cpks_probe PRIVATE
+      "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
+    set_target_properties(generativeqc_cuda_cpks_probe PROPERTIES
       CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
   endif()
 endfunction()
