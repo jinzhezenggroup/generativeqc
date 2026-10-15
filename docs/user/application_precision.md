@@ -21,11 +21,19 @@ verified module-level native Fock capability permits this selection; older
 libraries, unsupported providers and tighter budgets retain strict controls.
 Pure semilocal models lower J without inventing K work. Hybrid models share the
 same full-range K consumer, including the full-range projection of a short-/long-
-range decomposition. The separate range-exchange and nonlocal consumers remain
-FP64 without disabling mixed arithmetic in the supported Direct modules.
+range decomposition. Compatible exact SR/LR K consumers also lower their shared
+Cartesian recurrence, keeping radial moments in FP64. VV10/rVV10 lower bounded
+pair algebra to FP32, while local scales, coordinate differences, weighted
+contractions and reductions stay FP64. Pairs outside the admitted numeric domain
+use the unchanged FP64 closure, without clipping inputs or dropping grid points.
+These choices belong to the shared operator modules, not functional-name rules.
+SR/LR K uses FP32 in both the optional whole-shell consumer and its bounded
+canonical-AO fallback; both report executed mixed recurrence work.
 Post-SCF corrections retain their existing arithmetic and complete-model checks;
-they do not select the recurrence precision of electronic J/K. Primitive preparation,
-contraction/scatter, XC, eigensolution and global accumulation retain FP64:
+they do not select the recurrence precision of electronic J/K. Cached primitive
+preparation, whole-shell contraction/scatter, XC, eigensolution and global
+accumulation retain FP64. The bounded canonical-AO value fallback uses its
+existing FP32 scalar policy for primitive and contracted values:
 this is **not an all-FP32 calculation**. An admitted phase-local integral source
 uses FP32 recurrence and FP32 storage, with FP64 density products and compensated
 scatter. Its immutable geometry/operator/precision identity prevents strict
@@ -43,8 +51,11 @@ strict-density mixed-gradient qualification described next.
 An admitted endpoint reports `qualified_budget_fock`, actual positive FP32
 `coulomb_j` and recurrence work, and consecutive final FP64 Fock checks. Positive
 mixed `exchange_k` work is additionally required when the native full-range
-projection contains K. Range K is accounted separately as strict work; its
-execution cannot certify mixed full-range K. Module qualification is not a
+projection contains K. Separate range K contributes executed recurrence evidence;
+VV10 reports mixed pair work only after at least one FP32 pair actually executes,
+and retains strict records when pair-domain fallback is used. Nonlocal exact-key
+reuse includes arithmetic identity, so FP32 results cannot certify strict closure.
+Module qualification is not a
 measured per-call observable error or a
 universal force-error bound. Explicit targets still request a separate complete
 FP64 audit. Numerical failures retain the failed attempt with unknown work
@@ -52,11 +63,21 @@ counts rather than invented zeros, then use bounded strict fallback/audit solves
 
 Optional source residency follows the existing bounded cold/size, memory and
 free-device-capacity gates; disabling residency or refusing its complete bucket
-inventory retains uncached mixed recurrence. Before strict refinement the mixed
+inventory retains uncached mixed recurrence. Full/SR/LR sources share bounded
+angular-bucket selection; unselected FP32 buckets execute mixed recurrence
+rather than silently selecting strict arithmetic. Before strict refinement the mixed
 lease is audited and retired, then a separate FP64 source may be admitted. The
 two quartic caches do not overlap. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
+
+The shared nonlocal initializer and frozen-potential proposal stages also admit
+budget-selected mixed Focks. Provisional residuals never certify the target or
+trigger residual-based precision switching; their iterations still consume the
+same twelve-iteration mixed cap. Strict refinement leaves the frozen/seed stage,
+invalidates nonlinear history and evaluates fresh complete FP64 target Focks.
+Bounded FP32 VV10 pair closures reuse the compiler's rational derivatives and
+energy denominator, rather than losing those optimizations when lowering to float.
 
 Arithmetic admission is not a speedup guarantee. Compare complete energy/force
 endpoints against the optimized FP64
@@ -121,10 +142,12 @@ Direct and density-fitted canonical WB97M-V RKS select mixed semilocal geometry 
 Its complete range-exchange/VV10 MethodIR and molecular VV10 density policy
 must match. Direct uses exact J/K; DF uses fitted full-range J/K with the
 default `1e-10` metric threshold and **exact long-range exchange**, including
-the matching analytic derivative. SCF, AO production, integral/metric response,
-VV10 pair evaluation, nonlocal geometry and global reductions remain FP64.
-The application facade explicitly selects strict SCF for nonlocal models;
-an accepted AUTO keyword alone is not evidence of mixed SCF execution.
+the matching analytic derivative. Within this separate strict-density gradient
+route, SCF, AO production, integral/metric response, VV10 pair evaluation,
+nonlocal geometry and global reductions remain FP64. The application facade
+selects strict SCF for this route's nonlocal candidate; this does not restrict
+the module-selected Fast-Fock route above. An accepted AUTO keyword alone is
+not evidence of mixed SCF execution.
 Coarse grids, modified range/nonlocal compositions and energy-only
 requests retain the audit fallback. No universal endpoint speedup is promised.
 

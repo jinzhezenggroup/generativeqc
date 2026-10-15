@@ -28,6 +28,12 @@ int main() {
             "the optional cap must bound approximate work");
     require(early.enter_refinement(true, false, 3, 3, 1e-2),
             "warmup must not exceed the user's target budget");
+    require(!early.enter_refinement(true, true, 2, 100, 1e-8, true),
+            "a provisional nonlocal residual cannot certify target switching");
+    require(early.enter_refinement(true, false, 24, 100, 1e-2, true),
+            "provisional nonlocal work must consume the mixed iteration cap");
+    require(early.enter_refinement(true, false, 3, 3, 1e-2, true),
+            "a provisional stage must not exceed the original solve budget");
     require(!early.enter_refinement(false, true, 100, 100, 1e-8),
             "strict execution must never restart approximate refinement");
     for (const double invalid :

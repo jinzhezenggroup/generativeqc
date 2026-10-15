@@ -19,12 +19,16 @@ struct MixedPrecisionWarmup {
   double switch_residual{};
   unsigned max_iterations{};
 
+  /** Provisional operator residuals cannot trigger target-based switching,
+   * but initializer/frozen-potential work still consumes the same finite cap. */
   bool enter_refinement(bool mixed_stage, bool converged, unsigned iterations,
-                        unsigned target_limit, double residual_maximum) const noexcept {
+                        unsigned target_limit, double residual_maximum,
+                        bool provisional_operator = false) const noexcept {
     if (!mixed_stage || !std::isfinite(residual_maximum) || residual_maximum < 0.0) return false;
     const unsigned limit = max_iterations ? std::min(max_iterations, target_limit) : target_limit;
-    return converged || iterations >= limit ||
-           (switch_residual > 0.0 && iterations >= 2 && residual_maximum <= switch_residual);
+    return iterations >= limit ||
+           (!provisional_operator && (converged || (switch_residual > 0.0 && iterations >= 2 &&
+                                                    residual_maximum <= switch_residual)));
   }
 };
 

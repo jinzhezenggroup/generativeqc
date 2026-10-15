@@ -112,6 +112,10 @@ Vv10CudaDeviceLayout vv10_cuda_device_layout(std::size_t point_count, std::size_
  * because it is published only after all pair kernels have consumed scratch.
  * point_derivative may alias density_gradient: local-scale construction is
  * the last gradient reader and precedes every point-derivative writer on stream.
+ * Mixed execution narrows bounded pair algebra only. Storage, local scales,
+ * coordinate differences, weighted contractions and reductions remain FP64.
+ * Optional arithmetic_work has two device counters (FP32/strict pair values),
+ * reset on this stream; an exact-key owner must include arithmetic in its key.
  */
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters parameters,
                               int device_id, cudaStream_t stream, const double* coordinates,
@@ -119,7 +123,9 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
                               const double* density_gradient, void* workspace,
                               std::size_t workspace_bytes, double* energy, double* vrho,
                               double* vsigma, double* point_derivative, double* weight_derivative,
-                              int* numerical_error, const int* cache_mismatch = nullptr);
+                              int* numerical_error, const int* cache_mismatch = nullptr,
+                              bool mixed_pair_arithmetic = false,
+                              std::uint64_t* arithmetic_work = nullptr);
 
 /** Apply the molecular fixed-grid domain policy without changing point extent.
  * Inputs are validated before screening. rho<threshold becomes zero weight,
