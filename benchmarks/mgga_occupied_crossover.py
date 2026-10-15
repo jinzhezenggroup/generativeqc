@@ -16,8 +16,12 @@ import json
 from pathlib import Path
 from statistics import median
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike, NDArray
 
 
 def projection_work(active: int, occupied: int, points: int) -> dict[str, int]:
@@ -32,7 +36,9 @@ def projection_work(active: int, occupied: int, points: int) -> dict[str, int]:
     }
 
 
-def hybrid_features(jets, density, factor, ids=None):
+def hybrid_features(
+    jets: ArrayLike, density: ArrayLike, factor: ArrayLike, ids: ArrayLike | None = None
+) -> dict[str, NDArray[np.float64]]:
     """Independent FP64 D*phi + three B^T*d(phi) prototype for one spin.
 
     B includes sqrt(occupations); D=B@B.T is required. The density witness is
@@ -74,7 +80,7 @@ def hybrid_features(jets, density, factor, ids=None):
     }
 
 
-def water_atoms(replicas: int):
+def water_atoms(replicas: int) -> list[tuple[int, tuple[float, float, float]]]:
     if type(replicas) is not int or not (1 <= replicas <= 64):
         raise ValueError("replicas must be 1..64")
     local = ((8, (0.0, 0.0, 0.0)), (1, (1.4, 0.1, 1.1)), (1, (-1.2, 0.2, 1.3)))
@@ -85,13 +91,13 @@ def water_atoms(replicas: int):
     ]
 
 
-def active_ids(ao, cutoff=1e-16):
+def active_ids(ao: NDArray[np.float64], cutoff: float = 1e-16) -> NDArray[np.intp]:
     if ao.ndim != 3 or ao.shape[0] < 4 or not np.isfinite(ao).all():
         raise ValueError("finite four-jet AO tile required")
     return np.flatnonzero(np.any(np.abs(ao[:4]) > cutoff, axis=(0, 1)))
 
 
-def benchmark(args):
+def benchmark(args: argparse.Namespace) -> dict[str, object]:
     from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
     from generativeqc_compiler.common.cuda_target import cuda_target_info
     from generativeqc_compiler.common.provenance import find_nvcc
@@ -125,10 +131,12 @@ def benchmark(args):
             # a converged molecular SCF state or a physical force reference.
             factor = rng.normal(size=(n, rank)) / np.sqrt(n)
             d = factor @ factor.T
-            source = DensitySource(
-                np.stack((d, d)), basis_identity=basis.identity
-            ).with_orbitals(
-                (factor, factor), (np.ones(rank), np.ones(rank)), validation_rows=3
+            source = DensitySource(np.stack((d, d)), basis_identity=basis.identity)
+            source = source.with_orbitals(
+                (factor, factor),
+                (np.ones(rank), np.ones(rank)),
+                stamp=source.stamp,
+                validation_rows=3,
             )
             if source.source_kind != "orbitals":
                 raise RuntimeError("factor witness rejected by existing source API")
@@ -239,7 +247,7 @@ def benchmark(args):
     return report
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--replicas", type=int, nargs="+", default=[1, 16, 32])
     parser.add_argument("--arch", default="sm_120")
