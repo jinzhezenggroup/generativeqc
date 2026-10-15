@@ -68,3 +68,11 @@ without O(items) native scratch or weaker transactional output guarantees.
 `src/scf/hf_host_resources.hpp`;
 `python/generativeqc/resources_hf.py`;
 `.agents/notes/implemented/architecture/2026-10-15-shared-cpu-hf-phase-sizing.md`.
+
+## Follow-up: ECP input authority
+
+`2026-10-15-native-ecp-workspace-authority.md` moves the previously Python-sized
+ECP input to the existing native scalar query. ECP-bearing CPU HF fleets now
+make one additional scalar query per ECP item alongside the single fleet
+query; all-electron fleets retain the one-query path. The fleet ABI, two-pass
+scalar work and O(1) native scratch described here remain unchanged.

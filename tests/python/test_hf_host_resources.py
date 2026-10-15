@@ -58,7 +58,7 @@ def test_native_matches_independent_portable_phase_bound(
             else None
         ),
     }
-    monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item: 768)
+    monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item, **kwargs: 768)
     expected = resources_hf._cpu_item_inventory(item, history)
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
@@ -78,7 +78,7 @@ def test_discovered_rejection_never_retries_portable_sizing(
         pytest.fail("rejected native inventory silently used portable sizing")
 
     monkeypatch.setattr(resources_hf, "byte_product", forbidden)
-    monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item: 0)
+    monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item, **kwargs: 0)
     item = {
         "atoms": 2,
         "spins": 1,
@@ -169,7 +169,7 @@ def test_native_ragged_fleet_matches_portable_lifetimes_without_phase_requeries(
             }
         )
     monkeypatch.setattr(
-        resources_hf, "_ecp_workspace", lambda item: item["ecp_workspace"]
+        resources_hf, "_ecp_workspace", lambda item, **kwargs: item["ecp_workspace"]
     )
     expected_phases = tuple(
         resources_hf._cpu_item_inventory(item, history) for item in items

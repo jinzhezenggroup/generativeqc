@@ -60,7 +60,7 @@ def test_native_matches_independent_portable_lifetime_bound(
             "ecp_terms": 2,
         },
     }
-    monkeypatch.setattr(resources_ks, "_ecp_workspace", lambda item: 768)
+    monkeypatch.setattr(resources_ks, "_ecp_workspace", lambda item, **kwargs: 768)
     options = {
         "diis_history": 8,
         "max_iterations": 100,

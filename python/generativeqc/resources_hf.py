@@ -176,8 +176,55 @@ def _basis_record(
     return record
 
 
-def _ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> typing.Any:
-    """Conservative two-grid peak, including the selected CUDA radial batch."""
+def _ecp_inventory_owner(library: typing.Any) -> str:
+    """Identify ECP sizing separately from the enclosing HF/KS inventory."""
+    return (
+        "native-ecp-v1"
+        if getattr(library, "generativeqc_resource_ecp_workspace_v1", None) is not None
+        else "portable-metadata-v1"
+    )
+
+
+def _ecp_workspace(
+    item: typing.Any, *, cuda: typing.Any = False, library: typing.Any = None
+) -> int:
+    """Use the native two-grid owner when already loaded, without probing a GPU.
+
+    Old/no-library dry runs retain the portable bound. A discovered query's
+    rejection is authoritative, not permission to retry Python sizing. Public
+    AOs select the CUDA radial tile; Cartesian AOs determine storage capacity.
+    """
+    orbital = item["orbital"]
+    if not orbital.get("ecp_terms"):
+        return 0
+    query = getattr(library, "generativeqc_resource_ecp_workspace_v1", None)
+    if query is None:
+        return _portable_ecp_workspace(item, cuda=cuda)
+    dimensions = (
+        orbital["nbf"],
+        orbital["cartesian_nbf"],
+        item["atoms"],
+        orbital["primitives"],
+        orbital["ecp_terms"],
+    )
+    dimensions = tuple(checked_bytes(value, "ECP shape") for value in dimensions)
+    if any(
+        value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in dimensions
+    ):
+        raise ValueError("ECP resource shape exceeds the host size_t ABI")
+    query.argtypes = [ctypes.c_size_t] * 5 + [
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    query.restype = ctypes.c_int
+    output = ctypes.c_uint64()
+    if query(*dimensions, int(bool(cuda)), ctypes.byref(output)):
+        raise ValueError("native ECP workspace inventory rejected shape or capacity")
+    return checked_bytes(output.value, "ECP two-grid workspace")
+
+
+def _portable_ecp_workspace(item: typing.Any, *, cuda: typing.Any = False) -> int:
+    """Compatibility-only two-grid bound for old or absent native libraries."""
     from generativeqc_compiler.integral.ecp_policy import (
         REFINED_POLAR_POINTS,
         REFINED_RADIAL_POINTS,
@@ -232,7 +279,7 @@ def _native_cpu_fleet_inventory(
                 auxiliary["nbf"] if auxiliary else 0,
                 auxiliary["cartesian_nbf"] if auxiliary else 0,
                 auxiliary["maximum_angular"] if auxiliary else 0,
-                _ecp_workspace(item),
+                _ecp_workspace(item, library=library),
                 orbital["shells"],
                 orbital["primitives"],
                 auxiliary["shells"] if auxiliary else 0,
@@ -300,7 +347,7 @@ def _cpu_item_inventory(
             auxiliary["nbf"] if auxiliary else 0,
             auxiliary["cartesian_nbf"] if auxiliary else 0,
             auxiliary["maximum_angular"] if auxiliary else 0,
-            _ecp_workspace(item),
+            _ecp_workspace(item, library=library),
         )
         shape = (ctypes.c_uint64 * len(dimensions))(
             *(checked_bytes(value, "CPU HF host shape") for value in dimensions)
@@ -341,7 +388,7 @@ def _cpu_item_inventory(
     preparation = jet_arrays + max(
         recurrence, cartesian + conventional + 8 * (2 * n2 + n2 * n2)
     )
-    preparation += _ecp_workspace(item)
+    preparation += _ecp_workspace(item, library=library)
     resident = conventional
     matrix_work = byte_product(8, spin, n2, 64 + 2 * (diis_history + 1))
     matrix_work += byte_product(16, diis_history + 1, diis_history + 1)
@@ -475,10 +522,11 @@ def _small_cuda_item_inventory(
         + 8 * item["spins"] * orbital["nbf"] ** 2 * 64
         + 8 * 3 * item["atoms"] * 16
     )
+    ecp_workspace = _ecp_workspace(item, cuda=True, library=library)
     return {
         "arena": checked_bytes(int(output[0])),
-        "host": checked_bytes(host + _ecp_workspace(item, cuda=True)),
-        "ecp_workspace": _ecp_workspace(item, cuda=True),
+        "host": checked_bytes(host + ecp_workspace),
+        "ecp_workspace": ecp_workspace,
     }
 
 
@@ -626,6 +674,9 @@ def hf_resource_request(
         "density_fitting": density_fitting,
         "density_fitting_memory_budget_bytes": density_fitting_memory_budget_bytes,
     }
+    has_ecp = any(item["orbital"].get("ecp_terms") for item in items)
+    if has_ecp:
+        controls["ecp_inventory"] = _ecp_inventory_owner(library)
     if executed_backend == "cpu":
         native_fleet = getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
         controls["host_inventory"] = (
@@ -695,6 +746,8 @@ def hf_resource_request(
                 # and profile selection. The explicit library path can still
                 # identify a CUDA-linked library for scalar layout queries.
                 library = _native.load_library(device="cpu")
+            if has_ecp:
+                controls["ecp_inventory"] = _ecp_inventory_owner(library)
             identity = replace(
                 identity,
                 schedule=json.dumps(

@@ -130,7 +130,20 @@ rejection is not retried with a Python estimate; the schedule identity records
 which sizing owner is selected. Standalone no-library dry runs and older
 libraries retain portable metadata sizing without implicitly loading a library.
 This bridge does not constitute complete native admission/lease authority or
-full simultaneously-live allocator/RSS receipts; CUDA sizing is unchanged.
+full simultaneously-live allocator/RSS receipts; CUDA capacity formulas are unchanged.
+
+HF/KS ECP workspace sizing uses the already loaded library's
+`generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.
+This allocation-free scalar owner uses generated two-grid policy and CUDA
+radial scheduling without constructing grids, scientific tensors or a CUDA
+context. Public AO counts select the radial batch; Cartesian counts determine
+storage. A discovered query's rejection propagates without portable retry.
+Old libraries and library-free dry runs retain explicit metadata-only sizing;
+all-electron inputs need no ECP query or policy import. ECP sizing provenance is
+separate from the enclosing HF/KS inventory in the schedule identity. KS records
+host and device ECP owners separately because CUDA dry runs can load their
+layout-query library after sizing host storage. This changes sizing ownership,
+not scientific qualification, native admission/leases or allocation receipts.
 
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |

@@ -34,7 +34,12 @@ from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
 from .ks import _native_semilocal_code, resolve_ks_options
-from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
+from .resources_hf import (
+    _basis_record,
+    _cuda_library_identity,
+    _ecp_inventory_owner,
+    _ecp_workspace,
+)
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
@@ -104,7 +109,7 @@ def _native_cpu_host_inventory(
         max_iterations,
         int(requires_first_ao_derivatives),
         int(model.has_nonlocal_correlation),
-        _ecp_workspace(item),
+        _ecp_workspace(item, library=library),
     )
     shape = (ctypes.c_uint64 * len(dimensions))(
         *(checked_bytes(value, "CPU KS host shape") for value in dimensions)
@@ -290,7 +295,7 @@ def _item_host_inventory(
         # AO transforms and Cartesian one-electron downloads without packing.
         setup = 2048 * (1 + a + s + p + n + c + pairs + pairs * pairs)
         setup += 64 * (c2 + n2 + n * c) + quadrature + basis
-    setup += _ecp_workspace(item)
+    setup += _ecp_workspace(item, library=library)
     return {
         key: checked_bytes(value, f"KS {key}")
         for key, value in {
@@ -372,7 +377,7 @@ def _cuda_item_inventory(
     # pair indices and S/H/nuclear output, then frees them before preparing J.
     # This bound includes every explicit device buffer of that value-only path.
     setup = byte_product(64, 1 + a + s + p + n + pairs + n * n)
-    setup = max(setup, _ecp_workspace(item, cuda=True))
+    setup = max(setup, _ecp_workspace(item, cuda=True, library=library))
     quadrature_query = getattr(
         library, "generativeqc_resource_quadrature_cuda_v1", None
     )
@@ -743,6 +748,9 @@ def ks_resource_request(
         if backend == "cuda"
         else "serialized-native",
     }
+    has_ecp = any(item["orbital"].get("ecp_terms") for item in items)
+    if has_ecp:
+        controls["ecp_host_inventory"] = _ecp_inventory_owner(library)
     if _application_precision_budget is not None:
         controls["application_precision_budget"] = asdict(_application_precision_budget)
     if backend == "cpu":
@@ -935,6 +943,8 @@ def ks_resource_request(
                 raise NotImplementedError(
                     "CUDA KS planning does not claim this scaled/global-hybrid execution"
                 )
+            if has_ecp:
+                controls["ecp_device_inventory"] = _ecp_inventory_owner(library)
             identity = replace(
                 identity,
                 schedule=json.dumps(
