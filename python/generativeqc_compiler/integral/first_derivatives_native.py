@@ -48,7 +48,11 @@ def validate_first_components(integral: typing.Any, indices: typing.Any) -> None
     if len(integral.contractions) != 1:
         raise ValueError("first component execution requires one consumer")
     consumer = integral.contractions[0]
-    if integral.operator.family == OperatorFamily.FOUR_CENTER_ERI:
+    if integral.operator.family in (
+        OperatorFamily.FOUR_CENTER_ERI,
+        OperatorFamily.LONG_RANGE_ERI,
+        OperatorFamily.SHORT_RANGE_ERI,
+    ):
         if not isinstance(consumer, WeightedDerivative) or (
             consumer.output_sign,
             consumer.weights.sign,
@@ -65,7 +69,7 @@ def validate_first_components(integral: typing.Any, indices: typing.Any) -> None
         if not isinstance(consumer, RawBlock):
             raise ValueError("raw S/T/V component consumer required")
     else:
-        raise ValueError("first components support S/T/V and full Coulomb ERIs only")
+        raise ValueError("first components support S/T/V and Coulomb-family ERIs only")
 
 
 def emit_first_component_evaluator(
@@ -76,7 +80,7 @@ def emit_first_component_evaluator(
         raise ValueError("first component backend must be cpu or cuda")
     indices = tuple(indices)
     validate_first_components(integral, indices)
-    if integral.operator.family == OperatorFamily.FOUR_CENTER_ERI:
+    if len(integral.signature.shells) == 4:
         kernel = build_weighted_eri_kernel(integral, indices)
         source = emit_weighted_eri_primitive_header(
             ((kernel, "first"),), backend=backend

@@ -41,6 +41,7 @@ RUNTIME_ADAPTERS = {
 # AO lowering reuses exactly these neutral facilities, as XC already does;
 # it must not acquire integral recurrence, SCF, or schedule dependencies.
 SCALAR_CLIENTS = {
+    "method.stationary_grid_second": {"generativeqc_compiler.integral.expr"},
     "dft.xc_bilinear": {"generativeqc_compiler.integral.expr"},
     "dft.xc_contraction_cuda": {"generativeqc_compiler.integral.cuda"},
     "dft.ao_cuda": {

@@ -38,7 +38,10 @@ def second_program_identity(
 
 
 def emit_second_derivative_primitive(
-    kernel: SecondDerivativeKernel, *, backend: typing.Any = "cuda"
+    kernel: SecondDerivativeKernel,
+    *,
+    backend: typing.Any = "cuda",
+    include_first_order: bool = False,
 ) -> typing.Any:
     """Emit one to twelve output coordinates using the common scalar C emitter.
 
@@ -105,10 +108,16 @@ def emit_second_derivative_primitive(
         }
     )
     if is_eri:
+        radial = kernel.integral.operator.coulomb_kernel
+        native_range = {
+            "full_range": "Full",
+            "long_range": "Long",
+            "short_range": "Short",
+        }[radial.family.value]
         lines += [
             "  Geometry geometry{};",
             "  if (!generativeqc::integrals::make_eri_geometry<Geometry, 14>(exponents, centers,",
-            f"      {kernel.boys_count - 1}, generativeqc::integrals::CoulombRange::Full, 0, geometry)) return false;",
+            f"      {kernel.boys_count - 1}, generativeqc::integrals::CoulombRange::{native_range}, {float(radial.omega).hex()}, geometry)) return false;",
         ]
         variables.update(
             {
@@ -150,9 +159,12 @@ def emit_second_derivative_primitive(
             variables.update(
                 {f"boys_{i}": f"boys[{i}]" for i in range(kernel.boys_count)}
             )
-    graph, roots = kernel.graph.apply_algebra_form(
-        kernel.outputs, AlgebraForm.FACTORED_NARY
+    requested = (
+        (kernel.value, *kernel.gradients, *kernel.outputs)
+        if include_first_order
+        else kernel.outputs
     )
+    graph, roots = kernel.graph.apply_algebra_form(requested, AlgebraForm.FACTORED_NARY)
     plan = graph.materialization_plan(
         roots,
         RematerializationPolicy(name="second_coordinate_tile", inline_single_use=True),

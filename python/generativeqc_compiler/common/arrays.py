@@ -4,9 +4,19 @@ import typing
 
 import numpy as np
 
+from .array_execution import current_execution
+
 
 def immutable(value: typing.Any, *, shape: typing.Any = None) -> typing.Any:
-    """Copy finite real FP64 values into irreversibly read-only storage."""
+    """Detach finite FP64 values; host publication is irreversibly read-only.
+
+    Explicit device consumers own their detached private storage through the
+    scoped executor. They must publish host results before promising the public
+    immutable-array contract; writable device panels never escape that owner.
+    """
+    execution = current_execution()
+    if execution is not None:
+        return execution.freeze(value, shape=shape)
     raw = np.asarray(value)
     if np.iscomplexobj(raw):
         raise ValueError("complex references are unsupported")

@@ -2941,6 +2941,7 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system);
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+        execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
         (!system.ecp_terms.empty() ||
          std::any_of(system.atoms.begin(), system.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; })))

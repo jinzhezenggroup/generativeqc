@@ -8,6 +8,10 @@ change the established exceptional-arithmetic domain.
 
 from __future__ import annotations
 
+import math
+import typing
+from fractions import Fraction
+
 from generativeqc_compiler.common.nonlocal_correlation import (
     NONLOCAL_CORRELATION_VERSION,
     RVV10,
@@ -32,6 +36,60 @@ NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION = (
 )
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
+
+
+def _vv10_pair_factors(
+    radius: typing.Any,
+    omega_a: typing.Any,
+    omega_b: typing.Any,
+    kappa_a: typing.Any,
+    kappa_b: typing.Any,
+    *,
+    addition: typing.Any = add,
+    product: typing.Any = multiply,
+) -> tuple:
+    """Share the ordered VV10 primal between TensorIR emission and scalar AD."""
+    first = addition(product(omega_a, radius), kappa_a)
+    second = addition(product(omega_b, radius), kappa_b)
+    combined = addition(first, second)
+    return first, second, combined, product(product(first, second), combined)
+
+
+def vv10_grid_pair_expression(
+    graph: typing.Any, first: list, second: list, spec: typing.Any
+) -> typing.Any:
+    """Weighted ordered pair primal for total-density Cartesian grid AD.
+
+    Each leg is [rho,gx,gy,gz,tau,weight,x,y,z]. There is no one-half here:
+    differentiating only the first leg accounts for both symmetric energy
+    legs. Energy integration applies its one-half separately. Local scales
+    follow the raw CPU policy; runtime masks and admission remain external.
+    """
+    if spec.variant != VV10:
+        raise UnsupportedNonlocalCorrelation("grid pair AD currently requires VV10")
+
+    def scales(leg: list) -> tuple:
+        rho = leg[0]
+        sigma = graph.sum(value * value for value in leg[1:4])
+        omega = (
+            float(spec.c) * sigma * sigma / rho.pow(4) + (4 * math.pi / 3) * rho
+        ).pow(0.5)
+        kappa = float(spec.b) * 1.5 * math.pi * (rho / (9 * math.pi)).pow(1 / 6)
+        return omega, kappa
+
+    omega_a, kappa_a = scales(first)
+    omega_b, kappa_b = scales(second)
+    radius = graph.sum((first[index] - second[index]).pow(2) for index in range(6, 9))
+    *_, denominator = _vv10_pair_factors(
+        radius,
+        omega_a,
+        omega_b,
+        kappa_a,
+        kappa_b,
+        addition=lambda left, right: left + right,
+        product=lambda left, right: left * right,
+    )
+    return Fraction(-3, 2) * first[0] * first[5] * second[0] * second[5] / denominator
 
 
 def native_local_scale_cpp() -> str:
@@ -193,9 +251,7 @@ def build_nonlocal_pair_program(
             )
             outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
     else:
-        gi, gj = add(multiply(wi, r2), ki), add(multiply(wj, r2), kj)
-        gsum = add(gi, gj)
-        denominator = multiply(multiply(gi, gj), gsum)
+        gi, gj, gsum, denominator = _vv10_pair_factors(r2, wi, wj, ki, kj)
         # A unit numerator selects the compiler's FP64 reciprocal lowering.
         # The admitted domain keeps both reciprocal and product normal/finite;
         # the extra rounding is deliberate and independently qualified.

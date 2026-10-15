@@ -1,15 +1,15 @@
 """Generic MethodIR-derived stationary DFT HVP planning (#180/#181).
 
 This compiler boundary decides whether a resolved MethodIR and stationary
-mean-field envelope have the primitive families needed by the first LDA/GGA
-Hessian/HVP slice and generates bounded integral-source contractions. It does
+mean-field envelope have registered second-order primitive rules and generates
+bounded integral-source contractions. It does
 not solve CPKS, execute grid motion, or publish a molecular Hessian capability.
 """
 
 from __future__ import annotations
 
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 
 from generativeqc_compiler.common.provenance import canonical_hash
@@ -24,9 +24,11 @@ from generativeqc_compiler.tensor import (
     linearize,
 )
 
+from .nonlocal_correlation import NonlocalCorrelationPrimitive
 from .spec import (
     ExactExchangePrimitive,
     MethodIR,
+    RangeSeparatedExchangePrimitive,
     SemilocalXCPrimitive,
     UnsupportedMethod,
 )
@@ -223,6 +225,40 @@ _PRIMITIVE_HVP_RULES = MappingProxyType(
             (),
             _EXACT_EXCHANGE_HVP_SOURCES,
         ),
+        RangeSeparatedExchangePrimitive: HVPPrimitiveRule(
+            "range-separated-exchange-v1",
+            RangeSeparatedExchangePrimitive,
+            "range_separated_exchange",
+            ("energy", "fock", "nuclear-gradient"),
+            (),
+            (
+                HVPSource(
+                    "range_exchange",
+                    "range_separated_exchange",
+                    (
+                        "density-response",
+                        "first-integral-direction",
+                        "second-integral-hvp",
+                    ),
+                    ("density_left", "density_right"),
+                ),
+            ),
+        ),
+        NonlocalCorrelationPrimitive: HVPPrimitiveRule(
+            "vv10-pair-graph-second-order-v1",
+            NonlocalCorrelationPrimitive,
+            "nonlocal_correlation",
+            ("energy", "ks-potential", "nuclear-gradient"),
+            ("rho", "sigma"),
+            tuple(
+                HVPSource(
+                    name,
+                    "nonlocal_correlation",
+                    ("pair-feature-hessian", "density-response", "grid-response"),
+                )
+                for name in ("nonlocal_ao", "nonlocal_grid", "nonlocal_weight")
+            ),
+        ),
     }
 )
 
@@ -234,6 +270,23 @@ def _primitive_hvp_rule(primitive: typing.Any) -> HVPPrimitiveRule:
         raise UnsupportedMethod(
             f"{kind} primitive has no stationary-HVP second-order rule"
         )
+    if type(primitive) is RangeSeparatedExchangePrimitive:
+        source = "exchange_" + primitive.operator.replace("-", "_")
+        rule = replace(rule, sources=(replace(rule.sources[0], name=source),))
+    elif type(primitive) is NonlocalCorrelationPrimitive:
+        if primitive.spec.variant != "vv10":
+            raise UnsupportedMethod(
+                "nonlocal second-order rule currently requires VV10"
+            )
+    else:
+        if type(primitive) is SemilocalXCPrimitive and "tau" in _primitive_ingredients(
+            primitive
+        ):
+            rule = replace(
+                rule,
+                identifier="semilocal-rho-sigma-tau-v1",
+                supported_ingredients=("rho", "sigma", "tau"),
+            )
     rule.validate(primitive)
     return rule
 
@@ -269,12 +322,12 @@ def _input(
 
 @dataclass(frozen=True)
 class StationaryHVPPlan:
-    """Compose semilocal and full-range-exchange HVP primitive contracts.
+    """Compose semilocal, exchange and VV10 HVP primitive contracts.
 
     Planning admits direct, all-electron, real FP64, fixed-integer RKS/UKS
-    with rho/sigma XC and optional full-range exact exchange. Hybrid plans
+    with rho/sigma/tau XC, full/range-separated exchange and optional VV10. Plans
     reuse stationary-gradient exchange weights and their TensorIR JVP;
-    this never grants a complete hybrid molecular Hessian endpoint.
+    never by themselves grant a complete molecular Hessian endpoint.
     Other primitives remain fail-closed without a second-order rule.
     """
 
@@ -290,26 +343,12 @@ class StationaryHVPPlan:
             raise UnsupportedMethod(
                 "stationary HVP requires the qualified native SCF point model"
             )
-        if self.mean_field.hamiltonian != "all-electron":
-            raise UnsupportedMethod(
-                "stationary HVP first slice requires an all-electron Hamiltonian"
-            )
         # Integral lowering reuses the semilocal stationary-gradient envelope.
         # An exchange-only graph cannot publish an executable source plan yet.
         if self.semilocal is None:
             raise UnsupportedMethod("stationary HVP requires a semilocal XC primitive")
 
-        rules = tuple(
-            _primitive_hvp_rule(primitive) for primitive in self.method.primitives
-        )
-        primitive_source_names = tuple(
-            source.name for rule in rules for source in rule.sources
-        )
-        source_names = (
-            *(source.name for source in _ENVELOPE_HVP_PREFIX),
-            *primitive_source_names,
-            *(source.name for source in _ENVELOPE_HVP_SUFFIX),
-        )
+        source_names = tuple(source.name for source in self.sources)
         if len(set(source_names)) != len(source_names):
             raise UnsupportedMethod(
                 "stationary-HVP source rules publish duplicate source names"
@@ -347,7 +386,21 @@ class StationaryHVPPlan:
         primitive_sources = tuple(
             source for rule in self.primitive_rules for source in rule.sources
         )
-        return (*_ENVELOPE_HVP_PREFIX, *primitive_sources, *_ENVELOPE_HVP_SUFFIX)
+        prefix = _ENVELOPE_HVP_PREFIX
+        if self.mean_field.hamiltonian == "scalar-semilocal-ecp":
+            prefix = (
+                replace(prefix[0], primitive="kinetic_effective_charge_attraction"),
+                *(
+                    HVPSource(
+                        name,
+                        name + "_residual",
+                        ("ecp-projector-mixed-jvp", "density-response"),
+                    )
+                    for name in ("ecp_local", "ecp_nonlocal")
+                ),
+                prefix[1],
+            )
+        return (*prefix, *primitive_sources, *_ENVELOPE_HVP_SUFFIX)
 
     @property
     def source_names(self) -> typing.Any:

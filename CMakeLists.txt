@@ -456,7 +456,8 @@ if(GENERATIVEQC_BUILD_CLI)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   find_package(LibArchive REQUIRED)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
-                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
+                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp
+                 src/cli/resources.cpp src/cli/hessian.cpp)
   set(GENERATIVEQC_CLI_BASIS_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
   generativeqc_register_generated_sources(
@@ -519,7 +520,8 @@ if(GENERATIVEQC_BUILD_CLI)
   if(GENERATIVEQC_PYTHON_WHEEL)
     # A native PATH launcher finds the full CLI in the adjacent wheel package.
     # The full binary stays beside its shared library for relocatable RPATH;
-    # neither installed command invokes Python at runtime.
+    # Normal native commands never invoke Python. The explicitly selected
+    # hessian/hvp compiler-runtime extension has its own interpreter contract.
     add_executable(generativeqc_wheel_launcher src/cli/wheel_launcher.cpp)
     set_target_properties(generativeqc_wheel_launcher PROPERTIES
       OUTPUT_NAME generativeqc
@@ -577,6 +579,13 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_gaussian.py"
                      $<TARGET_FILE:generativeqc_cli>)
+    add_test(NAME generativeqc_cli_hessian_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_hessian.py"
+                     $<TARGET_FILE:generativeqc_cli>)
+    set_tests_properties(generativeqc_cli_hessian_contract PROPERTIES
+                         ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>"
+                         TIMEOUT 600)
     add_test(NAME generativeqc_cli_rhf_cpu
              COMMAND generativeqc_cli run
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"

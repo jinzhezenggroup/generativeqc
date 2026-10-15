@@ -399,7 +399,7 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     // Both backends retain the full-range short fraction plus the LR
     // correction in this identity. The live owner token, rather than a CPU
     // backend tag, proves the complete model for the stationary consumer.
-    if (!snapshot->all_electron || !model.range_correction || !model.nonlocal_correlation)
+    if (!model.range_correction || !model.nonlocal_correlation)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const double spin_factor = model.spins == 1 ? -0.5 : -1.0;
     const double short_exchange = primary.spec.exchange.coefficient / spin_factor;
