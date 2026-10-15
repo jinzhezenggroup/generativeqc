@@ -3926,9 +3926,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         incremental_delta_build_count, batch_size * sizeof(unsigned long long),
         cudaMemcpyDeviceToHost, resources.stream_);
     if (cuda_error == cudaSuccess) {
-      cuda_error = runtime::residency_stream_synchronize(
-          residency_execution, SourceRole::iteration, SourceSite::hf_final_fock_fence,
-          resources.stream_);
+      cuda_error =
+          runtime::residency_stream_synchronize(residency_execution, SourceRole::iteration,
+                                                SourceSite::hf_final_fock_fence, resources.stream_);
     }
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
