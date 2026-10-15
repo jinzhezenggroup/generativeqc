@@ -227,6 +227,11 @@
       "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     },
+    "readme-wb97mv-20261014": {
+      "owner": "README WB97M-V native endpoint refresh",
+      "reason": "Retain compact direct/DF charts and seven complete source-bound WB97M-V populations; unchanged functionals reference the previous archive. Native 3/12-atom points are remeasured in fresh processes after separate compilation-cache priming, with original 3-atom observations losslessly retained and references shared unchanged. DF/48 remains visible without a matching reference; only incomplete DF/96 is omitted. SVG presentation sharing is pixel-identical and fits the unchanged aggregate budget. No raw run archive, production default promotion or policy-cap change is introduced.",
+      "review_document": "benchmarks/results/readme-wb97mv-20261014/README.md"
+    },
     "vv10-range-followups-20261014": {
       "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
       "reason": "Lossless complete raw JSON, all endpoint force vectors and independent references retain automatic 4 GiB populations, partial 96-atom timeouts and rejected convergence experiments. No experiment becomes a default observation; no sample/deadline/gate or storage-limit change. Detailed source inventories use shared lossless storage.",
@@ -559,28 +564,12 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 185892,
-      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
-      "role": "Complete DF endpoint chart"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 298072,
       "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "bytes": 189107,
-      "sha256": "4bed4aea491bf39a802ac14ecbd3f1a4fa9af107c8d1bd83bb85196ee7701fcd",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete direct endpoint chart"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",

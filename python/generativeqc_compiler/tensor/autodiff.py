@@ -203,8 +203,9 @@ def _validate_reference_context(program: Program) -> None:
     """Admit Boolean values only as external, non-differentiated selectors.
 
     Node construction already validates view shape/type and where domains.
-    This additional proof is runtime-reference-only: it must not enter the
-    shared primitive capability set or generated derivative admission.
+    The shared primitive capability set remains unchanged. Explicit generated
+    forward consumers may reuse this proof with their own narrower dtype and
+    execution qualification; this proof alone grants no native admission.
     """
     live = program.live_nodes
     if not any(node.spec.dtype == "bool" for node in live):

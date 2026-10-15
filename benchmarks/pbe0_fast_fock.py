@@ -16,14 +16,18 @@ import os
 import traceback
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from generativeqc import Calculator, GridSpec
 
 from benchmarks._cases import benchmark_cases
+from benchmarks._retention import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import native_build_metadata
 from benchmarks.pbe0_mixed_gradient import options
 from benchmarks.pbe0_precision import errors, native_sample, protocol, reference
+
+if TYPE_CHECKING:
+    from typing import TextIO
 
 
 def portable_report(report: dict) -> dict:
@@ -98,34 +102,50 @@ def main() -> None:
         default="water-32mer-4s4-def2-svp-spherical",
     )
     parser.add_argument("--oracle", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--repeats", type=int, default=3)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("requires finite srun allocation")
-    if args.output.exists() or args.repeats < 1:
-        parser.error("output must be new and repeats must be positive")
-    grid = GridSpec(48, 16, 32)
-    science = protocol(args.case, grid)
+    if args.repeats < 1:
+        parser.error("repeats must be positive")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        output = args.output.open("x+", encoding="utf-8")
+    except FileExistsError:
+        parser.error("output must be new, including symlinks")
+    with output:
+        _run(args, output)
+
+
+def _run(args: argparse.Namespace, output: TextIO) -> None:
+    """Keep every update on the exclusively reserved evidence file."""
     report = {
         "schema": "generativeqc.pbe0-budget-fock.v1",
         "status": "running",
-        "protocol": science,
+        "protocol": None,
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "timing_scope": "fresh-owner complete energy/force endpoint; Hcore seed",
         "performance_claim": False,
         "records": [],
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
 
     def save() -> None:
-        args.output.write_text(
+        serialized = (
             json.dumps(portable_report(report), indent=2, allow_nan=False) + "\n"
         )
+        output.seek(0)
+        output.write(serialized)
+        output.truncate()
+        output.flush()
 
     save()
     try:
+        grid = GridSpec(48, 16, 32)
+        science = protocol(args.case, grid)
+        report["protocol"] = science
+        save()
         if args.engine == "reference":
             report["reference"] = reference(args.case, grid, 4, backend="gpu4pyscf")
             report["status"] = "reference-completed"
@@ -149,14 +169,12 @@ def main() -> None:
             report["oracle_sha256"] = hashlib.sha256(
                 args.oracle.read_bytes()
             ).hexdigest()
-            report["native_library_sha256"] = hashlib.sha256(
-                Path(os.environ["GENERATIVEQC_LIBRARY"]).read_bytes()
-            ).hexdigest()
             settings = options(args.case, grid)
             settings.pop("precision")
             calculator = Calculator(**settings, precision="fp64")
             try:
                 report["build"] = native_build_metadata(calculator)
+                report["native_library_sha256"] = report["build"]["library_sha256"]
             finally:
                 calculator.clear_cache()
             for repeat in range(-1, args.repeats):
@@ -170,18 +188,35 @@ def main() -> None:
                             "screening_tolerance",
                         ):
                             selected.pop(control)
-                    row = native_sample(mode, selected, args.case)
-                    row.update(
-                        repeat=repeat, phase="first-call" if repeat < 0 else "measured"
-                    )
+                    row = {
+                        "mode": mode,
+                        "repeat": repeat,
+                        "phase": "first-call" if repeat < 0 else "measured",
+                        "attempt_status": "running",
+                    }
                     report["records"].append(row)
                     save()
-                    row["oracle_errors"] = check_sample(row, oracle, mode)
-                    row["oracle_gate"] = True
-                    save()
-                    print(
-                        mode, repeat, row["seconds"], row["oracle_errors"], flush=True
-                    )
+                    try:
+                        row.update(native_sample(mode, selected, args.case))
+                        save()
+                        row["oracle_errors"] = check_sample(row, oracle, mode)
+                        row["oracle_gate"] = True
+                        row["attempt_status"] = "qualified"
+                        save()
+                        print(
+                            mode,
+                            repeat,
+                            row["seconds"],
+                            row["oracle_errors"],
+                            flush=True,
+                        )
+                    except Exception as error:
+                        row.update(
+                            attempt_status="failed",
+                            error=f"{type(error).__name__}: {error}",
+                            traceback=traceback.format_exc(),
+                        )
+                        raise
             times = {
                 mode: median(
                     row["seconds"]

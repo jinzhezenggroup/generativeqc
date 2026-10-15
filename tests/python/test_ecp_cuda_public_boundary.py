@@ -90,8 +90,20 @@ def test_public_force_wrapper_rejects_cpu_owner_before_compilation(
     sources = []
     original = StationaryKsState.from_native
 
-    def track(batch: typing.Any, basis: typing.Any, *, index: int = 0) -> typing.Any:
-        state = original(batch, basis, index=index)
+    def track(
+        batch: typing.Any,
+        basis: typing.Any,
+        *,
+        index: int = 0,
+        allow_budget_stationarity: bool = False,
+    ) -> typing.Any:
+        assert allow_budget_stationarity is True
+        state = original(
+            batch,
+            basis,
+            index=index,
+            allow_budget_stationarity=allow_budget_stationarity,
+        )
         sources.append(state._source)
         return state
 

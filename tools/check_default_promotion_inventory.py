@@ -34,6 +34,7 @@ AUDITED_PREFIXES = (
     "ks-runtime:",
     "tensor-schedule:",
     "tensor-execution:",
+    "tensor-ad:",
     "dft-policy:",
     "public-model:",
     "initial-guess:",
@@ -168,6 +169,34 @@ def _discover_tensor_execution(root: Path) -> dict[str, str]:
     if '"cuda-graph"' not in source:
         raise ValueError("missing audited cuda-graph execution mode")
     return {"tensor-execution:cuda-graph": relative.as_posix()}
+
+
+def _discover_tensor_ad(root: Path) -> dict[str, str]:
+    """Register explicit Boolean API controls, without pinning derivative bodies."""
+    relative = Path("python/generativeqc_compiler/tensor/ad_program.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    result = {}
+    for function in tree.body:
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        for argument, default in zip(
+            function.args.kwonlyargs, function.args.kw_defaults, strict=True
+        ):
+            if (
+                isinstance(argument.annotation, ast.Name)
+                and argument.annotation.id == "bool"
+            ):
+                if (
+                    not isinstance(default, ast.Constant)
+                    or type(default.value) is not bool
+                ):
+                    raise ValueError(
+                        "Tensor AD Boolean control requires an explicit Boolean default"
+                    )
+                result[f"tensor-ad:{function.name}.{argument.arg}"] = (
+                    relative.as_posix()
+                )
+    return result
 
 
 def _discover_public_precision(root: Path) -> dict[str, str]:
@@ -739,6 +768,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
+        _discover_tensor_ad(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_ks_final_validation_default(root),

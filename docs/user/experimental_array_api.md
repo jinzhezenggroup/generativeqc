@@ -475,8 +475,13 @@ Scientific index domains, representations and symmetry annotations are not
 admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
 tests support only external fixed Boolean masks in finite generic real graphs;
 see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
-The public compiled AD wrappers, generated derivative programs and HVP remain
-unsupported for `where`. The materializing native CPU forward path admits only
+The public compiled AD wrappers, default generated derivatives, generated VJP
+and HVP remain unsupported for `where`. The low-level
+`linearize(..., allow_external_mask_where=True)` opt-in generates first-order
+JVP programs for fixed external masks on generic finite FP64 arrays, replayable
+by the reference interpreter and materializing native CPU owner; see the
+derivative contract linked above for its validation and higher-order boundaries.
+The materializing native CPU forward path admits only
 float64 branches with the same generic-domain restrictions and explicit broadcasts.
 Its byte ABI stores each Boolean in one byte and aligns FP64 fields. Every live
 input and branch is materialized and validated before selection; unselected

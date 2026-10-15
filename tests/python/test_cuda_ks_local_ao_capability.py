@@ -256,11 +256,14 @@ int main() {
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
     for (bool strict_refinement : {false, true}) {
-      bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
+      const bool has_exchange = false;
+      bool pending_mixed_coulomb{}, pending_mixed_exchange{};
+      bool pending_mixed_density{}, pending_mixed_point{};
 """
         + block
         + r"""
       assert(pending_mixed_coulomb == (automatic && !strict_refinement));
+      assert(!pending_mixed_exchange);
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
       assert(!pending_mixed_point);
     }

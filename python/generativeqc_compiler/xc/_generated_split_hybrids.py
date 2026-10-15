@@ -45,4 +45,5 @@ SPLIT_HYBRID_COMPONENTS = frozenset(
     for record in SPLIT_HYBRIDS.values()
     for component, _ in record["components"]
 )
+
 # fmt: on

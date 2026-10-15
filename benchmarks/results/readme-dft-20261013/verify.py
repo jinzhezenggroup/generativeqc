@@ -24,6 +24,13 @@ def verify(*, rerender: bool = False) -> None:
         payload = (root / name).read_bytes()
         assert len(payload) == receipt["bytes"], name
         assert hashlib.sha256(payload).hexdigest() == receipt["sha256"], name
+        if "uncompressed" in receipt:
+            original = lzma.decompress(payload)
+            assert len(original) == receipt["uncompressed"]["bytes"], name
+            assert (
+                hashlib.sha256(original).hexdigest()
+                == receipt["uncompressed"]["sha256"]
+            ), name
     # Source inventories are shared losslessly outside the readable manifest;
     # storage compaction must preserve every original provenance field.
     followup = manifest["benchmark_issue_followup"]
@@ -70,9 +77,15 @@ def verify(*, rerender: bool = False) -> None:
                 destination = Path(directory)
                 render(summary, destination)
                 for output in destination.iterdir():
-                    assert output.read_bytes() == (root / output.name).read_bytes(), (
-                        output.name
+                    retained = root / output.name
+                    original = (
+                        retained.read_bytes()
+                        if retained.exists()
+                        else lzma.decompress(
+                            retained.with_suffix(retained.suffix + ".xz").read_bytes()
+                        )
                     )
+                    assert output.read_bytes() == original, output.name
     print(
         "Publication hashes, complete phases and scalar gates verified"
         + ("; figures replay byte-for-byte." if rerender else ".")
