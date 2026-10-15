@@ -1574,12 +1574,36 @@ def test_prior_macro_poison_exception_and_forced_order(
     )
 
 
+@pytest.mark.parametrize(
+    ("kind", "spelling"),
+    [
+        ("identifier", "value"),
+        ("numeric_constant", "1'000"),
+        ("string_literal", 'R"tag(multiple  spaces\nnew  line)tag"'),
+        ("string_literal", '"\\tend"'),
+    ],
+)
+def test_observed_token_pairs_preserves_records_without_eof_suffix(
+    kind: str, spelling: str
+) -> None:
+    stream = (
+        f"{kind} '{spelling}'\t [StartOfLine]\tLoc=<fixture.cpp:1:1>\n"
+        "eof ''\t\tLoc=<fixture.cpp:3:1>\n"
+    )
+    assert observed_token_pairs(stream) == [(kind, spelling)]
+
+
+def test_observed_token_pairs_rejects_incomplete_framing() -> None:
+    with pytest.raises(ValueError, match="unsupported-clangxx-token-stream"):
+        observed_token_pairs("identifier 'value'\t\tLoc=<fixture.cpp:1:1>\n")
+
+
 def observed_token_pairs(text: str) -> list[tuple[str, str]]:
     """Read complete Clang records; literal spelling bytes stay unchanged."""
     text = text.rstrip("\r\n")
     c._validate_clang_cxx_tokens(text)
     pairs = []
-    for match in re.finditer(c._CLANGXX_RECORD, text):
+    for match in re.finditer(rf"^{c._CLANGXX_RECORD}", text, re.MULTILINE):
         head, _, _ = match[0].rsplit("\t", 2)
         kind, spelling = head.split(" ", 1)
         pairs.append((kind, spelling[1:-1]))
