@@ -133,9 +133,16 @@ def initialize_from(
                 )
             # Bound live matrices, eigensolver operands and staged native seed
             # copies; caller-owned source/target HF arenas are separate budgets.
-            workspace = (
-                256 * (ns * ns + nt * nt + ns * nt) + 4 * state.coordinate_count * 8
+            from . import _projection_native
+
+            native_workspace = _projection_native.numeric_capacity(
+                target._library, ns, nt, max(left["nalpha"], left["nbeta"]), policy
             )
+            workspace = (
+                native_workspace
+                if native_workspace is not None
+                else 256 * (ns * ns + nt * nt + ns * nt)
+            ) + 4 * state.coordinate_count * 8
             if retained_bytes + workspace > maximum_host_bytes:
                 raise MemoryError("basis projection exceeds maximum_host_bytes")
             _resource_check(target, retained_bytes + workspace, 8 * spins * nt * nt)

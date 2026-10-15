@@ -6,6 +6,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 #include "scf/initial_guess/eigen_operation.hpp"
@@ -99,6 +100,15 @@ struct OccupiedProjectionControls {
   double residual_zero_tolerance{8.0 * std::numeric_limits<double>::epsilon()};
   bool measure_normal_equation{};
   EigenOperation eigen{};
+};
+
+/** Typed refusal lets public adapters retain their own diagnostic vocabulary
+ * without matching internal exception strings or duplicating numerical gates. */
+enum class OccupiedProjectionRejection { rank_loss, source_norm, residual_loss };
+struct OccupiedProjectionFailure : std::invalid_argument {
+  OccupiedProjectionRejection reason;
+  OccupiedProjectionFailure(OccupiedProjectionRejection cause, const char* message)
+      : std::invalid_argument(message), reason(cause) {}
 };
 
 /** Project source occupied columns through S_ts into the target AO metric.

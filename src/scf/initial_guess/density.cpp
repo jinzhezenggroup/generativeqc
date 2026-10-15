@@ -372,10 +372,13 @@ OccupiedProjectionResult project_occupied_density_with_controls(
   const double maximum_norm = spectral.values.back();
   if (!(minimum_norm > 0.0) || !std::isfinite(minimum_norm) || !std::isfinite(maximum_norm) ||
       minimum_norm <= controls.minimum_squared_norm ||
-      minimum_norm <= controls.relative_gram_threshold * maximum_norm ||
-      maximum_norm > 1.0 + controls.validation_tolerance) {
-    throw std::invalid_argument("occupied projection lost rank or exceeds the source norm");
+      minimum_norm <= controls.relative_gram_threshold * maximum_norm) {
+    throw OccupiedProjectionFailure(OccupiedProjectionRejection::rank_loss,
+                                    "occupied projection lost rank or exceeds the source norm");
   }
+  if (maximum_norm > 1.0 + controls.validation_tolerance)
+    throw OccupiedProjectionFailure(OccupiedProjectionRejection::source_norm,
+                                    "occupied projection lost rank or exceeds the source norm");
   result.minimum_projected_norm = minimum_norm;
   // Roundoff in an identity Gram can otherwise become an artificial O(sqrt(epsilon))
   // residual. Preserve every larger projected-norm loss.
@@ -383,7 +386,8 @@ OccupiedProjectionResult project_occupied_density_with_controls(
   result.projection_residual =
       norm_loss <= controls.residual_zero_tolerance ? 0.0 : std::sqrt(norm_loss);
   if (result.projection_residual > maximum_residual)
-    throw std::invalid_argument("occupied projection loses too much source occupied norm");
+    throw OccupiedProjectionFailure(OccupiedProjectionRejection::residual_loss,
+                                    "occupied projection loses too much source occupied norm");
 
   Matrix inverse_sqrt_gram(occupied * occupied, 0.0);
   for (std::size_t row = 0; row < occupied; ++row) {

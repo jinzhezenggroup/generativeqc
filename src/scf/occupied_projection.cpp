@@ -172,6 +172,12 @@ Result occupied(const Input& input, const Policy& policy, const Metric& source,
            auto result = tensor::cpu_symmetric_eigen(matrix, dimension);
            return reference::EigenResult{std::move(result.values), std::move(result.vectors)};
          }});
+  } catch (const initial_guess::OccupiedProjectionFailure& error) {
+    if (error.reason == initial_guess::OccupiedProjectionRejection::source_norm)
+      throw Rejected("cross overlap is inconsistent with normalized source and target metrics");
+    if (error.reason == initial_guess::OccupiedProjectionRejection::residual_loss)
+      throw Rejected("projection residual exceeds policy maximum");
+    throw Rejected("occupied projection lost rank in the target basis");
   } catch (const std::invalid_argument& error) {
     throw Rejected(error.what());
   }
@@ -205,8 +211,22 @@ Result occupied(const Input& input, const Policy& policy, const Metric& source,
 
 }  // namespace
 
-Result project_occupied(const Input& input, const Policy& policy) {
+Capacity capacity(const Input& input, const Policy& policy) {
   validate(input, policy);
+  const auto source = elements(input.source_ao, input.source_ao);
+  const auto target = elements(input.target_ao, input.target_ao);
+  const auto cross = elements(input.target_ao, input.source_ao);
+  constexpr auto limit = std::numeric_limits<std::size_t>::max() / 256;
+  if (source > limit || target > limit - source || cross > limit - source - target)
+    throw Rejected("occupied projection numeric capacity overflows");
+  return {elements(input.target_ao, input.occupied), target, 256 * (source + target + cross)};
+}
+
+Result project_occupied(const Input& input, const Policy& policy) {
+  const auto required = capacity(input, policy);
+  if (policy.maximum_workspace_bytes &&
+      required.numeric_workspace_bytes > policy.maximum_workspace_bytes)
+    throw BudgetExceeded{};
   const auto source = metric(input.source_overlap, input.source_ao, "source overlap", policy);
   const Matrix coefficients(input.source_ao, input.occupied, input.source_state,
                             "source coefficients");
@@ -214,7 +234,10 @@ Result project_occupied(const Input& input, const Policy& policy) {
 }
 
 Result project_density(const Input& input, const Policy& policy) {
-  validate(input, policy);
+  const auto required = capacity(input, policy);
+  if (policy.maximum_workspace_bytes &&
+      required.numeric_workspace_bytes > policy.maximum_workspace_bytes)
+    throw BudgetExceeded{};
   const auto source = metric(input.source_overlap, input.source_ao, "source overlap", policy);
   const Matrix density(input.source_ao, input.source_ao, input.source_state, "source density");
   for (std::size_t row = 0; row < input.source_ao; ++row)

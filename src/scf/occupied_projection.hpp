@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <new>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -14,10 +15,17 @@ struct Policy {
   double validation_tolerance{1e-7};
   double maximum_residual{0.5};
   std::size_t maximum_ao{4096};
+  std::size_t maximum_workspace_bytes{};
 };
 
 struct Rejected : std::invalid_argument {
   using std::invalid_argument::invalid_argument;
+};
+
+struct BudgetExceeded : std::bad_alloc {
+  const char* what() const noexcept override {
+    return "occupied projection exceeds maximum_workspace_bytes";
+  }
 };
 
 /** All inputs are borrowed row-major FP64 arrays, with target-by-source cross
@@ -42,6 +50,15 @@ struct Result {
   std::vector<double> coefficients, density;
   Diagnostics diagnostics;
 };
+
+/** Conservative owner-visible numeric capacity, including detached native
+ * results and ordinary eigen scratch. Caller arrays, metadata, allocator and
+ * provider-internal retained overhead are separate; this is not an RSS bound. */
+struct Capacity {
+  std::size_t coefficient_count{}, density_count{}, numeric_workspace_bytes{};
+};
+
+Capacity capacity(const Input& input, const Policy& policy = {});
 
 Result project_occupied(const Input& input, const Policy& policy = {});
 Result project_density(const Input& input, const Policy& policy = {});

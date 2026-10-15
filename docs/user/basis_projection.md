@@ -67,6 +67,36 @@ projected norm, normal-equation residual, metric orthogonality, electron trace
 and metric idempotency. Lost occupied rank rejects the entire item's proposal.
 Projection does not extend the target SCF provider's conditioning capabilities.
 
+## Shared native transport
+
+With the additive installed protocol available, plain `ProjectionPolicy` calls
+use the same C++ occupied transport as native initial-guess consumers. The
+native owner validates metric spectra, source purity and occupied rank,
+reconstructs pure densities, and produces all numerical diagnostics. Python
+retains shape/finite conversion, immutable presentation and explicit compatibility
+for old libraries, custom policies/scalars and integers outside the native range.
+A selected-library load, ABI or native execution failure never retries Python
+projection science. Custom compatibility is not advertised as native execution.
+
+The installed C/C++ entry points are
+`generativeqc_basis_projection_query_v1` and
+`generativeqc_basis_project_cpu_v1`; see the [native API](../reference/native_api.md).
+The shape-only query reads no numerical arrays. Execution admits the reported
+numeric working capacity before reading arrays, then publishes detached buffers
+only after every scientific gate succeeds. A zero native workspace limit is
+unbounded. Caller arrays, metadata, allocator and provider-internal retained
+overhead are separate: this numeric declaration is not a complete physical
+allocation or RSS bound. Prepared initialization consumes this native numeric
+subplan before admitting projection; old/custom domains retain the explicit
+portable subplan. Surrounding fleet/provider budgets remain separate.
+
+The original native initial-guess entry preserves its own historical relative
+Gram cutoff and roundoff residual snapping. Explicit controls select the public
+basis policy's absolute Gram cutoff and unsnapped diagnostic, without copying
+the projection equations or using a reference eigensolver for the new native
+production route. Projection still does not own progressive stage execution,
+target convergence or physical model authentication.
+
 ## Prepared batches and fallback
 
 ```python
@@ -152,6 +182,20 @@ target densities/energies/forces and records signed energy differences instead
 of counting another SCF root as an equivalent speedup. Per-iteration histories
 are not exported by this public solver and are explicitly marked unavailable.
 No default promotion follows from reduced target-stage iterations alone.
+
+For a migration/revision comparison, use
+`benchmarks/basis_projection_revision_endpoint.py` with each revision's archived
+Python source and matching installed `GENERATIVEQC_LIBRARY`. Run the same frozen
+runner on one CPU with one BLAS/OpenMP thread, preserving first use, warmups and
+all samples. It times calculator construction, both prepared lifetimes, source
+SCF, projection, target SCF/forces, detached output copies and cleanup. Original
+and moved RHF/UHF Direct/DF cases retain model/policy diagnostics, density,
+energy/forces, convergence and observed iterations/Fock work. Optional `--molecule
+lih` or `--molecule water` adds multicenter coverage. Compare each complete
+endpoint median with its matching master using the 1.05 non-regression gate;
+reduced projection time alone is not acceptance. First use shares the process
+and compiler cache and must not be labeled compiler-cold. Raw receipts belong
+in ignored artifact storage, not the reviewed result tree.
 
 ## Measured total cost
 
