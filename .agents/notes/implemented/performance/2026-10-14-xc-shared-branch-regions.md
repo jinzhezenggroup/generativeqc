@@ -109,3 +109,14 @@ Before merge, perform a source-matched current-master-versus-this-branch
 M06-2X complete E+F campaign (direct/DF, cold/five warm/moved/five
 moved-warm), retaining SCF work and independent E/F gates. A new benchmark
 is required before claiming combined #2464 + #2505 speedups.
+
+## Checkout-budget disposition — 2026-10-15
+
+With merged #2505, the full historical campaign would exceed the
+existing 64 MiB aggregate benchmark-results checkout budget by 189235
+bytes. All original evidence remains byte-for-byte recoverable from
+the PR ancestor `2f5b3396cbcfea548c76ff59d0bab91ef96ab9a9` (including the original manifest). The current
+`benchmarks/results/xc-shared-branches-20261014/README.md` is only a
+historical index and recovery recipe; the remaining original files are
+deliberately absent from the checkout. No scientific observations,
+timeouts, acceptance gates or hashes were edited, and no budget was raised.

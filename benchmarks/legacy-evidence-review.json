@@ -256,11 +256,6 @@
       "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
-    },
-    "xc-shared-branches-20261014": {
-      "owner": "Equal-spin XC complete endpoint qualification",
-      "reason": "Compact paired scalar observations retain all 237 returned native calls, independent oracle binding, full SCF histories explaining the direct moved regression, work counts and both 1800-second timeouts. Raw force arrays, binaries and profiler traces stay outside Git. The complete campaign stays below the existing 2 MiB review budget; no storage or scientific gate is relaxed.",
-      "review_document": "benchmarks/results/xc-shared-branches-20261014/README.md"
     }
   },
   "files": [
@@ -623,14 +618,6 @@
       "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
       "classification": "required-compact-accepted-evidence",
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
-    },
-    {
-      "path": "benchmarks/results/xc-shared-branches-20261014/endpoints.json.xz",
-      "family": "xc-shared-branches-20261014",
-      "bytes": 142480,
-      "sha256": "3ce8774f9a577b8468b6bd5a94499f24be8cfe7602a50347f2fcb626277f15c2",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All paired native scalar observations and SCF histories, retained independent references and source/library/job identities, including the slower direct moved endpoint and incomplete populations."
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
