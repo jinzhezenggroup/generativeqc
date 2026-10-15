@@ -57,7 +57,7 @@ GmresResult build_result(const GmresPlan& plan, WorkspaceVector solution, GmresS
 }
 
 bool solve_upper(std::span<const double> hessenberg, std::size_t stride,
-                 std::span<const double> transformed_rhs, std::size_t count, double tolerance,
+                 std::span<const double> transformed_rhs, std::size_t count,
                  std::span<double> solution) {
   std::fill(solution.begin(), solution.end(), 0.0);
   for (std::size_t reverse = count; reverse > 0; --reverse) {
@@ -66,7 +66,10 @@ bool solve_upper(std::span<const double> hessenberg, std::size_t stride,
     for (std::size_t column = row + 1; column < count; ++column)
       value -= hessenberg[row * stride + column] * solution[column];
     const double diagonal = hessenberg[row * stride + row];
-    if (!std::isfinite(diagonal) || std::abs(diagonal) <= tolerance) return false;
+    // An absolute pivot floor rejects valid, uniformly scaled systems, while a
+    // relative floor adds a condition-number cutoff. Attempt every finite,
+    // nonzero pivot; finite coefficients and the true residual guard acceptance.
+    if (!std::isfinite(diagonal) || diagonal == 0.0) return false;
     solution[row] = value / diagonal;
     if (!std::isfinite(solution[row])) return false;
   }
@@ -316,13 +319,18 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                               iterations % plan.options.true_residual_every == 0;
       if (!checkpoint) continue;
       const std::size_t columns = column + 1;
-      const bool solvable = solve_upper(hessenberg, restart, transformed, columns,
-                                        plan.options.breakdown_tolerance, coefficients);
+      const bool solvable = solve_upper(hessenberg, restart, transformed, columns, coefficients);
       candidate = base_x;
       if (solvable)
         for (std::size_t vector = 0; vector < columns; ++vector)
           for (std::size_t index = 0; index < n; ++index)
             candidate[index] += preconditioned[vector * n + index] * coefficients[vector];
+      // Finite backsolve coefficients can still overflow in the preconditioned
+      // combination. A sparse action may ignore that coordinate, so reject it
+      // before asking the operator to certify the physical residual.
+      if (!finite(candidate))
+        return result_for(plan, std::move(best_x), GmresStatus::breakdown, best_norm, rhs_norm,
+                          iterations, restarts, operator_actions, preconditioner_actions);
       if (!apply_checked(candidate, candidate_image, "gmres_exact_residual_replay"))
         return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
                           rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
