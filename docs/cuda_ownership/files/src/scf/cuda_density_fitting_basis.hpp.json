@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda_density_fitting_basis.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Read-only single-system actual DF basis capability exposes immutable device packing and public Cartesian/spherical expansions, including six-term auxiliary g, without exporting mutable scratch, allocating, transferring numerics or changing device visibility. Lifetime proof remains the enclosing authenticated owner contract.",
+  "regions": []
+}

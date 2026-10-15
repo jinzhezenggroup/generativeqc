@@ -60,12 +60,33 @@ def test_complete_eri_closure_retains_explicit_radial_controls() -> None:
     assert {item.radial for item in result.integrals} == {"long_range"}
 
 
+def test_df_auxiliary_g_closure_does_not_authorize_orbital_g() -> None:
+    original = parse_inventory(
+        json.loads((ROOT / "manifests/hessian_aot_development.json").read_text())
+    )
+    result = complete_inventory(
+        original, ("coulomb_metric", "three_center_eri"), 1, max_auxiliary_angular=4
+    )
+    assert {
+        item.angular for item in result.integrals if item.family == "coulomb_metric"
+    } == set(product(range(5), repeat=2))
+    assert {
+        item.angular for item in result.integrals if item.family == "three_center_eri"
+    } == set(product(range(2), range(2), range(5)))
+    assert [item for item in result.integrals if item.family == "eri"] == [
+        item for item in original.integrals if item.family == "eri"
+    ]
+    assert parse_inventory(inventory_payload(result)) == result
+
+
 @pytest.mark.parametrize(
     "change",
     [
         {"max_angular": -1},
         {"max_angular": 4},
         {"max_angular": True},
+        {"max_auxiliary_angular": 5},
+        {"max_auxiliary_angular": True},
         {"components_per_tile": 0},
         {"components_per_tile": 17},
         {"families": ()},

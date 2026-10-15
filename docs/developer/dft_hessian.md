@@ -511,8 +511,39 @@ compares the compiled maps at runtime-sized signed RKS/UKS shapes and actual KS
 owners against independent NumPy/libcint values, and exercises finite,
 symmetry, alias, capture, stream, cutoff, resource and revocation gates.
 
-Complete ERI/DF/ECP numerical shell coverage, fitted/ECP raw nuclear response and
-stationary molecular assembly still require integration.
+`src/integrals/cuda_df_nuclear_response.hpp` supplies a separate bounded two-pass
+raw DF nuclear source. The first pass publishes full ordered public A, V and
+their geometry directions. After inverse/Fock/weight AD and right density
+response, the second pass contracts fixed/moving raw cotangents into a nuclear
+gradient and its HVP. Compiler AD remains the derivative authority; the native
+owner gathers actual normalized primitives, caches one shell's mathematical
+center derivatives and applies fixed public expansions exactly once. No global
+coordinate-major derivative tensor or fitted four-center tensor is retained.
+All coincident mathematical-center incidences survive deterministic scatter.
+
+`src/scf/cuda_density_fitting_basis.hpp` exposes only the actual immutable DF
+basis arrays and six-term-capable auxiliary-g projection ABI, not mutable
+integral/J/K scratch. `src/dft/cuda_ks_wb97mv_df_nuclear.hpp` binds this source to
+the actual accepted RKS/UKS WB97M-V DF owner, integer normalized orbital and
+auxiliary topology, original stream and full live-state identity. Actions stage
+all outputs and reauthenticate before publication. Both passes explicitly
+charge primitive-component evaluations and repeated component-tile radial
+records; conservative reduction bounds include primitive-field sums, cache
+accumulation, projection and physical-center scatter. These receipts are not
+FLOPs or complete-endpoint timings.
+
+The AOT inventory builder accepts `--max-auxiliary-angular 4` independently of
+the orbital-through-f bound. A native consumer requires complete nonoverlapping
+linked tiles for every actual ordered shell class and fails closed otherwise.
+Admission/generation support does not imply numerical qualification of the full
+f/f/g closure. `tests/python/test_native_df_nuclear_response.py` compares raw
+values, first derivatives and weighted HVPs with independently normalized
+Cartesian libcint sources and independently applied Cartesian/spherical
+projections. Its actual RKS/UKS source/inverse/moving-weight chain remains a
+component test, not a stationary Hessian.
+
+Complete ERI/DF/ECP numerical shell coverage, residual ECP raw nuclear response
+and stationary molecular assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 

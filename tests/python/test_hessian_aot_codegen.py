@@ -71,6 +71,9 @@ def test_inventory_rejects_ignored_or_ambiguous_controls(change: dict) -> None:
     [
         ("eri", (0, 0), (0,), "full_range"),
         ("overlap", (4, 0), (0,), "full_range"),
+        ("three_center_eri", (4, 0, 0), (0,), "full_range"),
+        ("three_center_eri", (0, 4, 0), (0,), "full_range"),
+        ("coulomb_metric", (5, 0), (0,), "full_range"),
         ("overlap", (0, 0), (0, 0), "full_range"),
         ("overlap", (1, 0), (1, 0), "full_range"),
         ("overlap", (0, 0), (1,), "full_range"),
@@ -90,6 +93,23 @@ def test_attraction_retains_external_mathematical_center_and_unit_charge() -> No
     assert request.record_stride == 12
     assert request.payload()["charge"] == 1
     assert request.components == (0, 2)
+
+
+@pytest.mark.parametrize(
+    "family,angular", (("three_center_eri", (3, 3, 4)), ("coulomb_metric", (4, 4)))
+)
+def test_auxiliary_g_has_explicit_df_role_admission(
+    family: str, angular: tuple
+) -> None:
+    request = IntegralRequest(family, angular, (0,))
+    assert request.centers == len(angular)
+    assert request.record_stride == 4 * len(angular) + 1
+    assert (
+        integral_request(
+            {"family": family, "angular": list(angular), "components": [0]}
+        )
+        == request
+    )
 
 
 def test_build_generation_never_imports_runtime_or_gpu_packages(tmp_path: Path) -> None:

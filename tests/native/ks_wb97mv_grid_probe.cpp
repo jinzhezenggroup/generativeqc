@@ -11,6 +11,7 @@
 
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_one_electron_response.hpp"
+#include "dft/cuda_ks_wb97mv_df_nuclear.hpp"
 #include "dft/cuda_ks_wb97mv_df_response.hpp"
 #include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
@@ -64,10 +65,12 @@ void run(bool unrestricted, const std::string& mode) {
   const bool nuclear = mode == "nuclear" || mode == "df-nuclear";
   const bool one_electron = mode == "one-electron" || mode == "df-one-electron";
   const bool nuclear_jk = mode == "nuclear-jk" || mode == "df-nuclear-jk";
-  const bool df_algebra = mode == "df-response" || mode == "direct-df-response";
+  const bool df_nuclear = mode == "df-nuclear-source";
+  const bool df_algebra = mode == "df-response" || mode == "direct-df-response" || df_nuclear;
   const bool geometry = mode == "geometry" || mode == "df-geometry" || nuclear;
   const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear" ||
-                      mode == "df-one-electron" || mode == "df-nuclear-jk" || mode == "df-response";
+                      mode == "df-one-electron" || mode == "df-nuclear-jk" ||
+                      mode == "df-response" || df_nuclear;
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -206,13 +209,22 @@ void run(bool unrestricted, const std::string& mode) {
   array("potential", value);
   array("response", action);
   dft::CudaKsWb97mvDfResponse df_response;
+  dft::CudaKsWb97mvDfNuclear df_nuclear_response;
   dft::CudaWb97mvDfOutput df_output;
+  integrals::CudaDfNuclearValues df_sources;
+  integrals::CudaDfNuclearWeights df_weights;
+  integrals::CudaDfNuclearVectors df_vectors;
+  double *df_nuclear_motion{}, *df_source_storage{}, *df_vector_storage{};
+  std::size_t df_source_count{};
   double *df_delta_raw{}, *df_delta_metric{}, *df_storage{};
   std::size_t df_count{};
   if (df_algebra && !fitted) {
     require(
         df_response.prepare(*batch, 0, token, {}, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
         "fitted-primary adapter admitted a Direct model");
+    require(df_nuclear_response.prepare(*batch, 0, token, {}, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "raw DF source admitted a Direct model");
     std::cout << ",\"df_direct_rejected\":true";
   }
   if (df_algebra && fitted) {
@@ -257,6 +269,43 @@ void run(bool unrestricted, const std::string& mode) {
                           cudaMemcpyHostToDevice, lease.stream));
     check(cudaMemcpyAsync(df_delta_metric, metric_motion.data(), metric_count * sizeof(double),
                           cudaMemcpyHostToDevice, lease.stream));
+    if (df_nuclear) {
+      integrals::CudaDfNuclearOptions insufficient;
+      insufficient.max_workspace_bytes = 1;
+      require(df_nuclear_response.prepare(*batch, 0, token, insufficient, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "raw DF source ignored its storage budget");
+      require(
+          df_nuclear_response.prepare(*batch, 0, token, {}, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+      const auto source_shape = df_nuclear_response.shape();
+      require(source_shape.nao == shape.nao && source_shape.naux == fitted_shape.naux &&
+                  source_shape.atoms == shape.atoms,
+              "raw DF source differs from its accepted fitted-primary owner");
+      std::vector<double> motion(3 * shape.atoms);
+      for (std::size_t index = 0; index < motion.size(); ++index)
+        motion[index] = 0.15 * std::sin(index + 2.0);
+      df_nuclear_motion = storage.allocate(motion.size());
+      check(cudaMemcpyAsync(df_nuclear_motion, motion.data(), motion.size() * sizeof(double),
+                            cudaMemcpyHostToDevice, lease.stream));
+      df_source_count = 2 * (raw_count + metric_count);
+      df_source_storage = storage.allocate(df_source_count);
+      df_sources = {df_source_storage, df_source_storage + raw_count,
+                    df_source_storage + raw_count + metric_count,
+                    df_source_storage + 2 * raw_count + metric_count};
+      df_delta_raw = df_sources.direction_three_center;
+      df_delta_metric = df_sources.direction_metric;
+      check(df_nuclear_response.values(df_nuclear_motion, df_sources, lease.stream));
+      const auto raw_first = download(df_source_storage, raw_count + metric_count);
+      check(df_nuclear_response.values(df_nuclear_motion, df_sources, lease.stream));
+      require(download(df_source_storage, raw_count + metric_count) == raw_first,
+              "raw DF source replay changed values");
+      raw_motion = download(df_delta_raw, raw_count);
+      metric_motion = download(df_delta_metric, metric_count);
+      array("df_raw", download(df_sources.three_center, raw_count));
+      array("df_metric", download(df_sources.metric, metric_count));
+      array("df_nuclear_motion", motion);
+    }
     df_count = 1 + 2 * elements + 2 * raw_count + 2 * metric_count;
     df_storage = storage.allocate(df_count);
     df_output = {df_storage,
@@ -275,6 +324,23 @@ void run(bool unrestricted, const std::string& mode) {
     array("df_delta_metric", metric_motion);
     std::cout << ",\"df_naux\":" << fitted_shape.naux
               << ",\"df_device_bytes\":" << df_response.work().workspace_bytes;
+    if (df_nuclear) {
+      df_weights = {df_output.weight_three_center, df_output.weight_metric,
+                    df_output.weight_direction_three_center, df_output.weight_direction_metric};
+      df_vector_storage = storage.allocate(6 * shape.atoms);
+      df_vectors = {df_vector_storage, df_vector_storage + 3 * shape.atoms};
+      check(df_nuclear_response.contract(df_nuclear_motion, df_weights, df_vectors, lease.stream));
+      const auto vectors = download(df_vector_storage, 6 * shape.atoms);
+      check(df_nuclear_response.contract(df_nuclear_motion, df_weights, df_vectors, lease.stream));
+      require(download(df_vector_storage, 6 * shape.atoms) == vectors,
+              "raw DF source contraction replay changed values");
+      array("df_nuclear_vectors", vectors);
+      const auto& work = df_nuclear_response.work();
+      std::cout << ",\"df_nuclear_bytes\":" << work.workspace_bytes
+                << ",\"df_nuclear_components_per_pass\":" << work.component_evaluations_per_pass
+                << ",\"df_nuclear_value_passes\":" << work.value_passes
+                << ",\"df_nuclear_contraction_passes\":" << work.contraction_passes;
+    }
   }
   dft::CudaKsOneElectronResponse one_electron_response;
   double *integral_motion{}, *integral_weights{}, *integral_matrices{}, *integral_vectors{};
@@ -533,6 +599,22 @@ void run(bool unrestricted, const std::string& mode) {
               << ",\"response_eris\":" << work.response_eris;
   }
   solve();
+  if (df_nuclear) {
+    const std::vector<double> source_sentinel(df_source_count, 27);
+    const std::vector<double> vector_sentinel(6 * shape.atoms, 27);
+    check(cudaMemcpy(df_source_storage, source_sentinel.data(), df_source_count * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(cudaMemcpy(df_vector_storage, vector_sentinel.data(),
+                     vector_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice));
+    require(df_nuclear_response.values(df_nuclear_motion, df_sources, lease.stream) ==
+                    cudaErrorInvalidResourceHandle &&
+                download(df_source_storage, df_source_count) == source_sentinel,
+            "revoked raw DF source published values");
+    require(df_nuclear_response.contract(df_nuclear_motion, df_weights, df_vectors, lease.stream) ==
+                    cudaErrorInvalidResourceHandle &&
+                download(df_vector_storage, vector_sentinel.size()) == vector_sentinel,
+            "revoked raw DF source published vectors");
+  }
   if (df_algebra && fitted) {
     const std::vector<double> df_sentinel(df_count, 27);
     check(cudaMemcpy(df_storage, df_sentinel.data(), df_count * sizeof(double),
@@ -603,17 +685,17 @@ int main(int argc, char** argv) {
   if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
   try {
     const std::string mode = argc == 3 ? argv[2] : "grid";
-    require(
-        (argc == 2 ||
-         (argc == 3 &&
-          (mode == "physical" || mode == "fock" || mode == "df-fock" || mode == "geometry" ||
-           mode == "df-geometry" || mode == "nuclear" || mode == "df-nuclear" ||
-           mode == "one-electron" || mode == "df-one-electron" || mode == "nuclear-jk" ||
-           mode == "df-nuclear-jk" || mode == "df-response" || mode == "direct-df-response"))) &&
-            (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
-        "usage: ks_wb97mv_grid_probe rks|uks "
-        "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
-        "electron|nuclear-jk|df-nuclear-jk|df-response|direct-df-response]");
+    require((argc == 2 ||
+             (argc == 3 &&
+              (mode == "physical" || mode == "fock" || mode == "df-fock" || mode == "geometry" ||
+               mode == "df-geometry" || mode == "nuclear" || mode == "df-nuclear" ||
+               mode == "one-electron" || mode == "df-one-electron" || mode == "nuclear-jk" ||
+               mode == "df-nuclear-jk" || mode == "df-response" || mode == "direct-df-response" ||
+               mode == "df-nuclear-source"))) &&
+                (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
+            "usage: ks_wb97mv_grid_probe rks|uks "
+            "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
+            "electron|nuclear-jk|df-nuclear-jk|df-response|direct-df-response|df-nuclear-source]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {

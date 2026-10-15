@@ -35,16 +35,21 @@ def complete_inventory(
     *,
     components_per_tile: int = 16,
     radials: tuple[str, ...] = RADIALS,
+    max_auxiliary_angular: int | None = None,
 ) -> Inventory:
     """Replace selected families with non-overlapping complete ordered tiles.
 
     All shell-slot permutations are explicit: no center recovery or symmetry
-    convention is silently inferred by the package builder. The finite through-f
-    bound matches IntegralRequest; an unsupported bound fails before generation.
+    convention is silently inferred by the package builder. Orbital orders stop
+    at f; an independently selected auxiliary bound permits DF g without
+    authorizing orbital g or changing unselected integral families.
     """
+    auxiliary = max_angular if max_auxiliary_angular is None else max_auxiliary_angular
     if (
         type(max_angular) is not int
         or not 0 <= max_angular <= 3
+        or type(auxiliary) is not int
+        or not 0 <= auxiliary <= 4
         or type(components_per_tile) is not int
         or not 1 <= components_per_tile <= 16
         or not families
@@ -58,7 +63,14 @@ def complete_inventory(
     requests = [item for item in inventory.integrals if item.family not in families]
     for family in families:
         slots = 4 if family == "eri" else 3 if family == "three_center_eri" else 2
-        for angular in product(range(max_angular + 1), repeat=slots):
+        bounds = (
+            (auxiliary, auxiliary)
+            if family == "coulomb_metric"
+            else (max_angular, max_angular, auxiliary)
+            if family == "three_center_eri"
+            else (max_angular,) * slots
+        )
+        for angular in product(*(range(bound + 1) for bound in bounds)):
             size = prod(len(cartesian_components(order)) for order in angular)
             for radial in radials if family == "eri" else ("full_range",):
                 for begin in range(0, size, components_per_tile):
@@ -101,6 +113,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--families", choices=FAMILIES, nargs="+", required=True)
     parser.add_argument("--max-angular", type=int, required=True)
+    parser.add_argument("--max-auxiliary-angular", type=int)
     parser.add_argument("--components-per-tile", type=int, default=16)
     parser.add_argument("--radials", choices=RADIALS, nargs="+", default=list(RADIALS))
     args = parser.parse_args()
@@ -110,6 +123,7 @@ def main() -> None:
         args.max_angular,
         components_per_tile=args.components_per_tile,
         radials=tuple(args.radials),
+        max_auxiliary_angular=args.max_auxiliary_angular,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_if_changed(

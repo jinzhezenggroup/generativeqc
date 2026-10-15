@@ -13,6 +13,7 @@
 #include "scf/cuda/df_source_internal.hpp"
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/cuda_density_fitting_basis.hpp"
 
 namespace generativeqc::scf {
 
@@ -22,6 +23,36 @@ namespace generativeqc::scf {
 struct CudaDensityFittingIntegralSource {
   void* implementation{};
 };
+
+CudaDfReadonlyBasis cuda_density_fitting_readonly_basis(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return {};
+  const auto& owner = *static_cast<const cuda_execution::CudaDensityFittingIntegralSourceImpl*>(
+      source->implementation);
+  int device{-1};
+  if (owner.batch_size != 1 || cudaGetDevice(&device) != cudaSuccess || device != owner.device_id)
+    return {};
+  const auto& batch = owner.batch;
+  return {device,
+          static_cast<std::size_t>(batch.total_atoms),
+          owner.basis_primitives,
+          owner.orbital_shells,
+          owner.auxiliary_shells,
+          owner.public_nbf,
+          owner.public_naux,
+          owner.cartesian_nbf,
+          owner.cartesian_naux,
+          batch.positions,
+          batch.primitive_exponents,
+          batch.primitive_coefficients,
+          batch.direct_ao_coefficients,
+          batch.shell_atoms,
+          batch.shell_angular,
+          batch.shell_primitive_offsets,
+          batch.shell_direct_ao_offsets,
+          owner.orbital_to_cartesian,
+          owner.auxiliary_to_cartesian};
+}
 
 namespace {
 using namespace cuda_execution;

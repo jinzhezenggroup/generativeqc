@@ -50,15 +50,23 @@ class IntegralRequest:
         shells = (
             4 if self.family == "eri" else 3 if self.family == "three_center_eri" else 2
         )
+        bounds = (
+            (4, 4)
+            if self.family == "coulomb_metric"
+            else (3, 3, 4)
+            if self.family == "three_center_eri"
+            else (3,) * shells
+        )
         if (
             type(self.angular) is not tuple
             or len(self.angular) != shells
             or any(
-                type(order) is not int or not 0 <= order <= 3 for order in self.angular
+                type(order) is not int or not 0 <= order <= bound
+                for order, bound in zip(self.angular, bounds, strict=True)
             )
         ):
             raise ValueError(
-                "Hessian AOT integrals require explicit s/p/d/f shell orders"
+                "Hessian AOT requires orbital s/p/d/f and DF auxiliary s/p/d/f/g shell orders"
             )
         size = prod(len(cartesian_components(order)) for order in self.angular)
         if (

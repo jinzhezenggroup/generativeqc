@@ -101,7 +101,9 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_nuclear_jk.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_nuclear.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/integrals/cuda_df_nuclear_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -157,5 +159,9 @@ function(generativeqc_add_hessian_aot target inventory)
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_df_probe.cpp")
     target_link_libraries(generativeqc_cuda_wb97mv_df_probe PRIVATE ${target} generativeqc)
     add_test(NAME cuda_wb97mv_df_host_admission COMMAND generativeqc_cuda_wb97mv_df_probe --host-only)
+    add_executable(generativeqc_cuda_df_nuclear_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_df_nuclear_probe.cpp")
+    target_link_libraries(generativeqc_cuda_df_nuclear_probe PRIVATE ${target} generativeqc)
+    add_test(NAME cuda_df_nuclear_host_admission COMMAND generativeqc_cuda_df_nuclear_probe --host-only)
   endif()
 endfunction()
