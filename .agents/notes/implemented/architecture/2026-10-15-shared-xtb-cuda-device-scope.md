@@ -79,6 +79,20 @@ The CUDA source provenance manifest retains the original upstream hashes and
 records this shared-owner adaptation with refreshed hashes for the two adapted
 descriptor files. Its integrity checks remain enabled.
 
+## Installed and cached consumer closure
+
+The shared device-scope header is a transitive dependency of the installed Tensor
+CUDA runtime. It must remain in the wheel asset mapping, every existing resource
+consumer's source/dependency inventory, and the stationary AOT contract inputs.
+Otherwise a source-tree probe can pass while installed JIT compilation fails,
+and later guard changes can reuse an artifact with stale device ownership.
+
+The installed-header closure regression compiles only declared wheel assets.
+The generated XC identity regression changes only the device-scope input and
+requires both its retained source hash and complete artifact identity to change.
+Host-only CUDA declarations include the destructor's last-error API; this is
+header portability and identity coverage, not real-device execution evidence.
+
 ## Revisit when
 
 A backend needs asynchronous device-state ownership or CUDA changes the

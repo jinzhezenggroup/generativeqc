@@ -57,6 +57,7 @@ def test_transitive_resources_participate_in_all_tensor_consumer_identities() ->
         for header in (
             "bounded_workspace.hpp",
             "cuda_resources.cuh",
+            "cuda_device_scope.hpp",
             "resource_cuda.cuh",
             "resource_ledger.hpp",
             "residency_boundaries.hpp",
@@ -107,6 +108,7 @@ enum cudaMemcpyKind { cudaMemcpyHostToDevice, cudaMemcpyDeviceToHost,
                       cudaMemcpyDeviceToDevice };
 cudaError_t cudaGetDevice(int*);
 cudaError_t cudaSetDevice(int);
+cudaError_t cudaGetLastError();
 const char* cudaGetErrorString(cudaError_t);
 cudaError_t cudaMalloc(void**, std::size_t);
 cudaError_t cudaFree(void*);
@@ -139,7 +141,8 @@ cudaError_t cudaEventElapsedTime(float*, cudaEvent_t, cudaEvent_t);
 
 
 @pytest.mark.parametrize(
-    "header", ["residency_boundaries.hpp", "residency_observer.hpp"]
+    "header",
+    ["residency_boundaries.hpp", "residency_observer.hpp", "cuda_device_scope.hpp"],
 )
 def test_xc_residency_dependencies_invalidate_generated_identity(
     header: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
