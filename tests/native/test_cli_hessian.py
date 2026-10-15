@@ -185,6 +185,41 @@ class HessianCli(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("--compiler-python", result.stderr)
 
+    @unittest.skipIf(
+        MONOLITHIC, "monolithic builds explicitly select a separate shared library"
+    )
+    def test_explicit_library_cannot_change_the_linked_native_owner(self) -> None:
+        result = self.call()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        library = json.loads(result.stdout)["native_library_path"]
+        matching = self.call("--compiler-library", library)
+        self.assertEqual(matching.returncode, 0, matching.stderr)
+        different = self.call("--compiler-library", str(self.xyz))
+        self.assertNotEqual(different.returncode, 0)
+        self.assertEqual(different.stdout, "")
+        self.assertIn("already-linked native library", different.stderr)
+
+    @unittest.skipUnless(
+        MONOLITHIC, "only monolithic builds need an explicit shared library"
+    )
+    def test_monolithic_extension_requires_explicit_shared_library(self) -> None:
+        result = subprocess.run(
+            [
+                str(CLI),
+                "hessian",
+                str(self.xyz),
+                "--compiler-python",
+                str(self.interpreter),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("requires --compiler-library", result.stderr)
+
     def test_invalid_options_never_start_worker(self) -> None:
         for arguments in (
             ("--method", "pbe-rks"),

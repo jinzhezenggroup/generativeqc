@@ -127,6 +127,16 @@ from the preceding domain qualification:
   TensorIR namespace/grid-response regression passed all 33 tests in 1.57
   seconds. Logs are `wb97mv-resident-cpu-final.log` and
   `wb97mv-resident-generic-regression.log` under `/tmp/`.
+- Clean master-based PR candidate `80dfd1bf08f4051c94f883c53896b294d55b3ff1`
+  repeats and extends the qualification: Slurm node1 RTX 5090 job 8655 passes
+  all 24 tests in 1032.50 seconds, including the two actual C++ CLI endpoints.
+  The same native candidate passes 32 CPU Hessian/basis/domain tests in 1132.35
+  seconds, 153 compiler/TensorIR/grid/native-launcher tests in 20.83 seconds
+  (two opt-in GPU tests skipped), all 17 CLI CTest entries, and the expanded
+  ten-case CLI contract (nine pass, one monolithic-only gate skipped). The
+  current master inventory is 548 compiler modules with zero dependency errors.
+  Source/native artifact provenance, CLI dependency boundaries and receipts are
+  recorded in [the CLI decision](../architecture/2026-10-15-wb97mv-cli-compiler-runtime.md).
 
 Retained local logs start with `/tmp/wb97mv-resident-`. The shared sccache stats
 are not a hit-rate benchmark: runtime JIT uses the required per-invocation

@@ -57,7 +57,51 @@ rejects an override that differs from the library already linked into its proces
 
 ## Evidence
 
-Qualification results and source-matched logs are appended after execution.
+The numerical/native candidate is
+`80dfd1bf08f4051c94f883c53896b294d55b3ff1`, based directly on master
+`540ec82011232606374747727cd30fd7e1f93970`. The PR excludes the original
+worktree's unrelated dirty files and unmerged parent-branch changes. Master had
+moved KS spin admission into `dft_method_preparation.cpp`; the same WB97M-V-only
+ECP qualification exception is applied at that current owner.
+
+- A complete clean Release CUDA-sm120 build and a subsequent candidate-identity
+  rebuild use verified ccache 4.5.1. Generated native compiler commands invoke
+  that launcher; the cache is reused, not cleared. Shared counters are not
+  interpreted as an isolated hit-rate benchmark.
+- All 17 native CLI CTest entries pass in 142.13 seconds, retaining ordinary
+  Python-free runtime, geometry, Gaussian/DF, profile and catalog contracts.
+- The final expanded Hessian CLI suite runs ten tests in 42.273 seconds: nine
+  pass and the monolithic-only missing-library gate is skipped in this dynamic
+  build. It checks raw CPU H@v parity, an independent reconverged native-force
+  oracle, explicit interpreter/library selection, invalid shape/provider
+  rejection, worker failure/timeout and no partial publication.
+- Compiler/TensorIR/grid/native-launcher regression: 153 pass and two opt-in
+  GPU tests skip in 20.83 seconds. The current master compiler inventory contains
+  548 modules with zero dependency errors. Owned Ruff, C++ clang-format and
+  patch-whitespace checks pass.
+- Slurm node1 RTX 5090 job 8657 directly invokes the compiled CLI's CUDA HVP
+  command (not a Python API substitution). Its JSON reports device residency,
+  zero numerical host fallbacks and a finite complete result.
+- Final-source Slurm job 8655 passes all 24 GPU tests in 1032.50 seconds: six
+  complete endpoints, sixteen resident lowering/response/failure gates and two
+  compiled-CLI endpoints. The latter include raw RKS matrix/HVP publication and
+  combined UKS/DF/ECP with a genuinely spherical d auxiliary record and nonempty
+  response spaces in both spins. The scheduler-assigned visibility is preserved;
+  no work runs on the maintenance node. Slurm accounting storage is disabled,
+  so the retained srun/pytest log supplies the job ID and successful exit receipt.
+- The clean candidate's 32 CPU Hessian/basis/domain tests all pass in 1132.35
+  seconds, including asymmetric s/p water, coupled UKS, DF and ECP independent
+  force/energy oracles. Together with the earlier 153 tests, 185 Python tests
+  pass, with the two explicitly opt-in GPU tests skipped in that CPU invocation.
+
+The qualified native CLI SHA-256 is
+`6cd50d355dbb9278711985fbf3be4b1ea4228e1a808bb17c8dea4227f1ea9af6`;
+its source-matched shared library SHA-256 is
+`2af4e1b367ec2b0058848f33321582eab5c30ddbaf33e6d05c39ad0e9e2058c8`.
+These are one-off artifact provenance, not permanent source-fingerprint tests.
+Logs start with `/tmp/wb97mv-cli-`; final receipts are also retained in the
+ignored `.artifacts/wb97mv-hessian-cli-20261015/` directory.
+
 The resident numerical qualification is preserved in
 [the numerical ownership note](../numerics/2026-10-15-wb97mv-resident-hessian.md).
 
