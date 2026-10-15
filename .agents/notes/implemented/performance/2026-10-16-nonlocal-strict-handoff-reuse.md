@@ -196,11 +196,46 @@ branch or reverting concurrent work.
 Those upstream changes alter scientific source identity. The 96-atom timings,
 independent-accuracy receipts and sanitizer evidence above remain attributed to
 their exact measured source/core, not relabeled as a new integrated-head run.
-Fresh integrated host selections pass 530 plus 154 tests, with 864 resource skips
-and two native-library cases reserved for a configured runtime process.
-Integrated native build and GPU qualification are recorded separately from
-the earlier pilot. Repeated matched 96-atom pairs are still needed before
-promoting the single 1.247x observation to a repeated or general speed claim.
+Fresh integrated host selections pass 530 plus 154 tests, with 864 resource skips.
+Two native-library energy-only cases pass separately under Slurm 8853, giving
+686 passing host/native cases. The Release core and independent source-matrix
+probe were rebuilt against the integrated source using the verified ccache
+launcher; the existing compiler cache was not cleared.
+
+The initial integrated endpoint run (Slurm 8850) passes eight cases, including
+both strict-anchor regressions. Its six other cases fail qualification because
+the copied stationary-force AOT packages retain an older compiler contract:
+one raises the identity mismatch, while the others fall back rather than
+qualifying the budget solve. Keep that failed XML and log. Rebuild the six AOT
+force packages and manifests through their current CMake targets, without
+weakening identity checks or relabeling old binaries. All six cases then pass
+in a fresh process under Slurm 8855. Together these runs qualify all 14 distinct
+complete endpoint cases against independent moving-grid energy/force gates.
+The original runtime and its hardlinked artifacts remain unchanged; the rebuilt
+packages use a separate runtime directory.
+
+Seven independent source-matrix cases also pass under Slurm 8853. The complete
+3-atom Fast endpoint passes Compute Sanitizer memcheck with zero errors under
+Slurm 8851; its instrumented time is not a performance sample. These are fresh
+integrated-core qualifications, separate from the earlier 96-atom pilot:
+
+- Integrated implementation commit: `b7d6efd712765de608d7fe36fef22a5705d8ad10`.
+- Source identity:
+  `eda2388f5b64f1209c85498d2f5220139989a3bc2cddc1508bf96d5127780bc5`.
+- Core SHA256:
+  `3099c3fc3f1868fa86724253f11529b67a56e53420a7a450fbe9c22acdf4d8b2`.
+- Independent probe SHA256:
+  `c460437cb4d9d3793fd30fc1e83628ee8f067ca191cb08d665b4df6e7273d9e7`.
+
+Retain `source-freeze-pr-integrated.json` for the initial runtime and
+`source-freeze-pr-integrated-current-force.json` for the rebuilt force inventory.
+`pr-integrated-endpoints-initial.xml` preserves the initial failures;
+`pr-integrated-endpoints-current-force.xml` records their successful rerun.
+Matrix/energy-only XML, `pr-budget-inner-memcheck-slurm.log`, and the
+`pr-integrated-final-inventory-check.json` bind the remaining qualification and
+post-run artifact checks. Ruff, Ruff format, clang-format and whitespace checks
+pass. Repeated matched 96-atom pairs are still needed before promoting the single
+1.247x observation to a repeated or general speed claim.
 
 ## Revisit when
 
