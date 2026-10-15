@@ -16,7 +16,8 @@ void require(bool condition, const char* message) {
 void check_failure_mapping() {
   FleetItemResult item;
   const auto check = [&](auto failure, generativeqc_status expected) {
-    execute_fleet_item_attempt(item, [&] { throw failure; });
+    require(!execute_fleet_item_attempt(item, [&] { throw failure; }),
+            "a thrown attempt was reported as a complete backend result");
     require(item.status == expected, "fleet exception status changed");
   };
   check(std::bad_alloc{}, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
@@ -25,7 +26,9 @@ void check_failure_mapping() {
         GENERATIVEQC_STATUS_CUDA_ERROR);
   check(std::runtime_error("numerics"), GENERATIVEQC_STATUS_NUMERICAL_FAILURE);
   check(17, GENERATIVEQC_STATUS_INTERNAL_ERROR);
-  execute_fleet_item_attempt(item, [&] { item.status = GENERATIVEQC_STATUS_SCF_NOT_CONVERGED; });
+  require(execute_fleet_item_attempt(item,
+                                     [&] { item.status = GENERATIVEQC_STATUS_SCF_NOT_CONVERGED; }),
+          "explicit nonconvergence was mistaken for a thrown attempt");
   require(item.status == GENERATIVEQC_STATUS_SCF_NOT_CONVERGED,
           "an explicit backend failure was published as success");
 }

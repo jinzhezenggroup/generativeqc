@@ -62,6 +62,22 @@ def control_sources() -> tuple[str, str, str, str]:
     return hf_retry, dft_retry, dft_options, dft_policy
 
 
+def hf_bucket_retry_sources() -> tuple[str, str]:
+    """Execute the production direct/DF item loops with explicit provider doubles."""
+    source = (ROOT / "src/scf/fleet.cpp").read_text()
+    direct = between(
+        source,
+        "        for (std::size_t slot = 0; slot < cuda_results.size(); ++slot) {",
+        "\n      }\n    } else if (cuda_density_fitting_enabled_)",
+    )
+    fitted = between(
+        source,
+        "        for (std::size_t slot = 0; slot < df_results.size(); ++slot) {",
+        "\n      }\n    } else if (worker_count == 1)",
+    )
+    return direct, fitted
+
+
 @pytest.mark.parametrize(
     "neighbor",
     ["supports_native_pbe_force", "supports_native_gga_force", "other_capability"],
@@ -162,6 +178,7 @@ using generativeqc::methods::MethodError;
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
 using scf::execute_fleet_item_attempt;
+using scf::FleetItemResult;
 using scf::retry_fleet_item_cold;
 namespace core { struct System {}; }
 namespace runtime {
@@ -201,6 +218,8 @@ Native solve(const Options& options, const std::vector<double>* seed) {
     throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, "device failure");
   if (calls == 1 && scenario == "runtime_error") throw std::runtime_error("warm failure");
   if (calls == 2 && scenario == "core_runtime_error") throw std::runtime_error("core failure");
+  if (calls == 2 && scenario == "core_driver_error")
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, "cold driver failure");
   if ((calls == 1 && scenario == "bad_alloc") ||
       (calls == 2 && scenario == "core_bad_alloc")) throw std::bad_alloc();
   Native result;
@@ -236,6 +255,65 @@ Item run_hf() {
   };
   // HF_RETRY
   return item;
+}
+struct RhfBucketItem {
+  generativeqc_status status{};
+  Native scf;
+  bool fock_only_diagnostic{};
+};
+void destroy_rhf_cuda_bucket_plan(int*) {}
+std::vector<RhfBucketItem> run_rhf_cuda_bucket(
+    const std::vector<core::System>&, const Options& options,
+    const std::vector<const std::vector<double>*>& seeds, int, bool) {
+  auto native = solve(options, seeds.at(0));
+  const auto status = native.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                       : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
+  native.precision.operator_work_counters_valid = true;
+  native.precision.strict_stage_fock_builds = native.fock_builds;
+  return {{status, std::move(native), false}};
+}
+auto run_uhf_cuda_bucket(const std::vector<core::System>& systems, const Options& options,
+                         const std::vector<const std::vector<double>*>& seeds, int device,
+                         bool profile) {
+  return run_rhf_cuda_bucket(systems, options, seeds, device, profile);
+}
+Native run_rhf_density_fitting_cuda(const core::System&, const core::System&,
+                                    const Options& options, int,
+                                    const std::vector<double>* seed, int*) {
+  return solve(options, seed);
+}
+Native run_uhf_density_fitting_cuda(const core::System& system, const core::System& auxiliary,
+                                    const Options& options, int device,
+                                    const std::vector<double>* seed, int* overlap) {
+  return run_rhf_density_fitting_cuda(system, auxiliary, options, device, seed, overlap);
+}
+Item run_hf_bucket(bool fitted) {
+  Options execution_options(policy_enabled);
+  const std::vector<double> density{1};
+  std::vector<Item> results(1);
+  auto& item = results[0];
+  item.warm_start_used = true;
+  execute_fleet_item_attempt(item, [&] {
+    item.scf = solve(execution_options, &density);
+    item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
+                                     : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
+  });
+  std::vector<RhfBucketItem> cuda_results{{item.status, std::move(item.scf), false}};
+  auto df_results = cuda_results;
+  std::vector<core::System> cuda_systems(1), df_systems(1);
+  std::vector<std::size_t> original_indices{0};
+  std::vector<int*> cuda_bucket_plans_(1, nullptr);
+  std::vector<int> cuda_df_orthogonalizers_(1);
+  std::size_t bucket = 0;
+  int device_id_ = 0, auxiliary_template_ = 0;
+  const auto method_ = GENERATIVEQC_METHOD_RHF;
+  const auto finish_item = [](std::size_t, const core::System&) {};
+  if (fitted) {
+    // HF_DF_RETRY
+  } else {
+    // HF_DIRECT_RETRY
+  }
+  return results[0];
 }
 struct StubKsPlan {
   Options options_;
@@ -298,7 +376,10 @@ int main(int argc, char** argv) {
   scenario = argv[2];
   policy_enabled = argc < 4 || std::string(argv[3]) != "disabled";
   shared_policy_enabled = argc < 5 ? policy_enabled : std::string(argv[4]) != "disabled";
-  const auto item = route == "hf" ? run_hf() : run_dft(route == "dft-resident");
+  const auto item = route == "hf" ? run_hf()
+                    : route == "hf-direct" ? run_hf_bucket(false)
+                    : route == "hf-df" ? run_hf_bucket(true)
+                    : run_dft(route == "dft-resident");
   std::string detail;
   if (item.failure) {
     try { std::rethrow_exception(item.failure); }
@@ -318,6 +399,7 @@ int main(int argc, char** argv) {
             << ",\"discarded_iterations\":" << d.discarded_target_iterations
             << ",\"discarded_focks\":" << d.discarded_target_fock_builds
             << ",\"complete\":" << d.work_counters_complete
+            << ",\"final_focks\":" << item.scf.fock_builds
             << ",\"first_policy\":" << policies.front()
             << ",\"last_policy\":" << policies.back()
             << ",\"first_seed\":" << seeds.front()
@@ -339,7 +421,10 @@ def host_control_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
         cpp_function_definition(owner, name)
         for name in ("item_exception_status", "retryable_seed_failure")
     )
+    direct, fitted = hf_bucket_retry_sources()
     source = HARNESS.replace("// HF_RETRY", hf).replace("// DFT_RETRY", dft)
+    source = source.replace("// HF_DIRECT_RETRY", direct)
+    source = source.replace("// HF_DF_RETRY", fitted)
     source = source.replace("// DFT_OPTIONS", options)
     source = source.replace("// DFT_POLICY", policy)
     source = source.replace("// DFT_FAILURE_POLICY", failures)
@@ -528,3 +613,36 @@ def test_widened_diagnostic_ctypes_layout_matches_public_c_header(
     assert native.pop("size") == ctypes.sizeof(descriptor)
     for name, offset in native.items():
         assert getattr(descriptor, name).offset == offset
+
+
+@pytest.mark.parametrize("route", ["hf", "hf-direct", "hf-df"])
+@pytest.mark.parametrize(
+    "scenario", ["core_runtime_error", "core_bad_alloc", "core_driver_error"]
+)
+def test_failed_hf_cold_attempt_retains_an_incomplete_work_census(
+    host_control_harness: Path, route: str, scenario: str
+) -> None:
+    result = probe(host_control_harness, route, scenario)
+    assert result["calls"] == 2 and result["fallback"]
+    assert result["attempts"] == 2 and not result["complete"]
+    assert result["discarded_iterations"] == 7
+    assert result["discarded_focks"] == (1 << 33) + 7
+    assert result["final_focks"] == 0
+    expected_status = {
+        "core_bad_alloc": "oom",
+        "core_driver_error": "device_error",
+        "core_runtime_error": "numerical_failure",
+    }[scenario]
+    assert result["status"] == result[expected_status]
+    assert not result["last_policy"] and not result["last_seed"]
+
+
+@pytest.mark.parametrize("route", ["hf-direct", "hf-df"])
+def test_returned_hf_cold_attempt_preserves_complete_work_census(
+    host_control_harness: Path, route: str
+) -> None:
+    result = probe(host_control_harness, route, "nonconverged")
+    assert result["calls"] == 2 and result["status"] == result["success"]
+    assert result["attempts"] == 2 and result["complete"]
+    assert result["discarded_focks"] == (1 << 33) + 7
+    assert result["final_focks"] == 5

@@ -276,6 +276,19 @@ std::vector<FleetItemResult> FleetPlan::execute(
         return native;
       } catch (...) {
         discarded_work_complete = false;
+        // A thrown attempt has no final result. Keep known discarded work,
+        // but do not present the warm result again as the cold result.
+        item.scf = {};
+        if (has_warm_density && item_options.preliminary_guess) {
+          auto& diagnostic = item.scf.preliminary_guess;
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(item_options.preliminary_guess->kind);
+          diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
+          diagnostic.target_attempts = ordinary_attempts;
+          diagnostic.discarded_target_iterations = discarded_iterations;
+          diagnostic.discarded_target_fock_builds = discarded_fock_builds;
+          diagnostic.work_counters_complete = false;
+        }
         throw;
       }
     };
@@ -389,12 +402,6 @@ std::vector<FleetItemResult> FleetPlan::execute(
           item.status = cuda_results[slot].status;
           item.scf = std::move(cuda_results[slot].scf);
           retry_fleet_item_cold(item, cuda_results[slot].fock_only_diagnostic, [&] {
-            const std::vector<core::System> cold_system{cuda_systems[slot]};
-            const std::vector<const std::vector<double>*> cold_density{nullptr};
-            auto cold_options = execution_options;
-            // A failed warm call gets its ordinary core retry, not a new
-            // preliminary solve followed by another possible target retry.
-            cold_options.preliminary_guess.reset();
             auto warm_diagnostic = item.scf.preliminary_guess;
             warm_diagnostic.target_attempts = 2;
             warm_diagnostic.discarded_target_iterations = item.scf.iterations;
@@ -402,27 +409,37 @@ std::vector<FleetItemResult> FleetPlan::execute(
             warm_diagnostic.work_counters_complete =
                 warm_diagnostic.work_counters_complete &&
                 item.status == GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
-            if (execution_options.preliminary_guess) {
-              // The budget admits one target arena. Drop the failed bucket
-              // before constructing the ordinary single-item core retry.
-              destroy_rhf_cuda_bucket_plan(cuda_bucket_plans_[bucket]);
-              cuda_bucket_plans_[bucket] = nullptr;
-            }
-            std::vector<RhfBucketItem> cold =
-                method_ == GENERATIVEQC_METHOD_UHF
-                    ? run_uhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
-                                          false)
-                    : run_rhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
-                                          false);
-            item.status = cold.front().status;
-            item.scf = std::move(cold.front().scf);
+            const bool completed = execute_fleet_item_attempt(item, [&] {
+              const std::vector<core::System> cold_system{cuda_systems[slot]};
+              const std::vector<const std::vector<double>*> cold_density{nullptr};
+              auto cold_options = execution_options;
+              // A failed warm call gets its ordinary core retry, not a new
+              // preliminary solve followed by another possible target retry.
+              cold_options.preliminary_guess.reset();
+              if (execution_options.preliminary_guess) {
+                // The budget admits one target arena. Drop the failed bucket
+                // before constructing the ordinary single-item core retry.
+                destroy_rhf_cuda_bucket_plan(cuda_bucket_plans_[bucket]);
+                cuda_bucket_plans_[bucket] = nullptr;
+              }
+              std::vector<RhfBucketItem> cold =
+                  method_ == GENERATIVEQC_METHOD_UHF
+                      ? run_uhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
+                                            false)
+                      : run_rhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
+                                            false);
+              item.status = cold.front().status;
+              item.scf = std::move(cold.front().scf);
+            });
+            if (!completed) item.scf = {};
             if (execution_options.preliminary_guess) {
               const auto& work = item.scf.precision;
               if (work.operator_work_counters_valid)
                 item.scf.fock_builds = work.mixed_stage_fock_builds +
                                        work.strict_stage_fock_builds + work.post_scf_fock_builds;
-              warm_diagnostic.work_counters_complete =
-                  warm_diagnostic.work_counters_complete && work.operator_work_counters_valid;
+              warm_diagnostic.work_counters_complete = warm_diagnostic.work_counters_complete &&
+                                                       completed &&
+                                                       work.operator_work_counters_valid;
               item.scf.preliminary_guess = warm_diagnostic;
             }
           });
@@ -542,7 +559,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
             diagnostic.discarded_target_fock_builds = item.scf.fock_builds;
             if (item.status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
               diagnostic.work_counters_complete = false;
-            execute_fleet_item_attempt(item, [&] {
+            const bool completed = execute_fleet_item_attempt(item, [&] {
               const core::System auxiliary =
                   auxiliary_for_geometry(auxiliary_template_, df_systems[slot]);
               item.scf = method_ == GENERATIVEQC_METHOD_UHF
@@ -555,6 +572,10 @@ std::vector<FleetItemResult> FleetPlan::execute(
               item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
                                                : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
             });
+            if (!completed) {
+              item.scf = {};
+              diagnostic.work_counters_complete = false;
+            }
             if (execution_options.preliminary_guess) item.scf.preliminary_guess = diagnostic;
           });
           finish_item(system_index, df_systems[slot]);

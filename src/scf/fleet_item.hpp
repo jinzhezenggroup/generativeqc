@@ -22,11 +22,13 @@ struct FleetItemResult {
 };
 
 /** Isolate an attempt without replacing the backend's explicit result status.
- * Callbacks own solver work and diagnostics, not fleet failure policy. */
+ * Callbacks own solver work and diagnostics, not fleet failure policy. Returns
+ * false when an exception prevents a complete backend result. */
 template <class Attempt>
-void execute_fleet_item_attempt(FleetItemResult& item, Attempt&& attempt) {
+bool execute_fleet_item_attempt(FleetItemResult& item, Attempt&& attempt) {
   try {
     std::forward<Attempt>(attempt)();
+    return true;
   } catch (const std::bad_alloc&) {
     item.status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
@@ -38,6 +40,7 @@ void execute_fleet_item_attempt(FleetItemResult& item, Attempt&& attempt) {
   } catch (...) {
     item.status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
   }
+  return false;
 }
 
 /** A failed warm seed permits at most one ordinary cold attempt. Resource and
