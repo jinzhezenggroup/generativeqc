@@ -541,8 +541,10 @@ numerical admission, output ownership, ordered fallback and FP64 roots are
 unchanged. This experiment requires separate complete-endpoint qualification.
 
 The automatic VV10 pair schedule uses the rotating-partner packet kernel for
-admitted sm_120 molecular domains with at least 65,536 grid points. Smaller grids,
-other architectures and refused numerical/output leases retain the ordered
+admitted molecular domains with at least 65,536 grid points on any CUDA target
+supported by the build. There is no sm_120 whitelist: the generated schedule uses
+FP64 atomics and warp shuffles, not architecture-specific instructions. Smaller
+grids and refused numerical/output leases retain the ordered
 fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects the
 packet route, including small qualification fixtures; `parallel` restores the
 previous four-row bilateral schedule and `ordered` forces the ordered fallback.
@@ -559,4 +561,7 @@ qualification requirements. This is a scheduling change, not a scientific
 approximation or a claim that all large molecular populations complete within
 their benchmark limits. See
 `.agents/notes/implemented/performance/2026-10-15-vv10-packet-default.md` for the
-promotion decision, measured scope and unresolved 96-atom endpoint boundary.
+promotion decision, measured scope and unresolved 96-atom endpoint boundary, and
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-portable-default.md`
+for architecture-independent selection. Hardware admission is not a claim of
+measured speedup on every supported architecture.

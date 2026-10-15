@@ -1,5 +1,9 @@
 # Guarded automatic VV10 packet qualification
 
+This archive records the initial sm_120-only promotion. The later whitelist
+removal has a separate `portable-qualification.json` receipt; it does not relabel
+the original source-matched archive.
+
 This separate campaign qualifies default dispatch, not a change to pair algebra.
 The user requested default promotion after reviewing the original-limit 96-atom
 comparison. Automatic selection keeps the previous admission: molecular VV10,

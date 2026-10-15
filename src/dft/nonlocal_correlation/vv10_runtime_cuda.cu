@@ -117,22 +117,17 @@ bool parallel_pair_outputs_disjoint(std::size_t npoint, const double* points, co
   return true;
 }
 
-/** Default scope: large sm_120 molecular VV10, with an explicit ordered fallback.
+/** Default scope: large molecular VV10, with an explicit ordered fallback.
+ * The generated FP64 atomic/shuffle schedule needs no architecture whitelist.
  * Explicit parallel selection admits small real-device qualification fixtures;
  * neither preference bypasses numerical or output-lease guards. */
-bool prefer_parallel_pairs(std::size_t npoint, int device_id) {
+bool prefer_parallel_pairs(std::size_t npoint) {
   const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
   if (selector && *selector)
     return std::string_view(selector) == "parallel" ||
            std::string_view(selector) == "parallel-wide" ||
            std::string_view(selector) == "parallel-packet";
-  if (npoint < 65536) return false;
-  int major = 0, minor = 0;
-  runtime::cuda_resource_check(
-      cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device_id));
-  runtime::cuda_resource_check(
-      cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device_id));
-  return major == 12 && minor == 0;
+  return npoint >= 65536;
 }
 
 unsigned launch_blocks(std::size_t count, unsigned threads) {
@@ -814,7 +809,7 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
   bool parallel_pairs = false;
   if (parameters.variant == Vv10Variant::vv10 && layout.features && layout.mask_zero_weight_rows &&
       npoint <= (std::uint64_t{1} << 32) && std::fabs(parameters.coefficient) <= 0x1p32) {
-    parallel_pairs = prefer_parallel_pairs(npoint, device_id) &&
+    parallel_pairs = prefer_parallel_pairs(npoint) &&
                      parallel_pair_outputs_disjoint(npoint, points_xyz, density, workspace,
                                                     layout.workspace_bytes, vrho, vsigma,
                                                     point_derivative, weight_derivative);

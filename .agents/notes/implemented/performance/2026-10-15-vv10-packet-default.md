@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-15
 
+The architecture scope below records the initial promotion. It is superseded by
+`2026-10-15-vv10-packet-portable-default.md`; historical measurements remain bound
+to their original source and library identities.
+
 ## Decision and scope
 
 After reviewing the 96-atom off/on measurements, the user explicitly requested
