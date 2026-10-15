@@ -1124,6 +1124,18 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         void_pp,
     ]
     library.generativeqc_system_create.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_system_create_bundled"):
+        library.generativeqc_system_create_bundled.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            void_pp,
+        ]
+        library.generativeqc_system_create_bundled.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_bundled_basis_catalog_sha256"):
+        library.generativeqc_bundled_basis_catalog_sha256.argtypes = []
+        library.generativeqc_bundled_basis_catalog_sha256.restype = ctypes.c_char_p
     if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
         library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
             ctypes.c_void_p,

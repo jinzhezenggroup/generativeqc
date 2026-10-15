@@ -18,6 +18,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_gcp.cpp
     src/api/c_api_common.cpp
     src/api/c_api_context.cpp
+    src/api/c_api_basis_catalog.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
@@ -28,6 +29,7 @@ endfunction()
 
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
+    src/molecule/basis_catalog.cpp
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
     src/runtime/cuda_provider.cpp

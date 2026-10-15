@@ -52,6 +52,16 @@ See [capability sources](capabilities.md).
 | `generativeqc_batch_execute` | Execute the fleet with per-input result statuses rather than assuming every member succeeded |
 | `generativeqc_context_get_last_detail` | Borrow context detail; copy it before another context operation because D4/nonlocal calls may clear it even on success |
 
+For bundled Gaussian bases, `generativeqc_system_create_bundled` accepts an
+atom-only full-size system descriptor, a bundled name and an optional expected
+catalog checksum. `generativeqc_bundled_basis_catalog_sha256` identifies the
+compiled source pack; supplying it as the expected checksum binds external
+metadata to that exact catalog. The C++ `System(context, atoms, basis_name, ...)`
+constructor uses the same expansion and existing normalization/validation owner.
+These paths read no basis files, import no Python and invoke no compiler at
+runtime. They do not broaden any method/backend capability. Custom data continue
+through the validated descriptor constructors.
+
 Keep the execution context valid for dependent prepared owners, and release each
 handle with its matching `*_destroy` function. Systems own copied atom/basis
 data. Calculations and batches copy those systems during successful preparation,

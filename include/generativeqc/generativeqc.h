@@ -1613,6 +1613,38 @@ GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_
 GENERATIVEQC_API generativeqc_status generativeqc_system_create(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system);
+/** @native-contract generativeqc_bundled_basis_catalog_sha256
+ * @behavior Query the canonical-JSON SHA-256 of the compiled bundled basis source pack.
+ * @outputs Returns a nonnull, lowercase 64-digit NUL-terminated checksum, not a method
+ * capability or a checksum of normalized geometry-dependent basis data.
+ * @lifetime Borrows immutable library storage; valid until the library is unloaded.
+ * @errors No failure status; does not throw or require a context.
+ * @execution Synchronous, thread-safe metadata query; no file, Python, compiler or GPU access.
+ */
+GENERATIVEQC_API const char* generativeqc_bundled_basis_catalog_sha256(void);
+/** @native-contract generativeqc_system_create_bundled
+ * @behavior Expand a compiled bundled basis and create a normalized owning system through
+ * the same validation/normalization owner as generativeqc_system_create.
+ * @inputs A live context, full-size current-ABI descriptor, positive atom_count and atoms;
+ * shell/primitive pointers and counts must all be zero. Other descriptor fields retain
+ * their usual meaning. basis_name is a nonnull NUL-terminated bundled name (ASCII case and
+ * underscore aliases accepted). Optional expected_catalog_sha256 must exactly match the
+ * catalog query, binding caller provenance to the compiled pack; NULL opts out of this check.
+ * @outputs Writes a new owning system; after required nonnull checks, clears the output
+ * before validation. Unknown/missing-element bases are rejected, never downloaded or retried.
+ * @lifetime Copies atoms and expanded basis; caller buffers/strings may be released on return.
+ * Prepared consumers own their copies as for generativeqc_system_create.
+ * @errors ABI_MISMATCH for version/size mismatch; INVALID_ARGUMENT for malformed input,
+ * unknown names/elements or catalog mismatch. Backend/scientific/allocation errors retain
+ * system_create statuses. Required-null rejection may leave output unchanged; other failures
+ * leave it NULL. This constructor does not broaden backend or method capability admission.
+ * @execution Synchronous; serialize with operations on this context. Compiled constants only:
+ * no file/network access, Python import, runtime compiler, or reference-oracle calculation.
+ * @units Geometry and Gaussian data follow the system_create atomic-unit contract.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_bundled(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    const char* basis_name, const char* expected_catalog_sha256, generativeqc_system** system);
 /** Release a system; prepared consumers retain their own copied system data. */
 /** @native-contract generativeqc_system_destroy
  * @behavior Release the system exactly once.

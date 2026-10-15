@@ -1514,14 +1514,15 @@ class Calculator:
             "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
         }
 
-    def _shells_for_atoms(
+    def _basis_for_atoms(
         self,
         atoms: Sequence[Atom],
         basis: str | Sequence[Shell] | None = None,
         *,
         operator: str | None = None,
         derivative_order: int = 0,
-    ) -> tuple[Shell, ...]:
+    ) -> BasisSet | tuple[Shell, ...]:
+        """Admit immutable basis metadata without expanding native contractions."""
         selected_basis = self._basis if basis is None else basis
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
@@ -1540,6 +1541,20 @@ class Calculator:
             consumer=self._auxiliary_basis_consumer(selected_operator)
             if auxiliary
             else None,
+        )
+        return selected_basis
+
+    def _shells_for_atoms(
+        self,
+        atoms: Sequence[Atom],
+        basis: str | Sequence[Shell] | None = None,
+        *,
+        operator: str | None = None,
+        derivative_order: int = 0,
+    ) -> tuple[Shell, ...]:
+        """Expand portable metadata for planning, custom bases and old libraries."""
+        selected_basis = self._basis_for_atoms(
+            atoms, basis, operator=operator, derivative_order=derivative_order
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1876,25 +1891,65 @@ class Calculator:
                 context=context,
             )
             return system
-        selected_basis = self._basis if basis is None else basis
-        if not isinstance(selected_basis, BasisSet):
-            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
-        shells = self._shells_for_atoms(atoms, basis)
+        selected_basis = self._basis_for_atoms(atoms, basis)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
+        atom_array = (_native.AtomDescriptor * len(atoms))(
+            *(
+                _native.AtomDescriptor(atom.atomic_number, *atom.position)
+                for atom in atoms
+            )
+        )
+        bundled_create = getattr(
+            self._library, "generativeqc_system_create_bundled", None
+        )
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        bundled_name = (
+            _model_resolution._bundled_basis_name(selected_basis)
+            if bundled_create is not None and not correlation_auxiliary
+            else None
+        )
+        if (
+            bundled_create is not None
+            and bundled_name is not None
+            and not correlation_auxiliary
+        ):
+            descriptor = _native.SystemDescriptor(
+                struct_size=ctypes.sizeof(_native.SystemDescriptor),
+                abi_version=_native.ABI_VERSION,
+                atoms=atom_array,
+                atom_count=len(atom_array),
+                charge=int(charge),
+                multiplicity=int(multiplicity),
+                basis_representation=(
+                    _native.BASIS_SPHERICAL
+                    if selected_basis.representation == "spherical"
+                    else _native.BASIS_CARTESIAN
+                ),
+            )
+            system = ctypes.c_void_p()
+            _native.check(
+                self._library,
+                bundled_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    bundled_name.encode("ascii"),
+                    selected_basis.provenance.checksum.encode("ascii"),
+                    ctypes.byref(system),
+                ),
+                context=context,
+            )
+            return system
+        shells = self._shells_for_atoms(atoms, basis)
         checked_integer(len(shells), "shell count", low=1, high=2**32 - 1)
         checked_integer(
             sum(len(s.primitives) for s in shells),
             "primitive count",
             low=1,
             high=2**32 - 1,
-        )
-        atom_array = (_native.AtomDescriptor * len(atoms))(
-            *(
-                _native.AtomDescriptor(atom.atomic_number, *atom.position)
-                for atom in atoms
-            )
         )
         flattened_primitives: list[Primitive] = []
         shell_descriptors: list[_native.ShellDescriptor] = []
