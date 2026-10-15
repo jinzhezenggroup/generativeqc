@@ -444,8 +444,8 @@ RunOptions parse_run(int argc, char** argv) {
   RunOptions options;
   const bool resources = std::string_view(argv[1]) == "resources";
   const bool optimizing = std::string_view(argv[1]) == "optimize";
-  const bool compiler_second_order = std::string_view(argv[1]) == "hessian" ||
-                                     std::string_view(argv[1]) == "hvp";
+  const bool compiler_second_order =
+      std::string_view(argv[1]) == "hessian" || std::string_view(argv[1]) == "hvp";
   if (resources) {
     options.method_name = "rhf";
     options.method = GENERATIVEQC_METHOD_RHF;
