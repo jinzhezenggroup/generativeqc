@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
@@ -257,7 +262,7 @@ def main() -> None:
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--cache", default=".artifacts/mgga-occupied-grid-cache")
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     args = parser.parse_args()
     if (
         min(args.tile_points, args.points_per_atom, args.orbital_tile, args.warmups) < 1
@@ -266,8 +271,9 @@ def main() -> None:
         parser.error("positive tile/point/priming dimensions and >=2 repeats required")
     result = json.dumps(benchmark(args), indent=2, sort_keys=True)
     if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(result + "\n", encoding="utf-8")
+        output = raw_output_path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(result + "\n", encoding="utf-8")
     else:
         print(result)
 

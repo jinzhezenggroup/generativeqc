@@ -1,9 +1,11 @@
 """Host-only MGGA tau projection/crossover checks, no GPU required."""
 
+import sys
 from argparse import Namespace
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from typing import NoReturn
 
 import numpy as np
 import pytest
@@ -175,3 +177,37 @@ def test_benchmark_uses_current_density_witness(
         }
         assert all(len(samples) == 2 for samples in case["timings_seconds"].values())
         assert max(case["max_abs_hybrid_reference_error"].values()) < 1e-10
+
+
+@pytest.mark.parametrize("kind", ["retained", "alias", "traversal", "file-alias"])
+def test_cli_rejects_retained_output_before_benchmark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    from benchmarks import _retention, mgga_occupied_crossover
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = existing
+    if kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / existing.name
+    elif kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results" / existing.name
+    elif kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(existing)
+
+    def forbidden(args: Namespace) -> NoReturn:
+        pytest.fail("invalid output reached benchmark or native work")
+
+    monkeypatch.setattr(mgga_occupied_crossover, "benchmark", forbidden)
+    monkeypatch.setattr(sys, "argv", ["mgga", "--output", str(destination)])
+    with pytest.raises(SystemExit) as error:
+        mgga_occupied_crossover.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
