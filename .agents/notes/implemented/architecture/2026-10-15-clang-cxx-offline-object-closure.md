@@ -295,3 +295,38 @@ It retains the previous evidence, module/raw-string/parallel counterexamples,
 GCC-header incompatibility, package hashes, and all raw source/object/library
 receipts. These checks qualify this finite offline object domain; latest-head CI,
 genuinely independent formal approval and actual protected delivery remain separate.
+
+## Independent observer-startup correction in preparation
+
+The `sys.executable -c` observer must use `-I -S`: its standard-library imports
+must not resolve project modules or execute site/`.pth` hooks before execing
+Clang under CPU_ENVIRONMENT. This is startup isolation, not a changed Clang
+recipe, a new compiler owner, or a pragma-admission strategy.
+
+The task's standalone Python 3.11 has built-in `resource`, so a bare cwd
+`resource.py` does not reproduce shadowing on that distribution. Preserve that
+negative result rather than presenting it as a failure. A private Python 3.11
+venv with a controlled `.pth` hook does reproduce the unsafe startup: at `a1de`
+the hook runs, replaces `resource`, and collection fails. The new isolated
+startup is tested independently with both project-shadow and private-site
+fixtures; no shared environment's site packages are modified.
+
+Pragma admission/publication remains paused for the explicit scope decision:
+`-dD` consumes macro-stack pragmas, while preserving streams do not by themselves
+prove that arbitrary generated `_Pragma` operations are absent. No extra-`-D`
+marker experiment is treated as original-flags positive admission evidence.
+
+The independent startup smoke uses LF tree
+`2b1fde9cbcac136ef84bd4a630fc3aaf88ed1363` (delta SHA-256
+`cb0588d7b2500531af4b95d69fbb8751db2102a77d1b0414fa10ebfa1207ea45`).
+Collector/test blobs are `5257c7f4f878031d155a59135f13c667768ee92a` /
+`771a5c90dd4a6718d2d12c2f1b5970acfc825ff9`, raw SHA-256
+`98460074346210dc59e044139c3413a9a0575c968580c19a81dba9e8dab43392` /
+`22d17d6e19305a719cba4377936004bece7a82b4b20b0aa6e60c15fedc454513`.
+Three real Linux startup/budget checks pass with zero skips; client/remote exits
+are zero and all 11,054 source files match before/after. The private interpreter
+and ordinary interpreter produce the same key while the `.pth` hook stays inert.
+Downloaded `.cache/pr2525-startup-evidence.tar.gz` SHA-256 is
+`ad2a94a83abbf2e1698b1a5a5fa7bde41ee60bd1cc518e75dfb46ccb43f7a420`;
+its hash, code/test bytes and JUnit are checked without following/extracting links.
+This independently validates startup isolation, not whole-PR pragma admission.

@@ -494,6 +494,8 @@ def collect_cpu_closure(
                 result = run_compiler(
                     [
                         sys.executable,
+                        "-I",
+                        "-S",
                         "-c",
                         helper,
                         str(capture.fileno()),

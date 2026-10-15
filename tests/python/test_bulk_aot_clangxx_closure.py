@@ -1245,3 +1245,89 @@ def test_macro_projection_protocol_is_complete_before_policy(
     result = collect(source, manifest)
     assert result.reasons == ("unsupported-clangxx-macro-stream",)
     assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_real_observer_python_ignores_project_resource_shadow(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_clangxx
+    monkeypatch.chdir(tmp_path)
+    marker = tmp_path / "resource-shadow-ran"
+    (tmp_path / "resource.py").write_text(
+        'from pathlib import Path\nPath("resource-shadow-ran").write_text("unsafe")\nraise RuntimeError("project resource shadow imported")\n'
+    )
+    source = tmp_path / "point.cpp"
+    source.write_text('extern "C" int point(){return 7;}\n')
+    before = collect(source, manifest, compiler=compiler)
+    assert (
+        not before.reasons
+        and before.closure is not None
+        and before.closure.reusable
+        and before.recipe is not None
+    )
+    assert not marker.exists()
+    obj = tmp_path / "point.o"
+    built = compile_controlled(
+        [compiler, *before.recipe["flags"], "-c", str(source), "-o", str(obj)],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and before.closure.cache_key == after.closure.cache_key
+    )
+    assert not marker.exists()
+
+
+def test_real_observer_python_ignores_private_site_hook(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_clangxx
+    python = tmp_path / "private-python"
+    created = run_compiler(
+        [sys.executable, "-I", "-S", "-m", "venv", "--without-pip", str(python)],
+        60,
+        label="private observer Python",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert created.returncode == 0 and not created.timed_out, created.stderr
+    site = (
+        python
+        / "lib"
+        / (f"python{sys.version_info.major}.{sys.version_info.minor}")
+        / "site-packages"
+    )
+    site.mkdir(parents=True, exist_ok=True)
+    marker = tmp_path / "site-hook-ran"
+    hook = (
+        "import pathlib,sys,types; pathlib.Path("
+        + repr(str(marker))
+        + ').write_text("hook"); sys.modules["resource"]=types.ModuleType("resource")\n'
+    )
+    (site / "observer_probe.pth").write_text(hook)
+    source = tmp_path / "point.cpp"
+    source.write_text("int point(){return 7;}\n")
+    baseline = collect(source, manifest, compiler=compiler)
+    assert not baseline.reasons and baseline.closure is not None
+    with monkeypatch.context() as patch:
+        patch.setattr(c.sys, "executable", str(python / "bin/python"))
+        first = collect(source, manifest, compiler=compiler)
+        second = collect(source, manifest, compiler=compiler)
+    assert not first.reasons and not second.reasons
+    assert (
+        first.closure is not None
+        and second.closure is not None
+        and first.closure.reusable
+    )
+    assert (
+        first.closure.cache_key
+        == second.closure.cache_key
+        == baseline.closure.cache_key
+    )
+    assert not marker.exists()
