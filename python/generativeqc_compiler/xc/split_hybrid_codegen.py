@@ -215,7 +215,14 @@ def _emit_component(
         ]
     )
     restricted_roots = equal_spin_roots(graph, roots)
-    restricted_emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
+    # Share lazy regions only in FP64 split-hybrid equal-spin emission.
+    # Preserve the #2505 force-only integer-power policy and FP32 ordering.
+    restricted_emitter = CudaEmitter(
+        graph,
+        variables,
+        scalar_type=scalar_type,
+        coalesce_branches=(scalar_type == "double"),
+    )
     restricted_emitter.emit(restricted_roots)
     restricted_interior = "\n".join(
         [
