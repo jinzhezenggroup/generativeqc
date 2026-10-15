@@ -156,6 +156,60 @@ and retry behavior, with independent E/F gates and failed points retained;
 do not weaken tolerances or silently promote a full-energy-refinement policy
 to make these measurements pass. KS full-energy refinement remains unchanged.
 
+## Follow-up: diagnose the remaining 384-AO rejection
+
+Finite n4 Slurm allocations 996 and 997 repeat the same RHF/def2-SVP spherical
+384-AO cold/warm/moved sequence, including the last-atom +0.03-Bohr displacement,
+unchanged 1e-12 energy / 1e-9 density / 1e-12 screening tolerances, and retained
+independent CPU PySCF references. A temporary diagnostic overlay prints the
+existing RHF convergence kernel's actual iteration energy delta, effective
+roundoff-guarded energy limit, density RMS and pre-DIIS physical maximum. It
+does not change a numerical operation or convergence gate. Its library SHA256
+is `66a4d76f44268891c046b4700c12d5622e434a1c5fe84ab83d5bb5d0483c8170`;
+its distinct embedded source identity is
+`cb0d83eabecf9f568aad77a3c59463c4f04f647f6106690d3feae78753a90408`.
+Production source and the previously measured production library are restored.
+These printf-instrumented runs are diagnostic evidence, not new performance
+qualification or a replacement for the rejected job-992 cohort.
+
+Job 997 reproduces status 4 with 100 returned iterations (12 full, 88 delta),
+100 discarded target iterations, fallback and no forces. At returned iteration
+100, the three actual stopping quantities are:
+
+| Quantity | Observed | Required | Result |
+| --- | ---: | ---: | --- |
+| Iteration absolute energy delta | 5.862148100277409e-9 Eh | <5.318741663029393e-12 Eh | fail |
+| Density RMS step | 7.831471234286338e-11 | <1e-9 | pass |
+| Pre-DIIS physical residual maximum | 2.34170120794186e-10 | <=1e-9 | pass |
+
+The energy limit includes the existing FP64 roundoff guard, not a new or relaxed
+tolerance. The first attempt passes density and physical gates at iteration 14,
+then fails only the energy gate for all 87 remaining iterations. The returned
+retry passes both at iteration 19, then fails only energy for the remaining 82
+iterations. Its independent energy error is 1.2732925824820995e-11 Eh, which is
+not the iteration energy delta. The public `physical_residual_rms` remains
+unavailable; the table's maximum comes from the device trace, not that field.
+This establishes the failed stopping condition for this reproduced trajectory,
+without retroactively inventing the missing physical/energy diagnostics in job
+992 or proving every historical rejection has the same cause.
+
+The rejection is intermittent. Job 996's moved OFF control converges in 14
+iterations, fixed8 with normal warm finalization in 27, and fixed8 with explicit
+final rebuilds in 17. Both fixed8 controls exhibit energy-only rejections after
+the other physical gates pass. A single successful explicit-rebuild control
+does not establish trajectory independence of the new retained warm generation,
+and successful reruns do not invalidate the retained 200-iteration rejection.
+Job 997's planned four-repeat diagnostic stops after the first rejected moved
+endpoint; no complete repeated-cohort acceptance is claimed.
+
+The remaining investigation is HF full-energy closure near physical
+stationarity, analogous in purpose to the existing KS refinement, rather than
+loosening the energy gate or counting this as density nonconvergence. No such
+HF policy is implemented or qualified by this follow-up, and incremental J/K
+remains off by default. Raw traces, endpoints, overlay, frozen harness snapshots
+and reducer remain in ignored `.artifacts/delta-anchor/convergence-384/`, with
+the same local-only evidence availability limitation described above.
+
 ## References
 
 - `src/scf/cuda_rhf.cpp`
