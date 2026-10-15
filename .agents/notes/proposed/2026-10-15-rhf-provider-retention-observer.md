@@ -80,10 +80,11 @@ or retry. It journals a fixed maximum of 512 host event rows to a fresh file:
 - a normal-process destructor writes the terminal record. Missing terminal is
   incomplete evidence.
 
-The version script exports the exact versions found in the measured ELF. Symbol
-resolution uses `dlsym(RTLD_NEXT, ...)`; resolution failure returns a provider-
+The version script exports the exact versions found in the measured ELF. Each
+wrapper resolves its corresponding real implementation with
+`dlvsym(RTLD_NEXT, name, exact_version)`; resolution failure returns a provider-
 appropriate error and marks the capture unavailable rather than calling a
-different route.
+different version or route.
 
 `benchmarks/rhf_provider_retention_report.py` is stdlib-only. It accepts a
 separate source-policy receipt containing provider allowance values and required
@@ -118,16 +119,16 @@ The host suite uses independent hand-authored events for:
 
 No production source fingerprint, AST shape or internal call count is pinned.
 
-## Prepared fake ELF qualification
+## Fake ELF qualification
 
 `benchmarks/rhf_provider_retention_fake/` contains a self-contained Linux-only
-qualification that has not yet been executed. Its fake provider exports each of
-the seven targets under the production import version and under a deliberately
-different default `FAKE_PROVIDER_9.9` version. A version-pinned driver runs both
-without and with the observer; byte-identical result JSON plus provider-side
-expected/default call counters is the forwarding oracle. The fake cuBLAS create
-path makes a nested exact-version memory query so the trace must also prove the
-thread-local `provider_internal` boundary.
+qualification. Its fake provider exports each of the seven targets under the
+production import version and under a deliberately different default
+`FAKE_PROVIDER_9.9` version. A version-pinned driver runs both without and with
+the observer; byte-identical stdout plus provider-side expected/default call
+counters is the forwarding oracle. The fake cuBLAS create path makes a nested
+exact-version memory query so the trace must also prove the thread-local
+`provider_internal` boundary.
 
 The hand-authored verifier separately checks provider and resolution failures,
 fresh-file `O_EXCL` behavior and mode `0600`, the 512-event bound and loss
@@ -138,15 +139,24 @@ directory. The fixed a308 production source/library/endpoint hashes remain
 provenance only: neither the fake library nor a CPU PASS is a production, CUDA-
 device or scientific oracle.
 
+The first Linux run at observer commit `6662a2a553ed23eb641819debca56531d1e33aa7`
+failed as intended: unversioned `dlsym(RTLD_NEXT, name)` reached every
+`FAKE_PROVIDER_9.9` default implementation, changing the memory outputs from
+`1000:2000` to `111:222`. That negative run is retained under `run-1`. Commit
+`5f65cd687518b06d0aebeda74fd4776abe8052b8` changed only the diagnostic shim to
+exact-version `dlvsym`. The independent `run-2` then passed all nine cases, both
+positive and provider-failure stdout comparisons were byte-identical, and the
+fake report was `COMPLETE` with delta 200 and allowance 250. Its retained result
+manifest SHA-256 is
+`92986f4a9a80165d5bcde69b48dae9ca9da80bf421b4f7d2c614e999768c7f96`.
+
 ## Missing qualification
 
-This Windows host has no available Linux distro, ELF compiler, `sccache`,
-`readelf`, `nm` or `objdump`; no tool was installed. The shim is therefore
-uncompiled and its forwarding/version protocol is unverified. The prepared
-bounded qualification must still prove that each versioned import reaches the
-intended shim and that `RTLD_NEXT` resolves the corresponding real implementation
-while preserving arguments, output pointers, status and nested-call tagging.
-Compile/readelf success alone is insufficient. Then inspect the shim with:
+The fake Linux ABI/forwarding protocol is qualified, but the shim has not run in
+the actual a308 CUDA endpoint process. A fake PASS does not prove real CUDA
+library loading, actual retained-memory values, complete endpoint execution,
+scientific acceptance or performance. Actual-device use must still inspect the
+production library with:
 
 ```bash
 readelf -WsW libgenerativeqc.so | grep -E 'cudaMemGetInfo|cublas(Create|Set)|cusolverDn(Create|Set)'
@@ -163,11 +173,12 @@ sccache g++ -std=c++20 -O2 -fPIC -shared \
   -ldl -o rhf-provider-retention-probe.so
 ```
 
-The minimum future preparation is one 1-CPU/4-GiB CPU instance for at most 15
-minutes at the observed 0 points/hour. The diagnostic-only device attempt needs
-one compatible sm90 H100/H200 for at most 0.1 hour, no restart, with an observed
-upper bound of 0.1 point at 1 point/hour. A clean scientific retry is a separate,
-currently unapproved gate.
+The completed fake qualification used one 1-CPU/4-GiB CPU instance for 756
+seconds at the observed 0 points/hour, effective HIGH priority, and stopped 144
+seconds before its platform timer. The diagnostic-only device attempt still
+needs one compatible sm90 H100/H200 for at most 0.1 hour, no restart, with an
+observed upper bound of 0.1 point at 1 point/hour. A clean scientific retry is a
+separate, currently unapproved gate.
 
 The first bounded Linux preflight on `pytorch:25.06-py3:25.06` found no
 `sccache` or `ccache` through that shell's `PATH` and stopped before archive
@@ -176,9 +187,10 @@ the earlier source build named persistent candidates under
 `issue1765-attribution-20261014/runtime/{bin,local/bin}/sccache`, but their current
 existence, version, SHA and ABI were not rechecked before the one-window timer
 expired. A future separately authorized window must inspect those absolute paths
-first. If none qualifies, the prepared offline bootstrap accepts only Mozilla's
-fixed x86_64-musl sccache 0.16.0 asset after exact name/size/SHA and archive-safety
-checks; it never downloads or installs into an image/system path.
+first. The second bounded window found the retained
+`runtime/local/bin/sccache`, verified version 0.16.0 plus the target compiler and
+CUDA headers, and used that absolute launcher for all five compile/link commands.
+The offline bootstrap remained unused.
 
 ## Owner-coordinated alternative
 
