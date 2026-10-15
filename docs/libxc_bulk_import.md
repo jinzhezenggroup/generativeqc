@@ -55,7 +55,7 @@ Archive SHA-256: `8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a
 | MapleImportError: unknown Maple symbol 'erfc' | 1 |
 | MapleImportError: unknown Maple symbol 'evalf' | 1 |
 | MapleImportError: unknown Maple symbol 'gga_stoll_par' | 1 |
-| MapleImportError: unknown Maple symbol 'lda_x_spin' | 3 |
+| independent both-spin E/vxc/fxc fixtures required | 3 |
 | MapleImportError: unknown Maple symbol 'm_recexp' | 2 |
 | MapleImportError: unknown Maple symbol 'mgga_exchange_nsp' | 2 |
 | MapleImportError: unknown Maple symbol 'mgga_series_w' | 3 |
