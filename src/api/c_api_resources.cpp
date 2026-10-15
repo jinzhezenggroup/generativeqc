@@ -616,12 +616,12 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
  * cpu_hf_host_resource_keys. Invalid requests preserve the complete output.
  */
 int generativeqc_resource_hf_cpu_host_v1(const std::uint64_t* shape, std::size_t shape_count,
-                                        std::uint64_t* values, std::size_t value_count) {
+                                         std::uint64_t* values, std::size_t value_count) {
   if (!shape || shape_count != 10 || !values || value_count != 4) return -1;
   try {
-    const generativeqc::scf::CpuHfHostResourceShape request{
-        shape[0], shape[1], shape[2], shape[3], shape[4],
-        shape[5], shape[6], shape[7], shape[8], shape[9]};
+    const generativeqc::scf::CpuHfHostResourceShape request{shape[0], shape[1], shape[2], shape[3],
+                                                            shape[4], shape[5], shape[6], shape[7],
+                                                            shape[8], shape[9]};
     const auto inventory = generativeqc::scf::cpu_hf_host_resources(request);
     std::copy(inventory.begin(), inventory.end(), values);
     return 0;
