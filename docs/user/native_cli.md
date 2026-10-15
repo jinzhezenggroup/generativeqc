@@ -194,8 +194,11 @@ pairs per action). The pair cap is independent of memory; raise it explicitly
 when qualifying a larger grid. Response controls are `--response-rtol` (`1e-10`),
 `--response-atol` (`0`), `--response-restart` (`30`) and
 `--response-max-iterations` (`200`). `--cache` defaults to `.artifacts` and
-`--timeout-seconds` defaults to 1200; timeout kills the worker process group,
-including its compiler subprocesses. The isolated JSON protocol has a separate
+`--timeout-seconds` defaults to 1200. The CLI reclaims its worker group on every
+exit. An invocation-owned lifetime channel also cancels its separately isolated
+compiler and private cache-server groups on timeout or worker death, including a
+worker blocked in native code. Unrelated compiler/cache groups are untouched.
+The isolated JSON protocol has a separate
 64 MiB request/result limit. Missing dependencies, failed solves, native/source
 mismatch, exceeded limits and nonfinite output fail with no partial publication.
 

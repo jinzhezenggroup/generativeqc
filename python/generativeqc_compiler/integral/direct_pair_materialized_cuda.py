@@ -113,7 +113,7 @@ __device__ inline void contract_materialized_direct_pair_fock(
   const std::size_t spin = 2 * physical, ao_begin = std::size_t(system) * n;
   if constexpr (mixed) {
     if (range != generativeqc::integrals::CoulombRange::Full || !separate_coulomb ||
-        separate_exchange || exchange_only || hf_exchange) {
+        (separate_exchange && Unrestricted) || exchange_only || hf_exchange) {
       if (threadIdx.x == 0 && separate_coulomb)
         atomicAdd(separate_coulomb + physical, static_cast<double>(NAN));
       return;
@@ -144,7 +144,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
                                           i[slot], j[slot], k[slot], l[slot],
                                           screening_tolerance);
     if constexpr (mixed) {
-      if (admitted[slot])
+      // Coulomb-only zero-density pruning cannot reject exchange-active orbits.
+      if (admitted[slot] && !separate_exchange && (!fock || coulomb_only))
         admitted[slot] = direct_coulomb_density_active<Unrestricted>(
             n, physical, spin, density, i[slot], j[slot], k[slot], l[slot]);
     }

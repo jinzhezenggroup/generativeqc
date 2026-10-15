@@ -47,6 +47,7 @@ enum class FockOperator { ShortRange, LongRange };
 struct ScfOptions { enum class XcExecutionSchedule { DeviceFused }; };
 }
 namespace cuda_ks_detail { template<class... T> void reset_control(T...) {} }
+namespace runtime::cuda_trace { void trace_counter(const char*, std::uint64_t) {} }
 int active_scenario = 0;
 struct Region {
   bool bound() const { return false; }
@@ -66,6 +67,7 @@ struct Owner {
   bool is_active = true, started = false, is_failed = true;
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
+  bool pending_mixed_exchange = true, pending_mixed_resident = true;
   bool pending_mixed_point = true;
   bool experimental_mixed_point{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
@@ -77,7 +79,8 @@ struct Owner {
   struct { struct { int requested_mode{}; } precision;
     struct { std::uint64_t owner_id{}; std::vector<int> operators; } precision_work;
   } output;
-  std::uint64_t owner = 1;
+  std::uint64_t owner = 1, solve_epoch = 1;
+  std::uint64_t warm_density_generation{}, warm_factor_generation{};
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
   bool device_nonlocal{}, device_chunk_mode{};
   bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
@@ -113,7 +116,8 @@ struct Owner {
   double density[1]{}, warm[1]{}, cold_seed[1]{};
   std::size_t elements = 1;
   struct { std::size_t density_h2d_bytes{}, synchronizations{}; } movement;
-  bool warm_energy_baseline{};
+  bool warm_energy_baseline{}, occupied_fitted_factor_ready{};
+  struct { std::size_t state_device_bytes{}, xc_device_bytes{}, provider_device_bytes{}; } resource;
   double range_warm_energy{}, range_warm_energy_correction{};
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
   std::unique_ptr<int> phase_source;
@@ -124,6 +128,7 @@ struct Owner {
     if (scenario == 2) throw std::bad_alloc();
   }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
+  void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
@@ -131,6 +136,7 @@ struct Owner {
     // This probe exercises optional source-admission failures; its ordinary
     // begin transaction has no provisional nonlocal initializer.
     const bool nonlocal_initialization = false;
+    const auto initial_synchronizations = movement.synchronizations;
     std::vector<double> prepared;
 """
         + transaction
@@ -147,14 +153,16 @@ int main(int argc, char** argv) {
     try { owner.begin(); } catch (...) { thrown = true; }
     assert(thrown);
     assert(owner.is_failed && !owner.is_active);
-    assert(!owner.pending_mixed_point);
+    assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
+           !owner.pending_mixed_resident);
     assert(!owner.phase_source && owner.retired == 1);
-    owner.pending_mixed_point = true;
+    owner.pending_mixed_point = owner.pending_mixed_exchange = owner.pending_mixed_resident = true;
     owner.scenario = 0;
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
-    assert(!owner.pending_mixed_point);
+    assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
+           !owner.pending_mixed_resident);
 }
 """
     )

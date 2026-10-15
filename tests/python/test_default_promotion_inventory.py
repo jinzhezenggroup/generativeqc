@@ -44,6 +44,25 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+@pytest.mark.parametrize(
+    "control",
+    [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR",
+        "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT",
+    ],
+)
+def test_warm_factor_controls_require_inventory_registration(control: str) -> None:
+    """Production selection and diagnostic overhead need separate policy owners."""
+    payload = _payload()
+    payload["entries"] = [
+        entry for entry in payload["entries"] if control not in entry["controls"]
+    ]
+    assert any(
+        "unregistered audited controls" in error and control in error
+        for error in validate_inventory(payload, root=ROOT)
+    )
+
+
 def test_partial_source_default_requires_new_qualification(tmp_path: Path) -> None:
     """A measured explicit mask cannot silently become the production default."""
     payload = _payload()

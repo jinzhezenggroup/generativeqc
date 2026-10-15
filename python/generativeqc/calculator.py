@@ -975,7 +975,6 @@ class Calculator:
             )
         )
         from .ks import (
-            SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
             cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
@@ -989,10 +988,6 @@ class Calculator:
             and self._ks_options is not None
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
-            and (
-                self._precision_mode == _native.PRECISION_FP64
-                or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
-            )
         )
         cuda_nonlocal_force = (
             self._device_name == "cuda"
@@ -1129,17 +1124,6 @@ class Calculator:
                     "conventional coupled-cluster methods do not accept an auxiliary basis"
                 )
         if self._capabilities.family == "density_functional":
-            if (
-                self._ks_options is not None
-                and self._ks_options.scf_domain == SPLIT_HYBRID_SCF_DOMAIN
-                and self._precision_mode != _native.PRECISION_FP64
-            ):
-                # The native split-hybrid SCF owner rejects AUTO even for
-                # energies. Fail at construction so budget-selected derivatives
-                # can retain their independent strict-SCF candidate.
-                raise NotImplementedError(
-                    "split-global-hybrid SCF requires precision='fp64'"
-                )
             if (
                 self._precision_mode == _native.PRECISION_AUTO
                 and self._device_name != "cuda"

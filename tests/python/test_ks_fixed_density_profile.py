@@ -222,10 +222,12 @@ int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const 
 struct PhaseSource {
   unsigned calls{}, audits{}, observations{};
   bool active() const { return mode != 32 && mode != 37; }
+  // Final-state profiling must bypass a retained mixed-recurrence source.
+  bool mixed_recurrence() const { return mode == 41; }
   int enqueue(scf::Spec spec, const double* density, double* j, double* k,
               int* error, double threshold, std::string& detail,
               const double* beta, double* kb) {
-    assert(active() && threshold == 1e-12);
+    assert(active() && !mixed_recurrence() && threshold == 1e-12);
     ++calls;
     // A range lease must receive only the correction operator and scratch,
     // never the primary J/K operator. Both spin layouts use the same lease.
@@ -320,7 +322,7 @@ int main(int argc, char** argv) {
   }
   if (mode >= 29) {
     p.phase_source = std::make_unique<PhaseSource>();
-    p.phase_source_range = mode >= 36;
+    p.phase_source_range = mode >= 36 && mode <= 40;
     p.has_range_correction = p.phase_source_range;
     if (mode == 30) p.provider.model.spec.exchange.present = false;
   }
@@ -332,7 +334,7 @@ int main(int argc, char** argv) {
   auto run = [&] { return owner.profile_fixed_density_components(expected, profile, detail); };
   const auto status = run();
   const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20 || mode == 35;
-  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32 || mode == 36 || mode == 37;
+  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32 || mode == 36 || mode == 37 || mode == 41;
   assert((status == GENERATIVEQC_STATUS_SUCCESS) == success);
   if (mode == 23 || mode == 25 || mode == 27)
     assert(status == GENERATIVEQC_STATUS_CUDA_ERROR);
@@ -342,10 +344,10 @@ int main(int argc, char** argv) {
   assert(pending.empty() && range_pending.empty());
   if (success) {
     const unsigned mask = mode == 2 || mode == 30 ? 9 : mode == 3 || mode == 17 ? 7 :
-                          mode == 4 || (mode >= 29 && mode <= 35) ? 11 : 15;
+                          mode == 4 || (mode >= 29 && mode <= 35) || mode == 41 ? 11 : 15;
     assert(profile.present_mask == mask && p.token() == expected && drains == 0);
     for (unsigned i = 0; i != 4; ++i) assert(profile.milliseconds[i] == ((mask & (1U << i)) ? 2 : 0));
-    assert(stages == (mode == 2 || mode == 30 ? std::vector<char>{'J','X'} : mode == 4 || (mode >= 29 && mode <= 35) ?
+    assert(stages == (mode == 2 || mode == 30 ? std::vector<char>{'J','X'} : mode == 4 || (mode >= 29 && mode <= 35) || mode == 41 ?
       std::vector<char>{'J','K','X'} : mode == 3 || mode == 17 ? std::vector<char>{'J','K','R'} :
       std::vector<char>{'J','K','R','X'}));
     const auto count = stages.size();
@@ -381,7 +383,7 @@ int main(int argc, char** argv) {
     assert(std::string(bridge.begin(), bridge.end()) == expected_bridge[mode - 22]);
   }
   if (p.phase_source) {
-    if (mode == 32 || mode == 35 || mode == 37)
+    if (mode == 32 || mode == 35 || mode == 37 || mode == 41)
       assert(p.phase_source->calls == 0 && p.phase_source->audits == 0);
     else if (success)
       assert(p.phase_source->calls == (mode == 30 || mode == 36 ? 2U : 4U) &&
@@ -440,6 +442,7 @@ int main(int argc, char** argv) {
         pytest.param(38, id="range-resident-submit-failure"),
         pytest.param(39, id="range-resident-audit-failure"),
         pytest.param(40, id="range-resident-audit-allocation"),
+        pytest.param(41, id="mixed-resident-source-strict-fallback"),
     ],
 )
 @pytest.mark.parametrize("spins", [1, 2])

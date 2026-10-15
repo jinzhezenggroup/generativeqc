@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -264,6 +266,120 @@ class HessianCli(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stdout, "")
                 self.assertIn("no result published", result.stderr)
+
+    def test_worker_exit_reclaims_descendants_with_detached_output(self) -> None:
+        source = self.interpreter.read_text()
+        pid_file = self.root / "descendant.pid"
+
+        def running(pid: int) -> bool:
+            # Linux may briefly retain an orphaned grandchild as a zombie.
+            try:
+                if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
+                    return False
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            return True
+
+        for code in (0, 7):
+            with self.subTest(code=code):
+                self.interpreter.write_text(
+                    source.replace(
+                        "json.dump(result,sys.stdout)",
+                        "import pathlib,subprocess\n"
+                        "child=subprocess.Popen([sys.executable,'-c',"
+                        "'import time; time.sleep(60)'],stdin=subprocess.DEVNULL,"
+                        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+                        "json.dump(result,sys.stdout)\n"
+                        f"raise SystemExit({code})\n",
+                    )
+                )
+                result = self.call()
+                pid = int(pid_file.read_text())
+                try:
+                    self.assertEqual(result.returncode == 0, code == 0, result.stderr)
+                    if code == 0:
+                        self.assertEqual(json.loads(result.stdout)["operation"], "hvp")
+                    else:
+                        self.assertEqual(result.stdout, "")
+                    deadline = time.monotonic() + 2
+                    while running(pid) and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertFalse(running(pid), "worker descendant survived exit")
+                finally:
+                    if running(pid):
+                        os.kill(pid, signal.SIGKILL)
+
+    def test_compiler_sessions_stop_on_timeout_and_worker_crash(self) -> None:
+        compiler_source = Path(__file__).resolve().parents[2] / "python"
+        compiler_pid = self.root / "compiler.pid"
+        compiler_script = (
+            "import os,pathlib,time; "
+            f"pathlib.Path({str(compiler_pid)!r}).write_text(str(os.getpid())); "
+            "time.sleep(60)"
+        )
+        sentinel = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        self.addCleanup(sentinel.wait)
+        self.addCleanup(sentinel.kill)
+        for mode in ("timeout", "native-block", "crash"):
+            with self.subTest(mode=mode):
+                compiler_pid.unlink(missing_ok=True)
+                self.interpreter.write_text(
+                    f"#!{sys.executable}\n"
+                    "import ctypes,os,pathlib,signal,sys,threading,time\n"
+                    f"sys.path.insert(0,{str(compiler_source)!r})\n"
+                    "from generativeqc_compiler.common.compiler_process import run_compiler\n"
+                    "def compile():\n"
+                    f" run_compiler([sys.executable,'-c',{compiler_script!r}],"
+                    "30,label='CLI lifetime probe')\n"
+                    "threading.Thread(target=compile,daemon=True).start()\n"
+                    f"while not pathlib.Path({str(compiler_pid)!r}).exists(): time.sleep(0.01)\n"
+                    + (
+                        "os.kill(os.getpid(),signal.SIGKILL)\n"
+                        if mode == "crash"
+                        else "ctypes.CDLL(None).pause()\n"
+                        if mode == "native-block"
+                        else "time.sleep(60)\n"
+                    )
+                )
+                result = self.call("--timeout-seconds", "1")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                pid = int(compiler_pid.read_text())
+
+                def running(pid: int = pid) -> bool:
+                    try:
+                        if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
+                            return False
+                    except (FileNotFoundError, ProcessLookupError):
+                        pass
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        return False
+                    return True
+
+                try:
+                    deadline = time.monotonic() + 2
+                    while running() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertFalse(
+                        running(), "isolated compiler survived worker death"
+                    )
+                    self.assertIsNone(sentinel.poll(), "unrelated process was killed")
+                finally:
+                    if running():
+                        os.killpg(pid, signal.SIGKILL)
 
     def test_malformed_or_unqualified_result_is_not_published(self) -> None:
         source = self.interpreter.read_text()

@@ -22,6 +22,7 @@
 #include "generated_split_hybrid_registry.cuh"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/mean_field.hpp"
@@ -198,7 +199,7 @@ void prepared_cuda_fock_seam() {
  * catches a converged flag or energy belonging to the preceding generation. */
 void physical_check(const scf::PreparedFockPlan& cpu, const dft::AoBasis& basis,
                     const dft::MolecularGrid& grid, std::uint32_t functional,
-                    const scf::ScfResult& result) {
+                    const scf::ScfResult& result, double exchange_scale = 1.0) {
   using namespace scf::reference;
   const auto n = basis.nao, elements = n * n;
   const bool uks = cpu.strategy().spec.spin == scf::FockSpin::Unrestricted;
@@ -208,9 +209,10 @@ void physical_check(const scf::PreparedFockPlan& cpu, const dft::AoBasis& basis,
   auto fock = scf::assemble_fock(cpu.strategy(), cpu.one_electron().hcore, jk);
   double xc_energy;
   if (uks) {
-    const auto xc = functional == 2U   ? dft::integrate_r2scan_uks(basis, grid, a, b)
-                    : functional == 1U ? dft::integrate_pbe_uks(basis, grid, a, b)
-                                       : dft::integrate_lda_xc_pw_uks(basis, grid, a, b);
+    const auto xc = functional == 2U ? dft::integrate_r2scan_uks(basis, grid, a, b)
+                    : functional == 1U
+                        ? dft::integrate_pbe_uks_scaled(basis, grid, a, b, 256, exchange_scale, 1.0)
+                        : dft::integrate_lda_xc_pw_uks(basis, grid, a, b);
     xc_energy = xc.energy;
     for (std::size_t i = 0; i < elements; ++i) {
       fock.alpha[i] += xc.potential[0][i];
@@ -218,7 +220,8 @@ void physical_check(const scf::PreparedFockPlan& cpu, const dft::AoBasis& basis,
     }
   } else {
     const auto xc = functional == 2U   ? dft::integrate_r2scan_rks(basis, grid, a)
-                    : functional == 1U ? dft::integrate_pbe_rks_with_tail(basis, grid, a)
+                    : functional == 1U ? dft::integrate_pbe_rks_with_tail_scaled(
+                                             basis, grid, a, 256, {}, exchange_scale, 1.0)
                                        : dft::integrate_lda_xc_pw_rks(basis, grid, a);
     xc_energy = xc.energy;
     for (std::size_t i = 0; i < elements; ++i) fock.alpha[i] += xc.potential[i];
@@ -427,7 +430,85 @@ void run_exact_exchange_case(bool restricted) {
   }
 }
 
-void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true) {
+void check_fitted_warm_seed_matrices(const scf::PreparedFockPlan& cpu,
+                                     const scf::PreparedFockPlan& gpu, dft::CudaKsPlan& plan,
+                                     const dft::CudaKsFinalStateToken& token,
+                                     const dft::CudaKsResidentFittedProjectionBinding& projection,
+                                     const std::vector<double>& density) {
+  // Replay the exact seed inputs through both real-device provider routes,
+  // independently of SCF convergence. CPU DF supplies a third matrix oracle.
+  const auto dense = gpu.build(density);
+  const auto reference = cpu.build(density);
+  dft::CudaKsResidentDensityBinding resident;
+  std::string detail;
+  require(plan.resident_final_density(token, resident, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  const auto matrix = density.size();
+  const auto stream = reinterpret_cast<cudaStream_t>(projection.stream);
+  runtime::OwnedCudaBuffer<double> output(projection.device_id, 2 * matrix, stream);
+  runtime::OwnedCudaBuffer<int> numerical_error(projection.device_id, 1, stream);
+  const scf::PreparedCudaOccupiedFockInput occupied{projection.occupied_coefficients, nullptr,
+                                                    projection.rank, 0};
+  require(scf::enqueue_prepared_cuda_occupied_fock(
+              gpu, resident.alpha, nullptr, matrix, occupied, output.get(), output.get() + matrix,
+              nullptr, numerical_error.get(), detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  scf::DirectJkMatrices factored{
+      projection.nbf, std::vector<double>(matrix), std::vector<double>(matrix), {}};
+  int error = -1;
+  require(
+      cudaMemcpyAsync(factored.coulomb.data(), output.get(), matrix * sizeof(double),
+                      cudaMemcpyDeviceToHost, stream) == cudaSuccess &&
+          cudaMemcpyAsync(factored.exchange_alpha.data(), output.get() + matrix,
+                          matrix * sizeof(double), cudaMemcpyDeviceToHost, stream) == cudaSuccess &&
+          cudaMemcpyAsync(&error, numerical_error.get(), sizeof(error), cudaMemcpyDeviceToHost,
+                          stream) == cudaSuccess &&
+          cudaStreamSynchronize(stream) == cudaSuccess && error == 0,
+      "could not export a valid occupied warm-seed J/K build");
+  // Hcore and XC are identical at this exact D; the full Fock difference is
+  // therefore exactly the difference of these assembled Hcore+J/K matrices.
+  const auto dense_fock = scf::assemble_fock(gpu.strategy(), gpu.one_electron().hcore, dense);
+  const auto factored_fock = scf::assemble_fock(gpu.strategy(), gpu.one_electron().hcore, factored);
+  double exchange_error = 0, fock_error = 0, oracle_error = 0;
+  for (std::size_t element = 0; element < matrix; ++element) {
+    const double exchange_delta = dense.exchange_alpha[element] - factored.exchange_alpha[element];
+    const double fock_delta = dense_fock.alpha[element] - factored_fock.alpha[element];
+    const double coulomb_oracle_delta = factored.coulomb[element] - reference.coulomb[element];
+    const double exchange_oracle_delta =
+        factored.exchange_alpha[element] - reference.exchange_alpha[element];
+    require(std::isfinite(exchange_delta) && std::isfinite(fock_delta) &&
+                std::isfinite(coulomb_oracle_delta) && std::isfinite(exchange_oracle_delta),
+            "occupied warm-seed K/Fock or independent CPU DF contains a nonfinite difference");
+    exchange_error = std::max(exchange_error, std::abs(exchange_delta));
+    fock_error = std::max(fock_error, std::abs(fock_delta));
+    oracle_error =
+        std::max({oracle_error, std::abs(coulomb_oracle_delta), std::abs(exchange_oracle_delta)});
+  }
+  require(exchange_error < 2e-11 && fock_error < 2e-11 && oracle_error < 2e-11,
+          "occupied warm-seed K/Fock differs from dense GPU or independent CPU DF");
+  std::cout << "DF warm-seed matrix gates: K=" << exchange_error << " Fock=" << fock_error
+            << " CPU-DF=" << oracle_error << '\n';
+}
+
+void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true,
+                                      const char* warm_factor_selection = "0") {
+  const bool warm_factor = !warm_factor_selection || std::strcmp(warm_factor_selection, "1") == 0;
+  const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR");
+  const std::string saved = previous ? previous : "";
+  struct RestoreEnvironment {
+    bool present;
+    const std::string& value;
+    ~RestoreEnvironment() {
+      if (present)
+        ::setenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR", value.c_str(), 1);
+      else
+        ::unsetenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR");
+    }
+  } restore{previous != nullptr, saved};
+  require((warm_factor_selection
+               ? ::setenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR", warm_factor_selection, 1)
+               : ::unsetenv("GENERATIVEQC_CUDA_KS_WARM_FACTOR")) == 0,
+          "could not select fitted warm-factor qualification");
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
@@ -437,6 +518,9 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true)
   const scf::PreparedFockPlan gpu(system, &system,
                                   fitted_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
   scf::ScfOptions options;
+  // Match the quarter exact exchange with PBE0's semilocal exchange. A bare
+  // PBE-plus-K fixture is not a qualified global-hybrid final-state model.
+  options.semilocal_exchange_scale = 0.75;
   options.compute_forces = false;
   options.energy_tolerance = 1e-12;
   options.density_tolerance = 1e-10;
@@ -461,7 +545,7 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true)
   if (result.iterations > 1)
     require(movement.fitted_occupied_exchange_builds > 0,
             "density-fitted hybrid never reused the accepted canonical occupied factor");
-  physical_check(cpu, basis, grid, 1U, result);
+  physical_check(cpu, basis, grid, 1U, result, options.semilocal_exchange_scale);
 
   dft::CudaKsFinalStateToken token;
   std::string detail;
@@ -528,6 +612,8 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true)
                   "retained U does not equal independent CPU B times exact final Cocc");
         }
     }
+    if (warm_factor)
+      check_fitted_warm_seed_matrices(cpu, gpu, plan, token, projection, snapshot.density[0]);
     // Another KS owner can reuse the prepared provider and overwrite U with
     // the same shape/rank. The old method token must not revive that lease.
     dft::CudaKsPlan replacement(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
@@ -542,6 +628,117 @@ void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true)
                 movement.fitted_final_projection_leases == 0,
             "unsupported fitted-hybrid final projection was published");
   }
+
+  if (!warm_factor || !warm_updates) return;
+  const auto retained_bytes = plan.resources().state_device_bytes;
+  const auto frozen_density = plan.warm_density();
+  const bool reusable = restricted && movement.fitted_final_projection_leases != 0;
+  require(plan.transfers().fitted_warm_factor_publications == (reusable ? 1U : 0U),
+          "warm factor was published without an exact restricted final projection");
+  plan.set_warm_start_updates(false);
+  for (unsigned replay = 0; replay < 5; ++replay) {
+    const auto before = plan.transfers();
+    plan.begin();
+    require(plan.read_final_state(token, false, snapshot, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "warm replay kept the previous final-state token eligible");
+    plan.enqueue_iteration();
+    plan.finish_iteration();
+    const auto first = plan.transfers();
+    require(first.fitted_dense_exchange_builds - before.fitted_dense_exchange_builds ==
+                    (reusable ? 0U : 1U) &&
+                first.fitted_occupied_exchange_builds - before.fitted_occupied_exchange_builds ==
+                    (reusable ? 1U : 0U) &&
+                first.fitted_warm_factor_restores - before.fitted_warm_factor_restores ==
+                    (reusable ? 1U : 0U),
+            "first warm K did not follow its verified factor/dense provenance");
+    while (plan.active()) {
+      plan.enqueue_iteration();
+      plan.finish_iteration();
+    }
+    const auto warm = plan.result();
+    require(warm.converged && std::abs(warm.energy - reference.energy) < 1e-10 &&
+                plan.warm_density() == frozen_density &&
+                plan.resources().state_device_bytes == retained_bytes,
+            "frozen warm-factor replay changed its seed, Hamiltonian or retained allocation");
+    physical_check(cpu, basis, grid, 1U, warm, options.semilocal_exchange_scale);
+    require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    require(plan.read_final_state(token, true, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+  }
+
+  ks_cuda_fail_next_runtime_for_test_v1();
+  bool failed_begin = false;
+  try {
+    plan.begin();
+  } catch (const std::exception&) {
+    failed_begin = true;
+  }
+  require(failed_begin && plan.failed() && plan.has_warm_start() &&
+              plan.warm_density() == frozen_density,
+          "failed begin damaged the independent last-good warm representation");
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "failed begin kept a final-state token eligible");
+  const auto recovered = plan.run();
+  require(recovered.converged && std::abs(recovered.energy - reference.energy) < 1e-10,
+          "failed begin prevented exact warm-seed recovery");
+
+  // An explicit non-idempotent density is not identified by the old frame,
+  // even on this same owner. Frozen cache updates must leave the old seed live.
+  auto perturbed = frozen_density;
+  for (std::size_t diagonal = 0; diagonal < basis.nao; ++diagonal)
+    perturbed[diagonal * basis.nao + diagonal] += 0.02;
+  const auto before_import = plan.transfers();
+  plan.begin(&perturbed, true);
+  plan.enqueue_iteration();
+  plan.finish_iteration();
+  require(plan.transfers().fitted_dense_exchange_builds ==
+              before_import.fitted_dense_exchange_builds + 1,
+          "explicit mixed density borrowed the cached canonical factor");
+  while (plan.active()) {
+    plan.enqueue_iteration();
+    plan.finish_iteration();
+  }
+  require(plan.result().converged && plan.warm_density() == frozen_density,
+          "explicit density solve overwrote the frozen factor-backed warm seed");
+  const auto restored = plan.run();
+  require(restored.converged && std::abs(restored.energy - reference.energy) < 1e-10,
+          "explicit density solve damaged the next verified warm replay");
+
+  const auto before_cold = plan.transfers();
+  plan.begin(nullptr, false);
+  plan.enqueue_iteration();
+  plan.finish_iteration();
+  require(
+      plan.transfers().fitted_dense_exchange_builds == before_cold.fitted_dense_exchange_builds + 1,
+      "explicit cold restart borrowed a warm factor");
+  while (plan.active()) {
+    plan.enqueue_iteration();
+    plan.finish_iteration();
+  }
+
+  const auto moved_system = hydrogens(restricted ? 2U : 3U, restricted, 0.05);
+  const dft::AoBasis moved_basis(moved_system);
+  const dft::MolecularGrid moved_grid(moved_system, grid_spec);
+  const scf::PreparedFockPlan moved_gpu(
+      moved_system, &moved_system, fitted_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
+  dft::CudaKsPlan moved_plan(moved_gpu, moved_basis, moved_grid, options, dft::SemilocalFamily::Pbe,
+                             257);
+  moved_plan.begin(&frozen_density);
+  moved_plan.enqueue_iteration();
+  moved_plan.finish_iteration();
+  require(moved_plan.transfers().fitted_dense_exchange_builds == 1 &&
+              moved_plan.transfers().fitted_warm_factor_restores == 0,
+          "changed geometry/metric borrowed another owner's warm factor");
+  while (moved_plan.active()) {
+    moved_plan.enqueue_iteration();
+    moved_plan.finish_iteration();
+  }
+  const auto moved = moved_plan.result();
+  const auto moved_cold = moved_plan.run(nullptr, false);
+  require(
+      moved.converged && moved_cold.converged && std::abs(moved.energy - moved_cold.energy) < 1e-10,
+      "changed-geometry dense fallback changed the fitted endpoint");
 }
 
 void run_range_exchange_case(bool restricted) {
@@ -2237,6 +2434,14 @@ int main(int argc, char** argv) {
       ks_density_provider_cases();
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
+      for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
+        run_density_fitted_exchange_case(true, true, selection);
+        run_density_fitted_exchange_case(false, true, selection);
+      }
+      std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
+      return 0;
+    }
     minao_gpu_case();
     ks_density_provider_cases();
     prepared_cuda_fock_seam();
@@ -2273,6 +2478,10 @@ int main(int argc, char** argv) {
     run_density_fitted_exchange_case(true);
     run_density_fitted_exchange_case(true, false);
     run_density_fitted_exchange_case(false);
+    run_density_fitted_exchange_case(true, true, "1");
+    run_density_fitted_exchange_case(false, true, "1");
+    run_density_fitted_exchange_case(true, true, nullptr);
+    run_density_fitted_exchange_case(false, true, nullptr);
     run_range_exchange_case(true);
     run_range_exchange_case(false);
     run_density_fitted_range_exchange_case(true);

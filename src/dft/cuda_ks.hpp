@@ -61,9 +61,10 @@ struct CudaKsTransfers {
    * detached D/F/C/epsilon. Repeated leases do not increment this count. */
   std::uint64_t resident_final_validations{};
   std::uint64_t synchronizations{}, iterations{};
-  /** Intermediate orthonormal KS orbital frames retained entirely on device for
-   * a future #991 warm-subspace admission attempt. These are implementation
-   * diagnostics and are not part of the public C transport ABI. */
+  /** Intermediate KS orbital frames retained entirely on device. The restricted
+   * fitted warm-factor path retains exact density-generating AO coefficients;
+   * the incumbent retains the orthonormal frame for future subspace admission.
+   * These diagnostics are not part of the public C transport ABI. */
   std::uint64_t warm_orbital_frames_retained{}, warm_orbital_frame_invalidations{};
   /** Number of subsequent proposals using the CPU-compatible stationary-cycle
    * shift; cumulative across replays, independent of transfer counts. */
@@ -81,13 +82,18 @@ struct CudaKsTransfers {
   std::uint64_t execution_region_fallbacks{};
   /** Explicit host-unfused XC staging, separate from ordinary setup/seed movement. */
   std::uint64_t xc_host_d2h_bytes{}, xc_host_h2d_bytes{}, xc_host_synchronizations{};
-  /** Full-range density-fitted exchange provenance. Dense includes the first
-   * cold/warm-seed build where no canonical factor is available; occupied
+  /** Full-range density-fitted exchange provenance. Dense includes any first
+   * cold/warm-seed build without a verified density-generating factor; occupied
    * counts only builds whose Cocc generated the exact current device density. */
   std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
   /** Successful final RKS states that retained the exact density-generating Cocc
    * together with the already-computed complete resident U=B*Cocc projection. */
   std::uint64_t fitted_final_projection_leases{};
+  /** Opt-in inter-solve RKS reuse of the last-good exact factor, stored in the
+   * existing warm slot instead of D. No extra retained numeric storage. A warm
+   * density export materializes D in dead scratch, without modifying the seed. */
+  std::uint64_t fitted_warm_factor_publications{}, fitted_warm_factor_restores{};
+  std::uint64_t fitted_warm_factor_fallbacks{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The

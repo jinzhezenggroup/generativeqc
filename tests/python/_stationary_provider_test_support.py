@@ -43,7 +43,16 @@ def cuda_provider_selection(
     contract = SimpleNamespace(
         family="gga", spin="unpolarized", validate=lambda state: state
     )
-    monkeypatch.setattr(cuda, "StationaryDerivativeContract", lambda _: contract)
+
+    class StrictContract(cuda.StationaryDerivativeContract):
+        # Inherit the real force-policy selection; replace only state validation.
+        def __new__(
+            cls, identity: object, *, allow_budget_stationarity: bool = False
+        ) -> SimpleNamespace:
+            assert allow_budget_stationarity is False
+            return contract
+
+    monkeypatch.setattr(cuda, "StationaryDerivativeContract", StrictContract)
     monkeypatch.setattr(cuda, "native_ao_geometry_identity", lambda _: "geometry")
     method = resolve_method("PBE")
     bound_source = SimpleNamespace(

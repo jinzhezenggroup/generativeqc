@@ -16,6 +16,7 @@
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -95,6 +96,33 @@ std::string linked_library(const HessianInvocation& invocation) {
 #endif
 }
 
+// Only this C++ invocation holds the writer. Isolated compiler watchdogs
+// observe EOF even when the Python worker is killed inside blocking native work.
+class CompilerLifetime {
+ public:
+  CompilerLifetime() {
+    if (::pipe(descriptors_) != 0)
+      throw std::runtime_error("cannot allocate compiler lifetime channel");
+    if (::fcntl(descriptors_[0], F_SETFD, FD_CLOEXEC) < 0 ||
+        ::fcntl(descriptors_[1], F_SETFD, FD_CLOEXEC) < 0) {
+      ::close(descriptors_[0]);
+      ::close(descriptors_[1]);
+      throw std::runtime_error("cannot isolate compiler lifetime descriptors");
+    }
+  }
+  CompilerLifetime(const CompilerLifetime&) = delete;
+  CompilerLifetime& operator=(const CompilerLifetime&) = delete;
+  ~CompilerLifetime() {
+    ::close(descriptors_[0]);
+    ::close(descriptors_[1]);
+  }
+  int reader() const { return descriptors_[0]; }
+  int writer() const { return descriptors_[1]; }
+
+ private:
+  int descriptors_[2];
+};
+
 class Child {
  public:
   explicit Child(pid_t process) : process_(process) {}
@@ -113,7 +141,9 @@ class Child {
       const auto result = ::waitpid(process_, &status, WNOHANG);
       if (result == process_) {
         const bool succeeded = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-        if (!succeeded) ::kill(-process_, SIGKILL);
+        // A successful worker can leave children with redirected output behind.
+        // Reclaim this invocation's group on every terminal outcome.
+        ::kill(-process_, SIGKILL);
         process_ = -1;
         if (!succeeded)
           throw std::runtime_error("compiler Hessian worker failed; no result published");
@@ -134,6 +164,7 @@ class Child {
 Json execute_worker(const HessianInvocation& invocation, const Json& request) {
   auto input = temporary_file();
   auto output = temporary_file();
+  CompilerLifetime lifetime;
   const std::string encoded = request.dump();
   if (encoded.size() > kProtocolBytes ||
       std::fwrite(encoded.data(), 1, encoded.size(), input.get()) != encoded.size() ||
@@ -145,6 +176,14 @@ Json execute_worker(const HessianInvocation& invocation, const Json& request) {
   std::vector<char*> pointers;
   for (auto& argument : arguments) pointers.push_back(argument.data());
   pointers.push_back(nullptr);
+  constexpr std::string_view owner_key = "GENERATIVEQC_COMPILER_OWNER_FD=";
+  std::vector<std::string> environment;
+  for (char** entry = environ; *entry; ++entry)
+    if (!std::string_view(*entry).starts_with(owner_key)) environment.emplace_back(*entry);
+  environment.push_back(std::string(owner_key) + std::to_string(lifetime.reader()));
+  std::vector<char*> environment_pointers;
+  for (auto& entry : environment) environment_pointers.push_back(entry.data());
+  environment_pointers.push_back(nullptr);
   posix_spawn_file_actions_t actions;
   posix_spawnattr_t attributes;
   if (::posix_spawn_file_actions_init(&actions) != 0)
@@ -157,12 +196,15 @@ Json execute_worker(const HessianInvocation& invocation, const Json& request) {
   status |= ::posix_spawn_file_actions_adddup2(&actions, ::fileno(output.get()), STDOUT_FILENO);
   status |= ::posix_spawn_file_actions_addclose(&actions, ::fileno(input.get()));
   status |= ::posix_spawn_file_actions_addclose(&actions, ::fileno(output.get()));
+  // dup2 clears FD_CLOEXEC for the read end even when the descriptors match.
+  status |= ::posix_spawn_file_actions_adddup2(&actions, lifetime.reader(), lifetime.reader());
+  status |= ::posix_spawn_file_actions_addclose(&actions, lifetime.writer());
   status |= ::posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
   status |= ::posix_spawnattr_setpgroup(&attributes, 0);
   pid_t process = -1;
   if (status == 0)
     status = ::posix_spawn(&process, invocation.interpreter.c_str(), &actions, &attributes,
-                           pointers.data(), environ);
+                           pointers.data(), environment_pointers.data());
   ::posix_spawn_file_actions_destroy(&actions);
   ::posix_spawnattr_destroy(&attributes);
   if (status != 0) throw std::runtime_error("cannot start the explicit compiler Python executable");

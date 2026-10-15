@@ -207,7 +207,8 @@ class ECPSecondOrder:
         )
         fine = self._integrate("hvp", **options)
         if (
-            not np.isfinite(fine).all()
+            not np.isfinite(coarse).all()
+            or not np.isfinite(fine).all()
             or np.max(abs(fine - coarse)) > DERIVATIVE_ABS_TOLERANCE
         ):
             raise ArithmeticError("ECP Hessian quadrature convergence gate failed")

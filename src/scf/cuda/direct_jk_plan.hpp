@@ -121,6 +121,7 @@ struct CudaDirectJkPlan {
    * order is exactly the geometry-bound canonical bucket traversal. This
    * lease never changes range, screening or derivative fallback semantics. */
   double* resident_values{};
+  float* resident_mixed_values{};
   FockOperator resident_operator{FockOperator::FullRange};
   double resident_omega{};
   std::size_t resident_value_count{};

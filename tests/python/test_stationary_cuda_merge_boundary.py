@@ -20,9 +20,16 @@ def test_qualified_mgga_reaches_native_state_admission(
     from generativeqc import _stationary_cuda as runtime
 
     contract = SimpleNamespace(family="mgga", validate=lambda state: None)
-    monkeypatch.setattr(
-        runtime, "StationaryDerivativeContract", lambda identity: contract
-    )
+
+    class StrictContract(runtime.StationaryDerivativeContract):
+        # Inherit the real force-policy selection; replace only state validation.
+        def __new__(
+            cls, identity: object, *, allow_budget_stationarity: bool = False
+        ) -> SimpleNamespace:
+            assert allow_budget_stationarity is False
+            return contract
+
+    monkeypatch.setattr(runtime, "StationaryDerivativeContract", StrictContract)
     state = SimpleNamespace(identity=object(), _source=SimpleNamespace(backend="cpu"))
     with pytest.raises(NotImplementedError, match="requires a native CUDA KS state"):
         runtime.complete_rks_cuda_gradient_diagnostic(
@@ -338,9 +345,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     contract = SimpleNamespace(
         family="lda", spin="unpolarized", validate=lambda state: state
     )
-    monkeypatch.setattr(
-        runtime, "StationaryDerivativeContract", lambda _identity: contract
-    )
+
+    class StrictContract(runtime.StationaryDerivativeContract):
+        # Inherit the real force-policy selection; replace only state validation.
+        def __new__(
+            cls, identity: object, *, allow_budget_stationarity: bool = False
+        ) -> SimpleNamespace:
+            assert allow_budget_stationarity is False
+            return contract
+
+    monkeypatch.setattr(runtime, "StationaryDerivativeContract", StrictContract)
 
     class FakeCompiler:
         def __init__(self) -> None:

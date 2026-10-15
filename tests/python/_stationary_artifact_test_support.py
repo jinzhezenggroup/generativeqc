@@ -36,7 +36,16 @@ def stationary_route(
     monkeypatch.setattr(runtime, "CudaCompilerAdapter", Compiler)
     method = resolve_method("PBE", spin=spin)
     contract = SimpleNamespace(family="gga", spin=spin, validate=lambda state: state)
-    monkeypatch.setattr(runtime, "StationaryDerivativeContract", lambda _: contract)
+
+    class StrictContract(runtime.StationaryDerivativeContract):
+        # Inherit the real force-policy selection; replace only state validation.
+        def __new__(
+            cls, identity: object, *, allow_budget_stationarity: bool = False
+        ) -> SimpleNamespace:
+            assert allow_budget_stationarity is False
+            return contract
+
+    monkeypatch.setattr(runtime, "StationaryDerivativeContract", StrictContract)
     monkeypatch.setattr(runtime, "native_ao_geometry_identity", lambda _: "geometry")
     basis = SimpleNamespace(
         identity="basis",

@@ -13,7 +13,10 @@ def _norm(cp: typing.Any, value: typing.Any) -> typing.Any:
     if not value.size:
         return cp.asarray(0.0)
     scale = cp.maximum(cp.max(abs(value)), cp.finfo(cp.float64).tiny)
-    return scale * cp.linalg.norm(value / scale)
+    result = scale * cp.linalg.norm(value / scale)
+    if not bool(cp.isfinite(result)):
+        raise ValueError("resident response vector norm is nonfinite or overflows FP64")
+    return result
 
 
 def resident_gmres(

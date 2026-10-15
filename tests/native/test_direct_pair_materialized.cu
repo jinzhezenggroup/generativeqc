@@ -178,6 +178,93 @@ __global__ void shared_components(
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
 
+/** Restricted J/K share FP32 recurrence but retain independent FP64 sinks. */
+template <unsigned Order>
+__global__ void mixed_canonical_components(DeviceBatch batch, ActiveShellQuartetTile task,
+                                           const double* schwarz, const double* density,
+                                           const std::uint8_t* active, double* coulomb,
+                                           double* exchange, std::uint64_t* mixed_work) {
+  using Recurrence = MaterializedDirectPairRecurrence<Order, MixedPrecisionFloat>;
+  __shared__ __align__(16) unsigned char storage[sizeof(Recurrence)];
+  auto& shared = *reinterpret_cast<Recurrence*>(storage);
+  contract_materialized_direct_pair_fock<false, Order,
+                                         canonical_materialized_component_slots(Order),
+                                         canonical_materialized_component_lanes(Order)>(
+      batch, task, 0.0, schwarz, density, active, nullptr, nullptr, shared, nullptr, false, false,
+      nullptr, false, generativeqc::integrals::CoulombRange::Full, 0.0, coulomb, exchange, nullptr,
+      mixed_work);
+}
+
+std::array<std::size_t, 2> host_pair(const Fixture& fixture, unsigned pair, std::size_t ordinal);
+
+/** Retained FP64 ERIs and a host orbit qualify dense and exchange-only inputs. */
+template <unsigned Angular>
+void qualify_mixed_canonical() {
+  Fixture fixture({Angular, Angular, Angular, Angular}, false, false);
+  const auto dimension = std::size_t(fixture.batch.direct_nbf);
+  const auto matrix = dimension * dimension;
+  const auto pair_components = (Angular + 1) * (Angular + 2) / 2;
+  const auto pair_count = pair_components * pair_components;
+  const auto count = pair_count * pair_count;
+  std::vector<ActiveShellQuartetTile> tasks;
+  for (unsigned tile = 0; tile * 256 < count; ++tile) tasks.push_back({8, 1, tile});
+  Device<ActiveShellQuartetTile> device_tasks(tasks);
+  Device<double> schwarz(fixture.host_schwarz), retained(count), coulomb(matrix), exchange(matrix);
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1});
+  Device<std::uint64_t> mixed_work(1);
+  retained_components<Angular, Angular, Angular, Angular>
+      <<<tasks.size(), 256>>>(fixture.batch, device_tasks.data, schwarz.data, 0.0, retained.data);
+  check(cudaGetLastError());
+  const auto values = retained.read();
+  for (bool exchange_only : {false, true}) {
+    auto host_density = fixture.host_density;
+    if (exchange_only) {
+      std::fill(host_density.begin(), host_density.end(), 0.0);
+      host_density[fixture.ao_offsets[2] + dimension * fixture.ao_offsets[0]] = 1.0;
+    }
+    Device<double> density(host_density);
+    coulomb.clear();
+    exchange.clear();
+    mixed_work.clear();
+    mixed_canonical_components<4 * Angular>
+        <<<1, canonical_materialized_component_lanes(4 * Angular)>>>(
+            fixture.batch, tasks[0], schwarz.data, density.data, active.data, coulomb.data,
+            exchange.data, mixed_work.data);
+    check(cudaGetLastError());
+    const auto actual_j = coulomb.read(), actual_k = exchange.read();
+    std::vector<double> expected_j(matrix), expected_k(matrix);
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+      const auto bra = host_pair(fixture, 8, ordinal / pair_count);
+      const auto ket = host_pair(fixture, 1, ordinal % pair_count);
+      const auto first = bra[0], second = bra[1], third = ket[0], fourth = ket[1];
+      const std::set<std::array<std::size_t, 4>> orbit{
+          {first, second, third, fourth}, {second, first, third, fourth},
+          {first, second, fourth, third}, {second, first, fourth, third},
+          {third, fourth, first, second}, {fourth, third, first, second},
+          {third, fourth, second, first}, {fourth, third, second, first}};
+      for (const auto& indices : orbit) {
+        expected_j[indices[0] + dimension * indices[1]] +=
+            host_density[indices[2] + dimension * indices[3]] * values[ordinal];
+        expected_k[indices[0] + dimension * indices[2]] +=
+            host_density[indices[1] + dimension * indices[3]] * values[ordinal];
+      }
+    }
+    bool nonempty_exchange = false;
+    for (std::size_t entry = 0; entry < matrix; ++entry) {
+      if (!std::isfinite(actual_j[entry]) || !std::isfinite(actual_k[entry]) ||
+          std::abs(actual_j[entry] - expected_j[entry]) >
+              2e-6 * (1 + std::abs(expected_j[entry])) ||
+          std::abs(actual_k[entry] - expected_k[entry]) > 2e-6 * (1 + std::abs(expected_k[entry])))
+        throw std::runtime_error("mixed canonical J/K failed retained FP64 orbit parity");
+      if (exchange_only && actual_j[entry] != 0.0)
+        throw std::runtime_error("exchange-only density acquired a Coulomb contribution");
+      nonempty_exchange |= actual_k[entry] != 0.0;
+    }
+    if (!nonempty_exchange || !mixed_work.read()[0])
+      throw std::runtime_error("mixed canonical exchange lost active work");
+  }
+}
+
 /** Independent retained Dual3 component traversal, without shared preparation. */
 __global__ void retained_derivatives(DeviceBatch batch, ActiveShellQuartetTile task,
                                      const double* schwarz, double threshold, double* values) {
@@ -717,6 +804,12 @@ void qualify_shared_responses() {
 
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--mixed-jk") == 0) {
+      qualify_mixed_canonical<1>();
+      qualify_mixed_canonical<2>();
+      std::cout << "FP32 canonical J/K and exchange-only density PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--shared-responses") == 0) {
       qualify_shared_responses();
       return 0;
@@ -808,6 +901,9 @@ int main(int argc, char** argv) {
     qualify<2, 2, 2, 2, false, true>(false, false, 2.0);
     qualify<3, 3, 3, 3, true, true>(false, false, 0.8);
     std::cout << "pair-materialized whole-shell admission and exact work PASS\n";
+    qualify_mixed_canonical<1>();
+    qualify_mixed_canonical<2>();
+    std::cout << "FP32 canonical J/K and exchange-only density PASS\n";
 #ifdef GENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_TEST
     qualify_dft_stream<false>();
     qualify_dft_stream<true>();

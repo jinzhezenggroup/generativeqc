@@ -55,6 +55,20 @@ inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t 
   return restricted && aos >= 24 && aos <= 384 && atoms >= 2 && atoms <= 48 && maximum_angular <= 2;
 }
 
+/** Budget-Fock candidate domain, independent of mixed-gradient capacity.
+ * The prepared owner authenticates the requested model and the shared Direct
+ * operator capabilities. A strict physical Fock closes the solve;
+ * allowances select provisional arithmetic, not a per-molecule error bound. */
+inline bool admit_application_fock(const std::array<double, 3>& allowances, std::size_t aos,
+                                   std::size_t atoms, unsigned maximum_angular, bool restricted,
+                                   bool all_electron, bool mixed_fock_available) noexcept {
+  for (const auto allowance : allowances)
+    if (!std::isfinite(allowance) || allowance < 0.0) return false;
+  return restricted && all_electron && mixed_fock_available && aos >= 24 && aos <= 768 &&
+         atoms >= 2 && atoms <= 96 && maximum_angular <= 2 && allowances[0] >= 1e-5 &&
+         allowances[1] >= 1e-4 && (allowances[2] == 0.0 || allowances[2] >= 3e-5);
+}
+
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for
  * an arbitrary molecule. Explicit observable targets still require an audit.

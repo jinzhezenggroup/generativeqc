@@ -8,6 +8,8 @@ import subprocess
 import time
 from dataclasses import dataclass
 
+from .compiler_lifetime import cancel_owned_process, start_owned_process
+
 
 @dataclass(frozen=True, slots=True)
 class CompileResult:
@@ -22,6 +24,8 @@ class CompileResult:
 
 def kill_compiler_group(process: subprocess.Popen[str]) -> None:
     """Stop only a process group created by this invocation, then reap its leader."""
+    if cancel_owned_process(process):
+        return
     try:
         os.killpg(process.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -39,7 +43,7 @@ def run_compiler(
 ) -> CompileResult:
     """Capture diagnostics and terminate all compiler children on timeout."""
     started = time.monotonic()
-    process = subprocess.Popen(
+    process = start_owned_process(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

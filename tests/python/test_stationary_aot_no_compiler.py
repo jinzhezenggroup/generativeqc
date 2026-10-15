@@ -178,9 +178,16 @@ def test_public_aot_force_does_not_probe_nvcc(
         identity=SimpleNamespace(ingredients=("rho", "sigma"), spin=spin),
         grid=SimpleNamespace(points=np.zeros((1, 3))),
     )
-    monkeypatch.setattr(
-        _dft_gradient.StationaryKsState, "from_native", lambda *args, **kwargs: state
-    )
+
+    def from_native(
+        observed_batch: object, observed_basis: object, **kwargs: object
+    ) -> SimpleNamespace:
+        assert observed_batch is batch and isinstance(observed_basis, Basis)
+        assert kwargs["index"] == 0
+        assert kwargs["allow_budget_stationarity"] is True
+        return state
+
+    monkeypatch.setattr(_dft_gradient.StationaryKsState, "from_native", from_native)
     target = cuda_target_info("sm_120")
 
     def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
