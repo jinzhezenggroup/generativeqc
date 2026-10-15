@@ -109,6 +109,15 @@ target evaluation. FP32 pair roots reuse the shared rational/unit-reciprocal
 closure under the existing representable-input domain, with a new lowering
 identity and independent Decimal checks at every domain corner.
 
+Numerical-failure retries obey the same handoff: clear seed/frozen/outer state
+and reset the exact-target epoch before preparing the strict source. Changing
+only the precision flag would leave a seed retry without NLC, or reuse a mixed
+frozen potential in the alleged strict retry. Host failure injection executes
+the production retry and next device-XC dispatch for all mixed components,
+both provisional stages and absent/mixed/strict leases. It requires fresh strict
+pair work at the unchanged density, reset history/energy epochs and truthful
+retry accounting; GPU observable acceptance remains a separate requirement.
+
 The first composed 96-AO run passed observable gates but spent all twelve mixed
 iterations in the semilocal initializer: its positive-FP32-nonlocal-work assertion
 correctly failed. Do not weaken that check or report the missing work as mixed.

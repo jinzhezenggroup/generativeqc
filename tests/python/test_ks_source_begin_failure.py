@@ -68,6 +68,8 @@ struct Owner {
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_exchange = true, pending_mixed_resident = true;
+  bool pending_mixed_range_exchange = true, pending_mixed_range_resident = true;
+  bool pending_mixed_nonlocal = true;
   bool pending_mixed_point = true;
   bool experimental_mixed_point{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};

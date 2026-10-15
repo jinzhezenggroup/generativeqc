@@ -2966,6 +2966,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
         ++output.precision.execution_retries;
         record_precision_retry();
         strict_refinement = true;
+        // A numerical retry must discard the provisional operator as well as
+        // its arithmetic. Never omit NLC or retain a mixed frozen potential in
+        // the fresh strict target evaluation at this unchanged density.
+        nonlocal_outer_active = nonlocal_seed_stage = nonlocal_frozen_stage = false;
+        nonlocal_exact_epoch_iterations = 0;
         // A failed proposal cannot certify reuse or lend FP32 storage to the
         // strict retry. Retire it before admitting a fresh FP64 source.
         if (phase_source && phase_source->mixed_recurrence()) retire_phase_source(false);
