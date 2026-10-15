@@ -696,6 +696,50 @@ int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t
   }
 }
 
+/** Transactional CPU KS fleet capacity query, without allocation or providers.
+ * Each input item has the existing 17-slot host shape. Output is twelve
+ * persistent component totals, retained/workspace/peak, then sixteen diagnostic
+ * capacities per item. The workspace floor is a caller-supplied consumer bound,
+ * not a capability/admission bit. Immutable input must be disjoint from output.
+ * Two scalar passes validate the full request before publishing with O(1)
+ * native scratch; malformed later items or aggregate overflow preserve output.
+ */
+int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t workspace_floor, std::uint64_t* values,
+                                          std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 17 || !values) return -1;
+  const auto item_count = shape_count / 17;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
+      value_count != 15 + 16 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 17 * index;
+      if (shape[14] > 1 || shape[15] > 1)
+        throw std::invalid_argument("CPU KS fleet requires canonical boolean slots");
+      return scf::CpuKsHostResourceShape{
+          shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+          shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+          shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    };
+    scf::CpuKsHostFleetResources fleet(workspace_floor);
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cpu_ks_host_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 15 + 16 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
 /** Shape-only capacity of the shared device DIIS owner; never probes CUDA. */
 int generativeqc_resource_df_diis_bytes_v1(std::size_t batch, std::size_t nbf, unsigned history,
                                            std::uint64_t* output) {

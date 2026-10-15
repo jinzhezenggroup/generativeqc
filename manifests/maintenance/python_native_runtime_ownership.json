@@ -663,13 +663,15 @@
         "src/cli/resources.cpp"
       ],
       "remaining_python_runtime": [
-        "CPU HF phase/retained/serialized-fleet capacities and CPU KS host capacities share native CLI/C++ owners when their additive queries are discovered. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. Library-free dry runs and old libraries retain explicit portable metadata sizing, including phase-only ABI fallback. Python still composes global budget/admission candidates and KS fleet inventories. Native allocation receipts do not prove complete planner coverage; MINAO numeric capacity is already a native additive query."
+        "CPU HF and KS per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit consumer-workspace allowance to the native fleet peak check without transferring consumer eligibility/admission policy. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python still composes global budget/admission candidates, CUDA KS fleets and CPU force allowance/eligibility policy. Native allocation receipts do not prove complete planner coverage; MINAO numeric capacity is already a native additive query."
       ],
       "tests": [
         "tests/python/test_resources.py",
         "tests/native/test_hf_host_resources.cpp",
+        "tests/native/test_ks_host_resources.cpp",
         "tests/python/test_hf_host_resources.py",
         "tests/python/test_ks_host_resources.py",
+        "tests/python/test_ks_fleet_resources.py",
         "tests/python/test_ecp_resources.py",
         "tests/python/test_minao_default.py"
       ],

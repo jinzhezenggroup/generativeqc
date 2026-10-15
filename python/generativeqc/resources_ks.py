@@ -73,24 +73,19 @@ _CPU_HOST_INVENTORY_KEYS = (
 )
 
 
-def _native_cpu_host_inventory(
-    library: typing.Any,
+_CPU_HOST_PERSISTENT_KEYS = _CPU_HOST_INVENTORY_KEYS[:12]
+
+
+def _cpu_host_shape(
     item: typing.Any,
     *,
+    library: typing.Any,
     diis_history: int,
     max_iterations: int,
     requires_first_ao_derivatives: bool,
     model: typing.Any,
-) -> dict[str, int] | None:
-    """Use discovered shape-only authority; never retry a rejected native query.
-
-    No-library dry runs and older libraries retain the portable metadata bound.
-    Calculator requests pass their already loaded library, without implicit
-    provider loading or numerical work in the metadata-only planning API.
-    """
-    query = getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
-    if query is None:
-        return None
+) -> tuple[int, ...]:
+    """Marshal the same compact topology for the per-item and fleet ABIs."""
     orbital = item["orbital"]
     dimensions = (
         item["atoms"],
@@ -111,19 +106,11 @@ def _native_cpu_host_inventory(
         int(model.has_nonlocal_correlation),
         _ecp_workspace(item, library=library),
     )
-    shape = (ctypes.c_uint64 * len(dimensions))(
-        *(checked_bytes(value, "CPU KS host shape") for value in dimensions)
-    )
-    values = (ctypes.c_uint64 * len(_CPU_HOST_INVENTORY_KEYS))()
-    query.argtypes = [
-        ctypes.POINTER(ctypes.c_uint64),
-        ctypes.c_size_t,
-        ctypes.POINTER(ctypes.c_uint64),
-        ctypes.c_size_t,
-    ]
-    query.restype = ctypes.c_int
-    if query(shape, len(shape), values, len(values)):
-        raise ValueError("native CPU KS host inventory rejected shape or capacity")
+    return tuple(checked_bytes(value, "CPU KS host shape") for value in dimensions)
+
+
+def _cpu_host_result(values: typing.Sequence[int], model: typing.Any) -> dict[str, int]:
+    """Decode capacities without waiving the explicit nonlocal sub-budget."""
     inventory = {
         key: checked_bytes(value, f"KS {key}")
         for key, value in zip(_CPU_HOST_INVENTORY_KEYS, values, strict=True)
@@ -136,6 +123,83 @@ def _native_cpu_host_inventory(
             "KS nonlocal provider workspace exceeds nonlocal_memory_budget_bytes"
         )
     return inventory
+
+
+def _native_cpu_host_inventory(
+    library: typing.Any,
+    item: typing.Any,
+    **options: typing.Any,
+) -> dict[str, int] | None:
+    """Use discovered authority, retaining absent/old-library metadata sizing.
+
+    A rejected discovered query is never retried. This adapter neither loads a
+    provider nor performs numerical work during metadata-only planning.
+    """
+    query = getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
+    if query is None:
+        return None
+    dimensions = _cpu_host_shape(item, library=library, **options)
+    shape = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    values = (ctypes.c_uint64 * len(_CPU_HOST_INVENTORY_KEYS))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shape, len(shape), values, len(values)):
+        raise ValueError("native CPU KS host inventory rejected shape or capacity")
+    return _cpu_host_result(values, options["model"])
+
+
+def _native_cpu_fleet_inventory(
+    library: typing.Any,
+    items: typing.Sequence[typing.Any],
+    *,
+    workspace_floor: int,
+    **options: typing.Any,
+) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
+    """Query all retained owners and serialized workspace before publication.
+
+    The supplied consumer allowance is capacity metadata, not native admission
+    of its force provider. Only missing symbols permit the older per-item path.
+    """
+    query = getattr(library, "generativeqc_resource_ks_cpu_fleet_v1", None)
+    if query is None:
+        return None
+    dimensions = tuple(
+        value
+        for item in items
+        for value in _cpu_host_shape(item, library=library, **options)
+    )
+    shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    values = (ctypes.c_uint64 * (15 + 16 * len(items)))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(
+        shapes,
+        len(shapes),
+        checked_bytes(workspace_floor, "CPU KS workspace allowance"),
+        values,
+        len(values),
+    ):
+        raise ValueError("native CPU KS fleet inventory rejected shape or capacity")
+    aggregate = [checked_bytes(value, "CPU KS fleet capacity") for value in values[:15]]
+    if aggregate[12] != sum(aggregate[:12]) or aggregate[14] != sum(aggregate[12:14]):
+        raise ValueError("native CPU KS fleet inventory returned inconsistent peak")
+    host = [
+        _cpu_host_result(values[15 + 16 * index : 31 + 16 * index], options["model"])
+        for index in range(len(items))
+    ]
+    totals = dict(zip(_CPU_HOST_PERSISTENT_KEYS, aggregate[:12], strict=True))
+    return host, totals, aggregate[13]
 
 
 def _incremental_direct_jk_controls() -> dict[str, bool]:
@@ -755,11 +819,16 @@ def ks_resource_request(
         controls["application_precision_budget"] = asdict(_application_precision_budget)
     if backend == "cpu":
         controls["ao_grid_cache_cap"] = _CPU_AO_GRID_CACHE_CAP
+        native_fleet = getattr(library, "generativeqc_resource_ks_cpu_fleet_v1", None)
         controls["host_inventory"] = (
             "native-cpu-v1"
-            if getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
+            if native_fleet is not None
+            or getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
             is not None
             else "portable-metadata-v1"
+        )
+        controls["fleet_inventory"] = (
+            "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
         )
     if backend == "cuda":
         controls.update(
@@ -810,37 +879,50 @@ def ks_resource_request(
                 "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK or set both to 0/off"
             ),
         )
-    host = [
-        _item_host_inventory(
-            item,
+    native_inventory = (
+        _native_cpu_fleet_inventory(
+            library,
+            items,
+            workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
             diis_history=diis_history,
             max_iterations=history_iterations,
             requires_first_ao_derivatives=requires_first_ao_derivatives,
-            backend=backend,
             model=model,
-            library=library,
         )
-        for item in items
-    ]
+        if backend == "cpu"
+        else None
+    )
+    if native_inventory is not None:
+        host, totals, host_phase_peak = native_inventory
+    else:
+        host = [
+            _item_host_inventory(
+                item,
+                diis_history=diis_history,
+                max_iterations=history_iterations,
+                requires_first_ao_derivatives=requires_first_ao_derivatives,
+                backend=backend,
+                model=model,
+                library=library,
+            )
+            for item in items
+        ]
+        totals = {
+            key: checked_bytes(sum(inventory[key] for inventory in host))
+            for key in _CPU_HOST_PERSISTENT_KEYS
+        }
+        host_phase_peak = max(
+            max(inventory["setup_workspace"], inventory["scf_workspace"])
+            for inventory in host
+        )
+        if cpu_forces:
+            host_phase_peak = max(host_phase_peak, CPU_FORCE_HOST_CAP)
     estimates = []
-    for key in (
-        "metadata",
-        "grid",
-        "basis",
-        "warm_and_matrices",
-        "history",
-        "provider",
-        "solver_host",
-        "solver_binding_host",
-        "matrix_binding_host",
-        "structured_binding_host",
-        "xc_schedule_staging",
-        "nonlocal_provider",
-    ):
+    for key in _CPU_HOST_PERSISTENT_KEYS:
         estimates.append(
             ResourceEstimate(
                 f"all KS host {key}",
-                checked_bytes(sum(x[key] for x in host)),
+                totals[key],
                 "pageable",
                 first_phase,
                 last_phase,
@@ -851,9 +933,7 @@ def ks_resource_request(
     # retained across calls and overlaps the next setup/SCF replay; reserve it
     # separately rather than treating serialized execution as retired storage.
     # Keep the established diagnostic labels; kind records allocation lifetime.
-    host_phase_peak = max(max(x["setup_workspace"], x["scf_workspace"]) for x in host)
     if cpu_forces:
-        host_phase_peak = max(host_phase_peak, CPU_FORCE_HOST_CAP)
         exclusions += (
             "force JIT/compiler processes, loaded code, BLAS/runtime internal storage",
         )

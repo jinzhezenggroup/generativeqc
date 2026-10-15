@@ -315,6 +315,7 @@ def test_public_plans_route_ecp_independently_of_enclosing_inventory(
     hidden = set()
     if host_owner != "current":
         hidden.add("generativeqc_resource_hf_cpu_fleet_v1")
+        hidden.add("generativeqc_resource_ks_cpu_fleet_v1")
     if host_owner == "portable":
         hidden.update(
             (

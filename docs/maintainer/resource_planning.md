@@ -121,16 +121,23 @@ candidate composition, admission and leases remain frontend-owned; native
 fleet sizing is not complete endpoint/RSS allocation accounting.
 
 CPU KS calculator plans with a discovered
-`generativeqc_resource_ks_cpu_host_v1` query obtain their host capacities from
-the same allocation-free native sizing owner as the installed CLI. The query
-accounts for each retained numeric/value-metadata owner and serialized
-preparation/SCF workspace, including the optional restricted AO cache and
-nonlocal provider. It does not execute quadrature, integrals or SCF. Native
-rejection is not retried with a Python estimate; the schedule identity records
-which sizing owner is selected. Standalone no-library dry runs and older
-libraries retain portable metadata sizing without implicitly loading a library.
-This bridge does not constitute complete native admission/lease authority or
-full simultaneously-live allocator/RSS receipts; CUDA capacity formulas are unchanged.
+`generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
+owners as the installed CLI for per-item diagnostics, twelve retained-owner
+totals and serialized preparation/SCF workspace. The query validates the entire
+fleet and the complete signed-int64 retained-plus-workspace peak before
+publication. A caller-supplied workspace floor preserves the existing CPU force
+consumer allowance without implying native admission of that consumer; its
+eligibility and allowance policy remain frontend-owned. Restricted AO caches
+remain transient, and nonlocal provider sub-budgets remain explicit.
+
+Native rejection never retries Python sizing. Schedule identity records item
+and fleet authority separately. Libraries exposing only
+`generativeqc_resource_ks_cpu_host_v1` keep native per-item sizing and portable
+fleet composition; old/no-library dry runs retain portable metadata sizing
+without implicitly loading a provider. Neither sizing query executes
+quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
+allocator/RSS receipts remain outside this bridge; CUDA capacity formulas and
+fleet composition are unchanged.
 
 HF/KS ECP workspace sizing uses the already loaded library's
 `generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.

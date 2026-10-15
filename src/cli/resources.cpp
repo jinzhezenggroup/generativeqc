@@ -130,22 +130,42 @@ Json hf_inventory(const std::array<Bytes, 4>& inventory) {
   return result;
 }
 
+scf::CpuKsHostResourceShape cpu_ks_shape(const Topology& shape, Bytes atoms, Bytes spins,
+                                         const RunOptions& options, Bytes ecp_terms,
+                                         Bytes ecp_workspace) {
+  return {atoms,
+          shape.nbf,
+          shape.cartesian_nbf,
+          shape.shells,
+          shape.primitives,
+          spins,
+          shape.angular,
+          ecp_terms,
+          product({atoms, options.grid.radial_points, options.grid.angular_polar,
+                   options.grid.angular_azimuth}),
+          options.grid.radial_points,
+          options.grid.angular_polar,
+          256,
+          options.diis_history,
+          options.max_iterations.value_or(100),
+          options.method_name.starts_with("pbe"),
+          false,
+          ecp_workspace};
+}
+
+Json ks_inventory(const std::array<Bytes, 16>& inventory) {
+  Json result = Json::object();
+  for (std::size_t index = 0; index < inventory.size(); ++index)
+    result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
+  return result;
+}
+
 Json ks_inventory(const Topology& shape, Bytes atoms, Bytes spins, const RunOptions& options,
                   Bytes ecp_terms, Bytes ecp_workspace) {
   const bool cuda = options.backend == GENERATIVEQC_BACKEND_CUDA;
   if (!cuda) {
-    const auto inventory = scf::cpu_ks_host_resources(
-        {atoms, shape.nbf, shape.cartesian_nbf, shape.shells, shape.primitives, spins,
-         shape.angular, ecp_terms,
-         product({atoms, options.grid.radial_points, options.grid.angular_polar,
-                  options.grid.angular_azimuth}),
-         options.grid.radial_points, options.grid.angular_polar, 256, options.diis_history,
-         options.max_iterations.value_or(100), options.method_name.starts_with("pbe"), false,
-         ecp_workspace});
-    Json result = Json::object();
-    for (std::size_t index = 0; index < inventory.size(); ++index)
-      result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
-    return result;
+    return ks_inventory(scf::cpu_ks_host_resources(
+        cpu_ks_shape(shape, atoms, spins, options, ecp_terms, ecp_workspace)));
   }
   const Bytes orbital_aos = shape.nbf, cartesian_aos = shape.cartesian_nbf;
   const Bytes n2 = product({orbital_aos, orbital_aos}),
@@ -551,12 +571,13 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     retained = aggregate[0];
     workspace = aggregate[1];
   } else if (cpu && ks) {
-    const auto inventory =
-        ks_inventory(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace);
-    plan["item_inventory"] = inventory;
-    retained = inventory["retained"].get<Bytes>();
-    workspace = std::max(inventory["setup_workspace"].get<Bytes>(),
-                         inventory["scf_workspace"].get<Bytes>());
+    scf::CpuKsHostFleetResources fleet;
+    plan["item_inventory"] = ks_inventory(fleet.append(
+        cpu_ks_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        options.batch));
+    const auto aggregate = fleet.inventory();
+    retained = aggregate[12];
+    workspace = aggregate[13];
   } else if (hf && fitted) {
     if (auxiliary->nbf > 128) {
       plan["diagnostic"] = "CUDA DF inventory requires <=128 auxiliary AOs";
@@ -679,7 +700,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
   }
-  if (!(cpu && hf)) retained = product({options.batch, retained});
+  if (!cpu) retained = product({options.batch, retained});
   const Bytes host = sum({retained, workspace});
   plan["peak_bytes"] = {{"pageable", host}, {"host", host}, {"pinned", 0}, {"device", device}};
   if (device) plan["peak_bytes"]["device:" + std::to_string(options.device_id)] = device;

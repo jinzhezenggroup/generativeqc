@@ -421,6 +421,64 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
 
+    def test_cpu_ks_cli_uses_shared_native_fleet_inventory(self) -> None:
+        """Homogeneous repeats retain each owner but share the phase workspace."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_ks_cpu_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in KS_INVENTORY_METHODS:
+            with self.subTest(method=method):
+                run = self.resources(
+                    "--method", method, "--batch", "3", "--max-iterations", "250"
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                plan = json.loads(run.stdout)
+                radial, polar, azimuth = plan["controls"]["grid"]
+                item = (
+                    2,
+                    2,
+                    2,
+                    2,
+                    6,
+                    2 if method.endswith("uks") else 1,
+                    0,
+                    0,
+                    2 * radial * polar * azimuth,
+                    radial,
+                    polar,
+                    256,
+                    8,
+                    250,
+                    int(method.startswith("pbe")),
+                    0,
+                    0,
+                )
+                shapes = (ctypes.c_uint64 * 51)(*(item * 3))
+                values = (ctypes.c_uint64 * 63)()
+                self.assertEqual(query(shapes, len(shapes), 0, values, len(values)), 0)
+                self.assertEqual(plan["resident_bytes"]["pageable"], values[12])
+                self.assertEqual(plan["peak_bytes"]["host"], values[14])
+                self.assertEqual(plan["item_inventory"]["retained"] * 3, values[12])
+                for budget, status in ((values[14], 0), (values[14] - 1, 2)):
+                    bounded = self.resources(
+                        "--method",
+                        method,
+                        "--batch",
+                        "3",
+                        "--max-iterations",
+                        "250",
+                        "--host-bytes",
+                        str(budget),
+                    )
+                    self.assertEqual(bounded.returncode, status, bounded.stderr)
+
     def test_cpu_ks_cli_uses_shared_native_host_inventory(self) -> None:
         """The Python-free command exposes each authoritative host owner."""
         library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))

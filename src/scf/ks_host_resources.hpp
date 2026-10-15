@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <initializer_list>
@@ -137,4 +138,61 @@ inline std::array<std::uint64_t, 16> cpu_ks_host_resources(const CpuKsHostResour
           sum({integrals, quadrature, basis, shape.ecp_workspace}),
           sum({matrix, xc_tile, nonlocal_work, cache})};
 }
+
+/** Aggregate retained owners and serialized workspace across a CPU KS fleet.
+ * The optional floor is an explicitly supplied consumer-workspace allowance,
+ * not admission of that consumer. Append validates the complete peak before
+ * changing state; repetitions avoid materializing homogeneous descriptors.
+ */
+class CpuKsHostFleetResources {
+ public:
+  explicit CpuKsHostFleetResources(std::uint64_t workspace_floor = 0)
+      : workspace_(checked_sum(0, workspace_floor)), peak_(workspace_) {}
+
+  std::array<std::uint64_t, 16> append(const CpuKsHostResourceShape& shape,
+                                       std::uint64_t copies = 1) {
+    if (!copies) throw std::invalid_argument("CPU KS fleet repetition must be positive");
+    const auto item = cpu_ks_host_resources(shape);
+    auto next_totals = totals_;
+    for (std::size_t index = 0; index < next_totals.size(); ++index)
+      next_totals[index] = checked_sum(next_totals[index], checked_product(copies, item[index]));
+    const auto next_retained = checked_sum(retained_, checked_product(copies, item[13]));
+    const auto next_workspace = std::max({workspace_, item[14], item[15]});
+    const auto next_peak = checked_sum(next_retained, next_workspace);
+    totals_ = next_totals;
+    retained_ = next_retained;
+    workspace_ = next_workspace;
+    peak_ = next_peak;
+    return item;
+  }
+
+  /** Twelve persistent component totals, then retained/workspace/peak bytes. */
+  std::array<std::uint64_t, 15> inventory() const {
+    std::array<std::uint64_t, 15> result{};
+    std::copy(totals_.begin(), totals_.end(), result.begin());
+    result[12] = retained_;
+    result[13] = workspace_;
+    result[14] = peak_;
+    return result;
+  }
+
+ private:
+  static std::uint64_t checked_sum(std::uint64_t left, std::uint64_t right) {
+    constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
+    if (right > static_cast<std::uint64_t>(maximum) - left)
+      throw std::overflow_error("CPU KS fleet capacity sum overflows");
+    return left + right;
+  }
+
+  static std::uint64_t checked_product(std::uint64_t left, std::uint64_t right) {
+    constexpr auto maximum = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+    if (left > maximum || right > maximum || (right && left > maximum / right))
+      throw std::overflow_error("CPU KS fleet capacity product overflows");
+    return left * right;
+  }
+
+  std::array<std::uint64_t, 12> totals_{};
+  std::uint64_t retained_{0}, workspace_{0}, peak_{0};
+};
+
 }  // namespace generativeqc::scf
