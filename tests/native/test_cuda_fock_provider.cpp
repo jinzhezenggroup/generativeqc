@@ -2635,6 +2635,134 @@ void generated_coulomb_budget() {
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }
 
+/** Exercise generated and native DDDD J with an independent CPU ERI oracle.
+ * Poison both planes before every build: clearing/folding must include the
+ * native/materialized writer, batch offsets, zero density and spin summation.
+ * Numerical gates deliberately do not promise bitwise-reproducible atomics.
+ */
+void compensated_generated_coulomb() {
+  const auto* previous = std::getenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES");
+  const bool had_policy = previous != nullptr;
+  const std::string saved_policy = previous ? previous : "";
+  for (const auto* policy : {"0", "1"}) {
+    require(setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", policy, 1) == 0,
+            "cannot select DDDD value schedule");
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL})
+      for (unsigned portfolio : {0U, 1U, 2U, 3U}) {
+        generativeqc::core::System first;
+        first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+        if (portfolio != 1U)
+          first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 1, {{0.6, 1.0}}}};
+        if (portfolio != 0U) {
+          first.shells.push_back({0, 2, {{0.9, 0.8}, {0.3, 0.2}}});
+          first.shells.push_back({1, 2, {{0.7, 1.0}}});
+        }
+        if (portfolio == 3U)
+          first.shells = {
+              {0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 2, {{0.7, 1.0}}}, {0, 3, {{0.6, 1.0}}}};
+        first.electron_count = 2;
+        first.basis_representation = representation;
+        auto second = first;
+        second.atoms[1].position[2] += 0.17;
+        second.shells.back().primitives[0].exponent *= 1.2;
+        std::string detail;
+        for (auto* system : {&first, &second})
+          require(generativeqc::molecule::validate_and_normalize(*system, detail) ==
+                      GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+        const std::array oracles{generativeqc::integrals::build_integrals(first, false),
+                                 generativeqc::integrals::build_integrals(second, false)};
+        const auto dimension = oracles[0].nbf;
+        const auto matrix = dimension * dimension;
+        std::vector<double> alpha(2 * matrix), beta(2 * matrix);
+        for (std::size_t item = 0; item < 2; ++item)
+          for (std::size_t index = 0; index < matrix; ++index) {
+            const double pair = static_cast<double>(index / dimension + index % dimension);
+            alpha[item * matrix + index] = std::cos(0.37 * pair + item) / dimension;
+            beta[item * matrix + index] = std::sin(0.23 * pair - item) / dimension;
+          }
+        CudaDirectJkPlan* raw{};
+        CudaDirectJkDiagnostic diagnostic;
+        require(create_cuda_direct_jk_plan(0, {first, second}, 0, 0.0, 64U << 20, &raw, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+            raw, destroy_cuda_direct_jk_plan);
+        auto* owner = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                               : plan->generated_coulomb.get();
+        require(owner && (owner->value_capability ||
+                          (plan->generated_exchange &&
+                           plan->generated_exchange->bounded_value_capability)),
+                "missing complete generated/native/bounded J owner");
+        const auto cartesian = static_cast<std::size_t>(owner->batch.batch_size) *
+                               owner->batch.direct_nbf * owner->batch.direct_nbf;
+        const auto* original_correction = owner->batch.reference_fock_correction;
+        DeviceMatrix device_alpha(alpha), device_beta(beta), zero(std::vector<double>(2 * matrix)),
+            result(std::vector<double>(2 * matrix, 123.0));
+        for (bool prepared : {false, true}) {
+          if ((prepared && !plan->generated_exchange) || (!prepared && !owner->value_capability))
+            continue;
+          for (bool unrestricted : {false, true})
+            for (bool empty : {false, true, false}) {
+              std::vector<double> expected;
+              for (std::size_t item = 0; item < 2; ++item) {
+                const auto begin = static_cast<std::ptrdiff_t>(item * matrix);
+                std::vector<double> item_alpha(alpha.begin() + begin,
+                                               alpha.begin() + begin + matrix);
+                std::vector<double> item_beta(beta.begin() + begin, beta.begin() + begin + matrix);
+                if (empty) {
+                  std::fill(item_alpha.begin(), item_alpha.end(), 0.0);
+                  std::fill(item_beta.begin(), item_beta.end(), 0.0);
+                }
+                auto spec =
+                    make_hf_fock_spec(unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted);
+                spec.exchange.present = false;
+                const auto oracle = build_exact_direct_jk(
+                    resolve_fock_build(spec, FockBackend::Cpu, 0.0), dimension, oracles[item].eri,
+                    item_alpha, unrestricted ? item_beta : std::vector<double>{});
+                expected.insert(expected.end(), oracle.coulomb.begin(), oracle.coulomb.end());
+              }
+              check(cudaMemsetAsync(owner->coulomb, 0xff, 2 * cartesian * sizeof(double),
+                                    owner->stream));
+              const auto* input_alpha = empty ? zero.pointer : device_alpha.pointer;
+              const auto* input_beta =
+                  unrestricted ? (empty ? zero.pointer : device_beta.pointer) : nullptr;
+              check(prepared ? generativeqc::scf::cuda_execution::enqueue_generated_coulomb(
+                                   *plan->generated_exchange, unrestricted, input_alpha, input_beta,
+                                   result.pointer)
+                             : generativeqc::scf::cuda_execution::enqueue_generated_coulomb(
+                                   *owner, input_alpha, input_beta, result.pointer));
+              std::vector<double> correction(cartesian);
+              check(cudaMemcpyAsync(correction.data(), owner->coulomb + cartesian,
+                                    cartesian * sizeof(double), cudaMemcpyDeviceToHost,
+                                    owner->stream));
+              check(cudaStreamSynchronize(owner->stream));
+              result.verify(expected);
+              require(owner->batch.reference_fock_correction == original_correction,
+                      "J changed the shared K/derivative batch binding");
+              bool recovered_low_word = false;
+              for (double value : correction) {
+                require(std::isfinite(value), "J correction plane was not cleared");
+                if (empty) require(value == 0.0, "zero density retained an old J correction");
+                recovered_low_word = recovered_low_word || value != 0.0;
+              }
+              if (!empty)
+                require(recovered_low_word, "generated/native J did not retain scatter low words");
+            }
+        }
+        device_alpha.verify(alpha);
+        device_beta.verify(beta);
+      }
+  }
+  require(
+      (had_policy ? setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", saved_policy.c_str(), 1)
+                  : unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")) == 0,
+      "cannot restore DDDD value schedule");
+  std::cout
+      << "CUDA compensated generated/native/bounded J, spins, projections and plane-reset gates "
+         "PASS\n";
+}
+
 void direct_providers(bool through_f_response, bool eri_tiles_only = false,
                       bool mixed_force_domains = false, unsigned force_domain_angular = 3U,
                       const char* spd_selector = "spatial-reuse",
@@ -2939,6 +3067,11 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
+      generated_coulomb_budget();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--compensated-j-only") {
+      compensated_generated_coulomb();
       generated_coulomb_budget();
       return 0;
     }

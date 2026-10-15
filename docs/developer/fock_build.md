@@ -25,6 +25,18 @@ insufficient optional capacity. KS planning charges both owners; warm J calls
 keep their density and result on the provider stream. Qualification rationale
 is tracked in the [pure-J candidate note](../../.agents/notes/proposed/2026-09-23-generated-pure-j-consumer.md).
 
+This pure-J owner retains a Cartesian FP64 correction plane alongside the sum.
+Generated shell scatter, native dddd, and any admitted bounded-shell completion
+write the same compensated output. Each build clears both planes and folds the
+correction once after all J writers, before public-AO projection. This reduces
+unordered-scatter roundoff without promising bitwise reproducibility or changing
+screening and SCF convergence thresholds. The additional plane is included in
+actual owner charges and shape-only admission bounds; insufficient capacity
+retains the existing explicit provider fallback. J binds the correction only to
+launch-local batch views, never to shared K or derivative metadata. See the
+[compensation decision](../../.agents/notes/implemented/numerics/2026-10-15-generated-direct-j-compensation.md)
+for qualification and tradeoffs.
+
 Complete generated/native full-range J/K coverage remains automatic. Through-f
 value requests use the retained canonical source by default, or the generic
 source when optional canonical capacity is unavailable. The Direct-HF bounded

@@ -1,0 +1,109 @@
+{
+  "schema": "generativeqc.rejected-order-six-retention.v1",
+  "date": "2026-10-15",
+  "source_base_commit": "cb8781fb1bdcfb9166ef07cfed463c0482dea752",
+  "source_base_branch": "origin/master at task-start fetch",
+  "decision": "reject cooperative-six mixed consumer; retain production schedules and both README plots",
+  "publication_status": "diagnostic_only_not_promoted",
+  "source_binding": "unqualified: advertised native identity differs from frozen experimental inventory; consumer hashes match",
+  "native_rebuild": "stopped, exit 143; no final-source binary or native 96-atom/DF qualification claimed",
+  "diagnostic_completion": {
+    "native_populations": 4,
+    "native_observations": 48,
+    "failed_attempts_retained": 4,
+    "maximum_energy_error_eh": 1.5916157281026244e-11,
+    "maximum_force_error_eh_per_bohr": 3.7255087036169865e-11,
+    "energy_gate_eh": 1e-08,
+    "force_gate_eh_per_bohr": 1e-07
+  },
+  "validation": {
+    "final_retained_host_tests": "40 passed",
+    "independent_gpu_derivative_tests": "6 passed; Slurm n5 job 1606",
+    "complete_endpoint_jobs": {
+      "12_atoms": 1608,
+      "48_atoms": 1611
+    },
+    "frozen_source_identity_and_remote_artifact_checks": "verified; intermediate build identity remains explicitly stale"
+  },
+  "basis_inventory": {
+    "def2-SVP": {
+      "atoms": 96,
+      "spherical_aos": 768,
+      "s_p_d_shells": [
+        224,
+        128,
+        32
+      ],
+      "zero_contraction_coefficients": 0,
+      "unscreened_dd_by_dp_inventory_bound": 2162688,
+      "basis_checksum": "6002092fea25331281cc095dc6dc41a6a3d7a2f0c88f82a1fbceac01225a897c"
+    },
+    "def2-mTZVPP": {
+      "atoms": 96,
+      "spherical_aos": 1088,
+      "s_p_d_shells": [
+        288,
+        160,
+        64
+      ],
+      "zero_contraction_coefficients": 0,
+      "unscreened_dd_by_dp_inventory_bound": 21299200,
+      "basis_checksum": "b769650c71373053790db59191e68f35e20e7cfab85e011776aea1450d1a8d6f"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "build/cuda-release-sm120/libgenerativeqc.so",
+      "sha256": "d7167a84b53bd402b09694d9a194d2b3d1db945145bbb0b4b4764be6b84d65bd"
+    },
+    {
+      "path": "build/r2scan3c-force-aot/libgenerativeqc_stationary_r2scan_rks.so",
+      "sha256": "24a198c4dc59383e45b014b65703f94bef5f19810f0b2806cbf242d4151f27af"
+    },
+    {
+      "path": "build/r2scan3c-force-aot/libgenerativeqc_stationary_r2scan_rks_spd.so",
+      "sha256": "718fc3aaff12fafe94855cde9fb8fe5938776dd85774bd666707939e07cfb11c"
+    },
+    {
+      "path": "build/r2scan3c-force-aot/generativeqc_stationary_r2scan_rks.json",
+      "sha256": "b291844cdc643696dd8bf8105eb0d7432c04ae0c2bbb12af17eb123a19ee9af6"
+    },
+    {
+      "path": "build/r2scan3c-force-aot/generativeqc_stationary_r2scan_rks_spd.json",
+      "sha256": "60289d800be411a34ae8730005570281c4063af289241f1e318e032d82ef059b"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "diagnostic-report",
+      "bytes": 7237,
+      "sha256": "976df5d66b7be5c8e54a655fb144bf7749cf685053e295c12fb730d1f22afc4d"
+    },
+    {
+      "path": "reduce.py",
+      "role": "numerical-recheck-and-stale-source-receipt-gate",
+      "bytes": 3566,
+      "sha256": "86a5d42da1f69f1ec40b05e09cb3c9d82f83e89ab1d1b5a32e6704bb5af40dcd"
+    },
+    {
+      "path": "observations.json.xz",
+      "role": "all-diagnostic-observations-and-failed-attempts",
+      "bytes": 53732,
+      "sha256": "d31bb6fda55b7766339d8285ecc0ade8c643672ac64261d5af563e9b89d60f0d"
+    },
+    {
+      "path": "receipts.json.xz",
+      "role": "build-test-launcher-and-artifact-receipts",
+      "bytes": 42076,
+      "sha256": "0e9cd9f3dd929b4844c977d57851f79646ac3cbca60a68a0a04b51a2a880854e"
+    },
+    {
+      "path": "experiment.patch.xz",
+      "role": "rejected-experiment-and-independent-tests",
+      "bytes": 7768,
+      "sha256": "30ad1a1fc822fcec322b4b6f27d2c564e75efea58ff828881e044a0bc5c188ce"
+    }
+  ],
+  "external_archives": []
+}

@@ -38,6 +38,29 @@ def test_precision_consumer_provenance_is_retained() -> None:
         assert len(sources[f"python/generativeqc/{filename}"]) == 64
 
 
+def test_force_schedule_consumer_provenance_is_retained() -> None:
+    """Bind runtime schedule experiments to their actual native consumers."""
+    sources = source_hashes()
+    for filename in (
+        "direct_force_class_domains.cu",
+        "direct_force_class_domains.hpp",
+        "direct_force_class_pages.cuh",
+        "direct_force_diagnostic.hpp",
+        "direct_spd_force_schedule.hpp",
+    ):
+        assert len(sources[f"src/scf/cuda/{filename}"]) == 64
+    compiler_owner = (
+        "python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
+    )
+    assert len(sources[compiler_owner]) == 64
+    for path in (
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_final_validation_policy.hpp",
+        "python/generativeqc/resources_hf.py",
+    ):
+        assert len(sources[path]) == 64
+
+
 def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
     spec = specification("hf")
     assert spec.native_method == "rhf"
@@ -349,12 +372,27 @@ def test_reference_timeout_never_skips_native_runner(
     assert json.loads((point / "native.json").read_text())["native_ran"]
 
 
-def test_composite_protocol_retains_basis_and_corrections() -> None:
-    spec = specification("r2scan-3c")
-    result = protocol(3, load_r2scan3c_basis(), GridSpec(), 5, benchmark=spec)
+@pytest.mark.parametrize("density_fitting", (False, True))
+def test_composite_protocol_retains_basis_and_corrections(
+    density_fitting: bool,
+) -> None:
+    """Both README panels retain the defining basis and full 3c corrections."""
+    spec = replace(specification("r2scan-3c"), density_fitting=density_fitting)
+    result = protocol(
+        3,
+        load_r2scan3c_basis(),
+        GridSpec(),
+        5,
+        benchmark=spec,
+        auxiliary_basis=SimpleNamespace(
+            name="explicit-jkfit", identity="auxiliary-identity"
+        ),
+    )
     assert spec.native_method == "r2scan-3c-rks"
     assert spec.reference_xc == "R2SCAN"
     assert result["basis"] == "def2-mTZVPP"
+    assert result["representation"] == "spherical"
+    assert result["density_fitting"] == density_fitting
     assert result["aos"] == 34
     assert result["d4_parameters"]["s9"] == 2.0
     assert "included in every endpoint" in result["reference_corrections"]

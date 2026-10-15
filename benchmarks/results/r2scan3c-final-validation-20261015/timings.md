@@ -22,24 +22,25 @@
 | r²SCAN | 12 (96) | 8.021 | 11.953 | 1.012 | 1.032 |
 | r²SCAN | 48 (384) | 37.679 | 46.129 | 5.453 | 6.378 [6.359–7.116]† |
 | r²SCAN | 96 (768) | 118.007 | 75.886 | 17.154 | 14.594 [11.992–15.876]† |
-| r²SCAN-3c | 3 (34) | 3.370 | 5.964 | 0.210 | 0.801 |
-| r²SCAN-3c | 12 (136) | 9.209 | 15.777 | 1.832 | 1.568 |
-| r²SCAN-3c | 48 (544) | 83.585 | 79.081 | 22.341 | 11.195 |
-| r²SCAN-3c | 96 (1088) | 538.312 | 169.868 | 90.092 | 26.588 [22.168–28.807]† |
+| r²SCAN-3c | 3 (34) | 1.426 | 20.882 | 0.187 | 0.867 |
+| r²SCAN-3c | 12 (136) | 9.216 | 31.155 | 1.772 | 1.708 |
+| r²SCAN-3c | 48 (544) | 83.937 | 93.431 | 21.951 | 11.364 |
+| r²SCAN-3c | 96 (1088) | 456.842 | 168.718 | 88.312 | 31.250 [29.020–35.760]† |
 | M06-2X | 3 (24) | 4.187 | 15.205 | 0.260 | 1.051 |
 | M06-2X | 12 (96) | 7.919 | 25.024 | 1.430 | 1.775 |
 | M06-2X | 48 (384) | 46.884 | 54.767 | 6.824 | 5.294 [4.994–7.289]† |
 | M06-2X | 96 (768) | 150.704 | 97.687 | 20.014 | 13.406 |
-| ωB97M-V | 3 (24) | 7.059 | 27.917 | 0.387 | 2.575 |
-| ωB97M-V | 12 (96) | 30.388 | 109.918 | 1.651 | 8.837 |
-| ωB97M-V | 48 (384) | 253.595 | 1216.489 | 11.406 | 105.410 |
-| ωB97M-V | 96 (768) | 1332.267 | timeout | 59.321 | timeout |
+| ωB97M-V | 3 (24) | 7.299 | 27.917 | 0.386 | 2.575 |
+| ωB97M-V | 12 (96) | 30.861 | 109.918 | 1.641 | 8.837 |
+| ωB97M-V | 48 (384) | 255.233 | 1216.489 | 11.444 | 105.410 |
+| ωB97M-V | 96 (768) | 1336.273 | timeout | 59.897 | timeout |
 
 Warm cells show the median of all five complete endpoints. † marks differing
 SCF work and includes the full range; timings are never normalized by iterations.
 ‡ marks completed native calls without an independent accuracy check for that geometry.
 A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
+ωB97M-V: 3/12: native cache primed.
 
 ## Observed SCF work
 
@@ -73,7 +74,7 @@ between engines; complete endpoint time includes analytic forces as well.
 | r²SCAN-3c | 3 | 13/13 | 38/39 | 1/1 | 1/2 |
 | r²SCAN-3c | 12 | 18/19 | 42/43 | 1/1 | 1/2 |
 | r²SCAN-3c | 48 | 19/19 | 59/60 | 1/1 | 4/5 |
-| r²SCAN-3c | 96 | 32/32 | 66/67 | 1/1 | 1/2, 3/4, 4/5 |
+| r²SCAN-3c | 96 | 26/26 | 59/60 | 1/1 | 4/5, 5/6, 7/8 |
 | M06-2X | 3 | 13/14 | 35/36 | 1/1 | 1/2 |
 | M06-2X | 12 | 19/20 | 39/40 | 1/1 | 1/2 |
 | M06-2X | 48 | 18/19 | 41/42 | 1/1 | 1/2, 2/3, 3/4 |
