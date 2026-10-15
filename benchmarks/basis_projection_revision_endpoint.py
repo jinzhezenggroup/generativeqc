@@ -18,6 +18,7 @@ import typing
 from pathlib import Path
 
 import generativeqc
+from _support import raw_output_path
 from generativeqc import Calculator, projected_singlepoint
 from generativeqc.autotune import source_identity
 
@@ -138,7 +139,7 @@ def main() -> None:
     parser.add_argument("--molecule", choices=("h2", "lih", "water"), action="append")
     parser.add_argument("--repeats", type=int, default=21)
     parser.add_argument("--warmups", type=int, default=3)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.repeats < 1 or args.warmups < 0 or args.output.exists():
         parser.error(
@@ -149,8 +150,6 @@ def main() -> None:
     ):
         parser.error("source-sha must be the full archived Git revision")
     source_root = Path(generativeqc.__file__).resolve().parents[2]
-    if args.output.resolve().is_relative_to(source_root / "benchmarks" / "results"):
-        parser.error("raw output belongs in ignored local artifacts")
     library_path = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     library = ctypes.CDLL(str(library_path))
     library.generativeqc_get_source_identity.restype = ctypes.c_char_p
