@@ -1,7 +1,13 @@
 # Decision: qualify XC scalar optimizations by consumer metadata
 
-Status: implemented
+Status: superseded by the generic consumer policy; original #2506 rationale retained below
 Date: 2026-10-15
+
+The user rejected moving a method-specific exception into manifest metadata as
+insufficient generalization. The consumer-only replacement and its independent
+qualification gates are tracked in
+`.agents/notes/implemented/performance/2026-10-15-generic-xc-force-powers.md`. The original
+admission decision below is historical, not the current schedule contract.
 
 ## Problem
 

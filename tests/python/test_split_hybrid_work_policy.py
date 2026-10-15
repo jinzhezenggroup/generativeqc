@@ -72,61 +72,43 @@ def test_split_mgga_components_lower_bounded_integer_powers_only_when_requested(
 def test_split_consumers_qualify_integer_power_schedule_separately(
     identifier: str, scalar_type: str, spin: str
 ) -> None:
-    """Only the qualified FP64 M06 RKS force consumer enables the schedule."""
+    """Every FP64 force graph lowers powers; every SCF/float graph stays put."""
     semilocal = resolve_method(identifier, spin=spin).primitives[0].functional
     code = SPLIT_HYBRIDS[identifier]["functional_code"]
     force_source = _emit_composed_point(code, semilocal, scalar_type=scalar_type)
+    renamed = replace(semilocal, identifier="structural-functional-alias")
+    assert _emit_composed_point(code, renamed, scalar_type=scalar_type) == force_source
     point_source, _, _ = emit_split_hybrid_device_body(
         identifier, scalar_type=scalar_type
     )
     pattern = r"\bpowf?\([^,\n]+,\s*[-+]?(?:2|3|4)(?:\.0)?f?\)"
     assert re.search(pattern, point_source)
-    assert bool(re.search(pattern, force_source)) == (
-        identifier != "M06-2X" or scalar_type != "double" or spin != "unpolarized"
-    )
+    assert bool(re.search(pattern, force_source)) == (scalar_type != "double")
 
 
-@pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
-@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("scalar_type", ("double", "float"))
 @pytest.mark.parametrize(
     "consumer", (XcScalarConsumer.SCF_POINT, XcScalarConsumer.STATIONARY_FORCE)
 )
-def test_scalar_schedule_selects_only_qualified_consumer(
-    identifier: str, spin: str, scalar_type: str, consumer: XcScalarConsumer
+def test_scalar_schedule_depends_only_on_consumer_and_precision(
+    scalar_type: str, consumer: XcScalarConsumer
 ) -> None:
-    code = SPLIT_HYBRIDS[identifier]["functional_code"]
-    schedule = select_xc_scalar_schedule(
-        code, consumer=consumer, spin=spin, scalar_type=scalar_type
-    )
+    schedule = select_xc_scalar_schedule(consumer=consumer, scalar_type=scalar_type)
     assert schedule.lower_integer_powers is (
-        identifier == "M06-2X"
-        and spin == "unpolarized"
-        and scalar_type == "double"
-        and consumer is XcScalarConsumer.STATIONARY_FORCE
+        scalar_type == "double" and consumer is XcScalarConsumer.STATIONARY_FORCE
     )
 
 
 def test_unknown_or_invalid_scalar_schedule_requests_fail_closed() -> None:
-    assert not select_xc_scalar_schedule(
-        999999,
-        consumer=XcScalarConsumer.STATIONARY_FORCE,
-        spin="unpolarized",
-        scalar_type="double",
-    ).lower_integer_powers
     with pytest.raises(TypeError, match="consumer"):
         select_xc_scalar_schedule(
-            131522,
             consumer="stationary_force",
-            spin="unpolarized",
             scalar_type="double",
         )
-    with pytest.raises(ValueError, match="spin"):
+    with pytest.raises(ValueError, match="precision"):
         select_xc_scalar_schedule(
-            131522,
             consumer=XcScalarConsumer.STATIONARY_FORCE,
-            spin="invalid",
-            scalar_type="double",
+            scalar_type="half",
         )
 
 
@@ -153,6 +135,24 @@ def test_stoll_rewrite_fails_closed_on_changed_modified_pw_parameters() -> None:
     )
     with pytest.raises(MapleImportError, match="modified PW parameter policy"):
         stabilize_m06_2x_stoll(raw, altered, record)
+
+
+@pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
+@pytest.mark.parametrize("consumer", ("scf_point", "stationary_force"))
+def test_acceptance_header_binds_both_production_spins_without_patching_scf(
+    identifier: str, consumer: str
+) -> None:
+    from tools.validate_split_hybrid_cuda import validation_header
+
+    baseline = emit_split_hybrid_device(identifier)
+    header, hashes = validation_header(identifier, consumer)
+    assert emit_split_hybrid_device(identifier) == baseline
+    if consumer == "scf_point":
+        assert header == baseline
+        assert not hashes
+    else:
+        assert header != baseline
+        assert set(hashes) == {"unpolarized", "polarized"}
 
 
 def test_stoll_rewrite_uses_physical_spin_nodes_and_keeps_source_guard() -> None:

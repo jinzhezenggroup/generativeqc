@@ -102,46 +102,6 @@ def _manifest_cuda_fp64_local_ao(path: Path = MANIFEST) -> frozenset[str]:
     return frozenset(selected)
 
 
-def _manifest_cuda_small_integer_power_schedules(
-    path: Path = MANIFEST,
-) -> frozenset[tuple[str, str, str, str]]:
-    """Admit scalar schedules only for independently qualified consumers.
-
-    A schedule is tied to a registered method, consumer, spin and precision.
-    In particular, it cannot implicitly change SCF point arithmetic or FP32.
-    """
-    methods = _manifest_methods(path)
-    rows = json.loads(path.read_text(encoding="utf-8")).get("cuda_scalar_schedules", [])
-    if not isinstance(rows, list):
-        raise MapleImportError("CUDA scalar schedules must be a list")
-    fields = {
-        "method",
-        "consumer",
-        "spin",
-        "scalar_type",
-        "lower_integer_powers",
-    }
-    qualified: set[tuple[str, str, str, str]] = set()
-    for row in rows:
-        if (
-            not isinstance(row, dict)
-            or set(row) != fields
-            or row["method"] not in methods
-            or row["consumer"] != "stationary_force"
-            or row["spin"] not in ("unpolarized", "polarized")
-            or row["scalar_type"] != "double"
-            or row["lower_integer_powers"] is not True
-        ):
-            raise MapleImportError(
-                "CUDA scalar schedule requires a qualified FP64 stationary-force entry"
-            )
-        key = (row["method"], row["consumer"], row["spin"], row["scalar_type"])
-        if key in qualified:
-            raise MapleImportError("duplicate CUDA scalar schedule qualification")
-        qualified.add(key)
-    return frozenset(qualified)
-
-
 def _records() -> dict[str, dict]:
     return {
         record["name"]: record for record in libxc_bulk.read_catalog()["registrations"]
@@ -404,14 +364,6 @@ def emit_registry(path: Path = MANIFEST) -> str:
 def emit_python_registry(path: Path = MANIFEST) -> str:
     """Emit typed immutable mappings without changing existing consumer APIs."""
     entries = registry_entries(path)
-    codes = {entry["identifier"]: entry["code"] for entry in entries}
-    schedule_rows = [
-        f"    ({codes[method]}, {json.dumps(consumer)}, "
-        f"{json.dumps(spin)}, {json.dumps(scalar_type)}),"
-        for method, consumer, spin, scalar_type in sorted(
-            _manifest_cuda_small_integer_power_schedules(path)
-        )
-    ]
     rows = []
     for entry in entries:
         rows.extend(
@@ -458,9 +410,6 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
             '    for component, _ in record["components"]',
             ")",
             "",
-            "CUDA_SMALL_INTEGER_POWER_SCHEDULES: frozenset[tuple[int, str, str, str]] = frozenset({",
-            *schedule_rows,
-            "})",
             "# fmt: on",
             "",
         ]

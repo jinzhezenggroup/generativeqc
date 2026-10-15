@@ -1,47 +1,45 @@
-"""Qualified XC scalar schedules, independent of functional spelling.
+"""Consumer-owned XC scalar schedules, independent of method and spin.
 
-The generic graph lowering is mathematical IR; only evidence-backed
-consumer/spin/precision combinations may enable a changed arithmetic order.
+Bounded power expansion is useful in the stationary derivative program, but a
+different rounding path in the self-consistency map can add whole Fock builds.
+Keep that distinction at the consumer boundary, not in a functional registry.
 """
 
 from dataclasses import dataclass
 from enum import Enum
 
-from ._generated_split_hybrids import CUDA_SMALL_INTEGER_POWER_SCHEDULES
-
 
 class XcScalarConsumer(str, Enum):
+    """Distinguish a stationary derivative from the iterative SCF map."""
+
     SCF_POINT = "scf_point"
     STATIONARY_FORCE = "stationary_force"
 
 
 @dataclass(frozen=True, slots=True)
 class XcScalarSchedule:
+    """Bounded arithmetic transformations for one scalar consumer/precision."""
+
     lower_integer_powers: bool = False
 
 
 def select_xc_scalar_schedule(
-    functional_code: int,
     *,
     consumer: XcScalarConsumer,
-    spin: str,
     scalar_type: str,
 ) -> XcScalarSchedule:
-    """Select an admitted arithmetic schedule; otherwise preserve old ordering."""
-    if type(functional_code) is not int or functional_code < 0:
-        raise ValueError("scalar schedule requires a nonnegative functional code")
+    """Expand bounded FP64 force powers without modifying any SCF map.
+
+    Method identity and spin are deliberately absent: the shared IR pass acts
+    after independent polarized AD and before either spin binding. Float keeps
+    its original schedule; changing precision requires separate qualification.
+    """
     if not isinstance(consumer, XcScalarConsumer):
         raise TypeError("scalar schedule requires an XC consumer")
-    if spin not in ("unpolarized", "polarized"):
-        raise ValueError("scalar schedule requires a supported spin mode")
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar schedule requires double or float precision")
     return XcScalarSchedule(
         lower_integer_powers=(
-            functional_code,
-            consumer.value,
-            spin,
-            scalar_type,
+            consumer is XcScalarConsumer.STATIONARY_FORCE and scalar_type == "double"
         )
-        in CUDA_SMALL_INTEGER_POWER_SCHEDULES
     )
