@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 from contextlib import contextmanager
+from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -158,7 +159,7 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     record: dict[str, Any] = {
         "schema": (
-            "generativeqc.pbe0-xc-point-family-pairs.v2"
+            "generativeqc.pbe0-xc-point-family-pairs.v3"
             if args.point_specialization
             else (
                 "generativeqc.pbe0-xc-point-batch-pairs.v1"
@@ -224,6 +225,11 @@ def main() -> None:
             os.environ.get("INSPIRE_JOB_NAME") if args.point_specialization else None
         ),
         "feasibility": args.feasibility,
+        "lifecycle_timing": {
+            "version": 1,
+            "scope": "own-work segments; interleaving and provenance gaps retained separately",
+            "continuous_cold_wallclock": False,
+        },
         "preparation": [],
         "setup": [],
         "priming": [],
@@ -232,6 +238,7 @@ def main() -> None:
     }
     owners: dict[str, Any] = {}
     force_work: dict[str, Any] = {}
+    preparation: dict[str, dict[str, Any]] = {}
 
     def save(stage: str) -> None:
         record["stage"] = stage
@@ -286,6 +293,8 @@ def main() -> None:
 
     try:
         for arm, tile in tiles.items():
+            cp.cuda.Stream.null.synchronize()
+            construction_started = perf_counter()
             calculator = Calculator(
                 method="pbe0-rks",
                 basis=basis,
@@ -297,6 +306,8 @@ def main() -> None:
                 screening_tolerance=1e-12,
                 max_iterations=100,
             )
+            cp.cuda.Stream.null.synchronize()
+            construction_ended = perf_counter()
             native_build = native_build_metadata(calculator)
             require_tuned_native_build(
                 native_build, allow_portable=args.point_specialization
@@ -312,9 +323,16 @@ def main() -> None:
                 )
             owners[arm] = owner
             cp.cuda.Stream.null.synchronize()
-            record["preparation"].append(
-                {"selection": arm, "seconds": perf_counter() - started}
-            )
+            preparation_ended = perf_counter()
+            preparation[arm] = {
+                "selection": arm,
+                # Keep the historical owner-preparation field's meaning.
+                "seconds": preparation_ended - started,
+                "calculator_seconds": construction_ended - construction_started,
+                "calculator_interval": [construction_started, construction_ended],
+                "preparation_interval": [started, preparation_ended],
+            }
+            record["preparation"].append(preparation[arm])
             owner._public_dft_cuda_force = observe_force(
                 arm, owner._public_dft_cuda_force
             )
@@ -336,11 +354,36 @@ def main() -> None:
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
                 cp.cuda.Stream.null.synchronize()
+                setup_ended = perf_counter()
+                execution_interval = [started, setup_ended]
+                segments = (
+                    [
+                        preparation[arm]["calculator_interval"],
+                        preparation[arm]["preparation_interval"],
+                        execution_interval,
+                    ]
+                    if geometry == 0
+                    else [execution_interval]
+                )
                 record["setup"].append(
                     {
                         "selection": arm,
                         "geometry": geometry,
-                        "seconds": perf_counter() - started,
+                        "seconds": setup_ended - started,
+                        "execution_interval": execution_interval,
+                        "lifecycle": {
+                            "segments": segments,
+                            "own_work_seconds": sum(
+                                end - begin for begin, end in segments
+                            ),
+                            "observed_span_seconds": segments[-1][1] - segments[0][0],
+                            "excluded_gap_seconds": sum(
+                                right[0] - left[1] for left, right in pairwise(segments)
+                            ),
+                            # Coordinate rebuilding is inside moved execute;
+                            # the initial constructor is not charged again.
+                            "continuous": geometry == 1,
+                        },
                         "diagnostics": diagnostics(
                             item,
                             arm,

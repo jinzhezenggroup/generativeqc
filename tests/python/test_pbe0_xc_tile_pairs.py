@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from copy import deepcopy
+from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -35,6 +36,7 @@ def run_fake_campaign(
     compact: bool = False,
     atoms: int = 48,
     equal_spin: str | None = None,
+    work_clock: Any = None,
 ) -> tuple[dict[str, Any], list[Any]]:
     """Exercise orchestration without a CUDA library, device or reference solve."""
     scientific = {
@@ -84,6 +86,14 @@ def run_fake_campaign(
 
         def execute(self, coords: Any, *, strict: bool, properties: Any) -> Any:
             assert strict is False and properties == ("energy", "forces")
+            if work_clock is not None:
+                work_clock.work(
+                    "cold"
+                    if self._warm_updates and coords is None
+                    else "moved"
+                    if self._warm_updates
+                    else "replay"
+                )
             self.calls.append((coords, self._warm_updates))
             self.batch_policies.append(os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"])
             self.point_policies.append(
@@ -138,10 +148,14 @@ def run_fake_campaign(
     class Calculator:
         def __init__(self, *, ks_options: Any, **options: Any) -> None:
             assert options["device"] == "cuda"
+            if work_clock is not None:
+                work_clock.work("constructor")
             self.tile = ks_options.tile_points
 
         def prepare_batch(self, systems: Any, *, warm_start: bool) -> Owner:
             assert warm_start
+            if work_clock is not None:
+                work_clock.work("prepare")
             owner = Owner(self.tile)
             owners.append(owner)
             return owner
@@ -167,9 +181,15 @@ def run_fake_campaign(
     monkeypatch.setattr(benchmark, "source_hashes", dict)
     monkeypatch.setattr(benchmark, "cuda_accelerator_metadata", lambda *args: {})
     monkeypatch.setattr(benchmark, "environment_metadata", lambda **kwargs: {})
-    monkeypatch.setattr(
-        benchmark, "native_build_metadata", lambda *args: {"same_binary": True}
-    )
+
+    def native_metadata(*args: Any) -> dict[str, bool]:
+        if work_clock is not None:
+            work_clock.work("provenance")
+        return {"same_binary": True}
+
+    monkeypatch.setattr(benchmark, "native_build_metadata", native_metadata)
+    if work_clock is not None:
+        monkeypatch.setattr(benchmark, "perf_counter", work_clock)
     monkeypatch.setattr(
         benchmark, "require_tuned_native_build", lambda *args, **kwargs: None
     )
@@ -263,7 +283,7 @@ def test_point_specialization_preserves_work_and_restores_policy(
         point_specialization=True,
         equal_spin=equal_spin,
     )
-    assert record["schema"] == "generativeqc.pbe0-xc-point-family-pairs.v2"
+    assert record["schema"] == "generativeqc.pbe0-xc-point-family-pairs.v3"
     assert record["point_equal_spin_policy"] == {
         "baseline": equal_spin or "0",
         "candidate": equal_spin or "0",
@@ -508,7 +528,7 @@ def explicit_equal_spin_evidence(
 ) -> tuple[dict, dict]:
     record, reference = synthetic_point_family_evidence(seconds)
     record.update(
-        schema="generativeqc.pbe0-xc-point-family-pairs.v2",
+        schema="generativeqc.pbe0-xc-point-family-pairs.v3",
         point_equal_spin_policy={"baseline": policy, "candidate": policy},
         point_spin_channels=1,
         point_family_effect=(
@@ -520,7 +540,144 @@ def explicit_equal_spin_evidence(
     for group in ("setup", "priming", "samples"):
         for row in record[group]:
             row["diagnostics"]["requested_equal_spin_policy"] = policy
+    record["lifecycle_timing"] = {
+        "version": 1,
+        "scope": "synthetic lifecycle fixture for consumer tests only",
+        "continuous_cold_wallclock": False,
+    }
+    epoch = 100.0
+    prepared = {}
+    for row in record["preparation"]:
+        row["calculator_interval"] = [epoch, epoch + 1.0]
+        row["calculator_seconds"] = 1.0
+        epoch += 2.0
+        row["preparation_interval"] = [epoch, epoch + row["seconds"]]
+        epoch = row["preparation_interval"][1]
+        # Derive the field from its retained timestamps after float rounding.
+        row["seconds"] = row["preparation_interval"][1] - row["preparation_interval"][0]
+        prepared[row["selection"]] = row
+    for row in record["setup"]:
+        row["execution_interval"] = [epoch, epoch + row["seconds"]]
+        epoch = row["execution_interval"][1] + 1.0
+        row["seconds"] = row["execution_interval"][1] - row["execution_interval"][0]
+        intervals = (
+            [
+                prepared[row["selection"]]["calculator_interval"],
+                prepared[row["selection"]]["preparation_interval"],
+                row["execution_interval"],
+            ]
+            if row["geometry"] == 0
+            else [row["execution_interval"]]
+        )
+        row["lifecycle"] = {
+            "segments": deepcopy(intervals),
+            "own_work_seconds": sum(b - a for a, b in intervals),
+            "observed_span_seconds": intervals[-1][1] - intervals[0][0],
+            "excluded_gap_seconds": sum(b[0] - a[1] for a, b in pairwise(intervals)),
+            "continuous": row["geometry"] == 1,
+        }
     return record, reference
+
+
+@pytest.mark.parametrize("constructor_seconds", [11.0, 23.5])
+def test_constructor_prepare_first_and_move_costs_are_measured_separately(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, constructor_seconds: float
+) -> None:
+    """Delay actual fake work, independently of how often the clock is read."""
+
+    class WorkClock:
+        value = 100.0
+
+        def __call__(self) -> float:
+            return self.value
+
+        def work(self, kind: str) -> None:
+            self.value += {
+                "constructor": constructor_seconds,
+                "prepare": 7.0,
+                "provenance": 2.0,
+                "cold": 17.0,
+                "moved": 19.0,
+                "replay": 3.0,
+            }[kind]
+
+    record, _ = run_fake_campaign(
+        monkeypatch, tmp_path, point_specialization=True, work_clock=WorkClock()
+    )
+    assert record["lifecycle_timing"]["continuous_cold_wallclock"] is False
+    for row in record["preparation"]:
+        assert row["calculator_seconds"] == constructor_seconds
+        assert row["seconds"] == 7.0
+    for row in record["setup"]:
+        life = row["lifecycle"]
+        if row["geometry"] == 0:
+            assert row["seconds"] == 17.0
+            assert life["own_work_seconds"] == constructor_seconds + 24.0
+            gap = constructor_seconds + 11.0 if row["selection"] == "baseline" else 22.0
+            assert life["excluded_gap_seconds"] == gap
+            assert life["observed_span_seconds"] == life["own_work_seconds"] + gap
+            assert life["continuous"] is False
+        else:
+            assert row["seconds"] == life["own_work_seconds"] == 19.0
+            assert life["excluded_gap_seconds"] == 0.0
+            assert life["continuous"] is True
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing-constructor",
+        "double-charge",
+        "overlap",
+        "nonfinite",
+        "gap",
+        "gap-boolean",
+        "moved-constructor",
+        "moved-before-cold",
+        "span",
+        "continuous",
+        "version-boolean",
+    ],
+)
+def test_lifecycle_edits_cannot_create_current_promotion(mutation: str) -> None:
+    record, reference = explicit_equal_spin_evidence("0")
+    verify_point_family_pairs(record, reference, require_improvement=True)
+    row = record["setup"][0]
+    if mutation == "missing-constructor":
+        del record["preparation"][0]["calculator_seconds"]
+    elif mutation == "double-charge":
+        row["lifecycle"]["own_work_seconds"] += 1.0
+    elif mutation == "overlap":
+        row["execution_interval"][0] = 0.0
+    elif mutation == "nonfinite":
+        row["lifecycle"]["own_work_seconds"] = float("nan")
+    elif mutation == "gap":
+        row["lifecycle"]["excluded_gap_seconds"] = 0.0
+    elif mutation == "gap-boolean":
+        record["setup"][-1]["lifecycle"]["excluded_gap_seconds"] = False
+    elif mutation == "moved-constructor":
+        record["setup"][-1]["lifecycle"]["own_work_seconds"] += 1.0
+    elif mutation == "moved-before-cold":
+        moved = record["setup"][-1]
+        moved["execution_interval"] = [0.0, moved["seconds"]]
+        moved["lifecycle"]["segments"] = [moved["execution_interval"]]
+    elif mutation == "span":
+        row["lifecycle"]["observed_span_seconds"] += 1.0
+    elif mutation == "version-boolean":
+        record["lifecycle_timing"]["version"] = True
+    else:
+        record["lifecycle_timing"]["continuous_cold_wallclock"] = True
+    with pytest.raises((AssertionError, KeyError)):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+def test_legacy_v2_remains_auditable_without_new_lifecycle_credit() -> None:
+    record, reference = explicit_equal_spin_evidence("0")
+    record["schema"] = "generativeqc.pbe0-xc-point-family-pairs.v2"
+    record.pop("lifecycle_timing")
+    verify_point_family_pairs(record, reference)
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
 
 
 @pytest.mark.parametrize(

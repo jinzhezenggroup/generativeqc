@@ -1,5 +1,7 @@
 """Independent consumers of complete SCF-tile comparison evidence."""
 
+import math
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
@@ -28,8 +30,9 @@ def verify_point_family_pairs(
 
     Promotion additionally requires ``require_improvement=True``. A valid
     numerical/work receipt alone does not authorize changing the default.
-    Legacy v1 receipts remain auditable, but cannot qualify current promotion
-    without the explicit producer/policy provenance required by v2.
+    Legacy receipts remain auditable. Current promotion requires explicit point
+    policy plus v3 constructor/prepare/first-E+F segment accounting; those segments
+    do not establish a continuous cold-wallclock comparison.
     """
     _verify_pairs(
         record,
@@ -50,16 +53,20 @@ def _verify_pairs(
         (
             "generativeqc.pbe0-xc-point-family-pairs.v1",
             "generativeqc.pbe0-xc-point-family-pairs.v2",
+            "generativeqc.pbe0-xc-point-family-pairs.v3",
         )
         if point_family
         else ("generativeqc.pbe0-xc-tile-pairs.v1",)
     )
     assert record["schema"] in schemas
-    explicit_policy = point_family and record["schema"].endswith(".v2")
+    explicit_policy = point_family and record["schema"].endswith((".v2", ".v3"))
+    current_lifecycle = point_family and record["schema"].endswith(".v3")
     if point_family and require_improvement:
-        assert explicit_policy, "current promotion requires explicit v2 point policy"
+        assert current_lifecycle, "current promotion requires v3 lifecycle accounting"
     assert record["stage"] == reference["stage"] == "complete"
     assert record["protocol"] == reference["protocol"]
+    if current_lifecycle or "lifecycle_timing" in record:
+        _verify_lifecycle_timing(record)
     assert record["scf_tiles"] == {
         "baseline": 256,
         "candidate": 256 if point_family else 512,
@@ -195,3 +202,70 @@ def _verify_pairs(
                 for row in samples
             ]
             assert all(work == ao_work[0] for work in ao_work)
+
+
+def _verify_lifecycle_timing(record: dict[str, Any]) -> None:
+    """Recompute measured own-work costs without hiding interleaved gaps."""
+    timing = record["lifecycle_timing"]
+    assert type(timing["version"]) is int and timing["version"] == 1
+    assert timing["continuous_cold_wallclock"] is False
+    prepared = {row["selection"]: row for row in record["preparation"]}
+    assert len(record["preparation"]) == 2 and set(prepared) == {
+        "baseline",
+        "candidate",
+    }
+    assert len(record["setup"]) == 4
+    cold = {
+        row["selection"]: row["execution_interval"]
+        for row in record["setup"]
+        if type(row["geometry"]) is int and row["geometry"] == 0
+    }
+    assert set(cold) == set(prepared)
+    observed = set()
+    for row in record["setup"]:
+        key = row["selection"], row["geometry"]
+        assert type(key[1]) is int
+        assert key not in observed and key[0] in prepared and key[1] in (0, 1)
+        observed.add(key)
+        owner = prepared[key[0]]
+        constructor = owner["calculator_interval"]
+        preparation = owner["preparation_interval"]
+        execution = row["execution_interval"]
+        for interval in (constructor, preparation, execution):
+            assert len(interval) == 2
+            assert all(
+                type(value) in (int, float) and math.isfinite(value)
+                for value in interval
+            )
+            assert interval[1] >= interval[0]
+        assert owner["calculator_seconds"] == constructor[1] - constructor[0]
+        assert owner["seconds"] == preparation[1] - preparation[0]
+        assert row["seconds"] == execution[1] - execution[0]
+        segments = [constructor, preparation, execution] if key[1] == 0 else [execution]
+        if key[1] == 1:
+            assert execution[0] >= cold[key[0]][1]
+        assert all(right[0] >= left[1] for left, right in pairwise(segments))
+        lifecycle = row["lifecycle"]
+        assert lifecycle["segments"] == segments
+        for interval in lifecycle["segments"]:
+            assert all(
+                type(value) in (int, float) and math.isfinite(value)
+                for value in interval
+            )
+        for value in (
+            owner["calculator_seconds"],
+            owner["seconds"],
+            row["seconds"],
+            lifecycle["own_work_seconds"],
+            lifecycle["observed_span_seconds"],
+            lifecycle["excluded_gap_seconds"],
+        ):
+            assert type(value) in (int, float) and math.isfinite(value) and value >= 0
+        assert lifecycle["own_work_seconds"] == sum(
+            end - begin for begin, end in segments
+        )
+        assert lifecycle["observed_span_seconds"] == segments[-1][1] - segments[0][0]
+        assert lifecycle["excluded_gap_seconds"] == sum(
+            right[0] - left[1] for left, right in pairwise(segments)
+        )
+        assert lifecycle["continuous"] is (key[1] == 1)

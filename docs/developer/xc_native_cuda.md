@@ -196,15 +196,22 @@ retain their old source identity. Signed-response tail qualification separately
 uses derivatives of the original energy at 450/550 decimal digits.
 The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
 
-The point-family campaign uses schema v2 and fixes `--equal-spin` identically
+The point-family campaign uses schema v3 and fixes `--equal-spin` identically
 for both RKS arms. Its default `0` is an explicit opt-out diagnostic, while `1`
 records that the physical family difference is superseded. Both retain the same
 tile/map/reduction/workspace/precision contracts and full E+F evidence gates.
-The v1 reader preserves historical evidence. Requested policy fields do not
+The v1/v2 readers preserve historical evidence. Requested policy fields do not
 substitute for actual GPU consumer identity or production endpoint qualification.
-Current promotion requires explicit v2 producer/policy provenance; relabeling
+Current promotion requires explicit v3 producer/policy provenance; relabeling
 or stripping fields cannot turn a shared equal-spin or unknown legacy consumer
 into promotion evidence.
+
+The producer retains constructor, owner preparation and initial E+F timestamp
+segments, their own-work sum, observed span and excluded interleaving/provenance
+gaps. Preparation/setup durations retain their earlier meanings. Moved setup
+measures coordinate rebuilding inside execute without charging the initial
+constructor again. These segments do not provide continuous cold wallclock
+qualification; the consumer independently checks their types and totals.
 
 `verify_point_family_pairs` audits independent E/F vectors and fixed work even
 when the measured specialization has no significant endpoint improvement. Its
