@@ -72,6 +72,31 @@ failed native status calls. `Error::status()` preserves the status code.
 `Calculation::execute` checks supported properties; omitted forces are
 represented by `std::optional` rather than an all-zero vector.
 
+(response-recycle)=
+## CPU response recycle vectors
+
+`generativeqc_response_recycle_*` exposes a context-free CPU retained-vector
+owner through the installed C header, also usable from C++. Creation owns only
+metadata; shape-only capacity queries and whole-consumer admission precede
+dimension-sized allocations. Initialize all complete ABI headers, including
+nested strided-column descriptors. Signed strides locate logical values inside
+declared storage using `origin`; empty columns need no storage.
+
+Projection borrows one RHS and publishes a detached guess on success only.
+Replacement visits old directions, solution, then basis using two-pass MGS and
+the existing norm cutoff. Retained limits can change atomically without copying
+old directions to the caller. Stale generations, invalid extents and insufficient
+workspace do not publish new vectors; failed numerical attempts still contribute
+to allocation telemetry. A diagnostic column-range copy remains valid after
+replacement or destruction. Serialize operations and destruction per owner.
+
+This numeric owner does not retain a physical operator or certify method/model
+compatibility. The caller validates live scientific leases and updates only
+accepted solves. Additional workspace excludes existing retained payload and
+object/provider overhead; telemetry is not a complete physical endpoint receipt.
+See the [response architecture](../developer/response.md#native-cpu-recycle-vectors)
+and each function's [source-owned contract](native_symbols.md).
+
 ## Units and failure semantics
 
 Coordinates use **Bohr**, energies **Hartree**, and forces **Hartree/Bohr**

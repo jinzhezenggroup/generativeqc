@@ -175,6 +175,8 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
+    generativeqc_native_test(generativeqc_response_recycle_sdk_tests
+                            tests/native/test_response_recycle_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_rhf_resident_policy_tests tests/native/test_rhf_resident_policy.cpp NO_GENERATIVEQC)
     target_include_directories(generativeqc_rhf_resident_policy_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     generativeqc_native_test(generativeqc_low_rank_preconditioner_tests tests/native/test_low_rank_preconditioner.cpp)

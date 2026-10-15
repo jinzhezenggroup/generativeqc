@@ -35,7 +35,9 @@ blocked/recycled multi-RHS execution. `generativeqc.rks_response` binds a live
 native LDA/PBE RKS state to those owners using an exact J-only `FockPlan`.
 `tools/generativeqc_response` retains compatibility exports, UKS/spin-specific
 adapters and response backends not yet migrated. The Krylov controller remains
-Python/host-controlled; selected operator backends execute native J/K. This split
+Python/host-controlled; eligible CPU recycle-vector storage, projection and
+replacement use the shared native owner described below, and selected operator
+backends execute native J/K. This split
 lets downstream property, Hessian, and correlated-gradient code reuse one
 scientific owner without making installed runtime code depend on repository
 `tools.*`.
@@ -309,6 +311,41 @@ before projection or operator application. A successful peak is a conservative
 bound within the requested budget; a workspace rejection reports the required
 bound. Operator/preconditioner storage and Python interpreter bookkeeping are
 outside this solver numeric-buffer budget and require separate accounting.
+
+### Native CPU recycle vectors
+
+Eligible positive-dimensional FP64 `KrylovRecycleSpace` instances own their
+retained directions in C++. Normal CPU solve projection/replacement does not
+publish those directions back into Python. Native projection uses the retained
+orthonormal directions; replacement preserves old-first, two-pass MGS and the
+existing `1e-12 * max(1, original_norm)` acceptance cutoff. It uses the existing
+scaled native norm and shared CPU linear algebra, not a different response
+operator or an operator-image projection.
+
+The additive [native recycle API](../reference/native_api.md#response-recycle)
+provides shape-only capacities, an opaque owner, generation checks, projection,
+atomic replacement and explicit diagnostic copies. Both signed and repeated
+element strides are borrowed without making an entire Arnoldi panel copy.
+Changing retained limits is an atomic native update; old vectors remain charged
+until replacement succeeds. Additional native capacity bounds reserve the
+replacement and bounded scratch, separately from existing retained bytes.
+
+Whole-solve admission precedes native handle acquisition and numerical work.
+Missing additive protocols, explicit host seeds/transport, foreign data and
+resident/device domains preserve explicit compatibility. If an existing native
+space enters a compatibility update, its old directions stream through one
+reusable column buffer; failure preserves the original native state. A smaller
+destination capacity never forces a copy of the complete old space. Explicit
+identity/transport diagnostics detach immutable copies. Selected native/load
+errors never retry Python arithmetic.
+
+Native telemetry measures owned numeric arrays, including failed attempts;
+caller copies, Python/allocator bookkeeping and physical provider storage have
+separate lifetimes and budgets. This is not complete physical endpoint resource
+authority. Outer GMRES/RHS/recycled/block scheduling, value-only rank SVD,
+method-specific equations and full stationary molecular HVP assembly still have
+their documented Python/compatibility owners. CUDA/resident engines are not
+admitted by this CPU cutover.
 
 ### Actual-path evidence and residency boundaries
 
