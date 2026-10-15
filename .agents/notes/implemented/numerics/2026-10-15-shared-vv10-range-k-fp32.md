@@ -244,3 +244,27 @@ mixed range/nonlocal state reset, strict range-provider dispatch with explicit
 mixed/counter arguments, and mixed source operator/mask defaults. Their 95
 cases pass after updating the doubles. Strict profiling still rejects mixed
 counter use, and existing event/error/retry assertions remain in place.
+
+## Post-review strict retry qualification
+
+Preserve remote review fix `5f0fc6606`: numerical-failure recovery must leave
+the provisional nonlocal initializer/frozen operator before its fresh strict
+evaluation, just like the normal precision handoff. Its executable host
+failure-injection coverage and authenticated live benchmark runner are retained,
+not overwritten by the provider-fixture updates.
+
+The rebuilt core at code revision `74a852c26` has source identity
+`0ba780ead15c9ca55aeb438c5f858aaedfcd64260666a35ad7dda795be203669`
+and SHA256 `6b263637770ab3be53cf5b8ed31080a8da1605afe2587e2c2bc3a7bb72fabded`.
+The complete host selection passes 1144 tests with 42 resource skips, including
+the strict retry and live-runner authentication cases. Slurm job 8778 uses
+this new core and matching force artifacts: twelve complete endpoint cases
+pass, followed by seven matrix cases in a separate fresh Python process.
+Both whole-shell and canonical-AO range paths keep their original assertions.
+No new paired timing or 96-atom Fast speedup is inferred from test durations.
+
+The 784 pair-runtime cases and 32 clean mixed memchecks exercise unchanged
+generated/kernel sources. The complete-endpoint memchecks recorded in the
+previous section belong to the pre-retry-fix core `b89a605b...`, not this new
+core; do not relabel those observations. All raw logs, XMLs, source freezes
+and both earlier combined failures remain in the external evidence directory.
