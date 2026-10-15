@@ -204,22 +204,46 @@ The caller must initialize the device error flag, keep buffers/stream alive and
 discard all results after any nonzero error. Scientific descriptor identities
 authenticate logical programs, not executable bytes or a converged SCF state.
 
+The same opt-in library includes the generic native solver in
+`src/response/cuda_gmres.hpp`. Its linked CUDA kernels keep Arnoldi vectors,
+scaled norms, modified Gram-Schmidt projections, Hessenberg/Givens coefficients,
+triangular solves and candidate/true-residual arithmetic on the device. The
+host receives only discrete checkpoint status until the terminal scalar
+receipt. Optional signed right preconditioning divides by the supplied diagonal;
+entries at or below the requested gap floor fail. Projected convergence and
+happy breakdown never bypass the true unpreconditioned residual gate.
+
+The caller supplies the native CUDA operator, a borrowed stream and the exact
+admitted workspace. The initial iterate is zero; the public solution is an
+output-only panel, not an initial guess. Admission checks options, arithmetic overflow, byte budget,
+alignment and nonaliasing before GPU work. There are no solver allocations or
+runtime compiler/interpreter dependencies. On numerical failure, exhausted
+iterations or a failed operator, the public solution remains unchanged. This
+solver is **not** a coupled-spin CPKS implementation: native orbital maps,
+prepared-state authentication, physical induced-Fock actions and D/W response
+reconstruction still need a complete method owner.
+
 For a source build with a verified compiler-cache launcher configured:
 
 ```bash
 cmake -S . -B build/cuda-release-sm120 \
   -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON
-cmake --build build/cuda-release-sm120 --target generativeqc_hessian_aot_probe
+cmake --build build/cuda-release-sm120 --target \
+  generativeqc_hessian_aot_probe generativeqc_cuda_gmres_probe
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_hessian_aot_cuda.py
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_CUDA_GMRES_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_gmres_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_cuda_gmres.py
 ```
 
 The Python test driver supplies independent quadrature/Libxc/real-space oracles;
 each numerical leaf executes in the standalone native process, including a
 test with unavailable Python paths and an empty executable search path.
-This validates only the compiled leaves. The prepared-state/source owner,
-tensor contractions and reductions, coupled-spin CPKS, full-rank DF metric
+These tests validate only the compiled leaves and generic solver. The
+prepared-state/source owner, tensor contractions and reductions, coupled-spin
+CPKS, full-rank DF metric
 response, complete moving-grid/VV10/ECP assembly, full integral coverage and
 production CLI wiring are **not** implemented by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.

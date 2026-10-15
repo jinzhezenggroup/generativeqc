@@ -1,6 +1,6 @@
 # Decision: native AOT execution for the complete WB97M-V Hessian
 
-Status: proposed (native numerical leaf package implemented; endpoint incomplete)
+Status: proposed (native leaves and generic CUDA solver implemented; endpoint incomplete)
 Date: 2026-10-15
 
 ## Problem
@@ -71,6 +71,15 @@ Raw build/test/cache/dependency receipts are retained in the ignored local
 endpoint timing, scalability result or speedup claim.
 
 ## Remaining mandatory work
+
+An additional generic native GMRES primitive now retains every iterative
+numerical scalar on CUDA, including norms, Hessenberg/Givens coefficients and
+triangular solves. It accepts a borrowed native operator and publishes only
+after a true unpreconditioned residual gate. It does not supply the physical
+coupled-spin response maps, source operator or D/W reconstruction. Its
+[implemented solver note](../implemented/numerics/2026-10-15-device-scalar-native-gmres.md)
+records independent linear-solve, Python-free execution, resource and sanitizer
+gates. This does not change the incomplete endpoint status.
 
 - Bind/authenticate a live native prepared-state token and source inventory.
 - Implement native CUDA tensor execution/reductions, coupled UKS CPKS and D/W

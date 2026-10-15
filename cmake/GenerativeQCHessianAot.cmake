@@ -36,9 +36,18 @@ function(generativeqc_add_hessian_aot target inventory)
     OUTPUTS "${_registry}" GENERATOR "${_generator}" DEPENDS "${inventory}"
     ARGS --inventory "${inventory}" --registry --output "${_registry}"
     COMMENT "Generating explicit native Hessian AD leaf registry")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp")
+  set(_gmres "${CMAKE_CURRENT_BINARY_DIR}/generated/response/cuda_gmres_kernels.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_gmres}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_cuda_gmres.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.hpp"
+    ARGS --output "${_gmres}"
+    COMMENT "Generating numerically device-only native GMRES kernels")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}"
+    "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
+    "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   target_compile_features(${target} PUBLIC cxx_std_20)
   target_include_directories(${target} PUBLIC "${PROJECT_SOURCE_DIR}/src")
+  target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(${target} PUBLIC CUDA::cudart)
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
   set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
@@ -47,5 +56,12 @@ function(generativeqc_add_hessian_aot target inventory)
     add_executable(generativeqc_hessian_aot_probe
       "${PROJECT_SOURCE_DIR}/tests/native/hessian_aot_probe.cpp")
     target_link_libraries(generativeqc_hessian_aot_probe PRIVATE ${target})
+    add_executable(generativeqc_cuda_gmres_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_gmres_probe.cu")
+    target_link_libraries(generativeqc_cuda_gmres_probe PRIVATE ${target})
+    target_compile_options(generativeqc_cuda_gmres_probe PRIVATE
+      "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
+    set_target_properties(generativeqc_cuda_gmres_probe PROPERTIES
+      CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
   endif()
 endfunction()
