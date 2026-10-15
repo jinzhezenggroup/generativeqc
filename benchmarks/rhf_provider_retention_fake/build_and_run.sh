@@ -48,15 +48,40 @@ version_at_least() {
 
 launcher=()
 launcher_kind=
-if command -v sccache >/dev/null 2>&1; then
-  sccache_version=$(sccache --version | awk 'NR == 1 {print $2}')
-  if [[ -n $sccache_version ]] && version_at_least "$sccache_version" 0.16.0; then
-    launcher=(sccache)
+cache_override=${GENERATIVEQC_RHF_PROVIDER_CACHE:-}
+if [[ -n $cache_override ]]; then
+  [[ $cache_override = /* && -x $cache_override ]] || {
+    echo "GENERATIVEQC_RHF_PROVIDER_CACHE must be an executable absolute path" >&2
+    exit 6
+  }
+  if ! cache_version_output=$("$cache_override" --version); then
+    echo "explicit compiler-cache launcher did not execute" >&2
+    exit 6
+  fi
+  cache_version_line=${cache_version_output%%$'\n'*}
+  if [[ $cache_version_line =~ ^sccache[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]] &&
+    version_at_least "${BASH_REMATCH[1]}" 0.16.0; then
+    launcher=("$cache_override")
     launcher_kind=sccache
+  elif [[ $cache_version_line =~ ^ccache[[:space:]]+version[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    launcher=("$cache_override")
+    launcher_kind=ccache
+  else
+    echo "explicit compiler-cache launcher is unsupported or too old" >&2
+    exit 6
+  fi
+elif command -v sccache >/dev/null 2>&1; then
+  sccache_path=$(command -v sccache)
+  if sccache_version_output=$("$sccache_path" --version 2>/dev/null); then
+    sccache_version=$(awk 'NR == 1 {print $2}' <<<"$sccache_version_output")
+    if [[ -n $sccache_version ]] && version_at_least "$sccache_version" 0.16.0; then
+      launcher=("$sccache_path")
+      launcher_kind=sccache
+    fi
   fi
 fi
 if [[ -z $launcher_kind ]] && command -v ccache >/dev/null 2>&1; then
-  launcher=(ccache)
+  launcher=("$(command -v ccache)")
   launcher_kind=ccache
 fi
 [[ -n $launcher_kind ]] || {
@@ -65,11 +90,11 @@ fi
 }
 
 if [[ $launcher_kind == sccache ]]; then
-  sccache --version >"$result_directory/launcher-version.txt" 2>&1
-  sccache --show-stats >"$result_directory/launcher-stats-before.txt" 2>&1
+  "${launcher[0]}" --version >"$result_directory/launcher-version.txt" 2>&1
+  "${launcher[0]}" --show-stats >"$result_directory/launcher-stats-before.txt" 2>&1
 else
-  ccache --version >"$result_directory/launcher-version.txt" 2>&1
-  ccache --show-stats >"$result_directory/launcher-stats-before.txt" 2>&1
+  "${launcher[0]}" --version >"$result_directory/launcher-version.txt" 2>&1
+  "${launcher[0]}" --show-stats >"$result_directory/launcher-stats-before.txt" 2>&1
 fi
 "$cxx" --version >"$result_directory/compiler-version.txt" 2>&1
 
@@ -97,9 +122,9 @@ compile "${common[@]}" -fPIC -shared \
   -ldl -o "$build_directory/librhf_provider_probe.so"
 
 if [[ $launcher_kind == sccache ]]; then
-  sccache --show-stats >"$result_directory/launcher-stats-after.txt" 2>&1
+  "${launcher[0]}" --show-stats >"$result_directory/launcher-stats-after.txt" 2>&1
 else
-  ccache --show-stats >"$result_directory/launcher-stats-after.txt" 2>&1
+  "${launcher[0]}" --show-stats >"$result_directory/launcher-stats-after.txt" 2>&1
 fi
 
 "$readelf" -WsW "$build_directory/fake_provider_driver" \
@@ -117,6 +142,7 @@ sha256sum \
   "$repository_root/benchmarks/rhf_provider_retention_probe.cpp" \
   "$repository_root/benchmarks/rhf_provider_retention_probe.map" \
   "$repository_root/benchmarks/rhf_provider_retention_report.py" \
+  "$script_directory/OFFLINE_CACHE_BOOTSTRAP.md" \
   "$script_directory/README.md" \
   "$script_directory/build_and_run.sh" \
   "$script_directory/driver.cpp" \
@@ -124,6 +150,7 @@ sha256sum \
   "$script_directory/fake_provider.map" \
   "$script_directory/fault_write.cpp" \
   "$script_directory/missing_driver.cpp" \
+  "$script_directory/prepare_sccache_offline.sh" \
   "$script_directory/verify_results.py" \
   >"$result_directory/source.sha256"
 for header in "${headers[@]}"; do

@@ -32,6 +32,10 @@ benchmarks/rhf_provider_retention_fake/build_and_run.sh \
   <full-observer-commit>
 ```
 
+When a launcher was verified outside `PATH`, pass its absolute path through
+`GENERATIVEQC_RHF_PROVIDER_CACHE`. See `OFFLINE_CACHE_BOOTSTRAP.md` and
+`prepare_sccache_offline.sh` for the fixed, network-free sccache 0.16.0 fallback.
+
 The script fails before compilation when no approved compiler-cache launcher is
 available. It records compiler, SDK-header, launcher, source, binary, case-exit,
 symbol-version and runtime evidence under the result directory. The fixed

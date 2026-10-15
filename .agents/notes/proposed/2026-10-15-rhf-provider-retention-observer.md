@@ -169,6 +169,17 @@ one compatible sm90 H100/H200 for at most 0.1 hour, no restart, with an observed
 upper bound of 0.1 point at 1 point/hour. A clean scientific retry is a separate,
 currently unapproved gate.
 
+The first bounded Linux preflight on `pytorch:25.06-py3:25.06` found no
+`sccache` or `ccache` through that shell's `PATH` and stopped before archive
+upload or compilation. That is not an exhaustive image/fileset absence proof:
+the earlier source build named persistent candidates under
+`issue1765-attribution-20261014/runtime/{bin,local/bin}/sccache`, but their current
+existence, version, SHA and ABI were not rechecked before the one-window timer
+expired. A future separately authorized window must inspect those absolute paths
+first. If none qualifies, the prepared offline bootstrap accepts only Mozilla's
+fixed x86_64-musl sccache 0.16.0 asset after exact name/size/SHA and archive-safety
+checks; it never downloads or installs into an image/system path.
+
 ## Owner-coordinated alternative
 
 After #2287 releases ownership, its owner could instead add a failure-path
