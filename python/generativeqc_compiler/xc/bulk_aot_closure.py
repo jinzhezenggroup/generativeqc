@@ -458,7 +458,17 @@ def collect_cpu_closure(
                 tokens = shlex.split(line)
                 if tokens and line[:1].isspace():
                     if not Path(tokens[0]).is_absolute():
-                        raise ValueError("unsupported-gxx-job-model")
+                        # Native GCC may spell its PATH-selected assembler as
+                        # `as`. Resolve only that known handoff in the exact
+                        # child PATH; the independent tool query must agree.
+                        selected = (
+                            shutil.which("as", path=CPU_ENVIRONMENT["PATH"])
+                            if tokens[0] == "as"
+                            else None
+                        )
+                        if selected is None:
+                            raise ValueError("unsupported-gxx-job-model")
+                        tokens[0] = str(Path(selected).resolve())
                     jobs.append(tokens)
             if len(jobs) != 2:
                 raise ValueError("unsupported-gxx-job-model")

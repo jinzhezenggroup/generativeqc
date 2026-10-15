@@ -42,7 +42,11 @@ def fake_gxx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
     monkeypatch.setattr(c.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(c, "_system_gxx", lambda: driver)
     monkeypatch.setattr(
-        c.shutil, "which", lambda name, **kw: str(driver) if name == "g++" else name
+        c.shutil,
+        "which",
+        lambda name, **kw: (
+            str(driver) if name == "g++" else (str(assembler) if name == "as" else name)
+        ),
     )
 
     def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
@@ -63,7 +67,7 @@ def fake_gxx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
         elif "-###" in command:
             text = ""
             assembly = tmp_path / "probe.s"
-            diagnostic = f' "{frontend}" "{source}" -std=c++20 -o "{assembly}"\n "{assembler}" -o /dev/null "{assembly}"'
+            diagnostic = f' "{frontend}" "{source}" -std=c++20 -o "{assembly}"\n as -o /dev/null "{assembly}"'
         elif "-dM" in command:
             text = "#define __cplusplus 202002L\n#define __GXX_ABI_VERSION 1017"
         elif "-v" in command:
@@ -192,7 +196,7 @@ def test_cxx_observations_fail_closed(
             text = result.stderr
             if fault in {"frontend", "assembler"}:
                 text = text.replace(
-                    "cc1plus" if fault == "frontend" else str(source.parent / "as"),
+                    "cc1plus" if fault == "frontend" else "\n as ",
                     "other",
                 )
                 if fault == "assembler":
