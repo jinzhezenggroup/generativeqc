@@ -15,5 +15,10 @@ struct CudaXcAoSelectionWork {
       dense_point_ao_square_sum{}, discovery_d2h_bytes{};
   std::size_t reserved_device_bytes{}, host_peak_bytes{};
   std::uint64_t xc_evaluations{};
+  /** Submitted discovery transfers/fences, separate from later XC evaluation.
+   * They are available in the opt-in preparation trace without changing v1 ABI.
+   */
+  std::uint64_t discovery_h2d_bytes{}, discovery_synchronizations{}, discovery_chunks{};
+  bool device_compaction{};
 };
 }  // namespace generativeqc::dft

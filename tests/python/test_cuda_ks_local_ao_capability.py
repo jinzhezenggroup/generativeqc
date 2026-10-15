@@ -6,11 +6,15 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
 from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,15 +28,13 @@ def _guard() -> str:
 
 def test_local_ao_guard_depends_on_layout_capability_not_method_or_schedule(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
     guard = _guard()
     assert "cuda_xc_execution_capabilities(xc_layout).local_ao_selection" in guard
     assert "precision_schedule" not in guard
     assert "SemilocalFamily" not in guard
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     unit = tmp_path / "guard.cpp"
     executable = tmp_path / "guard"
     unit.write_text(
@@ -68,23 +70,9 @@ int main(int argc, char** argv) {
 }
 """
     )
-    built = subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+    native_cxx.build_executable(
+        [unit], executable, compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror")
     )
-    assert built.returncode == 0, built.stderr
 
     cases = {
         ("unset", "blocked", "host"): "dense",
@@ -268,12 +256,13 @@ int main() {
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
     for (bool strict_refinement : {false, true}) {
-      bool pending_mixed_coulomb{}, pending_mixed_density{};
+      bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
 """
         + block
         + r"""
       assert(pending_mixed_coulomb == (automatic && !strict_refinement));
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
+      assert(!pending_mixed_point);
     }
   }
   }
@@ -306,10 +295,9 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
     emitted = _emit_tiled(XcMatrixSchedule(16))
+    admission_start = emitted.index("inline bool tiled_xc_admitted(")
     shape_admission = emitted[
-        emitted.index("inline bool tiled_xc_admitted(") : emitted.index(
-            "template <bool Mixed, bool Tiled>"
-        )
+        admission_start : emitted.index("\ntemplate <", admission_start)
     ]
     unit.write_text(
         r"""
@@ -468,10 +456,54 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_selected_physical_layout_propagates_back_to_the_ks_owner() -> None:
+def test_selected_physical_layout_propagates_back_to_the_ks_owner(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute publication/refusal using the owner's real admission block."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("        if (admit_ao) {")
-    end = source.index("        prepared_ao_work = xc->ao_selection_work();", start)
-    block = source[start:end]
-    assert "xc->select_local_ao(1e-16, ao_map_host_budget)" in block
-    assert "xc_layout = xc->layout();" in block
+    end = source.index("        const auto admitted_precision", start)
+    probe = tmp_path / "publication.cpp"
+    probe.write_text(
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <stdexcept>
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
+struct Layout { bool local; };
+struct Owner {
+  bool success, called{};
+  CudaXcAoDiscovery schedule{};
+  bool select_local_ao(double cutoff, std::size_t budget, CudaXcAoDiscovery selected) {
+    assert(cutoff == 1e-16 && budget == 1024);
+    called = true; schedule = selected; return success;
+  }
+  Layout layout() { return {true}; }
+};
+int main() {
+  for (bool admit_ao : {false, true})
+    for (bool device_discovery : {false, true})
+      for (bool success : {false, true}) {
+        Owner owner{success}; auto* xc = &owner;
+        Layout xc_layout{false};
+        const std::size_t ao_map_host_budget = 1024;
+        bool refused = false;
+        try {
+"""
+        + source[start:end]
+        + r"""
+        } catch (const std::logic_error&) { refused = true; }
+        assert(refused == (admit_ao && !success));
+        assert(xc_layout.local == (admit_ao && success));
+        assert(owner.called == admit_ao);
+        if (owner.called)
+          assert(owner.schedule == (device_discovery ? CudaXcAoDiscovery::DeviceChunks
+                                                     : CudaXcAoDiscovery::HostTiles));
+      }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [probe], tmp_path / "publication", compile_args=["-std=c++20", "-O0"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

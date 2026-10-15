@@ -56,9 +56,9 @@ def prepare_source_probe(directory: Path) -> Path:
     (directory / "cuda_runtime.h").write_text(
         "#pragma once\n#include <algorithm>\n#include <cmath>\n"
         "#define __device__\n#define __host__\n#define __forceinline__ inline\n"
-        "#define __noinline__\nusing std::min; using std::max;\n"
-        "inline double atomicAdd(double* target, double value) {\n"
-        "  const double previous = *target; *target += value; return previous;\n}\n"
+        "#define __noinline__\nusing std::min; using std::max; using std::isfinite;\n"
+        "template<class T> inline T atomicAdd(T* target, T value) {\n"
+        "  const T previous = *target; *target += value; return previous;\n}\n"
     )
     source = directory / "probe.cpp"
     source.write_text(PROBE)
@@ -238,8 +238,16 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   const auto control_geometry = weighted::geometry_calls;
   const auto control_forces = weighted::force_calls;
   weighted::geometry_calls = weighted::force_calls = 0;
+  DirectForceWork census{};
+  fixture.batch.direct_force_work = &census;
   contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Separate>(
       batch,task,screening,bounds,density,&active,actual.data(),0,coulomb,exchange);
+  // Independent counters injected into the generated geometry function are
+  // the execution oracle; screened/all-zero tasks must publish zero work.
+  if (census.classes[shell_class].primitive_pair_products != weighted::geometry_calls ||
+      census.classes[shell_class].executed_shells != (weighted::geometry_calls != 0))
+    std::exit(5);
+  fixture.batch.direct_force_work = nullptr;
   for (std::size_t coordinate = 0; coordinate < actual.size(); ++coordinate) {
     if (!std::isfinite(actual[coordinate]) ||
         std::bit_cast<std::uint64_t>(actual[coordinate]) !=
@@ -297,6 +305,22 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
     }
     ++comparisons;
   }
+  auto mixed_batch = batch;
+  mixed_batch.direct_force_fp32 = true;
+  std::array<double, 24> mixed_sources{};
+  std::array<double, 12> mixed_combined{};
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Separate>(
+      mixed_batch,task,screening,bounds,density,&active,mixed_sources.data(),0,coulomb,exchange);
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Combined>(
+      mixed_batch,task,screening,bounds,density,&active,mixed_combined.data(),0,coulomb,exchange);
+  for (std::size_t coordinate = 0; coordinate < expected.size(); ++coordinate)
+    if (!std::isfinite(mixed_sources[coordinate]) ||
+        std::abs(mixed_sources[coordinate] - expected[coordinate]) >
+            5e-6 * (1 + std::abs(expected[coordinate]))) std::exit(6);
+  for (std::size_t coordinate = 0; coordinate < combined_control.size(); ++coordinate)
+    if (!std::isfinite(mixed_combined[coordinate]) ||
+        std::abs(mixed_combined[coordinate] - combined_control[coordinate]) >
+            5e-6 * (1 + std::abs(combined_control[coordinate]))) std::exit(7);
   if (shell_class == kPsssShellClass) {
     // Resident p-s records are oriented exactly as in the immutable global
     // cache. Test every p-shell slot and a partial lease that must fall back.

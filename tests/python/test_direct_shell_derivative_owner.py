@@ -125,10 +125,10 @@ def test_full_range_derivative_shares_one_queue_and_download() -> None:
     body = enqueue + host
     _assert_full_range_derivative_layout(body)
     assert body.count("launch_bounded_shell_energy_derivative(") == 1
-    assert body.count("cudaMemcpyAsync(") == 1
+    # Executed transfer counts, including opt-in qualification receipts, belong
+    # to the compiled host-lifetime tests rather than lexical API-call counts.
     assert "enqueue_generated_full_range_energy_derivatives(" in host
     assert "enqueue_generated_full_range_energy_derivatives(" in resident
-    assert "cudaMemcpyAsync(" not in enqueue + resident
     assert "CudaDerivativeConvention::Force" in resident
     assert "for (unsigned source" not in body
     dispatcher = _source("src/scf/cuda/direct_bounded_fallback.cu")

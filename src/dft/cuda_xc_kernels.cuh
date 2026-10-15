@@ -31,6 +31,50 @@ __global__ void add_nonlocal_energy(const double* energy, double* totals, int* e
   totals[0] += value;
 }
 
+/** Stream-ordered stable compaction of one tile's already computed predicate.
+ * Warp ballots implement a prefix over increasing AO IDs. Every lane reaches
+ * every barrier, including tail lanes and empty tiles. No floating-point AO
+ * arithmetic or selection threshold is duplicated here.
+ */
+__global__ void compact_ao_columns(const unsigned* flags, std::size_t nao, std::size_t* indices,
+                                   std::size_t capacity, std::size_t initial_offset,
+                                   std::size_t tile, std::size_t* offsets, int* error) {
+  constexpr unsigned width = 32, warps = 8;
+  __shared__ unsigned warp_prefix[warps];
+  __shared__ std::size_t base;
+  const unsigned lane = threadIdx.x % width, warp = threadIdx.x / width;
+  if (threadIdx.x == 0) base = tile ? offsets[tile - 1] : initial_offset;
+  __syncthreads();
+  for (std::size_t first = 0; first < nao; first += width * warps) {
+    const auto column = first + threadIdx.x;
+    const bool keep = column < nao && flags[column] != 0;
+    const unsigned mask = __ballot_sync(0xffffffffU, keep);
+    if (lane == 0) warp_prefix[warp] = __popc(mask);
+    __syncthreads();
+    if (threadIdx.x == 0) {
+      unsigned prefix = 0;
+      for (unsigned w = 0; w < warps; ++w) {
+        const auto count = warp_prefix[w];
+        warp_prefix[w] = prefix;
+        prefix += count;
+      }
+    }
+    __syncthreads();
+    if (keep) {
+      const auto rank = warp_prefix[warp] + __popc(mask & ((1U << lane) - 1U));
+      if (base > capacity || rank >= capacity - base)
+        atomicCAS(error, 0, 7);
+      else
+        indices[base + rank] = column;
+    }
+    // Retire readers before publishing the next wave's base/prefix storage.
+    __syncthreads();
+    if (threadIdx.x == width * warps - 1) base += warp_prefix[warp] + __popc(mask);
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) offsets[tile] = base;
+}
+
 }  // namespace
 
 void select_ao(const CudaXcLayout& l, cudaStream_t stream, const double* basis,
@@ -59,6 +103,47 @@ void select_ao(const CudaXcLayout& l, cudaStream_t stream, const double* basis,
     throw;
   }
   if (failure) throw std::runtime_error("nonfinite native XC AO selection output");
+}
+
+void select_ao_chunk(const CudaXcLayout& l, cudaStream_t stream, const double* basis,
+                     const double* points, std::size_t first_tile, std::size_t tile_count,
+                     double cutoff, double* ao, double* work, double* point_totals, int* error,
+                     std::size_t* indices, std::size_t capacity, std::size_t initial_offset,
+                     std::size_t* host_offsets) {
+  static_assert(sizeof(std::size_t) <= sizeof(double));
+  const auto tiles = 1 + (l.npoint - 1) / l.tile_points;
+  if (!tile_count || tile_count > 3 * l.tile_points || first_tile >= tiles ||
+      tile_count > tiles - first_tile || initial_offset > capacity)
+    throw std::invalid_argument("CUDA XC discovery chunk exceeds borrowed scratch");
+  auto* flags = reinterpret_cast<unsigned*>(work);
+  auto* offsets = reinterpret_cast<std::size_t*>(point_totals);
+  int failure = 0;
+  try {
+    cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
+    for (std::size_t tile = 0; tile < tile_count; ++tile) {
+      const auto begin = (first_tile + tile) * l.tile_points;
+      const auto count = std::min(l.tile_points, l.npoint - begin);
+      cuda_check(cudaMemsetAsync(flags, 0, l.nao * sizeof(unsigned), stream));
+      scheduled_ao(stream, basis, l.natom, l.nprimitive, l.nao, points + 3 * begin, count, l.jets,
+                   ao, error, nullptr);
+      cuda_check(cudaGetLastError());
+      const auto point_blocks = std::min(std::size_t{65535}, (count + 127) / 128);
+      active_ao_columns<<<dim3((l.nao + 31) / 32, point_blocks), 128, 0, stream>>>(
+          ao, count, l.nao, l.jets, cutoff, flags, error);
+      cuda_check(cudaGetLastError());
+      compact_ao_columns<<<1, 256, 0, stream>>>(flags, l.nao, indices, capacity, initial_offset,
+                                                tile, offsets, error);
+      cuda_check(cudaGetLastError());
+    }
+    cuda_check(cudaMemcpyAsync(host_offsets, offsets, tile_count * sizeof(std::size_t),
+                               cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaMemcpyAsync(&failure, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaStreamSynchronize(stream));
+  } catch (...) {
+    cudaStreamSynchronize(stream);
+    throw;
+  }
+  if (failure) throw std::runtime_error("invalid native XC device AO discovery output");
 }
 
 void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStream_t stream,
@@ -147,7 +232,10 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto density_launcher = l.local_ao
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
-      if (density_provider && active) {
+      if (l.fp32_contractions && tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
+        launch_density_product<false, true, float>(stream, density, ao, active, count, l.spins,
+                                                   l.work_jets, work, error, ids, l.nao);
+      } else if (density_provider && active) {
         if (l.local_ao) {
           // Preserve the mapped scientific domain. Only its compact symmetric
           // factor is packed; all tiles reuse the same bounded provider cache.
@@ -224,7 +312,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       scheduled_potential(stream, batch_ao + ao_offset, batch_coefficients + feature_offset,
                           weights + begin, active, count, l.spins, l.feature_terms, l.work_jets,
                           work, batch_totals + 3 * (begin - batch_begin), potential, totals,
-                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding);
+                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding,
+                          l.fp32_contractions);
       cuda_check(cudaGetLastError());
       ao_offset += count * active * l.jets;
     }

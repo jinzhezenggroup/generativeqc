@@ -71,6 +71,7 @@ def test_inactive_recycle_is_charged_or_released(tmp_path: Path) -> None:
         tmp_path,
         [
             source,
+            ROOT / "src/hf/df_reference.cpp",
             ROOT / "src/response/native_gmres.cpp",
             ROOT / "src/tensor/cpu_linalg.cpp",
         ],
@@ -90,6 +91,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include "generated_rhf_frame_response_cpu.hpp"
 #include "hf/rhf_frame_response.hpp"
+#include "hf/df_reference.hpp"
 #include "response/low_rank_preconditioner.hpp"
 #include "posthf/capacity.hpp"
 #include "scf/cuda/reference_eri_policy.hpp"
@@ -168,6 +170,19 @@ int main() {
     options.relax_orbitals = false;
     options.maximum_bytes = (96ULL << 20) - 1;
     const auto baseline = hf::rhf_frame_response_cuda(system, ref, seeds, seeds, 0, options);
+
+    // Link the real CPU-side DF owner/identity, rather than treating an
+    // incomplete or mismatched RI source as an admissible exact reference.
+    options.df_reference = std::make_shared<hf::DFReference>();
+    for (bool fitted : {false, true}) {
+      ref.density_fitted = fitted;
+      bool refused = false;
+      try { (void)hf::rhf_frame_response_cuda(system, ref, seeds, seeds, 0, options); }
+      catch (const std::invalid_argument&) { refused = true; }
+      require(refused, "unprepared fitted owner or mixed reference model admitted");
+    }
+    options.df_reference.reset();
+    ref.density_fitted = false;
 
     const auto binding = (96ULL << 20) + scf::generated::rhf_frame::prepared_host_bytes();
     for (const auto extra : {binding - 1, binding}) {

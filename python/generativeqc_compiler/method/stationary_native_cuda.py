@@ -48,18 +48,23 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]
         }
-        if actual != expected or functional.range_omega != 0 or len(plan.exchange) != 1:
+        if actual != expected or functional.range_omega != 0:
             continue
-        exchange = plan.exchange[0]
         if (
-            exchange.operator == "full-range"
-            and exchange.omega == 0
-            and exchange.coefficient == Fraction(record["exact_exchange"])
+            len(plan.exchange) != 1
+            or plan.exchange[0].operator != "full-range"
+            or plan.exchange[0].omega != 0
+            or plan.exchange[0].coefficient != Fraction(record["exact_exchange"])
+            or plan.nonlocal_correlation is not None
+            or plan.post_scf
         ):
-            # Native KS already publishes split-global-hybrid domain v4. The
-            # point program owns its internal X/C coefficients; the stationary
-            # wrapper carries the separately verified exact-exchange weight.
-            return record["functional_code"], 4, Fraction(1), Fraction(1)
+            raise ValueError(
+                "native split-hybrid stationary model requires its exact graph"
+            )
+        # Native KS already publishes split-global-hybrid domain v4. The
+        # point program owns its internal X/C coefficients; the stationary
+        # wrapper carries the separately verified exact-exchange weight.
+        return record["functional_code"], 4, Fraction(1), Fraction(1)
     for record in SEMILOCAL_FAMILIES:
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]
@@ -130,7 +135,8 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         ("generativeqc_stationary_cuda", "StationaryPointValue", "ao_pullback")
     )
     identifiers.update(
-        (
+        f"{name}{suffix}"
+        for name in (
             "local_ratio_geometry",
             "local_ratio_prepared",
             "local_norm",
@@ -138,6 +144,7 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
             "local_log",
             "local_becke",
         )
+        for suffix in ("", "_fp32")
     )
     prefix = f"generativeqc_native_{profile}_"
     aliases = "\n".join(
@@ -180,11 +187,12 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       stationary_geometry_max_threads, stationary_ao_jets, stationary_jets,
       stationary_jets > 1 ? 11U : 1U,
       native_numeric_bytes, native_create, native_topology, native_reset_geometry, native_nuclear,
-      native_consume_integrals, native_geometry, native_finish_gradient,
+      native_consume_integrals, native_geometry<false>, native_finish_gradient,
       native_source_span, native_metrics, native_destroy,
       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
-       {exchange}}}
+       {exchange}}},
+      stationary_fp32_point_capable ? native_geometry<true> : nullptr
   }};
   return binding;
 }}

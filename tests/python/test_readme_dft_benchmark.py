@@ -15,14 +15,27 @@ from generativeqc import GridSpec, load_r2scan3c_basis
 
 from benchmarks.readme_dft import SCHEMA, specification
 from benchmarks.readme_omol25 import (
+    check_record,
     protocol,
     reference_baselines,
     reference_energy_forces,
     retain_endpoint_record,
+    source_hashes,
 )
 from benchmarks.readme_wb97mv import _bind_reference_mixed_rsh_df
 from tools.render_omol25_benchmarks import independent_phase_status
 from tools.render_readme_dft import collect_point, phase_statistics, timing_cell
+
+
+def test_precision_consumer_provenance_is_retained() -> None:
+    """Dirty admission changes remain identifiable beside the native binary."""
+    sources = source_hashes()
+    for filename in (
+        "precision_policy.py",
+        "_df_precision.py",
+        "_composite_precision.py",
+    ):
+        assert len(sources[f"python/generativeqc/{filename}"]) == 64
 
 
 def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
@@ -132,6 +145,60 @@ def completed_sample(phase: str = "cold", geometry: int = 0) -> dict:
         "complete_seconds": 1.0,
         "gate": True,
     }
+
+
+def test_fast_budget_does_not_relabel_strict_parity_or_relax_other_norms() -> None:
+    """Fast acceptance is explicit and separately reports the unchanged FP64 gate."""
+    budget = {"energy_abs": 1e-5, "force_max_abs": 1e-4, "force_rms": 3e-5}
+    oracle = completed_sample()
+    row = completed_sample()
+    row["forces"] = [[1e-6, 0, 0]] * 3
+    assert not check_record(row, oracle)["gate"]
+    checked = check_record(row, oracle, budget=budget)
+    assert checked["gate"] and not checked["fp64_gate"]
+    assert checked["force_rms_error"] > 0
+    row["forces"] = [[4e-5, 4e-5, 4e-5]] * 3
+    assert not check_record(row, oracle, budget=budget)["gate"]
+    row["forces"] = [[0, 0, 0]] * 3
+    row["energy"] += 2e-5
+    assert not check_record(row, oracle, budget=budget)["gate"]
+
+
+@pytest.mark.parametrize("invalid", ["shape", "nonfinite", "failed"])
+def test_fast_budget_retains_complete_endpoint_safety(invalid: str) -> None:
+    budget = {"energy_abs": 1e-5, "force_max_abs": 1e-4, "force_rms": 3e-5}
+    row = completed_sample()
+    if invalid == "shape":
+        row["forces"] = [[0, 0, 0]]
+    elif invalid == "nonfinite":
+        row["energy"] = float("nan")
+    else:
+        row["status"] = 5
+    checked = check_record(row, completed_sample(), budget=budget)
+    assert not checked["gate"] and checked["force_rms_error"] is None
+
+
+def test_readme_runner_fast_cli_rejects_ambiguous_experiments(monkeypatch: Any) -> None:
+    """Reject unsupported comparisons before loading a GPU or requiring Slurm."""
+    from benchmarks.readme_omol25 import main
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    required = [
+        "--atoms",
+        "3",
+        "--basis-file",
+        "unused.json",
+        "--output",
+        ".artifacts/unused.json",
+    ]
+    for engine, options in (
+        ("reference", ["--policy", "fast"]),
+        ("native", ["--fast-budget", "1e-5", "1e-4", "3e-5"]),
+        ("native", ["--policy", "fast", "--force-active-ao"]),
+    ):
+        with pytest.raises(SystemExit) as caught:
+            main(specification("pbe0"), [engine, *required, *options])
+        assert caught.value.code == 2
 
 
 def test_partial_reference_checks_only_its_completed_geometry() -> None:
@@ -492,3 +559,39 @@ def test_mixed_wb97mv_oracle_rejects_unmatched_reference(
     )
     with pytest.raises(ValueError, match="requires restricted full-J/K DF"):
         configure_reference_mixed_rsh_df(engine)
+
+
+def test_omission_does_not_hide_completed_native_without_reference(
+    tmp_path: Path,
+) -> None:
+    """Only the incomplete size is absent; an unchecked native size stays visible."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": seconds}
+        for phase, seconds in [("cold", 10.0)] + [("warm", 1.0)] * 5
+    ]
+    native = {"status": "completed_unchecked", "records": rows}
+    reference = {"status": "not_run", "records": []}
+    annotation = "96: incomplete E+F omitted"
+    summary = {
+        "sizes": [3, 12, 48, 96],
+        "density_fitting": True,
+        "panel_annotations": {"wb97m-v": annotation},
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": 48,
+                    "protocol": {"aos": 384},
+                    "engines": {"native": native, "reference": reference},
+                }
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    table = (tmp_path / "df-timings.md").read_text()
+    assert annotation in table
+    assert "10.000‡ | not run | 1.000‡ | not run" in table
+    assert "| ωB97M-V | 48 |" in table
+    assert "| ωB97M-V | 96 |" not in table

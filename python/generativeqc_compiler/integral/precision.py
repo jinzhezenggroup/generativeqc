@@ -62,3 +62,31 @@ def generated_fock_precision_schedule(
         strict_audit_dtype="float64",
         audit_owner="method-controller",
     )
+
+
+def weighted_force_precision_schedule(
+    *, mixed_recurrence: bool = False, qualification: str | None = None
+) -> ExecutionPrecisionSchedule:
+    """Describe the order-0..5 weighted force candidate, not its admission.
+
+    The FP64 geometry/Boys ladder and density precontraction feed typed FP32
+    leaves. The shared derivative DAG, component partitions, and primitive
+    reduction use FP32. Translation recovery and atom accumulation use FP64.
+    Higher orders, one-electron/Pulay, XC, and SCF are outside this schedule.
+    """
+    if not mixed_recurrence:
+        if qualification is not None:
+            raise ValueError("strict weighted forces do not require a qualification")
+        return uniform_precision_schedule("integral.weighted_force")
+    if not isinstance(qualification, str) or not qualification.strip():
+        raise ValueError("mixed weighted forces require a qualification")
+    strict = PrecisionDirective("float64", "float64", "float64")
+    mixed = PrecisionDirective("float32", "float32", "float32", qualification)
+    return ExecutionPrecisionSchedule(
+        (
+            ("geometry_radial_density", strict),
+            ("weighted_derivative", mixed),
+            ("primitive_reduction", mixed),
+            ("translation_atom_accumulation", strict),
+        )
+    )

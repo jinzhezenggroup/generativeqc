@@ -16,7 +16,8 @@
 
 namespace generativeqc::scf {
 struct CudaDerivativeSourceView;
-}
+struct DirectForcePrecisionRequest;
+}  // namespace generativeqc::scf
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -163,7 +164,8 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources = true, bool allow_spatial_default = false, bool bilinear = false);
+    bool separate_sources = true, bool allow_spatial_default = false, bool bilinear = false,
+    DirectForcePrecisionRequest* precision = nullptr);
 
 /** Consume the same generated J/K channels directly on their owning stream.
  * No host gradient is allocated or copied. The callback must enqueue its copy
@@ -172,7 +174,7 @@ cudaError_t consume_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient,
     const std::function<void(const CudaDerivativeSourceView&)>& consumer,
-    bool allow_spatial_default = false);
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

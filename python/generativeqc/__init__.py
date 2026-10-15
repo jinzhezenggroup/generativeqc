@@ -107,6 +107,14 @@ from .mean_field import (
     exchange_operator_key,
 )
 from .overlap import cross_overlap
+from .precision_policy import (
+    PrecisionBudgetError,
+    PrecisionCalculator,
+    PrecisionError,
+    PrecisionPolicy,
+    PrecisionSolve,
+    PrecisionValidation,
+)
 from .progressive import ProgressiveResult, projected_singlepoint
 from .progressive_controller import (
     ArithmeticPolicy,
@@ -209,6 +217,12 @@ __all__ = [
     "PairedCalibrationSample",
     "PairedDifferenceEstimator",
     "PppsQueueProfile",
+    "PrecisionBudgetError",
+    "PrecisionCalculator",
+    "PrecisionError",
+    "PrecisionPolicy",
+    "PrecisionSolve",
+    "PrecisionValidation",
     "PreparedBatch",
     "Primitive",
     "ProgressiveBudget",

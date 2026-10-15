@@ -274,8 +274,11 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
+    "60885551705fbb5410a450037c08bbf9e3e9674502b9b77ff94d78c001cb6e28"
 )
+# The optional Fast candidate is admitted by the fitted/composite policy before
+# forwarding its explicit flag. AOT plan selection, complete-grid overrides,
+# byte budgets, topology rebuild and source cleanup remain bound above.
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
 )
@@ -293,9 +296,6 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 )
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
-)
-PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
-    "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
 )
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
@@ -318,15 +318,20 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Component packing also binds its ragged scratch/descriptor helpers. The
 # generic restricted-point request still borrows the same admitted geometry
 # scratch; refreshing these owners does not relax any promotion evidence gate.
+# Explicit FP32 adds boolean/profile admission and requires both optional
+# transport and work-counter ABIs. Descriptor capacity, primitive page budgets,
+# resource planning and legacy Becke fallback/control remain unchanged.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
+    "d79b0f5c255b78f1f56f017ca4363aeadb99d978de87279395edb4acd53cf183"
 )
-# Explicit strict pairing retains the fixed native counter-array arities.
+# Explicit strict pairing retains the fixed native counter-array arities. The
+# optional three-field FP32 ABI reports capability and actual enqueued work;
+# deltas subtract both work counters but never subtract the capability flag.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
+    "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "0b158358e77b94d84b845b388a3403769b9ae30b6b6ad5172ca30e0f329b1143"
+    "c9df420cacb6a16733a023c4de396db5d5c37cbfbecffdc8a232817c197017ec"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
@@ -398,8 +403,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Read-only grid admission now follows the requested AO capability. Refresh
 # these existing bindings with dry report/runtime parity and fallback witnesses;
 # do not reinstate writable indexed staging in the no-map census.
+# The explicit precision candidate adds forwarding, attempt-baseline capture
+# and work metadata. Native requirements, finite/shape checks, complete source
+# reduction, pending windows and all allocation equations remain unchanged.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
+    "dd4e8026d26989e122b28b46098deb5925421ccaf11a7d26142670272f60dbb8"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -444,29 +452,27 @@ NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
-# Audited lifecycle-only change: capacity defaults and forwarding remain intact.
-# Closed/running refusal and BaseException revocation protect the original lease.
+# Strict defaults and all resource forwarding remain intact. Explicit candidates
+# may retry numerical failure only after positive mixed work, or replay strict
+# for missing optional transport. Both paths drain/invalidate before one retry;
+# driver/allocation/identity failures never grant an arithmetic retry.
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
+    "45097f6787b42bd6fb13ddd38fd77dead329af1ec357fc8e620610ac967081af"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "ddca5ed4b429304cf051b9c28d4c3d5f88d805b0c94c08fbbe1e3955c8e944a1"
+    "82d609f25e944f0ca115b59f14da8e18c43a43a7042c6275ba7fa9d22b38c791"
 )
+# The native owner adds two integer FP32 work counters. Allocation(), create(),
+# scratch layout, optional-phase reservation and all resource guards are intact.
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
 )
-NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
-)
 # Elision preserves dense reservation/launch bounds. Bind its first-derivative
 # admission, both tolerance-refresh paths, immutable controls and charged D2H
 # observation independently of the unchanged allocation formula.
-NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
-    "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
-)
 NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
     "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
 )
@@ -502,9 +508,6 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # preserves the existing point/AO work and the seven Becke phases.
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
-NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
-)
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
 # configuration and counters as well as the launch route; a digest refresh must
@@ -565,12 +568,15 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 # Force-memory admission requests the full cold envelope and only the unretained
 # remainder on replay. Keep this existing compatibility binding until #2296;
 # no new whole-function fingerprint or production-source gate is introduced.
+# Precision selection is forwarded to source construction and replay identity;
+# AOT selection, cold/replay reservations and lease admission remain unchanged.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
+    "dbc6ee7cf50d25349b5cf345919a5e6741d4dfc3c4c9d8dacddffc83df4c9504"
 )
-# Prepared schedule identity also retains the selected read-only grid capability.
+# Prepared schedule identity retains the read-only grid capability and precision
+# mode; every topology, MethodIR, AO-policy and resource dimension is preserved.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "9362e2d766922cfe39572019244db842db6651ce7f9674097856688eeb8b4fbc"
+    "1c71cf4b076b5c16d992bf84a66efd4f9ebe824da24f2f738a3f2ff8f7c3d7ad"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -1440,11 +1446,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_reset_sha256": (
             "int stationary_reset(",
-            NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_geometry_reset_sha256": (
             "int stationary_geometry_reset(",
-            NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_phased_becke_input_sha256": (
             "PhasedBeckeInput phased_input(",
@@ -1484,7 +1490,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_launch_geometry_sha256": (
             "void launch_geometry(",
-            NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256,
+            None,
         ),
         "native_configure_becke_sha256": (
             "int stationary_configure_becke(",
@@ -1549,7 +1555,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
-        if digest != expected_digest:
+        # Reset/typed dispatch do not define the allocation equations below.
+        # Their exact current identities remain provenance; executable host
+        # contracts cover fencing, tolerance, scratch capacity and typed routes.
+        # A static preflight is never their execution/numerical qualification.
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
@@ -2966,6 +2976,74 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     }
 
 
+def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
+    """Execute the source-bound lowerer and check its observable grid ABI.
+
+    The private precision extension may change the function body without
+    changing the grid. Retain its source hash as provenance, but require field
+    behavior rather than a historical spelling. No native library is loaded.
+    """
+    import ctypes
+
+    from generativeqc import _native
+    from generativeqc import ks as ks_module
+
+    namespace = dict(vars(ks_module))
+    exec(  # noqa: S102 - execute the inspected repository ABI lowerer
+        compile(
+            ast.Module(body=[lowerer], type_ignores=[]), "<grid-abi-contract>", "exec"
+        ),
+        namespace,
+    )
+    for grid in (
+        GridSpec(48, 16, 32),
+        GridSpec(
+            7,
+            5,
+            9,
+            partition_iterations=2,
+            coincident_tolerance=3e-11,
+            element_radii=((1, 0.8), (8, 1.5)),
+        ),
+    ):
+        for budget in (None, (1e-5, 1e-4, 3e-5)):
+            options = resolve_ks_options(
+                "pbe0-rks",
+                KsOptions(grid=grid, tile_points=37, _precision_budget=budget),
+            )
+            descriptor = namespace[lowerer.name](options)
+            expected = {
+                "grid_version": grid.version,
+                "radial_points": grid.radial_points,
+                "angular_polar": grid.angular_polar,
+                "angular_azimuth": grid.angular_azimuth,
+                "partition_iterations": grid.partition_iterations,
+                "coincident_tolerance": grid.coincident_tolerance,
+                "tile_points": 37,
+            }
+            descriptor_type = (
+                _native.KsOptionsDescriptor
+                if budget is None
+                else _native.ApplicationPrecisionKsOptionsDescriptor
+            )
+            if (
+                any(
+                    getattr(descriptor, name) != value
+                    for name, value in expected.items()
+                )
+                or descriptor.struct_size != ctypes.sizeof(descriptor_type)
+                or descriptor.abi_version != _native.ABI_VERSION
+                or descriptor.element_radius_count != (119 if grid.element_radii else 0)
+                or any(
+                    descriptor.element_radii[z] != radius
+                    for z, radius in grid.element_radii
+                )
+            ):
+                raise RuntimeError(
+                    "grid point-count contract changed: public grid ABI fields"
+                )
+
+
 def _grid_count_contract(repository: Path) -> dict[str, str]:
     """Bind the source-only point count to the native CUDA grid owner."""
 
@@ -3001,6 +3079,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     if len(public_lowerers) != 1:
         raise RuntimeError("public GridSpec ABI lowerer is missing or ambiguous")
     public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
+    _check_public_grid_abi(public_lowerers[0])
 
     quadrature_source = (
         repository / "python/generativeqc_compiler/xc/quadrature_cuda.py"
@@ -3066,14 +3145,17 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
     expected = {
         "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
-        "public_grid_abi_sha256": PUBLIC_GRID_ABI_CONTRACT_SHA256,
         "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
         "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
         "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }
-    moved = [name for name, digest in contracts.items() if digest != expected[name]]
+    moved = [
+        name
+        for name, digest in contracts.items()
+        if name in expected and digest != expected[name]
+    ]
     if moved:
         raise RuntimeError("grid point-count contract changed: " + ", ".join(moved))
     return {

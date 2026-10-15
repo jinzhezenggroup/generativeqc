@@ -16,6 +16,18 @@ namespace generativeqc::scf {
 struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingJkPlan;
 struct CudaDfBorrowedResponseDensity;
+struct CudaDfFinalStateToken;
+/** Synchronous method-owner authorization for narrowed response arithmetic.
+ * Construct only after strict final-state acceptance, binding that exact host
+ * density and token through this call's drain. This is not a lease of cached
+ * SCF factors: corrected final densities may use ordinary dense response.
+ * An allowance alone, an equal-sized density or a retained-factor hint cannot
+ * substitute for this method-authorized binding. */
+struct CudaDfGradientPrecisionRequest {
+  std::array<double, 3> budget{};
+  const CudaDfFinalStateToken* verified_state{};
+  std::span<const double> verified_density;
+};
 /** Bind the prepared owner's immutable source after copying that source into
  * a new single-system plan. The caller owns these host arrays for the plan's
  * lifetime; geometry/basis changes create a new owner. Arbitrary tensor-plan
@@ -171,6 +183,11 @@ struct DfGradientResources {
   bool device_response{};
   /** True only after the owner validates and executes occupied response. */
   bool occupied_response{};
+  /** Completed shell candidate census, never inferred from the requested mode.
+   * Counts are active task attempts, prepared primitive products and strict
+   * task replays. Only synchronized finite output publishes these fields. */
+  bool precision_work_collected{};
+  std::array<std::uint64_t, 3> precision_work{};
 };
 /** Synchronous bounded bridge for fixed full A[mu,nu,P] and M[P,Q] weights.
  * Orbital/auxiliary bases share the same physical atom coordinates but may
@@ -228,6 +245,6 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr,
-    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr);
+    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false);
 }  // namespace generativeqc::scf
 #endif

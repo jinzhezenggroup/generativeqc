@@ -109,8 +109,11 @@ namespace generated = generativeqc::dft::generated;
         + r"""
 namespace cuda_xc_detail {
 using CudaXcPointLauncher = void (*)();
+using CudaXcPointBatchLauncher = void (*)();
 template <unsigned F, bool R> void launch_points() {}
 template <unsigned Mask> void launch_split_hybrid_points() {}
+void launch_mixed_pbe_points() {}
+void launch_mixed_pbe_point_batches() {}
 }
 namespace generativeqc::dft::generated {
 struct AutomaticPointStub {

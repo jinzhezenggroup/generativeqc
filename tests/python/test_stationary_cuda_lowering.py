@@ -382,6 +382,7 @@ def test_stationary_split_compile_options_fail_closed(value: str) -> None:
         ("pbe0_uks", 1),
         ("b3lyp_rks", 3),
         ("b3lyp_uks", 3),
+        ("m06_2x_rks", 131522),
     ],
 )
 def test_global_hybrid_stationary_aot_profiles_bind_exact_plan(

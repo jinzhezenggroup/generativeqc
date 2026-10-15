@@ -1,3 +1,4 @@
+#include <array>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -28,12 +29,15 @@ void rejects_invalid(Callback&& call, const char* detail) {
 
 void verify_scf_defaults() {
   generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
   descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
   auto options = common_scf_options(descriptor);
   require(!options.preliminary_guess && options.max_iterations == 100 &&
               options.diis_history == 8 && options.energy_tolerance == 1.0e-10 &&
-              options.density_tolerance == 1.0e-8 && options.screening_tolerance == 1.0e-12,
+              options.density_tolerance == 1.0e-8 && options.screening_tolerance == 1.0e-12 &&
+              options.application_precision_budget == std::array<double, 3>{},
           "HF/KS common SCF defaults changed");
 
   descriptor.max_iterations = 37;
@@ -72,6 +76,35 @@ void verify_scf_defaults() {
                   "unknown floating-point precision mode");
 }
 
+void verify_descriptor_prefix() {
+  generativeqc_method_descriptor descriptor{};
+  const auto rejects_abi = [&] {
+    try {
+      (void)common_scf_options(descriptor);
+    } catch (const MethodError& error) {
+      require(error.status() == GENERATIVEQC_STATUS_ABI_MISMATCH,
+              "invalid common method prefix returned the wrong status");
+      return;
+    }
+    throw std::runtime_error("invalid common method prefix was accepted");
+  };
+  rejects_abi();
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  for (std::size_t size = 0; size < sizeof(descriptor); ++size) {
+    descriptor.struct_size = static_cast<std::uint32_t>(size);
+    rejects_abi();
+  }
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION + 1;
+  rejects_abi();
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  for (std::size_t size = sizeof(descriptor) + 1; size < sizeof(ApplicationPrecisionMethodOptions);
+       ++size) {
+    descriptor.struct_size = static_cast<std::uint32_t>(size);
+    rejects_abi();
+  }
+}
+
 void verify_incremental_selectors() {
   using generativeqc::scf::classify_incremental_direct_jk_control;
   using generativeqc::scf::IncrementalDirectJkControl;
@@ -107,6 +140,7 @@ void verify_incremental_selectors() {
 int main() {
   try {
     verify_scf_defaults();
+    verify_descriptor_prefix();
     verify_incremental_selectors();
     return 0;
   } catch (...) {

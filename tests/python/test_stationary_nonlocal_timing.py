@@ -34,6 +34,17 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
     ticks = iter((0.0, 1.0, 1.0, 2.0, 2.0 + seed, 2.0 + seed, 2.0 + seed + pair, end))
     monkeypatch.setattr(MODULE, "perf_counter", lambda: next(ticks))
     calls: list[str] = []
+    executed = False
+
+    def diagnostic(*, include_work: bool = False) -> SimpleNamespace:
+        # Start above zero so reported work must be a per-call delta.
+        return SimpleNamespace(
+            executed=executed,
+            collected_points=int(executed),
+            pair_cache_probes=7 + int(executed) if include_work else None,
+            pair_cache_hits=3 if include_work else None,
+            pair_evaluations=4 + int(executed) if include_work else None,
+        )
 
     @contextmanager
     def feature_task(*args: Any, **kwargs: Any) -> Iterator[SimpleNamespace]:
@@ -47,7 +58,9 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         calls.append("seed")
 
     def execute() -> SimpleNamespace:
+        nonlocal executed
         calls.append("pairs")
+        executed = True
         return SimpleNamespace(pointer=4096, stride=1, stream=31, generation=1)
 
     def geometry(
@@ -122,7 +135,7 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         nonlocal_sources=sink,
         nonlocal_owner=SimpleNamespace(
             point_count=1,
-            diagnostic=lambda: SimpleNamespace(executed=False, collected_points=0),
+            diagnostic=diagnostic,
             seed_from_snapshot=seed_from_snapshot,
             execute=execute,
         ),
@@ -133,6 +146,7 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
         functional=4,
         ingredients=("rho", "gradient", "tau"),
     )
+    assert seconds["nonlocal_reset"] == pytest.approx(1.0)
     assert seconds["resident_feature_seed_enqueue"] == pytest.approx(seed)
     assert seconds["vv10_pair_enqueue"] == pytest.approx(pair)
     assert seconds["single_pass_geometry_and_pair_drain"] == pytest.approx(1.0 + tail)
@@ -140,4 +154,7 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
     assert all(value >= 0.0 for value in seconds.values())
     assert calls == ["borrow", "seed", "pairs", "release"]
     assert work["ao_collocation_point_visits"] == 1
+    assert work["nonlocal_pair_cache_probes"] == 1
+    assert work["nonlocal_pair_cache_hits"] == 0
+    assert work["nonlocal_pair_sweeps"] == 1
     assert len(components) == 7

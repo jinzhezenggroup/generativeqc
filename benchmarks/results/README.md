@@ -1,5 +1,21 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
+retains native direct cold/warm populations through 96 atoms and DF through
+48 atoms. Missing reference accuracy is explicit and does not suppress DF/48;
+only the incomplete DF/96 point is omitted, with negative evidence retained separately.
+
+The [2026-10-14 full DF-HF/RI-JK CBS campaign](readme-cbs-full-20261014/README.md)
+measures complete QM7 C1–C7 E+F with consistent fitted analytic response and
+shared JKFIT/correlation auxiliaries. It follows independent small-system
+qualification and retains the earlier budget-refused campaign separately.
+
+The [2026-10-13 DF-CCSD(T)/CBS campaign](readme-cbs-20261013/README.md) measures
+complete GPU energy + analytic-force endpoints for fixed QM7 C1–C7 alkanes,
+with cc-pV[D,T]Z MP2 correlation extrapolation and a DZ DF-CCSD(T) correction.
+It retains exact RHF references, shared same-basis work, independent directional
+force checks, and explicit incomplete/unchecked outcomes.
+
 The [2026-10-13 HF/DFT comparison](readme-dft-20261013/README.md) measures complete
 cold/warm direct and density-fitted endpoints based on master `e0ad22036` for HF, PBE, PBE0,
 B3LYP, r2SCAN, r2SCAN-3c, M06-2X and ωB97M-V. The report distinguishes original

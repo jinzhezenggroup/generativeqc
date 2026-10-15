@@ -909,3 +909,44 @@ def test_md_j_default_domain_and_optional_capacity_are_audited(
     assert any(
         "MD-J default" in error for error in validate_inventory(payload, root=tmp_path)
     )
+
+
+@pytest.mark.parametrize(
+    "expression,controls",
+    [
+        (
+            'std::getenv("GENERATIVEQC_KS_RESIDENT_VALUES")',
+            {"GENERATIVEQC_KS_RESIDENT_VALUES"},
+        ),
+        (
+            (
+                'std::getenv(range ? "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES" : '
+                '"GENERATIVEQC_KS_RESIDENT_VALUES")'
+            ),
+            {
+                "GENERATIVEQC_KS_RESIDENT_VALUES",
+                "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
+            },
+        ),
+        (
+            'policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY")',
+            {"GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY"},
+        ),
+        (
+            '// "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"\n/* "GENERATIVEQC_KS_RESIDENT_VALUES" */',
+            set(),
+        ),
+    ],
+)
+def test_phase_value_inventory_tracks_control_names_across_call_forms(
+    tmp_path: Path, expression: str, controls: set[str]
+) -> None:
+    """Call-site refactors retain ownership; comments do not declare controls."""
+    from tools.check_default_promotion_inventory import _discover_ks_phase_values
+
+    source = tmp_path / "src/dft/cuda_ks.cpp"
+    source.parent.mkdir(parents=True)
+    source.write_text(expression)
+    assert set(_discover_ks_phase_values(tmp_path)) == {
+        f"ks-runtime:{name}" for name in controls
+    }

@@ -925,7 +925,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     DfGradientResources* resources, const CudaDfMetricView* device_metric, void* blas_handle,
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
     const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
-    const CudaDfBorrowedResponseDensity* borrowed_density) {
+    const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell) {
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -1117,9 +1117,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
-  constexpr long double per_ao =
-      2 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  const bool auxiliary_g =
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum == 4; });
+  const auto expansion_terms = auxiliary_g ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                                           : molecule::kMaximumAoExpansionTerms;
+  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
+                             sizeof(std::uint8_t) +
+                             expansion_terms * (3 * sizeof(std::uint8_t) + sizeof(double));
   const long double host_bound = 2 * (per_ao * (n + a) + 2 * sizeof(double) * primitives +
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
@@ -1127,7 +1132,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital), host_a = pack(auxiliary);
+    const auto host_o = pack(orbital, 3, expansion_terms),
+               host_a = pack(auxiliary, 4, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -1145,6 +1151,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     std::array<unsigned long long, 6> observed_shell_work{};
     std::array<unsigned long long, 3> observed_screen_work{};
     std::array<unsigned long long, 3> observed_shell_screen_work{};
+    std::array<unsigned long long, 3> observed_precision_work{};
+    unsigned long long* precision_work = nullptr;
     std::unique_ptr<double[]> screening_feature_weights;
     std::size_t screening_feature_capacity{};
     unsigned long long* screen_counters = nullptr;
@@ -1176,7 +1184,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         occupied && device_metric && device_metric->full_rank, source_schedule == "qualify");
     runtime::cuda_trace::trace_counter("response_source_derivative_qualification_requested",
                                        source_schedule == "qualify");
-    if (device_metric && schedule == 0 && source_schedule_eligible &&
+    if (!auxiliary_g && device_metric && schedule == 0 && source_schedule_eligible &&
         !(upload_diagnostic && *upload_diagnostic) &&
         !(scatter_diagnostic && *scatter_diagnostic) &&
         !(serial_diagnostic && std::string_view(serial_diagnostic) == "1")) {
@@ -1191,7 +1199,19 @@ generativeqc_status execute_cuda_df_hf_gradient(
         execution_control ? execution_control : (promoted_default ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
+    // The whole-shell consumer has only s/p/d/f class metadata. Auxiliary g
+    // uses the same six-term generated derivative as the correlation sink;
+    // never omit its class or reinterpret six-term metadata with stride three.
+    if (auxiliary_g && execution != "generic")
+      throw std::invalid_argument("auxiliary g DF-HF derivatives require generic execution");
     const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
+    mixed_shell = mixed_shell && shell_execution;
+    if (mixed_shell) {
+      precision_work =
+          static_cast<unsigned long long*>(arena.allocate(sizeof(observed_precision_work)));
+      arena.stats.host_bytes += sizeof(observed_precision_work);
+      check(cudaMemsetAsync(precision_work, 0, sizeof(observed_precision_work), arena.stream));
+    }
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
     const bool full_shell_domain = execution == "shell";
@@ -1966,7 +1986,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                   check(launch_df_shell_derivative_packets(
                       orbital_groups, auxiliary_groups, r, range.offset, panel_count, weights,
                       derivative_output, shell_counters, arena.stream, full_shell_domain,
-                      shell_variant, derivative_pairs, shell_diagnostics));
+                      shell_variant, derivative_pairs, shell_diagnostics, mixed_shell,
+                      precision_work));
                 } else {
                   std::size_t signature_launches = 0;
                   for (std::size_t ga = 0; ga < shell_o->signature_groups.size(); ++ga) {
@@ -1991,7 +2012,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                             weights, derivative_output, shell_counters, arena.stream,
                             full_shell_domain, shell_variant, derivative_pairs,
                             derivative_pairs != DfDerivativePairs::full && ga == gb,
-                            shell_diagnostics));
+                            shell_diagnostics, mixed_shell, precision_work));
                         ++signature_launches;
                       }
                     }
@@ -2003,14 +2024,16 @@ generativeqc_status execute_cuda_df_hf_gradient(
                 check(launch_df_shell_derivative_panel(
                     shell_o->view, shell_x->panel(range.offset, panel_count), r, range.offset,
                     panel_count, weights, derivative_output, shell_counters, arena.stream,
-                    full_shell_domain, shell_variant, derivative_pairs, shell_diagnostics));
+                    full_shell_domain, shell_variant, derivative_pairs, shell_diagnostics,
+                    mixed_shell, precision_work));
               }
               runtime::cuda_trace::trace_counter("three_center_shell_panels", 1);
             }
             if (metric_weights || !shell_execution || !full_shell_domain)
               check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
                                               derivative_output, arena.stream, 0, result.size(),
-                                              gradient_copies, shell_execution && !metric_weights));
+                                              gradient_copies, shell_execution && !metric_weights,
+                                              expansion_terms));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },
@@ -2075,7 +2098,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                   kind ? "metric_derivative_weight_bytes" : "three_center_derivative_weight_bytes",
                   count * sizeof(double));
               check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
-                                              output, arena.stream, begin));
+                                              output, arena.stream, begin, 0, 1, false,
+                                              expansion_terms));
               ++arena.stats.tiles;
             }
             // The adapter reuses this host span after returning. Drain all its
@@ -2092,6 +2116,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                                      arena.stream);
     arena.stats.device_to_host_bytes += detailed_shell_work.readback_bytes;
     arena.stats.stream_synchronizations += detailed_shell_work.stream_drains;
+    if (precision_work) {
+      check(cudaMemcpyAsync(observed_precision_work.data(), precision_work,
+                            sizeof(observed_precision_work), cudaMemcpyDeviceToHost, arena.stream));
+      arena.stats.device_to_host_bytes += sizeof(observed_precision_work);
+    }
     if (shell_counters) {
       check(cudaMemcpyAsync(observed_shell_work.data(), shell_counters, sizeof(observed_shell_work),
                             cudaMemcpyDeviceToHost, arena.stream));
@@ -2153,6 +2182,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
     runtime::cuda_trace::trace_counter("atom_coordinates", 3 * atoms);
     if (!std::all_of(result.begin(), result.end(), [](double x) { return std::isfinite(x); }))
       throw std::runtime_error("nonfinite generated DF-HF gradient");
+    if (precision_work) {
+      arena.stats.precision_work_collected = true;
+      std::copy(observed_precision_work.begin(), observed_precision_work.end(),
+                arena.stats.precision_work.begin());
+    }
     gradient.swap(result);
     if (resources) *resources = arena.stats;
     return GENERATIVEQC_STATUS_SUCCESS;

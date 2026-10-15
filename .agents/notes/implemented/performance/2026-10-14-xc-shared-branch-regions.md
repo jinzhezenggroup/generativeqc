@@ -87,3 +87,25 @@ fixtures and packaging the UKS force profile. Moved replays must supply moved
 coordinates explicitly, and historical auxiliary basis fixtures require the
 checked namespace adapter. These repairs preserve the native implementation and
 all acceptance tolerances. Initial failures and successful reruns are retained.
+
+## Promotion decision — 2026-10-15
+
+The paired campaign above is **historical evidence** for original source
+`786c31a48`, which enabled branch coalescing in both split-hybrid and
+semilocal equal-spin points. It is not a source-matched benchmark of the
+current-master integration (which includes merged #2505).
+
+This integration keeps the general lazy multi-output scalar emitter but
+promotes branch sharing **only for FP64 split-hybrid equal-spin codegen**.
+Semilocal (including r2SCAN-3c direct/DF) retains current-master lowering
+without new branch sharing. FP32 retains the established lowering. The
+#2505 qualified force-only integer-power policy is preserved. This is a
+compiler scheduling boundary, not a change to any functional, tolerance,
+grid or convergence criterion. The historical direct r2SCAN-3c moved
+296.815 -> 403.783 s observation, unequal SCF work and timeouts are
+retained rather than assumed fixed.
+
+Before merge, perform a source-matched current-master-versus-this-branch
+M06-2X complete E+F campaign (direct/DF, cold/five warm/moved/five
+moved-warm), retaining SCF work and independent E/F gates. A new benchmark
+is required before claiming combined #2464 + #2505 speedups.

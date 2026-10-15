@@ -1,0 +1,74 @@
+{
+  "source": "de90d952d930a0584446dff30425369d45be4eab",
+  "native_source_identity": "7f10320b366288679395cd5d638debc67d0da9976ec7abe80df4886e1ac10620",
+  "inventory_files": 1732,
+  "library_sha256": "0051d04a4d7dc4d842da3f96a9c485088e8363ae6ad86a09fd76dd142215b38a",
+  "schema": "generativeqc.vv10-wide-pair-publication.v1",
+  "default_enabled": false,
+  "points": [
+    {
+      "arm": "off",
+      "atoms": 3,
+      "prefix": "off/3/",
+      "phases_seconds": {
+        "cold": 40.51289048418403,
+        "warm": 0.20375127717852592,
+        "moved": 5.6566734947264194,
+        "moved-warm": 0.2008991278707981
+      },
+      "energy_error_max": 9.947598300641403e-13,
+      "force_error_max": 5.529288138461652e-11
+    },
+    {
+      "arm": "off",
+      "atoms": 12,
+      "prefix": "off/12/",
+      "phases_seconds": {
+        "cold": 31.47373390197754,
+        "warm": 0.6979851052165031,
+        "moved": 19.910655856132507,
+        "moved-warm": 0.6978073604404926
+      },
+      "energy_error_max": 3.353761712787673e-12,
+      "force_error_max": 2.2483181982835276e-11
+    },
+    {
+      "arm": "on",
+      "atoms": 3,
+      "prefix": "on/3/",
+      "phases_seconds": {
+        "cold": 7.612398032099009,
+        "warm": 0.20057565346360207,
+        "moved": 5.714431796222925,
+        "moved-warm": 0.1985909454524517
+      },
+      "energy_error_max": 9.947598300641403e-13,
+      "force_error_max": 5.528577595725892e-11
+    },
+    {
+      "arm": "on",
+      "atoms": 12,
+      "prefix": "on/12/",
+      "phases_seconds": {
+        "cold": 30.60593408718705,
+        "warm": 0.6928498595952988,
+        "moved": 19.461065031588078,
+        "moved-warm": 0.704873513430357
+      },
+      "energy_error_max": 3.240074875066057e-12,
+      "force_error_max": 2.2482793404776658e-11
+    }
+  ],
+  "accepted_calls": 48,
+  "cancelled_jobs": [
+    8455,
+    8456,
+    8457
+  ],
+  "evidence": {
+    "path": "evidence.json.xz",
+    "bytes": 183856,
+    "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
+    "uncompressed_sha256": "6c13301bcb5f05ec0eba9379a74ad05407920972a5d1a24bf420c923196825c1"
+  }
+}

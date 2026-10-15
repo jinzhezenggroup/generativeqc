@@ -73,7 +73,9 @@ def test_cuda_capacity_query_matches_allocation_and_exact_cap(points: int) -> No
     # These complete 48/96-atom grids used 283,189,268/566,378,516 bytes.
     # Phase reuse must recover 7*N doubles without changing the hard cap or
     # dropping the full-grid pair/seed inventory from allocation accounting.
-    expected_large = {1_179_648: 217_128_980, 2_359_296: 434_257_940}
+    # The exact component-reuse predicate/work census adds only 28 bytes; its
+    # numeric key borrows dead pair scratch rather than another full-grid panel.
+    expected_large = {1_179_648: 217_129_008, 2_359_296: 434_257_968}
     if points in expected_large:
         assert required == expected_large[points]
     spec = original_nonlocal_correlation("rvv10")

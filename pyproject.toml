@@ -27,7 +27,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8"]
+# Required by the benchmark publication renderer regression; do not skip it.
+test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
 reference-test = [
   "scipy>=1.10",
@@ -105,6 +106,7 @@ wheel.py-api = "py3"
 "src/dft/ao_grid_work.hpp" = "generativeqc_compiler/assets/src/dft/ao_grid_work.hpp"
 "src/dft/grid_task_view.cuh" = "generativeqc_compiler/assets/src/dft/grid_task_view.cuh"
 "src/dft/xc_point.hpp" = "generativeqc_compiler/assets/src/dft/xc_point.hpp"
+"src/dft/xc_point_mixed.hpp" = "generativeqc_compiler/assets/src/dft/xc_point_mixed.hpp"
 "src/dft/semilocal_family.hpp" = "generativeqc_compiler/assets/src/dft/semilocal_family.hpp"
 "src/dft/xc_capabilities.hpp" = "generativeqc_compiler/assets/src/dft/xc_capabilities.hpp"
 "src/dft/xc_runtime.cuh" = "generativeqc_compiler/assets/src/dft/xc_runtime.cuh"

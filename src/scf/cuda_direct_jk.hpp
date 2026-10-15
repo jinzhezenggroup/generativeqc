@@ -7,6 +7,7 @@
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
 #include "scf/cuda_derivative_sources.hpp"
+#include "scf/direct_force_precision.hpp"
 #include "scf/fock_build.hpp"
 
 namespace generativeqc::scf {
@@ -21,6 +22,9 @@ struct CudaDirectJkDiagnostic {
   std::size_t batch_size{}, nbf{}, coordinates_per_item{};
   std::size_t device_bytes{}, host_bytes{}, host_preparation_bytes{};
   std::size_t resident_value_count{}, resident_value_bytes{};
+  /** Submitted complete-shell value launches, including fixed-mask response.
+   * This is a launch count, not a completed-ERI census or a device timer. */
+  std::size_t materialized_value_launches{};
   /** Last optional construction: submitted values and stream-completed values,
    * including a finite-audit rejection. These are not published-cache counts. */
   std::size_t resident_values_submitted{}, resident_values_completed{};
@@ -122,7 +126,7 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail, bool separate_sources = true,
-    bool allow_spatial_default = false);
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Contract P:G'(D) in one retained shell traversal. Both public-AO matrices
  * are borrowed on the owner's device through completion. Requires one
@@ -138,7 +142,7 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     const CudaDerivativeSourceConsumer& consumer, std::string& detail,
-    bool allow_spatial_default = false);
+    bool allow_spatial_default = false, DirectForcePrecisionRequest* precision = nullptr);
 
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
  * explicit omega. The retained owner performs one density transform and three

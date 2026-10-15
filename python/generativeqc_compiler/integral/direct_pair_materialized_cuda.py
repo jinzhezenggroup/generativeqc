@@ -20,15 +20,10 @@ def emit_direct_pair_materialized_support() -> str:
 #include "generated_direct_shell_pair_hermite.cuh"
 #include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
+#include "scf/cuda/direct_force_work.hpp"
 #include "scf/cuda/direct_screening.cuh"
 
 namespace generativeqc::scf::cuda_execution {
-
-/** Optional qualification counters. Production passes no allocation. */
-struct MaterializedDirectPairWork {
-  unsigned long long bra_preparations{}, ket_preparations{}, coulomb_preparations{};
-  unsigned long long component_contractions{}, published_components{};
-};
 
 /** Canonical whole-shell owners use fewer idle lanes in small domains.
  * These compile-time bounds cover every s/p/d/f composition, not just the
@@ -99,7 +94,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
     bool hf_exchange = false,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
-    std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr) {
+    std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr) {
   constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
@@ -255,10 +251,12 @@ __device__ inline void contract_materialized_direct_pair_fock(
       if (separate_coulomb || separate_exchange) {
         if (separate_coulomb)
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              separate_coulomb, i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
+              runtime::CompensatedOutput{separate_coulomb, coulomb_correction},
+              i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
         if (separate_exchange)
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
-              separate_exchange, i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
+              runtime::CompensatedOutput{separate_exchange, exchange_correction},
+              i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
       } else {
         // Exported-reference HF owns a correction plane; ordinary and
         // independent J/K callers retain their existing accumulation sinks.

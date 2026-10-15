@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_CUDA_DENSITY_FITTING_HPP
 #define GENERATIVEQC_SCF_CUDA_DENSITY_FITTING_HPP
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -22,6 +23,7 @@ struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingMetricDiagnostic;
 struct DensityFittingDensityResponse;
 struct DfGradientResources;
+struct CudaDfGradientPrecisionRequest;
 
 /** Bind a native orbital snapshot to this immutable physical plan and item.
  * Recreating the plan changes its identity even if dimensions match. The SCF
@@ -101,6 +103,9 @@ struct CudaDfBorrowedResponseDensity {
   }
 };
 
+/** Optional immutable application allowance authorizes only qualified shell
+ * arithmetic after exact final-density validation. Other consumers and
+ * resource-limited attempts retain bounded strict response. */
 generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a, const std::vector<double>& metric,
@@ -109,7 +114,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::string& detail, DfGradientResources* resources = nullptr,
     const CudaDfFinalStateToken* final_state = nullptr,
     const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr,
-    const CudaDfBorrowedResponseDensity* borrowed_response_density = nullptr);
+    const CudaDfBorrowedResponseDensity* borrowed_response_density = nullptr,
+    const CudaDfGradientPrecisionRequest* application_precision = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.

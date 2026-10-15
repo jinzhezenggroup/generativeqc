@@ -71,10 +71,11 @@ def test_tiled_potential_fuses_point_total_reduction() -> None:
     assert "accumulate, error, ao_ids, full_n, blockIdx.z);" in source
     assert "threadIdx.y == 0 && threadIdx.x < 3" in source
     assert (
-        "for (I p = 0; p < count; ++p) sum += point_totals[channel*count+p];" in source
+        "for (I p = 0; p < count; ++p) sum += static_cast<Arithmetic>(point_totals[channel*count+p]);"
+        in source
     )
     assert (
-        "totals[channel] = finite((accumulate ? totals[channel] : 0.0)+sum,error,3);"
+        "totals[channel] = finite((accumulate ? totals[channel] : 0.0)+static_cast<double>(sum),error,3);"
         in source
     )
     # Tiny/out-of-domain shapes keep the historical reducer rather than changing
@@ -173,7 +174,7 @@ def test_xc_matrix_admission_charges_compact_triangle_grid_dimension() -> None:
 
 def test_xc_matrix_emitter_materializes_explicit_tile_candidate() -> None:
     source = emit_native_xc_matrix_schedule(XcMatrixSchedule(8))
-    assert "__shared__ double d[8][9], a[8][9];" in source
+    assert "__shared__ Arithmetic d[8][9], a[8][9];" in source
     assert "dim3(8,8)" in source
     assert "(n+7)/8" in source
     assert "all 64 lanes" in source

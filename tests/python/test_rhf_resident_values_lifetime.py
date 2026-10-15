@@ -194,6 +194,11 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
   if(status==GENERATIVEQC_STATUS_SUCCESS) plan->mask=mask;
   return status;
 }
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask,
+    FockOperator, double, std::string& detail) {
+  return prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
+}
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept {
   CudaDirectJkDiagnostic diagnostic;
   if(plan && mode==12) {
@@ -210,7 +215,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
     double*, double*, double*, std::size_t correction, int* error, double threshold,
     std::uint64_t* census, std::string&, bool resident,
-    const double* beta, double* beta_exchange) {
+    const double* beta, double* beta_exchange, bool materialized) {
+  require(materialized);
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
           (spec.spin==FockSpin::Unrestricted ? beta!=nullptr : beta==nullptr) &&
           (spec.spin==FockSpin::Unrestricted && spec.exchange.present

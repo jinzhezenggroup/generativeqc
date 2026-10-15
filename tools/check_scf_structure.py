@@ -168,6 +168,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
 CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
+    "scf/application_precision.hpp",
     "solver/cuda/generalized_eigen.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",
@@ -462,6 +463,15 @@ CUDA_ALLOWED["cuda_direct_numerics"] = (
 # The output-layout policy is a leaf shared by device tasks and host interfaces.
 CUDA_MODULES["cuda_direct_force_sources"] = ("direct_force_sources.hpp",)
 CUDA_ALLOWED["cuda_direct_force_sources"] = ()
+# Diagnostic storage is a leaf; only host dispatch owns its allocation and
+# serialization. Device consumers may increment counters without owning them.
+CUDA_MODULES["cuda_direct_force_work"] = ("direct_force_work.hpp",)
+CUDA_ALLOWED["cuda_direct_force_work"] = ("scf/direct_task_layout.hpp",)
+CUDA_MODULES["cuda_direct_force_diagnostic"] = ("direct_force_diagnostic.hpp",)
+CUDA_ALLOWED["cuda_direct_force_diagnostic"] = (
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/direct_force_work.hpp",
+)
 # The borrowed resident lease exposes metadata only, never device execution.
 CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
@@ -493,6 +503,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_order2",
     "direct_force_order3",
     "direct_force_quartet",
+    "direct_force_profile",
     "direct_bounded_contraction",
 )
 CUDA_ALLOWED["cuda_direct_contractions"] = (
@@ -506,6 +517,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "integrals/range_moments.hpp",
         "scf/cuda/direct_constants.hpp",
         "scf/cuda/direct_force_sources.hpp",
+        "scf/cuda/direct_force_work.hpp",
         "scf/cuda/direct_metadata.hpp",
         "scf/cuda/packed_basis.hpp",
         "scf/cuda/direct_queue_index.cuh",
@@ -542,7 +554,12 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda/" + Path(name).stem + ".hpp"
         for name in CUDA_MODULES["cuda_direct_consumers"]
     )
-    + ("scf/cuda_weighted_eri.hpp", "scf/cuda/direct_bounded_queue_page.cuh")
+    + (
+        "scf/cuda_weighted_eri.hpp",
+        "scf/cuda/direct_bounded_queue_page.cuh",
+        "scf/cuda/direct_force_diagnostic.hpp",
+        "runtime/cuda_component_trace.hpp",
+    )
 )
 CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_cached_tensor_kernels.hpp",
@@ -632,6 +649,7 @@ CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
 # implementation includes out of C++.
 CUDA_MODULES["cuda_hf_driver"] = ("scf/cuda_rhf.cpp",)
 CUDA_ALLOWED["cuda_hf_driver"] = (
+    "scf/application_precision.hpp",
     "scf/cuda/hf_initial_guess.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",

@@ -510,7 +510,9 @@ Matrix generated_one_electron_hf_gradient(const DensityFittingScfData& data, con
 Matrix generated_df_hf_gradient(const DensityFittingScfData& data, CudaDensityFittingJkPlan* plan,
                                 std::size_t system, const Matrix& density,
                                 const Matrix* beta = nullptr,
-                                const CudaDfFinalStateToken* final_state = nullptr) {
+                                const CudaDfFinalStateToken* final_state = nullptr,
+                                const std::array<double, 3>* application_budget = nullptr,
+                                DfGradientResources* resources = nullptr) {
   Matrix gradient;
   if (!data.df_gradient_orbital) return gradient;
   if (!data.df_gradient_auxiliary)
@@ -541,10 +543,13 @@ Matrix generated_df_hf_gradient(const DensityFittingScfData& data, CudaDensityFi
         {density, generated::df_rhf_coulomb_coefficient, generated::df_rhf_exchange_coefficient}};
   }
   std::string detail;
+  const CudaDfGradientPrecisionRequest precision{
+      application_budget ? *application_budget : std::array<double, 3>{}, final_state, density};
   const auto status = execute_cuda_density_fitting_generated_force_response(
       plan, system, *data.df_gradient_orbital, *data.df_gradient_auxiliary, data.raw.three_center,
       data.raw.metric, terms, data.df_gradient_mapping,
-      data.df_gradient_budget - spin_staging_bytes, 0, gradient, detail, nullptr, final_state);
+      data.df_gradient_budget - spin_staging_bytes, 0, gradient, detail, resources, final_state,
+      nullptr, nullptr, application_budget ? &precision : nullptr);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status != GENERATIVEQC_STATUS_SUCCESS)
     throw generativeqc::Error(status, detail.empty() ? "generated DF response failed" : detail);
@@ -553,6 +558,8 @@ Matrix generated_df_hf_gradient(const DensityFittingScfData& data, CudaDensityFi
 #else
   (void)system;
   (void)final_state;
+  (void)application_budget;
+  (void)resources;
   throw std::runtime_error("CUDA DF response requested in a CPU-only build");
 #endif
   return gradient;
@@ -883,6 +890,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     auto reference = std::make_shared<PhysicalReference>();
     reference->nbf = n;
     reference->nocc = occupied;
+    reference->density_fitted = true;
     reference->overlap = data.one_electron.overlap;
     reference->hcore = data.one_electron.hcore;
     reference->fock = final_fock;
@@ -918,8 +926,14 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   // The CUDA response is the sole device path; failures propagate before force
   // assembly. The independent CPU calculation below serves CPU callers only.
   const Matrix generated_one_electron = generated_one_electron_hf_gradient(data, density, weighted);
-  const Matrix generated_df =
-      generated_df_hf_gradient(data, cuda_plan, cuda_system, density, nullptr, &response_token);
+  DfGradientResources gradient_resources;
+  const bool precision_eligible =
+      !options.export_physical_reference && options.energy_tolerance <= 1e-10 &&
+      options.density_tolerance <= 1e-8 && options.screening_tolerance <= 1e-12 &&
+      data.metric_relative_threshold == 1e-10;
+  const Matrix generated_df = generated_df_hf_gradient(
+      data, cuda_plan, cuda_system, density, nullptr, &response_token,
+      precision_eligible ? &options.application_precision_budget : nullptr, &gradient_resources);
   if (!generated_df.empty()) {
     if (generated_df.size() != data.raw.ncoord)
       throw std::runtime_error("generated DF response has invalid coordinate dimensions");
@@ -955,6 +969,15 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     }
     result.forces = build_density_fitting_rhf_forces(data.one_electron, data.raw, density, weighted,
                                                      options.density_fitting_relative_threshold);
+  }
+  if (gradient_resources.precision_work_collected && gradient_resources.precision_work[0] &&
+      gradient_resources.precision_work[1] && std::isfinite(result.energy) &&
+      std::all_of(result.forces.begin(), result.forces.end(),
+                  [](double value) { return std::isfinite(value); })) {
+    result.precision_work.gradient = {1, 2, 0, 0, 0};
+    result.precision_work.gradient_qualification = 7;
+    result.precision_work.gradient_weighted_work_collected = true;
+    result.precision_work.gradient_weighted_work = gradient_resources.precision_work;
   }
   result.density = density;
   if (cuda_plan) commit_cuda_density_fitting_rhf_warm_state(cuda_plan, response_token);

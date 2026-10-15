@@ -288,7 +288,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
         r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
     )
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_full_range\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in schedule
@@ -311,10 +311,11 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             "spec.coulomb.op == scf::FockOperator::FullRange",
             "spec.exchange.op == scf::FockOperator::FullRange",
             "!execution_plan_.range_exchange && !range_strategy_",
-            "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
+            "!execution_plan_.nonlocal_correlation",
+            "spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")
@@ -673,11 +674,29 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     """Register the stable control; executable probes qualify its admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if not re.search(
-        r'\b(?:std::)?getenv\s*\(\s*"GENERATIVEQC_KS_RESIDENT_VALUES"\s*\)', source
-    ):
-        return {}
-    return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
+    # The environment name may be chosen by a conditional or read through a
+    # policy helper. Inventory ownership follows each live control literal,
+    # independently of that harmless call-site spelling. Admission semantics
+    # are covered by the executable source-policy and endpoint tests.
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source, flags=re.DOTALL)
+    names = re.findall(
+        r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
+    )
+    controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    method = Path("src/methods/dft_method.cpp")
+    if (root / method).is_file():
+        owner = re.sub(
+            r"//[^\n]*|/\*.*?\*/", " ", _read(root / method), flags=re.DOTALL
+        )
+        for name in re.findall(r'"(GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE)"', owner):
+            controls[f"ks-runtime:{name}"] = method.as_posix()
+    geometry = Path("python/generativeqc/_stationary_composite_cuda.py")
+    if (root / geometry).is_file():
+        for name in re.findall(
+            r'"(GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE)"', _read(root / geometry)
+        ):
+            controls[f"ks-runtime:{name}"] = geometry.as_posix()
+    return controls
 
 
 def _discover_partial_phase_values(root: Path) -> dict[str, str]:

@@ -164,10 +164,23 @@ class KsOptions:
     # Finite capacity for the full-grid pair/force owners. Actual allocation is
     # shape-sized; a caller-specified smaller cap remains a hard admission gate.
     nonlocal_memory_budget_bytes: int = 1 << 30
+    _precision_budget: tuple[float, float, float] | None = field(
+        default=None, repr=False
+    )
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Validate exclusive functional/composition inputs, grid, schedule, and budget."""
+        if self._precision_budget is not None and (
+            not isinstance(self._precision_budget, tuple)
+            or len(self._precision_budget) != 3
+            or any(
+                not math.isfinite(value) or value < 0
+                for value in self._precision_budget
+            )
+            or self._precision_budget[0] == 0
+        ):
+            raise ValueError("invalid application precision allowances")
         if self.functional is not None and not isinstance(
             self.functional, FunctionalSpec
         ):
@@ -260,6 +273,8 @@ class KsOptions:
             "scalar_derivative_order": 1,
             "observable": "scf-energy",
         }
+        if self._precision_budget is not None:
+            payload["application_precision_budget"] = self._precision_budget
         if self._method_ir is not None:
             payload["method_ir"] = self._method_ir.to_payload()
             payload["method_ir_identity"] = self._method_ir.identity
@@ -1176,8 +1191,13 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         nonlocal_b = nonlocal_c = nonlocal_coefficient = 0.0
 
     domain = options.scf_domain.encode("ascii")
-    descriptor = _native.KsOptionsDescriptor(
-        ctypes.sizeof(_native.KsOptionsDescriptor),
+    descriptor_type = (
+        _native.ApplicationPrecisionKsOptionsDescriptor
+        if options._precision_budget is not None
+        else _native.KsOptionsDescriptor
+    )
+    descriptor = descriptor_type(
+        ctypes.sizeof(descriptor_type),
         _native.ABI_VERSION,
         domain,
         grid.version,
@@ -1204,6 +1224,7 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         nonlocal_c,
         nonlocal_coefficient,
         options.nonlocal_memory_budget_bytes if nonlocal_primitive is not None else 0,
+        *(options._precision_budget or ()),
     )
     # ctypes pointer fields do not own their pointees.  Retain every borrowed
     # object for exactly as long as the short-lived descriptor is alive.
@@ -1212,4 +1233,8 @@ def native_ks_options(options: typing.Any) -> typing.Any:
     descriptor._components_owner = components
     descriptor._exchange_owner = exchange_terms
     descriptor._radii_owner = radii
+    if options._precision_budget is not None:
+        prefix = _native.KsOptionsDescriptor.from_buffer(descriptor)
+        prefix._extension_owner = descriptor
+        return prefix
     return descriptor

@@ -93,9 +93,13 @@ def fixture(
             pointer=4096, stride=6, stream=seed_stream, generation=7
         )
 
-        def diagnostic(self) -> SimpleNamespace:
+        def diagnostic(self, *, include_work: bool = False) -> SimpleNamespace:
             return SimpleNamespace(
-                executed=self.executed, collected_points=self.collected_points
+                executed=self.executed,
+                collected_points=self.collected_points,
+                pair_cache_probes=0,
+                pair_cache_hits=0,
+                pair_evaluations=0,
             )
 
         def reset(self) -> None:
@@ -665,3 +669,36 @@ def test_local_ao_domain_is_checked_against_actual_snapshot_grid() -> None:
     with pytest.raises(ValueError, match="current grid lease"):
         MODULE.resident_nonlocal_geometry(**args)
     assert not events
+
+
+@pytest.mark.parametrize("available", (False, True))
+def test_pair_work_requires_measured_counters_and_retains_real_zero(
+    available: bool,
+) -> None:
+    """Old ABI absence stays absent through benchmark normalization."""
+    from benchmarks.dft_force_components import normalize_force_work
+
+    args, _ = fixture()
+    owner = args["nonlocal_owner"]
+    original = owner.diagnostic
+
+    def diagnostic(*, include_work: bool = False) -> SimpleNamespace:
+        result = original(include_work=include_work)
+        for field in ("pair_cache_probes", "pair_cache_hits", "pair_evaluations"):
+            setattr(result, field, 0 if available else None)
+        return result
+
+    owner.diagnostic = diagnostic
+    _, _, work = MODULE.resident_nonlocal_geometry(**args)
+    observed = normalize_force_work(
+        {**work, "execution": "cuda-complete-wb97mv", "component_seconds": {}}
+    )["work_counts"]["observed"]
+    for field in (
+        "nonlocal_pair_cache_probes",
+        "nonlocal_pair_cache_hits",
+        "nonlocal_pair_sweeps",
+    ):
+        if available:
+            assert work[field] == observed[field] == 0
+        else:
+            assert field not in work and field not in observed

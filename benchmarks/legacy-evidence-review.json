@@ -227,6 +227,36 @@
       "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     },
+    "readme-wb97mv-20261014": {
+      "owner": "README WB97M-V native endpoint refresh",
+      "reason": "Retain compact regenerated direct/DF charts and seven complete source-bound WB97M-V populations; unchanged functionals reference the previous archive. DF/48 remains visible without a matching reference. Only DF/96 is omitted because no complete E+F call was obtained before user-requested cancellation; failed resource probes are retained separately. The two baseline SVGs are losslessly archived to fit the unchanged aggregate budget. No raw run archive, production default promotion or policy-cap change is introduced.",
+      "review_document": "benchmarks/results/readme-wb97mv-20261014/README.md"
+    },
+    "vv10-range-followups-20261014": {
+      "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
+      "reason": "Lossless complete raw JSON, all endpoint force vectors and independent references retain automatic 4 GiB populations, partial 96-atom timeouts and rejected convergence experiments. No experiment becomes a default observation; no sample/deadline/gate or storage-limit change. Detailed source inventories use shared lossless storage.",
+      "review_document": "benchmarks/results/vv10-range-followups-20261014/README.md"
+    },
+    "exact-integral-response-20261014": {
+      "owner": "bounded exact-density two-electron response qualification",
+      "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
+      "review_document": "benchmarks/results/exact-integral-response-20261014/README.md"
+    },
+    "exact-geometry-response-20261014": {
+      "owner": "bounded exact-density XC geometry response qualification",
+      "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
+      "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
+    },
+    "vv10-wide-pair-20261014": {
+      "owner": "experimental large-domain VV10 pair schedule",
+      "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
+    },
+    "bounded-dft-schedules-2475-2479": {
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
+    },
     "xc-shared-branches-20261014": {
       "owner": "Equal-spin XC complete endpoint qualification",
       "reason": "Compact paired scalar observations retain all 237 returned native calls, independent oracle binding, full SCF histories explaining the direct moved regression, work counts and both 1800-second timeouts. Raw force arrays, binaries and profiler traces stay outside Git. The complete campaign stays below the existing 2 MiB review budget; no storage or scientific gate is relaxed.",
@@ -235,20 +265,28 @@
   },
   "files": [
     {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts",
+      "bytes": 140660,
+      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "clean-samples-and-source-reconstruction",
+      "bytes": 193076,
+      "sha256": "5b4600add56a2e757eccc25a64100e440183a65b011513368b97a1f0ecd3b2af"
+    },
+    {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
       "family": "cg01",
       "path": "benchmarks/results/cg01/capabilities.json",
       "role": "decision-or-audit-record",
       "sha256": "1bc9dd514c7396fb9a3dd6a637a654fd6617c6bb00a55858c0c445412d143a2d"
-    },
-    {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.gz",
-      "family": "cpu-eri-coulomb-20261001",
-      "bytes": 311664,
-      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing."
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
@@ -267,36 +305,12 @@
       "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 425678,
-      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
+      "bytes": 195548,
+      "sha256": "f46dfb1eb56a74c14c32641924ff49f88b6da87894a44992bbe0d7e8b49b2a35",
       "classification": "required-compact-accepted-evidence",
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
-    },
-    {
-      "bytes": 163067,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/raw-source.json",
-      "role": "scientific-record",
-      "sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
-    },
-    {
-      "bytes": 270744,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/rejected-inventory-run.json.gz",
-      "role": "scientific-record",
-      "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
-    },
-    {
-      "bytes": 155087,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/validation.json",
-      "role": "decision-or-audit-record",
-      "sha256": "8d78b766ceb1eedf6bfa7338808a2647e89a96b023d3cd7ed19f06f09ee9ded6"
     },
     {
       "bytes": 140958,
@@ -337,14 +351,6 @@
       "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
       "role": "reference-input",
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
-    },
-    {
-      "path": "benchmarks/results/df-one-step-warm-20260926/work.json",
-      "family": "df-one-step-warm-20260926",
-      "bytes": 202052,
-      "sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All grouped semantic work counters for eight DF workloads; profiler launch arrays remain ignored."
     },
     {
       "bytes": 485607,
@@ -395,6 +401,22 @@
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
+      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
+      "family": "exact-geometry-response-20261014",
+      "bytes": 206880,
+      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    },
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
+    },
+    {
       "bytes": 162452,
       "classification": "required-compact-accepted-evidence",
       "family": "generated-df-values-142",
@@ -409,14 +431,6 @@
       "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json",
       "role": "scientific-record",
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
-    },
-    {
-      "bytes": 166398,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
     },
     {
       "bytes": 143684,
@@ -457,22 +471,6 @@
       "path": "benchmarks/results/issue394-deferred/prototype.patch",
       "role": "source-provenance",
       "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
-    },
-    {
-      "bytes": 153158,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/384-404.json",
-      "role": "scientific-record",
-      "sha256": "e2f5728f31e23805bbc1f2fd3b3ecc52486eaf68b82abe2c46d385b74f36c1e1"
-    },
-    {
-      "bytes": 226206,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/768-404.json",
-      "role": "scientific-record",
-      "sha256": "1ba17b6d525922968c5af89e5667fdc6ffedac9d54e8e04111d39719ea4444b9"
     },
     {
       "bytes": 131267,
@@ -523,30 +521,6 @@
       "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
-      "bytes": 145996,
-      "classification": "required-compact-accepted-evidence",
-      "family": "native-memory-arena-20261011",
-      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
-      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
-      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
-    },
-    {
-      "bytes": 148102,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json",
-      "role": "scientific-record",
-      "sha256": "025d97701a9c47aacf436214beb3ead641e4938f2a0ca7464823d47e32f9f7b5"
-    },
-    {
-      "bytes": 148094,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-thread.json",
-      "role": "scientific-record",
-      "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
-    },
-    {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
       "bytes": 756252,
@@ -587,50 +561,42 @@
       "sha256": "15ab5b8c856e6179dcba32cdca99c780e0325b41ce9123d86d8c585a782b4293"
     },
     {
-      "bytes": 401876,
+      "bytes": 338108,
       "classification": "required-compact-accepted-evidence",
       "family": "pbe0-spd-spatial-reuse-20261011",
       "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
       "role": "decision-or-audit-record",
-      "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 185892,
-      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
-      "role": "Complete DF endpoint chart"
+      "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 330160,
-      "sha256": "a841fb8731cf03c3d6391dac9fee5588fdbae6947c3509698d59a15d79b2f943",
+      "bytes": 298072,
+      "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "bytes": 188062,
-      "sha256": "1db53ae625851527240df00621970162b9a2bf776e1a7ac6ed1b8c603dd83e28",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete direct endpoint chart"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 393624,
-      "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827",
+      "bytes": 359344,
+      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
       "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 426364,
+      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4",
+      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 308028,
-      "sha256": "fb978f7ddde6e4b1969e7d6c5bf834c1c1e32bec96bebd88b54f43ceb2b00342",
+      "bytes": 428796,
+      "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
@@ -641,6 +607,22 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
+    },
+    {
+      "path": "benchmarks/results/vv10-range-followups-20261014/campaigns.json.xz",
+      "family": "vv10-range-followups-20261014",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact source-bound endpoint records, reference force vectors and final failure outcomes",
+      "bytes": 244288,
+      "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
+    },
+    {
+      "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
+      "family": "vv10-wide-pair-20261014",
+      "bytes": 183856,
+      "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     },
     {
       "path": "benchmarks/results/xc-shared-branches-20261014/endpoints.json.xz",

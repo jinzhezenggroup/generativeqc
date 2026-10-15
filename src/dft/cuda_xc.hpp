@@ -82,6 +82,10 @@ struct CudaXcLayout {
   double exchange_scale{1.0}, correlation_scale{1.0};
   bool response{};
   CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
+  /** Research-only compact products: FP32 shared panels and inner sums;
+   * local point totals use FP32; global storage and inter-tile sums stay FP64.
+   * Unsupported compact groups retain the ordinary FP64 contractions. */
+  bool fp32_contractions{};
   /** Full-grid points/weights are borrowed from an immutable MolecularGrid
    * device owner instead of occupying this arena. */
   bool borrowed_grid{};
@@ -119,6 +123,12 @@ struct CudaXcAoTiles {
    * maps cannot certify an indexed consumer merely by matching dimensions. */
   int derivative_order{-1};
 };
+
+/** Discovery schedule only: both routes sample the same generated AO jets.
+ * DeviceChunks compacts sorted IDs on the plan stream and downloads offsets
+ * at bounded chunk boundaries. HostTiles is the retained qualification control.
+ */
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
 
 /** Worst-case admission for sampled-jet discovery. The device bound includes
  * the dense arena and one global-capacity map per tile; host peak includes
@@ -220,6 +230,10 @@ class CudaXcPlan {
    * This is diagnostic/execution provenance, not public capability admission. */
   const CudaXcPointProgram* point_program() const noexcept { return point_program_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Prepare bounded PBE correlation, optional AO and tiled-product lowering.
+   * Application admission or experimental ablations select the components;
+   * strict refinement/audit always restores FP64 for all of them. */
+  void prepare_mixed_pbe_points(bool mixed_ao = false, bool mixed_contractions = false);
   /** Prepare after maps and before evaluation/capture. Rejection/OOM preserves
    * the incumbent. Compact contraction batching is an explicit qualification
    * candidate; response, mixed arithmetic and optional providers do not use it. */
@@ -259,7 +273,8 @@ class CudaXcPlan {
    * Returns false without discovery if either numeric budget is insufficient.
    * A successful selection is immutable for the lifetime of this geometry
    * owner. A positive sampled-jet cutoff requires endpoint qualification. */
-  bool select_local_ao(double cutoff, std::size_t max_host_bytes);
+  bool select_local_ao(double cutoff, std::size_t max_host_bytes,
+                       CudaXcAoDiscovery schedule = CudaXcAoDiscovery::HostTiles);
   const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
@@ -321,6 +336,9 @@ class CudaXcPlan {
   CudaXcLayout layout_;
   const CudaXcPointProgram* point_program_{};
   CudaXcPointLauncher point_launcher_{};
+  bool mixed_pbe_points_{};
+  bool mixed_pbe_ao_{};
+  bool mixed_pbe_contractions_{};
   CudaXcPointBatchLauncher point_batch_launcher_{};
   CudaXcPointBatchPlan point_batch_plan_;
   double* point_batch_arena_{};
@@ -374,8 +392,20 @@ std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const Cud
 void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
                const double* points, std::size_t count, double cutoff, double* ao, double* work,
                int* error, unsigned* host_flags);
+/** Discover a bounded chunk using the existing AO predicate. Scratch consists
+ * of the dense AO/work panels and at most 3*tile_points offsets in point_totals.
+ * The only host publication is tile_count absolute CSR offsets after one fence;
+ * errors drain the stream before releasing borrowed host output storage.
+ */
+void select_ao_chunk(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
+                     const double* points, std::size_t first_tile, std::size_t tile_count,
+                     double cutoff, double* ao, double* work, double* point_totals, int* error,
+                     std::size_t* indices, std::size_t capacity, std::size_t initial_offset,
+                     std::size_t* host_offsets);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
+CudaXcPointLauncher mixed_pbe_point_launcher();
+CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher();
 /** Pure compiler-emitted resource qualification, with no device-model policy. */
 CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& ao_offsets,

@@ -46,6 +46,11 @@ PRELUDE = r"""
 #include <string>
 #include <vector>
 #include "runtime/lowering_binding.hpp"
+#include "runtime/df_progress_trace.hpp"
+#include "dft/ao_selection_work.hpp"
+namespace runtime = generativeqc::runtime;
+using generativeqc::dft::CudaXcAoSelectionWork;
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
 using namespace generativeqc::runtime;
 using cudaStream_t = int;
 using cudaStreamCaptureStatus = int;
@@ -125,14 +130,6 @@ Layout cuda_xc_local_ao_layout_shape(Layout l, std::size_t, int derivative_order
 std::vector<int> local_density_launchers(const Layout&, const std::vector<std::size_t>& offsets) {
   ++launcher_calls; return std::vector<int>(offsets.size()-1, 1);
 }
-struct CudaXcAoSelectionWork {
-  bool requested{}, selected{};
-  double cutoff{}, discovery_seconds{};
-  std::size_t reserved_device_bytes{}, host_peak_bytes{};
-  std::size_t tiles{}, empty_tiles{}, min_active{3}, max_active{}, active_sum{};
-  std::size_t point_ao_visits{}, point_ao_square_sum{}, discovery_ao_jet_values{};
-  std::size_t dense_point_ao_square_sum{}, discovery_d2h_bytes{};
-};
 namespace cuda_xc_detail {
 CudaXcDensityBinding prepare_density_binding(std::size_t, std::size_t count,
     std::size_t, std::size_t, PrecisionDirective precision, std::uint64_t replays) {
@@ -159,11 +156,27 @@ void select_ao(const Layout& l, int, void*, const double*, std::size_t, double,
                void*, void*, int*, unsigned* flags) {
   for (std::size_t i=0; i<l.nao; ++i) flags[i] = !discovery_empty && i != 1;
 }
+// Model the external compaction/transfer port; owner admission and publication
+// still execute the production body below, for both discovery schedules.
+void select_ao_chunk(const Layout& l, int, void*, const double*, std::size_t,
+    std::size_t tiles, double, void*, void*, double*, int*, std::size_t* indices,
+    std::size_t capacity, std::size_t offset, std::size_t* host_offsets) {
+  check(copy_failure);
+  for (std::size_t tile=0; tile<tiles; ++tile) {
+    for (std::size_t ao=0; ao<l.nao; ++ao) {
+      if (discovery_empty || ao == 1) continue;
+      if (offset >= capacity) throw std::runtime_error("discovery capacity exceeded");
+      indices[offset++] = ao;
+    }
+    host_offsets[tile] = offset;
+  }
+}
 }
 struct CudaXcPlan {
   Layout layout_;
   bool evaluation_started_{};
   double* point_batch_arena_{};
+  double* point_totals_{};
   int stream_{7};
   std::array<CudaXcDensityBinding, 2> strict_density_{}, admitted_density_{};
   std::unique_ptr<CudaXcDensityBinding> provider_density_binding_;
@@ -184,7 +197,7 @@ struct CudaXcPlan {
   void prepare_density(PrecisionDirective, std::uint64_t = 1, std::size_t = 0);
   const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
-  bool select_local_ao(double, std::size_t);
+  bool select_local_ao(double, std::size_t, CudaXcAoDiscovery = CudaXcAoDiscovery::HostTiles);
 };
 """
 
@@ -328,17 +341,21 @@ void response() {
           "response acquired optional resources");
 }
 void discovery() {
+  for (auto schedule : {CudaXcAoDiscovery::HostTiles, CudaXcAoDiscovery::DeviceChunks})
   for (std::size_t jets : {1U, 4U})
   for (bool empty_map : {false, true}) {
     discovery_empty = false;
     CudaXcPlan p; p.layout_.jets = jets;
     p.prepare_density(strict, 1, budget); const Snapshot dense(p);
-    require(!p.select_local_ao(1e-16, 0), "discovery ignored insufficient resources");
+    require(rejected([&]{ p.select_local_ao(1e-16, 64,
+                static_cast<CudaXcAoDiscovery>(255)); }), "unknown discovery schedule accepted");
+    dense.unchanged(p);
+    require(!p.select_local_ao(1e-16, 0, schedule), "discovery ignored insufficient resources");
     dense.unchanged(p);
     copy_failure = 1;
-    require(rejected([&]{ p.select_local_ao(1e-16, 64); }), "discovery copy failure ignored");
+    require(rejected([&]{ p.select_local_ao(1e-16, 64, schedule); }), "discovery copy failure ignored");
     dense.unchanged(p); copy_failure = 0; discovery_empty = empty_map;
-    require(p.select_local_ao(1e-16, 64), "discovery did not complete");
+    require(p.select_local_ao(1e-16, 64, schedule), "discovery did not complete");
     require(!p.density_provider_ && !p.provider_density_binding_ && !live_contexts && !live_cache,
             "discovery did not reset dense owner");
     p.prepare_density(strict, 2, budget);

@@ -85,7 +85,7 @@ SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { re
 std::size_t admitted_q_batch=0;
 bool admitted_derived_denominators=false, admitted_mixed=false;
 double admitted_switch=0;
-bool admitted_df_mp2_mode=false;
+bool admitted_df_mp2_mode=false, admitted_df_reference=false;
 scf::CudaRhfBucketPlan** admitted_reference_plan=nullptr;
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
@@ -94,13 +94,14 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::S
                                       std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
                                       bool retain_df_response,
                                       const scf::cuda_execution::CudaDfSourcePolicy*,
-                                      scf::CudaRhfBucketPlan** reference_plan, bool df_mp2_mode) {
+                                      scf::CudaRhfBucketPlan** reference_plan, bool df_mp2_mode, bool df_reference) {
   admitted_q_batch=options.df_auxiliary_batch_limit;
   admitted_derived_denominators=options.derived_denominators;
   admitted_mixed=options.df_mixed_precision;
   admitted_switch=options.df_mixed_precision_switch_residual;
   admitted_reference_plan=reference_plan;
   admitted_df_mp2_mode=df_mp2_mode;
+  admitted_df_reference=df_reference;
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
@@ -125,7 +126,9 @@ int main(int argc,char** argv) {
     for (std::optional<bool> requested :
          {std::optional<bool>{},std::optional<bool>{false},std::optional<bool>{true}})
     for (double switch_residual : {100.0 * 1e-9,1e-4})
-    for (bool mp2_mode : {false,true}) {
+    for (bool mp2_mode : {false,true})
+    for (bool fitted : {false,true}) {
+      if (fitted && (!cuda || !with_auxiliary)) continue;
       if (with_auxiliary && !cuda) continue;
       execution.cuda=cuda;
       system.electron_count=shape.electrons;
@@ -133,10 +136,10 @@ int main(int argc,char** argv) {
       (void)run_rccsd_native_state(
           execution,system,descriptor,nullptr,nullptr,nullptr,0,
           with_auxiliary ? &auxiliary : nullptr,false,true,nullptr,8,true,false,
-          requested,switch_residual,mp2_mode);
+          requested,switch_residual,mp2_mode,fitted);
       const bool expected=cuda && with_auxiliary && requested.value_or(shape.automatic);
       if (admitted_mixed!=expected || admitted_switch!=switch_residual ||
-          admitted_df_mp2_mode!=mp2_mode || allocations)
+          admitted_df_mp2_mode!=mp2_mode || admitted_df_reference!=fitted || allocations)
         return 16;
     }
     return 0;
@@ -178,7 +181,7 @@ int main(int argc,char** argv) {
                                  derived_denominators,false,false,switch_residual,mp2_mode);
     if(admitted_q_batch!=3 || admitted_reference_plan!=&reference_plan ||
        reference_plan!=&resident || admitted_derived_denominators!=derived_denominators ||
-       admitted_df_mp2_mode!=mp2_mode || admitted_mixed ||
+       admitted_df_mp2_mode!=mp2_mode || admitted_df_reference || admitted_mixed ||
        admitted_switch!=switch_residual) return 14;
     return retained_response!=retain_response || executions != 1 || allocations || cache ? 13 : 0;
   }
@@ -187,7 +190,7 @@ int main(int argc,char** argv) {
                                         nullptr,nullptr,0,nullptr,false,true,nullptr);
     if (mode < 2) return 2;
     if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators ||
-       admitted_df_mp2_mode || admitted_mixed ||
+       admitted_df_mp2_mode || admitted_df_reference || admitted_mixed ||
        admitted_switch!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 15;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;

@@ -44,6 +44,7 @@ CPU_PRIMITIVES = (
         {
             "input",
             "constant",
+            "where",
             "add",
             "multiply",
             "divide",
@@ -197,7 +198,9 @@ def describe_cpu_compilation(
     if not isinstance(program, Program):
         raise TypeError("CPU lowering requires a TensorIR Program")
     if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        prepared = prepare_for_backend(program, "cpu", allow_cpu_boolean=True)
+        prepared = prepare_for_backend(
+            program, "cpu", allow_cpu_boolean=True, allow_cpu_where=True
+        )
     else:
         prepared = prepare_for_backend(program, "cpu")
     source, resources = _emit_prepared_cpu(
@@ -341,6 +344,11 @@ def _emit_prepared_cpu(
                 "less_equal": "<=",
             }[node.op]
             expression = f"({read(node.inputs[0])} {operator} {read(node.inputs[1])})"
+        elif node.op == "where":
+            # All three operands have already been materialized and checked.
+            # Selection reads storage; it must not make branch evaluation lazy.
+            condition, left, right = node.inputs
+            expression = f"({read(condition)} ? {read(left)} : {read(right)})"
         elif node.op == "add":
             body.append("double value = 0.0;")
             for child, factor in zip(node.inputs, a["coefficients"], strict=True):

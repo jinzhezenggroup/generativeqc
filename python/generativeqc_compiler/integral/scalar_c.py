@@ -34,8 +34,7 @@ class ScalarCEmitter:
     """Emit selectively materialized DAG values with shared CSE state.
 
     ``coalesce_branches`` shares lazy regions across simultaneous outputs.
-    It is an explicit execution schedule; the default preserves incumbent
-    source generation for consumers that have not qualified this schedule.
+    The default preserves established lowering for unqualified consumers.
     """
 
     def __init__(
@@ -335,6 +334,7 @@ class ScalarCEmitter:
         """Lower one arithmetic node using the plan's contraction decisions."""
 
         node = self.graph.nodes[identifier]
+        math_suffix = "f" if self.scalar_type == "float" else ""
         fused_multiply = self._fma_by_add.get(identifier)
         if fused_multiply is not None:
             multiply = self.graph.nodes[fused_multiply]
@@ -346,7 +346,7 @@ class ScalarCEmitter:
                 else "(" + " + ".join(self._reference(item) for item in remaining) + ")"
             )
             arguments = [self._reference(item) for item in multiply.arguments]
-            return f"fma({arguments[0]}, {arguments[1]}, {accumulator})"
+            return f"fma{math_suffix}({arguments[0]}, {arguments[1]}, {accumulator})"
         arguments = [self._reference(item) for item in node.arguments]
         if node.operation == "add":
             return " + ".join(arguments)
@@ -365,15 +365,15 @@ class ScalarCEmitter:
             "asinh",
             "erf",
         ):
-            return f"{node.operation}({arguments[0]})"
+            return f"{node.operation}{math_suffix}({arguments[0]})"
         if node.operation == "power":
             payload = node.payload
             if payload is None:
                 raise ValueError("power node requires a numeric exponent")
             exponent = float(payload)
             if exponent == 0.5:
-                return f"sqrt({arguments[0]})"
-            return f"pow({arguments[0]}, {format_constant(exponent, scalar_type=self.scalar_type)})"
+                return f"sqrt{math_suffix}({arguments[0]})"
+            return f"pow{math_suffix}({arguments[0]}, {format_constant(exponent, scalar_type=self.scalar_type)})"
         raise ValueError(f"unsupported scalar operation {node.operation!r}")
 
     def _reference(self, identifier: int) -> str:

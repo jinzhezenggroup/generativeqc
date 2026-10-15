@@ -302,9 +302,11 @@ std::vector<double> NativeBlockProvider::get(const MOSlots&, bool, int,
             ROOT / "src/molecule/basis.cpp",
         ),
     )
+    measured = dict(field.split("=", 1) for field in output.split())
     assert (
-        "exact_budget=113386440 retained_device_lower_bound=2584 attempts=2" in output
+        int(measured["exact_budget"]) > int(measured["retained_device_lower_bound"]) > 0
     )
+    assert int(measured["attempts"]) == 2
 
 
 H2_ADMISSION_MAIN = r"""
@@ -347,14 +349,17 @@ int main() {
   const auto reference_peak = scf::reference_detail::base_capacity(layout.bytes,host,4,0,budget);
   const auto cache = reference_eri_cache_bytes(16,0,false,reference_peak,budget);
   const auto retained = layout.bytes + cache;
-  assert(budget == 113386440 && layout.bytes == 2456 && cache == 128);
+  // The arena can gain bookkeeping fields without changing retirement. Bind
+  // the retained reservation to its actual layout rather than a historical
+  // byte count; still require this to be the exact MP2 admission boundary.
+  assert(layout.bytes > 0 && cache == 16 * sizeof(double) && budget > retained);
   assert(posthf::rhf_reference_capacity(source.system,8,false) < budget);
   assert(reference_peak + cache < budget);
   const auto original = mp2::conventional_energy(ref,source,budget,1e-12,8,true,0);
   assert(original.numeric_capacity_bytes == budget);
   // Even the device-only lower bound reproduces the regression. Production
   // now also reserves retained host/topology/provider allocations separately.
-  for (const auto reservation : {retained, layout.bytes}) {
+  for (const auto reservation : {std::size_t{1}, retained, layout.bytes}) {
     bool rejected = false;
     try { (void)mp2::conventional_energy(ref,source,budget-reservation,1e-12,8,true,0); }
     catch (const std::length_error&) { rejected = true; }
@@ -403,7 +408,7 @@ def test_actual_cc_provider_and_solver_callbacks_preserve_retry_state(
         PLAN_STANDINS
         + CC_CALLBACK_STANDINS
         + r"""
-void provider_probe(int failure, bool resident) {
+void provider_probe(int failure, bool resident, bool fitted) {
   reset_injection(failure);
   CorrelatedCudaReferencePlan owner;
   *owner.slot() = new scf::CudaRhfBucketPlan{30,10};
@@ -414,6 +419,14 @@ void provider_probe(int failure, bool resident) {
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
   solver_options.max_bytes = 100;
+  // The extracted callback borrows the fitted owner from its enclosing frame.
+  // Its allowance must survive exact-source retirement and be charged once on
+  // every provider attempt, without changing the legacy unfitted budgets.
+  struct FittedReference {
+    std::size_t storage_bytes() const { return 7; }
+  };
+  auto fitted_reference = fitted ? std::make_shared<FittedReference>() : nullptr;
+  const std::size_t fitted_bytes = fitted ? 7 : 0;
   const bool cuda = true, retain_df_response = true, df_mp2_mode = false;
   const core::System* correlation_auxiliary = nullptr;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr;
@@ -435,9 +448,13 @@ void provider_probe(int failure, bool resident) {
         + provider
         + r"""
     assert(failure != 2);
-    assert(state.problem.provider_peak_bytes == 40 && provider_phase_peak == 40);
-    assert((build_budgets == (resident ? std::vector<std::size_t>{100,100}
-                                      : std::vector<std::size_t>{70,100})));
+    assert(state.problem.provider_peak_bytes == 40 + fitted_bytes &&
+           provider_phase_peak == 40 + fitted_bytes);
+    assert(state.problem.reference_retained_bytes == fitted_bytes);
+    assert((build_budgets == (resident
+        ? std::vector<std::size_t>{100-fitted_bytes,100-fitted_bytes}
+        : std::vector<std::size_t>{70-fitted_bytes,100-fitted_bytes})));
+    assert(bool(fitted_reference) == fitted);
     assert(raw_constructions == 2 && destroyed_sources == 1);
     assert(!state.reference_interaction_source);
     assert(provider_work.source_scans == 2 && provider_work.source_values == 6);
@@ -511,7 +528,8 @@ void solver_probe(int failure, bool resident) {
 }
 int main() {
   for (bool resident : {false,true}) {
-    for (int failure : {0,1,2}) provider_probe(failure,resident);
+    for (bool fitted : {false,true})
+      for (int failure : {0,1,2}) provider_probe(failure,resident,fitted);
     for (int failure : {0,1,2,3}) solver_probe(failure,resident);
   }
   std::cout << "actual provider/solver callback rollback and cumulative work gates passed\n";

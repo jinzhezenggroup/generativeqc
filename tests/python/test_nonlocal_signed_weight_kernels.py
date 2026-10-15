@@ -7,13 +7,15 @@ qualification. Both pair variants run their actual source arithmetic.
 from __future__ import annotations
 
 import ctypes as ct
-import shutil
-import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tools.generate_nonlocal_pair_native import native_header
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,10 +31,9 @@ def _definition(source: str, marker: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def signed_weight_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def signed_weight_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> ct.CDLL:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     pieces = [
         _definition(
@@ -132,7 +133,7 @@ int evaluate(double first_weight, double first_density, double* out, double firs
     seeds[5*n+i] = weight_derivative[i];
     threadIdx.x = i;
     pack_force_seeds_kernel(n, ew, point_derivative, seeds,
-                           &collect_error, &domain_error, &pair_error);
+                           &collect_error, &domain_error, &pair_error, nullptr);
   }
   out[0] = energy[0] + energy[1] + energy[2];
   out[1] = vrho[0]; out[2] = vsigma[0];
@@ -176,21 +177,12 @@ extern "C" int run_scf(int variant, int mask, double weight, double density, dou
         + "\n".join(pieces)
         + wrapper
     )
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            str(cpp),
-            "-o",
-            str(library),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
+    native_cxx.build_shared(
+        [cpp],
+        library,
+        compile_args=["-std=c++17", "-O2"],
+        compile_timeout=30,
+        link_timeout=30,
     )
     native = ct.CDLL(str(library))
     native.run.argtypes = [

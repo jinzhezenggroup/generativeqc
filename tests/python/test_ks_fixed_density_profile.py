@@ -45,6 +45,7 @@ def profile_program(
         "template <class Cleanup>\nclass ResourceScopeExit",
     )
     range_method = _definition(source, "  void enqueue_range_correction(")
+    range_active = _definition(source, "  bool range_source_active()")
     harness = r"""
 #include <algorithm>
 #include <array>
@@ -171,7 +172,7 @@ int enqueue(char stage, const double* density, const double* beta, std::size_t m
   assert((stage == 'J') == bool(j));
   assert((stage != 'J') == bool(k));
   ++submissions; stages.push_back(stage);
-  auto& work = stage == 'R' && mode >= 21 ? range_pending : pending;
+  auto& work = stage == 'R' && mode >= 21 && mode <= 28 ? range_pending : pending;
   work.emplace_back([=] {
     if (j) *j = 10;
     if (k) *k = 20;
@@ -199,10 +200,11 @@ int execute_cuda_density_fitting_rhf_jk_device(Fitted* p, const double* density,
   return execute_cuda_density_fitting_uhf_jk_device(p, density, nullptr, j, k, nullptr,
                                                    detail, terms, layout);
 }
-int enqueue_prepared_cuda_exchange_correction(Provider& provider, const Spec& spec,
+int enqueue_prepared_cuda_exchange_correction(Provider& provider, const Strategy& strategy,
     const double* density, const double* beta, std::size_t matrix, double* k,
     double* kb, int* error, std::string&) {
-  assert(!provider.is_range && mode < 21 && spec.exchange.coefficient == -0.375);
+  assert(!provider.is_range && (mode < 21 || mode >= 36) &&
+         strategy.spec.exchange.coefficient == -0.375);
   return enqueue('R', density, beta, matrix, nullptr, k, kb, error);
 }
 int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const double* beta,
@@ -219,12 +221,19 @@ int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const 
 // completed-action audit owns the resident-value error/census boundary.
 struct PhaseSource {
   unsigned calls{}, audits{}, observations{};
-  bool active() const { return mode != 32; }
+  bool active() const { return mode != 32 && mode != 37; }
   int enqueue(scf::Spec spec, const double* density, double* j, double* k,
               int* error, double threshold, std::string& detail,
               const double* beta, double* kb) {
     assert(active() && threshold == 1e-12);
     ++calls;
+    // A range lease must receive only the correction operator and scratch,
+    // never the primary J/K operator. Both spin layouts use the same lease.
+    if (mode >= 36) {
+      assert(!spec.coulomb.present && spec.exchange.coefficient == -0.375 && !j);
+      const auto status = scf::enqueue('R', density, beta, 4, j, k, kb, error);
+      return mode == 38 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
+    }
     const auto status = scf::enqueue_cuda_direct_jk_device(
         nullptr, spec, density, beta, 4, j, k, kb, error, detail);
     return mode == 33 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
@@ -232,8 +241,8 @@ struct PhaseSource {
   int audit() {
     assert(!timing && pending.empty());
     ++audits;
-    if (mode == 34) throw std::bad_alloc();
-    return mode == 31 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : 0;
+    if (mode == 34 || mode == 40) throw std::bad_alloc();
+    return mode == 31 || mode == 39 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : 0;
   }
   void observe_completed(std::size_t actions) { observations += actions; }
 };
@@ -273,10 +282,12 @@ struct Impl {
   int* jk_error{&primary_error};
   int* range_jk_error{&range_error};
   bool has_range_correction{true};
-  scf::Spec correction;
-  scf::Spec* range_correction{&correction};
+  scf::Strategy correction;
+  scf::Strategy* range_correction{&correction};
   scf::Provider provider;
   std::unique_ptr<PhaseSource> phase_source;
+  bool phase_source_range{};
+RANGE_ACTIVE
   scf::Provider separate_range_provider;
   scf::Provider* range_provider{};
   struct { int stream{11}; } range_fock_binding;
@@ -288,7 +299,7 @@ struct Impl {
     return {1, identity};
   }
   void current_device() const { check(cudaSetDevice(device)); }
-  Impl() { correction.exchange.coefficient = -0.375; }
+  Impl() { correction.spec.coulomb.present = false; correction.spec.exchange.coefficient = -0.375; }
 RANGE_METHOD
 };
 struct Owner {
@@ -309,7 +320,8 @@ int main(int argc, char** argv) {
   }
   if (mode >= 29) {
     p.phase_source = std::make_unique<PhaseSource>();
-    p.has_range_correction = false;
+    p.phase_source_range = mode >= 36;
+    p.has_range_correction = p.phase_source_range;
     if (mode == 30) p.provider.model.spec.exchange.present = false;
   }
   change_token = [&] { ++p.identity; };
@@ -320,7 +332,7 @@ int main(int argc, char** argv) {
   auto run = [&] { return owner.profile_fixed_density_components(expected, profile, detail); };
   const auto status = run();
   const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20 || mode == 35;
-  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32;
+  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32 || mode == 36 || mode == 37;
   assert((status == GENERATIVEQC_STATUS_SUCCESS) == success);
   if (mode == 23 || mode == 25 || mode == 27)
     assert(status == GENERATIVEQC_STATUS_CUDA_ERROR);
@@ -330,10 +342,10 @@ int main(int argc, char** argv) {
   assert(pending.empty() && range_pending.empty());
   if (success) {
     const unsigned mask = mode == 2 || mode == 30 ? 9 : mode == 3 || mode == 17 ? 7 :
-                          mode == 4 || mode >= 29 ? 11 : 15;
+                          mode == 4 || (mode >= 29 && mode <= 35) ? 11 : 15;
     assert(profile.present_mask == mask && p.token() == expected && drains == 0);
     for (unsigned i = 0; i != 4; ++i) assert(profile.milliseconds[i] == ((mask & (1U << i)) ? 2 : 0));
-    assert(stages == (mode == 2 || mode == 30 ? std::vector<char>{'J','X'} : mode == 4 || mode >= 29 ?
+    assert(stages == (mode == 2 || mode == 30 ? std::vector<char>{'J','X'} : mode == 4 || (mode >= 29 && mode <= 35) ?
       std::vector<char>{'J','K','X'} : mode == 3 || mode == 17 ? std::vector<char>{'J','K','R'} :
       std::vector<char>{'J','K','R','X'}));
     const auto count = stages.size();
@@ -369,13 +381,13 @@ int main(int argc, char** argv) {
     assert(std::string(bridge.begin(), bridge.end()) == expected_bridge[mode - 22]);
   }
   if (p.phase_source) {
-    if (mode == 32 || mode == 35)
+    if (mode == 32 || mode == 35 || mode == 37)
       assert(p.phase_source->calls == 0 && p.phase_source->audits == 0);
     else if (success)
-      assert(p.phase_source->calls == (mode == 30 ? 2U : 4U) &&
+      assert(p.phase_source->calls == (mode == 30 || mode == 36 ? 2U : 4U) &&
              p.phase_source->audits == p.phase_source->calls);
     else
-      assert(p.phase_source->calls == 1 && p.phase_source->audits == (mode == 33 ? 0U : 1U));
+      assert(p.phase_source->calls == 1 && p.phase_source->audits == (mode == 33 || mode == 38 ? 0U : 1U));
   }
 }
 """
@@ -386,6 +398,7 @@ int main(int argc, char** argv) {
         harness.replace("GUARD", guard)
         .replace("METHODS", methods)
         .replace("RANGE_METHOD", range_method)
+        .replace("RANGE_ACTIVE", range_active)
     )
     native_cxx.build_executable(
         [cpp],
@@ -422,6 +435,11 @@ int main(int argc, char** argv) {
         pytest.param(33, id="resident-source-submit-failure"),
         pytest.param(34, id="resident-source-audit-allocation"),
         pytest.param(35, id="resident-source-stale-token"),
+        pytest.param(36, id="range-resident-source"),
+        pytest.param(37, id="range-inactive-source-fallback"),
+        pytest.param(38, id="range-resident-submit-failure"),
+        pytest.param(39, id="range-resident-audit-failure"),
+        pytest.param(40, id="range-resident-audit-allocation"),
     ],
 )
 @pytest.mark.parametrize("spins", [1, 2])
