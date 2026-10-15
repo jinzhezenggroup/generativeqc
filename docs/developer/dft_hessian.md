@@ -458,8 +458,8 @@ The Python test driver supplies independent quadrature/Libxc/real-space oracles;
 numerical leaves and response components execute in standalone native processes,
 including tests with unavailable Python paths and an empty executable search
 path. These validate components, not a complete stationary molecular endpoint.
-The physical prepared-source composition, full-rank DF metric response, complete
-stationary integral/ECP assembly, full integral coverage and
+Nuclear H/S/J/K sources, full-rank DF metric response, complete stationary
+integral/ECP assembly, full integral coverage and
 production CLI wiring are **not** implemented by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.
 

@@ -80,6 +80,49 @@ cases. Complete qualification and sanitizer evidence is retained under ignored
 `.artifacts/wb97mv-hessian-aot-20261015/nuclear-*`; these are component tests,
 not complete Hessian endpoint timings.
 
+Final integrated code source is `65d097b7a5e106db0ebad420baaabe255c144f5f`,
+which retains the independent Fock queue-drain/sentinel repair `cf09b7e6e`
+and atomic GMRES repair `d7d78952e`. Rebuilt finite Slurm job **3119** on
+node2/main/PRO6000 preserves assigned visibility **0** and exits successfully:
+
+- All six resident-frame lifecycle cases and **260 integrated tests pass**.
+  Four host compiler/cache prerequisite cases skip remotely and pass locally.
+- All **24 sanitizer runs** are clean: memcheck/initcheck/racecheck/synccheck
+  each cover RKS/UKS Direct/DF molecular nuclear actions and both synthetic
+  spin fixtures. Racecheck reports zero errors and zero warnings.
+- Local integrated tests: **56 passed, 210 opt-in skipped**. Both separately
+  selected CUDA-free host admission tests pass. The local suite includes the
+  incoming physical Fock queued-borrow failure-injection and owner-port tests.
+- Pinned ty 0.0.82, all-files pre-commit, 557-module compiler dependency and
+  249-module shared SCF audits pass. Existing review-only structural-lint
+  warnings are not changed. Qualified probes/shared library have no libpython
+  dependency; this does not qualify the still-Python production CLI worker.
+- CMake CXX/CUDA launchers use verified ccache 4.5.1. Actual native CUDA compiler
+  commands and before/after shared-cache statistics are retained; these are
+  build provenance, not isolated cache-hit or endpoint-performance claims.
+
+Final source-matched binary SHA256 values:
+
+```text
+0842b29058c788e83d4b6e4bda5128225306e24453066e4c82377ef387edd043  generativeqc_cuda_grid_geometry_probe
+9dd5cc499142a3e95861732ad67e825fde9b790b024021c6e62b4abc970ea2a8  generativeqc_cuda_wb97mv_grid_probe
+aa1929f53f23635a6ab8fad7b2a0575ef18287984fc1fbfadc5a9d92149f7d9f  generativeqc_ks_wb97mv_grid_probe
+9b9d83b260358a05468e54bae8253d935a1f55be4a4476e38a9e0b721b28dac3  generativeqc_ks_resident_frame_tests
+3ab21616ca3dcc65a119145020af7abe1743211cf787f82f1020202df3dcc58e  libgenerativeqc.so.0.1.0
+```
+
+Final ignored local receipts are `nuclear-integrated-gpu.log`,
+`nuclear-integrated-cpu.log`, `nuclear-integrated-host-admission.log`,
+`nuclear-integrated-precommit.log`, `nuclear-integrated-source.patch`,
+`nuclear-integrated-compiler-commands.txt`, `nuclear-integrated-dependencies.txt`
+and `nuclear-integrated-sanitizers/` under the artifact directory above. The
+remote reproduction stage is
+`n2:/data/jzzeng/wb97mv-hessian-native-response-20261015/nuclear-integrated-20261016`.
+It includes the finite job script, source-head record, source reconstruction
+patch, independent fixtures, binaries and all sanitizer receipts. Slurm
+accounting storage is disabled on this installation; successful srun completion
+and the retained per-phase receipts establish job completion, not a sacct row.
+
 ## Consequences
 
 The opt-in arena retains full field partials and right directions, trading
