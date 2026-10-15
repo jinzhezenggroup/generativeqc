@@ -83,6 +83,25 @@ hazards on the restarted coupled-spin solve. The standalone qualification binary
 SHA256 is `b3722226d5eace081674743757905d04405346d38283f4561191d0317e31dbaa`;
 its dynamic dependencies contain no libpython or GenerativeQC public runtime.
 
+Integrated qualification on October 16, 2026 uses the normal Release/sm120
+CMake targets (no fast-compile mode), including the rebuilt native SCF library.
+Node2/main/PRO6000 job 3071 passes all 128 leaf/GMRES/CPKS tests in 47.05 s.
+The six actual prepared-frame cases (PBE/global-hybrid RKS and UKS) also pass
+twice in that job, including with PATH, PYTHONHOME and PYTHONPATH pointing to
+nonexistent locations. This covers the concrete plan, prepared-batch port and
+native CPKS reference adapter, but still not a physical molecular response.
+The CMake CPKS probe SHA256 is
+`de287671a50fcb0f1d7fffe5a36394d33e026980ba7616160bb91e84337c9b00`;
+job 3072 repeats all four sanitizers on that binary with zero errors/hazards,
+preserving Slurm-assigned visibility (device 1). Integrated CPU/tooling tests
+pass 88 tests with 77 explicitly opt-in skips; pinned all-file pre-commit,
+ty 0.0.82 and compiler ownership checks pass.
+
+Job 3070 rejected the new fixture's accidentally defaulted order-one Fock
+request before SCF. The corrected fixture explicitly requests the order-zero
+prepared SCF provider required by `CudaKsPlan`; that failed attempt is retained
+but is not numerical qualification evidence.
+
 The pre-existing broader `generativeqc_ks_resident_weights_tests` target cannot
 compile at base `372696077`: it references the removed `PreparedBatch` member
 `ks_transport_diagnostic`. The new focused frame test deliberately avoids fixing

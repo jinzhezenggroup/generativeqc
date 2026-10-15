@@ -120,6 +120,7 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
   const dft::AoBasis basis(system);
   const dft::MolecularGrid grid(system, {1, 24, 12, 24, 3, 1e-12});
   scf::FockBuildSpec spec;
+  spec.derivative_order = 0;
   spec.spin = restricted ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
   spec.exchange.present = hybrid;
   spec.exchange.coefficient = restricted ? -0.125 : -0.25;
