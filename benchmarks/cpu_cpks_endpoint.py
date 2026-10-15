@@ -16,9 +16,14 @@ import platform
 import statistics
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
-from _retention import raw_output_path
+try:
+    from _retention import raw_output_path
+except ModuleNotFoundError as error:
+    if error.name != "_retention":
+        raise
+    from benchmarks._retention import raw_output_path
 
 
 def endpoint(method: str, *, moved: bool, strategy: str) -> dict[str, Any]:
@@ -132,47 +137,97 @@ def main() -> None:
         parser.error("repeats must be positive and warmups nonnegative")
     if not set(args.methods) <= {"lda-rks", "pbe-rks", "lda-uks", "pbe-uks"}:
         parser.error("unsupported CPU CPKS method")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("x", encoding="utf-8") as stream:
+        publication: dict[str, Any] = {
+            "source_sha": args.source_sha,
+            "status": "running",
+            "cases": {},
+            "active": {"phase": "initialization"},
+        }
+        _write_receipt(stream, publication)
+        try:
+            _run(args, publication)
+            publication.pop("active", None)
+            publication["status"] = "complete"
+            _write_receipt(stream, publication)
+        except BaseException as error:
+            publication["status"] = "failed"
+            publication["error"] = {
+                "type": type(error).__name__,
+                "message": str(error),
+            }
+            try:
+                _write_receipt(stream, publication)
+            except BaseException as journal_error:
+                raise error from journal_error
+            raise
+
+
+def _write_receipt(stream: TextIO, publication: dict[str, Any]) -> None:
+    """Write through the exclusive descriptor even if its pathname is replaced."""
+    payload = json.dumps(publication, indent=2, allow_nan=False) + "\n"
+    stream.seek(0)
+    stream.write(payload)
+    stream.truncate()
+    stream.flush()
+
+
+def _run(args: argparse.Namespace, publication: dict[str, Any]) -> None:
+    """Preserve completed physical publications and the current failure boundary."""
 
     import generativeqc
     from generativeqc import response_solver
 
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve(strict=True)
-    publication = {
-        "source_sha": args.source_sha,
-        "python_package": str(Path(generativeqc.__file__).resolve()),
-        "solver_source": str(Path(response_solver.__file__).resolve()),
-        "library": str(library),
-        "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
-        "python": platform.python_version(),
-        "platform": platform.platform(),
-        "threads": {
-            name: os.environ.get(name)
-            for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS")
-        },
-        "strategy": args.strategy,
-        "first_use_scope": "per-case first endpoint; shared process and persistent compiler cache",
-        "timing_scope": "construct+SCF+prepare-response+solve-many+residual-check+close",
-        "cases": {},
-    }
+    publication.update(
+        {
+            "python_package": str(Path(generativeqc.__file__).resolve()),
+            "solver_source": str(Path(response_solver.__file__).resolve()),
+            "library": str(library),
+            "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "threads": {
+                name: os.environ.get(name)
+                for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS")
+            },
+            "strategy": args.strategy,
+            "first_use_scope": "per-case first endpoint; shared process and persistent compiler cache",
+            "timing_scope": "construct+SCF+prepare-response+solve-many+residual-check+close",
+            "cases": {},
+        }
+    )
     for method in args.methods:
         for moved in (False, True):
-            first = endpoint(method, moved=moved, strategy=args.strategy)
-            for _ in range(args.warmups):
-                endpoint(method, moved=moved, strategy=args.strategy)
-            samples = [
-                endpoint(method, moved=moved, strategy=args.strategy)
-                for _ in range(args.repeats)
-            ]
-            publication["cases"][f"{method}-{'moved' if moved else 'original'}"] = {
-                "first_use": first,
+            key = f"{method}-{'moved' if moved else 'original'}"
+            row: dict[str, Any] = {
                 "warmups": args.warmups,
-                "samples": samples,
-                "median_seconds": statistics.median(
-                    sample["seconds"] for sample in samples
-                ),
+                "samples": [],
             }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(publication, indent=2) + "\n", encoding="utf-8")
+            publication["cases"][key] = row
+            publication["active"] = {"case": key, "phase": "first_use"}
+            row["first_use"] = _validated_endpoint(
+                method, moved=moved, strategy=args.strategy
+            )
+            for index in range(args.warmups):
+                publication["active"].update(phase="warmup", index=index)
+                _validated_endpoint(method, moved=moved, strategy=args.strategy)
+            for index in range(args.repeats):
+                publication["active"].update(phase="sample", index=index)
+                row["samples"].append(
+                    _validated_endpoint(method, moved=moved, strategy=args.strategy)
+                )
+            row["median_seconds"] = statistics.median(
+                sample["seconds"] for sample in row["samples"]
+            )
+
+
+def _validated_endpoint(method: str, *, moved: bool, strategy: str) -> dict[str, Any]:
+    """Reject invalid JSON before it can poison retained partial results."""
+    result = endpoint(method, moved=moved, strategy=strategy)
+    json.dumps(result, allow_nan=False)
+    return result
 
 
 if __name__ == "__main__":
