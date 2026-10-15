@@ -136,6 +136,8 @@ legitimate scientific or backend-specific owners.
 | MP2/UMP2 | `src/methods/mp2_method.cpp`, `src/methods/ump2_method.cpp`, shared `src/methods/correlated_batch.cpp` | Reference/correlation source admission, phase-local providers, precision policy and last-good reference seed; unsupported targets still reject |
 | CC | `src/methods/rccsd_method.cpp`, `src/methods/rccsdt_method.cpp`, `src/methods/df_rccsdt_method.cpp`, `src/methods/uccsd_method.cpp`, shared `src/methods/correlated_batch.cpp` for conventional restricted batches | CC equations, physical residuals, shared response Krylov, source admission, provider streams and bounded fallbacks |
 | GFN | `src/methods/xtb_method.cpp` | Context-owned `Gfn2RuntimeBridge`, native CPU/CUDA SCC owners and provider handle preparation/destruction |
+| Tensor capture | `src/runtime/cuda_graph_region.cuh` | Original graph executable, stream/arena/library binding and capture eligibility; graph submission is not an endpoint completion fence |
+| Explicit generated D3 | `python/generativeqc_compiler/geometry/d3_cuda.py` | Existing artifact lease, topology/switch-state guards and native tensor owner; rebuild after failure remains explicit |
 
 ### Shared reference and correlated batch control
 
@@ -177,8 +179,6 @@ These shared controls do not add unsupported products, backends or batch domains
 The public method manifest and prepared capability queries remain authoritative.
 CPU/CUDA scientific providers, resident storage, captures, streams and finite
 resource fallbacks are not replaced with a generic per-operator host loop.
-| Tensor capture | `src/runtime/cuda_graph_region.cuh` | Original graph executable, stream/arena/library binding and capture eligibility; graph submission is not an endpoint completion fence |
-| Explicit generated D3 | `python/generativeqc_compiler/geometry/d3_cuda.py` | Existing artifact lease, topology/switch-state guards and native tensor owner; rebuild after failure remains explicit |
 
 The KS adapters cross-cast to private `KsSingleOwnerPort` and
 `KsBatchOwnerPort` interfaces. These interfaces only forward requests to the
