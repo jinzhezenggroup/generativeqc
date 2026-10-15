@@ -108,8 +108,18 @@ cannot impersonate an active definition. The derived anonymous projection has
 an observed end marker and the same hard output budget; malformed/truncated
 records yield `unsupported-clangxx-macro-stream`. Active parallel/profile/debug
 mode definitions and non-native C++11 ABI definitions are rejected. Explicit
-ABI undefinition and observed macro push/pop configuration are conservatively
-outside the domain (`unsupported-clangxx-abi` / `unsupported-clangxx-macro-stack`).
+ABI undefinition is outside the domain (`unsupported-clangxx-abi`).
+A separate bounded preprocessing observation force-includes an anonymous header
+containing only `#pragma GCC poison push_macro pop_macro`, before user input.
+Clang therefore rejects active direct or generated macro-stack operations,
+including `_Pragma` factories, with `unsupported-clangxx-macro-stack`. Active
+ordinary identifiers and conditional checks using either poisoned spelling are
+also conservatively excluded. Inactive code, comments, literals, unrelated
+pragmas and ordinary user macros remain admissible. The observer defines no
+macros and does not replace `_Pragma`; its forced include never enters the
+object recipe. It uses the same verified driver/base flags/environment, finite
+process owner and 64 MiB bound. Preprocessing history alone cannot establish
+macro-stack absence because Clang consumes those operations.
 Clang C++ inherits the Clang dependency-path restrictions below and the C++ PCH,
 module, alternate ABI, target/sysroot and flag restrictions above. Its returned
 closure salt must reach the verified compiler-cache command. Tests execute a

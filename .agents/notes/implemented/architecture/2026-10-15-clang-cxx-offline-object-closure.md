@@ -330,3 +330,87 @@ Downloaded `.cache/pr2525-startup-evidence.tar.gz` SHA-256 is
 `ad2a94a83abbf2e1698b1a5a5fa7bde41ee60bd1cc518e75dfb46ccb43f7a420`;
 its hash, code/test bytes and JUnit are checked without following/extracting links.
 This independently validates startup isolation, not whole-PR pragma admission.
+
+
+## Macro-stack observation correction (2026-10-16)
+
+The earlier publication pause above is superseded by the bounded poison observer
+proposed by njzjz-bot in PR #2525 comment 6196175032 and independently exercised
+on this task's retained Linux Notebook. The proposer implemented the adopted
+delta and is therefore not an independent approver for it.
+
+Clang consumes direct and computed macro-stack pragmas before `-dD` output.
+The old collector returns reusable keys for ten real source/header counterexamples.
+A forced-first anonymous header containing only
+`#pragma GCC poison push_macro pop_macro` makes the same verified compiler reject
+the active names, including stringified, pasted and native library `_Pragma`
+factories. It also rejects ordinary identifiers and conditional identifier checks
+with those two spellings. This is a deliberately conservative finite boundary.
+Inactive text, raw literals, unrelated pragmas and ordinary user macros remain
+supported. No macro is defined, `_Pragma` is not overridden, object flags are
+unchanged, and the existing finite process owner and 64 MiB bound are retained.
+
+Clang exempts expansions of macros defined before poisoning. A real control
+reproduces that exception, then proves the forced-first observer rejects the
+same source. The fixed driver's predefined macro table contains neither name;
+the admitted original flags cannot inject user predefinitions or forced headers.
+A post-poison definition control fails. These controls explain why moving the
+guard after user input or adding user macro admission would need a fresh audit.
+
+Own source-matched qualification of the proposed collector: ten baseline failures,
+sixteen candidate passes, the full eight-file Linux suite **267 passed / zero
+skips**, plus eleven extra controls and five further accepted-input controls.
+The latter five originally compared whitespace-normalized preprocessing output;
+that comparison does not establish literal-byte preservation. The integrated
+regressions instead retain raw preprocessing output and compare compiler token
+kinds and full spellings, with an additional stored-object execution oracle for
+multiline/double-space/tab bytes. Their final execution receipt is recorded below. The original 267-test result is not being counted again for new tests.
+
+The downloaded diagnostic archive `.cache/poison-eval/evidence.tar.gz` has SHA-256
+`94386d1c80b9bd1e3e4ee8e0e4d872a4311cf0261f0bd89290146a090b6cb258`.
+All 11,054 source files matched the corresponding full manifest before/after.
+The collector SHA-256 is
+`a8f1ce942084c35162e3cc123b55c342c68ea269588c8903aaba95b0bc4f3119`.
+The actual retrieved object and separately linked library retain SHA-256
+`ba1423b2ad1bb3364cdd2cf2e8e422618a4b173416d1152426a8d5ec58e03918` and
+`3b3c2512c9134436eeab2cf67d46d479273a1cb7836bf1464317277ef6d422c4`;
+seven Decimal rows match. Test-owned sccache misses/hits are 1/0, 1/1, 2/1,
+and real omitted/old-salt controls reject stale object bytes. This remains finite
+native offline-object evidence, with no installed/runtime/CUDA qualification.
+
+
+### Final integrated LF qualification
+
+The initial integrated run produced **105 passed / 6 failed / zero skips**.
+All six failures were new fixtures: the token comparator retained the terminal
+record newline that the production observer removes, and the literal fixture
+placed a literal tab directly in the unsupported dump-spelling domain. The
+comparator now removes only terminal record CR/LF, preserving every token's
+spelling; the C++ fixture uses an escaped tab and still requires the executed
+result to contain the actual tab byte. The corrected six tests pass with zero
+skips (105 explicitly deselected). The other 105 test bodies are unchanged.
+This is a composed 111-case qualification, not a falsely claimed clean rerun.
+
+Both runs verified all 11,054 source files before and after. Final LF collector
+SHA-256 is `af8c27df8c76e4035e70b4031368644e77a5730e9a0fd980e1dfb030bdcfb911`;
+final test SHA-256 is
+`ba672085654852e70597e8643859ae2a9dba221f04121888e1129a4351204004`.
+The prior diagnostic collector hash above is its CRLF file: replacing CRLF with
+LF yields exactly this final collector, with no implementation delta. The final
+qualification uses actual LF bytes rather than relabeling the CRLF diagnostic.
+
+Raw `.pp`, token and macro observations remain archived without global whitespace
+normalization. The independently executed literal bytes are hex
+`6d756c7469706c6520207370616365730a6e657720206c696e6509656e64`.
+Its retrieved object SHA-256 is
+`4a98a3d50943426a5c4f1eaab148ad41a3c222ab23ff79ba09638dd049ceb378`;
+the separately linked library SHA-256 is
+`9936b412e868f8bb9b8af23abbebbbac0df89dfc537bbefef0e0978078a2b0cd`.
+Downloaded `.cache/poison-final/evidence.tar.gz` SHA-256 is
+`3940e9d9ae852a83d7ebbcfa7e63bfba7b47cd481ca6a7931a3f35d7f2653512`.
+A read-only archive audit confirms regular entries, final source/test LF hashes,
+JUnit populations and the actual executed library bytes. The earlier 267-case
+suite is retained at its original CRLF source provenance, not counted as a new
+LF run. Windows protocol checks are 45 passed / 66 native skips; Ruff, formatting,
+diff whitespace and the 540-module compiler dependency audit pass. This final
+note-only result addition does not change the qualified source or test bytes.

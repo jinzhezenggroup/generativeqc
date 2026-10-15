@@ -458,6 +458,7 @@ def collect_cpu_closure(
         diagnostic: bool = False,
         token_budget: int | None = None,
         input_fds: tuple[int, ...] = (),
+        failure_reason: str = "compiler-command-failed",
     ) -> str:
         check_working_directory()
         check_clang_selection()
@@ -518,7 +519,7 @@ def collect_cpu_closure(
         if limited:
             raise ValueError("clangxx-token-output-limit")
         if result.returncode:
-            raise ValueError("compiler-command-failed")
+            raise ValueError(failure_reason)
         # Remove record terminators only: GCC quotes a filename's terminal
         # space/tab, and trimming that whitespace destroys dependency identity.
         return output.rstrip("\r\n")
@@ -676,6 +677,27 @@ def collect_cpu_closure(
                     r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
                 ):
                     raise ValueError("unsupported-clangxx-abi")
+                # -dD omits consumed pragma stack events. Poison only their
+                # names before preprocessing so Clang also checks destringized
+                # and token-pasted _Pragma expansions, without banning the
+                # ordinary _Pragma macros used by system/C++ headers. The gate
+                # changes observation only, never the actual object flags.
+                with tempfile.TemporaryFile() as stack_guard:
+                    stack_guard.write(b"#pragma GCC poison push_macro pop_macro\n")
+                    stack_guard.flush()
+                    stack_guard.seek(0)
+                    query(
+                        [
+                            *effective_flags,
+                            "-E",
+                            "-include",
+                            f"/proc/self/fd/{stack_guard.fileno()}",
+                            str(source),
+                        ],
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(stack_guard.fileno(),),
+                        failure_reason="unsupported-clangxx-macro-stack",
+                    )
                 # -dD includes ordinary output, so its text is not itself a
                 # directive/event protocol. Let the same Clang raw lexer own
                 # literal boundaries before interpreting active definitions.

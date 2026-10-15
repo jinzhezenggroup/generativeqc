@@ -1331,3 +1331,372 @@ def test_real_observer_python_ignores_private_site_hook(
         == baseline.closure.cache_key
     )
     assert not marker.exists()
+
+
+@pytest.mark.parametrize("wrapper", [False, True], ids=["source", "header"])
+@pytest.mark.parametrize(
+    "spelling", ["directive", "operator", "macro", "pasted", "spliced"]
+)
+def test_real_macro_stack_events_fail_closed(
+    tmp_path: Path, real_clangxx: tuple, spelling: str, wrapper: bool
+) -> None:
+    """A restored final macro table must not hide an active stack operation."""
+    compiler, manifest = real_clangxx
+    if spelling == "directive":
+        push = '#pragma push_macro("VALUE")\n'
+        pop = '#pragma pop_macro("VALUE")\n'
+        prefix = ""
+    elif spelling == "operator":
+        push = '_Pragma("push_macro(\\"VALUE\\")")\n'
+        pop = '_Pragma("pop_macro(\\"VALUE\\")")\n'
+        prefix = ""
+    elif spelling == "macro":
+        prefix = "#define APPLY_PRAGMA(value) _Pragma(#value)\n"
+        push = 'APPLY_PRAGMA(push_macro("VALUE"))\n'
+        pop = 'APPLY_PRAGMA(pop_macro("VALUE"))\n'
+    elif spelling == "pasted":
+        prefix = (
+            "#define JOIN_IMPL(left,right) left##right\n"
+            "#define JOIN(left,right) JOIN_IMPL(left,right)\n"
+            "#define APPLY_PRAGMA(value) JOIN(_Pra,gma)(value)\n"
+        )
+        push = 'APPLY_PRAGMA("push_macro(\\"VALUE\\")")\n'
+        pop = 'APPLY_PRAGMA("pop_macro(\\"VALUE\\")")\n'
+    else:
+        prefix = ""
+        push = '#pragma pu\\\nsh_macro("VALUE")\n'
+        pop = '#pragma po\\\np_macro("VALUE")\n'
+    payload = (
+        prefix + "#define VALUE 7\n" + push + "#undef VALUE\n#define VALUE 11\n" + pop
+    )
+    source = tmp_path / "stack.cpp"
+    if wrapper:
+        (tmp_path / "stack.hpp").write_text(payload)
+        payload = '#include "stack.hpp"\n'
+    source.write_text(payload + "int result() { return VALUE; }\n")
+    observed = run_compiler(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *FLAGS,
+            "-E",
+            str(source),
+        ],
+        30,
+        label="independent restored macro value",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert observed.returncode == 0 and not observed.timed_out, observed.stderr
+    assert "int result() { return 7; }" in observed.stdout
+    rejected = collect(source, manifest, compiler=compiler)
+    assert rejected.reasons == ("unsupported-clangxx-macro-stack",)
+    assert rejected.closure is not None and rejected.closure.cache_key is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '#if 0\n#pragma push_macro("VALUE")\n_Pragma("pop_macro(\\"VALUE\\")")\n#endif\n',
+        'const char* text=R"tag(\n#pragma push_macro("VALUE")\n_Pragma("pop_macro(\\"VALUE\\")")\n)tag";\n',
+        '_Pragma("GCC diagnostic push")\n_Pragma("GCC diagnostic pop")\n',
+        '#include <string>\n#include <concepts>\nstd::string text() { return "push_macro pop_macro"; }\n',
+    ],
+    ids=["inactive", "literal", "nonstack-pragma", "standard-library"],
+)
+def test_real_macro_stack_gate_preserves_supported_inputs(
+    tmp_path: Path, real_clangxx: tuple, payload: str
+) -> None:
+    """The stack gate does not forbid strings or the standard _Pragma operator."""
+    compiler, manifest = real_clangxx
+    source = tmp_path / "supported.cpp"
+    source.write_text(payload + "int result() { return 7; }\n")
+    before = collect(source, manifest, compiler=compiler)
+    after = collect(source, manifest, compiler=compiler)
+    assert not before.reasons and not after.reasons
+    assert before.closure is not None and after.closure is not None
+    assert before.closure.reusable
+    assert before.closure.cache_key == after.closure.cache_key
+    assert before.recipe is not None and "-include" not in before.recipe["flags"]
+
+
+@pytest.mark.parametrize("identifier", ["push_macro", "pop_macro"])
+def test_real_macro_stack_names_are_outside_the_observation_domain(
+    tmp_path: Path, real_clangxx: tuple, identifier: str
+) -> None:
+    """The conservative gate rejects active ordinary uses of the same names."""
+    compiler, manifest = real_clangxx
+    source = tmp_path / "identifier.cpp"
+    source.write_text(f"int {identifier} = 7;\n")
+    rejected = collect(source, manifest, compiler=compiler)
+    assert rejected.reasons == ("unsupported-clangxx-macro-stack",)
+    assert rejected.closure is not None and rejected.closure.cache_key is None
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "defined(push_macro)",
+        "__is_identifier(push_macro)",
+        "defined(pop_macro)",
+        "__is_identifier(pop_macro)",
+    ],
+)
+def test_policy_identifier_observation_fails_closed(
+    tmp_path: Path, real_clangxx: tuple, condition: str
+) -> None:
+    compiler, manifest = real_clangxx
+    p = tmp_path / "condition.cpp"
+    payload = chr(10).join(
+        [
+            '#pragma push_macro("X")',
+            "#undef X",
+            "#define X 11",
+            '#pragma pop_macro("X")',
+        ]
+    ) + chr(10)
+    true_block = payload if condition.startswith("__is_identifier") else ""
+    false_block = "" if condition.startswith("__is_identifier") else payload
+    p.write_text(
+        "#define X 7"
+        + chr(10)
+        + "#if "
+        + condition
+        + chr(10)
+        + true_block
+        + "#else"
+        + chr(10)
+        + false_block
+        + "#endif"
+        + chr(10)
+        + "int point(){return X;}"
+        + chr(10)
+    )
+    r = collect(p, manifest, compiler=compiler)
+    assert r.reasons == ("unsupported-clangxx-macro-stack",)
+    assert r.closure is None or r.closure.cache_key is None
+
+
+@pytest.mark.parametrize("factory", ["pstl", "concat", "pasted-name"])
+def test_native_or_computed_factories_fail_closed(
+    tmp_path: Path, real_clangxx: tuple, factory: str
+) -> None:
+    compiler, manifest = real_clangxx
+    p = tmp_path / "factory.cpp"
+    if factory == "pstl":
+        a = '_PSTL_PRAGMA(push_macro("X"))\n'
+        b = '_PSTL_PRAGMA(pop_macro("X"))\n'
+        prefix = "#include <numeric>\n"
+    elif factory == "concat":
+        a = r'__CONCAT(_Prag,ma)("push_macro(\"X\")")' + "\n"
+        b = r'__CONCAT(_Prag,ma)("pop_macro(\"X\")")' + "\n"
+        prefix = "#include <numeric>\n"
+    else:
+        prefix = "#define CAT_I(a,b) a##b\n#define CAT(a,b) CAT_I(a,b)\n#define S_I(x) #x\n#define S(x) S_I(x)\n"
+        a = '_Pragma(S(CAT(push_,macro)("X")))\n'
+        b = '_Pragma(S(CAT(pop_,macro)("X")))\n'
+    p.write_text(
+        prefix
+        + "#define X 7\n"
+        + a
+        + "#undef X\n#define X 11\n"
+        + b
+        + "int point(){return X;}\n"
+    )
+    original = run_compiler(
+        [compiler, "--driver-mode=g++", "--no-default-config", *FLAGS, "-E", str(p)],
+        30,
+        label="original factory semantics",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert original.returncode == 0, original.stderr
+    assert "return 7;" in original.stdout
+    r = collect(p, manifest, compiler=compiler)
+    assert r.reasons == ("unsupported-clangxx-macro-stack",)
+    assert r.closure is None or r.closure.cache_key is None
+
+
+def test_prior_macro_poison_exception_and_forced_order(
+    tmp_path: Path, real_clangxx: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiler, manifest = real_clangxx
+    p = tmp_path / "before.cpp"
+    p.write_text(
+        "#define OLD_NAME push_macro\n#pragma GCC poison push_macro pop_macro\nint OLD_NAME = 7;\n"
+    )
+    original = run_compiler(
+        [compiler, "--driver-mode=g++", "--no-default-config", *FLAGS, "-E", str(p)],
+        30,
+        label="before-poison macro exception",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    (tmp_path / "prior-exception.json").write_text(
+        json.dumps(
+            {
+                "exit": original.returncode,
+                "stderr": original.stderr,
+                "stdout": original.stdout,
+            },
+            indent=2,
+        )
+    )
+    assert original.returncode == 0, original.stderr
+    r = collect(p, manifest, compiler=compiler)
+    assert r.reasons == ("unsupported-clangxx-macro-stack",)
+    p.write_text(
+        "#pragma GCC poison push_macro pop_macro\n#define NEW_NAME push_macro\nint NEW_NAME=7;\n"
+    )
+    later = run_compiler(
+        [compiler, "--driver-mode=g++", "--no-default-config", *FLAGS, "-E", str(p)],
+        30,
+        label="after-poison macro control",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert later.returncode != 0
+    builtins = run_compiler(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            *FLAGS,
+            "-dM",
+            "-E",
+            "-x",
+            "c++",
+            "/dev/null",
+        ],
+        30,
+        label="fixed driver predefined macros",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert builtins.returncode == 0 and not any(
+        word in builtins.stdout for word in ["push_macro", "pop_macro"]
+    )
+
+
+def observed_token_pairs(text: str) -> list[tuple[str, str]]:
+    """Read complete Clang records; literal spelling bytes stay unchanged."""
+    text = text.rstrip("\r\n")
+    c._validate_clang_cxx_tokens(text)
+    pairs = []
+    for match in re.finditer(c._CLANGXX_RECORD, text):
+        head, _, _ = match[0].rsplit("\t", 2)
+        kind, spelling = head.split(" ", 1)
+        pairs.append((kind, spelling[1:-1]))
+    return pairs
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "#define VALUE 7\nint result(){return VALUE;}\n",
+        '#if 0\n#pragma push_macro("VALUE")\n#endif\nint result(){return 7;}\n',
+        '_Pragma("GCC diagnostic push")\n_Pragma("GCC diagnostic pop")\nint result(){return 7;}\n',
+        "enum { a=__COUNTER__, level=__INCLUDE_LEVEL__, b=__COUNTER__ };\nconst char* file=__BASE_FILE__;\nint result(){return a+b+level;}\n",
+        'const char* text=R"tag(multiple  spaces\nnew  line)tag" "\\tend";\nint result(){return 7;}\n',
+    ],
+)
+def test_real_poison_observation_preserves_token_and_macro_semantics(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    payload: str,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "accepted.cpp"
+    source.write_text(payload)
+    guard = tmp_path / "observation.hpp"
+    guard.write_text("#pragma GCC poison push_macro pop_macro\n")
+    observations = []
+    for label, extra in (("original", []), ("guarded", ["-include", str(guard)])):
+        command = [compiler, "--driver-mode=g++", "--no-default-config", *FLAGS, *extra]
+        macro = run_compiler(
+            [*command, "-E", "-dM", str(source)],
+            30,
+            label="macro semantics",
+            environment=c.CPU_ENVIRONMENT,
+        )
+        pp = run_compiler(
+            [*command, "-E", "-P", str(source)],
+            30,
+            label="raw PP semantics",
+            environment=c.CPU_ENVIRONMENT,
+        )
+        tokens = run_compiler(
+            [*command, "-fsyntax-only", "-Xclang", "-dump-tokens", str(source)],
+            30,
+            label="compiler token semantics",
+            environment=c.CPU_ENVIRONMENT,
+        )
+        assert all(r.returncode == 0 and not r.timed_out for r in (macro, pp, tokens))
+        (tmp_path / (label + ".pp")).write_text(pp.stdout)
+        (tmp_path / (label + ".tokens")).write_text(tokens.stderr)
+        (tmp_path / (label + ".macros")).write_text(macro.stdout)
+        observations.append((macro.stdout, observed_token_pairs(tokens.stderr)))
+    # Layout may differ, but neither literals nor any other token spelling is
+    # normalized. Both raw outputs above remain available for byte-level audit.
+    assert observations[0] == observations[1]
+    before = collect(source, manifest, compiler=compiler)
+    after = collect(source, manifest, compiler=compiler)
+    assert not before.reasons and not after.reasons
+    assert before.closure is not None and after.closure is not None
+    assert before.closure.cache_key == after.closure.cache_key
+    assert before.recipe is not None and "-include" not in before.recipe["flags"]
+
+
+def test_real_poison_literal_bytes_survive_actual_object_execution(
+    tmp_path: Path,
+    real_clangxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_clangxx
+    source = tmp_path / "literal.cpp"
+    source.write_text(
+        'extern "C" const char* literal_bytes(){return R"tag(multiple  spaces\nnew  line)tag" "\\tend";}\n'
+    )
+    before = collect(source, manifest, compiler=compiler)
+    assert (
+        not before.reasons and before.recipe is not None and before.closure is not None
+    )
+    obj = tmp_path / "literal.o"
+    built = compile_controlled(
+        [compiler, *before.recipe["flags"], "-c", str(source), "-o", str(obj)],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collect(source, manifest, compiler=compiler)
+    assert (
+        not after.reasons
+        and after.closure is not None
+        and after.closure.cache_key == before.closure.cache_key
+    )
+    published = store.store_artifact(tmp_path / "literal-store", after.closure, obj)
+    obj.unlink()
+    hit = store.lookup_artifact(tmp_path / "literal-store", after.closure)
+    assert hit == published and hit.artifact_path is not None
+    library_path = tmp_path / "literal.so"
+    linked = compile_controlled(
+        [
+            compiler,
+            "--driver-mode=g++",
+            "--no-default-config",
+            "-shared",
+            str(hit.artifact_path),
+            "-o",
+            str(library_path),
+        ],
+        monkeypatch,
+    )
+    assert linked.returncode == 0 and not linked.timed_out, linked.stderr
+    library = ctypes.CDLL(str(library_path))
+    library.literal_bytes.restype = ctypes.c_char_p
+    assert library.literal_bytes() == b"multiple  spaces\nnew  line\tend"
+    (tmp_path / "literal-execution.json").write_text(
+        json.dumps(
+            {
+                "object_sha256": file_hash(hit.artifact_path),
+                "library_sha256": file_hash(library_path),
+                "expected_hex": b"multiple  spaces\nnew  line\tend".hex(),
+            },
+            indent=2,
+        )
+    )
