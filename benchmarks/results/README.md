@@ -4,6 +4,8 @@ The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
 retains native direct cold/warm populations through 96 atoms and DF through
 48 atoms. Missing reference accuracy is explicit and does not suppress DF/48;
 only the incomplete DF/96 point is omitted, with negative evidence retained separately.
+The 2026-10-15 correction remeasures native 3/12-atom points after explicit
+compilation-cache priming in separate processes, retaining the original outliers.
 
 The [2026-10-14 full DF-HF/RI-JK CBS campaign](readme-cbs-full-20261014/README.md)
 measures complete QM7 C1–C7 E+F with consistent fitted analytic response and

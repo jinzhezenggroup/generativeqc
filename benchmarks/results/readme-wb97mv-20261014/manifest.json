@@ -2,6 +2,20 @@
   "schema": "generativeqc.readme-wb97mv-publication.v1",
   "date": "2026-10-15",
   "campaign_started": "2026-10-14",
+  "cache_primed_small_refresh": {
+    "date": "2026-10-15",
+    "atoms": [
+      3,
+      12
+    ],
+    "native_populations": 4,
+    "priming_calls": 48,
+    "measurement_calls": 48,
+    "protocol": "Prime the shared disk compilation cache, then launch fresh measurement processes and calculators; no density or resident allocations are reused. Priming calls are excluded from published timings, not subtracted from them.",
+    "unprimed_evidence": "unprimed-small-points.json.xz",
+    "references": "Unchanged historical reference populations; not remeasured or claimed to have the new native cache policy.",
+    "large_points": "Retained original 48/96-atom native observations with existing compiler caches; no new large-system timing campaign."
+  },
   "native_source_commit": "810f081ef293256ebe20beb7298f9d21996fec81",
   "source_archive": {
     "bytes": 53323743,
@@ -124,7 +138,7 @@
     "energy_tolerance_hartree": 1e-08,
     "force_tolerance_hartree_per_bohr": 1e-07,
     "maximum_checked_energy_error_hartree": 1.1823431123048067e-11,
-    "maximum_checked_force_error_hartree_per_bohr": 5.5286442091073695e-11,
+    "maximum_checked_force_error_hartree_per_bohr": 5.5294435696850996e-11,
     "reference_population": "Retained independent GPU4PySCF timing records and accuracy-only geometry receipts; no new reference timing samples.",
     "boundary": "Unchecked completion is not a numerical accuracy pass or an unmatched-reference speedup."
   },
@@ -150,6 +164,14 @@
     "meaning": "Additional force allowance, excluding the native DF/SCF owner; no physics or acceptance-gate change."
   },
   "raw_run_storage": {
+    "cache_primed_small": {
+      "hosts": {
+        "none": "n5",
+        "cuda": "n1"
+      },
+      "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/attempts/cache-primed-small-20261015",
+      "priming_subdirectory": "compiler-cache-priming"
+    },
     "direct": {
       "host": "n5",
       "path": "/data/jzzeng/gqc-readme-wb97mv-master-20261014/measurements/none"
@@ -171,6 +193,7 @@
       "version": "0.38.2",
       "coordinate_significant_digits": 8
     },
+    "presentation_compaction": "Repeated SVG presentation attributes share CSS classes; original plot pixels were verified identical before the data refresh.",
     "renderer_sources": {
       "tools/render_readme_dft.py": {
         "bytes": 16639,
@@ -194,20 +217,20 @@
   },
   "files": {
     "README.md": {
-      "bytes": 7331,
-      "sha256": "b7289b9d86d51097c36bdedd6e92f718241b4386d63e2f1ae00240a94aee0b43"
+      "bytes": 9461,
+      "sha256": "f7e73da8d036831a1a00e2700708d555a6a8821a1b321fff5b83536882c2daa7"
     },
     "df-cold-warm.svg": {
-      "bytes": 103716,
-      "sha256": "42ff347a72486d45e2f8d09fe0959f1032c9f7f900713a88229a1b9badd83a04"
+      "bytes": 84935,
+      "sha256": "47e0b51a147ec4838785fc0a27dfb9cdae201165d5a01784506f5989f30d527b"
     },
     "df-summary.json.xz": {
-      "bytes": 33588,
-      "sha256": "c02d81691685816622ad283b522918d5ed86c5644eb8934667eb6b9ceae9abe2"
+      "bytes": 33832,
+      "sha256": "6c76eafcf806045aa5c1fa198c8c20b775bb5f854c681f3ba209074acf2cb29c"
     },
     "df-timings.md": {
-      "bytes": 4664,
-      "sha256": "55d3388be52e0dca9e07df57d29c38cb6128b230bf411366b59051b896e6dbfd"
+      "bytes": 4689,
+      "sha256": "5133a6dad819e22fd7e9e78898bbc85529abe63e533d651be66c8951fc36a617"
     },
     "df96-capacity.json": {
       "bytes": 1282,
@@ -226,24 +249,28 @@
       "sha256": "8f8778b0390de0080d47be53cf5a25d7f47cf036c59371e4c1f9e89006db7254"
     },
     "dft-cold-warm.svg": {
-      "bytes": 102347,
-      "sha256": "5bffc148c736ba455d23fe8b22495377de51a928c2cbdf931714322135508b6f"
+      "bytes": 83736,
+      "sha256": "6e9f20402c1a4925251d1296c022d0d9f35ca2c67d1ae06da746c0208e080db5"
     },
     "refresh.py": {
-      "bytes": 7388,
-      "sha256": "9e2c947c8c16531d7d47ecdd5b55b6c69a0ba1077b4083d3f58995b3e573aa53"
+      "bytes": 12976,
+      "sha256": "98910bd1bb2782fc8ccc067163d47338c49d525ba973d086987d5c3ed17a0bee"
     },
     "reproduce.sh": {
-      "bytes": 1206,
-      "sha256": "e08f9454e79c39e47ec16f27aa6125f4428eff5689cd17b982fb9cf23a949bb7"
+      "bytes": 1560,
+      "sha256": "015df22aca2cd6f591ed3e152374d12b7ed9c266810ba02346d80710acbd552a"
     },
     "summary.json.xz": {
-      "bytes": 50300,
-      "sha256": "cb12c827233e6cd5500c310dacf3e013c46224c3fa323d3f3e203095d937f130"
+      "bytes": 50616,
+      "sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519"
     },
     "timings.md": {
-      "bytes": 4727,
-      "sha256": "31cabd9fc13354368ec2d6a7296ef7490fbaf3440401b1d68944d9e1f9e267d1"
+      "bytes": 4763,
+      "sha256": "4a23f19e35cf8d236e144ece8560abcb609bdf11d34714dd50353c73b8bdecda"
+    },
+    "unprimed-small-points.json.xz": {
+      "bytes": 20812,
+      "sha256": "d81eb1d05011fe7241688fc59482466d8cdf16e351d36fdc9cf8bbc4c7296936"
     }
   }
 }
