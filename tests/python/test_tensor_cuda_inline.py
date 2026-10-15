@@ -130,6 +130,74 @@ def test_inline_cuda_broadcasts_scalar_and_retains_zero_coefficient_inputs() -> 
     assert eval(lowered.expression, {"__builtins__": {}}) == pytest.approx(7.0)  # noqa: S307
 
 
+@pytest.mark.parametrize(
+    ("coefficients", "input_value", "expected"),
+    (
+        ((1,), "-0", 0.0),
+        ((Fraction(1, 3),), "-0x0.0000000000001p-1022", 0.0),
+        ((Fraction(-2, 3), Fraction(5, 7)), "21", 1.0),
+    ),
+)
+def test_inline_cuda_add_preserves_seeded_accumulation(
+    tmp_path: Path,
+    coefficients: tuple[int | Fraction, ...],
+    input_value: str,
+    expected: float,
+) -> None:
+    """Execute dynamic signed zeros, underflow, and an ordered rational sum."""
+    import shutil
+    import subprocess
+
+    compiler = shutil.which("c++")
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if not compiler or not launcher:
+        pytest.skip("C++ compiler and verified compiler cache are required")
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
+    scalar = input_tensor("scalar", TensorSpec(role="input"))
+    program = Program(
+        {"value": add(*(scalar for _ in coefficients), coefficients=coefficients)}
+    )
+    lowered = lower_inline_cuda_output(
+        program, output="value", bindings={"scalar": "x"}
+    )
+    source, executable = tmp_path / "seeded_add.cpp", tmp_path / "seeded_add"
+    object_file = tmp_path / "seeded_add.o"
+    source.write_text(
+        "#include <cmath>\n#include <cstdlib>\n#include <iomanip>\n"
+        "#include <iostream>\nint main(int argc, char** argv) {\n"
+        "if (argc != 2) return 2;\n"
+        "const double x = std::strtod(argv[1], nullptr);\n"
+        f"const double value = {lowered.expression};\n"
+        "std::cout << std::signbit(value) << ' ' << std::setprecision(17) << value;\n"
+        "}\n"
+    )
+    subprocess.run(
+        [
+            launcher,
+            compiler,
+            "-std=c++17",
+            "-ffp-contract=off",
+            "-c",
+            str(source),
+            "-o",
+            str(object_file),
+        ],
+        check=True,
+        timeout=60,
+    )
+    subprocess.run(
+        [launcher, compiler, str(object_file), "-o", str(executable)],
+        check=True,
+        timeout=60,
+    )
+    result = subprocess.run(
+        [str(executable), input_value], text=True, capture_output=True, check=True
+    )
+    signbit, actual = result.stdout.split()
+    assert float(actual) == pytest.approx(expected)
+    assert signbit == "0"
+
+
 def test_exact_cuda_literal_and_scalar_binding_contract() -> None:
     assert exact_cuda_literal(2) == "2.0"
     assert exact_cuda_literal(Fraction(1, 3)) == "(1.0/3.0)"

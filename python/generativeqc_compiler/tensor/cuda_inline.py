@@ -166,8 +166,10 @@ def lower_inline_cuda_output(
             )
         elif node.op == "add":
             coefficients = tuple(_fraction(item) for item in node.attrs["coefficients"])
+            # TensorIR add accumulates from positive zero, including when its
+            # first scaled operand is negative zero or underflows to it.
             values[node] = tuple(
-                "("
+                "(0.0 + "
                 + " + ".join(
                     value
                     if coefficient == 1
