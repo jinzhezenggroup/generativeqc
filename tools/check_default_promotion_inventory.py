@@ -700,7 +700,7 @@ def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_phase_values(root: Path) -> dict[str, str]:
-    """Register the stable control; executable probes qualify its admission."""
+    """Register stable KS controls; executable probes qualify their admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
     # The environment name may be chosen by a conditional or read through a
@@ -711,6 +711,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     names = re.findall(
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():
