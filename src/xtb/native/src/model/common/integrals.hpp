@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "cpu_dispatch/features.hpp"
 #include "model/common/basis.hpp"
+#include "runtime/cpu_isa.hpp"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail::common {
@@ -87,12 +87,13 @@ using MultipoleGradientShellPairKernel = void (*)(const BasisPlan&, std::size_t,
 
 struct IntegralKernelTable {
   MultipoleGradientShellPairKernel multipole_gradient_shell_pair = nullptr;
-  CpuIsa isa = CpuIsa::kBaseline;
+  generativeqc::runtime::CpuIsa isa = generativeqc::runtime::CpuIsa::kBaseline;
 };
 
 [[nodiscard]] const IntegralKernelTable& integral_baseline_kernels() noexcept;
 [[nodiscard]] const IntegralKernelTable& integral_avx2_fma_kernels() noexcept;
-[[nodiscard]] const IntegralKernelTable& integral_kernels_for_cpu_isa(CpuIsa isa) noexcept;
+[[nodiscard]] const IntegralKernelTable& integral_kernels_for_cpu_isa(
+    generativeqc::runtime::CpuIsa isa) noexcept;
 
 generativeqc_xtb_status_t make_integral_plan(const BasisPlan& basis, IntegralPlan& plan, std::string& error,
                                     double integral_cutoff = kDefaultIntegralCutoff);
@@ -106,11 +107,11 @@ generativeqc_xtb_status_t evaluate_multipole_cpu(const BasisPlan& basis, const I
                                         void* workspace, std::size_t workspace_size,
                                         std::string& error);
 
-generativeqc_xtb_status_t add_multipole_gradient_cpu(const BasisPlan& basis, const IntegralPlan& plan,
-                                            const double* positions, const double* dE_ddipole,
-                                            const double* dE_dquadrupole, double* gradients,
-                                            void* workspace, std::size_t workspace_size,
-                                            std::string& error, CpuIsa cpu_isa = CpuIsa::kBaseline);
+generativeqc_xtb_status_t add_multipole_gradient_cpu(
+    const BasisPlan& basis, const IntegralPlan& plan, const double* positions,
+    const double* dE_ddipole, const double* dE_dquadrupole, double* gradients, void* workspace,
+    std::size_t workspace_size, std::string& error,
+    generativeqc::runtime::CpuIsa cpu_isa = generativeqc::runtime::CpuIsa::kBaseline);
 
 generativeqc_xtb_status_t add_overlap_gradient_cpu(const BasisPlan& basis, const IntegralPlan& plan,
                                           const double* positions, const double* dE_doverlap,
