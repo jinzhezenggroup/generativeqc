@@ -403,6 +403,31 @@ def test_real_cxx_opaque_cache_and_identity(
     )
     keys, objects = [], []
     launcher = resolve_compiler_cache(60)
+    # Retain only cache location/address settings. Compiler and loader inputs
+    # must match collection even when the developer's shell is contaminated.
+    cache_environment = {
+        **c.CPU_ENVIRONMENT,
+        **{
+            key: os.environ[key]
+            for key in (
+                "HOME",
+                "SCCACHE_DIR",
+                "SCCACHE_SERVER_PORT",
+                "SCCACHE_SERVER_UDS",
+                "CCACHE_DIR",
+            )
+            if key in os.environ
+        },
+    }
+    for key in (
+        "GCC_EXEC_PREFIX",
+        "COMPILER_PATH",
+        "CPATH",
+        "CPLUS_INCLUDE_PATH",
+        "LIBRARY_PATH",
+        "LD_PRELOAD",
+    ):
+        monkeypatch.setenv(key, str(tmp_path / "inherited-compiler-poison"))
     receipts = []
     for content in (b"CXX-AAAA", b"CXX-BBBB"):
         payload.write_bytes(content)
@@ -419,7 +444,7 @@ def test_real_cxx_opaque_cache_and_identity(
             [str(launcher.path), "--show-stats"],
             30,
             label="cache stats",
-            environment=dict(os.environ),
+            environment=cache_environment,
         )
         built = compile_controlled(command, monkeypatch)
         assert built.returncode == 0 and not built.timed_out, built.stderr
@@ -463,14 +488,14 @@ def test_real_cxx_opaque_cache_and_identity(
             launcher.wrap(command),
             60,
             label="ordinary G++ cache replay",
-            environment={**os.environ, **c.CPU_ENVIRONMENT},
+            environment=cache_environment,
         )
         assert built.returncode == 0 and not built.timed_out, built.stderr
         stats = run_compiler(
             [str(launcher.path), "--show-stats"],
             30,
             label="cache counters",
-            environment=dict(os.environ),
+            environment=cache_environment,
         )
         commands.append({"command": launcher.wrap(command), "stats": stats.stdout})
     assert commands[0]["command"] == commands[1]["command"]

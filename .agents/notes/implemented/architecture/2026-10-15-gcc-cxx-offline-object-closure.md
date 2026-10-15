@@ -114,6 +114,23 @@ read back while running; it was explicitly stopped and verified STOPPED after
 receipt recovery, within the authorized 45-minute cumulative window. No GPU,
 installed bundle, production runtime or scientific endpoint qualification.
 
+### Review correction: cache-command environment
+
+Review of `aadcef12d` identified that the ordinary cache-counter commands
+merged the entire parent environment back into `CPU_ENVIRONMENT`. Unlike the
+collector and controlled object producer, these commands could inherit compiler
+or loader overrides. The test now admits only the controlled compiler mapping
+plus HOME, cache directories and the existing sccache server address. Statistics
+queries use the same restricted mapping. The real Linux test injects invalid
+GCC_EXEC_PREFIX, COMPILER_PATH, CPATH, CPLUS_INCLUDE_PATH, LIBRARY_PATH and
+LD_PRELOAD values into the parent to exercise this boundary.
+
+This correction changes the test producer, not the production collector. The
+137-test run and archive above remain measurements of their original snapshot;
+they do not claim execution of this later environment-poison control. Current
+PR Linux CI must execute the corrected test at the new exact head before
+delivery. No Notebook was restarted to repeat unchanged production qualification.
+
 ## Consequences and revisit conditions
 
 This is a narrow opt-in object tool, not an automatic generated-source consumer.
