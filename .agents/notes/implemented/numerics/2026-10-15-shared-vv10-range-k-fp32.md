@@ -196,6 +196,10 @@ use the reference's default atomic guess, eight threads and 100 maximum
 cycles. These are not identical timing protocols even though their physical
 target and stopping tolerances agree.
 
+The timed-out reference is WB97M-V, not PBE0. In the same README table,
+PBE0/96 has native cold 69.710 s and warm 13.259 s. Those different-functional
+observations cannot be substituted for WB97M-V's 96-atom timings.
+
 The 25-minute reference allowance was therefore poorly chosen relative to
 already retained diagnostic evidence. This is not a new 96-atom Fast timeout.
 Native cold versus native fixed-density warm, direct versus DF, and 96 AOs
@@ -216,7 +220,27 @@ The schedule identity advances to `vv10-parallel-bilateral-warp-packet-mixed-v5`
 Historical endpoint timings above retain their original source identities;
 they are not measurements of this integration revision.
 
-Integrated host suites pass 937 tests with 42 resource skips. The independent
+Integrated host suites pass 1032 tests with 42 resource skips. The independent
 generated-runtime GPU replay passes 784 tests across ordered, previous
 parallel, wide and packet traversals. Its 32 mixed cases also pass memcheck
 with zero errors, including actual arithmetic census and strict fallback.
+
+The integrated Release core has source identity
+`99dfe2fbe094816743ee13c9eab9dae1ca2d182667694a1aa9677f4cff073b92`
+and SHA256 `b89a605b87de5cdf959fc2f0fe2d208d95f155937021702005f31d429bb754d6`.
+All twelve complete Fast endpoint cases and the full-range mixed source
+matrix case pass. Six range matrix fixtures pass in a fresh process, retaining
+both whole-shell and canonical-AO schedules, mixed residency and moved inputs.
+The earlier combined run is retained: fifteen pass, but four mixed range
+fixtures fail their whole-shell admission assertion before numerical checks.
+Do not report that combined run as nineteen passes or infer a particular
+allocation failure without telemetry. The fresh replay uses the identical
+core and unchanged admission assertions, not a weakened test or fallback-only
+substitute. Fresh-process complete PBE0 and WB97M-V endpoint memchecks each
+pass with zero errors.
+
+Three host fault-injection fixtures needed the extended shared provider API:
+mixed range/nonlocal state reset, strict range-provider dispatch with explicit
+mixed/counter arguments, and mixed source operator/mask defaults. Their 95
+cases pass after updating the doubles. Strict profiling still rejects mixed
+counter use, and existing event/error/retry assertions remain in place.

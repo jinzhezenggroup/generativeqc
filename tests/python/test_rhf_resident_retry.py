@@ -91,6 +91,7 @@ PREFIX = r"""
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -118,6 +119,7 @@ enum class FockOperator { FullRange, ShortRange, LongRange };
 struct CudaDirectJkPlan;
 // The extracted definition does not include the header's restricted-spin default.
 std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins = 1);
+// Match the shared API defaults used by exact full-range retry consumers.
 generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
     CudaDirectJkPlan*, std::size_t, std::string&,
     FockOperator = FockOperator::FullRange, double = 0.0,
@@ -255,7 +257,8 @@ void launch_independent_jk_finite_kernel(cudaStream_t, const double* v, size_t n
 void launch_canonical_mixed_resident_values_kernel(
     cudaStream_t, CanonicalBatch, int, std::int32_t, unsigned, const int*, int, size_t, size_t n,
     size_t, size_t m, bool same, double, const double*, float* target, size_t work_limit,
-    DirectCoulombRange, double) {
+    DirectCoulombRange range, double omega) {
+  assert(range == DirectCoulombRange::Full && omega == 0.0);
   const auto count=std::min(same ? n*(n+1)/2 : n*m,work_limit);
   for(size_t index=0; index<count; ++index)
     target[index]=state.nan ? std::numeric_limits<float>::quiet_NaN() : float(index+1);

@@ -157,14 +157,20 @@ int main(int argc, char** argv) {
     assert(owner.is_failed && !owner.is_active);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
+    assert(!owner.pending_mixed_range_exchange && !owner.pending_mixed_range_resident &&
+           !owner.pending_mixed_nonlocal);
     assert(!owner.phase_source && owner.retired == 1);
     owner.pending_mixed_point = owner.pending_mixed_exchange = owner.pending_mixed_resident = true;
+    owner.pending_mixed_range_exchange = owner.pending_mixed_range_resident = true;
+    owner.pending_mixed_nonlocal = true;
     owner.scenario = 0;
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
     assert(!owner.pending_mixed_point && !owner.pending_mixed_exchange &&
            !owner.pending_mixed_resident);
+    assert(!owner.pending_mixed_range_exchange && !owner.pending_mixed_range_resident &&
+           !owner.pending_mixed_nonlocal);
 }
 """
     )
