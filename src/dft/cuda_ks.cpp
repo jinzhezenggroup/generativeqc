@@ -2956,6 +2956,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.density_change < options.density_tolerance &&
         physical.residual < std::min(1e-9, options.density_tolerance) &&
         physical.maximum_residual < std::min(1e-9, options.density_tolerance);
+    const bool confirm_direct_stationary_density =
+        spins == 1 && !has_exchange && !fitted_coulomb && !fitted_exchange &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
+        !budget_fock && !precision_schedule.any_lower_precision() &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        detail::stationary_density_needs_energy_confirmation(
+            has_energy_history, output.energy_change, physical.density_change, physical.residual,
+            physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
+            physical_stationarity_tolerance());
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     // Budget Fock already requires consecutive fresh FP64 physical Focks and
@@ -3072,7 +3083,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         warm_energy = physical.electronic_energy;
         warm_energy_correction = physical.electronic_energy_correction;
         occupied_fitted_factor_ready = false;
-      } else if (is_active && confirm_nonlocal_stationary_density) {
+      } else if (is_active &&
+                 (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
         // tmp2 belongs to the unaccepted proposal, not the held density. Do
         // not expose that orbital frame as an occupied-factor identity.
         occupied_fitted_factor_ready = false;
@@ -3366,7 +3378,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
          final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
     const bool default_device_validation = device_final_validation_default_eligible(
         n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(),
-        full_range_coulomb_only, fitted_coulomb);
+        full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
