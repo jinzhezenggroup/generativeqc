@@ -169,11 +169,14 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     return tuple(sorted(set(words)))
 
 
-def _validate_flags(flags: tuple[str, ...]) -> None:
+def _validate_flags(flags: tuple[str, ...], *, cxx: bool = False) -> None:
     if not isinstance(flags, tuple):
         raise TypeError("flags must be a tuple")
+    allowed = (_SIMPLE_FLAGS - {"-std=c99"}) | {"-std=c++20"} if cxx else _SIMPLE_FLAGS
+    if cxx and flags.count("-std=c++20") != 1:
+        raise ValueError("C++ requires explicit C++20")
     for flag in flags:
-        if isinstance(flag, str) and flag in _SIMPLE_FLAGS:
+        if isinstance(flag, str) and flag in allowed:
             continue
         if isinstance(flag, str) and flag.startswith("-I"):
             directory = Path(flag[2:])
@@ -188,6 +191,7 @@ def collect_cpu_closure(
     *,
     compiler: str = "gcc",
     compiler_family: str = "gcc",
+    language: str = "c",
     flags: tuple[str, ...] = ("-std=c99", "-O1", "-fPIC"),
     toolchain: CpuToolchainManifest | None = None,
     timeout: float = 60,
@@ -201,6 +205,12 @@ def collect_cpu_closure(
     alternate targets/sysroots, inherited environments and other compilers fail
     closed. The recipe includes the physical source path: __FILE__ and quoted
     include resolution make it part of object identity. Time macros are errors.
+
+    ``language="c++"`` explicitly admits native system G++ with a ``.cpp``
+    source and exactly one ``-std=c++20`` flag. Pass ``compiler="g++"`` and
+    explicit flags; the C defaults do not select this domain. Actual cc1plus/as
+    jobs, C++ ABI macros and include search configuration are observed. PCH,
+    modules, alternate ABI flags and link closure remain unsupported.
 
     The caller must hold the asserted immutable snapshot through compilation and
     collection, use the returned flags/compiler/environment/working directory,
@@ -218,8 +228,11 @@ def collect_cpu_closure(
         return CpuClosureResult(None, None, ("unsupported-cpu-platform-or-backend",))
     if compiler_family not in {"gcc", "clang"}:
         return CpuClosureResult(None, None, ("unsupported-compiler-family",))
+    if language not in {"c", "c++"} or (language == "c++" and compiler_family != "gcc"):
+        return CpuClosureResult(None, None, ("unsupported-source-language",))
+    is_cxx = language == "c++"
     try:
-        _validate_flags(flags)
+        _validate_flags(flags, cxx=is_cxx)
     except (ValueError, TypeError):
         return CpuClosureResult(None, None, ("unsupported-cpu-flags",))
     executable = shutil.which(compiler, path=CPU_ENVIRONMENT["PATH"])
@@ -228,9 +241,12 @@ def collect_cpu_closure(
     path = Path(executable).resolve()
     source = source_path.absolute()
     is_clang = compiler_family == "clang"
-    if path != (_system_clang() if is_clang else _system_gcc()):
+    system_driver = (
+        _system_clang if is_clang else (_system_gxx if is_cxx else _system_gcc)
+    )
+    if path != system_driver():
         return CpuClosureResult(None, None, ("unsupported-compiler-wrapper",))
-    if source.suffix != ".c":
+    if source.suffix != (".cpp" if is_cxx else ".c"):
         return CpuClosureResult(None, None, ("unsupported-source-language",))
     deadline = time.monotonic() + timeout
     working_directory = str(Path.cwd())
@@ -256,13 +272,13 @@ def collect_cpu_closure(
             raise ValueError("working-directory-changed")
 
     def check_clang_selection() -> None:
-        if not is_clang:
+        if not (is_clang or is_cxx):
             return
         selected = shutil.which(compiler, path=CPU_ENVIRONMENT["PATH"])
         if (
             selected is None
             or Path(selected).resolve() != path
-            or _system_clang() != path
+            or system_driver() != path
         ):
             raise ValueError("compiler-selection-changed")
 
@@ -319,7 +335,7 @@ def collect_cpu_closure(
     try:
         # A named FIFO can satisfy executable lookup; never open a nonregular
         # Clang input while waiting for ELF bytes outside the process deadline.
-        executable_hash = hash_input(path) if is_clang else None
+        executable_hash = hash_input(path) if is_clang or is_cxx else None
         with path.open("rb") as stream:
             magic = stream.read(4)
         if magic != b"\x7fELF":
@@ -359,12 +375,16 @@ def collect_cpu_closure(
             "flags": list(effective_flags),
             "working_directory": working_directory,
         }
-        if is_clang:
+        if is_clang or is_cxx:
             recipe["compiler"]["executable"] = str(path)
+        if is_cxx:
+            recipe["language"] = "c++20"
         snapshot(manifest.files)
         required = {str(path)}
         downstream = {}
-        for name in () if is_clang else ("cc1", "as"):
+        for name in (
+            () if is_clang else (("cc1plus", "as") if is_cxx else ("cc1", "as"))
+        ):
             tool = query(["-print-prog-name=" + name])
             found = shutil.which(tool, path=CPU_ENVIRONMENT["PATH"])
             if found is None:
@@ -372,6 +392,11 @@ def collect_cpu_closure(
             resolved = str(Path(found).resolve())
             required.add(resolved)
             downstream[name] = resolved
+            if is_cxx:
+                hash_input(Path(resolved))
+                with Path(resolved).open("rb") as stream:
+                    if stream.read(4) != b"\x7fELF":
+                        return failure("unsupported-downstream-tool")
         observed = {str(Path(item.identity).resolve()) for item in manifest.files}
 
         def clang_context() -> dict[str, Any]:
@@ -420,7 +445,82 @@ def collect_cpu_closure(
                 "driver_plan": plan,
             }
 
-        specs = clang_context() if is_clang else query(["-dumpspecs"])
+        def gcc_cxx_context() -> dict[str, Any]:
+            plan = query(
+                [*effective_flags, "-###", "-c", str(source), "-o", "/dev/null"],
+                diagnostic=True,
+            )
+            # GCC selects a temporary assembly pathname for every dry run.
+            # Validate the cc1plus -> as handoff before normalizing that one
+            # nonsemantic name; never execute diagnostic text.
+            jobs = []
+            for line in plan.splitlines():
+                tokens = shlex.split(line)
+                if tokens and line[:1].isspace():
+                    if not Path(tokens[0]).is_absolute():
+                        raise ValueError("unsupported-gxx-job-model")
+                    jobs.append(tokens)
+            if len(jobs) != 2:
+                raise ValueError("unsupported-gxx-job-model")
+            frontend, assembler = jobs
+            if (
+                str(Path(frontend[0]).resolve()) != downstream["cc1plus"]
+                or str(Path(assembler[0]).resolve()) != downstream["as"]
+                or frontend.count(str(source)) != 1
+                or frontend.count("-o") != 1
+                or assembler.count("-o") != 1
+                or "-std=c++20" not in frontend
+                or any(
+                    arg.startswith(("@", "-fplugin", "-fmodule", "-flto"))
+                    for arg in frontend
+                )
+            ):
+                raise ValueError("unsupported-gxx-job-model")
+            output_index = frontend.index("-o") + 1
+            assembly_index = assembler.index("-o") + 1
+            if output_index >= len(frontend) or assembly_index >= len(assembler):
+                raise ValueError("unsupported-gxx-job-model")
+            assembly = frontend[output_index]
+            if (
+                not Path(assembly).is_absolute()
+                or not assembly.endswith(".s")
+                or assembler[assembly_index] != "/dev/null"
+                or assembler[-1] != assembly
+                or assembler.count(assembly) != 1
+            ):
+                raise ValueError("unsupported-gxx-job-model")
+            frontend[output_index] = "<assembly-output>"
+            assembler[-1] = "<assembly-output>"
+            macros = query([*effective_flags, "-dM", "-E", str(source)])
+            if not re.search(
+                r"^#define __cplusplus 202002L$", macros, re.MULTILINE
+            ) or not re.search(
+                r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
+            ):
+                raise ValueError("unsupported-gxx-abi")
+            search = query([*effective_flags, "-E", "-v", str(source)], diagnostic=True)
+            match = re.search(
+                r'(#include "\.\.\." search starts here:.*?End of search list\.)',
+                search,
+                re.DOTALL,
+            )
+            if match is None:
+                raise ValueError("unsupported-gxx-include-search")
+            return {
+                "specs": query(["-dumpspecs"]),
+                "object_jobs": jobs,
+                "macros": macros,
+                "include_search": match[1],
+            }
+
+        def compiler_context() -> Any:
+            return (
+                clang_context()
+                if is_clang
+                else (gcc_cxx_context() if is_cxx else query(["-dumpspecs"]))
+            )
+
+        specs = compiler_context()
         # -M alone cannot observe __has_include branches which include no file,
         # or diagnostics/time macro expansions. Bind actual preprocessor output
         # too, without confusing it with the downstream toolchain closure.
@@ -444,6 +544,8 @@ def collect_cpu_closure(
                 raise ValueError("relative-header-path")
             if str(source) not in names:
                 raise ValueError("source-missing-from-dependencies")
+            if is_cxx and any(Path(name + ".gch").exists() for name in names):
+                raise ValueError("unsupported-gxx-pch")
             return names
 
         def clang_headers() -> set[str]:
@@ -494,7 +596,9 @@ def collect_cpu_closure(
             ),
             CacheDependency(
                 "cpu-build-context",
-                "clang-native" if is_clang else "gcc-native",
+                "clang-native"
+                if is_clang
+                else ("gxx-c++20-native" if is_cxx else "gcc-native"),
                 canonical_hash(
                     {
                         "schema": SCHEMA,
@@ -518,10 +622,7 @@ def collect_cpu_closure(
             or hash_input(path) != executable_hash
         ):
             return failure("source-or-compiler-changed")
-        if (
-            query(["--version"]) != version
-            or (clang_context() if is_clang else query(["-dumpspecs"])) != specs
-        ):
+        if query(["--version"]) != version or compiler_context() != specs:
             return failure("compiler-configuration-changed")
         if (
             canonical_hash(

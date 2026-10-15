@@ -16,6 +16,34 @@ Other drivers, wrappers, plugins, response files, languages, targets/sysroots an
 flags yield no reusable closure. This is a deliberately narrow offline support
 domain, not a general build-system interface.
 
+## Explicit GCC C++20 objects
+
+Pass `language="c++"`, `compiler="g++"`, and explicit flags such as
+`("-std=c++20", "-O1", "-fPIC")` for a matching `.cpp` translation unit.
+The default language remains C, including its existing keys and ABI. C++ is
+limited to the canonical native Linux ELF `/usr/bin/g++` driver and the same
+plain optimization/PIC/absolute-include flags, with exactly one `-std=c++20`.
+Clang++, CUDA C++, other standards, alternate ABI options, modules, PCH, LTO,
+plugins, response files, cross/sysroot compilation and link closure are outside
+this domain. A neighboring `.gch` file or directory is rejected.
+
+The collector requires manifest coverage of the actual `cc1plus` and assembler,
+checks their regular-file/ELF identity, and validates a two-job G++ `-###` object
+plan with the exact source and frontend-to-assembler handoff. Only the validated
+temporary assembly pathname is normalized. Driver selection is rechecked around
+each query. The returned `compiler.executable` identifies the physical driver;
+the launcher does not replace that identity. It binds queried specs, actual
+include search paths and full translation-unit macro output, including
+`__cplusplus` and `__GXX_ABI_VERSION`, to a distinct C++ context. Included standard
+library configuration headers participate in the header closure. The producer
+must still assert the immutable standard-library/include/configuration namespace;
+discovery does not prove completeness or qualify a preexisting object.
+
+Use the same collect/compile/collect/store handoff below. The returned GCC seed
+must reach the real compiler-cache command. Stored-object execution in tests
+uses a separate link step; it does not qualify a reusable executable/shared-link
+closure, production bundle, runtime cache or scientific endpoint.
+
 Clang is an explicit alternative: pass `compiler="clang"` and
 `compiler_family="clang"`. The default family remains GCC, including its prior
 recipes and diagnostics. The Clang executable must resolve to `/usr/bin/clang`,
@@ -157,6 +185,7 @@ manifest changes the salt and causes a miss under the same verified launcher.
 ```bash
 PYTHONPATH=python python -m pytest -q tests/python/test_bulk_aot_closure.py \
   tests/python/test_bulk_aot_clang_closure.py \
+  tests/python/test_bulk_aot_gxx_closure.py \
   tests/python/test_bulk_aot_cache.py tests/python/test_bulk_aot_store.py
 python tools/check_compiler_structure.py
 ```
@@ -174,3 +203,12 @@ publish and retrieve that object through the existing verified store, and execut
 a small polynomial density fixture against an independent Decimal reference.
 This fixture qualifies the stored object's toolchain/reuse behavior, not Libxc,
 installed production bundles, runtime cache completeness or CUDA endpoints.
+
+Native Linux G++ tests require the real system driver and a verified compiler
+cache, with no missing-tool skips on Linux. A C++ standard-header fixture is
+compiled between matching collections, independently checked against its compile
+depfile, published and read from the existing immutable store after deletion of
+the original object, and executed against a Decimal oracle. Other controls cover
+ordered flags, source/header/configuration/ABI identities, opaque assembler inputs,
+unchanged compiler-cache replay hits and changed manifest seed misses. Non-Linux
+skips are protocol-only evidence and cannot replace this qualification.
