@@ -153,6 +153,33 @@ production flags, salt derivation, object identity and immutable store are
 unchanged. This later test repair needs fresh exact-head CI and independent
 delta approval; the earlier approval and measurements are not promoted to it.
 
+### Production correction: GCC diagnostic dollar quoting
+
+Independent review reproduced a source acceptance defect at `3167bbf73`:
+canonical GCC 14.2 compiles literal-dollar and backslash-before-dollar paths,
+but the collector rejects their object plan. GCC's `-###` printer escapes
+quote, backslash and dollar inside double-quoted words. Python POSIX shlex
+preserves the escape before dollar, so its parsed source argument no longer
+equals the actual source pathname. The quoting rule was checked against the
+[GCC 14 driver source](https://github.com/gcc-mirror/gcc/blob/releases/gcc-14/gcc/gcc.cc).
+
+The C++ job parser now decodes that diagnostic grammar directly as data, consuming
+each quoted escape once. It preserves a genuine preceding backslash and literal
+apostrophe/backtick characters, rejects unsupported or unterminated escapes, and
+does not invoke a shell. Only indented job lines enter this parser; compiler
+banner/configuration text is not treated as a job. Existing driver/frontend/as
+identity and source/handoff checks remain mandatory. C and Clang collection do
+not enter the new decoder.
+
+Protocol controls cover dollar, one/two preceding literal backslashes, quotes,
+apostrophes/backticks, empty words and malformed quoting. Native Linux controls
+collect/compile/collect ordinary, dollar filename, dollar directory, literal
+backslash-dollar and backtick paths, independently checking the compile depfile
+and recording raw driver diagnostics. The preceding Notebook, reviewer and CI
+records retain their original source identities. This production change requires
+fresh source-matched native Linux validation, required CI and exact-head
+independent approval; the earlier `e7747b00` execution is not its qualification.
+
 ## Consequences and revisit conditions
 
 This is a narrow opt-in object tool, not an automatic generated-source consumer.

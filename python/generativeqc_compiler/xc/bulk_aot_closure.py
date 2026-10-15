@@ -169,6 +169,45 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     return tuple(sorted(set(words)))
 
 
+def _gcc_job_arguments(line: str) -> list[str]:
+    """Decode GCC -### words as data, including its quoted dollar escape.
+
+    GCC double-quotes arguments and escapes quote, backslash and dollar inside
+    them. POSIX shlex preserves the backslash before dollar; stripping those
+    after tokenization can confuse an actual preceding backslash with quoting.
+    Consume each quoted escape exactly once, without shell interpretation.
+    """
+    words: list[str] = []
+    word: list[str] = []
+    quoted = False
+    started = False
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == '"':
+            quoted = not quoted
+            started = True
+        elif quoted and char == "\\":
+            index += 1
+            if index == len(line) or line[index] not in '\\"$':
+                raise ValueError("unsupported-gxx-job-model")
+            word.append(line[index])
+        elif char.isspace() and not quoted:
+            if started:
+                words.append("".join(word))
+                word = []
+                started = False
+        else:
+            word.append(char)
+            started = True
+        index += 1
+    if quoted:
+        raise ValueError("unsupported-gxx-job-model")
+    if started:
+        words.append("".join(word))
+    return words
+
+
 def _validate_flags(flags: tuple[str, ...], *, cxx: bool = False) -> None:
     if not isinstance(flags, tuple):
         raise TypeError("flags must be a tuple")
@@ -455,8 +494,10 @@ def collect_cpu_closure(
             # nonsemantic name; never execute diagnostic text.
             jobs = []
             for line in plan.splitlines():
-                tokens = shlex.split(line)
-                if tokens and line[:1].isspace():
+                if not line[:1].isspace():
+                    continue
+                tokens = _gcc_job_arguments(line)
+                if tokens:
                     if not Path(tokens[0]).is_absolute():
                         # Native GCC may spell its PATH-selected assembler as
                         # `as`. Resolve only that known handoff in the exact

@@ -29,6 +29,44 @@ if TYPE_CHECKING:
 FLAGS = ("-std=c++20", "-O1", "-fPIC")
 
 
+def gcc_quoted(value: str) -> str:
+    """Emit the GCC driver's diagnostic quoting, independently of decoding."""
+    return (
+        '"' + "".join("\\" + char if char in '\\"$' else char for char in value) + '"'
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "ordinary.cpp",
+        "dollar$unit.cpp",
+        r"literal\$unit.cpp",
+        r"two\\$unit.cpp",
+        'quote"$.cpp',
+        "apos' and `tick`.cpp",
+        "",
+    ],
+)
+def test_gcc_diagnostic_argument_identity(value: str) -> None:
+    diagnostic = " /cc1plus " + gcc_quoted(value) + ' -o "/tmp/assembly.s"'
+    assert c._gcc_job_arguments(diagnostic) == [
+        "/cc1plus",
+        value,
+        "-o",
+        "/tmp/assembly.s",
+    ]
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [' /cc1plus "unfinished', ' /cc1plus "trailing\\', r' /cc1plus "unknown\q"'],
+)
+def test_unsupported_gcc_diagnostic_quoting(diagnostic: str) -> None:
+    with pytest.raises(ValueError, match="unsupported-gxx-job-model"):
+        c._gcc_job_arguments(diagnostic)
+
+
 @pytest.fixture
 def fake_gxx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
     driver = tmp_path / "g++"
@@ -67,7 +105,11 @@ def fake_gxx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
         elif "-###" in command:
             text = ""
             assembly = tmp_path / "probe.s"
-            diagnostic = f' "{frontend}" "{source}" -std=c++20 -o "{assembly}"\n as -o /dev/null "{assembly}"'
+            diagnostic = (
+                f" {gcc_quoted(str(frontend))} {gcc_quoted(str(source))} "
+                f'"-std=c++20" -o {gcc_quoted(str(assembly))}\n'
+                f" as -o /dev/null {gcc_quoted(str(assembly))}"
+            )
         elif "-dM" in command:
             text = "#define __cplusplus 202002L\n#define __GXX_ABI_VERSION 1017"
         elif "-v" in command:
@@ -389,6 +431,82 @@ def test_real_same_emission_c_and_cxx_are_distinct(
     assert cxx_result.closure is not None and c_result.closure is not None
     assert cxx_result.closure.emission_identity == c_result.closure.emission_identity
     assert cxx_result.closure.cache_key != c_result.closure.cache_key
+
+
+@pytest.mark.parametrize(
+    ("directory", "name"),
+    [
+        ("inputs", "ordinary.cpp"),
+        ("inputs", "dollar$unit.cpp"),
+        ("inputs", r"literal\$unit.cpp"),
+        ("dollar$directory", "ordinary.cpp"),
+        ("inputs", "back`unit.cpp"),
+    ],
+)
+def test_real_cxx_diagnostic_source_paths(
+    tmp_path: Path,
+    real_gxx: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+    directory: str,
+    name: str,
+) -> None:
+    compiler, manifest = real_gxx
+    folder = tmp_path / directory
+    folder.mkdir()
+    source = folder / name
+    source.write_bytes(b'extern "C" int point() { return 7; }\n')
+    before = collect(source, manifest, compiler=compiler)
+    assert not before.reasons and before.closure is not None and before.closure.reusable
+    assert before.recipe is not None
+    obj = tmp_path / "point.o"
+    dep = tmp_path / "point.d"
+    command = [
+        compiler,
+        *before.recipe["flags"],
+        "-MD",
+        "-MF",
+        str(dep),
+        "-MT",
+        "closure",
+        "-c",
+        str(source),
+        "-o",
+        str(obj),
+    ]
+    built = compile_controlled(command, monkeypatch)
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    assert str(source) in c.parse_gcc_dependencies(dep.read_text())
+    after = collect(source, manifest, compiler=compiler)
+    assert not after.reasons and after.closure is not None
+    assert before.closure.cache_key == after.closure.cache_key
+    diagnostic = run_compiler(
+        [
+            compiler,
+            *before.recipe["flags"],
+            "-###",
+            "-c",
+            str(source),
+            "-o",
+            "/dev/null",
+        ],
+        30,
+        label="independent G++ path diagnostic",
+        environment=c.CPU_ENVIRONMENT,
+    )
+    assert diagnostic.returncode == 0 and not diagnostic.timed_out
+    (tmp_path / "path-qualification.json").write_text(
+        json.dumps(
+            {
+                "source": str(source),
+                "source_sha256": file_hash(source),
+                "object_sha256": file_hash(obj),
+                "key": after.closure.cache_key,
+                "command": command,
+                "driver_diagnostic": diagnostic.stderr,
+            },
+            indent=2,
+        )
+    )
 
 
 def test_real_cxx_opaque_cache_and_identity(

@@ -32,7 +32,12 @@ checks their regular-file/ELF identity, and validates a two-job G++ `-###` objec
 plan with the exact source and frontend-to-assembler handoff. Only the validated
 temporary assembly pathname is normalized. Driver selection is rechecked around
 each query. The returned `compiler.executable` identifies the physical driver;
-the launcher does not replace that identity. It binds queried specs, actual
+the launcher does not replace that identity.
+GCC's diagnostic quoting is decoded as data: escaped quotes, backslashes and
+dollars are consumed exactly once, preserving a literal backslash before `$`.
+Apostrophes and backticks do not invoke a shell. Malformed quoted escapes fail
+closed; diagnostic text is never executed.
+Collection binds queried specs, actual
 include search paths and full translation-unit macro output, including
 `__cplusplus` and `__GXX_ABI_VERSION`, to a distinct C++ context. Included standard
 library configuration headers participate in the header closure. The producer
