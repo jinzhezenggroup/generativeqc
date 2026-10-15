@@ -134,9 +134,9 @@ def register_product() -> None:
     """Register the deterministic method-metadata product with source provenance."""
     registry = source_registry._load()
     registry["products"]["libxc-method-metadata"] = {
-        "inputs": [SOURCE_ID],
+        "inputs": [SOURCE_ID, NONLOCAL_SOURCE_ID],
         "input_identity_sha256": source_registry._product_input_identity(
-            registry["sources"], [SOURCE_ID]
+            registry["sources"], [SOURCE_ID, NONLOCAL_SOURCE_ID]
         ),
         "generator": Path(__file__).relative_to(ROOT).as_posix(),
         "generator_sha256": _digest(Path(__file__)),
@@ -145,6 +145,7 @@ def register_product() -> None:
             for name in (
                 "tools/libxc_bulk_metadata.py",
                 "tools/libxc_method_metadata.py",
+                "python/generativeqc_compiler/xc/libxc_method_metadata.py",
             )
         },
         "outputs": {
