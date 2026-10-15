@@ -402,6 +402,7 @@ def _emit_stationary_point(
         identity_constant="kStationaryR2scanIdentity",
         qualifier="__device__ inline",
         scalar_type=scalar_type,
+        coalesce_branches=scalar_type == "double",
     )
     return (
         body

@@ -264,6 +264,7 @@ def emit_r2scan_program(
     qualifier: str,
     include_equal_spin: bool | None = None,
     scalar_type: str = "double",
+    coalesce_branches: bool = False,
 ) -> str:
     """Emit r2SCAN with unchanged component-wise Libxc boundary semantics.
 
@@ -273,10 +274,15 @@ def emit_r2scan_program(
     work-input conditioning and original-density rescaling remain FP64. A
     float consumer must independently admit its interior domain and retain
     strict evaluation for unqualified tails or nonfinite component results.
+    ``coalesce_branches`` shares lazy scalar regions across the energy and
+    independent partials without changing the work-input boundary policy.
+    Consumers opt in separately: force evaluation must not reschedule SCF.
     """
 
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
+    if type(coalesce_branches) is not bool:
+        raise TypeError("coalesce_branches must be bool")
     if include_equal_spin is None:
         include_equal_spin = "__device__" in qualifier.split()
     component_rows = []
@@ -289,7 +295,10 @@ def emit_r2scan_program(
             component
         )
         emitter = ScalarCEmitter(
-            graph, {name: name for name in work_domains}, scalar_type=scalar_type
+            graph,
+            {name: name for name in work_domains},
+            scalar_type=scalar_type,
+            coalesce_branches=coalesce_branches,
         )
         emitter.emit(roots)
         roots_for_component[tag] = roots
@@ -344,7 +353,10 @@ def emit_r2scan_program(
         if include_equal_spin:
             restricted_roots = equal_spin_roots(emitter.graph, roots_for_component[tag])
             restricted_emitter = ScalarCEmitter(
-                emitter.graph, emitter.variables, scalar_type=scalar_type
+                emitter.graph,
+                emitter.variables,
+                scalar_type=scalar_type,
+                coalesce_branches=coalesce_branches,
             )
             restricted_emitter.emit(restricted_roots)
             restricted_refs = [
