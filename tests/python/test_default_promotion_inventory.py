@@ -161,30 +161,26 @@ def test_df_rhf_guess_rollback_selector_is_discovered(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "before,after",
+    "control",
     [
-        (
-            '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 32',
-            '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 1',
-        ),
-        (
-            '"GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024',
-            '"GENERATIVEQC_CUDA_XC_BATCH_BYTES", 64 * 1024 * 1024',
-        ),
+        "GENERATIVEQC_CUDA_XC_BATCH_TILES",
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES",
+        "GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
+        "GENERATIVEQC_CUDA_XC_RAGGED_BATCH",
     ],
 )
-def test_native_xc_batch_defaults_are_audited(
-    tmp_path: Path, before: str, after: str
+def test_native_xc_batch_rollback_selectors_are_audited(
+    tmp_path: Path, control: str
 ) -> None:
-    """Changing either default limit requires revisiting the recorded decision."""
+    """Retain opt-outs without pinning the spelling of the compiled policy."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/dft/cuda_ks.cpp"
     original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
+    assert control in original
+    source.write_text(original.replace(control, "REMOVED_SELECTOR"))
     assert any(
-        "XC point-batch default drifted" in error
+        "XC point-batch rollback selector missing" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 

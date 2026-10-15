@@ -190,24 +190,17 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
 
 
 def _discover_xc_point_batching(root: Path) -> dict[str, str]:
-    """Audit both limits of the promoted, resource-guarded native KS policy."""
+    """Inventory rollback controls; compiled resource tests qualify the policy."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_TILES",\s*32\)', source
-    ) or not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_BYTES",\s*32\s*\*\s*1024\s*\*\s*1024\)',
-        source,
+    for control in (
+        "GENERATIVEQC_CUDA_XC_BATCH_TILES",
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES",
+        "GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
+        "GENERATIVEQC_CUDA_XC_RAGGED_BATCH",
     ):
-        raise ValueError("XC point-batch default drifted from 32 tiles / 32 MiB")
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_COMPACT_BATCH",\s*1\)', source
-    ) or not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_RAGGED_BATCH",\s*1\)', source
-    ):
-        raise ValueError(
-            "XC compact contraction default drifted from resource-guarded enablement"
-        )
+        if f'"{control}"' not in source:
+            raise ValueError(f"XC point-batch rollback selector missing: {control}")
     return {
         "dft-policy:xc-point-batch-auto": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH": relative.as_posix(),
