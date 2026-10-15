@@ -20,6 +20,8 @@ from pathlib import Path
 import generativeqc
 from generativeqc import Calculator, GridSpec, KsOptions, ResourceBudget
 
+from benchmarks._retention import raw_output_path
+
 
 def endpoint(
     method: str, systems: list, properties: tuple[str, ...]
@@ -75,7 +77,7 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=21)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     arguments = parser.parse_args()
     if arguments.samples < 1 or arguments.warmup < 0:
         parser.error("samples must be positive and warmup nonnegative")
