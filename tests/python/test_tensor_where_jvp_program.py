@@ -37,6 +37,111 @@ def run(program: Program, feeds: dict, backend: str, cache: Path) -> dict:
 
 
 @pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("shape", [(), (10,)])
+@pytest.mark.parametrize("selector", ["input", "true", "false"])
+def test_validation_preserves_selected_tangent_bits(
+    tmp_path: Path, backend: str, shape: tuple, selector: str
+) -> None:
+    finite = np.finfo(np.float64)
+    smallest = np.nextafter(0.0, 1.0)
+    direction = np.asarray(
+        [
+            -0.0,
+            0.0,
+            -smallest,
+            smallest,
+            -finite.tiny,
+            finite.tiny,
+            -finite.max,
+            finite.max,
+            -1.0,
+            1.0,
+        ]
+    )
+    direction = direction if shape else direction[0].reshape(())
+    feeds = {
+        "c": np.arange(direction.size).reshape(shape) % 2 == 0,
+        "x": np.full(shape, 2.0),
+        "y": np.full(shape, 3.0),
+    }
+
+    def expression(c: Any, x: Any, y: Any) -> dict:
+        condition = c if selector == "input" else selector == "true"
+        return {"out": xp.where(condition, x, y), "pure": x}
+
+    primal = capture(expression, feeds)
+    derivative = generated(primal).program
+    directions = {"x": direction, "y": -direction}
+    for mask in (feeds["c"], ~feeds["c"]):
+        inputs = {**feeds, "c": mask}
+        all_feeds = {**inputs, "d_x": direction, "d_y": -direction}
+        # Independent scalar selection copies the exact FP64 bits, including
+        # both zero signs, subnormals and the largest finite values.
+        condition = mask if selector == "input" else np.full(shape, selector == "true")
+        selected = np.asarray(
+            [
+                a if c else b
+                for c, a, b in zip(
+                    condition.flat, direction.flat, (-direction).flat, strict=True
+                )
+            ]
+        ).reshape(shape)
+        oracle = {"out": selected, "pure": direction}
+        reference = jvp(primal, inputs, directions).output_tangents
+        for graph in (
+            derivative,
+            optimize(derivative),
+            Program.loads(derivative.dumps()),
+            Program.loads(optimize(derivative).dumps()),
+        ):
+            actual = run(graph, all_feeds, backend, tmp_path)
+            for name, expected in oracle.items():
+                np.testing.assert_array_equal(
+                    reference[name].view(np.uint64), expected.view(np.uint64)
+                )
+                np.testing.assert_array_equal(
+                    actual[f"d_{name}"].view(np.uint64), expected.view(np.uint64)
+                )
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+def test_validation_retains_all_live_input_contracts(
+    tmp_path: Path, backend: str
+) -> None:
+    feeds = {
+        "c": np.ones(2, dtype=bool),
+        "x": np.ones(2),
+        "y": np.ones(2),
+        "z": np.ones(2),
+    }
+    primal = capture(lambda c, x, y, z: {"out": xp.where(c, x, y), "other": z}, feeds)
+    derivative = generated(primal, outputs=("out",)).program
+    all_feeds = {**feeds, "d_x": np.full(2, -0.0), "d_y": np.full(2, -0.0)}
+    invalid = []
+    for name, value in all_feeds.items():
+        invalid.append({key: item for key, item in all_feeds.items() if key != name})
+        invalid.append({**all_feeds, name: np.ones(3, dtype=value.dtype)})
+        dtype = np.uint8 if name == "c" else np.float32
+        invalid.append({**all_feeds, name: value.astype(dtype)})
+        if name != "c":
+            for special in (np.nan, np.inf, -np.inf):
+                invalid.append({**all_feeds, name: np.full(2, special)})
+    for graph in (
+        derivative,
+        optimize(derivative),
+        Program.loads(derivative.dumps()),
+        Program.loads(optimize(derivative).dumps()),
+    ):
+        # y/d_y are never selected and z is not returned. Their absence, wrong
+        # shape/dtype or nonfinite values must still fail after every replay.
+        for bad in invalid:
+            with pytest.raises(ValueError):
+                run(graph, bad, backend, tmp_path)
+        recovered = run(graph, all_feeds, backend, tmp_path)["d_out"]
+        np.testing.assert_array_equal(np.signbit(recovered), [True, True])
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
 @pytest.mark.parametrize("shape", [(), (5,), (0, 3)])
 def test_analytic_runtime_and_fixed_mask_fd(
     tmp_path: Path, backend: str, shape: tuple
@@ -267,11 +372,22 @@ def test_generated_names_and_serialized_backend_boundaries() -> None:
     primal = capture(lambda c, x, d_x: {"out": xp.where(c, x, d_x)}, feeds, ("x",))
     with pytest.raises(ValueError, match="collides"):
         generated(primal, ("x",))
-    primal = capture(lambda c, x, d_x: {"out": xp.where(c, x, d_x)}, feeds, ("d_x",))
-    graph = Program.loads(generated(primal, ("d_x",)).program.dumps())
-    for backend in ("cuda", "scalar", "portable"):
-        with pytest.raises(ValueError):
-            prepare_for_backend(graph, backend)
+    primal = capture(
+        lambda c, x, d_x: {"out": xp.where(c, x, d_x), "pure": d_x}, feeds, ("d_x",)
+    )
+    for outputs in (("out",), ("pure",)):
+        derivative = generated(primal, ("d_x",), outputs=outputs).program
+        for graph in (
+            derivative,
+            optimize(derivative),
+            Program.loads(derivative.dumps()),
+            Program.loads(optimize(derivative).dumps()),
+        ):
+            # Even a non-selection output retains the unreturned where domain.
+            # Shared CPU planning also stays closed without its explicit owner.
+            for backend in ("cpu", "cuda", "scalar", "portable"):
+                with pytest.raises(ValueError):
+                    prepare_for_backend(graph, backend)
 
 
 @pytest.mark.parametrize("replay", ["reconstruct", "serialize", "optimize"])
