@@ -50,7 +50,6 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
   return result;
 }
 
-
 cc::SolverOptions cc_options(const generativeqc_method_descriptor& d, std::size_t budget) {
   cc::SolverOptions options;
   options.max_bytes = budget;
