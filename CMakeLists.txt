@@ -642,6 +642,9 @@ install(TARGETS generativeqc
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+# The native library embeds the BSE-derived catalog even without the CLI.
+install(FILES LICENSES/bse-data-BSD-3-Clause.txt
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   if(GENERATIVEQC_PYTHON_WHEEL AND DEFINED SKBUILD_SCRIPTS_DIR)
@@ -650,9 +653,7 @@ if(GENERATIVEQC_BUILD_CLI)
     install(TARGETS generativeqc_wheel_launcher
       RUNTIME DESTINATION "${SKBUILD_SCRIPTS_DIR}")
   endif()
-  # The CLI embeds the BSE-derived Gaussian basis catalog in its binary.
-  install(FILES LICENSES/bse-data-BSD-3-Clause.txt
-                LICENSES/nlohmann-json-MIT.txt
+  install(FILES LICENSES/nlohmann-json-MIT.txt
           DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
