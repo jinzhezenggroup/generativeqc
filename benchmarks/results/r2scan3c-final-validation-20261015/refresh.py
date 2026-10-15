@@ -22,6 +22,25 @@ def read_summary(name: str) -> dict[str, Any]:
     return json.loads(lzma.decompress((ROOT / name).read_bytes()))
 
 
+def verify_comparison(comparison: dict[str, Any]) -> None:
+    """Keep work attribution separate from complete-endpoint nonregression."""
+    reducer = runpy.run_path(str(ROOT / "reduce.py"))
+    phases = reducer["compare"](
+        comparison["arms"]["control"]["engines"]["native"],
+        comparison["arms"]["candidate"]["engines"]["native"],
+    )
+    if phases != comparison["phases"]:
+        raise ValueError("retained phase statistics differ from complete samples")
+    for phase, result in phases.items():
+        if not result["passes_nonregression_gate"]:
+            raise ValueError(
+                f"{comparison['density_fitting']}/{comparison['atoms']}/{phase}: "
+                "complete-endpoint nonregression gate failed"
+            )
+        if not result["same_scf_work"] and phase not in ("cold", "moved"):
+            raise ValueError("warm comparison semantic SCF work gate failed")
+
+
 def verify() -> None:
     """Check retained identities, numerical gates and declared cohort acceptance."""
     manifest = json.loads((ROOT / "manifest.json").read_text())
@@ -43,11 +62,7 @@ def verify() -> None:
     ):
         raise ValueError("publication and observation source identities differ")
     for comparison in observations["comparisons"]:
-        for phase, result in comparison["phases"].items():
-            if result["work_confounded"] and phase in ("cold", "moved"):
-                continue
-            if not result["passes_nonregression_gate"] or not result["same_scf_work"]:
-                raise ValueError("nonregression or semantic SCF work gate failed")
+        verify_comparison(comparison)
     for name in ("summary.json.xz", "df-summary.json.xz"):
         update = read_summary(name)
         if set(update["methods"]) != {"r2scan-3c"}:

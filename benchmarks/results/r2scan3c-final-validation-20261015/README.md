@@ -37,17 +37,24 @@ The descriptive robust-benefit label is
 enablement threshold**. Direct/48 moved-warm honestly remains below that label;
 its small positive improvement is retained and enabled. The user explicitly
 rejected disabling useful improvements merely because they are below 2%.
-Complete numerical correctness, resource/lease guards and matched-work nonregression beyond
-`max(5%, the same noise gate)` remain blocking checks. Cold/moved have one
+Complete numerical correctness, resource/lease guards and complete-endpoint
+nonregression beyond `max(5%, the same noise gate)` remain blocking checks.
+Changed SCF work limits causal attribution; it does not waive a failed endpoint
+nonregression gate. Warm comparisons additionally require matched SCF work. Cold/moved have one
 sample per arm and do not support a significance claim. Small 3/12-atom owners
 retain the reference proof and serve as non-admission controls.
 
 Direct/96 cold performs 30 versus 26 SCF iterations, and moved 17 versus 21.
 Their complete times are 516.372 → 456.842 s and 327.889 → 380.302 s,
 respectively. The moved sample keeps its failed descriptive nonregression
-flag. Both phases are work-confounded, not evidence of a validation-route
-speedup or regression; no time is normalized by iterations or removed.
+flag. Both phases are work-confounded, so causal attribution to the validation
+route is unresolved; no time is normalized by iterations or removed. The moved
+endpoint is nevertheless an observed slowdown and blocks performance acceptance.
 Warm/moved-warm retain all five matched-work endpoints for the route comparison.
+The retained observation archive preserves its original descriptive classification.
+The replay verifier now recomputes phase statistics and fails on the Direct/96
+moved nonregression result; repairing that verifier does not resolve the slowdown
+or qualify default promotion.
 
 ## Source and numerical qualification
 
