@@ -100,6 +100,8 @@ struct VerifiedKsFinalState {
   std::vector<scf::reference::EigenResult> orbitals;
   EnergyComponents components;
   KsFinalStateDiagnostic diagnostic;
+  /** Published only after the native owner verifies its explicit budget gate. */
+  std::optional<double> stationarity_tolerance;
 };
 
 /** Borrow a validated RKS/UKS snapshot through the common core reference

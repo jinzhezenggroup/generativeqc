@@ -8,7 +8,7 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-/** Method-neutral lease of immutable operator-bound FP64 ERIs.
+/** Method-neutral lease of immutable operator- and precision-bound ERIs.
  * The common Direct provider remains the scientific owner. Consumers assemble
  * their own HF/KS equations and retire captured borrowers before this lease.
  * The caller-owned stream outlives destruction. An immutable-geometry owner may
@@ -18,12 +18,17 @@ namespace generativeqc::scf::cuda_execution {
  */
 class DirectJkSourceLease {
  public:
-  /** Radial identity is immutable. Range leases accept matching pure K only;
-   * the default preserves the existing full-range J/K consumer contract. */
+  /** Radial identity and source precision are immutable. Range leases accept
+   * matching pure K only. Mixed sources are complete restricted full-range
+   * through-d FP32 recurrence/storage, with FP64 products and accumulation;
+   * a strict phase must retire them and construct a separate FP64 lease. */
   explicit DirectJkSourceLease(cudaStream_t stream,
                                FockOperator source_operator = FockOperator::FullRange,
-                               double omega = 0.0)
-      : stream_(stream), source_operator_(source_operator), source_omega_(omega) {}
+                               double omega = 0.0, bool mixed_recurrence = false)
+      : stream_(stream),
+        source_operator_(source_operator),
+        source_omega_(omega),
+        mixed_recurrence_(mixed_recurrence) {}
   ~DirectJkSourceLease();
   DirectJkSourceLease(const DirectJkSourceLease&) = delete;
   DirectJkSourceLease& operator=(const DirectJkSourceLease&) = delete;
@@ -48,6 +53,7 @@ class DirectJkSourceLease {
       DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
       std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1);
   bool active() const noexcept { return direct_ != nullptr; }
+  bool mixed_recurrence() const noexcept { return mixed_recurrence_; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
   std::size_t value_bytes() const noexcept { return value_bytes_; }
   const std::string& reason() const noexcept { return reason_; }
@@ -92,6 +98,7 @@ class DirectJkSourceLease {
   cudaStream_t stream_{};
   FockOperator source_operator_{FockOperator::FullRange};
   double source_omega_{};
+  bool mixed_recurrence_{};
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> direct_{
       nullptr, destroy_cuda_direct_jk_plan};
   double* scratch_{};

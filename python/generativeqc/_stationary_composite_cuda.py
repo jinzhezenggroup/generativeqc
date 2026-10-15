@@ -293,7 +293,7 @@ class PreparedCompositeStationaryCudaGradient:
             raise NotImplementedError(
                 "resident nonlocal force composition requires the stationary seed consumer"
             )
-        contract = StationaryDerivativeContract(state.identity)
+        contract = StationaryDerivativeContract.for_native_force(state)
         contract.validate(state)
         source = state._source
         if (

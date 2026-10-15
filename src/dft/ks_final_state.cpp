@@ -198,7 +198,8 @@ bool valid_evidence_metadata(const KsFinalStateIdentity& current,
     return false;
   }
   const double energy_error = std::abs(evidence.components.total() - evidence.reported_energy);
-  const double residual_gate = std::min(1e-9, limits.density_tolerance);
+  const double residual_gate =
+      std::min(limits.stationarity_tolerance.value_or(1e-9), limits.density_tolerance);
   if (energy_error > limits.energy_tolerance || evidence.physical_residual < 0.0 ||
       evidence.physical_residual > residual_gate) {
     detail = "KS final state failed component-energy or physical-residual consistency";
@@ -295,6 +296,7 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
       verified.weighted_density.push_back(std::move(weighted));
     }
   }
+  verified.stationarity_tolerance = limits.stationarity_tolerance;
   output = std::move(verified);
   return true;
 }

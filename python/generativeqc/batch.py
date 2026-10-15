@@ -677,7 +677,9 @@ class PreparedBatch:
             charge=self._charges[index],
             multiplicity=self._multiplicities[index],
         ) as basis:
-            state = StationaryKsState.from_native(self, basis, index=index)
+            state = StationaryKsState.from_native(
+                self, basis, index=index, allow_budget_stationarity=True
+            )
             try:
                 if state._source.backend != "cuda" or (
                     "forces" not in calculator._capabilities.supported_properties
