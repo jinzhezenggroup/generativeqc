@@ -1,0 +1,8 @@
+{
+  "name": "hessian_aot_leaves",
+  "outputs": [
+    "generated/hessian_aot/*.cu"
+  ],
+  "owner": "tools/generate_hessian_aot.py",
+  "scope": "Opt-in partial native AD leaf package generated from authoritative compiler AO, integral, XC, grid, VV10 and ECP programs. This is not a complete stationary Hessian consumer, full shell-component closure or endpoint capability. Native host code retains borrowed-pointer launch validation and exact package-miss handling."
+}

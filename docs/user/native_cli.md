@@ -138,6 +138,11 @@ production numerical fallbacks are retained.
 
 ## Compiler-AD WB97M-V Hessian and HVP
 
+These existing commands are **Python-backed, not a standalone native Hessian**.
+The experimental [native AOT leaf package](../developer/dft_hessian.md#native-aot-development-package)
+does not yet replace their interpreter, response solver or stationary driver.
+Precompiling leaves alone must not be presented as a Python-free endpoint.
+
 The C++ executable exposes `hessian` and `hvp` commands for canonical
 `wb97m-v-rks` (the default) and `wb97m-v-uks`. These commands explicitly invoke
 the existing compiler-AD runtime in the interpreter named by

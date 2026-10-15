@@ -129,6 +129,10 @@ that passing the smaller benchmark fixes that cold-compile blocker.
 
 ## WB97M-V compiler-AD molecular execution
 
+The complete molecular consumers in this section still use Python orchestration
+(and CuPy for CUDA execution). They are not a Python-free native endpoint.
+The separate native AOT development package below supplies compiled leaves only.
+
 `generativeqc.composite_rks_hessian` binds the complete twelve-source WB97M-V
 RKS/UKS plan to one converged native CPU or CUDA state. It reuses
 `StationarySecondOrderExecutor` for CPU transactional source coverage and the
@@ -172,6 +176,53 @@ SCF/native-provider storage are outside those grid bounds. A fine/default grid
 can exceed the pair cap; callers must choose and converge their quadrature and
 explicitly increase the cap if appropriate. Reducing a tile does not reduce
 quadratic pair work. This is a bounded implementation, not a scaling claim.
+
+### Native AOT development package
+
+`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON` builds the explicitly selected
+`generativeqc_hessian_aot` static library and, with native tests enabled, the
+standalone `generativeqc_hessian_aot_probe` executable. Python/compiler AD runs
+at build time only. The linked CUDA callbacks in `src/dft/hessian_aot.hpp` take
+borrowed device pointers and a borrowed stream; they neither compile, allocate,
+synchronize, launch an interpreter nor select a CPU numerical fallback.
+
+`manifests/hessian_aot_development.json` is a **partial development inventory**,
+not a production method/basis capability manifest. It selects the existing
+through-f/order-three normalized AO evaluator, RKS/UKS semilocal energy/gradient/
+feature-Hessian graphs, coefficient pullbacks/JVPs, VV10 pair gradient/JVP,
+mixed Becke/norm/ratio/log primitives, nuclear HVP and ECP radial/harmonic leaves.
+Its integral entries explicitly select S/T/V, full/SR/LR ERI and raw DF metric/
+three-center component tiles. It does not cover all s/p/d/f shell products.
+Missing names fail with `cudaErrorNotSupported`, without JIT or a fallback.
+
+Scalar panels use `[field,lane]` FP64 layout with input order in the native
+descriptor. Integral records use `[exponents,center_xyz,primitive_scale]`; output
+is `[component,value/gradient/gradient-JVP]` with all mathematical centers
+retained. Attraction uses unit nuclear charge, so the native record scale must
+include the actual charge as well as contraction/component normalization.
+The caller must initialize the device error flag, keep buffers/stream alive and
+discard all results after any nonzero error. Scientific descriptor identities
+authenticate logical programs, not executable bytes or a converged SCF state.
+
+For a source build with a verified compiler-cache launcher configured:
+
+```bash
+cmake -S . -B build/cuda-release-sm120 \
+  -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON
+cmake --build build/cuda-release-sm120 --target generativeqc_hessian_aot_probe
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_hessian_aot_cuda.py
+```
+
+The Python test driver supplies independent quadrature/Libxc/real-space oracles;
+each numerical leaf executes in the standalone native process, including a
+test with unavailable Python paths and an empty executable search path.
+This validates only the compiled leaves. The prepared-state/source owner,
+tensor contractions and reductions, coupled-spin CPKS, full-rank DF metric
+response, complete moving-grid/VV10/ECP assembly, full integral coverage and
+production CLI wiring are **not** implemented by this package. Therefore it
+registers no molecular Hessian capability and cannot establish endpoint speed.
 
 ### Representation, spin and fitting
 

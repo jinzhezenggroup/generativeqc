@@ -7,6 +7,10 @@ function(generativeqc_set_cuda_compile_pool target pool)
 endfunction()
 
 macro(generativeqc_configure_cuda_backend target)
+  if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
+    generativeqc_add_hessian_aot(generativeqc_hessian_aot "${GENERATIVEQC_HESSIAN_AOT_INVENTORY}")
+    target_link_libraries(${target} PRIVATE generativeqc_hessian_aot)
+  endif()
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     if(_arch STREQUAL "native" OR _arch STREQUAL "all" OR _arch STREQUAL "all-major")
       message(FATAL_ERROR

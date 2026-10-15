@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-15
 
+The user subsequently clarified that the entire #2527 runtime must be
+Python-free. The explicit bridge described here does not satisfy that stricter
+requirement. The proposed replacement and its currently partial AOT boundary are
+recorded in `../../proposed/2026-10-15-python-free-wb97mv-hessian.md`.
+
 ## Problem
 
 The complete WB97M-V compiler-AD Hessian/HVP was available only through Python.
