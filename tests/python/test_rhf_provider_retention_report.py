@@ -254,6 +254,62 @@ def test_nested_provider_pairs_are_ambiguous() -> None:
     assert result["observed_provider_flags"]["cublas"] is None
 
 
+def nested_vendor_records() -> list[dict]:
+    records = ordered_records()
+    index = next(
+        index
+        for index, row in enumerate(records)
+        if row["event"] == "cusolver_create" and row["phase"] == "begin"
+    )
+    # Real provider wrappers can call one another. The legacy shim labels these
+    # application too, so only balanced begin/end nesting establishes the census.
+    records[index + 1 : index + 1] = [
+        event(0, "cublas_create", phase="begin", origin="application"),
+        event(0, "cublas_create", phase="end", origin="application"),
+        event(0, "cublas_set_stream", phase="begin", origin="application"),
+        event(0, "cublas_set_stream", phase="end", origin="application"),
+    ]
+    return resequence(records)
+
+
+def test_balanced_vendor_nesting_keeps_external_provider_census() -> None:
+    result = summarize(nested_vendor_records(), POLICY, IDENTITY)
+    assert result["status"] == "COMPLETE"
+    assert result["observed_provider_flags"] == {"cublas": True, "cusolver": True}
+    candidate = result["candidate_intervals"][0]
+    assert candidate["provider_nesting_valid"] is True
+    assert [call["event"] for call in candidate["top_level_provider_calls"]] == [
+        "cublas_create",
+        "cublas_set_stream",
+        "cublas_set_pointer_mode",
+        "cusolver_create",
+        "cusolver_set_stream",
+        "cusolver_create_params",
+    ]
+    assert [call["event"] for call in candidate["nested_provider_calls"]] == [
+        "cublas_create",
+        "cublas_set_stream",
+    ]
+    assert candidate["raw_delta_bytes"] == 300
+
+
+def test_equal_repeated_vendor_intervals_do_not_select_a_primary() -> None:
+    first = nested_vendor_records()
+    second = nested_vendor_records()
+    result = summarize(resequence([*first[:-1], *second]), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert result["measurement"] is None
+    assert result["observed_provider_flags"] == {"cublas": None, "cusolver": None}
+    assert "ambiguous provider measurement pairs: 2" in result["issues"]
+    assert [
+        candidate["raw_delta_bytes"] for candidate in result["candidate_intervals"]
+    ] == [300, 300]
+    assert all(
+        candidate["provider_nesting_valid"]
+        for candidate in result["candidate_intervals"]
+    )
+
+
 def test_observed_provider_outside_source_policy_is_rejected() -> None:
     policy = deepcopy(POLICY)
     del policy["providers"]["cusolver"]
@@ -311,6 +367,14 @@ def test_shim_resolution_failure_retains_incomplete_report() -> None:
     assert result["status"] == "INCOMPLETE"
     assert result["measurement"] is None
     assert "interposer resolution failed 1 time(s)" in result["issues"]
+
+
+def test_observed_resolution_error_cannot_be_hidden_by_terminal_counter() -> None:
+    records = ordered_records()
+    records.insert(1, event(0, "resolution_error", status=-1, origin="interposer"))
+    result = summarize(resequence(records), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert result["measurement"] is None
 
 
 def test_duplicate_sequence_is_rejected() -> None:

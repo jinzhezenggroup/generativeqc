@@ -236,6 +236,20 @@ for the repeated setup, but the journal records no caller PC or explicit stage
 that proves the correspondence. Do not select the last interval, discard the
 initial interval, or merge equal deltas to manufacture a complete observation.
 
+The host reporter now reconstructs balanced provider-call nesting separately
+for each PID/TID. A unique interval may contain vendor-internal provider calls
+without counting them as duplicate external setup. Candidate diagnostics expose
+the reconstructed nesting, original query sequence ranges and raw deltas, but
+do not assign a stage or an effective allowance to an ambiguous interval. Invalid
+or unclosed nesting remains incomplete. In particular, no compatibility score,
+record origin text, ordinal position or equality of deltas selects a primary.
+Independent hand-authored tests cover a nested cuBLAS provider call inside
+cuSOLVER and repeated identical intervals. An offline replay of the actual
+88-row trace keeps all three candidates, top-level call counts `[9,6,6]`, nested
+counts `[10,5,5]`, and the original `INCOMPLETE` result with null primary fields.
+This is host analysis of old bound device evidence; the executed shim remains
+the old `c008...` binary, with no new device execution implied.
+
 The GPU Job ended `FAILED` after diagnostic exit 2. Requested priority 4 became
 the observed platform value 20/`NORMAL`; no running-priority snapshot was
 obtained during the 45-second grace period. Scheduled-to-terminal was 67 seconds,
@@ -246,6 +260,10 @@ reader retrieved only the journal and stopped after 90 seconds, within its
 not current-upstream endpoint or parent-issue completion.
 
 ## Owner-coordinated alternative
+
+The external owner dependency is recorded at
+https://github.com/jinzhezenggroup/generativeqc/pull/2287#issuecomment-6185131043.
+That evidence/ownership comment is not an approval or an ownership transfer.
 
 After #2287 releases ownership, its owner could instead add a failure-path
 progress scope or internal POD immediately before the throw, retaining

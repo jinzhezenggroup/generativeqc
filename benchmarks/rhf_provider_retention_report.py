@@ -119,6 +119,40 @@ def _mem_query(record: dict) -> bool:
     )
 
 
+def _provider_calls(ordered: list[dict]) -> tuple[list[dict], bool]:
+    """Reconstruct nesting from balanced per-thread calls, not origin labels."""
+    stacks: dict[tuple[int, int], list[dict]] = {}
+    calls = []
+    valid = True
+    for record in ordered:
+        name = record["event"]
+        if not name.startswith(("cublas_", "cusolver_")):
+            continue
+        key = record["pid"], record["tid"]
+        stack = stacks.setdefault(key, [])
+        if record["phase"] == "begin":
+            stack.append(
+                {
+                    "event": name,
+                    "pid": key[0],
+                    "tid": key[1],
+                    "begin_sequence": record["sequence"],
+                    "begin_status": record["status"],
+                    "reconstructed_depth": len(stack),
+                }
+            )
+        elif stack and stack[-1]["event"] == name:
+            call = stack.pop()
+            call.update(end_sequence=record["sequence"], end_status=record["status"])
+            calls.append(call)
+        else:
+            valid = False
+            stack.clear()
+    return sorted(calls, key=lambda call: call["begin_sequence"]), valid and not any(
+        stacks.values()
+    )
+
+
 def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
     """Reconcile one exact provider interval without inferring missing flags."""
     _validate_identity(policy, identity)
@@ -133,6 +167,11 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
         issues.append("event sequence contains gaps")
     terminal = [record for record in ordered if record["event"] == "terminal"]
     ordinary = [record for record in ordered if record["event"] != "terminal"]
+    if any(record["event"] == "resolution_error" for record in ordinary):
+        issues.append("observed interposer resolution error")
+    calls, nesting_valid = _provider_calls(ordinary)
+    if not nesting_valid:
+        issues.append("provider begin/end nesting is incomplete or mismatched")
     if not terminal:
         issues.append("missing terminal record")
     elif len(terminal) != 1:
@@ -183,12 +222,55 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
     elif len(candidates) != 1:
         issues.append(f"ambiguous provider measurement pairs: {len(candidates)}")
 
+    interval_diagnostics = []
+    for before, after, _ in candidates:
+        interval_calls = [
+            call
+            for call in calls
+            if call["pid"] == before["pid"]
+            and call["tid"] == before["tid"]
+            and before["sequence"] < call["begin_sequence"]
+            and call["end_sequence"] < after["sequence"]
+        ]
+        interval_diagnostics.append(
+            {
+                "before_sequence": before["sequence"],
+                "after_sequence": after["sequence"],
+                "before_free_bytes": before["free_bytes"],
+                "after_free_bytes": after["free_bytes"],
+                "raw_delta_bytes": max(before["free_bytes"] - after["free_bytes"], 0),
+                "provider_nesting_valid": nesting_valid,
+                "nesting_basis": "reconstructed from balanced begin/end records; not a recorded depth or stage",
+                "top_level_provider_calls": [
+                    call for call in interval_calls if call["reconstructed_depth"] == 0
+                ]
+                if nesting_valid
+                else None,
+                "nested_provider_calls": [
+                    call for call in interval_calls if call["reconstructed_depth"] > 0
+                ]
+                if nesting_valid
+                else None,
+                "interpretation": "candidate only; no unique stage or effective allowance is assigned",
+            }
+        )
+
     flags = {name: None for name in SUPPORTED_PROVIDERS}
     provider_errors = []
     unexpected_providers = []
     candidate = candidates[0] if len(candidates) == 1 else None
     if candidate:
         _, _, between = candidate
+        if nesting_valid:
+            external_sequences = {
+                sequence
+                for call in calls
+                if call["reconstructed_depth"] == 0
+                for sequence in (call["begin_sequence"], call["end_sequence"])
+            }
+            between = [
+                record for record in between if record["sequence"] in external_sequences
+            ]
         for record in between:
             if (
                 record["event"].startswith(("cublas_", "cusolver_"))
@@ -318,6 +400,7 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
         "issues": issues,
         "observed_provider_flags": flags,
         "unexpected_observed_providers": unexpected_providers,
+        "candidate_intervals": interval_diagnostics,
         "provider_errors": provider_errors,
         "measurement": measurement,
     }
