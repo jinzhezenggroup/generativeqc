@@ -121,6 +121,9 @@ Accounting account(std::span<const Buffer> buffers, std::size_t space_count) {
   events.reserve(size_mul(2, buffers.size(), "resource event count overflow"));
   for (const auto& buffer : buffers) {
     validate_buffer(buffer, space_count);
+    // Portable accounting exposes device labels only for nonzero peaks. A
+    // zero-sized placeholder must not lower another candidate's device minimum.
+    if (!buffer.bytes) continue;
     total.peaks[buffer.space].present = true;
     if (buffer.retained) resident.peaks[buffer.space].present = true;
     events.push_back({buffer.first_phase, buffer.bytes, buffer.space, true, buffer.retained});

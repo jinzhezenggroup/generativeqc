@@ -2135,6 +2135,7 @@ class Calculator:
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
+            library=self._library,
         )
 
     def _effective_ks_selection(

@@ -97,20 +97,26 @@ def test_geometry_reuses_topology_while_basis_spin_and_controls_invalidate() -> 
 
 
 @pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("method,charge,multiplicity", [("rhf", 0, 1), ("uhf", 1, 2)])
 def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
     fitted: typing.Any,
+    method: str,
+    charge: int,
+    multiplicity: int,
 ) -> None:
-    controls = {"density_fitting": "cpu" if fitted else "none"}
+    controls = {"method": method, "density_fitting": "cpu" if fitted else "none"}
+    endpoint = {"charge": charge, "multiplicity": multiplicity}
+    fleet = {"charges": [charge], "multiplicities": [multiplicity]}
     # This standalone estimator describes the Hcore target inventory. Automatic
     # MINAO plans are obtained from Calculator.estimate_resources instead.
-    baseline = Calculator(**controls, initial_guess=None).singlepoint(H2)
-    probe = estimate_hf_resources([H2], **controls)
+    baseline = Calculator(**controls, initial_guess=None).singlepoint(H2, **endpoint)
+    probe = estimate_hf_resources([H2], **controls, **fleet)
     calculator = Calculator(
         **controls,
         initial_guess=None,
         resource_budget=ResourceBudget(host_bytes=probe.peak_bytes["host"]),
     )
-    with calculator.prepare_batch([H2]) as batch:
+    with calculator.prepare_batch([H2], **fleet) as batch:
         assert batch.resource_plan.status == "feasible"
         first = batch.execute(strict=True).items[0]
         observed = batch.resource_diagnostics["observation"]
@@ -135,9 +141,9 @@ def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
         resource_budget=ResourceBudget(host_bytes=probe.peak_bytes["host"] - 1),
     )
     with pytest.raises(MemoryError, match="no supported plan fits"):
-        constrained.prepare_batch([H2])
+        constrained.prepare_batch([H2], **fleet)
     with pytest.raises(MemoryError, match="no supported plan fits"):
-        constrained.singlepoint(H2)
+        constrained.singlepoint(H2, **endpoint)
 
 
 @pytest.mark.parametrize("initial_guess", [None, "auto"])

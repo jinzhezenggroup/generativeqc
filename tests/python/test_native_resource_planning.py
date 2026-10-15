@@ -141,6 +141,43 @@ def test_native_composition_matches_independent_portable_model(
     assert receipt["limits"] == budget.limits()
 
 
+@pytest.mark.parametrize("kind", ("workspace", "persistent"))
+@pytest.mark.parametrize("zero_candidate_host", (0, 100))
+def test_zero_device_buffers_preserve_portable_presence_and_diagnostics(
+    library: typing.Any, kind: str, zero_candidate_host: int
+) -> None:
+    """A zero-byte device label is absent from portable peaks and their minima."""
+    requests = (
+        request(
+            "owner",
+            (
+                candidate(
+                    "zero",
+                    0,
+                    buffer("host", zero_candidate_host),
+                    buffer("device", 0, "device:0", kind=kind),
+                ),
+                candidate(
+                    "nonzero",
+                    0,
+                    buffer("host", 0),
+                    buffer("device", 2, "device:0", kind=kind),
+                ),
+            ),
+        ),
+    )
+    budget = ResourceBudget(host_bytes=0, per_device_bytes=((0, 0),))
+    expected = portable_plan_resources(requests, budget)
+    actual = resources_planning.plan_resources(requests, budget, library=library)
+    assert actual.to_dict() == expected.to_dict()
+    receipt = resources_planning._native_composition(
+        requests, budget, library.generativeqc_resource_compose_v1, 65536
+    )
+    assert receipt["peak_bytes"] == expected.peak_bytes
+    assert receipt["resident_bytes"] == expected.resident_bytes
+    assert receipt["minima"]["device:0"] == 2
+
+
 @pytest.mark.parametrize(
     "fraction", (0, 0.1, 0.5, math.ulp(0.0), math.nextafter(1.0, 0.0))
 )
