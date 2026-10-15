@@ -45,6 +45,18 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+Strict-FP64 integration retains three published totals and three private
+rounding-correction words for XC energy and the two spin populations. One full
+32-thread warp reduces each channel with lane-local compensated sums and a
+fixed tree that merges both words. Corrections survive point-batch boundaries;
+only the final fold publishes the existing three-double result. All three low
+words are cleared with the totals at each enqueue and charged by the exact
+arena request (24 extra bytes), with no new full-grid storage or device
+allocation. Dense, compact, indexed and retained fallback consumers share this
+reduction. Existing FP32 contraction schedules keep their original accumulation.
+The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
+this is an accuracy improvement, not a bitwise-reproducible SCF contract.
+
 ### Experimental automatic AOT plumbing
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc

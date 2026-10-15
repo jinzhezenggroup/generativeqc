@@ -360,7 +360,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   const auto cart = runtime::size_mul(nao, 2);
   const auto public_elements = runtime::size_mul(batch, runtime::size_mul(nao, nao));
   const auto cart_elements = runtime::size_mul(batch, runtime::size_mul(cart, cart));
-  add(cart_elements, 3 * sizeof(double));
+  add(cart_elements, 4 * sizeof(double));    // Density, J, J correction and Schwarz.
   add(public_elements, 6 * sizeof(double));  // Two rectangular and two public matrices.
   add(runtime::size_mul(batch, cart), sizeof(std::int32_t) + 3 + sizeof(double));
   add(runtime::size_mul(shells, shells),
