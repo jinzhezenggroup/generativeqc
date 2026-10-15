@@ -22,22 +22,25 @@
 | r²SCAN | 12 (96) | 6.451 | 9.076 | 0.699 | 0.557 |
 | r²SCAN | 48 (384) | 32.519 | 32.990 | 4.769 | 4.714 |
 | r²SCAN | 96 (768) | 106.578 | 64.152 | 14.213 | 12.671 [10.721–13.711]† |
-| r²SCAN-3c | 3 (34) | 2.784 | 5.333 | 0.141 | 0.312 |
-| r²SCAN-3c | 12 (136) | 6.586 | 8.161 | 0.805 | 0.656 |
-| r²SCAN-3c | 48 (544) | 50.312 | 52.500 | 6.164 | 7.541 [7.521–8.288]† |
-| r²SCAN-3c | 96 (1088) | 226.247 | 117.146 | 23.080 | 18.356 [18.337–24.735]† |
+| r²SCAN-3c | 3 (34) | 3.202 | 5.321 | 0.133 | 0.305 |
+| r²SCAN-3c | 12 (136) | 6.907 | 23.651 | 0.741 | 0.832 |
+| r²SCAN-3c | 48 (544) | 51.318 | 65.146 | 5.941 | 7.594 [7.591–8.329]† |
+| r²SCAN-3c | 96 (1088) | 210.885 | 105.102 | 18.809 | 22.824 [22.452–27.387]† |
 | M06-2X | 3 (24) | 3.486 | 4.750 | 0.219 | 0.311 |
 | M06-2X | 12 (96) | 6.467 | 6.940 | 1.031 | 0.591 |
 | M06-2X | 48 (384) | 45.783 | 29.255 | 8.920 | 4.239 |
 | M06-2X | 96 (768) | 150.082 | 95.234 | 36.357 | 22.421 [21.964–28.877]† |
-| ωB97M-V | 3 (24) | 38.146 | 18.880 | 0.735 | 1.665 |
-| ωB97M-V | 12 (96) | 51.540 | 98.457 | 5.789 | 7.824 |
+| ωB97M-V | 3 (24) | 7.779 | 18.880 | 0.375 | 1.665 |
+| ωB97M-V | 12 (96) | 29.126 | 98.457 | 1.388 | 7.824 |
+| ωB97M-V | 48 (384) | 359.464‡ | not run | 14.809‡ | not run |
 
 Warm cells show the median of all five complete endpoints. † marks differing
 SCF work and includes the full range; timings are never normalized by iterations.
 ‡ marks completed native calls without an independent accuracy check for that geometry.
 A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
+ωB97M-V: 3/12: native cache primed
+96: incomplete E+F omitted.
 
 ## Observed SCF work
 
@@ -71,13 +74,14 @@ between engines; complete endpoint time includes analytic forces as well.
 | r²SCAN-3c | 3 | 13/13 | 38/39 | 1/1 | 1/2 |
 | r²SCAN-3c | 12 | 18/18 | 42/43 | 1/1 | 1/2 |
 | r²SCAN-3c | 48 | 19/19 | 59/60 | 1/1 | 4/5, 5/6 |
-| r²SCAN-3c | 96 | 25/25 | 60/61 | 1/1 | 1/2, 5/6 |
+| r²SCAN-3c | 96 | 25/25 | 54/55 | 1/1 | 4/5, 6/7, 7/8 |
 | M06-2X | 3 | 13/13 | 35/36 | 1/1 | 1/2 |
 | M06-2X | 12 | 19/19 | 39/40 | 1/1 | 1/2 |
 | M06-2X | 48 | 18/18 | 41/42 | 1/1 | 1/2 |
 | M06-2X | 96 | 18/18 | 43/44 | 3/3 | 3/4, 4/5, 7/8 |
-| ωB97M-V | 3 | 13/13 | 32/33 | 1/1 | 1/2 |
-| ωB97M-V | 12 | 19/19 | 45/46 | 1/1 | 1/2 |
+| ωB97M-V | 3 | 23/23 | 32/33 | 1/1 | 1/2 |
+| ωB97M-V | 12 | 36/36 | 45/46 | 1/1 | 1/2 |
+| ωB97M-V | 48 | 36/36 | — | 1/1 | — |
 
 The [measurement report](README.md) describes the protocol and unsuccessful
 points; [df-summary.json.xz](df-summary.json.xz) retains all scalar observations,
