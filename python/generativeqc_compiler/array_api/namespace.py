@@ -826,7 +826,8 @@ def _contraction_arrays(
         raise TypeError(
             f"{operation} requires generic arrays; scientific domains need explicit einsum"
         )
-    return _promote_generic_arrays(left, right)
+    left, right = _promote_generic_arrays(left, right)
+    return left, right
 
 
 def _contraction_axes(
