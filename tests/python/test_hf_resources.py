@@ -308,3 +308,20 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     changed = estimate_hf_resources([H2], backend="cuda", library=library)
     assert changed.requests[0].identity == baseline.requests[0].identity
     assert changed.identity == baseline.identity
+
+
+def test_ks_final_validation_selection_changes_resource_identity(
+    monkeypatch: typing.Any,
+) -> None:
+    """Prepared/restarted owners must retain the actual proof-execution policy."""
+    from types import SimpleNamespace
+
+    variable = "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"
+    library = SimpleNamespace()
+    monkeypatch.delenv(variable, raising=False)
+    automatic = estimate_hf_resources([H2], backend="cuda", library=library)
+    monkeypatch.setenv(variable, "0")
+    reference = estimate_hf_resources([H2], backend="cuda", library=library)
+    monkeypatch.setenv(variable, "1")
+    resident = estimate_hf_resources([H2], backend="cuda", library=library)
+    assert len({automatic.identity, reference.identity, resident.identity}) == 3

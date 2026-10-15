@@ -3351,8 +3351,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
         final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
         final_spec.exchange.approximation == scf::FockApproximation::Exact &&
         final_spec.exchange.op == scf::FockOperator::FullRange;
+    // The proof consumes the final matrices, not the XC family or J builder.
+    // Admit only complete all-electron full-range pure-J models; range,
+    // incremental, nonlocal, ECP and lower-precision owners keep their policy.
+    const bool full_range_coulomb_only =
+        !has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
+        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        final_spec.derivative_order == 0 && final_spec.coulomb.present &&
+        final_spec.coulomb.coefficient == 1.0 &&
+        final_spec.coulomb.op == scf::FockOperator::FullRange && !final_spec.exchange.present &&
+        (final_spec.coulomb.approximation == scf::FockApproximation::Exact ||
+         final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision());
+        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(),
+        full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&

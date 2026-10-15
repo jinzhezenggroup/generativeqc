@@ -38,22 +38,28 @@ int main() {
                              -std::numeric_limits<double>::infinity()}) {
     assert(!restricted_global_hybrid_exchange_coefficient(coefficient));
   }
-  for (std::size_t aos : {0U, 2U, 7U, 16U, 17U, 37U, 383U, 384U, 768U, 1024U}) {
+  for (std::size_t aos : {0U, 2U, 7U, 16U, 17U, 37U, 383U, 384U, 543U, 544U, 545U, 768U, 1087U, 1088U, 1089U}) {
     for (unsigned spins : {0U, 1U, 2U}) {
       for (bool direct_global_hybrid : {false, true}) {
         for (bool full_precision : {false, true}) {
-          const bool expected = aos >= 384 && spins == 1 && direct_global_hybrid && full_precision;
-          const bool eligible = device_final_validation_default_eligible(
-              aos, spins, direct_global_hybrid, full_precision);
-          assert(eligible == expected);
-          assert(device_final_validation_requested(nullptr, eligible) == expected);
-          assert(!device_final_validation_requested("0", eligible));
-          assert(device_final_validation_requested("1", eligible));
-          for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
-            bool rejected = false;
-            try { device_final_validation_requested(invalid, eligible); }
-            catch (const std::invalid_argument&) { rejected = true; }
-            assert(rejected);
+          assert(device_final_validation_default_eligible(aos, spins, direct_global_hybrid,
+                                                          full_precision) ==
+                 (aos >= 384 && spins == 1 && direct_global_hybrid && full_precision));
+          for (bool full_range_coulomb_only : {false, true}) {
+            const bool expected = spins == 1 && full_precision &&
+                ((aos >= 384 && direct_global_hybrid) || (aos >= 544 && full_range_coulomb_only));
+            const bool eligible = device_final_validation_default_eligible(
+                aos, spins, direct_global_hybrid, full_precision, full_range_coulomb_only);
+            assert(eligible == expected);
+            assert(device_final_validation_requested(nullptr, eligible) == expected);
+            assert(!device_final_validation_requested("0", eligible));
+            assert(device_final_validation_requested("1", eligible));
+            for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
+              bool rejected = false;
+              try { device_final_validation_requested(invalid, eligible); }
+              catch (const std::invalid_argument&) { rejected = true; }
+              assert(rejected);
+            }
           }
         }
       }

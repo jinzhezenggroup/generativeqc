@@ -1,5 +1,11 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-15 r²SCAN-3c refresh](r2scan3c-final-validation-20261015/README.md)
+retains complete Direct and DF comparisons at 3/12/48/96 atoms with canonical
+def2-mTZVPP, independent energy/force checks and explicit work-confounded
+cold/moved outcomes. It refreshes both README panels without a minimum-benefit
+enablement gate.
+
 The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
 retains native direct cold/warm populations through 96 atoms and DF through
 48 atoms. Missing reference accuracy is explicit and does not suppress DF/48;
@@ -22,15 +28,16 @@ The [2026-10-13 HF/DFT comparison](readme-dft-20261013/README.md) measures compl
 cold/warm direct and density-fitted endpoints based on master `e0ad22036` for HF, PBE, PBE0,
 B3LYP, r2SCAN, r2SCAN-3c, M06-2X and ωB97M-V. The report distinguishes original
 master measurements from the force-memory fix reruns. It retains independent numerical
-checks, per-repeat SCF work and unsuccessful outcomes alongside the README
-figure and timing table.
+checks, per-repeat SCF work and unsuccessful outcomes in unchanged live
+summaries. The superseded report, ancillary receipts, figures and tables are
+recoverable through its verified merged-Git snapshot.
 
 The [2026-09-22 endpoint investigation](readme-20260922/README.md) retains
 matched GPU HF, partial DFT and internal CCSD(T) measurements from master
-`572fbd6d`. It is diagnostic evidence, **not qualified for README publication**:
-large-system correctness, completeness and capability blockers remain open under
-[#1117](https://github.com/jinzhezenggroup/vibeqc/issues/1117). Its stopped
-and unsupported paths have no inferred native timings.
+`572fbd6d` through a verified merged-Git snapshot. It is historical diagnostic
+evidence, **not qualified for README publication**: correctness, completeness
+and capability blockers stopped that campaign. Its stopped and unsupported
+paths have no inferred native timings or later scientific qualification.
 
 ## Adding and maintaining evidence
 
