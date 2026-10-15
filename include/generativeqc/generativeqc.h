@@ -1678,9 +1678,9 @@ GENERATIVEQC_API const char* generativeqc_builtin_basis_name_v1(uint64_t index);
  * @units Counts are dimensionless and expansion bytes cover only detached raw shell/primitive
  * buffers, excluding allocator metadata, caller atoms and normalized system/provider storage.
  */
-GENERATIVEQC_API generativeqc_status generativeqc_builtin_basis_query_v1(
-    const generativeqc_builtin_basis_descriptor_v1* descriptor,
-    generativeqc_builtin_basis_capacity_v1* capacity);
+GENERATIVEQC_API generativeqc_status
+generativeqc_builtin_basis_query_v1(const generativeqc_builtin_basis_descriptor_v1* descriptor,
+                                    generativeqc_builtin_basis_capacity_v1* capacity);
 
 /** @native-contract generativeqc_system_create_builtin_basis_v1
  * @behavior Materialize a named shared AOT basis and call the existing system validation/
