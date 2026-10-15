@@ -53,6 +53,10 @@ def test_small_direct_cuda_global_budget_covers_all_ragged_caches(
             assert observed["cuda_arena_samples"] >= 2
             ledger = observed["device_ledger"]
             assert (
+                ledger["capacity_admission"]["declared_device_peak"]
+                == probe.peak_bytes["device:0"]
+            )
+            assert (
                 0
                 < ledger["live_bytes"]
                 <= ledger["peak_bytes"]

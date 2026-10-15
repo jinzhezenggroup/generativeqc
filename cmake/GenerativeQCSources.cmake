@@ -20,6 +20,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_context.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_resource_planning.cpp
+    src/api/c_api_resource_ledger_plan.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
     src/api/error.cpp
@@ -32,6 +33,7 @@ function(generativeqc_add_runtime_sources target)
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
     src/runtime/resource_planning.cpp
+    src/runtime/resource_ledger_plan.cpp
     src/runtime/cuda_provider.cpp
     src/tensor/cpu_linalg.cpp
     src/tensor/cpu/lp64_provider.cpp)
