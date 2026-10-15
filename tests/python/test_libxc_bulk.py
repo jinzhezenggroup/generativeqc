@@ -58,6 +58,21 @@ def test_bulk_physical_energy_gradient_hessian_matches_independent_libxc(
     np.testing.assert_allclose(actual, case["expected"], rtol=2e-9, atol=2e-10)
 
 
+
+def test_new_nonlocal_maple_graph_is_not_public_without_independent_fixtures() -> None:
+    # B97M-V math can now lower through the same scalar Graph, but VV10 and
+    # complete-model execution require additional qualification.
+    record = next(
+        entry for entry in CATALOG["registrations"]
+        if entry["name"] == "MGGA_XC_B97M_V"
+    )
+    for spin in ("unpolarized", "polarized"):
+        raw = libxc_bulk.build_record(record, CATALOG["source_files"], SOURCE, spin=spin)
+        assert raw.roots(1)
+    assert "MGGA_XC_B97M_V" not in libxc_bulk.available_functionals()
+    assert "MGGA_XC_B97M_V" not in import_libxc_bulk.independent_pointwise_fixtures()
+
+
 def test_catalog_and_human_report_reproduce_offline() -> None:
     regenerated = import_libxc_bulk.make_catalog(SOURCE)
     assert regenerated == CATALOG
