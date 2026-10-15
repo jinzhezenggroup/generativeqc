@@ -261,3 +261,80 @@ def test_native_and_explicit_portable_multirhs_keep_the_same_linear_problem(
         np.testing.assert_allclose(
             matrix @ native.solution, rhs[:, column], atol=2e-10, rtol=2e-9
         )
+
+
+@pytest.mark.parametrize("scale", [1e-170, -1e-170, 1e-15, 1.0, -1e170, 1e170])
+@pytest.mark.parametrize("identity", [False, True])
+def test_small_nonzero_pivots_preserve_true_residual_solution(
+    library: Any, scale: float, identity: bool
+) -> None:
+    matrix = (
+        np.eye(3)
+        if identity
+        else np.array([[3.0, 2.0, -1.0], [0.0, 2.0, 1.0], [0.0, 0.0, 4.0]])
+    )
+    expected = np.array([1.0, -2.0, 0.5])
+    rhs = scale * (matrix @ expected)
+    operator = MatrixOperator(scale * matrix)
+    # Identity must work with the public defaults. The nonsymmetric control
+    # explicitly disables the unchanged absolute Arnoldi/Givens threshold.
+    options = GMRESOptions() if identity else GMRESOptions(breakdown_tolerance=0)
+    result = solve(operator, rhs, options=options, raise_on_failure=True)
+    np.testing.assert_allclose(
+        result.solution, np.linalg.solve(matrix, rhs / scale), atol=2e-12, rtol=2e-12
+    )
+    residual = np.linalg.norm((rhs - operator.matrix @ result.solution) / scale)
+    assert residual <= options.rtol * np.linalg.norm(rhs / scale)
+    assert result.operator_actions == operator.actions
+
+
+@pytest.mark.parametrize(
+    ("matrix", "rhs"),
+    [
+        (np.diag([1e15, 1.0]), np.array([1e-15, 1.0])),
+        (np.array([[1e15, 1e15], [0.0, 1.0]]), np.array([0.0, 1.0])),
+        (np.diag([1e18, 1.0]), np.array([1.0, 1.0])),
+    ],
+)
+def test_mixed_scale_pivots_preserve_existing_solutions(
+    library: Any, matrix: np.ndarray, rhs: np.ndarray
+) -> None:
+    operator = MatrixOperator(matrix)
+    result = solve(operator, rhs, raise_on_failure=True)
+    residual = np.linalg.norm(rhs - matrix @ result.solution) / np.linalg.norm(rhs)
+    assert residual <= GMRESOptions().rtol
+    assert result.relative_residual == pytest.approx(residual, abs=1e-15)
+    assert result.operator_actions == operator.actions
+    np.testing.assert_allclose(
+        result.solution, np.linalg.solve(matrix, rhs), atol=2e-12, rtol=2e-12
+    )
+
+
+def test_finite_action_with_overflowing_norm_still_solves(library: Any) -> None:
+    matrix = np.array([[0.0, 1.5e308], [1e308, 1.5e308]])
+    rhs = np.array([1.0, 0.0])
+    result = solve(MatrixOperator(matrix), rhs, raise_on_failure=True)
+    np.testing.assert_allclose(
+        result.solution * 1e308, [-1.0, 2.0 / 3.0], atol=2e-12, rtol=2e-12
+    )
+    assert np.linalg.norm(rhs - matrix @ result.solution) <= 1e-10
+
+
+@pytest.mark.parametrize("scale", [1e-170, 1.0, 1e170])
+def test_small_pivots_never_accept_inconsistent_system(
+    library: Any, scale: float
+) -> None:
+    matrix = scale * np.array([[0.0, 1.0], [0.0, 0.0]])
+    rhs = scale * np.array([0.0, 1.0])
+    result = solve(MatrixOperator(matrix), rhs)
+    assert not result.converged
+    actual = np.linalg.norm((rhs - matrix @ result.solution) / scale)
+    assert actual > GMRESOptions().rtol
+    assert result.relative_residual == pytest.approx(actual)
+
+
+def test_nonfinite_backsolve_coefficient_fails_closed(library: Any) -> None:
+    result = solve(MatrixOperator(np.array([[1e-309]])), np.array([1.0]))
+    assert not result.converged
+    assert result.relative_residual == 1
+    assert np.isfinite(result.solution).all()

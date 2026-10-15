@@ -186,6 +186,92 @@ generativeqc_status publish_sequence(void* data, std::size_t index,
   }
 }
 
+void small_pivot_contracts() {
+  for (double scale : {1e-170, -1e-170, 1e-15, 1.0, -1e170, 1e170}) {
+    for (bool identity : {false, true}) {
+      auto descriptor = request();
+      Operator action;
+      std::array<double, 3> rhs{{1.5 * scale, -5 * scale, 2 * scale}};
+      if (identity) {
+        action.matrix = {{scale, 0, 0, 0, scale, 0, 0, 0, scale}};
+        rhs = {{scale, -2 * scale, 0.5 * scale}};
+      } else {
+        // General small operators still need an explicit exact-zero Arnoldi
+        // threshold; this repair changes only triangular pivot admission.
+        descriptor.breakdown_tolerance = 0;
+        for (double& entry : action.matrix) entry *= scale;
+      }
+      descriptor.rhs = rhs.data();
+      descriptor.apply = apply;
+      descriptor.apply_data = &action;
+      generativeqc::ResponseResult result(descriptor);
+      const auto data = result.data();
+      require(data.converged && data.relative_residual <= descriptor.rtol &&
+                  data.operator_actions == action.actions,
+              "finite small pivots changed convergence or actual work");
+      require(std::abs(data.solution[0] - 1) < 2e-12 && std::abs(data.solution[1] + 2) < 2e-12 &&
+                  std::abs(data.solution[2] - 0.5) < 2e-12,
+              "small-pivot solve differs from the independent exact solution");
+    }
+  }
+
+  auto descriptor = request();
+  Operator action;
+  descriptor.apply = apply;
+  descriptor.apply_data = &action;
+  for (bool nonfinite_coefficient : {false, true}) {
+    action.matrix.fill(0);
+    if (nonfinite_coefficient) action.matrix[0] = 1e-309;
+    std::array<double, 3> rhs{{1, 0, 0}};
+    descriptor.rhs = rhs.data();
+    generativeqc::ResponseResult failed(descriptor);
+    require(!failed.data().converged && failed.data().relative_residual == 1 &&
+                std::isfinite(failed.data().solution[0]),
+            "singular or nonfinite backsolve falsely converged");
+  }
+
+  // A sparse physical action can ignore an overflowing nullspace coordinate.
+  // Its finite residual must never certify an infinite preconditioned solution.
+  std::uint64_t actions = 0;
+  std::array<double, 3> rhs{{1, 0, 0}};
+  descriptor.rhs = rhs.data();
+  descriptor.apply_data = &actions;
+  descriptor.apply = [](void* data, const double* input, double* output,
+                        std::size_t n) -> generativeqc_status {
+    ++*static_cast<std::uint64_t*>(data);
+    for (std::size_t i = 0; i < n; ++i)
+      require(std::isfinite(input[i]), "operator received a nonfinite solution candidate");
+    output[0] = 1e-15 * input[0];
+    output[1] = output[2] = 0;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  };
+  std::uint64_t preconditioner_actions = 0;
+  descriptor.precondition_data = &preconditioner_actions;
+  descriptor.precondition = [](void* data, const double* input, double* output,
+                               std::size_t) -> generativeqc_status {
+    ++*static_cast<std::uint64_t*>(data);
+    output[0] = input[0];
+    output[1] = 1e300 * input[0];
+    output[2] = 0;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  };
+  for (bool with_guess : {false, true}) {
+    actions = preconditioner_actions = 0;
+    const std::array<double, 3> guess{{0, 3, 0}};
+    descriptor.initial_guess = with_guess ? guess.data() : nullptr;
+    generativeqc::ResponseResult overflowed_candidate(descriptor);
+    const auto failed = overflowed_candidate.data();
+    require(!failed.converged && failed.reason == GENERATIVEQC_RESPONSE_BREAKDOWN &&
+                failed.relative_residual == 1 && failed.residual_norm == 1 &&
+                failed.operator_actions == actions &&
+                failed.preconditioner_actions == preconditioner_actions,
+            "overflowed candidate changed failure status, residual or actual work");
+    for (std::size_t index = 0; index < guess.size(); ++index)
+      require(failed.solution[index] == (with_guess ? guess[index] : 0),
+              "overflowed candidate did not retain the last finite iterate");
+  }
+}
+
 void sequence_contract() {
   SequenceState state;
   std::array<double, 9> storage{1.5, 3, 0, -5, -10, 0, 2, 4, 0};
@@ -306,6 +392,7 @@ int main() {
   try {
     run();
     sequence_contract();
+    small_pivot_contracts();
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

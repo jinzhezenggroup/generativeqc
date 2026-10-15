@@ -85,8 +85,13 @@ The shape-only workspace query validates controls without reading vector or
 callback pointers. Insufficient workspace publishes a diagnostic result without
 dimension-sized solver allocations or callback work. API success means a result
 was published, **not** that the solve converged: inspect `converged`, `reason`
-and the true unpreconditioned residual. Callback failure propagates its status
-and leaves the result slot null. See the [symbol contracts](native_symbols.md)
+and the true unpreconditioned residual. The host triangular backsolve rejects
+zero/nonfinite pivots, nonfinite coefficients and nonfinite solution candidates;
+small nonzero pivots alone do not reject a solution. A nonfinite candidate returns
+breakdown with the best finite iterate, without invoking the operator on that
+candidate. The existing absolute Arnoldi/Givens `breakdown_tolerance` checks remain,
+so general operator-scale invariance is not guaranteed. Callback failure propagates
+its status and leaves the result slot null. See the [symbol contracts](native_symbols.md)
 for exact flags, layouts and failure behavior.
 
 `generativeqc_response_result_view_v1_get` borrows immutable solution/history
