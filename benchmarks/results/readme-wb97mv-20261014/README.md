@@ -9,9 +9,15 @@ populations; DF retains 3, 12 and 48 atoms. The earlier DF panel stopped at
 independent reference. **Only DF/96 is omitted**: no complete E+F call was
 obtained, and the user requested cancellation rather than further waiting.
 
-![Direct HF/DFT cold and warm endpoints](dft-cold-warm.svg)
+![Direct HF/DFT cold and warm endpoints](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/4e28477e96d257528a60bcb68c00529f22585bc1/benchmarks/results/readme-wb97mv-20261014/dft-cold-warm.svg)
 
-![Density-fitted HF/DFT cold and warm endpoints](df-cold-warm.svg)
+![Density-fitted HF/DFT cold and warm endpoints](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/4e28477e96d257528a60bcb68c00529f22585bc1/benchmarks/results/readme-wb97mv-20261014/df-cold-warm.svg)
+
+Historical figure bytes are retained losslessly as
+[direct](dft-cold-warm.svg.xz) and [DF](df-cold-warm.svg.xz) archives.
+Previews use an existing Git snapshot; the verifier checks both stored and
+expanded identities. This storage-only compaction makes room for the next
+native refresh without dropping measurements or increasing the evidence budget.
 
 See the [direct](timings.md) and [DF](df-timings.md) tables for complete cold,
 warm, moved and moved-warm endpoints and their SCF iteration/Fock-build counts.

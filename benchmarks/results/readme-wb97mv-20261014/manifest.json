@@ -217,12 +217,8 @@
   },
   "files": {
     "README.md": {
-      "bytes": 9461,
-      "sha256": "f7e73da8d036831a1a00e2700708d555a6a8821a1b321fff5b83536882c2daa7"
-    },
-    "df-cold-warm.svg": {
-      "bytes": 84935,
-      "sha256": "47e0b51a147ec4838785fc0a27dfb9cdae201165d5a01784506f5989f30d527b"
+      "bytes": 10105,
+      "sha256": "8a45c19dffc9871dc2f48931950c15a527a5af8d4d65ad5a96a9a46ac0948e54"
     },
     "df-summary.json.xz": {
       "bytes": 33832,
@@ -248,13 +244,9 @@
       "bytes": 10316,
       "sha256": "8f8778b0390de0080d47be53cf5a25d7f47cf036c59371e4c1f9e89006db7254"
     },
-    "dft-cold-warm.svg": {
-      "bytes": 83736,
-      "sha256": "6e9f20402c1a4925251d1296c022d0d9f35ca2c67d1ae06da746c0208e080db5"
-    },
     "refresh.py": {
-      "bytes": 12976,
-      "sha256": "98910bd1bb2782fc8ccc067163d47338c49d525ba973d086987d5c3ed17a0bee"
+      "bytes": 13383,
+      "sha256": "e742801310cc9d89586361f37f712116cf95e47818cce793edca2335377fd5c4"
     },
     "reproduce.sh": {
       "bytes": 1560,
@@ -271,6 +263,22 @@
     "unprimed-small-points.json.xz": {
       "bytes": 20812,
       "sha256": "d81eb1d05011fe7241688fc59482466d8cdf16e351d36fdc9cf8bbc4c7296936"
+    },
+    "dft-cold-warm.svg.xz": {
+      "bytes": 8400,
+      "sha256": "cf13d3a45aff8c0e429a90f79ddcf53f1752043975053137088d4227ca5791d8",
+      "uncompressed": {
+        "bytes": 83736,
+        "sha256": "6e9f20402c1a4925251d1296c022d0d9f35ca2c67d1ae06da746c0208e080db5"
+      }
+    },
+    "df-cold-warm.svg.xz": {
+      "bytes": 8544,
+      "sha256": "8f753cc50d1fd71d8d5200c212ab497a65d938202d0b1cb9cd69899a91a44542",
+      "uncompressed": {
+        "bytes": 84935,
+        "sha256": "47e0b51a147ec4838785fc0a27dfb9cdae201165d5a01784506f5989f30d527b"
+      }
     }
   }
 }
