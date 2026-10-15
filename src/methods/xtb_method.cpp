@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "methods/geometry.hpp"
 #include "methods/gfn2_runtime_bridge.hpp"
 
 namespace generativeqc::methods::detail {
@@ -90,13 +91,11 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
 
   Result execute_impl(bool compute_forces) override {
     std::vector<std::int32_t> atomic_numbers;
-    std::vector<double> positions;
     atomic_numbers.reserve(atoms_.size());
-    positions.reserve(3u * atoms_.size());
     for (const core::Atom& atom : atoms_) {
       atomic_numbers.push_back(atom.atomic_number);
-      positions.insert(positions.end(), atom.position.begin(), atom.position.end());
     }
+    const auto positions = geometry::coordinates(atoms_);
 
     Gfn2RuntimeRequest request;
     request.atomic_numbers = atomic_numbers;
