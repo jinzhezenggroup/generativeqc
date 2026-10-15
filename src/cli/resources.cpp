@@ -10,6 +10,7 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
+#include "runtime/resource_planning.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
 #include "scf/ks_host_resources.hpp"
 
@@ -42,6 +43,7 @@ extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, 
 namespace generativeqc::cli {
 namespace {
 using Bytes = std::uint64_t;
+namespace resource = generativeqc::runtime::resources;
 constexpr Bytes maximum_bytes = std::numeric_limits<std::int64_t>::max();
 
 Bytes sum(std::initializer_list<Bytes> values) {
@@ -62,28 +64,43 @@ Bytes product(std::initializer_list<Bytes> values) {
   return result;
 }
 
-Bytes headroom_bytes(Bytes capacity, double fraction) {
-  if (fraction == 0 || capacity == 0) return 0;
-  int exponent = 0;
-  const double normalized = std::frexp(fraction, &exponent);
-  const Bytes numerator = static_cast<Bytes>(std::ldexp(normalized, 53));
-  const int shift = 53 - exponent;
-  // Multiply two limbs without an extension type, then round up the exact
-  // IEEE-754 rational product. Long-double multiplication is not exact here.
-  Bytes high = 0, low = 0;
-  for (unsigned bit = 0; bit < 53; ++bit) {
-    if (!(numerator & (Bytes{1} << bit))) continue;
-    const Bytes previous = low;
-    low += capacity << bit;
-    high += (bit ? capacity >> (64 - bit) : 0) + (low < previous ? 1 : 0);
+resource::Candidate inventory_candidate(Bytes retained_host, Bytes workspace_host,
+                                        Bytes retained_device, Bytes workspace_device,
+                                        Bytes cost = 0, Bytes lexical_rank = 0) {
+  return {cost,
+          lexical_rank,
+          {{retained_host, resource::kPageableSpace, 0, 0, true},
+           {workspace_host, resource::kPageableSpace, 0, 0, false},
+           {retained_device, resource::kFirstDeviceSpace, 0, 0, true},
+           {workspace_device, resource::kFirstDeviceSpace, 0, 0, false}}};
+}
+
+resource::Composition compose_inventory(const RunOptions& options,
+                                        std::vector<resource::Candidate> candidates) {
+  std::vector<resource::Limit> limits;
+  if (options.host_bytes)
+    limits.push_back({resource::kHostSpace, *options.host_bytes, options.host_reserve_bytes});
+  if (options.device_bytes)
+    limits.push_back({resource::kDeviceSpace, *options.device_bytes, options.device_reserve_bytes});
+  if (options.pinned_host_bytes)
+    limits.push_back({resource::kPinnedSpace, *options.pinned_host_bytes, 0});
+  const std::array<resource::Request, 1> requests{{{std::move(candidates)}}};
+  try {
+    return resource::compose(requests, limits, 5, options.headroom_fraction, 65536);
+  } catch (const std::overflow_error& error) {
+    throw UsageError(error.what());
   }
-  if (shift >= 128) return high || low ? 1 : 0;
-  if (shift >= 64) {
-    const int upper_shift = shift - 64;
-    const Bytes remainder = upper_shift ? high & ((Bytes{1} << upper_shift) - 1) : 0;
-    return (high >> upper_shift) + (remainder || low ? 1 : 0);
-  }
-  return (low >> shift) + (high << (64 - shift)) + ((low & ((Bytes{1} << shift) - 1)) ? 1 : 0);
+}
+
+Json composed_peaks(const resource::Composition& composition, int device_id, bool include_device) {
+  const auto& peaks = composition.accounting.peaks;
+  Json result{{"pageable", peaks[resource::kPageableSpace].bytes},
+              {"host", peaks[resource::kHostSpace].bytes},
+              {"pinned", peaks[resource::kPinnedSpace].bytes},
+              {"device", peaks[resource::kDeviceSpace].bytes}};
+  if (include_device)
+    result["device:" + std::to_string(device_id)] = peaks[resource::kFirstDeviceSpace].bytes;
+  return result;
 }
 
 struct Topology {
@@ -414,14 +431,14 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   Json limits = Json::object();
   const auto limit = [&](const char* name, std::optional<Bytes> cap, Bytes reserve) {
     if (cap) {
-      const Bytes withheld = headroom_bytes(*cap, options.headroom_fraction);
-      limits[name] = *cap - withheld > reserve ? *cap - withheld - reserve : 0;
+      limits[name] = resource::effective_capacity(*cap, reserve, options.headroom_fraction);
     }
   };
   limit("host", options.host_bytes, options.host_reserve_bytes);
   limit("device", options.device_bytes, options.device_reserve_bytes);
   limit("pinned", options.pinned_host_bytes, 0);
   Json plan = {{"schema_version", 1},
+               {"composition_inventory", "native-resource-composition-v1"},
                {"scope", "native-cli-allocation-inventory-v1"},
                {"source_identity", generativeqc_get_source_identity()},
                {"budget", budget},
@@ -614,37 +631,30 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
           orbital, *auxiliary, atoms.size(), spins,
           std::max<Bytes>(1, static_cast<Bytes>((electrons + unpaired) / 2)), options);
       plan["candidates"] = candidates;
-      const auto peaks = [&](const Json& candidate) {
-        const Bytes host_peak = sum({candidate.at("retained_host").get<Bytes>(),
-                                     candidate.at("workspace_host").get<Bytes>()});
-        const Bytes device_peak = sum({candidate.at("retained_device").get<Bytes>(),
-                                       candidate.at("workspace_device").get<Bytes>(),
-                                       candidate.at("runtime_allowance_device").get<Bytes>()});
-        return Json{{"pageable", host_peak},
-                    {"host", host_peak},
-                    {"pinned", 0},
-                    {"device", device_peak},
-                    {"device:" + std::to_string(options.device_id), device_peak}};
-      };
-      const Json* selected = &candidates.at(0);
-      bool feasible = false;
-      for (const auto& candidate : candidates) {
-        const auto peak = peaks(candidate);
-        bool fits = true;
-        for (auto cap = limits.begin(); cap != limits.end(); ++cap)
-          if (peak.value(cap.key(), Bytes{0}) > cap.value().get<Bytes>()) fits = false;
-        if (fits) {
-          selected = &candidate;
-          feasible = true;
-          break;
-        }
+      std::vector<std::string> names;
+      for (const auto& candidate : candidates)
+        names.push_back(candidate.at("name").get<std::string>());
+      std::sort(names.begin(), names.end());
+      std::vector<resource::Candidate> choices;
+      for (std::size_t index = 0; index < candidates.size(); ++index) {
+        const auto& candidate = candidates.at(index);
+        const auto rank =
+            std::lower_bound(names.begin(), names.end(), candidate.at("name").get<std::string>()) -
+            names.begin();
+        choices.push_back(inventory_candidate(
+            candidate.at("retained_host").get<Bytes>(), candidate.at("workspace_host").get<Bytes>(),
+            sum({candidate.at("retained_device").get<Bytes>(),
+                 candidate.at("runtime_allowance_device").get<Bytes>()}),
+            candidate.at("workspace_device").get<Bytes>(), index, rank));
       }
-      plan["selection"] = selected->at("name");
-      plan["peak_bytes"] = peaks(*selected);
-      plan["resident_bytes"] = {{"pageable", selected->at("retained_host")},
-                                {"device:" + std::to_string(options.device_id),
-                                 sum({selected->at("retained_device").get<Bytes>(),
-                                      selected->at("runtime_allowance_device").get<Bytes>()})}};
+      const auto composition = compose_inventory(options, std::move(choices));
+      const bool feasible = composition.status == resource::Status::feasible;
+      plan["selection"] = candidates.at(composition.selections.front()).at("name");
+      plan["peak_bytes"] = composed_peaks(composition, options.device_id, true);
+      plan["resident_bytes"] = {
+          {"pageable", composition.accounting.resident[resource::kPageableSpace].bytes},
+          {"device:" + std::to_string(options.device_id),
+           composition.accounting.resident[resource::kFirstDeviceSpace].bytes}};
       plan["status"] = feasible ? "feasible" : "infeasible";
       if (!feasible) plan["diagnostic"] = "no native DF allocation alternative fits all budgets";
     } catch (const UsageError&) {
@@ -717,14 +727,19 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     return emit();
   }
   retained = product({options.batch, retained});
-  const Bytes host = sum({retained, workspace});
-  plan["peak_bytes"] = {{"pageable", host}, {"host", host}, {"pinned", 0}, {"device", device}};
-  if (device) plan["peak_bytes"]["device:" + std::to_string(options.device_id)] = device;
-  plan["resident_bytes"]["pageable"] = retained;
-  plan["status"] = "feasible";
+  const Bytes resident_device =
+      plan["resident_bytes"].value("device:" + std::to_string(options.device_id), Bytes{0});
+  if (resident_device > device)
+    throw UsageError("resident device capacity exceeds the complete peak");
+  const auto composition = compose_inventory(
+      options,
+      {inventory_candidate(retained, workspace, resident_device, device - resident_device)});
+  plan["peak_bytes"] = composed_peaks(composition, options.device_id, device != 0);
+  plan["resident_bytes"]["pageable"] =
+      composition.accounting.resident[resource::kPageableSpace].bytes;
+  plan["status"] = composition.status == resource::Status::feasible ? "feasible" : "infeasible";
   for (auto cap = limits.begin(); cap != limits.end(); ++cap) {
     if (plan["peak_bytes"].value(cap.key(), Bytes{0}) > cap.value().get<Bytes>()) {
-      plan["status"] = "infeasible";
       plan["diagnostic"] = "allocation inventory exceeds " + cap.key() + " budget";
       break;
     }

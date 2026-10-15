@@ -241,6 +241,28 @@ class RuntimeTests(unittest.TestCase):
             0,
         )
 
+    def test_shared_composition_owner_preserves_exact_method_limits(self) -> None:
+        for method in ("rhf", "uhf", *KS_INVENTORY_METHODS):
+            with self.subTest(method=method):
+                options = ("--method", method)
+                initial = self.resources(*options)
+                self.assertEqual(initial.returncode, 0, initial.stderr)
+                plan = json.loads(initial.stdout)
+                self.assertEqual(
+                    plan["composition_inventory"], "native-resource-composition-v1"
+                )
+                peak = plan["peak_bytes"]["host"]
+                for difference in (-1, 0):
+                    checked = self.resources(
+                        *options, "--host-bytes", str(peak + difference)
+                    )
+                    self.assertEqual(
+                        checked.returncode, 0 if difference == 0 else 2, checked.stderr
+                    )
+                    self.assertEqual(
+                        json.loads(checked.stdout)["peak_bytes"], plan["peak_bytes"]
+                    )
+
     def test_large_budget_headroom_matches_exact_ieee_rational(self) -> None:
         for capacity, fraction in (
             (2**63 - 1, 0.5),
@@ -308,6 +330,30 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(
                     actual["runtime_allowance_device"], expected.estimates[4].bytes
                 )
+            rejected = self.resources(
+                "--backend",
+                "cuda",
+                "--density-fitting",
+                "cuda",
+                "--batch",
+                "4",
+                "--host-bytes",
+                "0",
+                "--device-bytes",
+                "0",
+            )
+            self.assertEqual(rejected.returncode, 2, rejected.stderr)
+            diagnostic = json.loads(rejected.stdout)
+            least_excess = min(
+                enumerate(reference),
+                key=lambda entry: (
+                    sum(estimate.bytes for estimate in entry[1].estimates),
+                    entry[0],
+                    entry[1].name,
+                ),
+            )[1]
+            self.assertEqual(diagnostic["status"], "infeasible")
+            self.assertEqual(diagnostic["selection"], least_excess.name)
 
     def test_df_and_ks_have_real_inventories(self) -> None:
         fitted = self.resources(

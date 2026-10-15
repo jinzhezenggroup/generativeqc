@@ -23,13 +23,13 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     byte_product,
     checked_bytes,
-    plan_resources,
 )
 
 from .basis import BasisSet
 from .basis_capabilities import require_basis, resolved_basis_metadata
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
+from .resources_planning import plan_resources
 
 # Newly tracked controls may be absent from earlier schema-1 checkpoints.
 # Preserve that distinction in restart provenance; absence is not a claim
@@ -720,4 +720,8 @@ def estimate_hf_resources(
 ) -> typing.Any:
     """Return an HF dry-run plan using compact topology and no native execution."""
     budget = ResourceBudget() if budget is None else budget
-    return plan_resources((hf_resource_request(systems, **options),), budget)
+    return plan_resources(
+        (hf_resource_request(systems, **options),),
+        budget,
+        library=options.get("library"),
+    )

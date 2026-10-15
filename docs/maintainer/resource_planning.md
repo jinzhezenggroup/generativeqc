@@ -50,6 +50,61 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+## Native composition authority
+
+With an already-loaded library exposing `generativeqc_resource_compose_v1`,
+runtime `plan_resources(..., library=library)`, calculator estimation and
+budgeted preparation use the shared C++ resource composition engine. The native
+CLI uses that same owner for effective caps, peak accounting and supported
+alternative selection; its `composition_inventory` metadata identifies the
+engine separately from the CLI's endpoint-inventory scope.
+
+The engine sweeps sparse inclusive-lifetime endpoints, accounts pageable plus
+pinned host storage and aggregate plus individual device caps simultaneously,
+and orders supported combinations by budget excess, total relative cost and
+lexical selection. Headroom uses the exact IEEE-754 rational value with upward
+rounding before fixed reserves. Cost and excess sums use wider integer
+arithmetic than individual byte capacities, so ranking cannot wrap int64 or
+uint64. Expired buffers retire before newly live buffers at an adjacent phase.
+
+The finite search limit remains explicit: exceeding it returns `unsupported`,
+not a false allocation failure. Every enumerated combination is checked,
+including overflow in a later alternative after a feasible prefix. For `P`
+combinations, at most `B` selected buffers and `S` memory spaces, native work is
+`O(P * (B log B + S))`, plus descriptor validation. Metadata scratch is linear
+in input buffers and spaces, not phase IDs or the Cartesian product. No
+scientific buffers, calculation contexts, backend probes or GPU allocations
+are created by the composition query.
+
+Supplied plans are checked by the native owner before scientific provider
+preparation, with their explicit selections held fixed. Validation does not
+silently replace a user-selected alternative with a cheaper one. Native
+authority also rechecks changed optional CPU force workspace before a
+force replay, preserving all live owners and selections. The revised plan is
+published only after successful execution; rejection leaves the energy plan
+and warm state usable. Discovered native errors propagate without retrying
+portable selection. Missing symbols
+or libraries retain provider-free portable planning; this adapter never loads a
+library itself. The compiler's separate portable planner remains available for
+offline generation without importing the runtime.
+
+`ResourcePlan` retains its portable data-only schema, independent derived-byte
+validation and serialization. A plan is not a native allocation receipt or
+execution lease. Method/provider inventories, allocation observation coverage,
+live provider reservations and session/lease lifecycle remain separately scoped;
+native composition alone does not establish complete endpoint/RSS accounting
+or complete the resource-authority cutover.
+
+`benchmarks/native_resource_composition.py` provides opt-in CPU endpoint timing:
+calculator construction, budgeted preparation, cold/warm/moved execution and
+prepared-owner close. Compare exact baseline/candidate Python trees in separate
+processes against the same compiled library, with the same thread settings and
+no competing benchmark load. The JSON retains every observation, energies,
+forces, convergence residuals, iteration/Fock counts (including unknown counts),
+iteration-branch histograms, source identity and the library checksum. A changed
+numerical/work signature invalidates a pooled timing comparison. This scoped
+procedure does not establish GPU performance or complete physical receipts.
+
 ## CUDA KS to force handoff
 
 CUDA KS keeps its admitted optional ERI value cache throughout SCF and after
