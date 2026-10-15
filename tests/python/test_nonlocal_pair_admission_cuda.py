@@ -21,7 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(
-    scope="module", params=(0, 4, 8), ids=("ordered", "parallel", "parallel-wide")
+    scope="module",
+    params=(0, 4, 8, "packet"),
+    ids=("ordered", "parallel", "parallel-wide", "parallel-packet"),
 )
 def admission_probe(
     tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
@@ -60,7 +62,8 @@ def admission_probe(
         + admission
         + kernel
         + f"constexpr bool use_parallel = {str(bool(request.param)).lower()};\n"
-        + f"constexpr unsigned pair_rows = {request.param or 4};\n"
+        + f"constexpr bool use_packet = {str(request.param == 'packet').lower()};\n"
+        + f"constexpr unsigned pair_rows = {request.param if request.param in (4, 8) else 4};\n"
         + r"""
 template<bool Geometry, bool Mask, bool Admit>
 void launch(size_t n, const double* x, const uint64_t* indices,
@@ -81,7 +84,10 @@ void launch(size_t n, const double* x, const uint64_t* indices,
         n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,indices,count,0.7,0.03125,rejected};
       const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
       generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
-      generated::parallel_pair_kernel<Geometry, pair_rows, pair_rows == 8><<<8,128>>>(input,output);
+      if constexpr(use_packet)
+        generated::parallel_pair_packet_kernel<Geometry><<<8,128>>>(input,output);
+      else
+        generated::parallel_pair_kernel<Geometry, pair_rows, pair_rows == 8><<<8,128>>>(input,output);
       generated::parallel_pair_zero_rows<<<8,128>>>(input,output);
       generated::parallel_pair_finalize<Geometry><<<(n+127)/128,128>>>(input,output);
     } else {
@@ -170,7 +176,7 @@ extern "C" int run(size_t n, int geometry, int mask, int stage,
     return probe
 
 
-@pytest.mark.parametrize("n", [127, 128, 129, 257, 383, 513])
+@pytest.mark.parametrize("n", [1, 31, 32, 33, 127, 128, 129, 257, 383, 513])
 @pytest.mark.parametrize("geometry", [False, True])
 @pytest.mark.parametrize(
     "domain",
@@ -255,3 +261,76 @@ def test_admitted_exception_publication_matches_direct(
         )
         assert out[0] == out[-1] == 9182.5
     assert statuses == [-1, -1]
+
+
+@pytest.mark.parametrize("n", [33, 129, 257])
+@pytest.mark.parametrize("geometry", [False, True])
+def test_admitted_outputs_match_extended_precision_pair_oracle(
+    admission_probe: ct.CDLL, n: int, geometry: bool
+) -> None:
+    """Differentiate the original kernel independently of generated pair roots.
+
+    Signed weights, observable positive-zero rows and masked negative-zero rows
+    share a partial packet/tile. Long-double reductions avoid using another
+    native summation schedule as the scientific acceptance oracle.
+    """
+    rng = np.random.default_rng(9157 + n)
+    inputs = rng.uniform(0.1, 2.0, size=10 * n)
+    inputs[: 3 * n] = rng.normal(size=3 * n)
+    inputs[9 * n :: 7] *= -1
+    inputs[9 * n :: 11] = 0.0
+    inputs[9 * n + 5 :: 17] = -0.0
+    coordinates = inputs[: 3 * n].astype(np.longdouble).reshape(n, 3)
+    rho, omega, kappa, domega_drho, domega_dsigma, dkappa_drho, factors = (
+        inputs[3 * n :].astype(np.longdouble).reshape(7, n)
+    )
+    partners = factors != 0
+    screened = (factors == 0) & np.signbit(factors)
+    coefficient, beta = np.longdouble("0.7"), np.longdouble("0.03125")
+    expected = np.zeros(7 * n)
+    for row in np.flatnonzero(~screened):
+        delta = coordinates[partners] - coordinates[row]
+        radius = np.sum(delta * delta, axis=1)
+        first = omega[row] * radius + kappa[row]
+        second = omega[partners] * radius + kappa[partners]
+        combined = first + second
+        phi = -np.longdouble("1.5") / (first * second * combined)
+        partial = -phi * (1 / first + 1 / combined)
+        sum_phi = np.sum(factors[partners] * phi)
+        sum_omega = np.sum(factors[partners] * partial * radius)
+        sum_kappa = np.sum(factors[partners] * partial)
+        expected[row] = coefficient * factors[row] * (beta + sum_phi / 2)
+        expected[n + row] = coefficient * (
+            beta
+            + sum_phi
+            + rho[row] * (sum_omega * domega_drho[row] + sum_kappa * dkappa_drho[row])
+        )
+        expected[2 * n + row] = coefficient * rho[row] * sum_omega * domega_dsigma[row]
+        if geometry:
+            radial = -phi * (
+                omega[row] / first
+                + omega[partners] / second
+                + (omega[row] + omega[partners]) / combined
+            )
+            expected[3 * n + 3 * row : 3 * n + 3 * row + 3] = (
+                -2
+                * coefficient
+                * factors[row]
+                * np.sum((factors[partners] * radial)[:, None] * delta, axis=0)
+            )
+            expected[6 * n + row] = coefficient * rho[row] * (beta + sum_phi)
+    output = np.full(7 * n + 2, 9182.5)
+    status = admission_probe.run(
+        n,
+        geometry,
+        True,
+        True,
+        inputs.ctypes.data_as(ct.POINTER(ct.c_double)),
+        output.ctypes.data_as(ct.POINTER(ct.c_double)),
+    )
+    assert status == 0
+    assert output[0] == output[-1] == 9182.5
+    consumed = 7 * n if geometry else 3 * n
+    np.testing.assert_allclose(
+        output[1 : 1 + consumed], expected[:consumed], rtol=2e-13, atol=1e-11
+    )

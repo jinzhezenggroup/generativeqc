@@ -9,6 +9,12 @@
       "reason": "Dispatch into compiler-owned ordered or bounded scalar closures. The general VV10 closure keeps its energy root; a separately admitted molecular closure qualifies unit-reciprocal and row-contraction rounding. Exceptional-domain fallbacks remain explicit."
     },
     {
+      "start": "void launch_pair_rows_impl(",
+      "stop": "constexpr unsigned kOrderedEnergyLoadThreads",
+      "role": "runtime",
+      "reason": "Launch and buffer-binding glue for compiler-owned scalar roots and generated bilateral schedules. The admitted large-grid default uses rotating partner packets on supported CUDA targets without an architecture whitelist; explicit previous, wide and ordered routes retain numerical and lease guards. This region schedules kernels without defining pair mathematics. Its classification is not physical retirement of the retained ordered scientific kernel."
+    },
+    {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
       "stop": null,
       "role": "runtime",

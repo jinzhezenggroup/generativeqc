@@ -545,3 +545,29 @@ least 65,536 active points. Smaller domains use the existing four-row schedule.
 Both branches select using the device count without a host synchronization;
 numerical admission, output ownership, ordered fallback and FP64 roots are
 unchanged. This experiment requires separate complete-endpoint qualification.
+
+The automatic VV10 pair schedule uses the rotating-partner packet kernel for
+admitted molecular domains with at least 65,536 grid points on any CUDA target
+supported by the build. There is no sm_120 whitelist: the generated schedule uses
+FP64 atomics and warp shuffles, not architecture-specific instructions. Smaller
+grids and refused numerical/output leases retain the ordered
+fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects the
+packet route, including small qualification fixtures; `parallel` restores the
+previous four-row bilateral schedule and `ordered` forces the ordered fallback.
+Unset and empty selectors both use automatic selection.
+Each warp loads 32 adjacent compact partners and rotates their
+inputs and bilateral FP64 partials through all lanes. After 32 steps each
+partner returns to its original lane for publication. Four rows per lane keep
+the 128-row tile size and scalar pair work unchanged; no extra workspace, host
+count read, allocation or synchronization is introduced. Padded lanes still
+participate in every shuffle. Numerical/output-lease admission, positive-zero
+response, exact-component reuse and ordered fallback retain their contracts.
+The changed reduction order retains independent numerical and complete-endpoint
+qualification requirements. This is a scheduling change, not a scientific
+approximation or a claim that all large molecular populations complete within
+their benchmark limits. See
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-default.md` for the
+promotion decision, measured scope and unresolved 96-atom endpoint boundary, and
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-portable-default.md`
+for architecture-independent selection. Hardware admission is not a claim of
+measured speedup on every supported architecture.
