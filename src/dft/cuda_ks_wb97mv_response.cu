@@ -441,6 +441,15 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
       return cudaErrorInvalidValue;
     if (owner.receipt.actions == std::numeric_limits<std::uint64_t>::max())
       return cudaErrorInvalidValue;
+    struct DrainOnFailure {
+      cudaStream_t stream;
+      bool active{true};
+      ~DrainOnFailure() {
+        // Later launch/API failure must not return while queued work still
+        // borrows the caller's direction or output storage.
+        if (active) (void)cudaStreamSynchronize(stream);
+      }
+    } drain{stream};
     check(owner.grid.apply(direction, owner.potential, stream));
     check(owner.evaluate(direction, owner.potential, owner.zero, true));
     error = owner.authenticate(stream);
@@ -450,6 +459,7 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
     }
     check(cudaMemcpyAsync(output, owner.candidate, bytes, cudaMemcpyDeviceToDevice, stream));
     check(cudaStreamSynchronize(stream));
+    drain.active = false;
     ++owner.receipt.actions;
     return cudaSuccess;
   } catch (...) {

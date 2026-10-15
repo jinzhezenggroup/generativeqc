@@ -104,6 +104,25 @@ b6ceb9b734941b0bf2dcfa28083f65915d662c54ce158fef2b5cae63bfe258e9  generativeqc_k
 5d8b3db10e610c793c9478c4e7a5869690daafb712ad3cfc7c9d0b2ec456c6e0  libgenerativeqc.so.0.1.0
 ```
 
+## Review follow-up: borrowed-work completion
+
+Queued host emulation reproduced a lifetime failure after this qualification:
+Direct work could retain the caller's density pointer when a later generated
+map launch failed, while the physical action returned through its exception
+handler without draining. A failure-only scoped stream guard now starts after
+validation and is disabled after the existing successful publication fence.
+Admission/capture rejection must not fence unrelated producer work; successful
+actions gain no additional fence. The durable host regression compiles the
+complete production controller and actual generated affine maps with queued
+CUDA/provider doubles, covering 90 launch-rejection boundaries across RKS/UKS
+and Direct/DF, unchanged output and retry. Removing the guard fails that test;
+the repaired controller passes host AddressSanitizer/UBSan. The revoked-owner
+probe also fences its sentinel upload before rejection so its default-stream
+observation has an established baseline. These are bounded host lifetime
+controls, not renewed real-GPU or molecular qualification; the Slurm receipts
+and binary hashes above describe the preceding source. Arithmetic, generated
+math, scientific gates and the incomplete-endpoint hold are unchanged.
+
 ## Consequences and revisit conditions
 
 The component can now serve real molecular CPKS, but it does not supply nuclear

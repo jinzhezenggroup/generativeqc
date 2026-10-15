@@ -189,6 +189,7 @@ void run(const char* fixture, const char* output, bool reject) {
                           cudaMemcpyHostToDevice, storage.stream));
     check(cudaMemcpyAsync(weight_output, sentinel_weights.data(), weight_count * sizeof(double),
                           cudaMemcpyHostToDevice, storage.stream));
+    check(cudaStreamSynchronize(storage.stream));
   };
   const auto unchanged = [&] {
     require(download(ao_output, ao_count) == sentinel_ao &&

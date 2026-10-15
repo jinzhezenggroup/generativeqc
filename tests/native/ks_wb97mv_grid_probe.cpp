@@ -327,6 +327,7 @@ void run(bool unrestricted, const std::string& mode) {
   std::vector<double> sentinel(elements, 27);
   check(cudaMemcpyAsync(output, sentinel.data(), elements * sizeof(double), cudaMemcpyHostToDevice,
                         lease.stream));
+  check(cudaStreamSynchronize(lease.stream));
   require(response.apply(input, output, lease.stream) == cudaErrorInvalidResourceHandle &&
               reference.shape().nao == 0,
           "native grid response accepted a revoked molecular owner");
@@ -344,6 +345,7 @@ void run(bool unrestricted, const std::string& mode) {
     check(cudaMemcpyAsync(geometry_weights, weight_sentinel.data(),
                           weight_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice,
                           lease.stream));
+    check(cudaStreamSynchronize(lease.stream));
     const double* spatial{};
     require(geometry_response.mixed(geometry_left, geometry_right, geometry_ao, geometry_weights,
                                     lease.stream) == cudaErrorInvalidResourceHandle &&

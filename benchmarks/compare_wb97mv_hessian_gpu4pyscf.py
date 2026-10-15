@@ -376,7 +376,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=raw_output_path,
-        default=Path(".artifacts/wb97mv-hessian-gpu4pyscf.json"),
+        default=".artifacts/wb97mv-hessian-gpu4pyscf.json",
     )
     arguments = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
