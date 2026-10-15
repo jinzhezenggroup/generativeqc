@@ -280,8 +280,6 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   if (precision_mode == GENERATIVEQC_PRECISION_AUTO && backend != GENERATIVEQC_BACKEND_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DFT automatic precision currently requires CUDA");
-  if (precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
   options.precision_mode = precision_mode;
 
   scf::FockBuildSpec fock;

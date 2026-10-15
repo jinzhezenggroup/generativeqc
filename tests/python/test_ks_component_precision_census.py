@@ -229,6 +229,16 @@ int main() {
   empty_mixed.pending_mixed_exchange = true;
   empty_mixed.complete(true, false, 0);
   assert(count(empty_mixed, Kind::ExchangeK, Mode::Mixed) == 0);
+  Owner range;
+  range.pending_mixed_exchange = true;
+  range.complete(true, false, 11);
+  assert(count(range, Kind::ExchangeK, Mode::Mixed) == 1);
+  assert(count(range, Kind::ExchangeK) == 1);
+  Owner semilocal;
+  semilocal.has_exchange = semilocal.has_range_correction = false;
+  semilocal.complete(true, false, 11);
+  assert(count(semilocal, Kind::ExchangeK) == 0);
+  assert(count(semilocal, Kind::ExchangeK, Mode::Mixed) == 0);
   Owner nlc;
   nlc.nonlocal_correlation = &nlc;
   nlc.device_nonlocal = true;
@@ -341,11 +351,26 @@ int main() {
     assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
     assert(strict.audit_owner() == "method-controller");
     const auto fast_fock = resolve_cuda_ks_precision_schedule(
-        GENERATIVEQC_PRECISION_AUTO, capabilities, false, false, false, false, true);
+        GENERATIVEQC_PRECISION_AUTO, capabilities, false, false, false, false, {true, true});
     assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
     assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
     assert(!fast_fock.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
     assert(resolve_cuda_ks_iteration_precision(fast_fock, true, true).is_strict_fp64());
+    for (const bool nonlocal_graph : {false, true}) {
+      const auto pure = resolve_cuda_ks_precision_schedule(
+          GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
+          false, false, {true, false});
+      assert(pure.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+      assert(!pure.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+      const auto hybrid = resolve_cuda_ks_precision_schedule(
+          GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
+          false, false, {true, true}, true);
+      assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+      assert(hybrid.find(cuda_ks_precision_region::kRangeExchange));
+      assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kRangeExchange));
+      assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kNonlocalCorrelation));
+      assert(resolve_cuda_ks_iteration_precision(hybrid, true, true).is_strict_fp64());
+    }
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
     assert(!resolve_cuda_ks_precision_schedule(std::nullopt, capabilities, false, false)
                 .any_lower_precision());

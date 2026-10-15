@@ -124,6 +124,9 @@ FP64/source residency must not be disabled to improve the comparison.
 
 ## References
 
+- The [module-selected successor](2026-10-15-module-selected-fast-fock.md)
+  removes this implementation's functional whitelist without relabeling its
+  historical measurements.
 - [Earlier precision-bound resident-source decision](2026-10-15-pbe0-mixed-resident-source.md)
 - [Original budget-Fock numerical decision](../numerics/2026-10-14-pbe0-budget-fock.md)
 - `docs/user/application_precision.md`

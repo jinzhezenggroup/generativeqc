@@ -709,8 +709,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
           pending_mixed_resident ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
       record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode, 1,
                                 source_storage);
-      const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
-                                            static_cast<std::uint64_t>(has_range_correction);
       record_precision_operator(
           scf::PrecisionOperatorKind::ExchangeK,
           pending_mixed_exchange ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
@@ -718,8 +716,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                  : scf::PrecisionArithmeticMode::Strict,
           pending_mixed_exchange && !mixed_coulomb_recurrences && !pending_mixed_resident
               ? 0
-              : exchange_builds,
+              : static_cast<std::uint64_t>(has_exchange),
           source_storage);
+      if (has_range_correction)
+        record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
+                                  scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(
           scf::PrecisionOperatorKind::Xc,
           pending_mixed_point ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
@@ -1155,6 +1156,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
                                options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
+    const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
     if (application_precision) {
       for (const auto* control :
@@ -1167,22 +1169,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       unsigned maximum_angular = 0;
       for (const auto& shell : provider.system().shells)
         maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-      budget_fock =
-          options.precision_mode == GENERATIVEQC_PRECISION_AUTO && grid_spec == GridSpec{} &&
-          admit_application_fock(
-              options.application_precision_budget, molecule::ao_count(provider.system()),
-              provider.system().atoms.size(), maximum_angular,
-              admit_application_pbe0_fock_model(functional, spins, options.semilocal_exchange_scale,
-                                                options.semilocal_correlation_scale,
-                                                exchange_coefficient) &&
-                  strategy.spec.coulomb.coefficient == 1.0 &&
-                  strategy.spec.exchange.op == scf::FockOperator::FullRange &&
-                  strategy.spec.exchange.omega == 0.0 &&
-                  options.xc_execution_schedule ==
-                      scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-                  !nonlocal_correlation,
-              provider.system().ecp_terms.empty(),
-              !fitted_coulomb && !fitted_exchange && !has_range_correction);
+      budget_fock = options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+                    admit_application_fock(
+                        options.application_precision_budget, molecule::ao_count(provider.system()),
+                        provider.system().atoms.size(), maximum_angular,
+                        spins == 1 && options.xc_execution_schedule ==
+                                          scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+                        provider.system().ecp_terms.empty(), fock_precision.coulomb);
       budget_stationarity =
           budget_fock && (options.energy_tolerance > 1e-10 || options.density_tolerance > 1e-8 ||
                           options.screening_tolerance > 1e-12);
@@ -1224,7 +1217,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             ? std::optional<generativeqc_precision_mode>{GENERATIVEQC_PRECISION_FP64}
             : options.precision_mode,
         xc_layout.fast_paths, fitted_coulomb, nonlocal_correlation != nullptr,
-        experimental_mixed_point, experimental_mixed_contractions, budget_fock);
+        experimental_mixed_point, experimental_mixed_contractions,
+        budget_fock ? fock_precision : scf::CudaFockPrecisionCapabilities{}, has_range_correction);
     if (precision_schedule.any_lower_precision()) {
       mixed_warmup =
           resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
@@ -2462,8 +2456,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
       pending_mixed_coulomb =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
-      pending_mixed_exchange =
-          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kExactExchange);
+      pending_mixed_exchange = has_exchange && iteration_precision.uses_lower_precision(
+                                                   cuda_ks_precision_region::kExactExchange);
       pending_mixed_point =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kXcPointAlgebra);
       const auto density_phase = strict_refinement

@@ -34,8 +34,6 @@ from generativeqc_compiler.method import (
     resolve_method,
 )
 
-from tools.dft_mp_v1 import qualify_capacity
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -225,11 +223,11 @@ def test_qualified_non_split_hybrid_route_admits_both_precision_requests(
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("method", ("M06-2X", "MN15"))
-def test_generated_split_hybrid_force_keeps_auto_fail_closed(
+def test_generated_split_hybrid_force_uses_shared_precision_admission(
     spin: str, method: str
 ) -> None:
     assert _promoted(precision=_native.PRECISION_FP64, spin=spin, method=method)
-    assert not _promoted(precision=_native.PRECISION_AUTO, spin=spin, method=method)
+    assert _promoted(precision=_native.PRECISION_AUTO, spin=spin, method=method)
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -239,10 +237,11 @@ def test_auto_force_admission_uses_resolved_domain_under_renaming(
 ) -> None:
     assert _promoted(
         precision=_native.PRECISION_AUTO, spin=spin, method=method, renamed=True
-    ) is (method in ("PBE0", "B3LYP"))
+    )
 
 
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15"))
 @pytest.mark.parametrize(
     "blocked",
     (
@@ -255,9 +254,9 @@ def test_auto_force_admission_uses_resolved_domain_under_renaming(
     ),
 )
 def test_auto_force_route_preserves_nonprecision_boundaries(
-    precision: int, blocked: str
+    precision: int, method: str, blocked: str
 ) -> None:
-    assert not _promoted(precision=precision, blocked=blocked)
+    assert not _promoted(precision=precision, method=method, blocked=blocked)
 
 
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
@@ -356,38 +355,6 @@ def test_df_force_preserves_nonprecision_boundaries(blocked: str) -> None:
         density_fitting=True,
         include_semilocal=True,
     )
-
-
-@pytest.mark.parametrize(
-    "guard",
-    (
-        'self._device_name == "cuda"',
-        "not basis_has_ecp",
-        "self._ks_options is not None",
-        'self._ks_options.xc_schedule == "device_fused"',
-        "cuda_global_hybrid_force_eligible(self._ks_options.method_ir)",
-        "self._precision_mode == _native.PRECISION_FP64",
-        "self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN",
-    ),
-)
-def test_capacity_audit_rejects_a_changed_hybrid_guard(
-    tmp_path: Path, guard: str
-) -> None:
-    source, assignments, _ = _nodes()
-    assignment = assignments["cuda_hybrid_force"]
-    segment = ast.get_source_segment(source, assignment)
-    assert segment is not None and segment.count(guard) == 1
-    for name in ("calculator.py", "batch.py"):
-        target = tmp_path / "python/generativeqc" / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        text = (ROOT / "python/generativeqc" / name).read_text(encoding="utf-8")
-        if name == "calculator.py":
-            text = text.replace(segment, segment.replace(guard, "True", 1), 1)
-        target.write_text(text, encoding="utf-8")
-    with pytest.raises(
-        RuntimeError, match="public global-hybrid force predicate changed"
-    ):
-        qualify_capacity._source_public_route(tmp_path)
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])

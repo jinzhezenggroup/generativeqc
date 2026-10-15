@@ -3,20 +3,28 @@
 `PrecisionCalculator(policy="fast")` selects FP32 arithmetic from an application
 error budget, without asking users to select kernels.
 
-## Budget-selected PBE0 Fock
+## Module-selected Fast Fock
 
-Canonical all-electron, restricted, exact non-DF PBE0 additionally admits a
-**FP32 J/K recurrence** candidate with 24–768 AOs, 2–96 atoms, shells through d,
-and explicit `GridSpec(48, 16, 32)` with unit radii and three Becke passes.
+Every supported native CUDA XC composition uses the same shared Direct-Fock precision
+policy. Admission depends on executable operator capabilities, not a functional
+name, canonical exchange fraction or MethodIR identity. The current restricted,
+all-electron Direct consumer admits **FP32 J and full-range K recurrence** with
+24–768 AOs, 2–96 atoms and shells through d. It uses the requested supported
+quadrature unchanged; the J/K precision decision does not require a particular grid.
 Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
 `3e-5` Eh/bohr RMS force when requested. This domain is independent of the
 384-AO mixed-gradient limit; neither is a hardware AO limit.
 
 Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
-verified new native Fock capability permits this selection; older libraries,
-other grids/models, density fitting and tighter budgets retain strict controls.
-FP32 recurrence values feed both J and full-range K. Primitive preparation,
+verified module-level native Fock capability permits this selection; older
+libraries, unsupported providers and tighter budgets retain strict controls.
+Pure semilocal models lower J without inventing K work. Hybrid models share the
+same full-range K consumer, including the full-range projection of a short-/long-
+range decomposition. The separate range-exchange and nonlocal consumers remain
+FP64 without disabling mixed arithmetic in the supported Direct modules.
+Post-SCF corrections retain their existing arithmetic and complete-model checks;
+they do not select the recurrence precision of electronic J/K. Primitive preparation,
 contraction/scatter, XC, eigensolution and global accumulation retain FP64:
 this is **not an all-FP32 calculation**. An admitted phase-local integral source
 uses FP32 recurrence and FP32 storage, with FP64 density products and compensated
@@ -33,8 +41,11 @@ Relaxed candidates retain FP64 force arithmetic, not the independent
 strict-density mixed-gradient qualification described next.
 
 An admitted endpoint reports `qualified_budget_fock`, actual positive FP32
-`coulomb_j`, `exchange_k` and recurrence work, and consecutive final FP64
-Fock checks. Qualification is not a measured per-call observable error or a
+`coulomb_j` and recurrence work, and consecutive final FP64 Fock checks. Positive
+mixed `exchange_k` work is additionally required when the native full-range
+projection contains K. Range K is accounted separately as strict work; its
+execution cannot certify mixed full-range K. Module qualification is not a
+measured per-call observable error or a
 universal force-error bound. Explicit targets still request a separate complete
 FP64 audit. Numerical failures retain the failed attempt with unknown work
 counts rather than invented zeros, then use bounded strict fallback/audit solves.
@@ -373,7 +384,7 @@ unknown work counts remain `None`.
 
 | Preset | Energy allowance (Eh) | Max force-component allowance (Eh/bohr) | RMS force-component allowance (Eh/bohr) | Candidate SCF |
 | --- | ---: | ---: | ---: | --- |
-| Fast | `1e-5` | `1e-4` | `3e-5` | Admitted PBE0 FP32 J/K with budget-controlled physical gates, or strict-density XC/gradient routes; FP64 audit fallback |
+| Fast | `1e-5` | `1e-4` | `3e-5` | Shared Direct-module FP32 J/K with budget-controlled physical gates, or strict-density XC/gradient routes; FP64 audit fallback |
 | FP64 | No implicit budget audit | No implicit budget audit | No implicit budget audit | FP64, one endpoint unless an explicit target is supplied |
 | `audit_auto` | `1e-5` | `1e-4` | `3e-5` | Native AUTO on admitted CUDA models; FP64 otherwise |
 | Balanced | `1e-7` | `1e-5` | `3e-6` | FP64 |
@@ -441,7 +452,7 @@ energy-only request can still use AUTO when its force consumer is unavailable.
 SCF AUTO policy with its FP64 refinement. It is distinct from Fast's
 budget-selected XC warmup. FP64, Balanced and Strict keep SCF in FP64.
 
-For CUDA PBE0, ordinary AUTO is **not all FP32**. Its schedule admits FP32 computation
+For CUDA KS, ordinary AUTO is **not all FP32**. Its schedule admits FP32 computation
 with FP64 accumulation for Coulomb J, and for density contractions only where
 the selected layout is qualified. Exact exchange K, XC point algebra and
 reductions remain FP64; strict refinement restores FP64 throughout the schedule.

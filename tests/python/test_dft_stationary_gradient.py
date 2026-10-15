@@ -300,6 +300,25 @@ def test_stationary_contract_accepts_consistent_rks_and_uks(
     assert contract.identity == StationaryDerivativeContract(value.identity).identity
 
 
+@pytest.mark.parametrize("allowance", (1e-8, 1e-5, 1e-4))
+def test_all_force_compositions_inherit_only_the_native_allowance(
+    allowance: float,
+) -> None:
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source._batch = SimpleNamespace(_ensure_open=lambda: None)
+    source.stationarity_tolerance = allowance
+    value = replace(state(), physical_residual=allowance / 2, _source=source)
+    force = StationaryDerivativeContract.for_native_force(value)
+    assert force.allow_budget_stationarity is (allowance > 1e-8)
+    assert force._validate_arrays(value) is value
+    if allowance > 1e-8:
+        with pytest.raises(ValueError, match="physical residual"):
+            StationaryDerivativeContract(value.identity)._validate_arrays(value)
+    with pytest.raises(ValueError):
+        force.validate(value)
+
+
 def test_force_budget_needs_native_allowance_and_never_relaxes_response_default() -> (
     None
 ):

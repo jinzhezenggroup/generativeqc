@@ -21,22 +21,46 @@ def test_native_budget_domain_admission(
 #include <limits>
 #include "dft/application_precision.hpp"
 #include "scf/application_precision.hpp"
+#include "scf/fock_precision.hpp"
 int main() {
   using generativeqc::dft::admit_application_xc_warmup;
   using generativeqc::dft::admit_application_gradient;
   const std::array<double, 3> loose{1e-5, 1e-4, 3e-5};
   using generativeqc::dft::admit_application_fock;
-  using generativeqc::dft::admit_application_pbe0_fock_model;
-  using generativeqc::dft::SemilocalFamily;
-  const auto pbe = static_cast<std::uint32_t>(SemilocalFamily::Pbe);
-  assert(admit_application_pbe0_fock_model(pbe, 1, 0.75, 1.0, -0.125));
-  for (const auto wrong : {0.25, -0.25, 0.0, std::numeric_limits<double>::quiet_NaN()})
-    assert(!admit_application_pbe0_fock_model(pbe, 1, 0.75, 1.0, wrong));
-  assert(!admit_application_pbe0_fock_model(pbe, 2, 0.75, 1.0, -0.125));
-  assert(!admit_application_pbe0_fock_model(pbe, 1, 1.0, 1.0, -0.125));
-  assert(!admit_application_pbe0_fock_model(pbe, 1, 0.75, 0.5, -0.125));
-  assert(!admit_application_pbe0_fock_model(
-      static_cast<std::uint32_t>(SemilocalFamily::Lda), 1, 0.75, 1.0, -0.125));
+  using namespace generativeqc::scf;
+  ResolvedFockBuild direct;
+  direct.backend = FockBackend::Cuda;
+  direct.spec.derivative_order = 0;
+  for (const auto schedule : {FockSchedule::CudaFused, FockSchedule::CudaIndependent}) {
+    direct.schedule = schedule;
+    for (const auto coefficient : {-0.5, -0.27, -0.125, -0.1, 0.0, 0.25}) {
+      direct.spec.exchange.coefficient = coefficient;
+      const auto modules = cuda_fock_precision_capabilities(direct);
+      assert(modules.coulomb && modules.exchange);
+    }
+  }
+  direct.schedule = FockSchedule::CudaDfResident;
+  assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  direct.schedule = FockSchedule::CudaIndependent;
+  direct.spec.exchange.present = false;
+  assert(cuda_fock_precision_capabilities(direct).coulomb);
+  assert(!cuda_fock_precision_capabilities(direct).exchange);
+  direct.spec.exchange.present = true;
+  direct.spec.exchange.op = FockOperator::LongRange;
+  direct.spec.exchange.omega = 0.3;
+  assert(cuda_fock_precision_capabilities(direct).coulomb);
+  assert(!cuda_fock_precision_capabilities(direct).exchange);
+  direct.spec.coulomb.approximation = FockApproximation::DensityFitted;
+  assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  direct.spec.coulomb.approximation = FockApproximation::Exact;
+  direct.spec.spin = FockSpin::Unrestricted;
+  assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  direct.spec.spin = FockSpin::Restricted;
+  direct.spec.derivative_order = 1;
+  assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  direct.spec.derivative_order = 0;
+  direct.backend = FockBackend::Cpu;
+  assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
   for (const auto aos : {24u, 384u, 768u})
     assert(admit_application_fock(loose, aos, 96, 2, true, true, true));
   for (const auto aos : {0u, 23u, 769u})

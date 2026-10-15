@@ -225,6 +225,22 @@ class StationaryDerivativeContract:
     allow_budget_stationarity: bool = False
     identity: str = field(init=False)
 
+    @classmethod
+    def for_native_force(cls, state: typing.Any) -> typing.Any:
+        """Consume only the live native owner's authenticated force allowance.
+
+        All force compositions share this policy. Array algebra and native
+        identity/proof validation remain mandatory; ordinary/response contracts
+        retain their strict default rather than inheriting a force budget.
+        """
+        return cls(
+            state.identity,
+            allow_budget_stationarity=getattr(
+                state._source, "stationarity_tolerance", _RESIDUAL_TOLERANCE
+            )
+            > _RESIDUAL_TOLERANCE,
+        )
+
     def __post_init__(self) -> None:
         if type(self.allow_budget_stationarity) is not bool:
             raise TypeError("budget stationarity selection must be boolean")

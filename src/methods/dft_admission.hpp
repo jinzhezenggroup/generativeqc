@@ -54,12 +54,16 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   const bool fitted_jk = (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
                           descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
                          dft::cuda_global_hybrid_df_admitted(code);
-  if (backend != GENERATIVEQC_BACKEND_CUDA ||
-      descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 || (!direct_jk && !fitted_jk) ||
+  // Direct arithmetic belongs to the shared Fock modules, independently of XC.
+  // Fitted consumers retain their separate strict-precision contract.
+  const bool precision_admitted =
+      descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
+      (direct_jk && descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO);
+  if (backend != GENERATIVEQC_BACKEND_CUDA || !precision_admitted || (!direct_jk && !fitted_jk) ||
       input->xc_execution_schedule != GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                   "split-global-hybrid KS requires CUDA, qualified Direct/DF J/K, "
-                  "device-fused XC and FP64");
+                  "device-fused XC and supported provider precision");
   if (first.coefficient != 1.0 || second.coefficient != 1.0 ||
       input->semilocal_range_omega != 0.0 || input->has_nonlocal_correlation != 0 ||
       descriptor.method == GENERATIVEQC_METHOD_PBE_D4_RKS)
