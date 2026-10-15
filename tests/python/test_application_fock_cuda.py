@@ -24,11 +24,11 @@ GRID = GridSpec(48, 16, 32)
 
 
 @cache
-def _oracle(functional: str) -> dict[str, Any]:
+def _oracle(functional: str, case_name: str = CASE) -> dict[str, Any]:
     """Evaluate identical moving quadrature with an independent SCF/force owner."""
     pytest.importorskip("pyscf")
     pytest.importorskip("gpu4pyscf")
-    return reference(CASE, GRID, 4, functional=functional, backend="gpu4pyscf")
+    return reference(case_name, GRID, 4, functional=functional, backend="gpu4pyscf")
 
 
 @pytest.mark.parametrize("selection", ("auto", "full", "partial", "refused"))
@@ -93,6 +93,60 @@ def test_fast_range_source_composes_with_strict_refinement(
     assert abs(result.energy - oracle["energy"]) <= 1e-5
     assert np.max(np.abs(delta)) <= 1e-4
     assert np.sqrt(np.mean(delta * delta)) <= 3e-5
+
+
+@pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
+def test_fast_nonlocal_refinement_refreshes_then_reuses_strict_anchor(
+    monkeypatch: pytest.MonkeyPatch, case_name: str, record_property: Any
+) -> None:
+    """Reuse a fresh strict anchor without publishing a provisional inner state.
+
+    The production mixed budget must retain the shared outer solver for both
+    molecular sizes. The first strict Fock replaces the mixed anchor; only later
+    strict inner steps may freeze that potential. Independent moving-grid
+    energy/force gates still apply to the complete returned endpoint.
+    """
+    monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
+    case = benchmark_cases()[case_name]
+    calculator = PrecisionCalculator(
+        method="wb97m-v-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        initial_guess=None,
+        max_iterations=180,
+        policy="fast",
+    )
+    try:
+        result = calculator.singlepoint(case.atoms, properties=("energy", "forces"))
+    finally:
+        calculator.clear_cache()
+    assert result.converged
+    validation = result.precision_validation
+    assert validation.status == "qualified_budget_fock" and validation.solve_count == 1
+    assert result.precision["execution_retries"] == 0
+    assert result.precision["fallback_count"] == 0
+    history = result.ks_diagnostic.to_payload()["history"]
+    scopes = {row["iteration"]: row["operator_scope"] for row in history}
+    strict_iterations = [
+        event["iteration"]
+        for event in result.precision["scf_fock_timeline"]
+        if event["kind"] == "strict_fock"
+    ]
+    assert strict_iterations and scopes[strict_iterations[0]] == "full-target"
+    assert any(
+        scopes[iteration] == "provisional-frozen-vv10"
+        for iteration in strict_iterations
+    )
+    assert all(row["operator_scope"] == "full-target" for row in history[-2:])
+    for name, count in result.ks_diagnostic.nonlocal_work.items():
+        record_property(name, count)
+    oracle = _oracle("WB97M-V", case_name)
+    difference = np.asarray(result.forces) - np.asarray(oracle["forces"])
+    assert abs(result.energy - oracle["energy"]) <= validation.budget.energy_abs
+    assert np.max(np.abs(difference)) <= validation.budget.force_max_abs
+    assert np.sqrt(np.mean(difference * difference)) <= validation.budget.force_rms
 
 
 @pytest.mark.parametrize(
