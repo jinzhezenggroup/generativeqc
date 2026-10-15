@@ -572,6 +572,11 @@
           "classification": "wrapper"
         },
         {
+          "path": "python/generativeqc/_response_native.py",
+          "symbol": "solve_sequence",
+          "classification": "wrapper"
+        },
+        {
           "path": "python/generativeqc/response_xc.py",
           "symbol": "FixedDensityXCDerivativeKernel",
           "classification": "scientific-runtime"
@@ -581,18 +586,21 @@
         "src/response/native_gmres.cpp",
         "src/response/resident_gmres.cpp",
         "src/response/linear_problem.hpp",
+        "src/response/sequence.hpp",
         "src/api/c_api_response.cpp"
       ],
       "native_callers": [
         "src/api/c_api_response.cpp"
       ],
       "remaining_python_runtime": [
-        "Eligible positive-dimensional CPU host solves and sequential/recycled inner solves use the shared native GMRES controller through the public C ABI. Python retains operator callbacks, RHS/inter-RHS/recycle projection/update schedules and XC tiles; a complete native molecular Hessian/HVP assembly remains outstanding.",
-        "Blocked solves, explicit/resident vector engines, device providers, general preconditioners, solution consumers and zero-dimensional problems retain their existing controllers. Missing optional native protocol is explicit compatibility; native/load failures do not retry Python arithmetic. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
+        "Eligible CPU host solves and recycled inner solves use shared native GMRES. Independent sequential CPU RHS schedules now stream through the native bound response owner with prefix admission and synchronous publication. Python retains value-only RHS-rank diagnostics, physical operator callbacks, recycled/block schedules, RHS/recycle projection/update assembly and XC tiles; full native molecular Hessian/HVP assembly remains outstanding.",
+        "Blocked solves, explicit/resident vector engines, device providers, general preconditioners, solution consumers and zero-dimensional problems retain their existing controllers. Foreign RHS dtypes/negative or unaligned strides preserve their existing sequential schedule. Missing optional native protocol is explicit compatibility; native/load failures never retry Python arithmetic. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
       ],
       "tests": [
         "tests/native/test_response_sdk.cpp",
+        "tests/native/test_native_gmres.cpp",
         "tests/python/test_native_response_solver.py",
+        "tests/python/test_native_response_sequence.py",
         "tests/python/test_response_native_rks.py",
         "tests/python/test_response_native_uks.py",
         "tests/python/test_stationary_nuclear_batch_host.py",

@@ -79,6 +79,72 @@ def workspace_bytes(library: Any, dimension: int, options: Any) -> int:
     return output.value
 
 
+def _action_callback(
+    action: Any,
+    engine: Any,
+    failures: list[BaseException],
+    *,
+    precondition: bool = False,
+) -> Any:
+    """Never lend user callbacks a NumPy view into temporary native storage."""
+
+    def invoke(user_data: Any, source: Any, destination: Any, count: int) -> int:
+        try:
+            vector = np.ctypeslib.as_array(source, shape=(count,)).copy()
+            vector.flags.writeable = False
+            output = (
+                engine.precondition(action, vector)
+                if precondition
+                else engine.apply(action, vector)
+            )
+            if not np.isfinite(output).all():
+                raise ValueError("response action must return finite real data")
+            np.ctypeslib.as_array(destination, shape=(count,))[:] = output
+            return _native.STATUS_SUCCESS
+        except BaseException as error:  # noqa: BLE001 - a ctypes callback cannot unwind through C
+            failures.append(error)
+            return _native.STATUS_INTERNAL_ERROR
+
+    return _native.ResponseAction(invoke)
+
+
+def _published_result(view: Any, dimension: int, guess: Any = None) -> Any:
+    """Detach every publication before its borrowed native lease expires."""
+    from .response_solver import SolveResult
+
+    if view.reason == 7:
+        raise ValueError("GMRES vector norm overflows FP64")
+
+    def copied(pointer: Any, count: int) -> np.ndarray:
+        if not count:
+            return immutable(np.empty(0))
+        return immutable(np.ctypeslib.as_array(pointer, shape=(count,)).copy())
+
+    solution = copied(view.solution, view.solution_count)
+    if view.reason == 3:
+        solution = immutable(np.zeros(dimension) if guess is None else guess)
+    basis = (
+        copied(view.basis, dimension * view.basis_columns)
+        .reshape((view.basis_columns, dimension))
+        .T
+    )
+    return SolveResult(
+        solution,
+        bool(view.converged),
+        view.residual_norm,
+        view.relative_residual,
+        view.iterations,
+        _REASONS[view.reason],
+        tuple(copied(view.history, view.history_count)),
+        view.operator_actions,
+        view.preconditioner_actions,
+        view.orthogonalization_seconds,
+        view.operator_seconds,
+        view.workspace_bytes,
+        basis=basis,
+    )
+
+
 def solve_host(
     library: Any,
     operator: Any,
@@ -95,7 +161,7 @@ def solve_host(
     its own physical equations and current-lease validation. A native refusal is
     a failure, not permission to retry Python arithmetic.
     """
-    from .response_solver import SolveResult, _HostKrylovEngine
+    from .response_solver import _HostKrylovEngine
 
     dimension = checked_integer(
         operator.dimension, "response dimension", low=1, high=2**64 - 1
@@ -109,33 +175,11 @@ def solve_host(
     engine = _HostKrylovEngine(dimension)
     failures: list[BaseException] = []
 
-    def callback(action: Any, *, precondition: bool = False) -> Any:
-        def invoke(user_data: Any, source: Any, destination: Any, count: int) -> int:
-            try:
-                # Tracebacks and user callbacks can retain this Python array.
-                # Never let such retention turn a completed native lease into a dangling view.
-                vector = np.ctypeslib.as_array(source, shape=(count,)).copy()
-                vector.flags.writeable = False
-                output = (
-                    engine.precondition(action, vector)
-                    if precondition
-                    else engine.apply(action, vector)
-                )
-                if not np.isfinite(output).all():
-                    raise ValueError("response action must return finite real data")
-                np.ctypeslib.as_array(destination, shape=(count,))[:] = output
-                return _native.STATUS_SUCCESS
-            except BaseException as error:  # noqa: BLE001 - a ctypes callback cannot unwind through C
-                failures.append(error)
-                return _native.STATUS_INTERNAL_ERROR
-
-        return _native.ResponseAction(invoke)
-
-    apply = callback(operator)
+    apply = _action_callback(operator, engine, failures)
     condition = (
         _native.ResponseAction()
         if preconditioner is None
-        else callback(preconditioner, precondition=True)
+        else _action_callback(preconditioner, engine, failures, precondition=True)
     )
     descriptor = _descriptor(dimension, options)
     descriptor.rhs = values.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
@@ -161,39 +205,97 @@ def solve_host(
             library,
             library.generativeqc_response_result_view_v1_get(owner, ctypes.byref(view)),
         )
-        if view.reason == 7:
-            raise ValueError("GMRES vector norm overflows FP64")
-
-        def copied(pointer: Any, count: int) -> np.ndarray:
-            return (
-                immutable(np.ctypeslib.as_array(pointer, shape=(count,)))
-                if count
-                else immutable(np.empty(0))
-            )
-
-        solution = copied(view.solution, view.solution_count)
-        if view.reason == 3:
-            solution = immutable(np.zeros(dimension) if guess is None else guess)
-        basis = (
-            copied(view.basis, dimension * view.basis_columns)
-            .reshape((view.basis_columns, dimension))
-            .T
-        )
-        return SolveResult(
-            solution,
-            bool(view.converged),
-            view.residual_norm,
-            view.relative_residual,
-            view.iterations,
-            _REASONS[view.reason],
-            tuple(copied(view.history, view.history_count)),
-            view.operator_actions,
-            view.preconditioner_actions,
-            view.orthogonalization_seconds,
-            view.operator_seconds,
-            view.workspace_bytes,
-            basis=basis,
-        )
+        return _published_result(view, dimension, guess)
     finally:
         if owner:
             library.generativeqc_response_result_destroy(owner)
+
+
+def solve_sequence(
+    library: Any,
+    operator: Any,
+    rhs: np.ndarray,
+    options: Any,
+    *,
+    preconditioner: Any,
+    collect_basis: bool,
+) -> tuple[list[Any], int, int]:
+    """Marshal a native-owned prefix schedule without a Python solve/admission loop.
+
+    Validated RHS storage is borrowed read-only. Only publication copies live
+    after the synchronous callback. A native error never retries Python science.
+    """
+    from .response_solver import _HostKrylovEngine
+
+    dimension = checked_integer(
+        operator.dimension, "response dimension", low=1, high=2**64 - 1
+    )
+    if rhs.ndim != 2 or rhs.shape[0] != dimension:
+        raise ValueError("response RHS dimension mismatch")
+    engine = _HostKrylovEngine(dimension)
+    failures: list[BaseException] = []
+    results: list[Any] = []
+
+    def validate(user_data: Any) -> int:
+        try:
+            getattr(operator, "validate_current", lambda: None)()
+            return _native.STATUS_SUCCESS
+        except BaseException as error:  # noqa: BLE001 - a ctypes callback cannot unwind through C
+            failures.append(error)
+            return _native.STATUS_INTERNAL_ERROR
+
+    def publish(user_data: Any, index: int, view: Any) -> int:
+        try:
+            if index != len(results):
+                raise RuntimeError("native response publication order mismatch")
+            data = _native.ResponseResultView.from_buffer_copy(view.contents)
+            if data.reason == 3 and results and results[-1].reason == "workspace_limit":
+                results.append(results[-1])
+            else:
+                results.append(_published_result(data, dimension))
+            return _native.STATUS_SUCCESS
+        except BaseException as error:  # noqa: BLE001 - a ctypes callback cannot unwind through C
+            failures.append(error)
+            return _native.STATUS_INTERNAL_ERROR
+
+    apply = _action_callback(operator, engine, failures)
+    condition = (
+        _native.ResponseAction()
+        if preconditioner is None
+        else _action_callback(preconditioner, engine, failures, precondition=True)
+    )
+    validate_callback = _native.ResponseValidate(validate)
+    publish_callback = _native.ResponsePublish(publish)
+    gmres = _descriptor(dimension, options)
+    gmres.flags = 1 | 4 | (2 if collect_basis else 0)
+    gmres.apply, gmres.precondition = apply, condition
+    gmres.rhs = rhs.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    row_stride, column_stride = (value // rhs.itemsize for value in rhs.strides)
+    count = rhs.shape[1]
+    descriptor = _native.ResponseSequenceDescriptor(
+        struct_size=ctypes.sizeof(_native.ResponseSequenceDescriptor),
+        abi_version=_native.ABI_VERSION,
+        gmres=gmres,
+        rhs_count=count,
+        row_stride=row_stride,
+        column_stride=column_stride,
+        rhs_element_count=(dimension - 1) * row_stride
+        + (count - 1) * column_stride
+        + 1,
+        max_numeric_bytes=options.max_workspace_bytes,
+        validate=validate_callback,
+        publish=publish_callback,
+    )
+    summary = _native.ResponseSequenceSummary(
+        struct_size=ctypes.sizeof(_native.ResponseSequenceSummary),
+        abi_version=_native.ABI_VERSION,
+    )
+    status = library.generativeqc_response_sequence_solve_v1(
+        ctypes.byref(descriptor), ctypes.byref(summary)
+    )
+    if failures:
+        raise failures[0]
+    _native.check(library, status)
+    if summary.published_count != count or len(results) != count:
+        raise RuntimeError("native response sequence lost a publication")
+    return results, summary.operator_actions, summary.peak_workspace_bytes
