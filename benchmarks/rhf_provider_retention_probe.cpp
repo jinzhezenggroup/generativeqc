@@ -8,6 +8,10 @@
  * scientific qualification or performance timing.
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 #include <cusolverDn.h>
@@ -100,9 +104,9 @@ void event(const char* name, const char* phase, std::int64_t status, const char*
 }
 
 template <class Function>
-Function resolve(const char* name) noexcept {
+Function resolve(const char* name, const char* version) noexcept {
   (void)::dlerror();
-  auto* symbol = ::dlsym(RTLD_NEXT, name);
+  auto* symbol = ::dlvsym(RTLD_NEXT, name, version);
   if (!symbol || ::dlerror()) {
     resolution_errors.fetch_add(1, std::memory_order_relaxed);
     event("resolution_error", "end", -1, "interposer");
@@ -161,7 +165,7 @@ __attribute__((destructor)) void finish_journal() noexcept {
 
 extern "C" cudaError_t cudaMemGetInfo(std::size_t* free_bytes, std::size_t* total_bytes) {
   using Function = cudaError_t (*)(std::size_t*, std::size_t*);
-  static Function real = resolve<Function>("cudaMemGetInfo");
+  static Function real = resolve<Function>("cudaMemGetInfo", "libcudart.so.12");
   if (!real) return cudaErrorUnknown;
   const auto status = real(free_bytes, total_bytes);
   const bool observed = status == cudaSuccess && free_bytes && total_bytes;
@@ -173,40 +177,42 @@ extern "C" cudaError_t cudaMemGetInfo(std::size_t* free_bytes, std::size_t* tota
 
 extern "C" cublasStatus_t cublasCreate_v2(cublasHandle_t* handle) {
   using Function = cublasStatus_t (*)(cublasHandle_t*);
-  static Function real = resolve<Function>("cublasCreate_v2");
+  static Function real = resolve<Function>("cublasCreate_v2", "libcublas.so.12");
   return provider_call("cublas_create", CUBLAS_STATUS_INTERNAL_ERROR, real, handle);
 }
 
 extern "C" cublasStatus_t cublasSetStream_v2(cublasHandle_t handle, cudaStream_t stream) {
   using Function = cublasStatus_t (*)(cublasHandle_t, cudaStream_t);
-  static Function real = resolve<Function>("cublasSetStream_v2");
+  static Function real = resolve<Function>("cublasSetStream_v2", "libcublas.so.12");
   return provider_call("cublas_set_stream", CUBLAS_STATUS_INTERNAL_ERROR, real, handle, stream);
 }
 
 extern "C" cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle,
                                                     cublasPointerMode_t mode) {
   using Function = cublasStatus_t (*)(cublasHandle_t, cublasPointerMode_t);
-  static Function real = resolve<Function>("cublasSetPointerMode_v2");
+  static Function real =
+      resolve<Function>("cublasSetPointerMode_v2", "libcublas.so.12");
   return provider_call("cublas_set_pointer_mode", CUBLAS_STATUS_INTERNAL_ERROR, real, handle, mode);
 }
 
 extern "C" cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t* handle) {
   using Function = cusolverStatus_t (*)(cusolverDnHandle_t*);
-  static Function real = resolve<Function>("cusolverDnCreate");
+  static Function real = resolve<Function>("cusolverDnCreate", "libcusolver.so.11");
   return provider_call("cusolver_create", CUSOLVER_STATUS_INTERNAL_ERROR, real, handle);
 }
 
 extern "C" cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t handle,
                                                  cudaStream_t stream) {
   using Function = cusolverStatus_t (*)(cusolverDnHandle_t, cudaStream_t);
-  static Function real = resolve<Function>("cusolverDnSetStream");
+  static Function real = resolve<Function>("cusolverDnSetStream", "libcusolver.so.11");
   return provider_call("cusolver_set_stream", CUSOLVER_STATUS_INTERNAL_ERROR, real, handle,
                        stream);
 }
 
 extern "C" cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t* parameters) {
   using Function = cusolverStatus_t (*)(cusolverDnParams_t*);
-  static Function real = resolve<Function>("cusolverDnCreateParams");
+  static Function real =
+      resolve<Function>("cusolverDnCreateParams", "libcusolver.so.11");
   return provider_call("cusolver_create_params", CUSOLVER_STATUS_INTERNAL_ERROR, real,
                        parameters);
 }
