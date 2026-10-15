@@ -19,6 +19,13 @@ from typing import Any
 OWNER_FD_ENV = "GENERATIVEQC_COMPILER_OWNER_FD"
 
 
+class _OwnedProcess(subprocess.Popen):
+    """A watchdog process with explicitly owned cancellation descriptors."""
+
+    _generativeqc_cancel_writer: int | None = None
+    _generativeqc_group_reader: int | None = None
+
+
 def start_owned_process(
     command: list[str], *, pass_fds: tuple[int, ...] = (), **options: Any
 ) -> subprocess.Popen:
@@ -42,7 +49,7 @@ def start_owned_process(
         os.close(cancel_write)
         raise
     try:
-        process = subprocess.Popen(
+        process = _OwnedProcess(
             [
                 sys.executable,
                 "-I",
@@ -72,7 +79,7 @@ def start_owned_process(
 
 def cancel_owned_process(process: subprocess.Popen) -> bool:
     """Ask a watchdog to reclaim its group; return false for ordinary launches."""
-    if not hasattr(process, "_generativeqc_cancel_writer"):
+    if not isinstance(process, _OwnedProcess):
         return False
     descriptor = process._generativeqc_cancel_writer
     if descriptor is not None:
