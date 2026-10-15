@@ -80,7 +80,22 @@ def test_native_package_does_not_need_python_environment(
         "PYTHONPATH": str(tmp_path / "absent"),
     }
     assert _run(probe, "contract", env=env) == {"contract": "passed"}
-    assert tuple(metadata) == INVENTORY.names
+    packaged_inventory = (
+        parse_inventory(
+            json.loads(
+                Path(os.environ["GENERATIVEQC_HESSIAN_AOT_INVENTORY"]).read_text()
+            )
+        )
+        if os.environ.get("GENERATIVEQC_HESSIAN_AOT_INVENTORY")
+        else INVENTORY
+    )
+    assert tuple(metadata) == packaged_inventory.names
+    for request in packaged_inventory.integrals:
+        actual = metadata[request.name]
+        assert actual["family"] == request.family
+        assert actual["angular"] == list(request.angular)
+        assert actual["radial"] == request.radial
+        assert actual["omega"] == request.payload()["omega"]
     names = metadata["nuclear_pair_hvp"]["inputs"]
     feeds = {
         "charge_product": 2,

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "dft/cuda_ks_grid_reference.hpp"
+#include "dft/cuda_ks_one_electron_response.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
 #include "dft/semilocal_family.hpp"
 #include "molecule/basis.hpp"
@@ -59,8 +60,10 @@ void run(bool unrestricted, const std::string& mode) {
   const bool physical = mode == "physical";
   const bool fock = mode == "fock" || mode == "df-fock";
   const bool nuclear = mode == "nuclear" || mode == "df-nuclear";
+  const bool one_electron = mode == "one-electron" || mode == "df-one-electron";
   const bool geometry = mode == "geometry" || mode == "df-geometry" || nuclear;
-  const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear";
+  const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear" ||
+                      mode == "df-one-electron";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -198,6 +201,65 @@ void run(bool unrestricted, const std::string& mode) {
   array("curvature", curvature);
   array("potential", value);
   array("response", action);
+  dft::CudaKsOneElectronResponse one_electron_response;
+  double *integral_motion{}, *integral_weights{}, *integral_matrices{}, *integral_vectors{};
+  integrals::CudaOneElectronWeights integral_source;
+  integrals::CudaOneElectronOutput integral_output;
+  if (one_electron) {
+    const auto matrix = shape.nao * shape.nao;
+    integral_motion = storage.allocate(3 * shape.atoms);
+    integral_weights = storage.allocate(4 * matrix);
+    integral_matrices = storage.allocate(4 * matrix);
+    integral_vectors = storage.allocate(6 * shape.atoms);
+    std::vector<double> motion(3 * shape.atoms), weights(4 * matrix);
+    for (std::size_t index = 0; index < motion.size(); ++index)
+      motion[index] = 0.15 * std::sin(index + 2.0);
+    for (unsigned panel = 0; panel < 4; ++panel)
+      for (std::size_t row = 0; row < shape.nao; ++row)
+        for (std::size_t column = 0; column < shape.nao; ++column)
+          weights[panel * matrix + row * shape.nao + column] =
+              0.1 * std::cos((panel + 1.0) * (row + column + 1.0));
+    check(cudaMemcpyAsync(integral_motion, motion.data(), motion.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    check(cudaMemcpyAsync(integral_weights, weights.data(), weights.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
+    integral_source = {integral_weights, integral_weights + matrix, integral_weights + 2 * matrix,
+                       integral_weights + 3 * matrix};
+    integral_output = {integral_matrices,
+                       integral_matrices + matrix,
+                       integral_matrices + 2 * matrix,
+                       integral_matrices + 3 * matrix,
+                       integral_vectors,
+                       integral_vectors + 3 * shape.atoms};
+    auto insufficient = integrals::CudaOneElectronOptions{};
+    insufficient.max_workspace_bytes = 1;
+    require(one_electron_response.prepare(*batch, 0, token, insufficient, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "native one-electron adapter ignored its capacity gate");
+    require(
+        one_electron_response.prepare(*batch, 0, token, {}, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail);
+    check(one_electron_response.apply(integral_motion, integral_source, integral_output,
+                                      lease.stream));
+    dft::CudaKsResidentFockBinding source;
+    dft::CudaKsResidentOrbitalFrameBinding frame;
+    require(methods::detail::dft_cuda_resident_fock_sources(*batch, 0, token, source, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                methods::detail::dft_cuda_resident_orbital_frame(*batch, 0, token, frame, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    const auto matrices = download(integral_matrices, 4 * matrix);
+    const auto core = download(source.hcore, matrix), overlap = download(frame.overlap, matrix);
+    for (std::size_t index = 0; index < matrix; ++index)
+      require(std::abs(matrices[index] - core[index]) < 2e-11 &&
+                  std::abs(matrices[matrix + index] - overlap[index]) < 2e-11,
+              "native compiler-AD H/S source differs from the actual accepted KS frame");
+    array("integral_matrices", matrices);
+    array("integral_vectors", download(integral_vectors, 6 * shape.atoms));
+    array("integral_motion", motion);
+    array("integral_weights", weights);
+    std::cout << ",\"integral_device_bytes\":" << one_electron_response.work().device_bytes;
+  }
   dft::CudaGridGeometryResponse geometry_response;
   double *geometry_left{}, *geometry_right{}, *geometry_ao{}, *geometry_weights{};
   if (geometry) {
@@ -347,6 +409,19 @@ void run(bool unrestricted, const std::string& mode) {
               << ",\"response_eris\":" << work.response_eris;
   }
   solve();
+  if (one_electron) {
+    const std::vector<double> matrix_sentinel(4 * shape.nao * shape.nao, 27);
+    const std::vector<double> vector_sentinel(6 * shape.atoms, 27);
+    check(cudaMemcpy(integral_matrices, matrix_sentinel.data(),
+                     matrix_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice));
+    check(cudaMemcpy(integral_vectors, vector_sentinel.data(),
+                     vector_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice));
+    require(one_electron_response.apply(integral_motion, integral_source, integral_output,
+                                        lease.stream) == cudaErrorInvalidResourceHandle &&
+                download(integral_matrices, matrix_sentinel.size()) == matrix_sentinel &&
+                download(integral_vectors, vector_sentinel.size()) == vector_sentinel,
+            "revoked native one-electron adapter published partial output");
+  }
   std::vector<double> sentinel(elements, 27);
   check(cudaMemcpyAsync(output, sentinel.data(), elements * sizeof(double), cudaMemcpyHostToDevice,
                         lease.stream));
@@ -389,10 +464,12 @@ int main(int argc, char** argv) {
     require(
         (argc == 2 || (argc == 3 && (mode == "physical" || mode == "fock" || mode == "df-fock" ||
                                      mode == "geometry" || mode == "df-geometry" ||
-                                     mode == "nuclear" || mode == "df-nuclear"))) &&
+                                     mode == "nuclear" || mode == "df-nuclear" ||
+                                     mode == "one-electron" || mode == "df-one-electron"))) &&
             (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
         "usage: ks_wb97mv_grid_probe rks|uks "
-        "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear]");
+        "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
+        "electron]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {

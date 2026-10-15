@@ -98,6 +98,13 @@ void list_programs() {
       if (index) std::cout << ',';
       std::cout << std::quoted(std::string(program.inputs[index]));
     }
+    std::cout << "],\"family\":" << std::quoted(std::string(program.signature.family))
+              << ",\"radial\":" << std::quoted(std::string(program.signature.radial))
+              << ",\"omega\":" << program.signature.omega << ",\"angular\":[";
+    for (std::size_t index = 0; index < program.signature.angular.size(); ++index) {
+      if (index) std::cout << ',';
+      std::cout << program.signature.angular[index];
+    }
     std::cout << "]}";
   }
   std::cout << "]\n";

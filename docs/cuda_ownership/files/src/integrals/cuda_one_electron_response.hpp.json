@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_one_electron_response.hpp",
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives",
+  "reason": "Native authenticated normalized basis/effective-charge source, externally supplied signed stationary weights, checked finite AOT closure/work/arena admission, and transactional public matrix/gradient/HVP source contracts. Cartesian and real-spherical orbital records through f are supported; residual ECP and the complete Hessian endpoint remain separate consumers.",
+  "regions": []
+}

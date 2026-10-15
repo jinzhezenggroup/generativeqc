@@ -109,6 +109,7 @@ def emit_program(inventory: Inventory, name: str) -> str:
     aliases = {}
     inputs, components = (), ()
     centers, stride = 0, 0
+    angular, signature = (), "{}"
     callbacks = ["nullptr", "nullptr", "nullptr"]
     if name == "ao":
         source, identity = emit_resident_ao(), _ao_identity()
@@ -133,6 +134,11 @@ def emit_program(inventory: Inventory, name: str) -> str:
         kind = "integral"
         centers, stride = request.centers, request.record_stride
         components, outputs = request.components, 1 + 6 * request.centers
+        angular = request.angular
+        signature = (
+            f'{{"{request.family}", angular, "{request.radial}", '
+            f"{request.payload()['omega']:.17g}}}"
+        )
         callbacks[2] = f"&{prefix}_launch"
         aliases = {
             "resident_evaluate": f"{prefix}_evaluate",
@@ -159,9 +165,10 @@ namespace generativeqc::dft::hessian_aot {{
 const Program& program_{name}() noexcept {{
   static constexpr std::array<std::string_view, {len(inputs)}> inputs{{{quoted_inputs}}};
   static constexpr std::array<std::uint32_t, {len(components)}> components{{{packed_components}}};
+  [[maybe_unused]] static constexpr std::array<unsigned, {len(angular)}> angular{{{",".join(map(str, angular))}}};
   static const Program program{{
     "{name}", "{identity}", Kind::{kind}, inputs, {outputs}, components,
-    {centers}, {stride}, {", ".join(callbacks)}
+    {centers}, {stride}, {", ".join(callbacks)}, {signature}
   }};
   return program;
 }}

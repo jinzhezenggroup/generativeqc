@@ -199,7 +199,9 @@ Scalar panels use `[field,lane]` FP64 layout with input order in the native
 descriptor. Integral records use `[exponents,center_xyz,primitive_scale]`; output
 is `[component,value/gradient/gradient-JVP]` with all mathematical centers
 retained. Attraction uses unit nuclear charge, so the native record scale must
-include the actual charge as well as contraction/component normalization.
+include the actual charge and radial contraction weights. Component normalization
+belongs to the enclosing public projection (or the scale for a single-component
+consumer), exactly once; raw leaves do not normalize Cartesian components.
 The caller must initialize the device error flag, keep buffers/stream alive and
 discard all results after any nonzero error. Scientific descriptor identities
 authenticate logical programs, not executable bytes or a converged SCF state.
@@ -401,8 +403,53 @@ native RKS/UKS Direct/DF geometry. Arbitrary signed molecular directions use
 separate upstream Libxc handles without its optional FHC PSD projection;
 interior positive-definite cases retain the default unmodified oracle.
 
-Complete shell coverage, integral/DF/ECP
-nuclear response and stationary molecular assembly still require integration.
+`src/integrals/cuda_one_electron_response.hpp` supplies a separate native
+compiler-AD overlap and `T + effective-point-charge attraction` nuclear source.
+It consumes the actual normalized AoBasis packing, including Cartesian
+component normalization and real-spherical expansions through f. Primitive
+coefficients contain radial normalization only; public projection coefficients
+are applied exactly once on CUDA. The method supplies finite symmetric core/
+overlap weights and their right-direction responses, including signed weights.
+The source publishes core/overlap values and directional matrices together with
+weighted nuclear gradient/HVP vectors. It retains every mathematical center
+until deterministic physical-atom scatter, including coincident centers.
+
+The caller provides a bounded arena and a live basis/effective-charge
+authenticator. Host preparation selects integer shell topology and linked
+program descriptors only. Actions build radial records, evaluate AD leaves,
+project public matrices and contract derivatives on CUDA, without allocation,
+runtime compilation, Python or CPU numerical contraction. The linked inventory
+must cover every required ordered Cartesian component exactly once; missing,
+overlapping or malformed closure fails before CUDA work. Independent limits
+bound jobs, primitive-component evaluations, public projection terms and arena
+bytes. `projection_terms` is the conservative nine polynomial-term products per
+public AO pair/component/radial tile, not an endpoint timing. A radial tile in
+`[1,64]` bounds storage but does not reduce primitive work. All six outputs are
+private until finite/symmetry and live-owner reauthentication gates pass. Failures
+before publication leave them unchanged; a CUDA publication failure invalidates
+all six. Actions reject aliases, foreign streams/devices and stream capture.
+
+`src/dft/cuda_ks_one_electron_response.hpp` connects this source to an actual
+canonical native KS batch. Integer topology/effective charges come from the
+prepared Fock owner's normalized System; basis storage comes from the live grid
+binding. Independent arena/charge storage never overwrites provider scratch.
+Both bindings are reborrowed on every action and before publication. ECP core
+removal is retained, but **residual local/nonlocal ECP projectors are not included**.
+The adapter does not invent spin/HF factors or supply stationary D/W policy.
+
+The partial development inventory is intentionally unchanged. A complete
+one-electron closure can be generated **at build time** with
+`tools/complete_hessian_aot_inventory.py --families overlap kinetic nuclear_attraction
+--max-angular 3 --inventory manifests/hessian_aot_development.json --output <inventory.json>`,
+then selected with `-DGENERATIVEQC_HESSIAN_AOT_INVENTORY=<absolute-inventory-path>`.
+`tests/python/test_native_one_electron.py` compares all ordered s/p/d/f public
+matrices, first directions and weighted mixed response with independent displaced
+libcint/PySCF values. The standalone probe starts from the native System
+normalizer/AoBasis; actual RKS/UKS Direct/DF owner tests also compare primal H/S
+with the accepted native frame and verify revocation without publication.
+
+Complete ERI/DF/ECP shell coverage, their nuclear response and stationary molecular
+assembly still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 

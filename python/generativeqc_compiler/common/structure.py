@@ -44,6 +44,7 @@ SCALAR_CLIENTS = {
     "method.stationary_grid_second": {"generativeqc_compiler.integral.expr"},
     "method.wb97mv_grid_response": {"generativeqc_compiler.integral.expr"},
     "method.wb97mv_nuclear_grid": {"generativeqc_compiler.integral.expr"},
+    "method.nuclear_integral_response": {"generativeqc_compiler.integral.expr"},
     "dft.xc_bilinear": {"generativeqc_compiler.integral.expr"},
     "dft.xc_contraction_cuda": {"generativeqc_compiler.integral.cuda"},
     "dft.ao_cuda": {

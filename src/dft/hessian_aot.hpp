@@ -26,6 +26,17 @@ using AoLaunch = int (*)(const double*, std::size_t, std::size_t, std::size_t, c
 using IntegralLaunch = int (*)(const double*, std::size_t, const long long*, const double*, double*,
                                int*, cudaStream_t);
 
+/** Scientific selectors for integral closure, independent of program names.
+ * Components use the flattened CCA Cartesian product of these shell orders.
+ * Empty selectors belong to non-integral programs. No runtime code discovery
+ * or compilation is authorized by this metadata. */
+struct IntegralSignature {
+  std::string_view family;
+  std::span<const unsigned> angular;
+  std::string_view radial;
+  double omega{};
+};
+
 struct Program {
   std::string_view name;
   std::string_view identity;
@@ -38,6 +49,7 @@ struct Program {
   ArrayLaunch array{};
   AoLaunch ao{};
   IntegralLaunch integral{};
+  IntegralSignature signature{};
 };
 
 /** Immutable, explicitly selected build inventory; no runtime discovery. */
@@ -60,8 +72,10 @@ cudaError_t launch_ao(const double* basis, std::size_t atoms, std::size_t primit
                       std::size_t jets, double* outputs, int* status, cudaStream_t stream) noexcept;
 
 /** Integral records are [exponents,center_xyz,primitive_scale].
- * The fixed record scale includes contraction weights, component normalization
- * and, for attraction, the physical nuclear charge (the program uses unit Z).
+ * The fixed record scale includes radial contraction weights and, for
+ * attraction, the physical nuclear charge (the program uses unit Z). Component
+ * normalization must be applied exactly once by the enclosing public projection
+ * or, for a single component, by the record scale; it is not built into the leaf.
  * Output is component-major [value,gradient(3*C),gradient-JVP(3*C)]. Atoms map
  * mathematical centers to the caller's molecular direction; coincidence does
  * not remove centers. All raw component weights are unity before compiler AD.

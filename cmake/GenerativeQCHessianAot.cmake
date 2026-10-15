@@ -72,12 +72,20 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.hpp"
     ARGS --output "${_nuclear}"
     COMMENT "Generating compiler-AD native WB97M-V moving-grid response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}"
+  set(_one_electron "${CMAKE_CURRENT_BINARY_DIR}/generated/response/nuclear_integral_response.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_one_electron}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_nuclear_integral_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.hpp"
+    ARGS --output "${_one_electron}"
+    COMMENT "Generating compiler-AD native weighted integral response")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_one_electron_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -115,5 +123,12 @@ function(generativeqc_add_hessian_aot target inventory)
     add_executable(generativeqc_cuda_grid_geometry_probe
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_grid_geometry_probe.cpp")
     target_link_libraries(generativeqc_cuda_grid_geometry_probe PRIVATE ${target})
+    add_executable(generativeqc_cuda_one_electron_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_one_electron_probe.cpp")
+    target_link_libraries(generativeqc_cuda_one_electron_probe PRIVATE ${target} generativeqc)
+    add_executable(generativeqc_cuda_one_electron_closure_tests
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_one_electron_closure_tests.cpp")
+    target_link_libraries(generativeqc_cuda_one_electron_closure_tests PRIVATE ${target})
+    add_test(NAME cuda_one_electron_host_closure COMMAND generativeqc_cuda_one_electron_closure_tests)
   endif()
 endfunction()
