@@ -23,7 +23,7 @@ Pass `language="c++"`, `compiler="g++"`, and explicit flags such as
 The default language remains C, including its existing keys and ABI. C++ is
 limited to the canonical native Linux ELF `/usr/bin/g++` driver and the same
 plain optimization/PIC/absolute-include flags, with exactly one `-std=c++20`.
-Clang++, CUDA C++, other standards, alternate ABI options, modules, PCH, LTO,
+CUDA C++, other standards, alternate ABI options, modules, PCH, LTO,
 plugins, response files, cross/sysroot compilation and link closure are outside
 this domain. A neighboring `.gch` file or directory is rejected.
 
@@ -64,6 +64,31 @@ The Clang recipe also returns its resolved `compiler.executable`; use that path
 for object compilation. Invocation-entry/system-driver selection is checked
 around queries and before returning a key, so entry symlink retargeting fails
 closed even when the original canonical driver remains unchanged.
+
+For explicit Clang C++20 objects, pass `compiler="clang++"`,
+`compiler_family="clang"`, `language="c++"`, and
+`flags=("-std=c++20", "-O1", "-fPIC")` with a matching `.cpp` source.
+The canonical native ELF `/usr/bin/clang++` is required. Its physical executable
+may equal Clang C's, so the returned flags explicitly preserve `--driver-mode=g++`
+and the closure uses a separate C++ language/context identity. The actual
+integrated cc1 job must select C++ and exactly C++20. Collection binds and rechecks
+full macro output (including `__cplusplus` and `__GXX_ABI_VERSION`), include-search
+diagnostics and the actual absolute GCC-compatible toolchain installation selected
+by Clang. This domain requires that native GCC selection to be observable;
+alternative standard libraries/toolchain selection remain unsupported. Included
+standard-library configuration headers are hashed as ordinary dependencies.
+The caller's immutable snapshot must cover the full C++ header/search, ABI,
+loader and configuration namespaces; observations never infer completeness.
+Clang C and existing GCC/G++ recipes retain their identities and defaults.
+The C++ job decoder follows LLVM's quoted `sys::printArg` protocol: it consumes
+escaped quotes, backslashes and dollars once, preserves genuine preceding
+backslashes, and rejects malformed or unquoted words. Diagnostic text is never
+executed. The existing Clang C decoder is unchanged.
+Clang C++ inherits the Clang dependency-path restrictions below and the C++ PCH,
+module, alternate ABI, target/sysroot and flag restrictions above. Its returned
+closure salt must reach the verified compiler-cache command. Tests execute a
+retrieved stored object against Decimal references through a separate link step;
+this does not establish reusable link closure or installed/runtime admission.
 Clang driver regularity is checked before reading ELF bytes, so a named FIFO
 that satisfies executable lookup is rejected without blocking on its writer.
 
