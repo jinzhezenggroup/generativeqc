@@ -32,6 +32,10 @@ void run(unsigned spins, bool fitted) {
   dft::CudaKsWb97mvResponse owner;
   std::string detail;
   queue_test::reset_action();
+  queue_test::valid_fock_binding = false;
+  expect(owner.prepare(batch, 0, token, {}, detail) != GENERATIVEQC_STATUS_SUCCESS,
+         "physical model accepted a binding without an owner");
+  queue_test::valid_fock_binding = true;
   expect(owner.prepare(batch, 0, token, {}, detail) == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
   std::vector<double> direction(4 * spins, 1), output(4 * spins, 27);
 

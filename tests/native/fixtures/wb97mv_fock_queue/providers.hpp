@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "dft/cuda_ks_resident_fock.hpp"
+
 using cudaStream_t = void*;
 using cudaError_t = int;
 constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1, cudaErrorNotSupported = 2,
@@ -38,6 +40,7 @@ namespace queue_test {
 inline std::vector<std::function<void()>> pending;
 inline int launches{}, fail_launch{}, fences{}, late_reads{};
 inline bool returned{}, capturing{}, revoked{};
+inline bool valid_fock_binding{true};
 inline unsigned spins = 1;
 inline bool fitted{};
 inline cudaStream_t stream = reinterpret_cast<void*>(8);
@@ -248,17 +251,6 @@ struct CudaKsFinalStateToken {
     } determinant;
   } identity;
 };
-struct CudaKsResidentFockBinding {
-  int device_id{};
-  const scf::PreparedFockPlan* primary{&scf::primary};
-  const scf::ResolvedFockBuild* correction{&scf::correction};
-  const double* hcore{queue_test::metadata.data()};
-  const double* fock{queue_test::metadata.data() + 8};
-  std::size_t nao{2};
-  unsigned spins{queue_test::spins};
-  void* stream{queue_test::stream};
-  bool operator==(const CudaKsResidentFockBinding&) const = default;
-};
 struct CudaKsResidentOrbitalFrameBinding {
   const double* coefficients{queue_test::metadata.data() + 16};
   const double* orbital_energies{queue_test::metadata.data() + 24};
@@ -313,7 +305,10 @@ inline generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch&, std::s
                                                           const dft::CudaKsFinalStateToken&,
                                                           dft::CudaKsResidentFockBinding& binding,
                                                           std::string&) {
-  binding = {};
+  // Keep the real lifetime binding and shared model-admission contract in scope.
+  binding = {0, &scf::primary, &scf::correction, queue_test::metadata.data(),
+             queue_test::metadata.data() + 8, 2, queue_test::spins, queue_test::stream,
+             queue_test::valid_fock_binding ? 1U : 0U, 1, 1};
   return queue_test::revoked ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS;
 }
 inline generativeqc_status dft_cuda_resident_orbital_frame(

@@ -214,7 +214,9 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
                     )
                 expression = factor(values[0])
             elif node.op == "add":
-                expression = " + ".join(
+                # Match TensorIR's positive-zero accumulator even when the
+                # first scaled operand is negative zero or underflows to it.
+                expression = "0.0 + " + " + ".join(
                     f"{factor(coefficient)} * operand_{operand}[position]"
                     for operand, coefficient in enumerate(node.attrs["coefficients"])
                 )
