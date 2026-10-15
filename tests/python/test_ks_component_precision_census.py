@@ -64,7 +64,7 @@ using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_point{}, experimental_mixed_contractions{}, pending_mixed_exchange{};
-  bool pending_mixed_resident{};
+  bool pending_mixed_resident{}, pending_mixed_range_resident{};
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
@@ -81,10 +81,13 @@ struct Owner {
         + methods
         + r"""
   void complete(bool coulomb, bool density, std::uint64_t mixed_coulomb_recurrences,
-                std::array<std::uint64_t, 3> nonlocal_work = {}) {
+                std::array<std::uint64_t, 3> nonlocal_work = {},
+                std::uint64_t mixed_range_recurrences = 0,
+                std::array<std::uint64_t, 2> nonlocal_arithmetic = {}) {
     pending_mixed_coulomb = coulomb;
     pending_mixed_density = density;
-    mixed_precision_executed |= coulomb || density || pending_mixed_point;
+    mixed_precision_executed |= coulomb || density || pending_mixed_point || pending_mixed_range_resident ||
+                                mixed_range_recurrences || nonlocal_arithmetic[0];
 """
         + census
         + r"""
@@ -234,6 +237,43 @@ int main() {
   range.complete(true, false, 11);
   assert(count(range, Kind::ExchangeK, Mode::Mixed) == 1);
   assert(count(range, Kind::ExchangeK) == 1);
+  // Range-only execution and bounded nonlocal fallback must classify a Fock
+  // from executed work rather than assuming mixed J accompanies every module.
+  Owner range_only;
+  range_only.complete(false, false, 0, {}, 17);
+  assert(count(range_only, Kind::ExchangeK, Mode::Mixed) == 1);
+  assert(range_only.output.precision.mixed_stage_fock_builds == 1);
+  assert(range_only.refinement_iterations == 0);
+  range_only.complete(false, false, 0);
+  assert(range_only.output.precision.strict_stage_fock_builds == 1);
+  assert(range_only.refinement_iterations == 1);
+  // Replaying a mixed range source is an FP32-storage K action, not another
+  // recurrence. Range-only schedules must still advance the mixed phase.
+  Owner range_resident;
+  range_resident.pending_mixed_range_resident = true;
+  range_resident.record_precision_operator(Kind::CoulombRecurrence, Dtype::Fp32, Mode::Mixed,
+                                           31, Dtype::Fp32);
+  range_resident.complete(false, false, 0);
+  range_resident.complete(false, false, 0);
+  assert(count(range_resident, Kind::ExchangeK, Mode::Mixed, Dtype::Fp32) == 2);
+  assert(count(range_resident, Kind::CoulombRecurrence, Mode::Mixed, Dtype::Fp32) == 31);
+  assert(range_resident.output.precision.mixed_stage_fock_builds == 2);
+  range_resident.pending_mixed_range_resident = false;
+  range_resident.complete(false, false, 0);
+  assert(range_resident.output.precision.strict_stage_fock_builds == 1);
+  assert(range_resident.refinement_iterations == 1);
+  Owner bounded_nonlocal;
+  bounded_nonlocal.nonlocal_correlation = &bounded_nonlocal;
+  bounded_nonlocal.device_nonlocal = true;
+  bounded_nonlocal.complete(false, false, 0, {}, 0, {19, 3});
+  assert(count(bounded_nonlocal, Kind::NonlocalCorrelation, Mode::Mixed) == 1);
+  assert(count(bounded_nonlocal, Kind::NonlocalCorrelation) == 1);
+  assert(bounded_nonlocal.output.precision.mixed_stage_fock_builds == 1);
+  assert(bounded_nonlocal.refinement_iterations == 0);
+  bounded_nonlocal.complete(false, false, 0, {}, 0, {0, 23});
+  assert(bounded_nonlocal.output.precision.strict_stage_fock_builds == 1);
+  assert(bounded_nonlocal.refinement_iterations == 1);
+  assert(count(bounded_nonlocal, Kind::NonlocalCorrelation) == 2);
   Owner semilocal;
   semilocal.has_exchange = semilocal.has_range_correction = false;
   semilocal.complete(true, false, 11);
@@ -285,6 +325,13 @@ int main() {
     assert(!partial.output.precision_work.complete && !partial.output.precision_work.operator_inventory_complete);
     assert(partial.output.precision_work.events.size() == 1);
   }
+  Owner components;
+  components.nonlocal_correlation = &components;
+  components.device_nonlocal = true;
+  components.record_fock_precision_work(0, 7, {11, 3});
+  assert(count(components, Kind::ExchangeK, Mode::Mixed) == 1);
+  assert(count(components, Kind::NonlocalCorrelation, Mode::Mixed) == 1);
+  assert(count(components, Kind::NonlocalCorrelation) == 1);
   Owner overflow;
   overflow.record_precision_operator(Kind::CoulombRecurrence, Dtype::Fp32, Mode::Mixed,
                                       std::numeric_limits<std::uint64_t>::max());
@@ -368,7 +415,12 @@ int main() {
       assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
       assert(hybrid.find(cuda_ks_precision_region::kRangeExchange));
       assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kRangeExchange));
-      assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kNonlocalCorrelation));
+      assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kNonlocalCorrelation) == nonlocal_graph);
+      const auto mixed_range = resolve_cuda_ks_precision_schedule(
+          GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
+          false, false, {true, true}, true, true);
+      assert(mixed_range.uses_lower_precision(cuda_ks_precision_region::kRangeExchange));
+      assert(resolve_cuda_ks_iteration_precision(mixed_range, true, true).is_strict_fp64());
       assert(resolve_cuda_ks_iteration_precision(hybrid, true, true).is_strict_fp64());
     }
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);

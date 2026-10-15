@@ -13,6 +13,7 @@ if __package__ in (None, ""):
 
 from generativeqc_compiler.method.nonlocal_pair import (
     NONLOCAL_PAIR_LOWERING_VERSION,
+    NONLOCAL_PAIR_MIXED_VERSION,
     NONLOCAL_PAIR_RATIONAL_VERSION,
     NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION,
     PAIR_INPUT_ORDER,
@@ -28,7 +29,7 @@ from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 def native_header() -> str:
     """Emit each output closure once, shared unchanged by CPU and CUDA."""
-    bodies, branches = [], []
+    bodies, branches, mixed_branches = [], [], []
     for variant, preconditioned in (("vv10", False), ("rvv10", False), ("rvv10", True)):
         for features in (False, True):
             for geometry in (False, True):
@@ -80,6 +81,45 @@ def native_header() -> str:
                 branches.append(
                     f"  if constexpr ({condition}) {{\n    {name}({', '.join(arguments)});\n  }}"
                 )
+                if variant == "vv10" or preconditioned:
+                    # The bounded FP32 domain also keeps the shared rational
+                    # derivative intermediates representable. Use the same
+                    # denominator reuse as FP64 instead of restoring divides
+                    # merely because the scalar lowering selects float.
+                    mixed_program = build_nonlocal_pair_program(
+                        variant,
+                        preconditioned=preconditioned,
+                        features=features,
+                        geometry=geometry,
+                        rational_derivatives=variant == "vv10" and features,
+                        reciprocal_energy=variant == "vv10" and features,
+                    )
+                    mixed_body = emit_scalar_cpp(
+                        mixed_program,
+                        function_name=name + "_fp32",
+                        input_order=input_order,
+                        output_order=output_order,
+                        caller_owned_checks=True,
+                        ordered_native_sums=True,
+                        output_dependency_order=True,
+                        scalar_type="float",
+                    )
+                    bodies.append(
+                        mixed_body.replace(
+                            "inline bool ",
+                            "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ",
+                            1,
+                        )
+                    )
+                    mixed_condition = condition.replace(" && Preconditioned", "")
+                    mixed_arguments = (
+                        *(f"static_cast<float>({item})" for item in input_order),
+                        *(f"mixed_{item}" for item in output_order),
+                    )
+                    mixed_branches.append(
+                        f"  if constexpr ({mixed_condition}) {{\n"
+                        f"    {name}_fp32({', '.join(mixed_arguments)});\n  }}"
+                    )
     for geometry, unit in ((g, u) for g in (False, True) for u in (False, True)):
         label = "unit_reciprocal" if unit else "rational"
         rational = build_nonlocal_pair_program(
@@ -137,6 +177,25 @@ def native_header() -> str:
                 "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
             )
         )
+        mixed_bilateral = build_nonlocal_pair_program(
+            "vv10",
+            geometry=geometry,
+            rational_derivatives=True,
+            reciprocal_energy=True,
+            partner_features=True,
+        )
+        bodies.append(
+            emit_scalar_cpp(
+                mixed_bilateral,
+                function_name=f"pair_vv10_bilateral_g{int(geometry)}_fp32",
+                input_order=PAIR_INPUT_ORDER[:5],
+                output_order=output_order,
+                caller_owned_checks=True,
+                ordered_native_sums=True,
+                output_dependency_order=True,
+                scalar_type="float",
+            ).replace("inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1)
+        )
     row = build_nonlocal_row_feature_program()
     row_body = emit_scalar_cpp(
         row,
@@ -174,6 +233,7 @@ namespace generativeqc::dft::nlc::generated {
         + f'inline constexpr const char* nonlocal_pair_lowering_version = "{NONLOCAL_PAIR_LOWERING_VERSION}";\n'
         + f'inline constexpr const char* nonlocal_pair_rational_version = "{NONLOCAL_PAIR_RATIONAL_VERSION}";\n'
         + f'inline constexpr const char* nonlocal_pair_admitted_version = "{NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION}";\n'
+        + f'inline constexpr const char* nonlocal_pair_mixed_version = "{NONLOCAL_PAIR_MIXED_VERSION}";\n'
         + """
 struct PairValues {
   double phi{};
@@ -187,6 +247,33 @@ struct PairValues {
         + "\n"
         + "\n".join(bodies)
         + """
+// Keep scale construction, coordinate subtraction and all weighted sums in
+// FP64. This sufficient domain bounds the FP32 pair's positive denominators
+// and positive factor products away from overflow/underflow. Extreme inputs retain
+// the established strict closure, rather than being clipped or screened out.
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool fp32_pair_domain(
+    double r2, double wi, double wj, double ki, double kj) noexcept {
+  constexpr double lower = 0x1p-8, upper = 0x1p8;
+  return (r2 == 0.0 || r2 >= 0x1p-16) && r2 <= 0x1p12 && wi >= lower && wi <= upper &&
+         wj >= lower && wj <= upper && ki >= lower && ki <= upper &&
+         kj >= lower && kj <= upper;
+}
+
+template <Vv10Variant Variant, bool Features, bool Geometry>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool try_pair_values_fp32(
+    double r2, double wi, double wj, double ki, double kj,
+    double row_inverse_kappa, PairValues& result) noexcept {
+  if (!fp32_pair_domain(r2, wi, wj, ki, kj)) return false;
+  if constexpr (Variant == Vv10Variant::rvv10 && Features)
+    if (!(row_inverse_kappa >= 0x1p-8 && row_inverse_kappa <= 0x1p8)) return false;
+  float mixed_phi{}, mixed_dphi_domega{}, mixed_dphi_dkappa{}, mixed_dphi_dr2{};
+"""
+        + "\n".join(mixed_branches)
+        + """
+  result = {mixed_phi, mixed_dphi_domega, mixed_dphi_dkappa, mixed_dphi_dr2};
+  return true;
+}
+
 template <Vv10Variant Variant, bool Features, bool Geometry, bool Preconditioned = false>
 GENERATIVEQC_NONLOCAL_PAIR_HD inline PairValues pair_values(
     double r2, double wi, double wj, double ki, double kj,
@@ -235,6 +322,24 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilate
                           result.dphi_dkappa, result.dphi_domega_j,
                           result.dphi_dkappa_j);
   return result;
+}
+
+template <bool Geometry>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool try_pair_values_vv10_bilateral_fp32(
+    double r2, double wi, double wj, double ki, double kj,
+    BilateralPairValues& result) noexcept {
+  if (!fp32_pair_domain(r2, wi, wj, ki, kj)) return false;
+  float phi{}, omega{}, kappa{}, omega_j{}, kappa_j{}, radial{};
+  if constexpr (Geometry)
+    pair_vv10_bilateral_g1_fp32(static_cast<float>(r2), static_cast<float>(wi),
+        static_cast<float>(wj), static_cast<float>(ki), static_cast<float>(kj),
+        phi, omega, kappa, omega_j, kappa_j, radial);
+  else
+    pair_vv10_bilateral_g0_fp32(static_cast<float>(r2), static_cast<float>(wi),
+        static_cast<float>(wj), static_cast<float>(ki), static_cast<float>(kj),
+        phi, omega, kappa, omega_j, kappa_j);
+  result = {{phi, omega, kappa, radial}, omega_j, kappa_j};
+  return true;
 }
 
 // The general bounded closure keeps the original energy root. Only the

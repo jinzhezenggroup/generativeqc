@@ -99,6 +99,9 @@ int cudaMemcpy(void* destination, const void* source, std::size_t bytes, int) {
   assert(!timing && pending.empty() && range_pending.empty());
   ++reads; std::memcpy(destination, source, bytes); return 0;
 }
+int cudaMemsetAsync(void*, int, std::size_t, int) {
+  throw std::logic_error("strict profiling must not initialize mixed counters");
+}
 void check(int status, const std::string& detail = {}) {
   if (status) throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, detail);
 }
@@ -202,17 +205,16 @@ int execute_cuda_density_fitting_rhf_jk_device(Fitted* p, const double* density,
 }
 int enqueue_prepared_cuda_exchange_correction(Provider& provider, const Strategy& strategy,
     const double* density, const double* beta, std::size_t matrix, double* k,
-    double* kb, int* error, std::string&) {
-  assert(!provider.is_range && (mode < 21 || mode >= 36) &&
-         strategy.spec.exchange.coefficient == -0.375);
-  return enqueue('R', density, beta, matrix, nullptr, k, kb, error);
-}
-int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const double* beta,
-    std::size_t matrix, double* j, double* k, double* kb, int* error,
-    bool synchronous, std::string&) {
-  assert(provider.is_range && mode >= 21 && !j && !synchronous && bridge.back() == 'i');
+    double* kb, int* error, std::string&, bool mixed = false,
+    std::uint64_t* arithmetic_work = nullptr) {
+  assert(!mixed && !arithmetic_work && strategy.spec.exchange.coefficient == -0.375);
+  if (!provider.is_range) {
+    assert(mode < 21 || mode >= 36);
+    return enqueue('R', density, beta, matrix, nullptr, k, kb, error);
+  }
+  assert(mode >= 21 && bridge.back() == 'i');
   bridge.push_back('R');
-  const auto status = enqueue('R', density, beta, matrix, j, k, kb, error);
+  const auto status = enqueue('R', density, beta, matrix, nullptr, k, kb, error);
   if (mode == 24) throw std::runtime_error("range provider failed after mutation");
   return mode == 25 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
 }
@@ -284,6 +286,10 @@ struct Impl {
   int* jk_error{&primary_error};
   int* range_jk_error{&range_error};
   bool has_range_correction{true};
+  bool pending_mixed_range_resident{};
+  std::uint64_t* mixed_coulomb_work_counter() {
+    throw std::logic_error("strict profiling must not borrow mixed counters");
+  }
   scf::Strategy correction;
   scf::Strategy* range_correction{&correction};
   scf::Provider provider;
