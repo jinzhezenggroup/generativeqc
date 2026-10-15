@@ -51,6 +51,69 @@ bind raw object/store/library identities and Decimal rows. Measured results are
 recorded separately after source-matched execution; this decision alone does not
 assert that validation or delivery has passed.
 
+### Source-matched Linux qualification
+
+At `d5635169c33963e22e4e9bc2cc147d91e2b3bdf8`, the CPU-only Notebook
+`i1123-gxx-1015` ran Python 3.11.16, canonical
+`/usr/bin/x86_64-linux-gnu-g++-11` (Ubuntu 11.4.0) and verified sccache 0.16.0.
+The selected private environment image advertises additional GCC 12 tools, but
+its canonical `/usr/bin/g++` resolves to GCC 11; this evidence is GCC 11.4, not
+GCC 12.3. No system compiler selection was changed.
+
+All 11,049 archived regular files were checked against committed Git blob bytes
+before transfer and against their sizes/SHA-256 on Linux. The archive used
+`git -c core.autocrlf=false archive`. The two repaired files came from a second
+raw Git archive with the updated full input manifest. The executed production
+and test blob identities are respectively
+`e7747b007a44e8b4e8f143eb64354a44063419db` and
+`d3d3a1bc1035ba085d66ce4eeeb0a3f1ef2c711b` (verify against the source commit).
+
+The source-matched GCC C/C++ closure, cache/store, publication, boundary and alias
+suite passed **137 tests, zero skips**. The C++ standard-header fixture independently
+matched the object compiler's `-MD` dependency file, bracketed compilation with
+equal reusable keys, published/retrieved the object, deleted the original, and
+linked the stored object for execution against four independent Decimal rows.
+This separate execution link is not a link-closure cache claim.
+
+- Stored object SHA-256:
+  `4edf91198a6b16973455181b4e80ee7b751b79f912d013b1f21e5f17782f7551`.
+- Executed shared library SHA-256:
+  `9fc31cbb8fa7d53246ff555e1e99f9e79b115da1e213615aebcb2ff0ff4c279b`.
+- Ordinary unchanged replay increased shared-cache hits from 0 to 1; refreshing
+  the opaque manifest salt increased misses from 1 to 2. These counters belong
+  to the recorded foreground commands, not unrelated private JIT cache slots.
+- Changed assembler-only `.incbin` payloads produced different raw object hashes
+  `67d52f342a1ea6062d0a81954fc8c47b18f0f0030413ecfb976cf3a6507a6286` and
+  `cb5a305f6f675e91b6d407180a5dd2b262632231076699c03c90755e75158826`.
+  These prove fresh objects; cacheable replay/seed hashing is demonstrated by
+  the separate ordinary-source control, not inferred from `.incbin` alone.
+- A one-off comparison against upstream baseline
+  `e88dee9d2f242f76bb8f712aaff2cd0cab103e41` observed identical GCC C recipes,
+  complete closure payloads and keys under three ordered flag combinations.
+  It is retained evidence, not a permanent source fingerprint test.
+
+The initial source `7e6bea0ed6f672198ca486a42ee6a6cef2353650` produced
+**133 passed / 4 failed**. Actual G++ diagnostics spell the PATH-selected
+assembler as `as`; requiring an absolute diagnostic token rejected that valid
+native job. The repair resolves only this known token under `CPU_ENVIRONMENT`
+and requires agreement with the independently queried canonical assembler.
+Unexpected relative commands still fail closed. Initial failure logs remain.
+One CLI invocation returned client exit 1 despite remote explicit exit 0;
+downloaded test/runner logs, raw stored/library hashes, receipt rows and cache
+counter receipts independently confirm the remote result. A later remote
+compatibility/receipt-archive command returned client and remote exit 0.
+
+Raw evidence remains under the task-owned project directory
+`/inspire/qb-ilm/project/chemicalreaction/czxs25220150/issue1123-gxx-20261015`.
+The locally retrieved ignored `.cache/gxx-evidence.tar.gz` SHA-256 is
+`d28e7e39c774863f26085a1a3ac33bf2213061f4d539393e82256ddf74fcbcb5`;
+its object/library bytes were rehashed after download against the execution
+receipt. The sole zero-GPU 1 CPU/4 GiB Notebook had a live 0 points/hour quote,
+requested priority 10 and received 6/HIGH. The 40-minute platform timer was
+read back while running; it was explicitly stopped and verified STOPPED after
+receipt recovery, within the authorized 45-minute cumulative window. No GPU,
+installed bundle, production runtime or scientific endpoint qualification.
+
 ## Consequences and revisit conditions
 
 This is a narrow opt-in object tool, not an automatic generated-source consumer.
