@@ -1,0 +1,44 @@
+[
+  {
+    "arm": "baseline",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/baseline-n4/profile/r2scan-3c/96/first/cold-warm.nsys-rep",
+    "retained_remote_path": "n4:/data/jzzeng/gqc-direct-md-20261016/results/baseline-current/profile/r2scan-3c/96/first/cold-warm.nsys-rep",
+    "bytes": 51569593,
+    "sha256": "39a341d8cb421abb59589f19877a535877d100a7c14415f5125d2633e5fb7680"
+  },
+  {
+    "arm": "baseline",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/baseline-n4/profile/r2scan-3c/96/first/cold-warm.sqlite",
+    "retained_remote_path": "n4:/data/jzzeng/gqc-direct-md-20261016/results/baseline-current/profile/r2scan-3c/96/first/cold-warm.sqlite",
+    "bytes": 114950144,
+    "sha256": "4a39b02285fbef064ce529e37dafe4aa2f2137c2146c3d31034eae3bd2f1108d"
+  },
+  {
+    "arm": "candidate",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/final-n4/profile-96/cold-warm.nsys-rep",
+    "retained_remote_path": "n4:/data/jzzeng/gqc-direct-md-20261016/results/candidate-current/profile/r2scan-3c/96/clean-isolated/cold-warm.nsys-rep",
+    "bytes": 50762280,
+    "sha256": "5733688cff5f905a77310d01a4aaa42c86dd6c21f3cfaf3d349d1c7a2c79ac04"
+  },
+  {
+    "arm": "candidate",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/final-n4/profile-96/cold-warm.sqlite",
+    "retained_remote_path": "n4:/data/jzzeng/gqc-direct-md-20261016/results/candidate-current/profile/r2scan-3c/96/clean-isolated/cold-warm.sqlite",
+    "bytes": 115142656,
+    "sha256": "e98c906423be1fb0b431fa5eaa720c7e9d65123f26ec770b31a0526264c08167"
+  },
+  {
+    "arm": "candidate-isolation-48",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/final-n5/profile-48-isolated/cold-warm.nsys-rep",
+    "retained_remote_path": "n5:/data/jzzeng/gqc-direct-md-20261016/results/candidate-current/profile/r2scan-3c/48/isolated-diagnostic/cold-warm.nsys-rep",
+    "bytes": 14937283,
+    "sha256": "a894855e77e405ed5dddd385af54dca899d597081e7e88a022f2f571b090f64e"
+  },
+  {
+    "arm": "candidate-isolation-48",
+    "local_ignored_path": "/data/jzzeng/qc-direct-force-reuse-20261016/.artifacts/direct-md-next/final-n5/profile-48-isolated/cold-warm.sqlite",
+    "retained_remote_path": "n5:/data/jzzeng/gqc-direct-md-20261016/results/candidate-current/profile/r2scan-3c/48/isolated-diagnostic/cold-warm.sqlite",
+    "bytes": 33878016,
+    "sha256": "db06884c401e9c595776f4ce831ce9b2b0873f942c4f290ffb7a1674afb60b1f"
+  }
+]

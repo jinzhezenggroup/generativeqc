@@ -1,0 +1,118 @@
+{
+  "baseline": {
+    "cold": {
+      "calls": 13780,
+      "api_host_seconds": 198.214588975,
+      "by_api": [
+        [
+          "cudaEventSynchronize_v3020",
+          8883,
+          198.2057639
+        ],
+        [
+          "cudaStreamSynchronize_v3020",
+          4897,
+          0.008825075
+        ]
+      ]
+    },
+    "warm": {
+      "calls": 4808,
+      "api_host_seconds": 8.511172227,
+      "by_api": [
+        [
+          "cudaEventSynchronize_v3020",
+          11,
+          8.505125043
+        ],
+        [
+          "cudaStreamSynchronize_v3020",
+          4797,
+          0.006047184
+        ]
+      ]
+    },
+    "linked_md_resources": {
+      "columns": [
+        "name",
+        "registers_per_thread",
+        "nsys_local_metadata_bytes_per_thread",
+        "static_shared_bytes",
+        "dynamic_shared_bytes",
+        "launches"
+      ],
+      "rows": []
+    }
+  },
+  "candidate": {
+    "cold": {
+      "calls": 13780,
+      "api_host_seconds": 6.613864464,
+      "by_api": [
+        [
+          "cudaEventSynchronize_v3020",
+          8859,
+          6.604942885
+        ],
+        [
+          "cudaStreamSynchronize_v3020",
+          4921,
+          0.008921579
+        ]
+      ]
+    },
+    "warm": {
+      "calls": 4808,
+      "api_host_seconds": 0.280690587,
+      "by_api": [
+        [
+          "cudaEventSynchronize_v3020",
+          10,
+          0.274568217
+        ],
+        [
+          "cudaStreamSynchronize_v3020",
+          4798,
+          0.00612237
+        ]
+      ]
+    },
+    "linked_md_resources": {
+      "columns": [
+        "name",
+        "registers_per_thread",
+        "nsys_local_metadata_bytes_per_thread",
+        "static_shared_bytes",
+        "dynamic_shared_bytes",
+        "launches"
+      ],
+      "rows": [
+        [
+          "generativeqc::scf::cuda_execution::<unnamed>::md_j_density(generativeqc::scf::cuda_execution::DeviceBatch, generativeqc::scf::cuda_execution::MdJView, unsigned long, unsigned long, bool, const double *, const double *)",
+          48,
+          0,
+          0,
+          0,
+          25
+        ],
+        [
+          "generativeqc::scf::cuda_execution::<unnamed>::md_j_project(generativeqc::scf::cuda_execution::DeviceBatch, generativeqc::scf::cuda_execution::MdJView, unsigned long, unsigned long, double *)",
+          40,
+          0,
+          0,
+          0,
+          25
+        ],
+        [
+          "generativeqc::scf::cuda_execution::<unnamed>::md_j_transforms(generativeqc::scf::cuda_execution::DeviceBatch, generativeqc::scf::cuda_execution::MdJView)",
+          64,
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    }
+  },
+  "semantics": "Synchronization API host time is a nonexclusive diagnostic nested inside the endpoint phase wall ledger. Never add these observations to the mutually exclusive wall/device accounting. Nsight launch local-memory zero does not prove absence of PTX local arrays."
+}

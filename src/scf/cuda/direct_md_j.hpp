@@ -24,6 +24,7 @@ struct MdJPair {
   std::int32_t system, first, second;
   std::int32_t first_ao, second_ao, first_count, second_count;
   std::uint32_t angular, hermites, primitive_begin, primitive_end;
+  std::uint32_t transform_map;
 };
 
 /** Geometry is filled on the owning stream, never by a host integral oracle. */
@@ -56,6 +57,7 @@ struct MdJView {
   MdJPrimitive* primitives{};
   const std::int64_t *shell_offsets{}, *pair_offsets{}, *primitive_offsets{};
   std::uint32_t* ordered_primitives{};
+  const std::uint16_t* transform_slots{};
   double *minimum_bounds{}, *maximum_bounds{}, *density_bounds{}, *maximum_bound{}, *transforms{},
       *density{}, *potential{};
   std::uint32_t *active_pairs{}, *active_count{};
@@ -70,6 +72,14 @@ struct MdJView {
   std::uint32_t active_pair_offsets[6]{};
   std::size_t pair_count{}, primitive_count{}, class_offsets[6]{};
 };
+
+/** Structural zeros share only the primitive's explicitly weighted zero slot. */
+__host__ __device__ inline double md_j_transform(MdJView md, const MdJPrimitive& primitive,
+                                                 const MdJPair& pair, unsigned component,
+                                                 unsigned derivative) {
+  const auto slot = md.transform_slots[pair.transform_map + component * pair.hermites + derivative];
+  return md.transforms[primitive.transform_offset + slot];
+}
 
 /** Simplex size of all Hermite derivatives through the pair's angular order. */
 __host__ __device__ constexpr unsigned md_j_hermite_count(unsigned angular) {

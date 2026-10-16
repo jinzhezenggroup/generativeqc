@@ -1,0 +1,122 @@
+[
+  {
+    "atoms": 48,
+    "ao_pair": [
+      59,
+      168
+    ],
+    "shell_pair": [
+      27,
+      79
+    ],
+    "reference_screened": -3.4906470281260216e-06,
+    "reference_unscreened": -3.4906470409831012e-06,
+    "normal": -3.4907159844675692e-06,
+    "candidate_md": -3.490647028126037e-06,
+    "old_md": -3.490647028126037e-06,
+    "normal_error": -6.895634154766399e-11,
+    "candidate_error": -1.5246593050577406e-20,
+    "old_error": -1.5246593050577406e-20,
+    "oracle_seconds": 0.02833640098106116
+  },
+  {
+    "atoms": 48,
+    "ao_pair": [
+      472,
+      401
+    ],
+    "shell_pair": [
+      222,
+      188
+    ],
+    "reference_screened": 3.4906470281260216e-06,
+    "reference_unscreened": 3.4906470409831012e-06,
+    "normal": 3.490715984467567e-06,
+    "candidate_md": 3.4906470281260347e-06,
+    "old_md": 3.4906470281260355e-06,
+    "normal_error": 6.895634154554641e-11,
+    "candidate_error": 1.3129010682441655e-20,
+    "old_error": 1.3976043629695956e-20,
+    "oracle_seconds": 0.049026387045159936
+  },
+  {
+    "atoms": 48,
+    "ao_pair": [
+      302,
+      366
+    ],
+    "shell_pair": [
+      142,
+      172
+    ],
+    "reference_screened": 3.389469179136197e-06,
+    "reference_unscreened": 3.389469185651364e-06,
+    "normal": 3.3895361793424283e-06,
+    "candidate_md": 3.3894691791361906e-06,
+    "old_md": 3.3894691791361966e-06,
+    "normal_error": 6.700020623129046e-11,
+    "candidate_error": -6.3527471044072525e-21,
+    "old_error": -4.235164736271502e-22,
+    "oracle_seconds": 0.04819056892301887
+  },
+  {
+    "atoms": 96,
+    "ao_pair": [
+      535,
+      854
+    ],
+    "shell_pair": [
+      251,
+      404
+    ],
+    "reference_screened": 2.465170685345942e-08,
+    "reference_unscreened": 2.4651414370361844e-08,
+    "normal": 2.474630587373216e-08,
+    "candidate_md": 2.4651706853459357e-08,
+    "old_md": null,
+    "normal_error": 9.459902027274072e-11,
+    "candidate_error": -6.28657265540301e-23,
+    "old_error": null,
+    "oracle_seconds": 0.06301662302576005
+  },
+  {
+    "atoms": 96,
+    "ao_pair": [
+      637,
+      174
+    ],
+    "shell_pair": [
+      299,
+      84
+    ],
+    "reference_screened": 2.465170685345942e-08,
+    "reference_unscreened": 2.4651414370361847e-08,
+    "normal": 2.4746305873732167e-08,
+    "candidate_md": 2.4651706853459396e-08,
+    "old_md": null,
+    "normal_error": 9.459902027274734e-11,
+    "candidate_error": -2.3161057151484775e-23,
+    "old_error": null,
+    "oracle_seconds": 0.060486470931209624
+  },
+  {
+    "atoms": 96,
+    "ao_pair": [
+      752,
+      943
+    ],
+    "shell_pair": [
+      356,
+      443
+    ],
+    "reference_screened": 2.465170685345942e-08,
+    "reference_unscreened": 2.4651414370361844e-08,
+    "normal": 2.4746305873732167e-08,
+    "candidate_md": 2.4651706853459466e-08,
+    "old_md": null,
+    "normal_error": 9.459902027274734e-11,
+    "candidate_error": 4.632211430296955e-23,
+    "old_error": null,
+    "oracle_seconds": 0.06069181393831968
+  }
+]

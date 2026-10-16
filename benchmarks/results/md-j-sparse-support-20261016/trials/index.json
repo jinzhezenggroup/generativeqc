@@ -1,0 +1,60 @@
+[
+  {
+    "raw_record": "trials/candidate-current-r2scan-3c-48-first.json.xz",
+    "source_arm": "candidate-current",
+    "status": "deliberately_stopped_not_qualified",
+    "original_status": "running",
+    "completed_returns": 1,
+    "reason": "Canceled predecessor profile job 1060 survived scancel and completed at 2026-10-16T15:51:47+08:00, after focused job 1061 began at 15:44:47. This overlap invalidates its 542.922067-second cold control. Retain the result and use the separately guarded complete replacement.",
+    "scheduler": {
+      "SLURM_JOB_ID": "1061",
+      "SLURM_JOB_PARTITION": "main",
+      "SLURM_GPUS_ON_NODE": "1"
+    }
+  },
+  {
+    "raw_record": "trials/candidate-current-r2scan-3c-96-first.json.xz",
+    "source_arm": "candidate-current",
+    "status": "deliberately_stopped_not_qualified",
+    "original_status": "running",
+    "completed_returns": 0,
+    "reason": "Canceled because a verified predecessor job 1655 left a live GPU child after scancel. The two processes overlapped; this cannot qualify source-matched timing.",
+    "scheduler": {
+      "SLURM_JOB_ID": "1656",
+      "SLURM_JOB_PARTITION": "main",
+      "SLURM_GPUS_ON_NODE": "1"
+    }
+  },
+  {
+    "raw_record": "trials/candidate-public-r2scan-3c-96-first.json.xz",
+    "source_arm": "candidate-public",
+    "status": "deliberately_stopped_not_qualified",
+    "original_status": "running",
+    "completed_returns": 8,
+    "reason": "Unnecessary public-ledger-admission prototype stopped after scope correction; its timeout child survived scancel and later overlapped job 1656. Do not use the incomplete prototype as final focused-source evidence.",
+    "scheduler": {
+      "SLURM_JOB_ID": "1655",
+      "SLURM_JOB_PARTITION": "main",
+      "SLURM_GPUS_ON_NODE": "1"
+    }
+  },
+  {
+    "raw_record": "trials/candidate-public-r2scan-3c-96-profile.json.xz",
+    "source_arm": "candidate-public",
+    "status": "diagnostic_only_contaminated_after_cancel",
+    "original_status": "diagnostic_completed",
+    "reason": "Canceled predecessor profile job 1060 completed at 2026-10-16T15:51:47+08:00 after focused job 1061 began at 15:44:47. Both calls are intrusive diagnostics, not a complete population; neither is valid performance qualification."
+  },
+  {
+    "status": "setup_failed_before_calculation",
+    "trial": "baseline HF first",
+    "reason": "Original strict reference loader rejects the explicitly historical HF reference status before any endpoint executes. Both independent geometry oracles were verified, then all 12 HF calls were independently gated under the existing allow-missing-reference interface. No fresh reference HF timing is claimed.",
+    "log": "validation/logs.json.xz:baseline-controls-endpoints.log"
+  },
+  {
+    "status": "setup_failed_before_calculation",
+    "trial": "baseline r2scan-3c 48 first",
+    "reason": "Remote Python compatibility launcher had not yet been copied to n4. No GPU calculation occurred. The corrected finite allocation retained the unchanged scientific protocol.",
+    "log": "validation/logs.json.xz:baseline-current-48-endpoint.log"
+  }
+]
