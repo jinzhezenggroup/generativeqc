@@ -118,3 +118,50 @@ gates, independent endpoint oracles and all negative observations if modifying
 this strategy. Separately qualify extensions to other solver modes or producer
 classes. A source change, a different hardware cohort, or a warm-only gain is
 not permission to waive a slower complete endpoint.
+
+## Integrated-head requalification
+
+After synchronizing the shared solver with `master` through `4a36f6f3e`, rerun
+qualification on clean committed head `65cb37d58bcd384f46bf94f9056eb24cd9d294de`.
+Its native source identity is
+`e84f242a2260dc9cf6e75782b265f32a9fa6b830404f6b8843156edeb93423f9`;
+core SHA256 is
+`c521f58d53e99d2c164c399b39c1ee90e927a906c867579328acf4987ef79f14`.
+All 1753 native inputs are retained against the pinned historical inventory and
+checked against this committed head; all 610 upstream inputs are identified.
+The preceding `c300...` campaign is not acceptance of this integrated image.
+
+The [integrated evidence packet](../../../benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
+retains all eight passing complete phase comparisons: 48 comparison calls plus
+24 candidate-only 3/12-atom calls. Actual energies and full force arrays for all
+72 calls permit independent error recomputation, including the small systems.
+Maximum energy/force errors are 3.819878e-11 Eh and 6.043033e-11 Eh/Bohr, below
+the unchanged 1e-8/1e-7 gates. Both arms have identical semantic work throughout;
+the 96-atom moved pair is 261.452944 to 257.768177 seconds with 13 iterations
+and builds, not the earlier image's 14. Warm benefits are +2.123% at 48 atoms and
++4.213% at 96 atoms. Different-image absolute timings are not patch-only gains.
+
+Finite RTX 5090 Slurm jobs 1018/node4 and 1639/node5 execute the comparisons and
+separate cold/first-warm resident proofs at both sizes; intrusive calls are not
+pooled into the timing population. The native proof and retained lease fixture
+also pass; the latter adapts only the removed transport getter to
+`BatchKsTransportDiagnostics`, without weakening numerical or lifetime gates.
+Host qualification passes 290 cases with 36 explicit device skips. Job
+1020/node4 passes all 53 targeted cases without skips, including 45 device cases.
+The first job's 30-pass/23-skip result remains visible: resource CUDA and DFT CUDA
+tests require their separate `GENERATIVEQC_RESOURCE_CUDA_TEST` and
+`GENERATIVEQC_DFT_CUDA_TEST` opt-ins, both set to `1` for the successful rerun.
+
+Building force library targets alone leaves separately generated AOT manifests
+stale. The real loader rejects both old contracts; rebuilding the normal
+`generativeqc_stationary_r2scan_rks_manifest` and
+`generativeqc_stationary_r2scan_rks_spd_manifest` targets regenerates valid
+metadata, without editing identity fields. Both rejection and recovery receipts,
+all build logs and shared cumulative ccache statistics are retained.
+
+The fixed evidence cap is not relaxed. Losslessly compressing #409's archived
+source patch saves 191789 bytes while preserving its original decoded SHA256,
+all source bytes, scientific data and incomplete status. Both manifests and
+recovery instructions are updated; a one-off comparison against the original
+Git bytes passes. The original failed Direct/96 cohort, prior repaired-image
+cohort, historical figures and earlier negative attempts remain unchanged.

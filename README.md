@@ -132,7 +132,8 @@ first E+F call; warm reuses converged density. The water clusters have
 
 The figures describe a frozen snapshot, not a timing claim for the current
 checkout. The earlier Direct/96 moved regression remains rejected (+15.985%).
-The [stationary-energy repair and fresh Direct/48/96 qualification](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
+The [stationary-energy repair](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
+and [integrated-head Direct/48/96 requalification](benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
 are retained separately, without relabeling either historical cohort.
 Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
 [repair decision](.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md).

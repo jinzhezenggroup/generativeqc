@@ -467,14 +467,6 @@
       "sha256": "c584f057cea4a1b5e4ac898ed3c9af5d03ee90131ad73551f5d1bb49948a99a8"
     },
     {
-      "bytes": 246001,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue409-packed-values",
-      "path": "benchmarks/results/issue409-packed-values/reproduction/source.patch",
-      "role": "source-provenance",
-      "sha256": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474"
-    },
-    {
       "bytes": 135548,
       "classification": "required-compact-accepted-evidence",
       "family": "issue409-packed-values",
