@@ -628,9 +628,10 @@ def test_omission_does_not_hide_completed_native_without_reference(
     }
     render(summary, tmp_path)
     assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
-    assert "GPU4PySCF cold/warm unavailable: 48 atoms" in (
-        tmp_path / "df-cold-warm.svg"
-    ).read_text()
+    assert (
+        "GPU4PySCF cold/warm unavailable: 48 atoms"
+        in (tmp_path / "df-cold-warm.svg").read_text()
+    )
     table = (tmp_path / "df-timings.md").read_text()
     assert annotation in table
     assert "10.000‡ | not run | 1.000‡ | not run" in table
