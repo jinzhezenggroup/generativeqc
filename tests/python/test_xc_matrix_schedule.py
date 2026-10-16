@@ -53,6 +53,29 @@ def test_compact_factor_matches_full_bilinear(
     np.testing.assert_allclose(actual, expected, rtol=3e-14, atol=5e-13)
 
 
+@pytest.mark.parametrize("family,jets", [("lda", 1), ("gga", 4), ("mgga", 4)])
+def test_one_sided_diagonal_panels_match_full_bilinear(family: str, jets: int) -> None:
+    """Signed arbitrary point coefficients catch missing cross terms or tau/2."""
+    generator = np.random.default_rng(20261016)
+    ao = generator.normal(size=(jets, 33, 19))
+    coefficients = generator.normal(size=(5, 33))
+    weights = generator.normal(size=33)
+    bindings = {f"x{jet}": ao[jet] for jet in range(jets)}
+    bindings.update({f"c{term}": coefficients[term, :, None] for term in range(5)})
+    actual = np.zeros((19, 19))
+    for one_sided in (False, True):
+        graph, roots = compact_panel_program(family)
+        panels = evaluate_array_graph(graph, roots, bindings)
+        potential = np.zeros_like(actual)
+        for jet, panel in enumerate(panels):
+            cross = ao[jet].T @ (weights[:, None] * panel)
+            potential += 2 * cross if one_sided and jet else cross + cross.T
+        if one_sided:
+            np.testing.assert_allclose(potential, actual, rtol=3e-14, atol=5e-13)
+        else:
+            actual = potential
+
+
 def test_potential_uses_compact_triangular_tile_domain() -> None:
     """Potential launch work must contain only the authoritative tile triangle."""
     source = emit_native_xc_matrix_schedule()

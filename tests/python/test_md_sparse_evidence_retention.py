@@ -33,7 +33,13 @@ class EvidenceRetention(unittest.TestCase):
         self.assertEqual(set(entries), actual)
 
     def test_full_archive_and_provenance_aliases_are_explicit(self) -> None:
-        recovery = json.loads((BUNDLE / "recovery.json").read_text())
+        decoded = lzma.decompress((BUNDLE / "recovery.json.xz").read_bytes())
+        self.assertEqual(len(decoded), 12109)
+        self.assertEqual(
+            hashlib.sha256(decoded).hexdigest(),
+            "12339580f9f20d5b3a8eab5b06e48223fbfd75ac4e3dbef4ac75d9eee510f602",
+        )
+        recovery = json.loads(decoded)
         self.assertEqual(recovery["commit"], "ef02ef322e809a905cca09e7d2b3323b9d1972ae")
         self.assertIn(recovery["commit"], recovery["raw_url_template"])
         entries = {entry["path"]: entry for entry in recovery["files"]}
@@ -62,6 +68,15 @@ class EvidenceRetention(unittest.TestCase):
             self.assertTrue(
                 path in entries or path in recovery["provenance_aliases"], path
             )
+
+    def test_archived_source_provenance_is_lossless(self) -> None:
+        decoded = lzma.decompress((BUNDLE / "source-and-build.json.xz").read_bytes())
+        self.assertEqual(len(decoded), 3782)
+        self.assertEqual(
+            hashlib.sha256(decoded).hexdigest(),
+            "b3dbe93b9e614c1f174cb9d1c4ee38731d690d5096e9a2b0f8bb8f5d94f3d86e",
+        )
+        self.assertIsInstance(json.loads(decoded), dict)
 
     def test_pooled_endpoint_gates_recompute_offline(self) -> None:
         namespace = runpy.run_path(str(BUNDLE / "summarize.py"))
