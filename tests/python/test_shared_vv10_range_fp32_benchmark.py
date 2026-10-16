@@ -362,6 +362,9 @@ def test_shared_sample_attests_executed_owner_outside_timer(
         iterations=1,
         ks_diagnostic=None,
         precision_validation=None,
+        resource_diagnostics={
+            "generated_force": [{"index": 0, "work": {"grid_points": 1}}]
+        },
     )
     actual = SimpleNamespace(
         singlepoint=lambda *a, **k: observed, clear_cache=lambda: None
@@ -397,6 +400,7 @@ def test_shared_sample_attests_executed_owner_outside_timer(
     assert row["native_build_before"] == row["native_build"]
     assert row["excluded_provenance_seconds"] == 0.5
     assert row["observed_span_seconds"] == 4.5
+    assert row["force_work"] == observed.resource_diagnostics["generated_force"]
     with pytest.raises(StopIteration):
         next(times)
 
