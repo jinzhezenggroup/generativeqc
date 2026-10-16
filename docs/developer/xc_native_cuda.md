@@ -235,6 +235,26 @@ measures coordinate rebuilding inside execute without charging the initial
 constructor again. These segments do not provide continuous cold wallclock
 qualification; the consumer independently checks their types and totals.
 
+`benchmarks/pbe0_xc_cold_pairs.py` separately measures fresh-process cold E+F.
+Each observation starts a new interpreter, CUDA context, Calculator, owner and
+density. Primary wallclock runs from process launch through successful process
+completion, including provenance collection and cleanup. Synchronized E/F
+delivery is retained as a separate interval and cannot replace full cold time.
+The explicit `--sdk-source`, loaded library, complete native identity, worker,
+consumer, basis and independent reference are frozen for the campaign. The
+collector may be newer than the SDK; its independent consumer is loaded from
+the collector tree, while production modules come from the frozen SDK.
+
+The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
+`1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
+full FP64 single-stage PBE0 histories, observed J/K work and equal semantic work
+between arms. Unknown J/K work is incomplete evidence. Five complete pairs per
+geometry are required; `--feasibility --repeats 1` only audits readiness and
+cannot establish cold profitability. Both geometries start fresh owners; a
+fresh solve at moved coordinates is distinct from the retained-owner moved
+campaign. Failed children retain negative receipts and are reaped. Profiling
+runs separately from clean timing; this tool does not collect dynamic traffic.
+
 `verify_point_family_pairs` audits independent E/F vectors and fixed work even
 when the measured specialization has no significant endpoint improvement. Its
 successful evidence audit does not qualify a performance default. Promotion
