@@ -587,6 +587,25 @@ def _native_cuda_fleet_inventory(
             raise ValueError(
                 "native CUDA KS fleet returned inconsistent retained totals"
             )
+    expected_setup_extra = max(
+        (
+            max(
+                0,
+                inventory["setup"]
+                - sum(inventory[key] for key in ("state", "xc", "coulomb")),
+            )
+            for inventory in device
+        ),
+        default=0,
+    )
+    if aggregate[4] != expected_setup_extra:
+        raise ValueError("native CUDA KS fleet returned inconsistent setup excess")
+    for index, mode in ((5, "minimum"), (6, "cached")):
+        expected = (
+            sum(consumer[mode] for consumer in stationary) if native_stationary else 0
+        )
+        if aggregate[index] != expected:
+            raise ValueError("native CUDA KS fleet changed stationary consumer totals")
     return device, dict(
         zip(
             (

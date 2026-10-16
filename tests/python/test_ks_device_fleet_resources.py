@@ -128,7 +128,20 @@ def test_missing_symbol_does_not_query_leaves(monkeypatch: pytest.MonkeyPatch) -
     )
 
 
-@pytest.mark.parametrize("corruption", ("refusal", "overflow", "leaf", "peak", "setup"))
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "refusal",
+        "overflow",
+        "leaf",
+        "peak",
+        "setup",
+        "setup_aggregate",
+        "minimum",
+        "cached",
+        "swapped_candidates",
+    ),
+)
 def test_native_refusal_or_corruption_never_retries_portable_composition(
     library: Any, monkeypatch: pytest.MonkeyPatch, corruption: str
 ) -> None:
@@ -146,8 +159,19 @@ def test_native_refusal_or_corruption_never_retries_portable_composition(
         assert query(shape, count, output, size) == 0
         if corruption == "refusal":
             return -1
-        slot = {"overflow": 0, "leaf": 9, "peak": 7, "setup": 12}[corruption]
-        output[slot] = 2**64 - 1 if corruption == "overflow" else 0
+        if corruption == "swapped_candidates":
+            output[5], output[6] = output[6], output[5]
+        elif corruption in ("setup_aggregate", "minimum", "cached"):
+            slot = {"setup_aggregate": 4, "minimum": 5, "cached": 6}[corruption]
+            output[slot] = 0
+        else:
+            slot = {"overflow": 0, "leaf": 9, "peak": 7, "setup": 12}[corruption]
+            output[slot] = 2**64 - 1 if corruption == "overflow" else 0
+        if corruption in ("setup_aggregate", "minimum", "cached", "swapped_candidates"):
+            # Keep both internal peak equations coherent while contradicting
+            # returned setup diagnostics or the supplied stationary leaves.
+            output[7] = sum(output[:5]) + output[5]
+            output[8] = sum(output[:5]) + output[6]
         return 0
 
     monkeypatch.setattr(
@@ -162,8 +186,36 @@ def test_native_refusal_or_corruption_never_retries_portable_composition(
         resources_ks._native_cuda_fleet_inventory(
             SimpleNamespace(generativeqc_resource_ks_cuda_fleet_v1=corrupted),
             [topology(2)],
-            [None],
+            [{"minimum": 700, "cached": 900}],
             device_fused_xc=True,
+        )
+
+
+@pytest.mark.parametrize("mode", ("minimum", "cached"))
+def test_stationary_candidates_admit_exact_signed_int64_peak(
+    library: Any, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """Validate the wire relations without imposing ordering or losing one byte."""
+    monkeypatch.setattr(
+        resources_ks, "_cuda_leaf_inventory", lambda _, item, **__: leaves(item)
+    )
+    _, empty = resources_ks._native_cuda_fleet_inventory(
+        library,
+        [topology(2)],
+        [{"minimum": 0, "cached": 0}],
+        device_fused_xc=True,
+    )
+    maximum = 2**63 - 1
+    stationary = {"minimum": 0, "cached": 0}
+    stationary[mode] = maximum - empty[f"{mode}_peak"]
+    _, exact = resources_ks._native_cuda_fleet_inventory(
+        library, [topology(2)], [stationary], device_fused_xc=True
+    )
+    assert exact[f"{mode}_peak"] == maximum
+    stationary[mode] += 1
+    with pytest.raises(ValueError):
+        resources_ks._native_cuda_fleet_inventory(
+            library, [topology(2)], [stationary], device_fused_xc=True
         )
 
 
