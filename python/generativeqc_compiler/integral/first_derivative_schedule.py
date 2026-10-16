@@ -8,7 +8,7 @@ The existing first-derivative graphs remain the sole mathematical lowering.
 import typing
 from dataclasses import asdict, dataclass
 from functools import lru_cache
-from itertools import permutations, product
+from itertools import combinations_with_replacement, permutations, product
 from pathlib import Path
 from time import perf_counter
 
@@ -86,19 +86,35 @@ def derivative_binding(operator: str, components: tuple[str, ...]) -> Derivative
 def derivative_requests(
     domain: tuple[str, ...],
 ) -> tuple[DerivativeRequest, ...]:
-    """Finite metadata-only plan; full s/p/d needs 313 ERI representatives."""
+    """Plan identical roots from center-symmetry representatives, not ordered AOs.
+
+    Pair exchange and exchange of the two ERI pairs leave the scalar request
+    orbit unchanged. Enumerating unordered pairs first avoids canonicalizing
+    every ordered quartet during cold preparation. Axis permutations still
+    belong to ``derivative_binding``, including for domains not closed under
+    axis exchange; its ordered center/axis mappings are never approximated.
+    """
     if not domain or len(domain) > 10 or tuple(sorted(set(domain))) != domain:
         raise ValueError(
             "component domain must contain one to ten sorted unique labels"
         )
     requests = {("nuclear", ())}
+    pairs = tuple(combinations_with_replacement(domain, 2))
     for operator, rank in (
         ("overlap", 2),
         ("kinetic", 2),
         ("nuclear_attraction", 2),
         ("four_center_eri", 4),
     ):
-        for components in product(domain, repeat=rank):
+        components_by_orbit = (
+            (
+                first + second
+                for first, second in combinations_with_replacement(pairs, 2)
+            )
+            if rank == 4
+            else iter(pairs)
+        )
+        for components in components_by_orbit:
             requests.add(derivative_binding(operator, components).request)
     return tuple(sorted(requests))
 

@@ -1,7 +1,7 @@
 """Finite compiler schedules and independently checked permutation semantics."""
 
 import typing
-from itertools import product
+from itertools import permutations, product
 
 import numpy as np
 import pytest
@@ -41,6 +41,35 @@ def test_complete_spd_schedule_is_finite_and_deterministic() -> None:
     assert sum(op == "four_center_eri" for op, _ in requests) == 313
     assert requests == tuple(sorted(set(requests)))
     assert schedule.derivative_requests(DOMAIN) is requests
+
+
+@pytest.mark.parametrize("domain", [DOMAIN, ("x",), ("", "xy", "zz"), ("xx", "yz")])
+def test_request_inventory_matches_independent_ordered_orbits(
+    domain: tuple[str, ...],
+) -> None:
+    """An independent exhaustive orbit retains roots even for asymmetric domains."""
+    expected = {("nuclear", ())}
+    for operator in ("overlap", "kinetic", "nuclear_attraction", "four_center_eri"):
+        rank = 4 if operator == "four_center_eri" else 2
+        for components in product(domain, repeat=rank):
+            orbit = []
+            for axes in permutations("xyz"):
+                mapping = dict(zip("xyz", axes, strict=True))
+                labels = tuple(
+                    "".join(sorted(mapping[axis] for axis in label))
+                    for label in components
+                )
+                if rank == 4:
+                    first = tuple(sorted(labels[:2]))
+                    second = tuple(sorted(labels[2:]))
+                    orbit.append(tuple(sorted((first, second))))
+                else:
+                    orbit.append(tuple(sorted(labels)))
+            canonical = min(orbit)
+            if rank == 4:
+                canonical = canonical[0] + canonical[1]
+            expected.add((operator, canonical))
+    assert schedule.derivative_requests(domain) == tuple(sorted(expected))
 
 
 @pytest.mark.parametrize(
