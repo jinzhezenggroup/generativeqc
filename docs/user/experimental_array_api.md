@@ -178,9 +178,16 @@ control tensors; unary plus does not turn them into numeric data.
 `sum` and `mean` accept static axes, and generic arrays may use
 `keepdims=True` to retain reduced singleton axes. Shape utilities also include
 `broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
-`moveaxis`, `flip` and `roll`. `expand_dims` accepts the 2025.12 multi-axis tuple
+`moveaxis`, `flip`, `roll` and `repeat`. `expand_dims` accepts the 2025.12 multi-axis tuple
 form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
-reshape, transpose, broadcast and gather semantics. Six elementwise comparisons
+reshape, transpose, broadcast and gather semantics.
+
+Captured `repeat` accepts a static nonnegative Python integer count and a signed
+axis, or `axis=None` to flatten in row-major order. Scalar inputs use `axis=None`.
+It composes reshape/broadcast without an elementwise static gather map; per-element
+count arrays are not admitted. Existing backend byte/work/node budgets still apply.
+
+Six elementwise comparisons
 (`equal`, `not_equal`, `greater`, `greater_equal`, `less`, `less_equal`, plus
 their Python operators) accept finite real operands and return genuine Boolean
 arrays. Generic comparison operands broadcast and promote within float32/float64;
