@@ -60,3 +60,22 @@ reference-kernel defect. It supplies no accepted speed ratio: obtain fresh
 complete-endpoint timings with the corrected contract. Preserve old failed
 raw measurements and null ratios unchanged. The coarse grid remains a bounded
 implementation/latency diagnostic, not evidence of chemical grid convergence.
+
+## Fresh complete-endpoint acceptance
+
+Slurm 3240 independently qualified all 36 H2 and 81 water entries from
+reconverged values-only energies. Maximum errors are `1.2051208642116507e-10`
+and `5.1325805994206775e-8 Eh/Bohr²`, with the original `.004/.002` stencil and
+`8e-7` absolute / `1e-7` relative gates. It used the explicitly recorded test
+patch on the unchanged production library, not a newly claimed clean-source run.
+
+Slurm 3241 then ran the clean-source17 complete comparator with the aligned
+quadrature and unchanged `1e-11` CPHF tolerance. All twelve endpoints completed;
+every cross-engine raw matrix pair passes `3e-6`. H2 native/reference primed
+medians are `1.7430343707092106` / `5.473797673359513` seconds; water is
+`15.490663528442383` / `10.831725798081607`. Thus H2 is about 3.14 times faster
+but water about 43% slower. Preserve both outcomes: this is not a universal
+speedup or statistically qualified default promotion. Source-matched raw samples,
+complete matrices, work counts, independent energy stencils and the historical
+A/B control are published in
+`benchmarks/results/wb97mv-hessian-matched-cphf-20261016/`.
