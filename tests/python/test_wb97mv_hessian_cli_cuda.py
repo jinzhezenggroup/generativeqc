@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import numpy as np
 import pytest
@@ -112,7 +112,64 @@ def invoke_cli(
     return payload
 
 
-def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(tmp_path: Path) -> None:
+def qualify_native_frontend(
+    monkeypatch: pytest.MonkeyPatch,
+    atoms: list,
+    direction: np.ndarray,
+    expected: object,
+    *,
+    matrix: object = None,
+    multiplicity: int = 1,
+    **options: object,
+) -> None:
+    """Opt-in frontend qualification must not launch any compiler/interpreter."""
+    if os.environ.get("GENERATIVEQC_TEST_NATIVE_HESSIAN_FRONTEND") != "1":
+        return
+    calculator = Calculator(
+        device="cuda",
+        basis_representation="spherical",
+        initial_guess=None,
+        max_iterations=240,
+        energy_tolerance=1e-13,
+        density_tolerance=1e-11,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
+        ),
+        **options,
+    )
+
+    def reject_legacy(*arguments: Any, **keywords: Any) -> NoReturn:
+        raise AssertionError(
+            "native CUDA endpoint tried Python numerics or a subprocess"
+        )
+
+    with monkeypatch.context() as guard:
+        guard.setattr(calculator, "_run_public_rks_second_order", reject_legacy)
+        guard.setattr(subprocess, "Popen", reject_legacy)
+        result = calculator.hessian_vector_product(
+            atoms,
+            direction,
+            multiplicity=multiplicity,
+            solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
+        )
+        np.testing.assert_allclose(result.value, expected, atol=3e-8, rtol=2e-6)
+        assert not result.value.flags.writeable
+        assert result.diagnostics["numerical_runtime"] == "native-cpp-cuda"
+        assert result.diagnostics["runtime_compilation"] is False
+        assert result.diagnostics["intermediate_panel_downloads"] == 0
+        if matrix is not None:
+            full = calculator.hessian(
+                atoms, solver_options=GMRESOptions(atol=1e-12, rtol=1e-11)
+            )
+            np.testing.assert_allclose(full.matrix, matrix, atol=3e-8, rtol=2e-6)
+            assert full.diagnostics["completed_directions"] == 3 * len(atoms)
+            assert full.diagnostics["response_strategy"] == "scalar"
+            assert not full.matrix.flags.writeable
+
+
+def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     atoms = [("H", (0.03, -0.02, 0.01)), ("H", (0.15, 0.13, 1.5))]
     direction = np.array([[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]])
     hvp = invoke_cli(tmp_path, atoms, direction=direction)
@@ -126,6 +183,9 @@ def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(tmp_path: Path) -> None:
         rtol=2e-6,
     )
     np.testing.assert_allclose(matrix, matrix.T, atol=2e-8, rtol=0)
+    qualify_native_frontend(
+        monkeypatch, atoms, direction, hvp["value"], matrix=matrix, method="wb97m-v"
+    )
     cpu = Calculator(
         method="wb97m-v",
         device="cpu",
@@ -149,7 +209,10 @@ def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(tmp_path: Path) -> None:
     np.testing.assert_allclose(hvp["value"], expected.value, atol=3e-8, rtol=2e-6)
 
 
-def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> None:
+@pytest.mark.parametrize("auxiliary_order", (2, 4))
+def test_cpp_cli_cuda_uks_df_ecp_with_spherical_auxiliary(
+    tmp_path: Path, auxiliary_order: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from test_wb97mv_ecp_hessian import synthetic_basis
 
     atoms = [
@@ -162,13 +225,13 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> N
     )
     orbital = synthetic_basis()
     auxiliary = BasisSet(
-        "synthetic spherical d auxiliary CLI fixture",
+        "synthetic spherical auxiliary CLI fixture",
         (
             ElementBasis(
                 11,
                 (
                     BasisShell(0, ("0.8",), (("1",),)),
-                    BasisShell(2, ("0.6",), (("1",),)),
+                    BasisShell(auxiliary_order, ("0.6",), (("1",),)),
                 ),
             ),
             ElementBasis(1, (BasisShell(0, ("0.65",), (("1",),)),)),
@@ -180,7 +243,7 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> N
     )
     orbital_file, auxiliary_file = (
         tmp_path / "Orbital ECP.json",
-        tmp_path / "Auxiliary D.json",
+        tmp_path / "Auxiliary.json",
     )
     orbital.write(orbital_file)
     auxiliary.write(auxiliary_file)
@@ -204,6 +267,17 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> N
     assert result["diagnostics"]["response_iterations"] > 0
     assert result["diagnostics"]["ecp_ad_backend"] == "cuda"
     assert result["diagnostics"]["df_integral_ad_backend"] == "cuda"
+    qualify_native_frontend(
+        monkeypatch,
+        atoms,
+        direction,
+        result["value"],
+        multiplicity=2,
+        method="wb97m-v-uks",
+        basis=orbital,
+        auxiliary_basis=auxiliary,
+        density_fitting="cuda",
+    )
     cpu = Calculator(
         method="wb97m-v-uks",
         device="cpu",
@@ -221,6 +295,18 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> N
     )
     energy = cpu.singlepoint(atoms, multiplicity=2, properties=("energy",)).energy
     np.testing.assert_allclose(result["energy_hartree"], energy, atol=5e-9, rtol=0)
+    if auxiliary_order == 4:
+        from test_native_wb97mv_stationary import _native, _qualify
+
+        # Reuse the independently reconverged values-only molecular oracle,
+        # rather than compiling a second expanded high-angular derivative path.
+        reference = _native(2, True, True, True, False, auxiliary_g=True)
+        np.testing.assert_array_equal(
+            np.asarray(reference["motion"]).reshape(direction.shape), direction
+        )
+        reference["hvp"] = np.asarray(result["value"]).ravel().tolist()
+        _qualify(reference, fitted=True, spherical=True, ecp=True, full=False)
+        return
     expected = cpu.hessian_vector_product(
         atoms,
         direction,

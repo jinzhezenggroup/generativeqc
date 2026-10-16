@@ -129,17 +129,21 @@ that passing the smaller benchmark fixes that cold-compile blocker.
 
 ## WB97M-V compiler-AD molecular execution
 
-The complete molecular consumers in this section still use Python orchestration
-(and CuPy for CUDA execution). They are not a Python-free native endpoint.
-The separate opt-in native AOT owner below now composes a Python-free CUDA
-endpoint and replaces the C++ CLI worker; these Python APIs have not migrated.
+The C++ CLI and public CUDA `Calculator.hessian*` numerical path use the linked
+native AOT stationary owner described below. The CLI needs no Python runtime.
+The Python frontend only validates/marshals inputs, prepares the native SCF batch
+and publishes the detached final result; it needs neither CuPy nor a runtime
+compiler for this numerical path. A library without the linked AOT package
+fails before SCF preparation, rather than selecting the legacy Python owner.
 
 `generativeqc.composite_rks_hessian` binds the complete twelve-source WB97M-V
-RKS/UKS plan to one converged native CPU or CUDA state. It reuses
+RKS/UKS plan to one converged native state for CPU/development consumers. It reuses
 `StationarySecondOrderExecutor` for CPU transactional source coverage and the
-installed implicit CPKS nuclear-response solver. CUDA dispatches to the resident
-owner in `generativeqc.cuda_composite_hessian`, with equivalent explicit source
-coverage and a device-coupled CPKS solve. Neither path differentiates SCF
+installed implicit CPKS nuclear-response solver. Its low-level CUDA development
+owner in `generativeqc.cuda_composite_hessian` is not the production public CUDA
+route. The public route enters `generativeqc._native_hessian`, which calls
+`generativeqc_ks_hessian_cuda_v1` without creating/exporting a KS snapshot or
+constructing Python AO/CPKS providers. None of these paths differentiates SCF
 iterations, reconverges displaced geometries, or calls a reference engine.
 
 `generativeqc_compiler.method.stationary_grid_second` generates the AO `rho`, Cartesian
@@ -166,8 +170,12 @@ the canonical WB97M-V graph with RKS or UKS, CPU or CUDA, direct or full-rank
 DF, all-electron or scalar semilocal ECP Hamiltonians, and Cartesian or real
 spherical AOs through f in strict FP64. Combinations use the same stationary
 endpoint. The full-matrix owner uses scalar columns
-(`block_size=None` or `1`, default `strategy="recycled"`); this does not claim
-multi-RHS recycling. The raw matrix is neither symmetrized nor projected.
+(`block_size=None` or `1`). The default `strategy=None` resolves to native
+`"scalar"` on CUDA and `"recycled"` on CPU. Explicit recycling/block requests
+on CUDA fail rather than mislabeling independent solves. The raw matrix is
+neither symmetrized nor projected. Native results expose immutable `value` or
+`matrix` arrays and detached scalar/work diagnostics; source-component panels
+are aggregate-only and stay on device. CPU/development result types are unchanged.
 `grid_budget_bytes` bounds numeric AO/grid and AD tile workspace;
 `max_nonlocal_pairs` separately bounds the ordered active pairs **per grid
 action**, not the complete Hessian's work. Default limits are 128 MiB and
@@ -177,6 +185,23 @@ SCF/native-provider storage are outside those grid bounds. A fine/default grid
 can exceed the pair cap; callers must choose and converge their quadrature and
 explicitly increase the cap if appropriate. Reducing a tile does not reduce
 quadratic pair work. This is a bounded implementation, not a scaling claim.
+
+The CUDA frontend forwards GMRES relative/absolute tolerances, restart, iteration,
+reorthogonalization and workspace limits. Native GMRES checks true residuals
+itself; nondefault Python stagnation, residual-frequency or breakdown controls
+are explicitly unsupported, not silently discarded. Response storage plus
+caller device input/output has an independent 2 GiB endpoint cap. Host staging
+and immutable publication share the output budget. `cache` remains a CPU/development
+compatibility argument and does not activate compilation on CUDA.
+These response arenas are not yet integrated into the global `ResourceBudget`
+planner; supplying that planner with this CUDA endpoint fails explicitly before
+SCF rather than claiming that its SCF-only estimate covers Hessian resources.
+
+Auxiliary g preparation uses a source-only KS DF handle for **values**, not a
+generic g orbital/HF/first-derivative capability. The native stationary owner
+separately authenticates canonical WB97M-V, the live accepted state, actual DF
+provider and complete linked derivative selectors. Neither this role nor a
+successful SCF authorizes a missing derivative package.
 
 ### Native AOT development package
 
@@ -195,6 +220,39 @@ mixed Becke/norm/ratio/log primitives, nuclear HVP and ECP radial/harmonic leave
 Its integral entries explicitly select S/T/V, full/SR/LR ERI and raw DF metric/
 three-center component tiles. It does not cover all s/p/d/f shell products.
 Missing names fail with `cudaErrorNotSupported`, without JIT or a fallback.
+
+An inventory may explicitly select `"integral_schedule": "factorized"` for
+ERI and raw DF leaves. The compiler reuses its canonical one-dimensional
+subset/Wick pair coefficients and Cartesian Coulomb states, differentiates
+these factors with the existing scalar AD, and emits their product assembly.
+One shared CUDA factor library covers orbital-through-f and auxiliary-through-g;
+groups of at most 256 host-only metadata entries retain exact component selectors
+and the established callback ABI. Scientific program identities do not change
+with this schedule; executable/source identities still distinguish builds.
+One-electron and scalar/AO leaves keep their existing lowering. The default
+development inventory retains the expanded schedule; missing linked factors
+never request runtime compilation or an approximate fallback.
+
+The finite full integral selection can be generated before compilation:
+
+```bash
+python tools/complete_hessian_aot_inventory.py \
+  --inventory manifests/hessian_aot_development.json \
+  --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric \
+  --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized \
+  --output build/hessian-full.json
+```
+
+Select that file with `-DGENERATIVEQC_HESSIAN_AOT_INVENTORY=<absolute-path>`.
+Enumeration, source emission and a passing primitive gate do not by themselves
+qualify a complete compiled package or a molecular endpoint. The factorized
+schedule preserves ordered FP64 radial contraction, but changes factoring
+within each primitive and therefore has independent libcint value/gradient/JVP
+gates. Its internal DF unit-Gaussian slots are compile-time explicit: every
+physical primitive exponent remains strictly positive. The ordinary four-center
+geometry binder continues to reject zero exponents. Native scratch bounds do
+not imply that compiler-generated CUDA local/stack storage is free; inspect
+compiled resource usage and complete endpoint behavior before performance claims.
 
 Scalar panels use `[field,lane]` FP64 layout with input order in the native
 descriptor. Integral records use `[exponents,center_xyz,primitive_scale]`; output

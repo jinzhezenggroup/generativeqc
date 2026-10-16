@@ -8,6 +8,7 @@ keep physical charges and contraction scales in native primitive records.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from math import prod
 from typing import Any
 
@@ -137,37 +138,45 @@ def integral_request(payload: Any) -> IntegralRequest:
     )
 
 
-def emit_integral(request: IntegralRequest) -> tuple[str, str]:
-    """Return unchanged compiler-AD arithmetic and scientific package identity."""
-    if request.family in ("coulomb_metric", "three_center_eri"):
+@cache
+def _integral_ir(family: str, angular: tuple, radial: str) -> Any:
+    """Share immutable scientific metadata across component packaging tiles."""
+    if family in ("coulomb_metric", "three_center_eri"):
         from .df_derivatives import build_df_derivative_ir
 
-        integral = build_df_derivative_ir(request.family, request.angular)
-        source = emit_resident_df_second(
-            request.family, request.angular, request.components
+        return build_df_derivative_ir(family, angular)
+    return (
+        build_eri_second_ir(
+            angular,
+            operator=four_center_eri_operator(
+                CoulombKernel(radial, RANGE_OMEGA if radial != "full_range" else 0)
+            ),
         )
-    else:
-        integral = (
-            build_eri_second_ir(
-                request.angular,
-                operator=four_center_eri_operator(
-                    CoulombKernel(
-                        request.radial,
-                        RANGE_OMEGA if request.radial != "full_range" else 0,
-                    )
-                ),
-            )
-            if request.family == "eri"
-            else build_one_electron_second_ir(
-                request.family, request.angular, charge=1.0, output="weighted_hvp"
-            )
+        if family == "eri"
+        else build_one_electron_second_ir(
+            family, angular, charge=1.0, output="weighted_hvp"
         )
-        source = emit_resident_second(integral, request.components)
-    identity = canonical_hash(
+    )
+
+
+def integral_program_identity(request: IntegralRequest) -> str:
+    """Keep scientific identity independent of the selected factoring schedule."""
+    integral = _integral_ir(request.family, request.angular, request.radial)
+    return canonical_hash(
         {
             "schema": "generativeqc.hessian-integral-aot/v1",
             "request": request.payload(),
             "integral": integral_to_payload(integral),
         }
     )
-    return source, identity
+
+
+def emit_integral(request: IntegralRequest) -> tuple[str, str]:
+    """Return unchanged compiler-AD arithmetic and scientific package identity."""
+    integral = _integral_ir(request.family, request.angular, request.radial)
+    source = (
+        emit_resident_df_second(request.family, request.angular, request.components)
+        if request.family in ("coulomb_metric", "three_center_eri")
+        else emit_resident_second(integral, request.components)
+    )
+    return source, integral_program_identity(request)

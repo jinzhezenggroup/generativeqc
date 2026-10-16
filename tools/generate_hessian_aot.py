@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ from generativeqc_compiler.dft.ao_resident_cuda import emit_resident_ao
 from generativeqc_compiler.integral.hessian_aot import (
     IntegralRequest,
     emit_integral,
+    integral_program_identity,
     integral_request,
 )
 from generativeqc_compiler.xc.grid_response_ir import grid_response_graph_identity
@@ -39,8 +41,9 @@ class Inventory:
     ao: bool
     arrays: tuple[str, ...]
     integrals: tuple[IntegralRequest, ...]
+    integral_schedule: str = "expanded"
 
-    @property
+    @cached_property
     def names(self) -> tuple[str, ...]:
         return tuple(
             sorted(
@@ -57,11 +60,14 @@ def parse_inventory(payload: object) -> Inventory:
     """Validate scientific selection and reject ambiguous/ignored metadata."""
     if (
         not isinstance(payload, dict)
-        or set(payload) != {"schema", "ao", "arrays", "integrals"}
+        or not {"schema", "ao", "arrays", "integrals"} <= payload.keys()
+        or set(payload) - {"schema", "ao", "arrays", "integrals", "integral_schedule"}
         or payload["schema"] != SCHEMA
         or type(payload["ao"]) is not bool
         or not isinstance(payload["arrays"], list)
         or not isinstance(payload["integrals"], list)
+        or payload.get("integral_schedule", "expanded")
+        not in ("expanded", "factorized")
     ):
         raise ValueError("invalid Hessian AOT package inventory")
     arrays = payload["arrays"]
@@ -75,7 +81,80 @@ def parse_inventory(payload: object) -> Inventory:
         payload["ao"],
         tuple(sorted(arrays)),
         tuple(sorted(integrals, key=lambda item: item.name)),
+        payload.get("integral_schedule", "expanded"),
     )
+
+
+def _factorized_requests(inventory: Inventory) -> tuple[IntegralRequest, ...]:
+    if inventory.integral_schedule != "factorized":
+        return ()
+    return tuple(
+        item
+        for item in inventory.integrals
+        if item.family in ("eri", "three_center_eri", "coulomb_metric")
+    )
+
+
+def compilation_units(inventory: Inventory) -> tuple[str, ...]:
+    """Group only host metadata; compile the reusable CUDA algebra once."""
+    requests = _factorized_requests(inventory)
+    names = {item.name for item in requests}
+    return (
+        *(name + ".cu" for name in inventory.names if name not in names),
+        *(("factorized_integrals.cu",) if requests else ()),
+        *(
+            f"integral_metadata_{index:04d}.cpp"
+            for index in range((len(requests) + 255) // 256)
+        ),
+    )
+
+
+def emit_compilation_unit(inventory: Inventory, unit: str) -> str:
+    """Keep CUDA and host-only compilation membership explicit and finite."""
+    if unit not in compilation_units(inventory):
+        raise ValueError("unit is absent from the explicit Hessian AOT inventory")
+    if unit == "factorized_integrals.cu":
+        from generativeqc_compiler.integral.factorized_second import (
+            emit_factorized_resident,
+        )
+
+        return emit_factorized_resident()
+    if unit.startswith("integral_metadata_"):
+        index = int(unit.removeprefix("integral_metadata_").removesuffix(".cpp"))
+        return "\n".join(
+            _emit_factorized_program(item)
+            for item in _factorized_requests(inventory)[256 * index : 256 * (index + 1)]
+        )
+    return emit_program(inventory, unit.removesuffix(".cu"))
+
+
+def _emit_factorized_program(request: IntegralRequest) -> str:
+    """Preserve exact component selectors and the existing native leaf ABI."""
+    family = ("eri", "three_center_eri", "coulomb_metric").index(request.family)
+    radial = ("full_range", "long_range", "short_range").index(request.radial)
+    angular = ",".join(map(str, request.angular))
+    padded = ",".join(
+        map(str, (*request.angular, *(0 for _ in range(4 - len(request.angular)))))
+    )
+    components = ",".join(map(str, request.components))
+    return f'''
+#include "dft/hessian_aot.hpp"
+#include "dft/factorized_hessian_integral.hpp"
+#include <array>
+namespace generativeqc::dft::hessian_aot {{
+const Program& program_{request.name}() noexcept {{
+  static constexpr std::array<unsigned,{len(request.angular)}> angular{{{angular}}};
+  static constexpr std::array<std::uint32_t,{len(request.components)}> components{{{components}}};
+  static const Program program{{
+    "{request.name}","{integral_program_identity(request)}",Kind::integral,{{}},{1 + 6 * request.centers},components,
+    {request.centers},{request.record_stride},nullptr,nullptr,
+    &factorized_integral_callback<{family},{radial},{padded},{components}>,
+    {{"{request.family}",angular,"{request.radial}",{request.payload()["omega"]:.17g}}}
+  }};
+  return program;
+}}
+}}
+'''
 
 
 def _ao_identity() -> str:
@@ -130,6 +209,12 @@ def emit_program(inventory: Inventory, name: str) -> str:
         }
     else:
         request = next(item for item in inventory.integrals if item.name == name)
+        if inventory.integral_schedule == "factorized" and request.family in (
+            "eri",
+            "three_center_eri",
+            "coulomb_metric",
+        ):
+            return _emit_factorized_program(request)
         source, identity = emit_integral(request)
         kind = "integral"
         centers, stride = request.centers, request.record_stride
@@ -181,17 +266,29 @@ def emit_registry(inventory: Inventory) -> str:
     declarations = "\n".join(
         f"const Program& program_{name}() noexcept;" for name in inventory.names
     )
-    entries = ",\n".join(f"    program_{name}()" for name in inventory.names)
+    entries = ",\n".join(f"    &program_{name}" for name in inventory.names)
     return f"""// Native AOT leaf inventory; this does not advertise a molecular endpoint.
 #include "dft/hessian_aot.hpp"
 #include <array>
 namespace generativeqc::dft::hessian_aot {{
 {declarations}
 std::span<const Program> programs() noexcept {{
-  static const std::array<Program, {len(inventory.names)}> inventory{{{{
+  using Getter = const Program& (*)() noexcept;
+  static constexpr std::array<Getter, {len(inventory.names)}> getters{{{{
 {entries}
   }}}};
-  return inventory;
+  // Keep both compilation work and startup stack bounded for large closures.
+  // Construct directly in static storage; do not return a multi-MiB stack array
+  // from a lambda or expand tens of thousands of Program copies into one CFG.
+  struct Inventory {{
+    std::array<Program, {len(inventory.names)}> entries{{}};
+    Inventory() noexcept {{
+      for (std::size_t index=0; index<entries.size(); ++index)
+        entries[index]=getters[index]();
+    }}
+  }};
+  static const Inventory inventory;
+  return inventory.entries;
 }}
 }}
 """
@@ -204,21 +301,27 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path)
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--list-programs", action="store_true")
+    selection.add_argument("--list-units", action="store_true")
+    selection.add_argument("--unit")
     selection.add_argument("--program")
     selection.add_argument("--registry", action="store_true")
     selection.add_argument("--all", action="store_true")
     args = parser.parse_args()
     inventory = parse_inventory(json.loads(args.inventory.read_text()))
-    if args.list_programs:
+    if args.list_programs or args.list_units:
         if args.output or args.output_dir:
             parser.error("inventory discovery must not write output")
-        print(";".join(inventory.names))
+        print(
+            ";".join(
+                compilation_units(inventory) if args.list_units else inventory.names
+            )
+        )
     elif args.all:
         if args.output or not args.output_dir:
             parser.error("--all requires --output-dir and forbids --output")
-        for name in inventory.names:
+        for unit in compilation_units(inventory):
             write_if_changed(
-                args.output_dir / f"{name}.cu", emit_program(inventory, name)
+                args.output_dir / unit, emit_compilation_unit(inventory, unit)
             )
         write_if_changed(args.output_dir / "registry.cpp", emit_registry(inventory))
     else:
@@ -228,6 +331,8 @@ def main() -> None:
             args.output,
             emit_registry(inventory)
             if args.registry
+            else emit_compilation_unit(inventory, args.unit)
+            if args.unit
             else emit_program(inventory, args.program),
         )
 

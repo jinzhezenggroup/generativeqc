@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,61 @@ from generativeqc_compiler.integral.hessian_aot import (
 )
 
 from tools.generate_hessian_aot import parse_inventory
+
+
+def test_factorized_inventory_groups_host_metadata_without_changing_selectors() -> None:
+    """Finite package selection is independent of CUDA source duplication."""
+    from generativeqc_compiler.integral.hessian_aot import integral_program_identity
+
+    from tools.complete_hessian_aot_inventory import inventory_payload
+    from tools.generate_hessian_aot import compilation_units, emit_program
+
+    expanded = parse_inventory(json.loads(INVENTORY.read_text()))
+    factorized = replace(expanded, integral_schedule="factorized")
+    assert parse_inventory(inventory_payload(factorized)) == factorized
+    assert factorized.names == expanded.names
+    units = compilation_units(factorized)
+    assert "factorized_integrals.cu" in units
+    assert "integral_metadata_0000.cpp" in units
+    for request in factorized.integrals:
+        source = emit_program(factorized, request.name)
+        if request.family in ("eri", "coulomb_metric", "three_center_eri"):
+            assert request.name + ".cu" not in units
+            assert "factorized_integral_callback<" in source
+            assert integral_program_identity(request) in source
+            assert request.name in source
+    with pytest.raises(ValueError, match="inventory"):
+        parse_inventory({**inventory_payload(factorized), "integral_schedule": "jit"})
+
+
+def test_complete_factorized_f_g_inventory_has_bounded_compilation_units() -> None:
+    """Do not regress to one NVCC invocation per high-angular component tile."""
+    from generativeqc_compiler.integral.hessian_aot import FAMILIES
+
+    from tools.complete_hessian_aot_inventory import complete_inventory
+    from tools.generate_hessian_aot import (
+        compilation_units,
+        emit_compilation_unit,
+        emit_registry,
+    )
+
+    seed = replace(
+        parse_inventory(json.loads(INVENTORY.read_text())),
+        integral_schedule="factorized",
+    )
+    complete = complete_inventory(seed, FAMILIES, 3, max_auxiliary_angular=4)
+    assert len(complete.integrals) == 31469
+    units = compilation_units(complete)
+    assert sum(unit == "factorized_integrals.cu" for unit in units) == 1
+    assert len(units) < 300
+    assert sum(unit.startswith("integral_metadata_") for unit in units) < 128
+    source = emit_compilation_unit(complete, "integral_metadata_0000.cpp")
+    assert source.count("const Program& program_") == 256
+    registry = emit_registry(complete)
+    assert "entries[index]=getters[index]();" in registry
+    assert "static const Inventory inventory;" in registry
+    assert "static const std::array<Program," not in registry
+
 
 ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "manifests/hessian_aot_development.json"

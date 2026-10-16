@@ -32,6 +32,7 @@ def _native(
     full: bool,
     *,
     auxiliary_d: bool = False,
+    auxiliary_g: bool = False,
     benchmark_h2: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
@@ -42,6 +43,7 @@ def _native(
     mode += "-spherical" if spherical else ""
     mode += "-ecp" if ecp else ""
     mode += "-auxd" if auxiliary_d else ""
+    mode += "-auxg" if auxiliary_g else ""
     mode += "-benchmark-h2" if benchmark_h2 else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
@@ -93,8 +95,14 @@ class MolecularEnergy:
             [0.168855404, 0.4446345422],
         ]
         basis = {label: [[0, *radial]] for label in labels}
-        auxiliary_d = result.get("auxiliary_d", False)
-        if auxiliary_d:
+        auxiliary_order = (
+            4
+            if result.get("auxiliary_g", False)
+            else 2
+            if result.get("auxiliary_d", False)
+            else 0
+        )
+        if auxiliary_order:
             basis = {
                 label: [[0, [0.7 if atom == 0 else 0.9, 1.0]]]
                 for atom, label in enumerate(labels)
@@ -103,11 +111,11 @@ class MolecularEnergy:
         if ecp:
             from test_native_ecp_nuclear_response import _fixture
 
-            if not auxiliary_d:
+            if not auxiliary_order:
                 basis[labels[0]].append([1, [0.45, 1.0]])
             terms = (
                 ((0, -1, 2, 0.8, -0.4), (0, 0, 2, 0.8, 0.3))
-                if auxiliary_d
+                if auxiliary_order
                 else _fixture()["terms"]
             )
             channels = {}
@@ -129,12 +137,12 @@ class MolecularEnergy:
             verbose=0,
         )
         self.auxiliary = self.template
-        if auxiliary_d:
+        if auxiliary_order:
             auxiliary_basis = {
                 label: [[0, [0.8 if atom == 0 else 0.65, 1.0]]]
                 for atom, label in enumerate(labels)
             }
-            auxiliary_basis[labels[0]].append([2, [0.6, 1.0]])
+            auxiliary_basis[labels[0]].append([auxiliary_order, [0.6, 1.0]])
             self.auxiliary = gto.M(
                 atom=list(zip(labels, self.centers, strict=True)),
                 unit="Bohr",
@@ -291,6 +299,17 @@ def test_independent_spherical_d_auxiliary_stationary_hvp(
     """A separate d fit must not silently reuse the s-only orbital source."""
     pytest.importorskip("pyscf")
     result = _native(spins, True, True, ecp, False, auxiliary_d=True)
+    _qualify(result, fitted=True, spherical=True, ecp=ecp, full=False)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("ecp", (False, True))
+def test_independent_spherical_g_auxiliary_stationary_hvp(
+    spins: int, ecp: bool
+) -> None:
+    """Qualify g/g metric and coupled fitted response, not just primitive leaves."""
+    pytest.importorskip("pyscf")
+    result = _native(spins, True, True, ecp, False, auxiliary_g=True)
     _qualify(result, fitted=True, spherical=True, ecp=ecp, full=False)
 
 

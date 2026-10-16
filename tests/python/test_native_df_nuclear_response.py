@@ -37,8 +37,12 @@ def _fixture(
         orbital = [(0, 2, radial), (1, 3, [[0.7, 0.8], [0.22, -0.1]])]
         auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]])]
     else:
-        assert domain == "g"
-        orbital = [(0, 0, radial), (1, 0, [[0.7, 0.8], [0.22, -0.1]])]
+        assert domain in ("g", "fg")
+        orbital_order = 0 if domain == "g" else 3
+        orbital = [
+            (0, orbital_order, radial),
+            (1, orbital_order, [[0.7, 0.8], [0.22, -0.1]]),
+        ]
         auxiliary = [(0, 4, [[0.6, 0.8], [0.19, -0.2]]), (1, 4, [[0.75, 1.0]])]
 
     def size(shells: list, spherical: bool) -> int:
@@ -252,6 +256,30 @@ def test_raw_df_two_pass_source_against_independent_oracle(
     tile: int,
     tmp_path: Path,
 ) -> None:
+    _qualify_raw_df_source(
+        domain, orbital_spherical, auxiliary_spherical, tile, tmp_path
+    )
+
+
+@pytest.mark.parametrize(
+    "orbital_spherical,auxiliary_spherical",
+    ((False, False), (False, True), (True, False), (True, True)),
+)
+def test_joint_f_orbital_g_auxiliary_two_pass_source(
+    orbital_spherical: bool, auxiliary_spherical: bool, tmp_path: Path
+) -> None:
+    """Exercise the full high-angular contraction and both independent projections."""
+    _qualify_raw_df_source("fg", orbital_spherical, auxiliary_spherical, 64, tmp_path)
+
+
+def _qualify_raw_df_source(
+    domain: str,
+    orbital_spherical: bool,
+    auxiliary_spherical: bool,
+    tile: int,
+    tmp_path: Path,
+) -> None:
+    """Share the independent source, fitted-response and exact semantic-work gates."""
     fixture = _fixture(domain, orbital_spherical, auxiliary_spherical)
     actual, receipt = _native(fixture, tmp_path, tile=tile)
     oracle = DfOracle(fixture)

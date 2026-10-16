@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "api/ks_hessian.hpp"
 #include "api/native_method_inputs.hpp"
 
 namespace {
@@ -231,6 +232,53 @@ void correlation_auxiliary_forwarding(generativeqc_context* cpu_context) {
               !out,
           "legacy RI-MP2 accepted a correlation-only auxiliary handle");
 }
+
+void ks_auxiliary_roles(generativeqc_context* context) {
+  auto orbital = system(context, 0.8);
+  auto auxiliary = system(context, 0.3);
+  auxiliary->ks_auxiliary = true;
+  auto request = descriptor(GENERATIVEQC_METHOD_RHF, auxiliary.get());
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+  require(!api::valid_system_roles(*orbital, request), "HF accepted a KS-only auxiliary");
+  request.method = GENERATIVEQC_METHOD_PBE_RKS;
+  require(!api::valid_system_roles(*orbital, request),
+          "KS-only auxiliary accepted absent KS options");
+  generativeqc_ks_options options{};
+  request.ks_options = &options;
+  require(api::valid_system_roles(*orbital, request), "CUDA KS DF source role was rejected");
+  require(!api::valid_system_roles(*auxiliary, request), "KS-only auxiliary became an orbital");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  require(!api::valid_system_roles(*orbital, request),
+          "KS-only CUDA auxiliary entered another provider");
+
+  double published = 7;
+  generativeqc_ks_hessian_options_v1 policy;
+  generativeqc_ks_hessian_receipt_v1 receipt;
+  receipt.completed_directions = 99;
+  require(generativeqc_ks_hessian_cuda_version_v1() <= 1, "unknown native Hessian bridge version");
+  require(generativeqc_ks_hessian_cuda_v1(nullptr, 0, &policy, nullptr, 0, &published, 1,
+                                          &receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              published == 7 && receipt.completed_directions == 99,
+          "rejected Hessian call modified caller publication");
+
+  request = descriptor(GENERATIVEQC_METHOD_PBE_RKS, nullptr);
+  const generativeqc_system* items[]{orbital.get()};
+  generativeqc_batch* output = nullptr;
+  require(generativeqc_batch_prepare(context, items, 1, &request, 0, &output) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "CPU KS preparation for CUDA Hessian refusal failed");
+  Batch batch(output, generativeqc_batch_destroy);
+  (void)batch_energy(batch.get());
+  std::array<double, 36> matrix;
+  matrix.fill(7);
+  require(generativeqc_ks_hessian_cuda_v1(batch.get(), 0, &policy, nullptr, 0, matrix.data(),
+                                          matrix.size(),
+                                          &receipt) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+              receipt.completed_directions == 99,
+          "CPU KS state entered CUDA Hessian execution");
+  for (double component : matrix)
+    require(component == 7, "CPU KS refusal modified caller publication");
+}
 }  // namespace
 
 int main() {
@@ -249,6 +297,7 @@ int main() {
       auxiliary_lifetime(context.get(), method);
     }
     correlation_auxiliary_forwarding(context.get());
+    ks_auxiliary_roles(context.get());
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

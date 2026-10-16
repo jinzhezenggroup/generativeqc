@@ -1549,7 +1549,7 @@ class Calculator:
             representation=selected_basis.representation
             if isinstance(selected_basis, BasisSet)
             else self._representation_name,
-            consumer=self._auxiliary_basis_consumer(selected_operator)
+            consumer=self._auxiliary_basis_consumer(selected_operator, derivative_order)
             if auxiliary
             else None,
         )
@@ -1566,7 +1566,9 @@ class Calculator:
             return "cuda"
         return self._device_name
 
-    def _auxiliary_basis_consumer(self, operator: str) -> str | None:
+    def _auxiliary_basis_consumer(
+        self, operator: str, derivative_order: int = 0
+    ) -> str | None:
         """Select the correlation source's domain, not generic DF-HF exports.
 
         The physical correlation source and its nuclear pullback support
@@ -1586,6 +1588,14 @@ class Calculator:
             )
         ):
             return "correlation_df"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order == 0
+            and self._density_fitting_backend() == "cuda"
+            and self._device_name == "cuda"
+            and getattr(self, "_composite_rks_second_order", False)
+        ):
+            return "wb97mv_df_values"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -1841,7 +1851,7 @@ class Calculator:
                         representation=basis.representation
                         if isinstance(basis, BasisSet)
                         else self._representation_name,
-                        consumer=self._auxiliary_basis_consumer(operator)
+                        consumer=self._auxiliary_basis_consumer(operator, order)
                         if role == "auxiliary"
                         else None,
                     )
@@ -1978,15 +1988,20 @@ class Calculator:
             )
             return system
         create_system = self._library.generativeqc_system_create
-        if basis is not None and self._auxiliary_basis_consumer("df_metric"):
+        auxiliary_consumer = (
+            self._auxiliary_basis_consumer("df_metric") if basis is not None else None
+        )
+        if auxiliary_consumer:
             create_system = getattr(
                 self._library,
-                "generativeqc_correlation_auxiliary_system_create_v1",
+                "generativeqc_correlation_auxiliary_system_create_v1"
+                if auxiliary_consumer == "correlation_df"
+                else "generativeqc_ks_auxiliary_system_create_v1",
                 None,
             )
             if create_system is None:
                 raise NotImplementedError(
-                    "native library lacks correlation-only DF auxiliary admission"
+                    "native library lacks the requested source-only DF auxiliary admission"
                 )
         _native.check(
             self._library,
@@ -2439,8 +2454,11 @@ class Calculator:
         LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
         Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
         and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
-        AD and coupled response, remain device-resident and require the
-        ``cuda-hessian`` extra. Unsupported resources never select host AD.
+        AD and coupled response, remain in linked native C++/CUDA code. A
+        build-time Hessian AOT package is required; Python, CuPy and runtime
+        compilation are not numerical dependencies. ``cache`` is retained for
+        CPU/development compatibility and is unused by this CUDA AOT path.
+        Unsupported resources never select host AD.
         The integral budget bounds generated second-order integral work;
         response/provider diagnostics remain separately reported.
 
@@ -2449,13 +2467,26 @@ class Calculator:
         the Cartesian Hessian uses Hartree/Bohr squared. Invalid directions,
         failed response solves and exceeded budgets raise before publication.
         See :ref:`python-calculation-values` and :ref:`python-calculation-errors`."""
-        from .rks_hessian import rks_hvp
-        from .rks_hessian_integrals import checked_direction
+        from ._native_hessian import checked_direction
 
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hvp"
         )
         vector = checked_direction(direction, len(native_atoms))
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                direction=vector,
+                integral_budget_bytes=integral_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
         if self._composite_rks_second_order:
             from .composite_rks_hessian import composite_rks_hvp
 
@@ -2473,6 +2504,8 @@ class Calculator:
                     solver_options=solver_options,
                 ),
             )
+        from .rks_hessian import rks_hvp
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2495,7 +2528,7 @@ class Calculator:
         multiplicity: int = 1,
         block_size: int | None = None,
         cache: typing.Any = ".artifacts",
-        strategy: str = "recycled",
+        strategy: str | None = None,
         output_budget_bytes: int = 64 << 20,
         integral_budget_bytes: int = 64 << 20,
         solver_options: typing.Any = None,
@@ -2510,7 +2543,11 @@ class Calculator:
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
-        (``block_size=None`` or ``1``, default ``strategy="recycled"``).
+        (``block_size=None`` or ``1``). The default strategy resolves to native
+        ``"scalar"`` on CUDA and ``"recycled"`` on CPU; explicitly requesting
+        recycling/block solves on CUDA is unsupported, never silently ignored.
+        CUDA returns an aggregate native result: intermediate/source-component
+        panels remain on device rather than being exported for Python assembly.
         ``grid_budget_bytes`` bounds its numeric AO/grid/pair workspace;
         ``max_nonlocal_pairs`` independently caps ordered VV10 pairs per action.
         Tight SCF/response tolerances and a converged grid remain necessary.
@@ -2519,8 +2556,6 @@ class Calculator:
         ``(3*natoms, 3*natoms)`` in Hartree/Bohr squared. The qualified context
         and failure/lifetime rules are those of :ref:`python-calculation-backends`,
         :ref:`python-calculation-errors` and :ref:`python-calculation-ownership`."""
-        from .rks_hessian import rks_hessian
-
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hessian"
         )
@@ -2535,6 +2570,28 @@ class Calculator:
                 "full RKS Hessian output and immutable publication exceed "
                 "output_budget_bytes"
             )
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError("native CUDA Hessian requires block_size=None or 1")
+            if strategy not in (None, "scalar"):
+                raise NotImplementedError(
+                    "native CUDA Hessian supports only strategy='scalar'; no Krylov recycling"
+                )
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                integral_budget_bytes=integral_budget_bytes,
+                output_budget_bytes=output_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
         if self._composite_rks_second_order:
             from .composite_rks_hessian import composite_rks_hessian
 
@@ -2544,7 +2601,7 @@ class Calculator:
                 raise ValueError(
                     "WB97M-V Hessian currently requires block_size=None or 1"
                 )
-            if strategy != "recycled":
+            if strategy not in (None, "recycled"):
                 raise ValueError(
                     "WB97M-V Hessian currently uses the default scalar response strategy"
                 )
@@ -2562,6 +2619,8 @@ class Calculator:
                     solver_options=solver_options,
                 ),
             )
+        from .rks_hessian import rks_hessian
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2570,7 +2629,7 @@ class Calculator:
                 operator,
                 block_size=block_size,
                 cache=cache,
-                strategy=strategy,
+                strategy="recycled" if strategy is None else strategy,
                 output_budget_bytes=output_budget_bytes,
                 integral_budget_bytes=integral_budget_bytes,
                 solver_options=solver_options,

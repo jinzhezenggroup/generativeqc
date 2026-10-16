@@ -86,6 +86,7 @@ def complete_inventory(
         inventory.ao,
         inventory.arrays,
         tuple(sorted(requests, key=lambda item: item.name)),
+        inventory.integral_schedule,
     )
 
 
@@ -104,6 +105,11 @@ def inventory_payload(inventory: Inventory) -> dict:
             }
             for item in inventory.integrals
         ],
+        **(
+            {"integral_schedule": inventory.integral_schedule}
+            if inventory.integral_schedule != "expanded"
+            else {}
+        ),
     }
 
 
@@ -114,11 +120,17 @@ def main() -> None:
     parser.add_argument("--families", choices=FAMILIES, nargs="+", required=True)
     parser.add_argument("--max-angular", type=int, required=True)
     parser.add_argument("--max-auxiliary-angular", type=int)
+    parser.add_argument("--integral-schedule", choices=("expanded", "factorized"))
     parser.add_argument("--components-per-tile", type=int, default=16)
     parser.add_argument("--radials", choices=RADIALS, nargs="+", default=list(RADIALS))
     args = parser.parse_args()
+    original = parse_inventory(json.loads(args.inventory.read_text()))
+    if args.integral_schedule:
+        from dataclasses import replace
+
+        original = replace(original, integral_schedule=args.integral_schedule)
     inventory = complete_inventory(
-        parse_inventory(json.loads(args.inventory.read_text())),
+        original,
         tuple(args.families),
         args.max_angular,
         components_per_tile=args.components_per_tile,

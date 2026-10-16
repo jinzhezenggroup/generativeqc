@@ -52,9 +52,12 @@ void run(bool unrestricted, const std::string& mode, bool full) {
              ecp = mode.find("ecp") != std::string::npos,
              spherical = mode.find("spherical") != std::string::npos,
              auxiliary_d = mode.find("auxd") != std::string::npos,
+             auxiliary_g = mode.find("auxg") != std::string::npos,
              benchmark_h2 = mode.find("benchmark-h2") != std::string::npos;
-  require(!auxiliary_d || fitted, "the independent d auxiliary fixture requires DF");
-  require(!benchmark_h2 || (!unrestricted && !fitted && !ecp && !auxiliary_d),
+  const bool separate_auxiliary = auxiliary_d || auxiliary_g;
+  require(!auxiliary_d || !auxiliary_g, "select only one independent auxiliary fixture");
+  require(!separate_auxiliary || fitted, "the independent auxiliary fixture requires DF");
+  require(!benchmark_h2 || (!unrestricted && !fitted && !ecp && !separate_auxiliary),
           "the benchmark H2 fixture requires all-electron direct RKS");
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
@@ -73,8 +76,8 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     system.ecp_terms = {{0, -1, 0, 0.9, 0.25}, {0, -1, 2, 0.4, -0.1}, {0, 0, 1, 0.8, 0.3},
                         {0, 1, 2, 0.65, -0.4}, {0, 2, 3, 0.7, 0.12},  {0, 3, 4, 0.55, -0.08}};
   }
-  if (auxiliary_d) {
-    // Match the CLI's independent spherical auxiliary fixture, without borrowing
+  if (separate_auxiliary) {
+    // Match the CLI's independent spherical d/g auxiliary fixture, without borrowing
     // the orbital topology or radial contraction coefficients for the fit.
     const std::array<std::array<double, 3>, 3> centers{
         {{{0.13, -0.21, 0.17}}, {{0.43, 0.19, 2.1}}, {{-0.3, 0.4, -1.6}}}};
@@ -89,14 +92,15 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   std::optional<core::System> auxiliary;
-  if (auxiliary_d) {
+  if (separate_auxiliary) {
     auxiliary = system;
     auxiliary->ecp_terms.clear();
     for (auto& atom : auxiliary->atoms) atom.ecp_core = 0;
     auxiliary->shells.clear();
     for (unsigned atom = 0; atom < system.atoms.size(); ++atom)
       auxiliary->shells.push_back({atom, 0, {{atom == 0 ? 0.8 : 0.65, 1.0}}});
-    auxiliary->shells.insert(auxiliary->shells.begin() + 1, {0, 2, {{0.6, 1.0}}});
+    auxiliary->shells.insert(auxiliary->shells.begin() + 1,
+                             {0, auxiliary_g ? 4U : 2U, {{0.6, 1.0}}});
     require(molecule::validate_and_normalize(*auxiliary, detail) == GENERATIVEQC_STATUS_SUCCESS,
             detail);
   }
@@ -111,7 +115,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = dft::semilocal_family_scf_domain(dft::SemilocalFamily::Wb97mv);
   ks.grid_version = 1;
-  ks.radial_points = auxiliary_d || benchmark_h2 ? 8 : 12;
+  ks.radial_points = separate_auxiliary || benchmark_h2 ? 8 : 12;
   ks.angular_polar = 4;
   ks.angular_azimuth = 8;
   ks.partition_iterations = 3;
@@ -181,7 +185,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   std::vector<double> motion(coordinates), sentinel(coordinates, 27.0);
   for (std::size_t index = 0; index < coordinates; ++index)
     motion[index] = 0.12 * std::cos(index + 0.7);
-  if (auxiliary_d && unrestricted)
+  if (separate_auxiliary && unrestricted)
     motion = {0.02, -0.03, 0.1, -0.04, 0.01, -0.02, 0.02, 0.02, -0.08};
   check(cudaMemcpyAsync(direction, motion.data(), coordinates * sizeof(double),
                         cudaMemcpyHostToDevice, lease.stream));
@@ -218,7 +222,8 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   std::cout << std::setprecision(17) << "{\"atoms\":" << shape.atoms
             << ",\"primitives\":" << shape.primitives << ",\"nao\":" << shape.nao
             << ",\"spins\":" << shape.spins << ",\"point_count\":" << shape.points
-            << ",\"auxiliary_d\":" << (auxiliary_d ? "true" : "false") << ",\"energy\":" << energy
+            << ",\"auxiliary_d\":" << (auxiliary_d ? "true" : "false")
+            << ",\"auxiliary_g\":" << (auxiliary_g ? "true" : "false") << ",\"energy\":" << energy
             << ",\"response_residual\":" << result.response.gmres.residual_norm;
   array("basis", download(lease.basis, 3 * shape.atoms + 2 * shape.primitives + 16 * shape.nao));
   array("points", download(lease.points, 3 * shape.points));

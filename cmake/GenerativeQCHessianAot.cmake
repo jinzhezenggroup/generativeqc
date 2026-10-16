@@ -12,7 +12,7 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/tools/hessian_aot_inventory.py")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" "${_generator}"
-            --inventory "${inventory}" --list-programs
+            --inventory "${inventory}" --list-units
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     RESULT_VARIABLE _result OUTPUT_VARIABLE _programs ERROR_VARIABLE _error
     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -22,12 +22,12 @@ function(generativeqc_add_hessian_aot target inventory)
   set(_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/hessian_aot")
   set(_sources)
   foreach(_program IN LISTS _programs)
-    set(_output "${_directory}/${_program}.cu")
+    set(_output "${_directory}/${_program}")
     generativeqc_register_generated_sources(
       OUTPUTS "${_output}"
       GENERATOR "${_generator}"
       DEPENDS "${inventory}" "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.hpp"
-      ARGS --inventory "${inventory}" --program "${_program}" --output "${_output}"
+      ARGS --inventory "${inventory}" --unit "${_program}" --output "${_output}"
       COMMENT "Generating native Hessian AD leaf ${_program}")
     list(APPEND _sources "${_output}")
   endforeach()

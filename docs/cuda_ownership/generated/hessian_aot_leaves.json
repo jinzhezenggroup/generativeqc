@@ -1,8 +1,9 @@
 {
   "name": "hessian_aot_leaves",
   "outputs": [
-    "generated/hessian_aot/*.cu"
+    "generated/hessian_aot/*.cu",
+    "generated/hessian_aot/*.cpp"
   ],
   "owner": "tools/generate_hessian_aot.py",
-  "scope": "Opt-in partial native AD leaf package generated from authoritative compiler AO, integral, XC, grid, VV10 and ECP programs. This is not a complete stationary Hessian consumer, full shell-component closure or endpoint capability. Native host code retains borrowed-pointer launch validation and exact package-miss handling."
+  "scope": "Opt-in explicitly selected native AD leaf package generated from authoritative compiler AO, integral, XC, grid, VV10 and ECP programs; the default inventory is partial. An explicit factorized integral schedule shares compiler-AD Hermite/Boys factors in one CUDA unit and groups exact selectors in host-only metadata units. Registry initialization uses a bounded loop over linked getters. Enumeration/source generation alone is not compiled-closure or molecular-endpoint qualification. Native host code retains borrowed-pointer launch validation and exact package-miss handling."
 }
