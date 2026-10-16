@@ -462,6 +462,9 @@ same-device consumer handoff extension.
 
 Capture accepts CPU bool/float32/float64 inputs and the compiler's bounded
 operation set; backend execution has narrower dtype/primitive admission.
+Captured `asarray(..., copy=False)` rejects dtype changes; `copy=True` or
+`copy=None` permits an explicit supported real cast. Same-dtype conversion does
+not imply aliasing of compiled outputs, which remain detached from inputs.
 Shape/axis values must be static. Captured `flip` retains
 its 65,536-index budget per reversed axis. Captured `roll` accepts static integer
 shifts and signed axes (including tuples and repeated axes); `axis=None` rolls
