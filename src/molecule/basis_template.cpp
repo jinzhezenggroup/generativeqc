@@ -93,6 +93,7 @@ CheckedBasisTemplate preflight(const generativeqc_basis_template_descriptor_v1& 
   count(atoms.size());
   CheckedBasisTemplate checked{validate(basis), {}};
   auto& capacity = checked.capacity;
+  std::uint32_t maximum_orbital_angular_momentum = 0;
   for (const auto& atom : atoms) {
     require(
         atom.atomic_number > 0 && atom.atomic_number <= 118 && checked.elements[atom.atomic_number],
@@ -104,15 +105,24 @@ CheckedBasisTemplate preflight(const generativeqc_basis_template_descriptor_v1& 
       capacity.primitive_count =
           count(std::uint64_t(capacity.primitive_count) +
                 std::uint64_t(shell.primitive_count) * shell.contraction_count);
+      maximum_orbital_angular_momentum =
+          std::max(maximum_orbital_angular_momentum, shell.angular_momentum);
       const auto angular_momentum = std::uint64_t(shell.angular_momentum);
       const auto functions = representation == GENERATIVEQC_BASIS_SPHERICAL
                                  ? 2 * angular_momentum + 1
                                  : (angular_momentum + 1) * (angular_momentum + 2) / 2;
       capacity.ao_count = count(capacity.ao_count + functions * shell.contraction_count);
     }
+    for (std::uint32_t index = 0; index < element.ecp_term_count; ++index) {
+      const auto& term = basis.ecp_terms[element.ecp_term_offset + index];
+      require(term.angular_momentum <= 4, "ECP local channel supports at most g");
+      require(term.power <= 4, "ECP radial powers support 0..4");
+    }
     capacity.ecp_term_count =
         count(std::uint64_t(capacity.ecp_term_count) + element.ecp_term_count);
   }
+  require(capacity.ecp_term_count == 0 || maximum_orbital_angular_momentum <= 3,
+          "ECP execution requires s/p/d/f orbital shells");
   const auto maximum = std::numeric_limits<std::size_t>::max();
   require(capacity.shell_count <= maximum / sizeof(generativeqc_shell) &&
               capacity.primitive_count <= maximum / sizeof(generativeqc_primitive),
@@ -165,8 +175,6 @@ ExpandedBasis expand_basis_template(const generativeqc_basis_template_descriptor
     result.core_electrons.push_back(element.ecp_core_electrons);
     for (std::uint32_t index = 0; index < element.shell_count; ++index) {
       const auto& shell = basis.shells[element.shell_offset + index];
-      require(capacity.ecp_term_count == 0 || shell.angular_momentum <= 3,
-              "ECP execution requires s/p/d/f orbital shells");
       for (std::uint32_t row = 0; row < shell.contraction_count; ++row) {
         const auto offset = count(result.primitives.size());
         for (std::uint32_t primitive = 0; primitive < shell.primitive_count; ++primitive)
@@ -183,10 +191,8 @@ ExpandedBasis expand_basis_template(const generativeqc_basis_template_descriptor
     for (std::uint32_t index = 0; index < element.ecp_term_count; ++index)
       local_channel = std::max(local_channel,
                                basis.ecp_terms[element.ecp_term_offset + index].angular_momentum);
-    require(local_channel <= 4, "ECP local channel supports at most g");
     for (std::uint32_t index = 0; index < element.ecp_term_count; ++index) {
       const auto& term = basis.ecp_terms[element.ecp_term_offset + index];
-      require(term.power <= 4, "ECP radial powers support 0..4");
       result.ecp_terms.push_back({count(atom_index),
                                   term.angular_momentum == local_channel
                                       ? -1

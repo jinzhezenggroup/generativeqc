@@ -107,8 +107,71 @@ void test_shape_capacity() {
   }
 }
 
+void test_ecp_shape_preflight() {
+  auto check = [](const generativeqc::molecule::BasisTemplateData& source,
+                  std::span<const generativeqc_atom> atoms,
+                  generativeqc_basis_representation representation, bool accepted) {
+    for (const bool expand : {false, true}) {
+      bool rejected = false;
+      try {
+        if (expand)
+          (void)generativeqc::molecule::expand_basis_template(source.descriptor(), atoms,
+                                                            representation);
+        else
+          (void)generativeqc::molecule::basis_template_capacity(source.descriptor(), atoms,
+                                                              representation);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected != accepted, "capacity and expansion must agree on selected ECP shapes");
+    }
+    if (accepted) {
+      const auto capacity = generativeqc::molecule::basis_template_capacity(
+          source.descriptor(), atoms, representation);
+      const auto expanded = generativeqc::molecule::expand_basis_template(
+          source.descriptor(), atoms, representation);
+      require(capacity.shell_count == expanded.shells.size() &&
+                  capacity.primitive_count == expanded.primitives.size() &&
+                  capacity.ecp_term_count == expanded.ecp_terms.size(),
+              "accepted ECP capacity must match expansion");
+    }
+  };
+
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    for (const bool ecp_first : {false, true}) {
+      const std::array<generativeqc_atom, 2> atoms{{
+          {ecp_first ? 3 : 1, 0, 0, 0}, {ecp_first ? 1 : 3, 0, 0, 1.4}}};
+      check(fixture(), atoms, representation, true);
+      for (int invalid = 0; invalid < 4; ++invalid) {
+        auto source = fixture();
+        if (invalid == 0) source.shells[1].angular_momentum = 4;
+        if (invalid == 1) source.ecp_terms[0].angular_momentum = 5;
+        if (invalid == 2) source.ecp_terms[0].power = 5;
+        // ECP admission limits every selected orbital, including all-electron atoms.
+        if (invalid == 3) source.shells[0].angular_momentum = 4;
+        check(source, atoms, representation, false);
+      }
+      auto boundary = fixture();
+      boundary.shells[0].angular_momentum = 3;
+      boundary.shells[1].angular_momentum = 3;
+      boundary.ecp_terms[0].angular_momentum = 4;
+      boundary.ecp_terms[0].power = 4;
+      check(boundary, atoms, representation, true);
+    }
+
+    auto unselected = fixture();
+    unselected.shells[0].angular_momentum = 4;
+    unselected.shells[1].angular_momentum = 32;
+    unselected.ecp_terms[0].angular_momentum = 32;
+    unselected.ecp_terms[0].power = 32;
+    const std::array<generativeqc_atom, 2> all_electron{{{1, 0, 0, 0}, {1, 0, 0, 1.4}}};
+    check(unselected, all_electron, representation, true);
+  }
+}
+
 void run() {
   test_shape_capacity();
+  test_ecp_shape_preflight();
   generativeqc_context_descriptor context_descriptor{};
   context_descriptor.struct_size = sizeof(context_descriptor);
   context_descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
