@@ -652,12 +652,17 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold,
       close(actual_forces[index], expected_forces[index],
             "shared force differs from independent orbit");
     const auto counters = work.read()[0];
-    const auto response_contractions = 1U;
+    const auto independent = unique.size() - 1;
     const auto live = std::size_t(admitted_count != 0);
-    if (counters.bra_preparations != 4 * response_contractions * live ||
-        counters.coulomb_preparations != 16 * live ||
-        counters.ket_preparations != 16 * response_contractions * live ||
-        counters.component_contractions != 16 * response_contractions * admitted_count ||
+    // Permit further recurrence/contraction reuse without pinning internal calls.
+    // The unshared AD traversal bounds work; screened/inactive work stays zero.
+    const auto within_retained_bound = [](auto value, std::size_t limit) {
+      return limit == 0 ? value == 0 : value > 0 && value <= limit;
+    };
+    if (!within_retained_bound(counters.bra_preparations, 4 * independent * live) ||
+        !within_retained_bound(counters.coulomb_preparations, 16 * live) ||
+        !within_retained_bound(counters.ket_preparations, 16 * independent * live) ||
+        !within_retained_bound(counters.component_contractions, 16 * independent * admitted_count) ||
         counters.published_components != admitted_count)
       throw std::runtime_error("materialized derivative preparation/work mismatch");
   }

@@ -1,46 +1,58 @@
 {
   "archives": [],
   "decision": {
-    "reason": "All repeated primary/diagnostic arrays independently accurate; scoped cold nonregression observations without replacing historical measurements.",
+    "reason": "Independent complete endpoint accuracy qualification; complete timings and controls reported without filtering.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 34120,
+      "bytes": 49468,
       "path": "numeric-arrays.npy.xz",
       "role": "samples",
-      "sha256": "0f4d91ef3075f4111ce22440d48b36bd2be20b8ea9e483cbb9d4368d4941a503"
+      "sha256": "ecc8090d0a55863b15a7184841b8f5b8b6c0851e7ffd156ea5181729b2e8d8cd"
     },
     {
-      "bytes": 13552,
+      "bytes": 14288,
       "path": "numeric-index.json.xz",
       "role": "summary",
-      "sha256": "676e0b89fd3dbf2af3e9d2d53aed4d6f7c504e4e3f95363f2245e187a371193c"
+      "sha256": "08f4ecb65fb440c2e9bc25c7d17337032f4d74336df2f2086a479d48708d9435"
     },
     {
-      "bytes": 3924,
+      "bytes": 2136,
       "path": "endpoint-summary.json.xz",
       "role": "summary",
-      "sha256": "9d6a1cfb8da0da70d86be95782795fc3a2805585ec244ac362760cf864a3b093"
+      "sha256": "007aa3507ab8325f68adb74ebfb3e2594073c3d01e11a5aa0757e26fb2946b04"
     },
     {
-      "bytes": 17772,
+      "bytes": 5528,
       "path": "profile-summary.json.xz",
       "role": "summary",
-      "sha256": "0fb341ee8a7b9c879a39f23ae08da12f1e9bb0dc05c005ac2230511dd524e355"
+      "sha256": "05b2df8653f19de7923f6c8bfe9071e9e6cd0cf02cd0baa67dcd08865b6e1f95"
     },
     {
-      "bytes": 8892,
+      "bytes": 8528,
+      "path": "work-and-convergence.json.xz",
+      "role": "summary",
+      "sha256": "d0d587cc8f124ddb6386fe81dc14405f162cb6762c3492000f501d00fcbc7087"
+    },
+    {
+      "bytes": 8720,
       "path": "reproduction.json.xz",
       "role": "reproduction",
-      "sha256": "82a7e4c7dc76a22803c76e8b3c7c72de7bb09b1c619acb8b8ab58e5f2939ae42"
+      "sha256": "3a5568cfe2835456d214adb31c08518d9a24fc0fcc6b858e19dac317daafe89f"
     },
     {
-      "bytes": 3544,
+      "bytes": 3576,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "613ab9e77e62f596defd89194cc6400d0f5046bb65bb6782c330489902ec821c"
+      "sha256": "589b6e614070ab266031502dd9eca1310a88048ec8f2d8a42d2f85e5b83b9fcc"
+    },
+    {
+      "bytes": 2520,
+      "path": "verify-arrays.py",
+      "role": "reproduction",
+      "sha256": "75d9f2314c5daa2a1469148bd99aef7e33efb8a6584da3410fd6184e2c44899e"
     },
     {
       "bytes": 1055,
@@ -55,16 +67,10 @@
       "sha256": "cc379e1c76528fb956979ffb9848b24694562bdd56a5ba9e1df33e81d3acf828"
     },
     {
-      "bytes": 2520,
-      "path": "verify-arrays.py",
-      "role": "reproduction",
-      "sha256": "75d9f2314c5daa2a1469148bd99aef7e33efb8a6584da3410fd6184e2c44899e"
-    },
-    {
-      "bytes": 7045,
+      "bytes": 5571,
       "path": "README.md",
       "role": "summary",
-      "sha256": "7fad6fc1b35543a1ee92d769b758eb8bfd58e2a0d838880ece44cec952ebfdb0"
+      "sha256": "c0e5750c63ebaeb59e2b2c7f91cc9fd866dd27e1bbe952c7d095a8c1963868e5"
     }
   ],
   "reproduction": {
@@ -76,14 +82,14 @@
       "--ntasks=1",
       "--cpus-per-task=8",
       "--mem=28G",
-      "--time=00:25:00",
+      "--time=01:30:00",
       "bash",
-      "run.sh"
+      "campaign-n5.sh"
     ]
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "00fced59f8d083839e4bc0761f91a1e94e8ccc0b"
+    "revision": "6526c392711b55bf1a105a8cd5d75746a2e753b0"
   }
 }
