@@ -457,7 +457,7 @@ def _solve_single(
     resident_recycle: typing.Any = None,
     solution_consumer: typing.Any = None,
 ) -> typing.Any:
-    """Restarted GMRES with one control flow and pluggable vector residency."""
+    """Compatibility/foreign-engine GMRES; admitted CPU solves use the shared native owner."""
     b_host = np.asarray(rhs, dtype=np.float64)
     if b_host.ndim != 1 or not np.isfinite(b_host).all():
         raise ValueError("GMRES RHS must be a finite vector")
@@ -1138,6 +1138,9 @@ def solve(
 
     solution_consumer runs synchronously on the converged engine-native
     solution before host publication and must not retain engine-owned leases.
+    CPU host-vector requests use the shared native controller when installed.
+    Device providers, explicit vector engines, general preconditioners and
+    solution consumers retain their existing control paths until qualified.
     """
     # A live reference lease must hold even when a zero RHS skips all actions.
     validate_current = getattr(operator, "validate_current", lambda: None)
@@ -1194,7 +1197,27 @@ def solve(
             # Plan the streamed compatibility transition without changing the
             # retained owner's mode before whole-solve admission succeeds.
             reservation += 2 * operator.dimension * 8
-    required = _single_workspace_bytes(operator.dimension, options) + reservation
+    native_library = None
+    if (
+        engine is None
+        and operator.dimension > 0
+        and getattr(operator, "device_workspace_bytes", 0) == 0
+        and (
+            preconditioner is None or isinstance(preconditioner, DiagonalPreconditioner)
+        )
+        and solution_consumer is None
+    ):
+        from . import _native
+
+        native_library = _native.optional_response_library()
+    if native_library is not None:
+        from ._response_native import workspace_bytes
+
+        required = (
+            workspace_bytes(native_library, operator.dimension, options) + reservation
+        )
+    else:
+        required = _single_workspace_bytes(operator.dimension, options) + reservation
     # Old best-cycle and current Arnoldi vectors may overlap. Resident recycle
     # replacement additionally overlaps both old and new retained spaces.
     retained_capacity = (
@@ -1226,20 +1249,35 @@ def solve(
             recycle_seconds += time.perf_counter() - recycle_started
         workspace = getattr(engine, "solver_workspace", nullcontext)
         with workspace():
-            result = _solve_single(
-                operator,
-                rhs,
-                replace(
-                    options,
-                    max_workspace_bytes=options.max_workspace_bytes - reservation,
-                ),
-                initial_guess=initial_guess,
-                preconditioner=preconditioner,
-                collect_basis=collect_basis
-                or (recycle is not None and not resident_recycle),
-                resident_recycle=recycle if resident_recycle else None,
-                solution_consumer=solution_consumer,
+            solve_options = replace(
+                options, max_workspace_bytes=options.max_workspace_bytes - reservation
             )
+            basis_requested = collect_basis or (
+                recycle is not None and not resident_recycle
+            )
+            if native_library is not None:
+                from ._response_native import solve_host
+
+                result = solve_host(
+                    native_library,
+                    operator,
+                    rhs,
+                    solve_options,
+                    initial_guess=initial_guess,
+                    preconditioner=preconditioner,
+                    collect_basis=basis_requested,
+                )
+            else:
+                result = _solve_single(
+                    operator,
+                    rhs,
+                    solve_options,
+                    initial_guess=initial_guess,
+                    preconditioner=preconditioner,
+                    collect_basis=basis_requested,
+                    resident_recycle=recycle if resident_recycle else None,
+                    solution_consumer=solution_consumer,
+                )
         validate_current()
         if recycle is not None and result.converged and not resident_recycle:
             recycle_started = time.perf_counter()

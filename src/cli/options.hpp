@@ -5,10 +5,12 @@
 #include <stdexcept>
 #include <string>
 
-#include "cli_method_catalog.hpp"
 #include "generativeqc/ks.hpp"
+#include "methods/named_ks_catalog.hpp"
 
 namespace generativeqc::cli {
+
+namespace method_generated = methods::named_ks;
 
 class UsageError : public std::runtime_error {
  public:

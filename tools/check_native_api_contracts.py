@@ -61,7 +61,7 @@ class Declaration:
 
     @property
     def anchor(self) -> str:
-        prefix = "native-c-" if self.kind == "c-function" else "native-cpp-"
+        prefix = "native-c-" if self.kind.startswith("c-") else "native-cpp-"
         name = self.name.replace("~", "destructor-").replace(
             "operator=", "copy-assignment"
         )
@@ -179,6 +179,28 @@ def scan_c(source: str) -> list[Declaration]:
     result = []
     covered = set()
     for i, token in enumerate(ts):
+        if token.text != "typedef":
+            continue
+        end = i + 1
+        while end < len(ts) and ts[end].text not in {";", "{"}:
+            end += 1
+        text = signature(ts[i:end])
+        callback = re.fullmatch(
+            r"typedef generativeqc_status \( \* (generativeqc_\w+) \) \( ([^(){};]*) \)",
+            text,
+        )
+        if callback and end < len(ts) and ts[end].text == ";":
+            covered.update(range(i, end + 1))
+            result.append(
+                Declaration(
+                    callback[1],
+                    "c-callback",
+                    text + " ;",
+                    token.start,
+                    adjacent_comment(source, token.start),
+                )
+            )
+    for i, token in enumerate(ts):
         if token.text != "GENERATIVEQC_API":
             continue
         end = i + 1
@@ -225,7 +247,7 @@ def scan_c(source: str) -> list[Declaration]:
                 + signature(ts[max(0, i - 3) : i + 8])
             )
 
-    return result
+    return sorted(result, key=lambda declaration: declaration.start)
 
 
 def operation_name(owner: str | None, head: list[Token]) -> str:
@@ -543,7 +565,7 @@ def main() -> int:
         return 1
     counts = {
         kind: sum(d.kind == kind for d in declarations)
-        for kind in ("c-function", "cpp-type", "cpp-operation")
+        for kind in ("c-function", "c-callback", "cpp-type", "cpp-operation")
     }
     print(
         "Native API contracts covered: "
