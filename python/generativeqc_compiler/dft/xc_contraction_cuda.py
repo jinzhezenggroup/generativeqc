@@ -172,12 +172,14 @@ def select_xc_matrix_schedule(
     )
 
 
-def compact_panel_program(family: str) -> tuple:
+def compact_panel_program(family: str, *, diagonal_one_sided: bool = False) -> tuple:
     """Factor the symmetric bilinear into A*W^T + W*A^T.
 
     The value panel absorbs both gradient legs. The scalar and diagonal kinetic
-    terms get a one-half because symmetric assembly visits each twice. Derive
-    their coefficients from the canonical bilinear instead of restating them.
+    terms get a one-half because symmetric assembly visits each twice. With
+    diagonal_one_sided, additional diagonal jets instead carry the full
+    coefficient and are contracted once. Only the value panel still needs
+    both gradient legs. Both layouts derive from the canonical bilinear.
     """
     graph, x, y, _coefficients, bilinear = ao_pair_bilinear(family)
 
@@ -189,7 +191,8 @@ def compact_panel_program(family: str) -> tuple:
         value += entry(j, 0) * x[j]
     roots = [value]
     if family == "mgga":
-        roots.extend(entry(j, j) * x[j] / 2 for j in range(1, 4))
+        divisor = 1 if diagonal_one_sided else 2
+        roots.extend(entry(j, j) * x[j] / divisor for j in range(1, 4))
     return graph, tuple(roots)
 
 
@@ -228,7 +231,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     )
 
 
-def _emit_panels() -> str:
+def _emit_panels(*, diagonal_one_sided: bool = False) -> str:
     lines = [
         r"""
 __device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
@@ -240,7 +243,9 @@ __device__ void compact_potential_panels_body(const double* ao, const double* co
 """
     ]
     for family, terms in (("lda", 1), ("gga", 4), ("mgga", 5)):
-        graph, roots = compact_panel_program(family)
+        graph, roots = compact_panel_program(
+            family, diagonal_one_sided=diagonal_one_sided
+        )
         bindings = {f"x{j}": f"ao[{j}*panel+index]" for j in range(4)}
         bindings.update(
             {f"c{j}": f"coefficients[(spin*terms+{j})*count+point]" for j in range(5)}
@@ -262,7 +267,12 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
                                 work, error);
 }
 """)
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if diagonal_one_sided:
+        source = source.replace(
+            "compact_potential_panels", "compact_diagonal_potential_panels"
+        )
+    return source
 
 
 _TILED_TEMPLATE = r"""
@@ -335,7 +345,7 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false, class Arithmetic = double>
+template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
     double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin) {
@@ -360,17 +370,28 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
   Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
+    // Additional panels are diagonal bilinears derived by compact_panel_program.
+    // Their full coefficient is packed once; the transposed product is identical
+    // mathematically and must not be evaluated a second time. Generic panels
+    // and the value/gradient cross panel retain both legs.
+    const bool cross = !DiagonalJets || jet == 0;
     const double* a = ao+jet*panel;
     const double* w = work+(spin*work_jets+jet)*panel;
     for (I begin = 0; begin < count; begin += @TILE@) {
       const I p = begin+y;
       am[y][x] = p < count && mu < n ? a[p*n+mu] : 0.0;
-      an[y][x] = p < count && nu_load < n ? a[p*n+nu_load] : 0.0;
-      wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
+      if (cross) {
+        an[y][x] = p < count && nu_load < n ? a[p*n+nu_load] : 0.0;
+        wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
+      }
       wn[y][x] = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
       __syncthreads();
-      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu))
-        for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
+        if (cross)
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+        else
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y];
+      }
       __syncthreads();
     }
   }
@@ -399,6 +420,13 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
     bool accumulate, int* error, const size_t* ao_ids, I full_n) {
   tiled_potential_body<false, Arithmetic>(ao, work, n, count, work_jets, point_totals, potential, totals,
                         accumulate, error, ao_ids, full_n, blockIdx.z);
+}
+
+__global__ void tiled_diagonal_potential(const double* ao, const double* work, I n, I count,
+    I work_jets, const double* point_totals, double* potential, double* totals,
+    bool accumulate, int* error, const size_t* ao_ids, I full_n) {
+  tiled_potential_body<false, double, true>(ao, work, n, count, work_jets, point_totals,
+      potential, totals, accumulate, error, ao_ids, full_n, blockIdx.z);
 }
 
 inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
@@ -442,6 +470,17 @@ inline void generated_potential(cudaStream_t stream, const double* ao,
     return;
   }
   if (tiled_xc_admitted(n, count, spins, work_jets)) {
+    if constexpr (std::is_same_v<Arithmetic, double>) {
+      if (work_jets == 4) {
+        compact_diagonal_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+            ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
+        generativeqc_tensor::cuda_check(cudaGetLastError());
+        const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
+        tiled_diagonal_potential<<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
+            ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n);
+        return;
+      }
+    }
     compact_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
         ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
@@ -535,11 +574,12 @@ def emit_native_xc_matrix_schedule(
     density_source: str = "",
 ) -> str:
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
+    panels = _emit_panels() + _emit_panels(diagonal_one_sided=True)
     return (
-        emit_potential_portfolio(_emit_panels() + _emit_tiled(schedule))
-        + '\n#include "tensor/cuda_panel_product.cuh"\n'
+        emit_potential_portfolio(panels + _emit_tiled(schedule))
+        + '\n#include "tensor/cuda_panel_product.cuh"\n#include <type_traits>\n'
         + "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
-        + _emit_panels()
+        + panels
         + _emit_tiled(schedule)
         + _emit_density_factor()
         + _emit_density_factor(indexed=True)

@@ -62,6 +62,15 @@ __global__ void batch_potential_panels(const CudaXcCompactTile* tiles, const dou
       tile.active, tile.count, spins, terms, work_jets, work + tile.work_offset, error);
 }
 
+__global__ void batch_diagonal_potential_panels(const CudaXcCompactTile* tiles, const double* ao,
+    const double* coefficients, const double* weights, double* work, I batch_begin,
+    I spins, I terms, I work_jets, int* error) {
+  const auto& tile = tiles[blockIdx.y];
+  compact_diagonal_potential_panels_body(ao + tile.ao_offset,
+      coefficients + (tile.begin - batch_begin) * spins * terms, weights + tile.begin,
+      tile.active, tile.count, spins, terms, work_jets, work + tile.work_offset, error);
+}
+
 template <class Arithmetic = double>
 __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const double* ao,
     const double* work, double* potential, I spins, I work_jets, int* error) {
@@ -69,6 +78,16 @@ __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const dou
   const I columns = (tile.active + @TILE@ - 1) / @TILE@;
   if (!tile.active || blockIdx.x >= columns * (columns + 1) / 2) return;
   tiled_potential_body<true, Arithmetic>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
+      tile.count, work_jets, nullptr, potential + tile.potential_offset, nullptr, false,
+      error, nullptr, tile.active, blockIdx.z % spins);
+}
+
+__global__ void batch_local_diagonal_potentials(const CudaXcCompactTile* tiles, const double* ao,
+    const double* work, double* potential, I spins, I work_jets, int* error) {
+  const auto& tile = tiles[blockIdx.z / spins];
+  const I columns = (tile.active + @TILE@ - 1) / @TILE@;
+  if (!tile.active || blockIdx.x >= columns * (columns + 1) / 2) return;
+  tiled_potential_body<true, double, true>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
       tile.count, work_jets, nullptr, potential + tile.potential_offset, nullptr, false,
       error, nullptr, tile.active, blockIdx.z % spins);
 }
@@ -184,12 +203,22 @@ inline void launch_batch_potential_typed(cudaStream_t stream, const CudaXcLayout
     const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* ao, const double* coefficients,
     const double* weights, double* work, double* local, const double* point_totals,
     I batch_begin, const size_t* ids, double* potential, double* totals, int* error) {
-  batch_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * max_active,
+  const bool diagonal = std::is_same_v<Arithmetic, double> && layout.work_jets == 4;
+  if (diagonal)
+    batch_diagonal_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * max_active,
+        128), tile_count), 128, 0, stream>>>(tiles, ao, coefficients, weights, work, batch_begin,
+        layout.spins, layout.feature_terms, layout.work_jets, error);
+  else
+    batch_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * max_active,
       128), tile_count), 128, 0, stream>>>(tiles, ao, coefficients, weights, work, batch_begin,
       layout.spins, layout.feature_terms, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   const I columns = (max_active + @TILE@ - 1) / @TILE@;
-  batch_local_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
+  if (diagonal)
+    batch_local_diagonal_potentials<<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
+        dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);
+  else
+    batch_local_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   // Preserve small-group execution. Large groups parallelize only output
