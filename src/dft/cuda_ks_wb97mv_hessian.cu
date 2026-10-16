@@ -26,6 +26,15 @@ std::size_t product(std::size_t first, std::size_t second) {
   require(!second || first <= SIZE_MAX / second, "stationary Hessian extent overflow");
   return first * second;
 }
+struct DrainOnFailure {
+  cudaStream_t stream;
+  bool active{true};
+  ~DrainOnFailure() {
+    // Failed submissions may leave earlier work borrowing caller/staging data.
+    // The null handle is CUDA's valid default stream and must also drain.
+    if (active) (void)cudaStreamSynchronize(stream);
+  }
+};
 struct Layout {
   std::size_t bytes{};
   std::size_t reserve(std::size_t count, std::size_t size = sizeof(double)) {
@@ -542,12 +551,9 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->bytes = layout.bytes;
     owner->charge(owner->bytes - owner->grid_bytes - owner->geometry_bytes - owner->cpks_bytes);
     check(cudaMalloc(&owner->arena, owner->bytes));
-    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
     std::vector<double> charges;
     for (const auto& atom : owner->fock.primary->system().atoms)
       charges.push_back(atom.ionic_charge());
-    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
-                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
     std::vector<std::size_t> pair_atoms(product(2, owner->pairs));
     std::size_t pair{};
     for (std::size_t first = 0; first < shape.atoms; ++first)
@@ -555,11 +561,16 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
         pair_atoms[pair] = first;
         pair_atoms[owner->pairs + pair] = second;
       }
+    DrainOnFailure upload_drain{owner->stream};
+    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
+    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
+                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
     if (owner->pairs)
       check(cudaMemcpyAsync(owner->at<std::size_t>(owner->pair_atoms), pair_atoms.data(),
                             pair_atoms.size() * sizeof(std::size_t), cudaMemcpyHostToDevice,
                             owner->stream));
     check(cudaStreamSynchronize(owner->stream));
+    upload_drain.active = false;
     check(owner->geometry.prepare(geometry_shape, owner->options.geometry,
                                   owner->grid_reference.geometry_reference(),
                                   owner->at(owner->geometry_offset), owner->geometry_bytes));
@@ -629,6 +640,7 @@ cudaError_t CudaKsWb97mvHessian::apply(const double* direction, double* output, 
     auto& owner = *impl_;
     auto error = owner.admit(direction, output, false, stream);
     if (error != cudaSuccess) return error;
+    DrainOnFailure drain{stream};
     error = cudaMemcpyAsync(owner.at(owner.direction), direction,
                             owner.coordinates * sizeof(double), cudaMemcpyDeviceToDevice, stream);
     if (error != cudaSuccess || (error = owner.compute(result)) != cudaSuccess ||
@@ -637,10 +649,12 @@ cudaError_t CudaKsWb97mvHessian::apply(const double* direction, double* output, 
     error = cudaMemcpyAsync(output, owner.at(owner.candidate), owner.coordinates * sizeof(double),
                             cudaMemcpyDeviceToDevice, stream);
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
-    if (error == cudaSuccess)
+    if (error == cudaSuccess) {
+      drain.active = false;
       ++owner.receipt.published_hvps;
-    else
+    } else {
       result.status = CudaKsWb97mvHessianStatus::failed;
+    }
     return error;
   } catch (...) {
     result.status = CudaKsWb97mvHessianStatus::failed;
@@ -655,6 +669,7 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
     auto& owner = *impl_;
     auto error = owner.admit(nullptr, output, true, stream);
     if (error != cudaSuccess) return error;
+    DrainOnFailure drain{stream};
     for (std::size_t coordinate = 0; coordinate < owner.coordinates; ++coordinate) {
       result.status = CudaKsWb97mvHessianStatus::failed;
       unit<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(owner.at(owner.direction),
@@ -679,6 +694,7 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
                             cudaMemcpyDeviceToDevice, stream);
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
     if (error == cudaSuccess) {
+      drain.active = false;
       ++owner.receipt.published_hessians;
       result.status = CudaKsWb97mvHessianStatus::converged;
     }
