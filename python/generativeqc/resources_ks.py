@@ -952,6 +952,8 @@ def ks_resource_request(
             return ResourceRequest(
                 name, identity, (), exclusions, unsupported_reason=str(error)
             )
+        if has_ecp:
+            controls["ecp_host_inventory"] = _ecp_inventory_owner(library)
     native_inventory = _native_host_fleet_inventory(
         library,
         items,
