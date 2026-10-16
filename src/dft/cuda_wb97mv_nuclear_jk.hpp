@@ -30,6 +30,8 @@ struct CudaWb97mvJkOptions {
   std::uint64_t max_reduction_terms{1'073'741'824};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
+  /// Optional last-direction jets; zero or insufficient arena keeps streaming.
+  std::size_t max_resident_integral_bytes{64ULL << 20};
 };
 
 /** Borrow the actual normalized AoBasis and an immutable live owner. Geometry,
@@ -58,6 +60,8 @@ struct CudaWb97mvJkWork {
       reduction_terms_per_action{};
   std::uint64_t attempted_actions{}, completed_actions{}, component_evaluations{},
       projection_terms_bound{}, reduction_terms{};
+  std::size_t resident_integral_bytes{};
+  std::uint64_t integral_source_builds{}, resident_integral_hits{};
 };
 
 /** Host-only checked closure/work/arena admission, without CUDA initialization.
@@ -70,7 +74,14 @@ cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape,
 
 /** Native compiler-AD J/K nuclear source, with signed symmetric D and dD.
  * Raw value/gradient/gradient-JVP are evaluated once per primitive component and
- * cached only for the current shell quartet (<=25*10^4 FP64 values through f).
+ * streamed through the current shell quartet (<=25*10^4 FP64 values through f).
+ * When its explicit memory cap and the supplied arena permit, an optional
+ * resident cache retains all jets for the last right direction. Its key is the
+ * complete device direction, compared exactly, under the authenticated immutable
+ * basis lease. D and dD are not cache keys: contractions always use their current
+ * values. Reprepare and failed cache construction invalidate resident contents.
+ * Resident groups share ERI eightfold symmetry through explicit Cartesian and
+ * derivative-slot permutations; the disabled/budget fallback stays ordered.
  * Public transforms gather that mandatory bounded cache, never repeat integral
  * work per AO or left coordinate. All numerical contraction and deterministic
  * reductions run on CUDA; actions allocate nothing and invoke no Python/CPU

@@ -1,5 +1,6 @@
 #include <array>
 #include <climits>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -65,7 +66,7 @@ struct Owner {
     return cudaSuccess;
   }
 };
-void run(const char* source, const char* result) {
+void run(const char* source, const char* result, const std::string& cache_mode) {
   std::ifstream input(source, std::ios::binary);
   const auto header = read<std::uint64_t>(input, 7);
   require(header[0] > 0 && header[0] <= 8 && header[1] > 0 && header[1] <= 8 && header[2] <= 1 &&
@@ -109,6 +110,15 @@ void run(const char* source, const char* result) {
   CudaWb97mvJkOptions options;
   options.part = static_cast<CudaWb97mvJkPart>(header[4]);
   options.radial_tile = header[5];
+  if (cache_mode != "resident") {
+    options.max_resident_integral_bytes = 0;
+    if (cache_mode == "budgeted") {
+      std::size_t minimum{};
+      check(cuda_wb97mv_jk_workspace(shape, shells, options, minimum));
+      options.max_workspace_bytes = minimum;
+      options.max_resident_integral_bytes = 64ULL << 20;
+    }
+  }
   std::size_t bytes{};
   check(cuda_wb97mv_jk_workspace(shape, shells, options, bytes));
   const auto ao_offset = 3 * shape.atoms + 2 * shape.primitives;
@@ -166,6 +176,63 @@ void run(const char* source, const char* result) {
                                             values.size() * sizeof(double))),
             "output write failed");
   }
+  const auto expected = [&] {
+    std::array<std::vector<double>, 5> values;
+    for (unsigned index = 0; index < 5; ++index)
+      values[index] = download(pointers[index], counts[index]);
+    return values;
+  }();
+  auto* identical_direction = storage.upload(direction);
+  check(response.apply(identical_direction, density, delta, output, storage.stream));
+  require(response.work().resident_integral_hits > 0 || !receipt.resident_integral_bytes,
+          "resident direction was keyed by pointer rather than values");
+  for (unsigned index = 0; index < 5; ++index)
+    require(download(pointers[index], counts[index]) == expected[index],
+            "same direction changed numerical output");
+
+  auto streamed = options;
+  streamed.max_resident_integral_bytes = 0;
+  std::size_t streamed_bytes{};
+  check(cuda_wb97mv_jk_workspace(shape, shells, streamed, streamed_bytes));
+  CudaWb97mvNuclearJk independent_schedule;
+  check(independent_schedule.prepare(shape, shells, streamed, reference,
+                                     storage.allocate(streamed_bytes / sizeof(double)),
+                                     streamed_bytes));
+  std::array<double*, 5> alternate;
+  for (unsigned index = 0; index < 5; ++index) alternate[index] = storage.allocate(counts[index]);
+  const auto compare_streamed = [&] {
+    check(independent_schedule.apply(motion, density, delta, outputs(alternate), storage.stream));
+    for (unsigned index = 0; index < 5; ++index) {
+      const auto actual = download(pointers[index], counts[index]);
+      const auto expected_streamed = download(alternate[index], counts[index]);
+      for (std::size_t element = 0; element < counts[index]; ++element)
+        require(std::isfinite(actual[element]) && std::isfinite(expected_streamed[element]) &&
+                    std::abs(actual[element] - expected_streamed[element]) <=
+                        3e-12 * (1 + std::abs(expected_streamed[element])),
+                "resident and streaming schedules disagree");
+    }
+  };
+  auto changed_densities = densities;
+  for (std::size_t index = 0; index < panels; ++index) {
+    changed_densities[index] = 0.7 * densities[index] + 0.2 * densities[panels + index];
+    changed_densities[panels + index] = -0.3 * densities[index] + 0.4 * densities[panels + index];
+  }
+  check(cudaMemcpy(density, changed_densities.data(), changed_densities.size() * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  check(response.apply(motion, density, delta, output, storage.stream));
+  compare_streamed();
+  auto changed_direction = direction;
+  for (auto& value : changed_direction) value *= -1.3;
+  check(cudaMemcpy(motion, changed_direction.data(), changed_direction.size() * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  check(response.apply(motion, density, delta, output, storage.stream));
+  compare_streamed();
+  check(cudaMemcpy(motion, direction.data(), direction.size() * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  check(cudaMemcpy(density, densities.data(), densities.size() * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  check(response.apply(motion, density, delta, output, storage.stream));
+  compare_streamed();
   const auto sentinel = [&] {
     for (unsigned index = 0; index < 5; ++index) {
       const std::vector<double> values(counts[index], 27);
@@ -266,14 +333,18 @@ void run(const char* source, const char* result) {
             << ",\"groups\":" << receipt.groups
             << ",\"records\":" << receipt.primitive_records_per_action
             << ",\"components\":" << receipt.component_evaluations
+            << ",\"resident_bytes\":" << receipt.resident_integral_bytes
             << ",\"projections\":" << receipt.projection_terms_bound
             << ",\"reductions\":" << receipt.reduction_terms << "}\n";
 }
 }  // namespace
 int main(int argc, char** argv) {
   try {
-    require(argc == 3, "usage: jk-probe source.bin output.bin");
-    run(argv[1], argv[2]);
+    require(argc == 3 || argc == 4,
+            "usage: jk-probe source.bin output.bin [resident|streamed|budgeted]");
+    const std::string mode = argc == 4 ? argv[3] : "resident";
+    require(mode == "resident" || mode == "streamed" || mode == "budgeted", "invalid cache mode");
+    run(argv[1], argv[2], mode);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
