@@ -201,6 +201,8 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_scf_proposal_tests tests/native/test_scf_proposals.cpp)
+  generativeqc_native_test(generativeqc_scf_effort_policy_tests tests/native/test_scf_effort_policy.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_scf_effort_sdk_tests tests/native/test_scf_effort_sdk.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_self_consistent_tests tests/native/test_self_consistent.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_batch_tests tests/native/test_batch.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_method_execution_tests tests/native/test_method_execution.cpp)

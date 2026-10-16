@@ -1453,6 +1453,126 @@ typedef struct generativeqc_cuda_tuning_device_descriptor {
 GENERATIVEQC_API generativeqc_status generativeqc_cuda_tuning_device(
     int32_t device_id, generativeqc_cuda_tuning_device_descriptor* output);
 
+/** Native empirical SCF-effort selection; the final supplied level is strict. */
+typedef enum {
+  GENERATIVEQC_SCF_EFFORT_STRICT = 0,
+  GENERATIVEQC_SCF_EFFORT_STRICT_FALLBACK = 1,
+  GENERATIVEQC_SCF_EFFORT_HOLD = 2,
+  GENERATIVEQC_SCF_EFFORT_RELAX = 3,
+  GENERATIVEQC_SCF_EFFORT_TIGHTEN = 4
+} generativeqc_scf_effort_action;
+
+typedef enum {
+  GENERATIVEQC_SCF_EFFORT_REPRODUCIBLE = 0,
+  GENERATIVEQC_SCF_EFFORT_MISSING_FORCE = 1,
+  GENERATIVEQC_SCF_EFFORT_NEAR_STATIONARY = 2,
+  GENERATIVEQC_SCF_EFFORT_CALIBRATION_DOMAIN = 3,
+  GENERATIVEQC_SCF_EFFORT_ENERGY_FORECAST = 4,
+  GENERATIVEQC_SCF_EFFORT_FORCE_MAX_FORECAST = 5,
+  GENERATIVEQC_SCF_EFFORT_FORCE_RMS_FORECAST = 6,
+  GENERATIVEQC_SCF_EFFORT_NO_ADMISSIBLE_LEVEL = 7,
+  GENERATIVEQC_SCF_EFFORT_RELAXATION_WAIT = 8,
+  GENERATIVEQC_SCF_EFFORT_RELAXATION_MARGIN = 9,
+  GENERATIVEQC_SCF_EFFORT_TIGHTER_ALLOWANCE = 10,
+  GENERATIVEQC_SCF_EFFORT_CURRENT_ALLOWANCE = 11
+} generativeqc_scf_effort_reason;
+
+/** Immutable call-local policy/calibration values, not scientific model identity.
+ * flags: bit 0 requests strict reproducibility; bit 1 supplies current_force_max.
+ * calibration_domain: 0 is a caller-verified joint method/basis domain, 1 an
+ * uncalibrated method, 2 an uncalibrated joint pair. No unseen-domain promotion.
+ */
+typedef struct {
+  uint32_t struct_size, abi_version;
+  uint32_t flags, calibration_domain;
+  uint64_t level_count, level_index, safe_streak, relax_after;
+  const double* density_tolerances;
+  double optimizer_force_tolerance, intermediate_energy_error;
+  double intermediate_force_fraction, max_intermediate_force_error;
+  double near_stationary_factor;
+  double energy_scale, force_max_scale, force_rms_scale, diagnostic_floor;
+  double current_force_max;
+} generativeqc_scf_effort_descriptor_v1;
+
+/** Detached next state and optional empirical estimate. reserved is zero.
+ * has_estimate is 0/1; estimate fields are zero when no estimate is published.
+ */
+typedef struct {
+  uint32_t struct_size, abi_version;
+  uint32_t action, reason, has_estimate, reserved;
+  uint64_t level_index, safe_streak;
+  double allowed_energy_error, allowed_force_error;
+  double energy_abs, force_max_abs, force_rms, diagnostic_value;
+} generativeqc_scf_effort_decision_v1;
+
+/** @native-contract generativeqc_scf_effort_decide_v1
+ * @behavior Select strict/hold/relax/tighten effort and next hysteresis state from
+ * an empirical diagnostic-to-error calibration; this is not a rigorous bound.
+ * @inputs Initialize complete descriptor/output ABI headers. Both pointers and
+ * level_count positive finite tightening density_tolerances are required; the
+ * last level is strict. Controls/floor are positive finite; scales nonnegative
+ * finite, force fraction <1, stationarity factor >=1, relax_after >0, and state
+ * index < level_count. Only flags bits 0/1 and domain codes 0/1/2 are supported.
+ * A supplied force is nonnegative finite unless strict reproducibility ignores
+ * it. The caller owns calibration provenance, physical model and level validity.
+ * @outputs On success atomically replaces output with a detached next state and
+ * optional selected-level estimate. Missing force/reproducibility/stationarity
+ * gates precede forecasts. Domain or nonfinite-forecast fallback is SUCCESS with
+ * STRICT_FALLBACK, not permission to execute an unqualified calculation.
+ * @errors Invalid metadata, counts/overflow or pointers return INVALID_ARGUMENT;
+ * incompatible headers return ABI_MISMATCH. Output stays unchanged on failure.
+ * @lifetime Borrows immutable descriptors/level values only for this call; retains
+ * no pointers and owns no physical calculation, device, lease or transition log.
+ * @execution Synchronous host metadata operation with linear level work and
+ * constant native numeric storage; performs no SCF, provider or device operation.
+ * @units Energy/force thresholds and forecasts use the supplied calibration's
+ * Hartree and Hartree/Bohr units; density RMS is not a physical residual metric.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_scf_effort_decide_v1(const generativeqc_scf_effort_descriptor_v1* descriptor,
+                                  generativeqc_scf_effort_decision_v1* output);
+
+/** Flags bits 0/1/2 declare matching model identity, strict level and convergence.
+ * All other bits and reserved must be zero. Identity metadata is not attested.
+ */
+typedef struct {
+  uint32_t struct_size, abi_version;
+  uint32_t flags, reserved;
+  double energy, energy_change, density_rms, force_max_abs;
+  double energy_tolerance, density_tolerance, optimizer_force_tolerance;
+} generativeqc_scf_effort_final_descriptor_v1;
+
+/** status: 0 observed_met, 1 observed_unmet, 2 unverified. unmet_gates bits:
+ * model=1, strict level=2, convergence=4, energy change=8, density=16, force=32.
+ */
+typedef struct {
+  uint32_t struct_size, abi_version;
+  uint32_t status, unmet_gates;
+} generativeqc_scf_effort_verification_v1;
+
+/** @native-contract generativeqc_scf_effort_verify_v1
+ * @behavior Verify all final strict-SCF and optimizer termination gates without
+ * treating empirical forecasts as a substitute for measured final observables.
+ * @inputs Initialize both complete ABI headers. Both pointers are required.
+ * flags use only bits 0/1/2 and reserved=0. Energy is finite; change/density/force
+ * are finite nonnegative, thresholds finite positive. Caller supplies exact
+ * physical-model and strict-level equality and actual SCF convergence metadata.
+ * @outputs On success atomically publishes status and every unmet gate. Equality
+ * meets a numeric gate. Any model mismatch is unverified; otherwise unmet gates
+ * produce observed_unmet. All measured gates passing produces observed_met only.
+ * @errors Invalid pointers/metadata/numeric values return INVALID_ARGUMENT;
+ * incompatible complete headers return ABI_MISMATCH. Failed output is unchanged.
+ * @lifetime Borrows immutable inputs for this call and retains no model, result,
+ * device, calculation or borrowed storage; publication belongs to the caller.
+ * @execution Synchronous constant-storage host metadata verification; performs
+ * no scientific reevaluation, provider/device work or fallback SCF solve.
+ * @units Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
+ * remains the selected SCF diagnostic, not a physical commutator residual.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_scf_effort_verify_v1(const generativeqc_scf_effort_final_descriptor_v1* descriptor,
+                                  generativeqc_scf_effort_verification_v1* output);
+
 /** Return a stable, process-lifetime error string for a status code. */
 /** @native-contract generativeqc_status_message
  * @behavior Describe a native status code, including unrecognized values.
