@@ -6,6 +6,16 @@ Loading is offline. Element symbols H–Og identify nuclei independently of the
 available basis data; the unchanged bundled STO-3G/def2-SVP/def2-TZVP tables
 cover H–Ar. Existing bundled defaults remain Cartesian.
 
+Bundled execution uses the same compiled C++ catalog for the Python API, native
+CLI and installed SDK. Python still creates native-free immutable metadata for
+preflight and provenance; only an exact bundled snapshot uses native expansion,
+and its source-pack checksum must match the installed catalog. A catalog mismatch
+is an error, not permission to retry with different Python data. Older libraries
+without the additive constructor retain the portable descriptor path. Custom
+records, ECP expansion and the correlation-only auxiliary-through-g path retain
+their explicit descriptor adapters; a same-name custom record is never replaced
+by bundled data.
+
 ## Import and use
 
 Convert a locally supplied **MolSSI Basis Set Exchange complete JSON 0.1** file:

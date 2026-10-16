@@ -900,16 +900,25 @@
       "native_scientific_sources": [
         "src/methods/generated_method_manifest.hpp",
         "src/methods/registry.cpp",
+        "src/molecule/basis_catalog.cpp",
+        "src/molecule/basis_template.cpp",
+        "src/api/c_api_basis_catalog.cpp",
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_basis_catalog.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+        "Exact bundled snapshots use the checksum-bound native catalog constructor. Other admitted BasisSet inputs use element-local FP64 templates; Python, CLI and SDK share native atom/general-contraction expansion and scalar ECP channel mapping. Typed arrays do not authenticate canonical provenance. Python retains native-free preflight/provenance metadata and explicit old-library, Shell and correlation-auxiliary descriptor adapters. Built-in Calculator construction still imports compiler MethodIR/model resolution; custom MethodIR remains explicit compiler work."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_native_basis_catalog.py",
+        "tests/python/test_native_basis_template.py",
+        "tests/native/test_basis_catalog.cpp",
+        "tests/native/test_basis_template.cpp",
+        "tests/native/test_basis_catalog_sdk.cpp",
         "tests/python/test_api_ownership_boundaries.py"
       ],
       "trackers": [

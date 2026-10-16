@@ -5,6 +5,16 @@ include_guard(GLOBAL)
 # target(s) that consume each generated family.
 macro(generativeqc_register_host_generated_sources target)
   generativeqc_register_generated_sources(
+    NAME generativeqc_basis_catalog_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_basis_pack.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_basis_pack.hpp"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+    ARGS
+      --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+      --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_basis_pack.hpp"
+    COMMENT "Generating shared Python-free native basis catalog")
+  generativeqc_register_generated_sources(
     NAME generativeqc_matrix_product_codegen
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_matrix_product_cuda.py"

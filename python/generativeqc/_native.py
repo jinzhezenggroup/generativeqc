@@ -221,6 +221,53 @@ class ShellDescriptor(ctypes.Structure):
     ]
 
 
+class BasisShellTemplate(ctypes.Structure):
+    _fields_ = [
+        ("angular_momentum", ctypes.c_uint32),
+        ("exponent_offset", ctypes.c_uint32),
+        ("primitive_count", ctypes.c_uint32),
+        ("coefficient_offset", ctypes.c_uint32),
+        ("contraction_count", ctypes.c_uint32),
+    ]
+
+
+class BasisEcpTemplate(ctypes.Structure):
+    _fields_ = [
+        ("angular_momentum", ctypes.c_uint32),
+        ("power", ctypes.c_uint32),
+        ("exponent", ctypes.c_double),
+        ("coefficient", ctypes.c_double),
+    ]
+
+
+class BasisElementTemplate(ctypes.Structure):
+    _fields_ = [
+        ("atomic_number", ctypes.c_int32),
+        ("ecp_core_electrons", ctypes.c_int32),
+        ("shell_offset", ctypes.c_uint32),
+        ("shell_count", ctypes.c_uint32),
+        ("ecp_term_offset", ctypes.c_uint32),
+        ("ecp_term_count", ctypes.c_uint32),
+    ]
+
+
+class BasisTemplateDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("elements", ctypes.POINTER(BasisElementTemplate)),
+        ("element_count", ctypes.c_uint32),
+        ("shells", ctypes.POINTER(BasisShellTemplate)),
+        ("shell_count", ctypes.c_uint32),
+        ("exponents", ctypes.POINTER(ctypes.c_double)),
+        ("exponent_count", ctypes.c_uint32),
+        ("coefficients", ctypes.POINTER(ctypes.c_double)),
+        ("coefficient_count", ctypes.c_uint32),
+        ("ecp_terms", ctypes.POINTER(BasisEcpTemplate)),
+        ("ecp_term_count", ctypes.c_uint32),
+    ]
+
+
 class SystemDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -1124,6 +1171,26 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         void_pp,
     ]
     library.generativeqc_system_create.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_system_create_bundled"):
+        library.generativeqc_system_create_bundled.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            void_pp,
+        ]
+        library.generativeqc_system_create_bundled.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_bundled_basis_catalog_sha256"):
+        library.generativeqc_bundled_basis_catalog_sha256.argtypes = []
+        library.generativeqc_bundled_basis_catalog_sha256.restype = ctypes.c_char_p
+    if hasattr(library, "generativeqc_system_create_basis_template_v1"):
+        library.generativeqc_system_create_basis_template_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            ctypes.POINTER(BasisTemplateDescriptor),
+            void_pp,
+        ]
+        library.generativeqc_system_create_basis_template_v1.restype = ctypes.c_int
     if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
         library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
             ctypes.c_void_p,
