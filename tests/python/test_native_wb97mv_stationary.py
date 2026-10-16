@@ -34,6 +34,7 @@ def _native(
     auxiliary_d: bool = False,
     auxiliary_g: bool = False,
     benchmark_h2: bool = False,
+    orbital_angular: int = 0,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -45,6 +46,7 @@ def _native(
     mode += "-auxd" if auxiliary_d else ""
     mode += "-auxg" if auxiliary_g else ""
     mode += "-benchmark-h2" if benchmark_h2 else ""
+    mode += "-orbd" if orbital_angular == 2 else "-orbf" if orbital_angular == 3 else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -62,7 +64,10 @@ def _native(
     if directory := os.environ.get("GENERATIVEQC_STATIONARY_RECEIPTS"):
         destination = Path(directory)
         destination.mkdir(parents=True, exist_ok=True)
-        (destination / f"stationary-{spins}-{mode}.json").write_text(result.stdout)
+        suffix = "-full" if full else ""
+        (destination / f"stationary-{spins}-{mode}{suffix}.json").write_text(
+            result.stdout
+        )
     return json.loads(result.stdout)
 
 
@@ -102,20 +107,24 @@ class MolecularEnergy:
             if result.get("auxiliary_d", False)
             else 0
         )
-        if auxiliary_order:
+        self.orbital_angular = result.get("orbital_angular", 0)
+        compact_fixture = auxiliary_order or self.orbital_angular
+        if compact_fixture:
             basis = {
                 label: [[0, [0.7 if atom == 0 else 0.9, 1.0]]]
                 for atom, label in enumerate(labels)
             }
+        if self.orbital_angular:
+            basis[labels[0]].append([self.orbital_angular, [0.48, 1.0]])
         potentials = {}
         if ecp:
             from test_native_ecp_nuclear_response import _fixture
 
-            if not auxiliary_order:
+            if not compact_fixture:
                 basis[labels[0]].append([1, [0.45, 1.0]])
             terms = (
                 ((0, -1, 2, 0.8, -0.4), (0, 0, 2, 0.8, 0.3))
-                if auxiliary_order
+                if compact_fixture
                 else _fixture()["terms"]
             )
             channels = {}
@@ -151,15 +160,25 @@ class MolecularEnergy:
                 cart=not spherical,
                 verbose=0,
             )
-        jets = self.template.eval_gto(
-            "GTOval_sph_deriv1" if spherical else "GTOval_cart_deriv1", self.points
+        # libcint Cartesian d/f functions carry a shell-radial convention;
+        # the public native Cartesian AOs are individually normalized.
+        self.orbital_scale = (
+            1 / np.sqrt(np.diag(self.template.intor("int1e_ovlp")))
+            if not spherical
+            else np.ones(self.nao)
+        )
+        jets = (
+            self.template.eval_gto(
+                "GTOval_sph_deriv1" if spherical else "GTOval_cart_deriv1", self.points
+            )
+            * self.orbital_scale
         )
         self.active = _fields(jets, self.seed).sum(axis=0)[0] >= 1e-8
         self.reference = result
 
     def __call__(self, displacement: np.ndarray, *, reference: bool = False) -> float:
         from pyscf import df
-        from scipy.linalg import eigh
+        from scipy.linalg import eigh, expm
         from scipy.optimize import root
 
         centers = self.centers + displacement
@@ -179,8 +198,11 @@ class MolecularEnergy:
             ),
             dtype=np.float64,
         )
-        jets = molecule.eval_gto(
-            "GTOval_cart_deriv1" if molecule.cart else "GTOval_sph_deriv1", points
+        jets = (
+            molecule.eval_gto(
+                "GTOval_cart_deriv1" if molecule.cart else "GTOval_sph_deriv1", points
+            )
+            * self.orbital_scale
         )
         fixture = {
             "jets": jets,
@@ -194,10 +216,17 @@ class MolecularEnergy:
         core = molecule.intor("int1e_kin") + molecule.intor("int1e_nuc")
         if molecule.has_ecp():
             core += molecule.intor("ECPscalar")
+        orbital_pair_scale = self.orbital_scale[:, None] * self.orbital_scale[None, :]
+        overlap *= orbital_pair_scale
+        core *= orbital_pair_scale
         eri = molecule.intor("int2e", aosym="s1")
+        eri *= (
+            orbital_pair_scale[:, :, None, None] * orbital_pair_scale[None, None, :, :]
+        )
         if self.fitted:
             auxiliary = self.auxiliary.set_geom_(centers, unit="Bohr", inplace=False)
             raw = df.incore.aux_e2(molecule, auxiliary, aosym="s1")
+            raw *= orbital_pair_scale[:, :, None]
             metric = auxiliary.intor("int2c2e")
             eri = np.einsum("ijp,pq,klq->ijkl", raw, np.linalg.inv(metric), raw)
             if reference and "raw" in self.reference:
@@ -218,6 +247,9 @@ class MolecularEnergy:
                 )
         with molecule.with_range_coulomb(0.3):
             long_range = molecule.intor("int2e", aosym="s1")
+        long_range *= (
+            orbital_pair_scale[:, :, None, None] * orbital_pair_scale[None, None, :, :]
+        )
         occupation = 2 if self.spins == 1 else 1
         occupied = (molecule.nelectron // 2,) if self.spins == 1 else molecule.nelec
         rows, columns = np.triu_indices(self.nao)
@@ -249,9 +281,69 @@ class MolecularEnergy:
                 projected.append(occupation * vectors @ vectors.T)
             return pack(np.array(projected) - density)
 
-        solution = root(residual, pack(self.seed), tol=1e-10)
-        assert np.linalg.norm(residual(solution.x)) < 2e-10, solution.message
-        density = unpack(solution.x)
+        if self.orbital_angular:
+            # Unconstrained density trials can be indefinite and leave VV10's
+            # domain. Occupied/virtual rotations preserve positivity and rank
+            # without borrowing native response or any derivative equations.
+            overlap_values, overlap_vectors = eigh(overlap)
+            overlap_root = (
+                overlap_vectors * np.sqrt(overlap_values)
+            ) @ overlap_vectors.T
+            inverse_root = (
+                overlap_vectors / np.sqrt(overlap_values)
+            ) @ overlap_vectors.T
+            frames = [
+                inverse_root @ eigh(overlap_root @ seed @ overlap_root)[1][:, ::-1]
+                for seed in self.seed
+            ]
+            offsets = np.cumsum(
+                [0, *(count * (self.nao - count) for count in occupied)]
+            )
+
+            def orbital_density(parameters: np.ndarray) -> tuple[np.ndarray, list]:
+                trial_frames, trial_density = [], []
+                for spin, count in enumerate(occupied):
+                    rotation = parameters[offsets[spin] : offsets[spin + 1]].reshape(
+                        self.nao - count, count
+                    )
+                    generator = np.zeros((self.nao, self.nao))
+                    generator[count:, :count] = rotation
+                    generator[:count, count:] = -rotation.T
+                    coefficients = frames[spin] @ expm(generator)
+                    trial_frames.append(coefficients)
+                    trial_density.append(
+                        occupation * coefficients[:, :count] @ coefficients[:, :count].T
+                    )
+                return np.array(trial_density), trial_frames
+
+            def orbital_residual(parameters: np.ndarray) -> np.ndarray:
+                trial_density, trial_frames = orbital_density(parameters)
+                return np.concatenate(
+                    [
+                        (
+                            coefficients[:, count:].T @ matrix @ coefficients[:, :count]
+                        ).ravel()
+                        for matrix, coefficients, count in zip(
+                            fock(trial_density), trial_frames, occupied, strict=True
+                        )
+                    ]
+                )
+
+            solution = root(
+                orbital_residual,
+                np.zeros(offsets[-1]),
+                tol=1e-10,
+                options={"maxfev": 200 * (int(offsets[-1]) + 1)},
+            )
+            density = orbital_density(solution.x)[0]
+            values = pack(density)
+        else:
+            solution = root(residual, pack(self.seed), tol=1e-10)
+            values = solution.x
+        # Retain the independent lowest-occupation fixed-point gate, not merely
+        # stationarity in the rotation chart, at the original tolerance.
+        assert np.linalg.norm(residual(values)) < 2e-10, solution.message
+        density = unpack(values)
         if reference:
             np.testing.assert_allclose(
                 core,
@@ -313,6 +405,43 @@ def test_independent_spherical_g_auxiliary_stationary_hvp(
     _qualify(result, fitted=True, spherical=True, ecp=ecp, full=False)
 
 
+@pytest.mark.parametrize(
+    "spins,fitted,spherical,ecp,orbital_angular",
+    (
+        (1, False, True, False, 2),
+        (1, False, True, False, 3),
+        (1, False, False, False, 3),
+        (2, True, True, True, 3),
+        (2, True, False, True, 3),
+    ),
+    ids=(
+        "rks-direct-d",
+        "rks-direct-f-spherical",
+        "rks-direct-f-cartesian",
+        "uks-df-ecp-f-g-spherical",
+        "uks-df-ecp-f-g-cartesian",
+    ),
+)
+def test_high_angular_molecular_stationary_hvp(
+    spins: int, fitted: bool, spherical: bool, ecp: bool, orbital_angular: int
+) -> None:
+    """Exercise d/f orbital relaxation and joint f/g response beyond leaf gates."""
+    pytest.importorskip("pyscf")
+    full = spherical and orbital_angular == 3
+    result = _native(
+        spins,
+        fitted,
+        spherical,
+        ecp,
+        full,
+        auxiliary_g=fitted,
+        orbital_angular=orbital_angular,
+    )
+    assert result["orbital_angular"] == orbital_angular
+    assert result["nao"] > 6
+    _qualify(result, fitted=fitted, spherical=spherical, ecp=ecp, full=full)
+
+
 def test_benchmark_h2_full_hessian_against_independent_molecular_energies() -> None:
     """Qualify the actual external-comparison geometry and grid, not a proxy."""
     pytest.importorskip("pyscf")
@@ -363,9 +492,8 @@ def _qualify(
         energy = MolecularEnergy(
             result, fitted=fitted, spherical=spherical, ecp=ecp, code=code
         )
-        np.testing.assert_allclose(
-            energy(np.zeros_like(motion), reference=True), result["energy"], atol=5e-9
-        )
+        reference_energy = energy(np.zeros_like(motion), reference=True)
+        np.testing.assert_allclose(reference_energy, result["energy"], atol=5e-9)
         estimates = []
         for step in (0.004, 0.002):
             estimate = np.zeros_like(motion)
@@ -379,6 +507,46 @@ def _qualify(
                     for sign_right in (1, -1)
                 ) / (4 * step**2)
             estimates.append(estimate)
-        np.testing.assert_allclose(
-            actual, (4 * estimates[1] - estimates[0]) / 3, atol=8e-7, rtol=3e-5
-        )
+        expected = (4 * estimates[1] - estimates[0]) / 3
+        np.testing.assert_allclose(actual, expected, atol=8e-7, rtol=3e-5)
+        if directory := os.environ.get("GENERATIVEQC_STATIONARY_RECEIPTS"):
+            from generativeqc_compiler.common.evidence import (
+                block_error,
+                canonical_hash,
+            )
+
+            inputs = {
+                "basis": result["basis"],
+                "spins": result["spins"],
+                "fitted": fitted,
+                "spherical": spherical,
+                "ecp": ecp,
+                "auxiliary_d": result.get("auxiliary_d", False),
+                "auxiliary_g": result.get("auxiliary_g", False),
+            }
+            identity = canonical_hash(inputs)
+            receipt = {
+                "inputs_hash": identity,
+                "spins": result["spins"],
+                "fitted": fitted,
+                "spherical": spherical,
+                "ecp": ecp,
+                "orbital_angular": result.get("orbital_angular", 0),
+                "auxiliary_g": result.get("auxiliary_g", False),
+                "full": full,
+                "coordinates_bohr": energy.centers.tolist(),
+                "native_energy": result["energy"],
+                "reference_energy": reference_energy,
+                "direction": motion.tolist(),
+                "actual": actual.tolist(),
+                "steps": [0.004, 0.002],
+                "energy_stencil_hvps": [estimate.tolist() for estimate in estimates],
+                "expected": expected.tolist(),
+                "error": block_error(actual, expected, atol=8e-7, rtol=3e-5),
+                "consumer": result.get("oracle_consumer", "native-stationary-probe"),
+            }
+            destination = Path(directory)
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / f"oracle-{receipt['consumer']}-{identity}.json").write_text(
+                json.dumps(receipt, indent=2, allow_nan=False) + "\n"
+            )

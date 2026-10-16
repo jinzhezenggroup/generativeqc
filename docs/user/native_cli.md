@@ -139,10 +139,11 @@ production numerical fallbacks are retained.
 
 The C++ executable exposes native `hessian` and `hvp` commands for canonical
 `wb97m-v-rks` (the default) and `wb97m-v-uks`, in strict FP64 on CUDA. Build with
-`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON` and an explicit inventory containing
-the complete integral-component closure for the requested orbital and auxiliary
-bases. The bundled development inventory is partial: it does **not** promise
-arbitrary through-f orbital / through-g auxiliary shell products. Missing linked
+`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON`. With no explicit inventory, CMake
+generates the complete factorized through-f orbital / through-g auxiliary
+integral-component closure at configure time. An existing cache that explicitly
+selected a partial inventory must clear `GENERATIVEQC_HESSIAN_AOT_INVENTORY`
+to use this default. Missing linked
 closure is an explicit error, never a request to compile or fall back at runtime.
 This opt-in path replaces the old Python/CuPy CLI worker, including the response
 solver and stationary assembly, rather than merely precompiling isolated leaves.
@@ -150,8 +151,8 @@ solver and stationary assembly, rather than merely precompiling isolated leaves.
 obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
 the separate Python API retains its existing CPU contract.
 
-For a complete ordered through-f orbital / through-g auxiliary integral
-selection, generate the factorized inventory before configuring CMake:
+For an independently retained inventory, the equivalent complete selection can
+also be generated before configuring CMake:
 
 ```bash
 python tools/complete_hessian_aot_inventory.py \
@@ -162,8 +163,8 @@ python tools/complete_hessian_aot_inventory.py \
 ```
 
 Set `GENERATIVEQC_HESSIAN_AOT_INVENTORY` to that file's absolute path alongside
-the CUDA, CLI and Hessian-AOT build options. This selection is explicit, not the
-default development inventory. Smaller finite packages can lower the angular
+the CUDA, CLI and Hessian-AOT build options. Smaller explicit development
+packages can lower the angular
 bounds. Enumeration alone is not numerical or performance qualification; see
 the [AOT package contract](../developer/dft_hessian.md#native-aot-development-package)
 for compiler ownership, physical selectors and independent gates. All generation

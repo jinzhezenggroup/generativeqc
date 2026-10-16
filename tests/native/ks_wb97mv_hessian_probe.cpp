@@ -53,11 +53,17 @@ void run(bool unrestricted, const std::string& mode, bool full) {
              spherical = mode.find("spherical") != std::string::npos,
              auxiliary_d = mode.find("auxd") != std::string::npos,
              auxiliary_g = mode.find("auxg") != std::string::npos,
+             orbital_d = mode.find("orbd") != std::string::npos,
+             orbital_f = mode.find("orbf") != std::string::npos,
              benchmark_h2 = mode.find("benchmark-h2") != std::string::npos;
+  const unsigned orbital_angular = orbital_f ? 3U : orbital_d ? 2U : 0U;
   const bool separate_auxiliary = auxiliary_d || auxiliary_g;
+  const bool compact_fixture = separate_auxiliary || orbital_angular;
   require(!auxiliary_d || !auxiliary_g, "select only one independent auxiliary fixture");
+  require(!orbital_d || !orbital_f, "select only one high-angular orbital fixture");
   require(!separate_auxiliary || fitted, "the independent auxiliary fixture requires DF");
-  require(!benchmark_h2 || (!unrestricted && !fitted && !ecp && !separate_auxiliary),
+  require(!benchmark_h2 ||
+              (!unrestricted && !fitted && !ecp && !separate_auxiliary && !orbital_angular),
           "the benchmark H2 fixture requires all-electron direct RKS");
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
@@ -76,9 +82,9 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     system.ecp_terms = {{0, -1, 0, 0.9, 0.25}, {0, -1, 2, 0.4, -0.1}, {0, 0, 1, 0.8, 0.3},
                         {0, 1, 2, 0.65, -0.4}, {0, 2, 3, 0.7, 0.12},  {0, 3, 4, 0.55, -0.08}};
   }
-  if (separate_auxiliary) {
-    // Match the CLI's independent spherical d/g auxiliary fixture, without borrowing
-    // the orbital topology or radial contraction coefficients for the fit.
+  if (compact_fixture) {
+    // Single radial primitives keep the complete high-angular molecular response
+    // gate bounded; they do not replace the independent auxiliary topology.
     const std::array<std::array<double, 3>, 3> centers{
         {{{0.13, -0.21, 0.17}}, {{0.43, 0.19, 2.1}}, {{-0.3, 0.4, -1.6}}}};
     system.shells.clear();
@@ -88,6 +94,8 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     }
     if (ecp) system.ecp_terms = {{0, -1, 2, 0.8, -0.4}, {0, 0, 2, 0.8, 0.3}};
   }
+  if (orbital_angular)
+    system.shells.insert(system.shells.begin() + 1, {0, orbital_angular, {{0.48, 1.0}}});
   if (benchmark_h2) system.atoms[0].position = {0.03, -0.02, 0.01};
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
@@ -115,7 +123,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = dft::semilocal_family_scf_domain(dft::SemilocalFamily::Wb97mv);
   ks.grid_version = 1;
-  ks.radial_points = separate_auxiliary || benchmark_h2 ? 8 : 12;
+  ks.radial_points = compact_fixture || benchmark_h2 ? 8 : 12;
   ks.angular_polar = 4;
   ks.angular_azimuth = 8;
   ks.partition_iterations = 3;
@@ -222,6 +230,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   std::cout << std::setprecision(17) << "{\"atoms\":" << shape.atoms
             << ",\"primitives\":" << shape.primitives << ",\"nao\":" << shape.nao
             << ",\"spins\":" << shape.spins << ",\"point_count\":" << shape.points
+            << ",\"orbital_angular\":" << orbital_angular
             << ",\"auxiliary_d\":" << (auxiliary_d ? "true" : "false")
             << ",\"auxiliary_g\":" << (auxiliary_g ? "true" : "false") << ",\"energy\":" << energy
             << ",\"response_residual\":" << result.response.gmres.residual_norm;

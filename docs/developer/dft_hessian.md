@@ -203,14 +203,21 @@ separately authenticates canonical WB97M-V, the live accepted state, actual DF
 provider and complete linked derivative selectors. Neither this role nor a
 successful SCF authorizes a missing derivative package.
 
-### Native AOT development package
+### Native AOT package selection
 
-`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON` builds the explicitly selected
+`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON` builds the selected
 `generativeqc_hessian_aot` static library and, with native tests enabled, the
 standalone `generativeqc_hessian_aot_probe` executable. Python/compiler AD runs
 at build time only. The linked CUDA callbacks in `src/dft/hessian_aot.hpp` take
 borrowed device pointers and a borrowed stream; they neither compile, allocate,
 synchronize, launch an interpreter nor select a CPU numerical fallback.
+
+With `GENERATIVEQC_HESSIAN_AOT_INVENTORY` empty (the default), CMake completes
+all ordered orbital-through-f and auxiliary-through-g integral tiles with the
+factorized schedule at configure time. The resolved inventory is written to
+`generated/hessian_aot/inventory.json` in the build directory. An explicit
+inventory overrides this selection, including in an existing CMake cache;
+set `-DGENERATIVEQC_HESSIAN_AOT_INVENTORY=` to restore the complete default.
 
 `manifests/hessian_aot_development.json` is a **partial development inventory**,
 not a production method/basis capability manifest. It selects the existing
@@ -229,8 +236,8 @@ One shared CUDA factor library covers orbital-through-f and auxiliary-through-g;
 groups of at most 256 host-only metadata entries retain exact component selectors
 and the established callback ABI. Scientific program identities do not change
 with this schedule; executable/source identities still distinguish builds.
-One-electron and scalar/AO leaves keep their existing lowering. The default
-development inventory retains the expanded schedule; missing linked factors
+One-electron and scalar/AO leaves keep their existing lowering. The explicitly
+selected partial development inventory retains the expanded schedule; missing linked factors
 never request runtime compilation or an approximate fallback.
 
 The finite full integral selection can be generated before compilation:
@@ -243,7 +250,8 @@ python tools/complete_hessian_aot_inventory.py \
   --output build/hessian-full.json
 ```
 
-Select that file with `-DGENERATIVEQC_HESSIAN_AOT_INVENTORY=<absolute-path>`.
+Select that file with `-DGENERATIVEQC_HESSIAN_AOT_INVENTORY=<absolute-path>`
+to retain an external selection equivalent to the complete default.
 Enumeration, source emission and a passing primitive gate do not by themselves
 qualify a complete compiled package or a molecular endpoint. The factorized
 schedule preserves ordered FP64 radial contraction, but changes factoring

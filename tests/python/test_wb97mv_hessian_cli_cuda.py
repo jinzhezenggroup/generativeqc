@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, NoReturn
 
 import numpy as np
@@ -209,9 +210,16 @@ def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(
     np.testing.assert_allclose(hvp["value"], expected.value, atol=3e-8, rtol=2e-6)
 
 
-@pytest.mark.parametrize("auxiliary_order", (2, 4))
+@pytest.mark.parametrize(
+    "auxiliary_order,orbital_angular",
+    ((2, 0), (4, 0), (4, 3)),
+    ids=("d-auxiliary", "g-auxiliary", "f-orbital-g-auxiliary"),
+)
 def test_cpp_cli_cuda_uks_df_ecp_with_spherical_auxiliary(
-    tmp_path: Path, auxiliary_order: int, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    auxiliary_order: int,
+    orbital_angular: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from test_wb97mv_ecp_hessian import synthetic_basis
 
@@ -224,6 +232,20 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_auxiliary(
         [[0.02, -0.03, 0.1], [-0.04, 0.01, -0.02], [0.02, 0.02, -0.08]]
     )
     orbital = synthetic_basis()
+    if orbital_angular:
+        orbital = replace(
+            orbital,
+            elements=tuple(
+                replace(
+                    element,
+                    shells=element.shells
+                    + (BasisShell(orbital_angular, ("0.48",), (("1",),)),),
+                )
+                if element.atomic_number == 11
+                else element
+                for element in orbital.elements
+            ),
+        )
     auxiliary = BasisSet(
         "synthetic spherical auxiliary CLI fixture",
         (
@@ -300,11 +322,20 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_auxiliary(
 
         # Reuse the independently reconverged values-only molecular oracle,
         # rather than compiling a second expanded high-angular derivative path.
-        reference = _native(2, True, True, True, False, auxiliary_g=True)
+        reference = _native(
+            2,
+            True,
+            True,
+            True,
+            False,
+            auxiliary_g=True,
+            orbital_angular=orbital_angular,
+        )
         np.testing.assert_array_equal(
             np.asarray(reference["motion"]).reshape(direction.shape), direction
         )
         reference["hvp"] = np.asarray(result["value"]).ravel().tolist()
+        reference["oracle_consumer"] = "cpp-cli-and-native-frontend"
         _qualify(reference, fitted=True, spherical=True, ecp=True, full=False)
         return
     expected = cpu.hessian_vector_product(

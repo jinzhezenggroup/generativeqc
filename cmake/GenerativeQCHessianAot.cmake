@@ -1,11 +1,45 @@
 include_guard(GLOBAL)
 
-# Explicit selected closure and native stationary consumers. The partial default
-# inventory grants no general method/basis capability and never falls back to JIT.
-function(generativeqc_add_hessian_aot target inventory)
+# Resolve the complete package at configure time, keeping Python out of the
+# deployed numerical runtime. Explicit partial inventories remain opt-in for
+# development; neither selection permits runtime JIT or a missing-leaf fallback.
+function(generativeqc_resolve_hessian_aot_inventory output_variable inventory)
   if(NOT Python3_EXECUTABLE)
     message(FATAL_ERROR "Hessian AOT generation requires build-time Python")
   endif()
+  if(NOT "${inventory}" STREQUAL "")
+    get_filename_component(_inventory "${inventory}" ABSOLUTE
+      BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    if(NOT EXISTS "${_inventory}" OR IS_DIRECTORY "${_inventory}")
+      message(FATAL_ERROR "Explicit Hessian AOT inventory is missing: ${_inventory}")
+    endif()
+  else()
+    set(_seed "${PROJECT_SOURCE_DIR}/manifests/hessian_aot_development.json")
+    set(_completion "${PROJECT_SOURCE_DIR}/tools/complete_hessian_aot_inventory.py")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+      "${_seed}" "${_completion}"
+      "${PROJECT_SOURCE_DIR}/tools/generate_hessian_aot.py"
+      "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/integral/hessian_aot.py"
+      "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py")
+    set(_inventory "${CMAKE_CURRENT_BINARY_DIR}/generated/hessian_aot/inventory.json")
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" "${_completion}"
+              --inventory "${_seed}"
+              --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric
+              --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized
+              --output "${_inventory}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      RESULT_VARIABLE _result ERROR_VARIABLE _error)
+    if(NOT _result EQUAL 0)
+      message(FATAL_ERROR "Cannot generate complete Hessian AOT inventory: ${_error}")
+    endif()
+    message(STATUS "Hessian AOT: complete factorized orbital-f/auxiliary-g closure")
+  endif()
+  set(${output_variable} "${_inventory}" PARENT_SCOPE)
+endfunction()
+
+function(generativeqc_add_hessian_aot target inventory)
+  generativeqc_resolve_hessian_aot_inventory(inventory "${inventory}")
   set(_generator "${PROJECT_SOURCE_DIR}/tools/generate_hessian_aot.py")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${inventory}" "${_generator}"
