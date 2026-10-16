@@ -51,6 +51,14 @@ def verify() -> None:
             or hashlib.sha256(payload).hexdigest() != receipt["sha256"]
         ):
             raise ValueError(f"publication checksum mismatch: {name}")
+        if "uncompressed" in receipt:
+            original = lzma.decompress(payload)
+            identity = receipt["uncompressed"]
+            if (
+                len(original) != identity["bytes"]
+                or hashlib.sha256(original).hexdigest() != identity["sha256"]
+            ):
+                raise ValueError(f"historical figure identity mismatch: {name}")
     for name, receipt in manifest["historical_files"].items():
         payload = (ROOT.parents[2] / name).read_bytes()
         if hashlib.sha256(payload).hexdigest() != receipt["sha256"]:

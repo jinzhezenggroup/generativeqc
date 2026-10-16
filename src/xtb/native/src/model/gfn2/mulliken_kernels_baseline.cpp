@@ -23,8 +23,9 @@ GENERATIVEQC_XTB_NOINLINE void mulliken_hamiltonian_chunk_baseline(void* opaque,
 }
 
 const MullikenKernelTable& mulliken_baseline_kernels() noexcept {
-  static constexpr MullikenKernelTable kernels{
-      &mulliken_population_chunk_baseline, &mulliken_hamiltonian_chunk_baseline, CpuIsa::kBaseline};
+  static constexpr MullikenKernelTable kernels{&mulliken_population_chunk_baseline,
+                                               &mulliken_hamiltonian_chunk_baseline,
+                                               generativeqc::runtime::CpuIsa::kBaseline};
   return kernels;
 }
 

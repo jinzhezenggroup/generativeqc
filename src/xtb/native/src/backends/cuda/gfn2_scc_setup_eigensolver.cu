@@ -106,7 +106,8 @@ bool valid_options(const Gfn2EigensolverOptions& options) noexcept {
  * execute through the explicit uncaptured-segment contract instead of
  * discovering an unsupported provider call halfway through capture. */
 Gfn2SccIterationProviderCaptureMode detect_provider_capture_mode(cublasHandle_t blas) noexcept {
-#if CUDART_VERSION >= 12090 && CUBLAS_VERSION >= 120901 && CUSOLVER_VERSION >= 11705
+#if CUDART_VERSION >= 12090 && GENERATIVEQC_CUBLAS_MIN_VERSION >= 120901 && \
+    GENERATIVEQC_CUSOLVER_MIN_VERSION >= 11705
   int runtime_version = 0;
   int blas_version = 0;
   int solver_major = 0;

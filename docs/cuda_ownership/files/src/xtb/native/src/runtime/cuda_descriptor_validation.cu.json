@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/runtime/cuda_descriptor_validation.cu",
-  "reason": "Vendored CUDA execution support for the transitional GFN2 backend; retained as generic launch, validation, atomic, or result-ownership plumbing rather than a GFN2 scientific equation owner.",
+  "reason": "CUDA buffer/stream admission and xTB-specific status/diagnostic translation; temporary device selection and restoration delegate to the shared runtime owner, with no GFN2 scientific equations.",
   "regions": [],
   "role": "runtime",
   "subsystem": "gfn2"

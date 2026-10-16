@@ -224,13 +224,17 @@ struct CudaKsPlan {
 };
 // CUDA_METHODS
 struct System { std::vector<double> coordinates{0, 0, 0}; };
-std::vector<double> positions(const System& system) { return system.coordinates; }
-bool valid_positions(const std::vector<double>& positions, const System& system) {
+namespace core { using System = ::System; }
+namespace geometry {
+std::vector<double> coordinates(const System& system) { return system.coordinates; }
+bool valid_coordinates(const std::vector<double>& positions, const System& system) {
   return positions.size() == system.coordinates.size() &&
       std::all_of(positions.begin(), positions.end(), [](double x) { return std::isfinite(x); });
 }
-void set_positions(System& system, const std::vector<double>& positions) {
+void set_coordinates(System& system, const std::vector<double>& positions) {
   system.coordinates = positions;
+}
+// BIND_BATCH_ITEM
 }
 void add_transfers(int& previous, int current) { previous += current; }
 struct ExecutionPlan { bool automatic_program{}; int semilocal_family{}; };
@@ -398,6 +402,11 @@ def cuda_control_probe(
     batch = owner[owner.index("class KsPreparedBatch final") :]
     lifecycle = (ROOT / "src/methods/prepared_execution.cpp").read_text()
     pieces = {
+        "BIND_BATCH_ITEM": between(
+            (ROOT / "src/methods/geometry.hpp").read_text(),
+            "inline core::System bind_batch_item(",
+            "\n}  // namespace generativeqc::methods::geometry",
+        ),
         "PREPARED_BATCH_INTERFACE": between(
             (ROOT / "src/methods/method.hpp").read_text(),
             "class PreparedBatch {",
@@ -442,9 +451,9 @@ def cuda_control_probe(
             owner, "Result adapt_result(", "\n/** The method's global ledger"
         ),
         "FAILURE_CLASSIFICATION": between(
-            owner,
-            "generativeqc_status item_exception_status()",
-            "\n/** Independent native KS owners",
+            (ROOT / "src/methods/execution_failure.hpp").read_text(),
+            "inline generativeqc_status item_exception_status(",
+            "\n}  // namespace generativeqc::methods",
         ),
         "SHARED_OWNER_CONTROL": between(
             batch,

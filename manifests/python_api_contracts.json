@@ -387,7 +387,7 @@
     "generativeqc.load_r2scan3c_basis": "generativeqc/r2scan3c.py:load_r2scan3c_basis",
     "generativeqc.make_deterministic_hf_plan": "generativeqc/progressive_controller.py:make_deterministic_hf_plan",
     "generativeqc.method_capabilities": "generativeqc/calculator.py:method_capabilities",
-    "generativeqc.plan_resources": "generativeqc_compiler/common/resources.py:plan_resources",
+    "generativeqc.plan_resources": "generativeqc/resources_planning.py:plan_resources",
     "generativeqc.project_density": "generativeqc/projection.py:project_density",
     "generativeqc.project_occupied": "generativeqc/projection.py:project_occupied",
     "generativeqc.projected_singlepoint": "generativeqc/progressive.py:projected_singlepoint",
@@ -7895,7 +7895,7 @@
         "values": "docs/reference/python_contracts.md#python-resources-values"
       }
     },
-    "generativeqc_compiler/common/resources.py:plan_resources": {
+    "generativeqc/resources_planning.py:plan_resources": {
       "kind": "function",
       "profile": "resource",
       "facets": {

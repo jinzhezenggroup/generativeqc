@@ -61,6 +61,28 @@ int main() {
   direct.spec.derivative_order = 0;
   direct.backend = FockBackend::Cpu;
   assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  auto range = direct;
+  range.backend = FockBackend::Cuda;
+  range.spec.coulomb.present = false;
+  for (const auto op : {FockOperator::ShortRange, FockOperator::LongRange}) {
+    range.spec.exchange.op = op;
+    assert(cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.omega = 0.0;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.omega = 0.3;
+    range.spec.derivative_order = 1;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.derivative_order = 0;
+    range.spec.spin = FockSpin::Unrestricted;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.spin = FockSpin::Restricted;
+    range.spec.exchange.approximation = FockApproximation::DensityFitted;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.approximation = FockApproximation::Exact;
+    range.schedule = FockSchedule::CudaDfResident;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.schedule = FockSchedule::CudaIndependent;
+  }
   for (const auto aos : {24u, 384u, 768u})
     assert(admit_application_fock(loose, aos, 96, 2, true, true, true));
   for (const auto aos : {0u, 23u, 769u})

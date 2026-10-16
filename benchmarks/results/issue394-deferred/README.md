@@ -6,7 +6,7 @@ measurement. Work stopped when the user requested consolidation; the running
 full-library build was interrupted. This is an unqualified prototype, not a
 measured performance failure or a production optimization.
 
-`prototype.patch` preserves the source and tests against
+`prototype.patch.xz` losslessly preserves the source and tests against
 `1c3f2ab8d6df6f06bee526b89a807511ef726301`. It contains identity response folding,
 one-shell ownership, independently generated one/two-root quadrature, SSS moment
 IR lowering, explicit math policy and immutable prepared-source provenance.
@@ -14,6 +14,14 @@ Applying this archival patch is a separate experiment. No files under `src/`,
 `python/`, `tests/` or the build configuration change in this publication.
 
 `status.json` retains the exact patch identity and validation limits:
+
+The archive is compressed to preserve the repository's unchanged evidence
+budget. Its decoded bytes and SHA256 remain unchanged; this is storage
+compaction, not new scientific qualification. From the repository root:
+
+```bash
+xz -dc benchmarks/results/issue394-deferred/prototype.patch.xz | git apply
+```
 
 - Independent CPU numerical/generation tests passed. The combined run had a
   work-ledger field-name failure after removing C grouping; that reader was

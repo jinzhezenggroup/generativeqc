@@ -13,7 +13,7 @@
 #include "backends/cuda/gfn2_geometry.cuh"
 #include "backends/cuda/gfn2_scc_iteration_arena.cuh"
 #include "backends/cuda/gfn2_scc_setup_topology.hpp"
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
