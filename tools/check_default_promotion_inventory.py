@@ -245,8 +245,7 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     if not re.search(
         r"return\s+spins\s*==\s*1\s*&&\s*full_precision\s*&&\s*"
         r"\(\(aos\s*>=\s*384\s*&&\s*direct_global_hybrid\)\s*\|\|\s*"
-        r"\(aos\s*>=\s*544\s*&&\s*full_range_coulomb_only\s*&&\s*"
-        r"\(density_fitted_coulomb\s*\|\|\s*aos\s*<\s*1088\)\)\);",
+        r"\(aos\s*>=\s*544\s*&&\s*full_range_coulomb_only\)\);",
         policy,
     ) or any(
         fragment not in policy
@@ -276,7 +275,7 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
             "!has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation",
             "!final_spec.exchange.present",
             "final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted",
-            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(), full_range_coulomb_only, fitted_coulomb",
+            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(), full_range_coulomb_only",
             'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
             "final_validation_partial && matrix_products.library_enabled()",
             "!final_stationary_weights_ready;",
