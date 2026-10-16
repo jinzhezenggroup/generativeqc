@@ -1960,6 +1960,7 @@ class Calculator:
                 if (
                     source.has_ecp
                     and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and not self._composite_rks_second_order
                 ):
                     raise NotImplementedError(
                         "ECP density-fitting execution is not yet validated"
