@@ -304,3 +304,28 @@ def test_ks_auxiliary_g_scope_is_values_only(operator: str) -> None:
             consumer="wb97mv_df_values",
             **{**request, "role": "orbital"},
         )
+
+
+@pytest.mark.parametrize("scalar_type", (np.int32, np.int64, np.uint32, np.uint64))
+@pytest.mark.parametrize("field", ("charge", "multiplicity"))
+@pytest.mark.parametrize("matrix", (False, True))
+def test_native_result_identity_normalizes_integer_inputs(
+    frontend: tuple[Calculator, list[str]],
+    scalar_type: type,
+    field: str,
+    matrix: bool,
+) -> None:
+    """Integral scalars accepted by native preparation retain the same identity."""
+    calculator, _ = frontend
+    atoms = (Atom(1, (0, 0, 0)), Atom(1, (0, 0, 1.4)))
+    values = {"charge": 0, "multiplicity": 1}
+    operation = calculator.hessian if matrix else calculator.hessian_vector_product
+    arguments = (atoms,) if matrix else (atoms, np.arange(6).reshape(2, 3))
+    expected = operation(*arguments, **values)
+    values[field] = scalar_type(values[field])
+    actual = operation(*arguments, **values)
+    assert actual.identity == expected.identity
+    np.testing.assert_array_equal(
+        actual.matrix if matrix else actual.value,
+        expected.matrix if matrix else expected.value,
+    )

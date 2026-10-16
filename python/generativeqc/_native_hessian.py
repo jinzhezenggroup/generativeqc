@@ -294,8 +294,8 @@ def run_native_cuda(
             {
                 "model": model_signature,
                 "atoms": [(atom.atomic_number, atom.position) for atom in atoms],
-                "charge": charge,
-                "multiplicity": multiplicity,
+                "charge": int(charge),
+                "multiplicity": int(multiplicity),
                 "shape": shape,
             },
             sort_keys=True,
