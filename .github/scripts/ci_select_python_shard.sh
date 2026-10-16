@@ -240,11 +240,20 @@ slow_paths=(
   tests/python/test_rccsdt_native_codegen_dependencies.py
   tests/python/test_df_cc_native_codegen.py
 )
+# Run 38863506122 spent ~700 worker-seconds in these complete files while
+# core-a timed out and runtime-heavy finished in 550 s. Transfer whole files
+# to its existing loadfile workers, retaining every ordinary core modulo slot.
+measured_core_runtime_paths=(
+  tests/python/test_cpu_hf_high_l.py
+  tests/python/test_cuda_xc_point_contract.py
+  tests/python/test_uccsd_solver.py
+)
 # PR #1934 / run 37238512811 still left the broad core shards with
 # a large measured long tail. Keep these newly measured files out of
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  "${measured_core_runtime_paths[@]}"
   tests/python/test_df_cc_native_solver.py
   tests/python/test_df_lambda_matrix.py
   tests/python/test_df_lambda_reduction.py
@@ -485,12 +494,13 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_df_lambda_matrix.py
       tests/python/test_df_lambda_reduction.py
     )
-    # The dependent unrestricted triples-response slice has its own
-    # bounded owner and full/edge/fault matrix. Reserve a stable worker
-    # group without adding a nonexistent target on the earlier tree.
-    if git ls-files --error-unmatch -- tests/python/test_uccsd_triples_response.py >/dev/null 2>&1; then
-      test_targets+=(tests/python/test_uccsd_triples_response.py)
-    fi
+    # Tracked missing files stay selected and fail closed in pytest; absent
+    # future files and untracked local probes cannot enter the owner inventory.
+    for path in tests/python/test_uccsd_triples_response.py "${measured_core_runtime_paths[@]}"; do
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+      fi
+    done
     ;;
   posthf)
     test_targets=(
