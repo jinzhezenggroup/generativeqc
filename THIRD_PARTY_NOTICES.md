@@ -3,10 +3,12 @@
 ## Bundled Gaussian basis catalog
 
 The data in `python/generativeqc/data/basis_pack.json`, also compiled into the
-native command-line executable, is derived from MolSSI Basis Set Exchange.
+native library and command-line executable, is derived from MolSSI Basis Set
+Exchange.
 The source pack records its upstream version and contains the H-Ar subset of
 STO-3G, def2-SVP, and def2-TZVP. Its BSD-3-Clause license is retained in
-`LICENSES/bse-data-BSD-3-Clause.txt` and installed with the native CLI under
+`LICENSES/bse-data-BSD-3-Clause.txt` and installed with every native SDK/CLI
+build under
 `share/generativeqc/licenses/` (or the configured CMake data directory).
 
 ## Native CLI metadata and archive dependencies

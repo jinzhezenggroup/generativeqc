@@ -2,6 +2,7 @@
 #define GENERATIVEQC_GENERATIVEQC_HPP
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -307,6 +308,68 @@ class System {
   System(Context& context, const generativeqc_system_descriptor& descriptor)
       : atom_count_(descriptor.atom_count) {
     check(generativeqc_system_create(context.get(), &descriptor, &handle_));
+  }
+  /** @native-contract generativeqc::System::System-bundled
+   * @behavior Expand a compiled bundled basis and own the normalized native system.
+   * @inputs A live Context, nonempty native-domain atom span, bundled basis name, ionic charge,
+   * positive multiplicity and Cartesian/spherical representation. Embedded NUL names are
+   * rejected. Defaults are neutral closed-shell Cartesian. C bundled-constructor rules apply.
+   * @lifetime Copies atoms and basis data; input buffers and basis_name need not outlive the
+   * constructor. Prepared consumers retain their own system copies.
+   * @errors Throws Error for dimension/name/descriptor or native scientific/backend failures;
+   * local string allocation may throw standard allocation exceptions. No owner on failure.
+   * @execution Synchronous; serialize with other operations on the Context. No Python or I/O.
+   * @units Atom coordinates are Bohr, charge is in electron-charge units.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms, std::string_view basis_name,
+         std::int32_t charge = 0, std::uint32_t multiplicity = 1,
+         generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max() ||
+        basis_name.find('\0') != std::string_view::npos)
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid bundled system dimensions/name");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    const std::string name(basis_name);
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    descriptor.basis_representation = representation;
+    check(generativeqc_system_create_bundled(context.get(), &descriptor, name.c_str(), nullptr,
+                                             &handle_));
+  }
+  /** @native-contract generativeqc::System::System-basis-template
+   * @behavior Expand caller-supplied element templates and own the normalized system,
+   * retaining general contraction and scalar ECP source-channel semantics.
+   * @inputs A live Context, nonempty native-domain atom span, initialized v1 template
+   * descriptor, charge, positive multiplicity and Cartesian/spherical representation.
+   * The C template-constructor validation and backend/scientific admission rules apply.
+   * @lifetime Copies all required atom/basis/ECP data; input arrays may die on return.
+   * Prepared consumers retain their own copies after the System is destroyed.
+   * @errors Throws Error for dimension/ABI/record errors or native execution preparation
+   * failures; native allocation errors retain their mapped status. No owner on failure.
+   * @execution Synchronous; serialize with this Context. No I/O, Python or compiler.
+   * @units Coordinates and Gaussian/ECP arrays follow the C atomic-unit contracts.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms,
+         const generativeqc_basis_template_descriptor_v1& basis, std::int32_t charge = 0,
+         std::uint32_t multiplicity = 1,
+         generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid template system dimensions");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    descriptor.basis_representation = representation;
+    check(
+        generativeqc_system_create_basis_template_v1(context.get(), &descriptor, &basis, &handle_));
   }
   /** @native-contract generativeqc::System::System-ecp
    * @behavior Create an owned scalar-ECP system through the native ECP constructor.

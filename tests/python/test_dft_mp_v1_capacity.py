@@ -1971,37 +1971,37 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
             "selected_basis.shells_for(atoms)",
             "selected_basis.shells_for(atoms)[:1]",
         ),
-        ("_shells_for_atoms", "self._representation_name)", "'cartesian')"),
+        ("_basis_for_atoms", "self._representation_name)", "'cartesian')"),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             "if auxiliary else self._device_name",
             "if auxiliary else 'cpu'",
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             "self._density_fitting_backend() if auxiliary",
             "self._device_name if auxiliary",
         ),
-        ("_shells_for_atoms", "operator=selected_operator", "operator='overlap'"),
+        ("_basis_for_atoms", "operator=selected_operator", "operator='overlap'"),
         (
             "_shells_for_atoms",
             "derivative_order=derivative_order",
             "derivative_order=0",
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             'role="auxiliary" if auxiliary else "orbital"',
             'role="orbital"',
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             (
                 "consumer=self._auxiliary_basis_consumer("
                 "selected_operator, derivative_order)"
             ),
             "consumer=None",
         ),
-        ("_shells_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
+        ("_basis_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
         (
             "_create_native_system",
             "shells = self._shells_for_atoms(atoms, basis)",

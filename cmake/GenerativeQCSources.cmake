@@ -22,6 +22,8 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_gcp.cpp
     src/api/c_api_common.cpp
     src/api/c_api_context.cpp
+    src/api/c_api_basis_catalog.cpp
+    src/api/c_api_basis_builtin.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_resource_planning.cpp
     src/api/c_api_resource_ledger_plan.cpp
@@ -37,6 +39,8 @@ endfunction()
 
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
+    src/molecule/basis_catalog.cpp
+    src/molecule/basis_template.cpp
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
     src/runtime/resource_planning.cpp

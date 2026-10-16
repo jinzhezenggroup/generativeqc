@@ -453,28 +453,71 @@
     },
     {
       "id": "wb97mv-native-cuda-second-order",
-      "method_families": ["density_functional"],
-      "backends": ["cuda"],
-      "representations": ["cartesian", "spherical"],
-      "properties": ["hvp", "hessian"],
-      "spins": ["restricted", "unrestricted"],
-      "approximations": ["direct", "density-fitting", "range-separated", "nonlocal", "ecp"],
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "hvp",
+        "hessian"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting",
+        "range-separated",
+        "nonlocal",
+        "ecp"
+      ],
       "python_sites": [
-        {"path": "python/generativeqc/calculator.py", "symbol": "Calculator.hessian", "classification": "wrapper"},
-        {"path": "python/generativeqc/_native_hessian.py", "symbol": "run_native_cuda", "classification": "wrapper"},
-        {"path": "python/generativeqc_compiler/integral/factorized_second.py", "symbol": "emit_factorized_second", "classification": "compiler-ad"}
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.hessian",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_native_hessian.py",
+          "symbol": "run_native_cuda",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc_compiler/integral/factorized_second.py",
+          "symbol": "emit_factorized_second",
+          "classification": "compiler-ad"
+        }
       ],
       "native_scientific_sources": [
         "src/dft/cuda_ks_wb97mv_hessian.cu",
         "src/dft/cuda_ks_wb97mv_df_nuclear.cu",
         "src/dft/cuda_ks_wb97mv_response.cu"
       ],
-      "native_callers": ["src/api/c_api_ks_hessian.cpp", "src/cli/hessian.cpp"],
+      "native_callers": [
+        "src/api/c_api_ks_hessian.cpp",
+        "src/cli/hessian.cpp"
+      ],
       "remaining_python_runtime": [],
-      "tests": ["tests/python/test_native_hessian_frontend.py", "tests/python/test_wb97mv_hessian_cli_cuda.py", "tests/python/test_native_wb97mv_stationary.py"],
-      "trackers": ["#2527"],
+      "tests": [
+        "tests/python/test_native_hessian_frontend.py",
+        "tests/python/test_wb97mv_hessian_cli_cuda.py",
+        "tests/python/test_native_wb97mv_stationary.py"
+      ],
+      "trackers": [
+        "#2527"
+      ],
       "qualification": "source-inventory-only",
-      "method_selectors": ["method-ir:wb97m-v-rks", "method-ir:wb97m-v-uks"]
+      "method_selectors": [
+        "method-ir:wb97m-v-rks",
+        "method-ir:wb97m-v-uks"
+      ]
     },
     {
       "id": "ks-molecular-second-order",
@@ -1009,28 +1052,46 @@
           "path": "python/generativeqc/_method_native.py",
           "symbol": "capabilities",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_basis_builtin.py",
+          "symbol": "create_system",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
         "src/methods/generated_method_manifest.hpp",
         "src/methods/registry.cpp",
-        "src/methods/named_ks_catalog.cpp",
-        "src/cli/native_basis.cpp"
+        "src/molecule/basis_catalog.cpp",
+        "src/molecule/basis_template.cpp",
+        "src/api/c_api_basis_catalog.cpp",
+        "src/api/c_api_basis_builtin.cpp",
+        "src/cli/native_basis.cpp",
+        "src/methods/named_ks_catalog.cpp"
       ],
       "native_callers": [
         "src/cli/main.cpp",
-        "src/methods/named_ks_catalog.cpp",
-        "src/api/c_api_common.cpp"
+        "src/api/c_api_basis_catalog.cpp",
+        "src/api/c_api_basis_builtin.cpp",
+        "src/api/c_api_common.cpp",
+        "src/methods/named_ks_catalog.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup stays on the already-selected Calculator library. The CLI and Python KS wire lowering now share one library-owned build-time catalog: complete matching MethodIR identities and numerical domains borrow native scientific component/exchange arrays while caller execution controls remain unchanged. Same-name custom graphs, noncatalog/unrepresented domains and missing-symbol/library-free metadata retain explicit compiler lowering; actual native refusal never retries it. Basis expansion and complete frontend/SDK/CLI model resolution remain separate gaps."
+        "Exact bundled snapshots prefer the byte-counted, checksum-bound native catalog query/constructor; selected native refusals never retry an older ABI or Python. Capacity and expansion use the same general-template owner, not a second flat catalog. Other admitted BasisSet inputs use element-local FP64 templates; Python, CLI and SDK share native atom/general-contraction expansion and scalar ECP channel mapping. Typed arrays do not authenticate canonical provenance. Python retains native-free preflight/provenance metadata and explicit old-library, Shell and correlation-auxiliary descriptor adapters. Built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight; native method-name/capability lookup stays on the already-selected Calculator library rather than public cached/default-library discovery. The CLI and Python KS wire lowering now share one library-owned build-time catalog: complete matching MethodIR identities and numerical domains borrow native scientific component/exchange arrays while caller execution controls remain unchanged. Same-name custom graphs, noncatalog/unrepresented domains and missing-symbol/library-free metadata retain explicit compiler lowering; actual native refusal never retries it. Custom MethodIR remains explicit compiler work. Complete frontend/SDK/CLI model resolution remains a separate gap."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
-        "tests/python/test_native_ks_catalog.py",
-        "tests/native/test_named_ks_catalog.cpp",
+        "tests/python/test_native_basis_catalog.py",
+        "tests/python/test_native_basis_template.py",
+        "tests/python/test_native_basis_builtin.py",
+        "tests/native/test_basis_catalog.cpp",
+        "tests/native/test_basis_template.cpp",
+        "tests/native/test_basis_catalog_sdk.cpp",
+        "tests/native/test_builtin_basis_sdk.cpp",
         "tests/python/test_selected_native_method_capabilities.py",
-        "tests/python/test_api_ownership_boundaries.py"
+        "tests/python/test_api_ownership_boundaries.py",
+        "tests/python/test_native_ks_catalog.py",
+        "tests/native/test_named_ks_catalog.cpp"
       ],
       "trackers": [
         "#926",
