@@ -14,6 +14,7 @@ from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 from .array import ExactScalar, VibeArray
 
 _GENERIC_SPACE_PREFIX = "_array_extent_"
+_MAX_STATIC_GATHER_POSITIONS = 65_536
 
 
 def _array(value: object, name: str = "operand") -> VibeArray:
@@ -459,6 +460,14 @@ def divide(x1: object, x2: object) -> VibeArray:
     raise TypeError("divide requires at least one symbolic VibeArray")
 
 
+def positive(x: object) -> VibeArray:
+    """Preserve a real symbolic array and its scientific index metadata."""
+    value = _array(x)
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("positive supports only float32 and float64")
+    return value
+
+
 def negative(x: object) -> VibeArray:
     value = _array(x)
     return VibeArray(tensor_ir.add(value.node, coefficients=(-1,)))
@@ -586,7 +595,7 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
         if axis is None
         else _normalized_axes(axis, value.ndim, "flip")
     )
-    if any(value.shape[position] > 65536 for position in axes):
+    if any(value.shape[position] > _MAX_STATIC_GATHER_POSITIONS for position in axes):
         raise ValueError("flip exceeds the bounded static gather index budget")
     node = value.node
     for position in sorted(axes):
@@ -594,6 +603,63 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
             node, position, range(value.shape[position] - 1, -1, -1)
         )
     return _canonical_generic(VibeArray(node))
+
+
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> VibeArray:
+    """Roll generic arrays with a bounded total of static gather positions."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("roll scientific arrays require explicit TensorIR index maps")
+    if type(shift) is int:
+        shifts = (shift,)
+    elif isinstance(shift, tuple) and all(type(item) is int for item in shift):
+        shifts = shift
+    else:
+        raise TypeError("roll shift must be an integer or tuple of integers")
+    if axis is None:
+        flattened = reshape(value, (value.size,))
+        return reshape(roll(flattened, builtins.sum(shifts), axis=0), value.shape)
+    if type(axis) is int:
+        axes = (axis,)
+    elif isinstance(axis, tuple) and all(type(item) is int for item in axis):
+        axes = axis
+    else:
+        raise TypeError("roll axis must be an integer or tuple of integers")
+    axes = tuple(_axis(item, value.ndim, "roll") for item in axes)
+    if len(shifts) != len(axes):
+        if len(shifts) == 1:
+            shifts = shifts * len(axes)
+        elif len(axes) == 1:
+            axes = axes * len(shifts)
+        else:
+            raise ValueError("roll shift and axis must have broadcastable lengths")
+    offsets: dict[int, int] = {}
+    for position, offset in zip(axes, shifts, strict=True):
+        extent = value.shape[position]
+        offsets[position] = (offsets.get(position, 0) + offset) % (extent or 1)
+    # Check the complete map budget before constructing any gather positions.
+    if (
+        builtins.sum(
+            value.shape[position] for position, offset in offsets.items() if offset
+        )
+        > _MAX_STATIC_GATHER_POSITIONS
+    ):
+        raise ValueError("roll exceeds the bounded static gather index budget")
+    result = value
+    for position, offset in sorted(offsets.items()):
+        if offset:
+            extent = value.shape[position]
+            result = take(
+                result,
+                tuple((index - offset) % extent for index in range(extent)),
+                axis=position,
+            )
+    return result
 
 
 def reshape(
@@ -967,16 +1033,28 @@ def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
                 "generic symbolic indexing supports integers, slices, None, and ellipsis"
             )
         start, stop, step = item.indices(extent)
-        positions = tuple(range(start, stop, step))
-        if step == 1 and positions:
-            ranges = tuple(
-                (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
-                for axis in range(len(node.spec.shape))
-            )
-            node = tensor_ir.slice_tensor(node, ranges)
+        if step == 1:
+            # A contiguous slice needs only its bounds, not an index tuple.
+            selected_count = max(0, stop - start)
+            if selected_count:
+                ranges = tuple(
+                    (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
+                    for axis in range(len(node.spec.shape))
+                )
+                node = tensor_ir.slice_tensor(node, ranges)
+            else:
+                node = tensor_ir.gather(node, source_axis, ())
         else:
+            # Non-unit strides require an explicit gather map. Check its extent
+            # before TensorIR materializes the map as an immutable tuple.
+            positions = range(start, stop, step)
+            selected_count = len(positions)
+            if selected_count > _MAX_STATIC_GATHER_POSITIONS:
+                raise ValueError(
+                    "symbolic subscript exceeds the bounded static gather index budget"
+                )
             node = tensor_ir.gather(node, source_axis, positions)
-        output_shape.append(len(positions))
+        output_shape.append(selected_count)
         source_axis += 1
     return VibeArray(tensor_ir.reshape(node, _generic_indices(tuple(output_shape))))
 

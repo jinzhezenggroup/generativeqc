@@ -1,0 +1,83 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "449cd63ccfbdb298c97b78f3c2d85edff0041310",
+  "file_count": 15,
+  "total_bytes": 1739870,
+  "files": [
+    {
+      "path": "benchmarks/results/readme-dft-20261013/README.md",
+      "bytes": 24425,
+      "sha256": "de1d39c43aabe1e5c567122ef767a9721bd2d08c1cb4b982bb1d4211aca2bd03"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg.xz",
+      "bytes": 12624,
+      "sha256": "a32182e5fb64da57847c79001efd6b708eb53737b7768a0818af083784fe6a27"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
+      "bytes": 298072,
+      "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/df-timings.md",
+      "bytes": 4513,
+      "sha256": "9d866eb0472c840e86aac73a869140a566f126b54c9a1a2a68e3d3b752ba109a"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg.xz",
+      "bytes": 12940,
+      "sha256": "5598d116938fa4d7b18a8a4d45378cac2c08986326f2439f03d11dc0e0c487ad"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
+      "bytes": 359344,
+      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "bytes": 426364,
+      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/force-memory.json.xz",
+      "bytes": 37176,
+      "sha256": "3d097f4f410700d971dd15bfc82220d3abdb25038c89548a2e1256060c496fe0"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
+      "bytes": 84239,
+      "sha256": "8fe3a5da48d06e6757d7e2ceedd96847d55caeadffe01bded3c9a6271713dd18"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/reference-replay-audit.json",
+      "bytes": 19485,
+      "sha256": "7a7250d519c83eb9d3af0d1cfef5bdfd94a929ad1edb4fb30dde2f7d3ec30934"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/source-audit.json.xz",
+      "bytes": 4604,
+      "sha256": "4541a00d438bb5776604e166525399b1a25091549740ba9ffc57b931f98707e4"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/source-campaigns.json.xz",
+      "bytes": 18216,
+      "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
+      "bytes": 428796,
+      "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/timings.md",
+      "bytes": 4726,
+      "sha256": "388712048c4fdb517829b1a0d5878e647d23ce3e685b7524aeaa68d8e0b8b517"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/verify.py",
+      "bytes": 4346,
+      "sha256": "3e922c8108e460ee9dd509b8bb8af5579d98d194c38abdd1542bf8910790cff0"
+    }
+  ]
+}

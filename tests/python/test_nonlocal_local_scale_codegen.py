@@ -47,6 +47,7 @@ def test_generated_local_scales_compile_for_a_cuda_device(tmp_path: Path) -> Non
         "__device__ int __shfl_sync(unsigned, int, int, int=32);\n"
         "__device__ double __shfl_sync(unsigned, double, int, int=32);\n"
         "__device__ double atomicAdd(double*, double);\n"
+        "__device__ unsigned long long atomicAdd(unsigned long long*, unsigned long long);\n"
         "__device__ int atomicExch(int*, int);\n"
         "namespace generativeqc::dft::nlc {enum class Vv10Variant {vv10,rvv10};}\n"
         '#include "generated.hpp"\n'

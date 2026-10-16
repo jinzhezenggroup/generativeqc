@@ -221,8 +221,14 @@ def emit_scalar_cpp(
     caller_owned_checks: bool = False,
     ordered_native_sums: bool = False,
     output_dependency_order: bool = False,
+    scalar_type: str = "double",
 ) -> str:
-    """Lower a scalar FP64 Program to one checked inline C++ function.
+    """Lower a scalar Program to one checked inline C++ function.
+
+    scalar_type selects the arithmetic and parameter type, not the mathematical
+    IR. Float lowering rounds inputs and constants before any arithmetic; its
+    caller owns numerical qualification and any strict fallback. The robust
+    scaled-bilinear helper remains double-only.
 
     direct_scaled_bilinear is an explicit admission for callers that have
     already proved bounded nonzero denominator domains. check_intermediates
@@ -251,6 +257,8 @@ def emit_scalar_cpp(
 
     if not isinstance(program, Program):
         raise TypeError("scalar C++ lowering requires a TensorIR Program")
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar_type must be double or float")
     program = prepare_for_backend(program, "scalar")
     function_name = _identifier(function_name, "function_name")
     nodes = program.live_nodes
@@ -259,6 +267,17 @@ def emit_scalar_cpp(
     unsupported = sorted({node.op for node in nodes} - SCALAR_CPP_PRIMITIVES)
     if unsupported:
         raise ValueError(f"unsupported scalar C++ primitives: {unsupported}")
+    if (
+        scalar_type == "float"
+        and not direct_scaled_bilinear
+        and any(node.op == "scaled_bilinear" for node in nodes)
+    ):
+        raise ValueError("float scaled_bilinear requires explicit direct lowering")
+
+    def literal(value: typing.Any) -> str:
+        rendered = _literal(value)
+        return rendered + "f" if scalar_type == "float" else rendered
+
     if (
         caller_owned_checks
         and not direct_scaled_bilinear
@@ -324,8 +343,10 @@ def emit_scalar_cpp(
     output_parameters = {
         name: f"tensor_output_{i}" for i, name in enumerate(ordered_outputs)
     }
-    parameters = [f"double {input_parameters[name]}" for name in ordered_inputs]
-    parameters += [f"double& {output_parameters[name]}" for name in ordered_outputs]
+    parameters = [f"{scalar_type} {input_parameters[name]}" for name in ordered_inputs]
+    parameters += [
+        f"{scalar_type}& {output_parameters[name]}" for name in ordered_outputs
+    ]
     lines: list[str] = []
     if not direct_scaled_bilinear and any(
         node.op == "scaled_bilinear" for node in nodes
@@ -344,13 +365,15 @@ def emit_scalar_cpp(
         name = ref(node)
         attrs = node.attrs
         if node.op == "input":
-            lines.append(f"  const double {name} = {input_parameters[attrs['name']]};")
+            lines.append(
+                f"  const {scalar_type} {name} = {input_parameters[attrs['name']]};"
+            )
             continue
         if node.op == "constant":
             values = attrs["values"]
             if len(values) != 1:
                 raise ValueError("scalar constant must contain exactly one value")
-            lines.append(f"  const double {name} = {_literal(values[0])};")
+            lines.append(f"  const {scalar_type} {name} = {literal(values[0])};")
             continue
         if node.op == "add":
             terms = list(zip(node.inputs, attrs["coefficients"], strict=True))
@@ -361,7 +384,7 @@ def emit_scalar_cpp(
                     if Fraction(*coefficient) != 0 and _scalar_constant(child) != 0
                 ]
             if not ordered_native_sums or not terms:
-                lines.append(f"  double {name} = 0.0;")
+                lines.append(f"  {scalar_type} {name} = 0.0;")
             for term_index, (child, coefficient) in enumerate(terms):
                 first_native_term = ordered_native_sums and term_index == 0
                 factor = Fraction(*coefficient)
@@ -370,7 +393,7 @@ def emit_scalar_cpp(
                     sign = "-" if factor == -1 else ""
                     if first_native_term:
                         lines.append(
-                            f"  double {name} = {sign}{ref(left)} * {ref(right)};"
+                            f"  {scalar_type} {name} = {sign}{ref(left)} * {ref(right)};"
                         )
                     else:
                         lines.append(
@@ -384,41 +407,41 @@ def emit_scalar_cpp(
                         if factor == 1
                         else f"-{ref(child)}"
                         if factor == -1
-                        else f"{_literal(coefficient)} * {ref(child)}"
+                        else f"{literal(coefficient)} * {ref(child)}"
                     )
                     if first_native_term:
-                        lines.append(f"  double {name} = {term};")
+                        lines.append(f"  {scalar_type} {name} = {term};")
                     elif factor == -1:
                         lines.append(f"  {name} -= {ref(child)};")
                     else:
                         lines.append(f"  {name} += {term};")
                 else:
-                    lines.append(f"  {name} += {_literal(coefficient)} * {ref(child)};")
+                    lines.append(f"  {name} += {literal(coefficient)} * {ref(child)};")
         elif node.op == "multiply":
             left, right = node.inputs
             if simplify_bounded and (
                 _scalar_constant(left) == 0 or _scalar_constant(right) == 0
             ):
-                lines.append(f"  const double {name} = 0.0;")
+                lines.append(f"  const {scalar_type} {name} = 0.0;")
             elif simplify_bounded and _scalar_constant(left) == 1:
-                lines.append(f"  const double {name} = {ref(right)};")
+                lines.append(f"  const {scalar_type} {name} = {ref(right)};")
             elif simplify_bounded and _scalar_constant(right) == 1:
-                lines.append(f"  const double {name} = {ref(left)};")
+                lines.append(f"  const {scalar_type} {name} = {ref(left)};")
             else:
                 expression = _binary_expression("multiply", ref(left), ref(right))
-                lines.append(f"  const double {name} = {expression};")
+                lines.append(f"  const {scalar_type} {name} = {expression};")
         elif node.op == "divide":
             numerator, denominator_node = node.inputs
             denominator = ref(denominator_node)
             if check_runtime:
                 lines.append(f"  if ({denominator} == 0.0) return false;")
             if simplify_bounded and _scalar_constant(numerator) == 0:
-                lines.append(f"  const double {name} = 0.0;")
+                lines.append(f"  const {scalar_type} {name} = 0.0;")
             elif simplify_bounded and _scalar_constant(denominator_node) == 1:
-                lines.append(f"  const double {name} = {ref(numerator)};")
+                lines.append(f"  const {scalar_type} {name} = {ref(numerator)};")
             else:
                 expression = _binary_expression("divide", ref(numerator), denominator)
-                lines.append(f"  const double {name} = {expression};")
+                lines.append(f"  const {scalar_type} {name} = {expression};")
         elif node.op == "scaled_bilinear":
             if direct_scaled_bilinear:
                 a_node, b_node, c_node, d_node, _e_node, _f_node = node.inputs
@@ -439,10 +462,10 @@ def emit_scalar_cpp(
                     expression = f"({a} * {b}) / ({e} * {f})"
                 else:
                     expression = f"({a} * {b} - {c} * {d}) / ({e} * {f})"
-                lines.append(f"  const double {name} = {expression};")
+                lines.append(f"  const {scalar_type} {name} = {expression};")
             else:
                 args = ", ".join(ref(child) for child in node.inputs)
-                lines.append(f"  double {name} = 0.0;")
+                lines.append(f"  {scalar_type} {name} = 0.0;")
                 lines.append(
                     f"  if (!{function_name}_scaled_bilinear({args}, {name})) return false;"
                 )
@@ -459,10 +482,10 @@ def emit_scalar_cpp(
             elif node.op == "power":
                 if check_runtime:
                     lines.append(f"  if (!({child} > 0.0)) return false;")
-                expression = f"std::pow({child}, {_literal(attrs['exponent'])})"
+                expression = f"std::pow({child}, {literal(attrs['exponent'])})"
             else:
                 expression = f"std::exp({child})"
-            lines.append(f"  const double {name} = {expression};")
+            lines.append(f"  const {scalar_type} {name} = {expression};")
         else:
             raise AssertionError(node.op)
         if check_values:

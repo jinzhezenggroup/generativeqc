@@ -499,18 +499,29 @@ def test_channel_dispatch_is_independent(
     dispatch_start = source.index("const auto dispatch =", device_start)
     dispatch_end = source.index(";", dispatch_start) + 1
     device_dispatch = source[dispatch_start:dispatch_end]
+    availability_start = source.index(
+        "const bool generated_exchange_available =", device_start
+    )
+    availability_end = source.index(";", availability_start) + 1
+    exchange_availability = source[availability_start:availability_end]
     harness = (
         "#include <cassert>\n"
         + header[start:end]
         + r"""
 DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
-    bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
-    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false) {
+    bool generated_exchange_capability, bool want_j, bool want_k, bool mixed_j,
+    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false,
+    bool mixed_exchange = false) {
   struct Channel { bool present; };
   struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
   struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
   auto* plan = &storage;
+  const auto direct_jk_generated_exchange_value_available =
+      [generated_exchange_capability](const auto&, const auto&) {
+        return generated_exchange_capability;
+      };
 """
+        + exchange_availability
         + device_dispatch
         + r"""
   return dispatch;
@@ -546,6 +557,16 @@ int main() {
     assert(ordinary.canonical_exchange == both.canonical_exchange);
     assert(ordinary.generic_coulomb == both.generic_coulomb);
     assert(ordinary.generic_exchange == both.generic_exchange);
+    // A strict generated K source cannot satisfy explicitly mixed K, even
+    // when its radial operator is available. J retains its own precision.
+    const auto lowered_k = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                            canonical, false, false, false, true);
+    assert(!lowered_k.generated_exchange);
+    assert(lowered_k.canonical_exchange == (k && canonical));
+    assert(lowered_k.generic_exchange == (k && !canonical));
+    assert(lowered_k.generated_coulomb == both.generated_coulomb);
+    assert(lowered_k.canonical_coulomb == both.canonical_coulomb);
+    assert(lowered_k.generic_coulomb == both.generic_coulomb);
     // MD owns J separately; normal dispatch must still select exactly the
     // same K provider and must not compute J a second time.
     const auto md = device_dispatch(generated_j, generated_k, j, k, mixed,

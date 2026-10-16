@@ -31,7 +31,8 @@ struct MullikenPlanData final {
   std::int64_t population_scratch_elements = 0;
   std::int64_t hamiltonian_scratch_elements = 0;
   MullikenKernelTable kernels{&mulliken_population_chunk_baseline,
-                              &mulliken_hamiltonian_chunk_baseline, CpuIsa::kBaseline};
+                              &mulliken_hamiltonian_chunk_baseline,
+                              generativeqc::runtime::CpuIsa::kBaseline};
 
   std::vector<std::int64_t> atom_offsets;
   std::vector<std::int64_t> batch_shell_offsets;
@@ -387,8 +388,8 @@ std::size_t MullikenPlan::resident_bytes() const noexcept {
          data_->quadrupole_population_offsets.capacity() * sizeof(std::int64_t);
 }
 
-CpuIsa MullikenPlan::cpu_isa() const noexcept {
-  return data_ == nullptr ? CpuIsa::kBaseline : data_->kernels.isa;
+generativeqc::runtime::CpuIsa MullikenPlan::cpu_isa() const noexcept {
+  return data_ == nullptr ? generativeqc::runtime::CpuIsa::kBaseline : data_->kernels.isa;
 }
 
 const std::vector<std::int64_t>& MullikenPlan::atom_offsets() const noexcept {
@@ -718,7 +719,7 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenDensityView& density, const MullikenPopulationView& population,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel) {
+    const generativeqc::runtime::ChunkExecutor* parallel) {
   generativeqc_xtb_status_t status = validate_plan(plan, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -860,7 +861,7 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
   std::fill_n(dipole_scratch + dipole_base, target_atoms * 3u, 0.0);
   std::fill_n(quadrupole_scratch + quadrupole_base, target_atoms * 6u, 0.0);
 
-  const bool use_parallel = parallel != nullptr && scc_parallel_enabled(*parallel) && atoms >= 2;
+  const bool use_parallel = parallel != nullptr && parallel->enabled() && atoms >= 2;
   MullikenPopulationTask population_task;
   population_task.orbital_to_shell = data.orbital_to_shell.data();
   population_task.orbital_to_atom = data.orbital_to_atom.data();
@@ -1610,7 +1611,7 @@ generativeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenPotentialView& potential, const MullikenHamiltonianView& hamiltonian,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel) {
+    const generativeqc::runtime::ChunkExecutor* parallel) {
   generativeqc_xtb_status_t status = validate_plan(plan, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -1802,7 +1803,7 @@ generativeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
     return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   }
 
-  const bool use_parallel = parallel != nullptr && scc_parallel_enabled(*parallel) && orbitals >= 2;
+  const bool use_parallel = parallel != nullptr && parallel->enabled() && orbitals >= 2;
   MullikenHamiltonianTask assembly_task;
   assembly_task.orbital_to_shell = data.orbital_to_shell.data();
   assembly_task.orbital_to_atom = data.orbital_to_atom.data();

@@ -55,6 +55,7 @@ constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
 inline std::size_t allocation_limit=~std::size_t{0};
 inline cudaError_t cudaGetDevice(int* d) { *d=0; return 0; }
 inline cudaError_t cudaSetDevice(int) { return 0; }
+inline cudaError_t cudaGetLastError() { return cudaSuccess; }
 inline const char* cudaGetErrorString(cudaError_t) { return "CUDA allocation double"; }
 inline cudaError_t cudaMalloc(void** p,std::size_t bytes) {
   if(bytes>allocation_limit) return cudaErrorMemoryAllocation;
@@ -101,6 +102,7 @@ def native_probe(
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"
 #define __host__
 #define __device__
@@ -270,8 +272,6 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
     # Compile the allocation owner and quadrature retention block unchanged.
     owned = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
     source += "namespace generativeqc::runtime {\n"
-    for signature in ("inline void cuda_resource_check(", "class CudaDeviceScope"):
-        source += _definition(owned, signature) + ";\n"
     for signature in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
         source += "template<class T>\n" + _definition(owned, signature) + ";\n"
     source += "}\n"

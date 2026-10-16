@@ -24,7 +24,6 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     byte_product,
     checked_bytes,
-    plan_resources,
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
@@ -40,6 +39,7 @@ from .resources_hf import (
     _ecp_inventory_owner,
     _ecp_workspace,
 )
+from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
@@ -1169,4 +1169,5 @@ def estimate_ks_resources(
     return plan_resources(
         (ks_resource_request(systems, **options),),
         ResourceBudget() if budget is None else budget,
+        library=options.get("library"),
     )

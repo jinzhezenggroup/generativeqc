@@ -1,0 +1,23 @@
+{
+  "measured_commit": "1593d3b2fea9ed3e9232efc49eedede1beb1787b",
+  "subsequent_pr_heads": {
+    "2531": "01ed327f483b7e7e9b992dff8f9ac41dffbff42b",
+    "2532": "1be47f590b25c14753daf6d96703d7c8fa834bb1"
+  },
+  "subsequent_combined_tree": "9f24610306ae7f8d1aa579cb7245aa0d240ab18d",
+  "changed_paths": [
+    "benchmarks/results/r2scan3c-final-validation-20261015/README.md",
+    "benchmarks/results/r2scan3c-final-validation-20261015/manifest.json",
+    "benchmarks/results/r2scan3c-final-validation-20261015/refresh.py",
+    "tests/python/test_cuda_ks_local_ao_admission.py",
+    "tests/python/test_ks_grid_inventory.py",
+    "tests/python/test_r2scan3c_final_validation_evidence.py",
+    "tests/python/test_xc_matrix_schedule.py"
+  ],
+  "native_input_count": 1745,
+  "benchmark_consumer_count": 71,
+  "changed_native_inputs": [],
+  "changed_benchmark_consumers": [],
+  "native_source_identity": "176e6b9c1b3a8757880e0c7b07739979b69ddf9a0745eee98abb4127fab603ca",
+  "policy": "Test-only updates do not relabel or replace the frozen measurement source."
+}

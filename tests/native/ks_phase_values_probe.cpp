@@ -113,7 +113,6 @@ void raw_oracle(const Fixture& fixture, bool mixed = false) {
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
   for (const double preparation_mask : {0.0, 1e-12})
     for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
-      if (mixed && buckets != (1U << 28) - 1) continue;
       scf::cuda_execution::DirectJkSourceLease source(stream, scf::FockOperator::FullRange, 0.0,
                                                       mixed);
       require(
@@ -175,6 +174,14 @@ void raw_oracle(const Fixture& fixture, bool mixed = false) {
           }
         }
       const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
+      if (mixed) {
+        auto pure_j = spec;
+        pure_j.exchange.present = false;
+        require(source.enqueue(pure_j, matrices, coulomb, nullptr, error, preparation_mask,
+                               detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                "zero-density mixed J-only replay lost its uncached-row census");
+      }
       if (preparation_mask > 0.0)
         require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
                     GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -255,7 +262,7 @@ void raw_oracle_uks(const Fixture& fixture) {
 
 /** Independent SR/LR matrices protect radial identity, both spins and partial
  * caches. Invalid operator requests must fail before any retained value is used. */
-void raw_range_oracle(const Fixture& fixture) {
+void raw_range_oracle(const Fixture& fixture, bool mixed = false) {
   runtime::OwnedCudaStream stream;
   stream.create(0);
   const auto elements = fixture.density.size();
@@ -274,12 +281,14 @@ void raw_range_oracle(const Fixture& fixture) {
   cuda_check(cudaMemcpyAsync(beta, beta_density.data(), elements * sizeof(double),
                              cudaMemcpyHostToDevice, stream.get()));
   unsigned checks = 0;
+  double maximum_error = 0.0;
   for (unsigned range = 0; range < 2; ++range)
     for (const unsigned spins : {1U, 2U})
       for (const double screening : {0.0, 1e-12})
         for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
+          if (mixed && spins != 1) continue;
           const auto op = range == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
-          scf::cuda_execution::DirectJkSourceLease source(stream.get(), op, 0.3);
+          scf::cuda_execution::DirectJkSourceLease source(stream.get(), op, 0.3, mixed);
           require(
               source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
                              4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
@@ -288,12 +297,43 @@ void raw_range_oracle(const Fixture& fixture) {
                              buckets, spins) == GENERATIVEQC_STATUS_SUCCESS &&
                   source.active(),
               source.reason());
+          require(source.value_bytes() ==
+                      source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
+                  "range source precision/storage inventory mismatch");
+          std::string detail;
+          if (mixed) {
+            auto* prepared = const_cast<scf::CudaDirectJkPlan*>(
+                static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(
+                        prepared, source.value_bytes(), detail, op, 0.3, buckets) ==
+                        GENERATIVEQC_STATUS_SUCCESS,
+                    "identical mixed range preparation was not idempotent");
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(
+                        prepared, source.value_bytes() - 1, detail, op, 0.3, buckets) ==
+                        GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                    "mixed range preparation bypassed its byte ceiling");
+            require(scf::prepare_cuda_direct_jk_mixed_resident_values(prepared, 8ULL << 30, detail,
+                                                                      op, 0.4, buckets) ==
+                            GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                        scf::prepare_cuda_direct_jk_mixed_resident_values(
+                            prepared, 8ULL << 30, detail,
+                            op == scf::FockOperator::ShortRange ? scf::FockOperator::LongRange
+                                                                : scf::FockOperator::ShortRange,
+                            0.3, buckets) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                        scf::prepare_cuda_direct_jk_mixed_resident_values(
+                            prepared, 8ULL << 30, detail, op, 0.3, buckets ^ 1U) ==
+                            GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "mixed range source changed its immutable radial/bucket identity");
+            require(scf::prepare_cuda_direct_jk_range_resident_values(prepared, 8ULL << 30, buckets,
+                                                                      op, 0.3, detail) ==
+                        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "strict range construction reused mixed source precision");
+          }
           auto spec = scf::make_global_hybrid_fock_spec(
               spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted, 0.25);
           spec.coulomb.present = false;
           spec.exchange.op = op;
           spec.exchange.omega = 0.3;
-          std::string detail;
           const auto execute = [&](scf::FockBuildSpec request, double threshold) {
             return source.enqueue(request, alpha, nullptr, ka, error.get(), threshold, detail,
                                   spins == 2 ? beta : nullptr, spins == 2 ? kb : nullptr);
@@ -314,18 +354,32 @@ void raw_range_oracle(const Fixture& fixture) {
             require(execute(wrong, screening) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                     "range source accepted a different radial consumer");
           }
-          require(execute(spec, screening) == GENERATIVEQC_STATUS_SUCCESS &&
-                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-                  "range resident finite/census audit: " + detail);
           std::vector<double> actual(elements);
-          for (unsigned spin = 0; spin < spins; ++spin) {
-            cuda_check(cudaMemcpy(actual.data(), spin == 0 ? ka : kb, elements * sizeof(double),
-                                  cudaMemcpyDeviceToHost));
-            const double scale = spin == 0 ? 1.0 : -0.5;
-            for (std::size_t index = 0; index < elements; ++index)
-              require(std::abs(actual[index] - scale * fixture.range_exchange[range][index]) < 2e-9,
-                      "independent PySCF range-K parity");
+          for (const double density_scale : {1.0, -0.5, 0.0}) {
+            auto density = fixture.density;
+            for (auto& value : density) value *= density_scale;
+            cuda_check(cudaMemcpyAsync(alpha, density.data(), elements * sizeof(double),
+                                       cudaMemcpyHostToDevice, stream.get()));
+            require(execute(spec, screening) == GENERATIVEQC_STATUS_SUCCESS &&
+                        source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                    "range resident finite/census audit: " + detail);
+            for (unsigned spin = 0; spin < spins; ++spin) {
+              cuda_check(cudaMemcpy(actual.data(), spin == 0 ? ka : kb, elements * sizeof(double),
+                                    cudaMemcpyDeviceToHost));
+              const double scale = spin == 0 ? density_scale : -0.5;
+              for (std::size_t index = 0; index < elements; ++index) {
+                maximum_error = std::max(
+                    maximum_error,
+                    std::abs(actual[index] - scale * fixture.range_exchange[range][index]));
+                require(std::isfinite(actual[index]) &&
+                            std::abs(actual[index] - scale * fixture.range_exchange[range][index]) <
+                                (mixed ? 8e-7 : 2e-9),
+                        "independent PySCF range-K parity");
+              }
+            }
           }
+          cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, stream.get()));
           require(execute(spec, 1e12) == GENERATIVEQC_STATUS_SUCCESS &&
                       source.audit() == GENERATIVEQC_STATUS_SUCCESS,
                   "range replay changed the immutable screening predicate");
@@ -336,7 +390,79 @@ void raw_range_oracle(const Fixture& fixture) {
               "screened range replay retained nonzero values");
           ++checks;
         }
-  std::cout << "range oracle checks " << checks << "\n";
+  std::cout << (mixed ? "mixed resident range oracle checks " : "range oracle checks ") << checks
+            << " maximum_error " << maximum_error << "\n";
+}
+
+/** Independent signed-density SR/LR K matrices qualify both mixed schedules.
+ * Turning off optional shell-pair ordering exercises its bounded AO fallback;
+ * no oracle participates in native preparation or contraction. */
+void raw_mixed_range_oracle(const Fixture& fixture) {
+  const auto elements = fixture.density.size();
+  unsigned checks = 0;
+  double maximum_error = 0.0;
+  for (const double screening : {0.0, 1e-12}) {
+    scf::CudaDirectJkPlan* raw{};
+    scf::CudaDirectJkDiagnostic diagnostic;
+    std::string detail;
+    require(scf::create_cuda_direct_jk_plan(0, {fixture.system}, 0, screening, 2ULL << 30, &raw,
+                                            diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "mixed range preparation: " + detail);
+    std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+        raw, scf::destroy_cuda_direct_jk_plan);
+    runtime::OwnedCudaBuffer<double> matrices(0, 2 * elements, plan->stream);
+    runtime::OwnedCudaBuffer<int> error(0, 1, plan->stream);
+    runtime::OwnedCudaBuffer<std::uint64_t> work(0, 1, plan->stream);
+    auto* ordered_pairs = plan->materialized_pair_order;
+    require(ordered_pairs != nullptr, "whole-shell range schedule was not admitted");
+    for (unsigned radial = 0; radial < 2; ++radial)
+      for (const bool materialized : {true, false})
+        for (const double scale : {1.0, -0.5, 0.0}) {
+          auto density = fixture.density;
+          for (auto& value : density) value *= scale;
+          cuda_check(cudaMemcpyAsync(matrices.get(), density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, plan->stream));
+          auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.37);
+          spec.coulomb.present = false;
+          spec.exchange.op =
+              radial == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
+          spec.exchange.omega = 0.3;
+          plan->materialized_pair_order = materialized ? ordered_pairs : nullptr;
+          const auto status = scf::enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, matrices.get(), nullptr, elements, nullptr,
+              matrices.get() + elements, nullptr, error.get(), detail, work.get(), true);
+          plan->materialized_pair_order = ordered_pairs;
+          require(status == GENERATIVEQC_STATUS_SUCCESS, "mixed range execution: " + detail);
+          std::vector<double> actual(elements);
+          int failure = 0;
+          std::uint64_t recurrences = 0;
+          cuda_check(cudaMemcpyAsync(actual.data(), matrices.get() + elements,
+                                     elements * sizeof(double), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&failure, error.get(), sizeof(failure), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&recurrences, work.get(), sizeof(recurrences),
+                                     cudaMemcpyDeviceToHost, plan->stream));
+          cuda_check(cudaStreamSynchronize(plan->stream));
+          require(!failure, "mixed range numerical failure: radial=" + std::to_string(radial) +
+                                " materialized=" + std::to_string(materialized) + " scale=" +
+                                std::to_string(scale) + " screening=" + std::to_string(screening) +
+                                " recurrences=" + std::to_string(recurrences));
+          // Both schedules must execute FP32 for nonzero density. A zero
+          // density may screen every quartet before recurrence work.
+          require(scale == 0.0 || recurrences > 0,
+                  "incorrect mixed SR/LR recurrence work evidence");
+          for (std::size_t index = 0; index < elements; ++index) {
+            const double difference =
+                std::abs(actual[index] - scale * fixture.range_exchange[radial][index]);
+            require(std::isfinite(actual[index]) && difference < 8e-7,
+                    "independent mixed SR/LR K parity");
+            maximum_error = std::max(maximum_error, difference);
+          }
+          ++checks;
+        }
+  }
+  std::cout << "mixed range oracle checks " << checks << " maximum_error " << maximum_error << "\n";
 }
 
 void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
@@ -756,18 +882,24 @@ int main(int argc, char** argv) {
     require(argc == 2 ||
                 (argc == 3 &&
                  (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
+                  std::string(argv[2]) == "range-mixed-oracle" ||
                   std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
                   std::string(argv[2]) == "mixed-refinement" ||
                   std::string(argv[2]) == "mixed-source")),
             "usage: ks-phase-values-probe INPUT "
             "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
-    const bool range_oracle = argc == 3 && std::string(argv[2]) == "range-oracle";
+    const bool mixed_range_oracle = argc == 3 && std::string(argv[2]) == "range-mixed-oracle";
+    const bool range_oracle =
+        argc == 3 && (std::string(argv[2]) == "range-oracle" || mixed_range_oracle);
     const Fixture fixture(argv[1],
                           argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
                               std::string(argv[2]) == "mixed-source" || range_oracle,
                           range_oracle);
     std::cout << std::setprecision(17);
-    if (range_oracle) {
+    if (mixed_range_oracle) {
+      raw_mixed_range_oracle(fixture);
+      raw_range_oracle(fixture, true);
+    } else if (range_oracle) {
       raw_range_oracle(fixture);
     } else if (argc == 3 && std::string(argv[2]) == "mixed-source") {
       raw_oracle(fixture, true);
