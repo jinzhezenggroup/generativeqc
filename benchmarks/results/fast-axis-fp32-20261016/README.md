@@ -37,3 +37,21 @@ Qualification base: `072ba064643a21f470cd889c965475e2d1f8475c`, not current-mast
 integration qualification. Raw matrices, full receipts, failures and scripts
 stay outside Git in the existing local evidence tree. No Release or raw bundle
 is published. The separate Boys-table FP32 trial is not measured by this report.
+
+## PR-head integration
+
+`integration.json` independently qualifies the exact PR source at `a226b3cc0`,
+based on `8d7246d25`. This is not a qualification of later upstream commits.
+The rebuilt core and all six official force manifests authenticate the same
+source identity. Node2 job 3270 passes all-order mixed J/K, exchange-only,
+strict/derivative/response coverage and memcheck with zero errors. Its retained
+NVML mismatch limits that receipt to functional validation; two initial compiler
+environment failures are recorded separately rather than counted as passes.
+
+On the clean n5 RTX 5090, job 1668 independently qualifies WB97M-V96 Fast and
+FP64 complete endpoints (757.880654 and 1071.574263 seconds), plus both modes
+for eight method families at three and twelve atoms: 34 complete returns.
+All Fast returns execute genuine FP32 work with FP64 accumulation, one qualified
+budget solve and zero retries. The WB96 pair is an integration control, not a
+repeat-median performance cohort. Only the historical three-pair table supports
+the axis speedup claim. Full receipts and the recomputing audit stay outside Git.
