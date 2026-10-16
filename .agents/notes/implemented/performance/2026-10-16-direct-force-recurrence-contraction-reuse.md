@@ -149,3 +149,45 @@ aggregate storage cap without changing unrelated historical evidence. Numerical
 acceptance and scoped endpoint gains are explicit, not a universal interleaved
 performance promotion with full compile/memory budgets. The candidate remains
 about 2.47× slower than the historical 26.59-second GPU4PySCF warm target.
+
+## Current-source requalification after dependency resolution
+
+The preceding measurements remain historical. After #2532 merged, clean master
+`5348b9e66` and synchronized candidate `4bdffe3ce` were built as official
+Release/sm_120 images with verified ccache4.5.1. Native identities are
+`4fef53cce012f4fcabdd307247350fc61b3f1d4d9d2e8999400f3d2e5532ff96`
+and `ac850b60e98f89be8fa69922f7a2779d2da9c812a5a5dee61be5a88bcd14471b`,
+from1753 manifest inputs each. Later source movement is not relabeled as this
+campaign. PR #2541 now targets master; no merge is performed by this agent.
+
+All96 current-source primary calls complete and independently pass1e-8Eh and
+1e-7Eh/Bohr gates; maximum errors are3.86535e-11Eh/6.01426e-11Eh/Bohr. Full
+per-call arrays, both independent geometry oracles, actual iteration/build
+counts and original1800-second population limits are retained in the current
+bundle. The original frozen bundle remains at immutable commit
+`6369de44fe1f30759b3d07c8f267f4a02d0d70dd`, same repository path.
+
+Current96 cold/warm/moved/moved-warm seconds are
+411.282020/90.798641/260.105874/90.800574 to
+386.116851/65.477918/234.961981/65.707564. Warm/moved-warm improve
+27.89%/27.64%. Current48 values are75.817234/21.438233/56.877101/21.439160
+to69.934962/15.226590/50.849639/15.253462. Unlike the historical pair, both
+current48 moved trajectories are13/13; current96 remains24/24 cold and13/13
+moved. All warm calls are1/1. PBE0 warm/moved-warm improve6.59%/6.95%; HF
+changes are within0.58% in every phase. No trajectory is normalized away.
+
+Separate matched n1 diagnostic profiles give order-six21.968210→17.549077s,
+order-seven28.218229→7.375439s and order-eight5.809917→5.824592s. Primary96
+populations use the same n4 GPU. Diagnostic stationary caches are isolated
+from clean endpoint caches. Mutually exclusive host owners and separate device
+windows reconcile; intrusive capture is not substituted for clean timing.
+Entered primitive products remain2,400,504,912/1,250,544/95,976 for orders6/7/8.
+No missing preparation count is inferred from enumeration.
+
+588 focused host checks and six actual-linked independent Libcint GPU cases
+pass after synchronization. Follow-up warp-local Boys/prefactor and subgroup
+Wick-term sharing probes have no consistent useful device gain despite lower
+preparation work; neither is enabled. The separately tracked response-factoring
+continuation is PR #2549. This two-arm packet does not claim its results.
+The existing aggregate storage cap is respected by superseding only this PR's
+own packet while retaining its full earlier version in existing Git history.
