@@ -52,6 +52,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_one_electron_gradient_cuda](#native-c-generativeqc-system-one-electron-gradient-cuda)
 - [generativeqc_batch_get_last_fock_builds](#native-c-generativeqc-batch-get-last-fock-builds)
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
+- [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
+- [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
@@ -1277,6 +1279,70 @@ to the caller. Keep the owner and its context alive throughout the call.
 and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Overlap is dimensionless; system geometry uses Bohr.
+
+(native-c-generativeqc-basis-projection-query-v1)=
+## generativeqc_basis_projection_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_basis_projection_query_v1 ( const generativeqc_basis_projection_descriptor_v1 * descriptor , generativeqc_basis_projection_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query the shared occupied transport's conservative numeric capacity, without
+admitting a target calculation or inspecting numerical inputs.
+
+**Inputs.** Initialize descriptor and output struct_size/abi_version. Dimensions and positive
+finite policy thresholds are required; occupation is 1 or 2, input_kind is 0 or 1.
+maximum_ao bounds both AO dimensions. Array pointers/counts are ignored by this query.
+The input and output descriptors must not overlap.
+
+**Outputs.** Writes required target coefficient/density counts and numeric working capacity.
+The supplied workspace limit does not suppress a successful capacity report.
+
+**Errors.** Invalid metadata, overflow or ABI mismatch leave output unchanged.
+
+**Lifetime.** Borrows descriptors only for the call; no array or native owner is retained.
+
+**Execution.** Synchronous metadata-only query, without array reads, provider initialization,
+numerical allocation, eigensolver execution or accelerator access.
+
+**Units.** Counts are FP64 elements; capacity is bytes; metrics and residuals are dimensionless.
+
+(native-c-generativeqc-basis-project-cpu-v1)=
+## generativeqc_basis_project_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_basis_project_cpu_v1 ( generativeqc_context * context , const generativeqc_basis_projection_descriptor_v1 * descriptor , generativeqc_basis_projection_output_v1 * output ) ;
+```
+
+**Behavior.** Validate metric/occupied purity, transport the occupied subspace through the
+shared native owner, and publish a target seed; this never establishes target SCF convergence.
+
+**Inputs.** Live context for error details; versioned descriptor/output. Source/target overlaps
+have exact square counts, cross_overlap is target_AO by source_AO. Source state follows
+input_kind. Output capacities meet the query. Written output ranges are mutually disjoint
+and do not overlap any input array or either descriptor. Empty occupied output may be NULL.
+
+**Outputs.** On success copies detached coefficients/density and all diagnostics atomically with
+respect to refusal; unused buffer tails are unchanged. No input storage is modified.
+
+**Errors.** Invalid metadata, aliasing, nonfinite or rejected scientific proposals return
+INVALID_ARGUMENT; ABI mismatch returns ABI_MISMATCH. A positive workspace limit below the
+declared capacity returns OUT_OF_MEMORY before reading any numerical array. Provider failures
+propagate as native errors. Every failure preserves all output buffers and the output record;
+scientific/allocation errors provide context details, not a Python/reference retry.
+
+**Lifetime.** All arrays are borrowed for the synchronous call; output belongs to the caller.
+
+**Execution.** Explicit CPU FP64 transport using the shared CPU algebra/eigen provider. Context
+accelerator selection is irrelevant; no device transfer/probe occurs. Serialize shared-context
+calls and destruction. Caller input/output and provider overhead are outside the numeric cap.
+
+**Units.** Metrics, orbital coefficients, densities and diagnostic residuals follow the supplied
+AO convention; occupations/electron trace are electron counts and capacity is bytes.
 
 (native-c-generativeqc-system-df-gradient-cuda)=
 ## generativeqc_system_df_gradient_cuda

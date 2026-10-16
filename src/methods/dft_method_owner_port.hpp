@@ -87,12 +87,26 @@ class KsBatchOwnerPort {
                                                            std::size_t maximum_device_bytes,
                                                            std::string& detail) = 0;
 
+  virtual generativeqc_status resident_orbital_frame(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      dft::CudaKsResidentOrbitalFrameBinding& binding, std::string& detail, bool prepare) = 0;
+
   virtual generativeqc_status resident_density(std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                int& device, const double*& alpha,
                                                const double*& beta, std::size_t& matrix_elements,
                                                unsigned& spins, void*& source_stream,
                                                std::string& detail) = 0;
+
+  virtual generativeqc_status resident_fock_sources(std::size_t index,
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    dft::CudaKsResidentFockBinding& binding,
+                                                    std::string& detail) = 0;
+
+  virtual generativeqc_status resident_grid_reference(std::size_t index,
+                                                      const dft::CudaKsFinalStateToken& expected,
+                                                      dft::CudaKsResidentGridBinding& binding,
+                                                      std::string& detail) = 0;
 
   virtual generativeqc_status fixed_density_profile(std::size_t index,
                                                     const dft::CudaKsFinalStateToken& expected,

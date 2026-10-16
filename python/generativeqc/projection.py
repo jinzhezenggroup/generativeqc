@@ -58,11 +58,16 @@ class ProjectionDiagnostics:
 
 @dataclass(frozen=True)
 class OccupiedProjection:
-    """Detached immutable occupied coefficients and their target AO density."""
+    """Detached immutable proposal with its actual metric execution owner.
+
+    ``execution_owner`` is ``native_cpu`` only after installed native execution;
+    ``python_compatibility`` identifies explicit old/custom-policy science.
+    """
 
     coefficients: np.ndarray
     density: np.ndarray
     diagnostics: ProjectionDiagnostics
+    execution_owner: str = "python_compatibility"
 
 
 def _immutable(array: typing.Any) -> typing.Any:
@@ -101,6 +106,49 @@ def _metric(value: typing.Any, name: typing.Any, policy: typing.Any) -> typing.A
 
 
 def project_occupied(
+    source_overlap: typing.Any,
+    target_overlap: typing.Any,
+    cross_overlap: typing.Any,
+    source_coefficients: typing.Any,
+    *,
+    occupation: typing.Any = 2,
+    policy: typing.Any = None,
+) -> typing.Any:
+    """Project an occupied subspace with the shared installed CPU transport.
+
+    Coefficients are source-AO by occupied; occupation is 1 for a spin channel
+    or 2 for RHF. Output density is gauge invariant and immutable. Projection
+    is only a seed: the target must converge its own Hamiltonian. Old libraries,
+    custom policies and unbounded metadata retain explicit Python compatibility;
+    a selected native/load error never retries scientific work in Python.
+    """
+    policy = ProjectionPolicy() if policy is None else policy
+    if type(occupation) is not int or occupation not in (1, 2):
+        raise ValueError("occupation must be 1 (one spin) or 2 (restricted)")
+    from . import _projection_native
+
+    result = _projection_native.project(
+        source_overlap,
+        target_overlap,
+        cross_overlap,
+        source_coefficients,
+        occupied=None,
+        occupation=occupation,
+        policy=policy,
+    )
+    if result is not None:
+        return result
+    return _project_occupied_python(
+        source_overlap,
+        target_overlap,
+        cross_overlap,
+        source_coefficients,
+        occupation=occupation,
+        policy=policy,
+    )
+
+
+def _project_occupied_python(
     source_overlap: typing.Any,
     target_overlap: typing.Any,
     cross_overlap: typing.Any,
@@ -212,6 +260,52 @@ def project_density(
     occupation: typing.Any = 2,
     policy: typing.Any = None,
 ) -> typing.Any:
+    """Validate a pure HF density and transport its occupied space natively.
+
+    The native owner reconstructs the declared integer-occupied source, rejects
+    fractional/discarded components and applies the same transport used for
+    occupied columns. Custom/old-protocol compatibility is explicit and never
+    used as a retry after a native failure. Target SCF convergence is separate.
+    """
+    policy = ProjectionPolicy() if policy is None else policy
+    if type(occupied_orbitals) is not int or occupied_orbitals < 0:
+        raise ValueError("occupied_orbitals must be a nonnegative integer")
+    if type(occupation) is not int or occupation not in (1, 2):
+        raise ValueError("occupation must be 1 or 2")
+    from . import _projection_native
+
+    result = _projection_native.project(
+        source_overlap,
+        target_overlap,
+        cross_overlap,
+        source_density,
+        occupied=occupied_orbitals,
+        occupation=occupation,
+        policy=policy,
+    )
+    if result is not None:
+        return result
+    return _project_density_python(
+        source_overlap,
+        target_overlap,
+        cross_overlap,
+        source_density,
+        occupied_orbitals=occupied_orbitals,
+        occupation=occupation,
+        policy=policy,
+    )
+
+
+def _project_density_python(
+    source_overlap: typing.Any,
+    target_overlap: typing.Any,
+    cross_overlap: typing.Any,
+    source_density: typing.Any,
+    *,
+    occupied_orbitals: typing.Any,
+    occupation: typing.Any = 2,
+    policy: typing.Any = None,
+) -> typing.Any:
     """Reconstruct a pure HF occupied space from a validated AO density, then project.
 
     Diagonalize ``S_source**(1/2) D S_source**(1/2)`` in the retained metric
@@ -254,7 +348,7 @@ def project_density(
         raise ProjectionRejected(
             "source density contains unsupported discarded metric components"
         )
-    return project_occupied(
+    return _project_occupied_python(
         metric,
         target_overlap,
         cross_overlap,

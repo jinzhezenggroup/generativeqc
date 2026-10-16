@@ -308,6 +308,34 @@ jobs:
       - name: Install native CLI dependencies
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
+      - name: Install uv and Python 3.11 for compiler-extension tests
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "cpu-cli-compiler-extension-v1"
+      - name: Prepare CPU CLI compiler-extension interpreter
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        run: |
+          uv venv --python 3.11
+          # The native CLI stays Python-free. Its explicit Hessian extension's
+          # mandatory CTest oracle needs the declared CPU Python dependencies,
+          # not a wheel rebuild, reference extras or NVIDIA runtime providers.
+          mapfile -t requirements < <(
+            .venv/bin/python - <<'PY_INNER'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              config = tomllib.load(handle)
+          for requirement in config["project"]["dependencies"]:
+              if not requirement.lstrip().startswith("nvidia-"):
+                  print(requirement)
+          PY_INNER
+          )
+          uv pip install --python .venv/bin/python "${requirements[@]}"
+          PYTHONPATH="$PWD/python" .venv/bin/python -m generativeqc.hessian_cli --help
       - name: Test native CLI archive/metadata contracts
         if: matrix.compiler == 'gcc'
         run: |
@@ -328,6 +356,7 @@ jobs:
           -DGENERATIVEQC_ENABLE_CUDA=OFF
           -DCMAKE_BUILD_TYPE=Release
           -DGENERATIVEQC_COMPILER_CACHE=ccache
+          -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
           -DCMAKE_CXX_FLAGS="${COVERAGE_COMPILE_FLAGS}"
           -DCMAKE_EXE_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
           -DCMAKE_SHARED_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"

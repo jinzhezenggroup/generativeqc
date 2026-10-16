@@ -1,9 +1,11 @@
-"""Bounded Array-namespace reference execution for TensorIR.
+"""Bounded Array-namespace execution for TensorIR validation and device consumers.
 
 This module deliberately implements only operations with a portable immutable
 Array API-style lowering (plus an optional NumPy-like ``einsum`` extension).
 Unsupported primitives fail explicitly instead of falling back through NumPy,
 which would silently move device arrays to the host.
+Resident consumers explicitly own placement, finite-status accumulation and
+publication; this module never substitutes a host reference for a device action.
 """
 
 from __future__ import annotations
@@ -297,8 +299,14 @@ def execute_namespace(
     *,
     debug: bool,
     max_bytes: int,
+    finite_check: typing.Callable[[typing.Any], None] | None = None,
 ) -> tuple[dict[str, typing.Any], dict[str, typing.Any], int, str]:
-    """Execute a bounded TensorIR subset without crossing through NumPy."""
+    """Execute a bounded TensorIR subset without crossing through NumPy.
+
+    A resident owner may accumulate finiteness checks in its device status word
+    instead of synchronizing each node. That owner must check the status before
+    publishing any result. Shape, dtype and scientific domain guards remain.
+    """
     if not isinstance(program, Program) or not isinstance(feeds, Mapping):
         raise TypeError("tensor evaluation requires a Program and input mapping")
     if namespace is None:
@@ -350,8 +358,11 @@ def execute_namespace(
             raise ValueError(
                 f"interpreter result violates {node.op} shape/dtype contract"
             )
-        if not _truth(all_(isfinite(value))):
-            raise ValueError(f"non-finite tensor at {names[node]} ({node.op})")
+        if finite_check is None:
+            if not _truth(all_(isfinite(value))):
+                raise ValueError(f"non-finite tensor at {names[node]} ({node.op})")
+        else:
+            finite_check(value)
         values[node] = value
         if debug:
             snapshots[names[node]] = _copy(namespace, value)

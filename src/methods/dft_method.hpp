@@ -7,6 +7,9 @@
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
+#include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/cuda_stationary_controller.hpp"
 #include "dft/grid.hpp"
@@ -153,6 +156,34 @@ generativeqc_status dft_mixed_density_fitted_integral_gradient_cached(
 generativeqc_status dft_cuda_full_range_integral_derivatives(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::vector<double>& output, std::string& detail);
+
+/** Borrow the exact native canonical frame without detached numerical export.
+ * With prepare=true, run/reuse the shared scalar-only physical/canonical proof.
+ * With prepare=false, perform only a zero-transfer token/storage check; this
+ * mode is suitable for reauthentication around a native response consumer.
+ * CPU owners, missing/unconverged items and stale tokens fail closed and clear
+ * binding. The caller retains the prepared batch and its execution exclusion.
+ */
+generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::size_t index,
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                                    std::string& detail, bool prepare = false);
+
+/** Borrow actual prepared Fock sources and accepted F/H after canonical
+ * validation. No numerical work or provider scratch mutation is authorized. */
+generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   dft::CudaKsResidentFockBinding& binding,
+                                                   std::string& detail);
+
+/** Borrow the actual XC owner's packed basis/quadrature and the exact accepted
+ * density after resident canonical preparation. No device/panel allocation, transfer or
+ * scientific work; stale/missing/CPU/host-unfused owners clear the binding.
+ * The enclosing endpoint retains the batch and excludes concurrent calls. */
+generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     dft::CudaKsResidentGridBinding& binding,
+                                                     std::string& detail);
 
 /** Borrow the accepted spin density directly from the exact CUDA KS
  * final-state owner. No transfer or synchronization is performed. source_stream

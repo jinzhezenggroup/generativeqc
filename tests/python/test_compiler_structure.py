@@ -98,6 +98,22 @@ def test_dependency_directions() -> None:
     assert audit_structure()["errors"] == []
 
 
+@pytest.mark.parametrize(
+    "target,allowed", (("expr", True), ("weighted_eri", False), ("cuda", False))
+)
+def test_stationary_grid_ad_may_only_consume_neutral_integral_algebra(
+    tmp_path: typing.Any,
+    target: str,
+    allowed: bool,
+) -> None:
+    method = tmp_path / "method"
+    method.mkdir()
+    (method / "stationary_grid_second.py").write_text(
+        f"import generativeqc_compiler.integral.{target}\n"
+    )
+    assert (not audit_structure(tmp_path)["errors"]) == allowed
+
+
 def test_correlated_equation_compatibility_aliases_are_canonical() -> None:
     import importlib
 

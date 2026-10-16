@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_ecp_nuclear.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Actual canonical RKS/UKS adapter borrows immutable normalized grid basis and accepted physical densities, stages native primary-Fock residual terms once, and charges all term/spin-sum storage. Complete model, state, source identity and original noncapturing stream are reauthenticated. Compiler TensorIR supplies physical total-density/spin-direction sums; native finite/symmetry/alias/resource gates protect publication and ordinary J/K owners. No scientific derivative equations, occupied-factor replacement, Python or runtime compilation.",
+  "regions": []
+}

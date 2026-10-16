@@ -1,0 +1,9 @@
+{
+  "name": "wb97mv_stationary_assembly",
+  "outputs": [
+    "generated/response/wb97mv_stationary_assembly.cuh",
+    "generated/response/wb97mv_stationary_model.hpp"
+  ],
+  "owner": "python/generativeqc_compiler/method/wb97mv_stationary_assembly.py",
+  "scope": "Compiler TensorIR physical spin totals, stationary overlap signs, complete source sums and nuclear-pair incidence reduction. The build generator also serializes the complete canonical MethodIR model for Python-free native preparation; no functional coefficients or derivative policy are authored by CLI/runtime code. Native lifetime/resource/traversal owners remain separate."
+}

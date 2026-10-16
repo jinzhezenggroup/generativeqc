@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_ecp_nuclear_response.hpp",
+  "role": "runtime",
+  "subsystem": "ecp",
+  "reason": "Residual local/projector value, geometry-direction and moving-total-density nuclear-gradient/HVP contracts with immutable normalized through-f basis/ECP leases, explicit byte/work bounds and transactional owner/stream publication. Declares no quadrature, harmonic or derivative equations and no stationary endpoint.",
+  "regions": []
+}

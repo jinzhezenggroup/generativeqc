@@ -3,8 +3,10 @@
 
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <utility>
 
 #include "scf/initial_guess/eigen_operation.hpp"
@@ -85,6 +87,28 @@ struct OccupiedProjectionResult {
   double minimum_projected_norm = 0.0;
   double projection_residual = 0.0;
   double target_metric_orthogonality_error = 0.0;
+  double normal_equation_residual = 0.0;
+};
+
+/** Acceptance controls for the shared occupied transport, not new physical
+ * equations. Defaults preserve the original initial-guess contract; the public
+ * basis policy supplies an absolute Gram cutoff and unsnapped residual. */
+struct OccupiedProjectionControls {
+  double validation_tolerance{1e-7};
+  double minimum_squared_norm{};
+  double relative_gram_threshold{1e-10};
+  double residual_zero_tolerance{8.0 * std::numeric_limits<double>::epsilon()};
+  bool measure_normal_equation{};
+  EigenOperation eigen{};
+};
+
+/** Typed refusal lets public adapters retain their own diagnostic vocabulary
+ * without matching internal exception strings or duplicating numerical gates. */
+enum class OccupiedProjectionRejection { rank_loss, source_norm, residual_loss };
+struct OccupiedProjectionFailure : std::invalid_argument {
+  OccupiedProjectionRejection reason;
+  OccupiedProjectionFailure(OccupiedProjectionRejection cause, const char* message)
+      : std::invalid_argument(message), reason(cause) {}
 };
 
 /** Project source occupied columns through S_ts into the target AO metric.
@@ -100,6 +124,14 @@ OccupiedProjectionResult project_occupied_density(
     std::span<const double> source_overlap, std::span<const double> cross_overlap,
     std::size_t source_nbf, std::span<const double> source_coefficients, std::size_t occupied,
     double occupation = 2.0, double maximum_residual = 0.5);
+
+/** Same transport owner with explicit public-policy acceptance and diagnostics.
+ * Caller-owned target orthogonalizers may retain only supported metric modes. */
+OccupiedProjectionResult project_occupied_density_with_controls(
+    const integrals::IntegralData& target, const Matrix& target_orthogonalizer,
+    std::span<const double> source_overlap, std::span<const double> cross_overlap,
+    std::size_t source_nbf, std::span<const double> source_coefficients, std::size_t occupied,
+    double occupation, double maximum_residual, const OccupiedProjectionControls& controls);
 
 /** Complete an already projected occupied subspace with the lowest independent
  * target reference orbitals. This is required when a semiempirical source

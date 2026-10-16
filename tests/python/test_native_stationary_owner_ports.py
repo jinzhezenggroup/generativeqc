@@ -103,6 +103,12 @@ class StationaryOwner final : public PlainBatch, public KsBatchOwnerPort {
   generativeqc_status mixed_density_fitted_integral_gradient(std::size_t, const Token&,
       const Matrices&, const Matrices&, std::span<const double>, std::vector<double>&,
       std::size_t, Work&, std::string&) override { std::abort(); }
+  generativeqc_status resident_orbital_frame(std::size_t, const Token&,
+      dft::CudaKsResidentOrbitalFrameBinding&, std::string&, bool) override { std::abort(); }
+  generativeqc_status resident_fock_sources(std::size_t, const Token&,
+      dft::CudaKsResidentFockBinding&, std::string&) override { std::abort(); }
+  generativeqc_status resident_grid_reference(std::size_t, const Token&,
+      dft::CudaKsResidentGridBinding&, std::string&) override { std::abort(); }
   generativeqc_status resident_density(std::size_t, const Token&, int&, const double*&,
       const double*&, std::size_t&, unsigned&, void*&, std::string&) override { std::abort(); }
   generativeqc_status fixed_density_profile(std::size_t, const Token&, KsFixedDensityProfile&,

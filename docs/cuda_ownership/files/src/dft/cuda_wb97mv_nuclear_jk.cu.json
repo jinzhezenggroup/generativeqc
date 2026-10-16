@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_nuclear_jk.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Integer-only ordered AOT ERI closure/work/arena admission and bounded quartet traversal. CUDA gathers actual normalized AoBasis radial records, caches each raw Cartesian value/gradient/gradient-JVP once per shell quartet, gathers public polynomial projections, invokes compiler-AD stationary energy/weight/Fock maps, and deterministically reduces private matrices/vectors. No recurrence, derivative, spin-factor or range-coefficient authority, Python, CPU numerical contraction, JIT or global ERI residency is introduced. All five outputs share finite/symmetry/live-owner publication gates.",
+  "regions": []
+}

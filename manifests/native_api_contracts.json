@@ -717,6 +717,38 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_basis_projection_query_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "786e7a68ddbc7a02e04026be93697a620e7a01765f9dbd47a2b4035339c09607",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_basis_project_cpu_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "0eef8ebcbdde16792d74b946eb36cc4873e45efdd3931708aa40c15cafc8cddc",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_system_df_gradient_cuda": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

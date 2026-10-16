@@ -3,11 +3,14 @@ include_guard(GLOBAL)
 # Keep production source enumeration explicit and component-owned. Generated
 # outputs are registered separately in GenerativeQCGeneratedSources.cmake.
 function(generativeqc_add_api_sources target)
+  set_property(SOURCE src/api/c_api_ks_hessian.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "GENERATIVEQC_HAS_NATIVE_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES}>")
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
+    src/api/c_api_ks_hessian.cpp
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
@@ -338,6 +341,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/scf/gradient/hf_gradient.cpp
       src/scf/reference/mean_field.cpp
       src/scf/initial_guess/density.cpp
+      src/scf/occupied_projection.cpp
       src/scf/initial_guess/minao.cpp
       src/scf/initial_guess/huckel.cpp
       src/scf/preliminary_guess.cpp
