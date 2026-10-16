@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_ecp_nuclear.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Accepted WB97M-V RKS/UKS Direct/DF residual-ECP source API, physical spin-direction, resource and lifetime contracts. Distinguishes this numerical source from stationary CPKS/Hessian assembly.",
+  "regions": []
+}

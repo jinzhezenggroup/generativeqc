@@ -90,7 +90,15 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.hpp"
     ARGS --output "${_df}"
     COMMENT "Generating compiler-AD native WB97M-V fitted-primary response")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}"
+  set(_ecp "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_response.cuh")
+  set(_ecp_quadrature "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_quadrature.hpp")
+  set(_ecp_density "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_density.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_ecp}" "${_ecp_quadrature}" "${_ecp_density}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_ecp_response.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/integrals/cuda_ecp_nuclear_response.hpp"
+    ARGS --output "${_ecp}" --quadrature "${_ecp_quadrature}" --density-output "${_ecp_density}"
+    COMMENT "Generating compiler-AD residual ECP response and fixed quadrature")
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}" "${_ecp}" "${_ecp_quadrature}" "${_ecp_density}"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
@@ -102,8 +110,10 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_nuclear.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_ecp_nuclear.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_df_nuclear_response.cu"
+    "${PROJECT_SOURCE_DIR}/src/integrals/cuda_ecp_nuclear_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
   target_compile_features(${target} PUBLIC cxx_std_20)
@@ -163,5 +173,9 @@ function(generativeqc_add_hessian_aot target inventory)
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_df_nuclear_probe.cpp")
     target_link_libraries(generativeqc_cuda_df_nuclear_probe PRIVATE ${target} generativeqc)
     add_test(NAME cuda_df_nuclear_host_admission COMMAND generativeqc_cuda_df_nuclear_probe --host-only)
+    add_executable(generativeqc_cuda_ecp_nuclear_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_ecp_nuclear_probe.cpp")
+    target_link_libraries(generativeqc_cuda_ecp_nuclear_probe PRIVATE ${target} generativeqc)
+    add_test(NAME cuda_ecp_nuclear_host_admission COMMAND generativeqc_cuda_ecp_nuclear_probe --host-only)
   endif()
 endfunction()

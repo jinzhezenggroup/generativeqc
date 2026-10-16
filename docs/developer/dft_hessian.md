@@ -542,8 +542,42 @@ Cartesian libcint sources and independently applied Cartesian/spherical
 projections. Its actual RKS/UKS source/inverse/moving-weight chain remains a
 component test, not a stationary Hessian.
 
-Complete ERI/DF/ECP numerical shell coverage, residual ECP raw nuclear response
-and stationary molecular assembly still require integration.
+`src/integrals/cuda_ecp_nuclear_response.hpp` supplies a separately bounded
+residual-ECP nuclear source. Build-only `integral.ecp_fixed_grid` freezes the
+incumbent coarse/refined quadratures; radial potentials and the sixteen real
+s/p/d/f projectors retain the existing compiler graphs. Each ECP-center radial
+layer collocates ten spatial AO jets once and retains their fixed harmonic
+projections. Compiler AO Taylor AD and the stationary AO bilinear VJP/JVP supply
+local/nonlocal matrices, frozen-density geometry directions, total-density
+gradients and joint geometry/density HVPs. Left nuclear coordinates reuse these
+jets and cotangents, without replaying collocation or retaining a global
+coordinate-major derivative tensor. The Coulomb tail remains in the separate
+effective-charge attraction and nuclear-repulsion sources.
+
+`src/dft/cuda_ks_wb97mv_ecp_nuclear.hpp` binds this residual source to actual
+accepted WB97M-V RKS/UKS Direct/DF owners. It borrows normalized native AO basis
+and physical spin densities, stages immutable normalized residual terms once,
+and uses generated CUDA spin sums for D/dD without occupancy/half factors.
+All staged terms, sums and scratch count against the explicit device budget;
+source work receipts distinguish collocation, harmonic projection, affine work
+and conservative reduction bounds. Actions reauthenticate the complete model,
+canonical frame, source identity and original stream. Both quadratures must
+pass the incumbent matrix/derivative convergence policy before any of the four
+outputs is published. Finite, symmetry, resource, alias, stream, capture or
+revocation rejection preserves all outputs; a CUDA publication fault may leave
+partial copies. The source does not mutate ordinary J/K or occupied projections.
+
+`tests/python/test_native_ecp_nuclear_response.py` independently qualifies
+local/projector matrices and physical first derivatives with libcint, validates
+the analytic oracle against displaced energies, and checks moving-density HVPs
+against displaced analytic gradients at two steps. Synthetic Cartesian and
+real-spherical through-f and multicenter sources complement accepted RKS/UKS
+Direct/DF s/p owner fixtures. Nonconvergent quadrature must fail without
+publication. These are source/component gates, not complete stationary molecular
+Hessians or complete-endpoint speed measurements.
+
+Complete ERI/DF numerical shell coverage and stationary molecular assembly
+still require integration.
 Production CLI Hessian/HVP commands still
 use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
 
@@ -557,6 +591,7 @@ cmake --build build/cuda-release-sm120 --target \
   generativeqc_cuda_cpks_probe generativeqc_cuda_wb97mv_grid_probe \
   generativeqc_ks_wb97mv_grid_probe \
   generativeqc_cuda_grid_geometry_probe \
+  generativeqc_cuda_ecp_nuclear_probe \
   generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
@@ -587,6 +622,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_nuclear_grid.py
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:30:00 \
+  env GENERATIVEQC_CUDA_ECP_NUCLEAR_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_ecp_nuclear_probe" \
+  GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_native_ecp_nuclear_response.py
 ```
 
 For the exact empty-spin grid tests, also set
@@ -599,9 +638,9 @@ The Python test driver supplies independent quadrature/Libxc/real-space oracles;
 numerical leaves and response components execute in standalone native processes,
 including tests with unavailable Python paths and an empty executable search
 path. These validate components, not a complete stationary molecular endpoint.
-The H/S and exact J/K nuclear source components do not supply full-rank DF
-metric response, complete stationary integral/ECP assembly, full integral coverage
-or production CLI wiring. These remain **unimplemented** by this package. Therefore it
+The H/S, exact J/K, raw DF/inverse and residual-ECP source components remain
+separate from complete stationary molecular assembly, full integral coverage
+and production CLI wiring. Those integrations remain **unimplemented** by this package. Therefore it
 registers no molecular Hessian capability and cannot establish endpoint speed.
 
 ### Representation, spin and fitting

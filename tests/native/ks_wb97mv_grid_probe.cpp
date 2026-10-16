@@ -13,6 +13,7 @@
 #include "dft/cuda_ks_one_electron_response.hpp"
 #include "dft/cuda_ks_wb97mv_df_nuclear.hpp"
 #include "dft/cuda_ks_wb97mv_df_response.hpp"
+#include "dft/cuda_ks_wb97mv_ecp_nuclear.hpp"
 #include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
 #include "dft/semilocal_family.hpp"
@@ -66,11 +67,14 @@ void run(bool unrestricted, const std::string& mode) {
   const bool one_electron = mode == "one-electron" || mode == "df-one-electron";
   const bool nuclear_jk = mode == "nuclear-jk" || mode == "df-nuclear-jk";
   const bool df_nuclear = mode == "df-nuclear-source";
+  const bool ecp = mode == "ecp-source" || mode == "df-ecp-source" ||
+                   mode == "spherical-ecp-source" || mode == "df-spherical-ecp-source";
   const bool df_algebra = mode == "df-response" || mode == "direct-df-response" || df_nuclear;
   const bool geometry = mode == "geometry" || mode == "df-geometry" || nuclear;
   const bool fitted = mode == "df-fock" || mode == "df-geometry" || mode == "df-nuclear" ||
                       mode == "df-one-electron" || mode == "df-nuclear-jk" ||
-                      mode == "df-response" || df_nuclear;
+                      mode == "df-response" || df_nuclear || mode == "df-ecp-source" ||
+                      mode == "df-spherical-ecp-source";
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   for (unsigned atom = 0; atom < (unrestricted ? 3U : 2U); ++atom) {
@@ -79,6 +83,15 @@ void run(bool unrestricted, const std::string& mode) {
         {atom,
          0,
          {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}});
+  }
+  if (ecp) {
+    system.atoms[0].atomic_number = 11;
+    system.atoms[0].ecp_core = 10;
+    system.shells.insert(system.shells.begin() + 1, {0, 1, {{0.45, 1.0}}});
+    system.ecp_terms = {{0, -1, 0, 0.9, 0.25}, {0, -1, 2, 0.4, -0.1}, {0, 0, 1, 0.8, 0.3},
+                        {0, 1, 2, 0.65, -0.4}, {0, 2, 3, 0.7, 0.12},  {0, 3, 4, 0.55, -0.08}};
+    if (mode == "spherical-ecp-source" || mode == "df-spherical-ecp-source")
+      system.basis_representation = core::kSphericalBasis;
   }
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
@@ -208,6 +221,108 @@ void run(bool unrestricted, const std::string& mode) {
   array("curvature", curvature);
   array("potential", value);
   array("response", action);
+  dft::CudaKsWb97mvEcpNuclear ecp_response;
+  integrals::CudaEcpNuclearValues ecp_values;
+  integrals::CudaEcpNuclearVectors ecp_vectors;
+  double *ecp_motion{}, *ecp_matrices{}, *ecp_vector_storage{};
+  if (ecp) {
+    for (unsigned bound = 0; bound < 5; ++bound) {
+      integrals::CudaEcpNuclearOptions insufficient;
+      if (bound == 0) insufficient.max_workspace_bytes = 1;
+      if (bound == 1) insufficient.max_terms = 1;
+      if (bound == 2) insufficient.max_ao_evaluations = 1;
+      if (bound == 3) insufficient.max_affine_terms = 1;
+      if (bound == 4) insufficient.max_reduction_terms = 1;
+      require(ecp_response.prepare(*batch, 0, token, insufficient, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+              "actual ECP source ignored its resource bound");
+    }
+    require(ecp_response.prepare(*batch, 0, token, {}, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    const auto matrix = shape.nao * shape.nao, coordinates = 3 * shape.atoms;
+    require(ecp_response.shape().nao == shape.nao && ecp_response.shape().atoms == shape.atoms &&
+                ecp_response.shape().terms == system.ecp_terms.size() &&
+                ecp_response.device_bytes() > ecp_response.work().workspace_bytes,
+            "actual ECP source lost canonical basis or staging budget");
+    std::vector<double> motion(coordinates);
+    for (std::size_t index = 0; index < coordinates; ++index)
+      motion[index] = 0.12 * std::cos(index + 0.7);
+    ecp_motion = storage.allocate(coordinates);
+    check(cudaMemcpy(ecp_motion, motion.data(), coordinates * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    ecp_matrices = storage.allocate(4 * matrix);
+    ecp_vector_storage = storage.allocate(4 * coordinates);
+    ecp_values = {ecp_matrices, ecp_matrices + matrix, ecp_matrices + 2 * matrix,
+                  ecp_matrices + 3 * matrix};
+    ecp_vectors = {ecp_vector_storage, ecp_vector_storage + coordinates,
+                   ecp_vector_storage + 2 * coordinates, ecp_vector_storage + 3 * coordinates};
+    dft::CudaKsWb97mvResponse ordinary;
+    dft::CudaKsWb97mvResponseOptions ordinary_options;
+    ordinary_options.grid = controls;
+    require(
+        ordinary.prepare(*batch, 0, token, ordinary_options, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail);
+    check(ordinary.apply(input, output, lease.stream));
+    const auto ordinary_before = download(output, elements);
+    check(ecp_response.values(ecp_motion, ecp_values, lease.stream));
+    check(ecp_response.contract(ecp_motion, input, ecp_vectors, lease.stream));
+    const auto matrices = download(ecp_matrices, 4 * matrix);
+    const auto vectors = download(ecp_vector_storage, 4 * coordinates);
+    check(ecp_response.values(ecp_motion, ecp_values, lease.stream));
+    check(ecp_response.contract(ecp_motion, input, ecp_vectors, lease.stream));
+    check(ordinary.apply(input, output, lease.stream));
+    require(download(ecp_matrices, matrices.size()) == matrices &&
+                download(ecp_vector_storage, vectors.size()) == vectors &&
+                download(output, elements) == ordinary_before &&
+                download(lease.density, elements) == density,
+            "ECP replay changed outputs or ordinary J/K owners");
+    auto alias = ecp_values;
+    alias.local = const_cast<double*>(lease.density);
+    require(ecp_response.values(ecp_motion, alias, lease.stream) == cudaErrorInvalidValue &&
+                ecp_response.contract(ecp_motion, nullptr, ecp_vectors, lease.stream) ==
+                    cudaErrorInvalidValue,
+            "actual ECP source admitted an immutable alias or missing spin motion");
+    dft::CudaKsResidentOrbitalFrameBinding protected_frame;
+    require(methods::detail::dft_cuda_resident_orbital_frame(*batch, 0, token, protected_frame,
+                                                             detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    for (const auto* immutable : {lease.points, lease.weights, protected_frame.coefficients,
+                                  protected_frame.orbital_energies, protected_frame.overlap}) {
+      alias.local = const_cast<double*>(immutable);
+      require(ecp_response.values(ecp_motion, alias, lease.stream) == cudaErrorInvalidValue,
+              "actual ECP source admitted an immutable canonical/grid output alias");
+    }
+    auto invalid = direction;
+    invalid[0] = std::numeric_limits<double>::quiet_NaN();
+    check(cudaMemcpy(input, invalid.data(), elements * sizeof(double), cudaMemcpyHostToDevice));
+    require(ecp_response.contract(ecp_motion, input, ecp_vectors, lease.stream) ==
+                    cudaErrorInvalidValue &&
+                download(ecp_vector_storage, vectors.size()) == vectors,
+            "nonfinite actual ECP spin motion published output");
+    if (shape.spins == 2) {
+      invalid = direction;
+      invalid[1] += 1;
+      invalid[matrix + 1] -= 1;
+      check(cudaMemcpy(input, invalid.data(), elements * sizeof(double), cudaMemcpyHostToDevice));
+      require(ecp_response.contract(ecp_motion, input, ecp_vectors, lease.stream) ==
+                      cudaErrorInvalidValue &&
+                  download(ecp_vector_storage, vectors.size()) == vectors,
+              "antisymmetric spins hidden by a symmetric total were admitted");
+    }
+    check(cudaMemcpy(input, direction.data(), elements * sizeof(double), cudaMemcpyHostToDevice));
+    array("ecp_motion", motion);
+    array("ecp_matrices", matrices);
+    array("ecp_vectors", vectors);
+    const auto& work = ecp_response.work();
+    std::cout << ",\"ecp_device_bytes\":" << ecp_response.device_bytes()
+              << ",\"ecp_workspace_bytes\":" << work.workspace_bytes
+              << ",\"ecp_spin_sum_terms\":" << ecp_response.spin_sum_terms_per_contraction()
+              << ",\"ecp_value_actions\":" << work.value_actions
+              << ",\"ecp_contraction_actions\":" << work.contraction_actions
+              << ",\"ecp_layers_per_action\":" << work.radial_layers_per_action
+              << ",\"ecp_ao_per_action\":" << work.ao_evaluations_per_action
+              << ",\"ecp_ordinary_owner_preserved\":true";
+  }
   dft::CudaKsWb97mvDfResponse df_response;
   dft::CudaKsWb97mvDfNuclear df_nuclear_response;
   dft::CudaWb97mvDfOutput df_output;
@@ -599,6 +714,21 @@ void run(bool unrestricted, const std::string& mode) {
               << ",\"response_eris\":" << work.response_eris;
   }
   solve();
+  if (ecp) {
+    const std::vector<double> matrix_sentinel(4 * shape.nao * shape.nao, 27);
+    const std::vector<double> vector_sentinel(12 * shape.atoms, 27);
+    check(cudaMemcpy(ecp_matrices, matrix_sentinel.data(), matrix_sentinel.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(cudaMemcpy(ecp_vector_storage, vector_sentinel.data(),
+                     vector_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice));
+    require(ecp_response.values(ecp_motion, ecp_values, lease.stream) ==
+                    cudaErrorInvalidResourceHandle &&
+                ecp_response.contract(ecp_motion, input, ecp_vectors, lease.stream) ==
+                    cudaErrorInvalidResourceHandle &&
+                download(ecp_matrices, matrix_sentinel.size()) == matrix_sentinel &&
+                download(ecp_vector_storage, vector_sentinel.size()) == vector_sentinel,
+            "revoked actual ECP source published partial output");
+  }
   if (df_nuclear) {
     const std::vector<double> source_sentinel(df_source_count, 27);
     const std::vector<double> vector_sentinel(6 * shape.atoms, 27);
@@ -691,11 +821,13 @@ int main(int argc, char** argv) {
                mode == "df-geometry" || mode == "nuclear" || mode == "df-nuclear" ||
                mode == "one-electron" || mode == "df-one-electron" || mode == "nuclear-jk" ||
                mode == "df-nuclear-jk" || mode == "df-response" || mode == "direct-df-response" ||
-               mode == "df-nuclear-source"))) &&
+               mode == "df-nuclear-source" || mode == "ecp-source" || mode == "df-ecp-source" ||
+               mode == "spherical-ecp-source" || mode == "df-spherical-ecp-source"))) &&
                 (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
             "usage: ks_wb97mv_grid_probe rks|uks "
             "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
-            "electron|nuclear-jk|df-nuclear-jk|df-response|direct-df-response|df-nuclear-source]");
+            "electron|nuclear-jk|df-nuclear-jk|df-response|direct-df-response|df-nuclear-source|"
+            "ecp-source|df-ecp-source|spherical-ecp-source|df-spherical-ecp-source]");
     run(std::string(argv[1]) == "uks", mode);
     return 0;
   } catch (const std::exception& error) {
