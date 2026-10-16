@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/cuda_atomic.cuh",
+  "reason": "Shared FP64 atomic addition with native and integer-CAS fallback paths; synchronization support without method-specific scientific arithmetic or a change to accumulation order.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

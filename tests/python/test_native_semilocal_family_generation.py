@@ -268,7 +268,7 @@ def test_legacy_cpu_point_response_abi_slots_are_generated() -> None:
 
 
 def test_b3lyp_fractions_are_source_derived_from_pinned_libxc(tmp_path: Path) -> None:
-    from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
+    from generativeqc_compiler.xc._generated_libxc_methods import LIBXC_METHODS
 
     record = LIBXC_METHODS["B3LYP"]
     assert Fraction(record["exact_exchange"]) == Fraction(1, 5)

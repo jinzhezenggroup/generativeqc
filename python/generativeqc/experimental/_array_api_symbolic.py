@@ -252,6 +252,13 @@ def less_equal(x1: object, x2: object) -> typing.Any:
     return _compare("less_equal", x1, x2)
 
 
+def positive(x: object) -> typing.Any:
+    """Preserve a real array under eager or symbolic unary plus."""
+    if isinstance(x, VibeArray):
+        return _namespace.positive(x)
+    return _eager_compute(np.positive, _eager_array(x))
+
+
 def negative(x: object) -> typing.Any:
     """Negate each element of a host or symbolic array."""
     if isinstance(x, VibeArray):
@@ -420,6 +427,25 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
         else _namespace._normalized_axes(axis, array.ndim, "flip")
     )
     return np.flip(array, axis=axes)
+
+
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> typing.Any:
+    """Roll generic arrays along static axes using bounded gather maps."""
+    if isinstance(x, VibeArray):
+        return _namespace.roll(x, shift, axis=axis)
+    return np.roll(_eager_data_array(x), shift, axis=axis)
+
+
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
+    """Repeat elements using a static integer count during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.repeat(x, repeats, axis=axis)
+    return np.repeat(_eager_data_array(x), repeats, axis=axis)
 
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
@@ -714,6 +740,8 @@ def asarray(
             return value
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
+        if copy is False:
+            raise ValueError("asarray dtype conversion requires a copy")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
     if "unknown-nested" in source_kinds:

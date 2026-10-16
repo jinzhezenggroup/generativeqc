@@ -24,7 +24,6 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     byte_product,
     checked_bytes,
-    plan_resources,
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
@@ -40,6 +39,7 @@ from .resources_hf import (
     _ecp_inventory_owner,
     _ecp_workspace,
 )
+from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
@@ -496,6 +496,7 @@ def _cuda_stationary_descriptor(
     density_tolerance: float,
     screening_tolerance: float,
     application_precision_budget: typing.Any = None,
+    library: typing.Any = None,
 ) -> typing.Any:
     """Serialize the resolved model; native admission owns scientific predicates."""
     from . import _generated_methods, _native
@@ -522,7 +523,9 @@ def _cuda_stationary_descriptor(
         if precision == "fp64"
         else _native.PRECISION_AUTO,
     )
-    descriptor.ks_options = ctypes.pointer(native_ks_options(model))
+    descriptor.ks_options = ctypes.pointer(
+        native_ks_options(model, library=library, backend=_native.BACKEND_CUDA)
+    )
     if application_precision_budget is not None:
         descriptor.application_energy_budget = application_precision_budget.energy_abs
         descriptor.application_max_force_budget = (
@@ -770,6 +773,7 @@ def ks_resource_request(
             multiplicity,
             "orbital",
             derivative_order=0,
+            library=library,
         )
         if (
             not electrons.nalpha
@@ -1006,6 +1010,7 @@ def ks_resource_request(
                     )
             descriptor = _cuda_stationary_descriptor(
                 model,
+                library=library,
                 precision=precision,
                 max_iterations=max_iterations,
                 diis_history=diis_history,
@@ -1169,4 +1174,5 @@ def estimate_ks_resources(
     return plan_resources(
         (ks_resource_request(systems, **options),),
         ResourceBudget() if budget is None else budget,
+        library=options.get("library"),
     )

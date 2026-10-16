@@ -5,11 +5,14 @@ molecular method or overall tuning is faster. The two cases use real CUDA 12.9
 `sm_120` execution on an allocated RTX 5090. Both retain the ordinary baseline:
 none of the shortlisted candidates passes all existing performance gates.
 
-`qualification.json` retains every screening and final A/B scalar timing, input
+`qualification.json.xz` retains every screening and final A/B scalar timing, input
 identities, device identity, numerical errors, compiled resource reports, source
 file SHA-256 values, and complete local-evidence checksums. Full planner payloads
 and per-sample diagnostics remain in the ignored local paths; the compact record
 does not imply those files are downloadable from GitHub.
+
+The XZ representation is lossless; use `xz -dc qualification.json.xz` to read
+the original JSON. Compression changes storage only, not the historical record.
 
 Each case screens three candidates on one fixture, then obtains fresh paired
 measurements on all three fixtures for one finalist. This records 30 A/B pairs

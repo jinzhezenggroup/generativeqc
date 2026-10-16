@@ -38,6 +38,29 @@ def test_precision_consumer_provenance_is_retained() -> None:
         assert len(sources[f"python/generativeqc/{filename}"]) == 64
 
 
+def test_force_schedule_consumer_provenance_is_retained() -> None:
+    """Bind runtime schedule experiments to their actual native consumers."""
+    sources = source_hashes()
+    for filename in (
+        "direct_force_class_domains.cu",
+        "direct_force_class_domains.hpp",
+        "direct_force_class_pages.cuh",
+        "direct_force_diagnostic.hpp",
+        "direct_spd_force_schedule.hpp",
+    ):
+        assert len(sources[f"src/scf/cuda/{filename}"]) == 64
+    compiler_owner = (
+        "python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
+    )
+    assert len(sources[compiler_owner]) == 64
+    for path in (
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_final_validation_policy.hpp",
+        "python/generativeqc/resources_hf.py",
+    ):
+        assert len(sources[path]) == 64
+
+
 def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
     spec = specification("hf")
     assert spec.native_method == "rhf"
@@ -349,12 +372,27 @@ def test_reference_timeout_never_skips_native_runner(
     assert json.loads((point / "native.json").read_text())["native_ran"]
 
 
-def test_composite_protocol_retains_basis_and_corrections() -> None:
-    spec = specification("r2scan-3c")
-    result = protocol(3, load_r2scan3c_basis(), GridSpec(), 5, benchmark=spec)
+@pytest.mark.parametrize("density_fitting", (False, True))
+def test_composite_protocol_retains_basis_and_corrections(
+    density_fitting: bool,
+) -> None:
+    """Both README panels retain the defining basis and full 3c corrections."""
+    spec = replace(specification("r2scan-3c"), density_fitting=density_fitting)
+    result = protocol(
+        3,
+        load_r2scan3c_basis(),
+        GridSpec(),
+        5,
+        benchmark=spec,
+        auxiliary_basis=SimpleNamespace(
+            name="explicit-jkfit", identity="auxiliary-identity"
+        ),
+    )
     assert spec.native_method == "r2scan-3c-rks"
     assert spec.reference_xc == "R2SCAN"
     assert result["basis"] == "def2-mTZVPP"
+    assert result["representation"] == "spherical"
+    assert result["density_fitting"] == density_fitting
     assert result["aos"] == 34
     assert result["d4_parameters"]["s9"] == 2.0
     assert "included in every endpoint" in result["reference_corrections"]
@@ -590,11 +628,74 @@ def test_omission_does_not_hide_completed_native_without_reference(
     }
     render(summary, tmp_path)
     assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    assert (
+        "GPU4PySCF cold/warm unavailable: 48 atoms"
+        in (tmp_path / "df-cold-warm.svg").read_text()
+    )
     table = (tmp_path / "df-timings.md").read_text()
     assert annotation in table
     assert "10.000‡ | not run | 1.000‡ | not run" in table
     assert "| ωB97M-V | 48 |" in table
     assert "| ωB97M-V | 96 |" not in table
+
+
+def test_readme_chart_reports_missing_plotted_phases_not_moved_timeouts(
+    tmp_path: Path,
+) -> None:
+    """Direct/48 can be complete in the plot despite a later moved timeout."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": secs}
+        for phase, secs in [("cold", 20.0)] + [("warm", 2.0)] * 5
+    ]
+    native = {"status": "measured", "records": rows}
+    reference_48 = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "measured", "moved": "timeout"},
+        "records": rows,
+    }
+    reference_96 = {"status": "timeout", "records": []}
+    summary = {
+        "sizes": [48, 96],
+        "density_fitting": False,
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": atoms,
+                    "protocol": {"aos": atoms * 8},
+                    "engines": {
+                        "native": native,
+                        "reference": reference,
+                    },
+                }
+                for atoms, reference in [(48, reference_48), (96, reference_96)]
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    svg = (tmp_path / "dft-cold-warm.svg").read_text()
+    assert "GPU4PySCF cold/warm unavailable: 96 atoms" in svg
+    assert "GPU4PySCF cold/warm unavailable: 48 atoms" not in svg
+    assert "Reference sequence incomplete" not in svg
+
+
+def test_readme_chart_identifies_only_missing_warm_phase() -> None:
+    from tools.render_readme_dft import missing_plot_phase_annotations
+
+    native = {
+        "status": "measured",
+        "records": [{"phase": phase} for phase in ("cold", "warm")],
+    }
+    reference = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "timeout"},
+        "records": [{"phase": "cold"}],
+    }
+    point = {"atoms": 96, "engines": {"native": native, "reference": reference}}
+    assert missing_plot_phase_annotations([point]) == [
+        "GPU4PySCF warm unavailable: 96 atoms"
+    ]
 
 
 @pytest.mark.parametrize("priming_fails", [False, True])

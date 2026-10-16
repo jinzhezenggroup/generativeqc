@@ -10,6 +10,8 @@ import typing
 
 import numpy as np
 
+from .array_execution import current_execution
+
 
 def _operation(node: typing.Any, args: typing.Any, variables: typing.Any) -> typing.Any:
     if node.operation == "constant":
@@ -94,6 +96,9 @@ def evaluate_array_graph(
     scalars; the caller owns output shapes and any physical-domain restrictions.
     Floating-point exceptions propagate instead of silently regularizing inputs.
     """
+    execution = current_execution()
+    if execution is not None:
+        return execution.graph(graph, roots, variables)
     order = graph.topological_order(roots)
     if any(graph.nodes[index].operation == "select_le" for index in order):
         return _evaluate_piecewise(graph, roots, variables)

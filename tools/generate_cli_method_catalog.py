@@ -1,4 +1,4 @@
-"""Generate a native CLI catalog from compiler MethodIR, with strict admission.
+"""Generate the shared native catalog from compiler MethodIR, with strict admission.
 
 Only build-time Python is needed. Representable methods without qualified native
 lowerers are listed with reasons, never silently projected to a different energy.
@@ -47,6 +47,7 @@ class Row:
     domain: str
     components: tuple[tuple[str, float], ...]
     exchange: tuple[tuple[int, float, float], ...]
+    fock_coefficients: tuple[float, ...]
     cpu: bool
     cuda: bool
     reason: str
@@ -144,6 +145,7 @@ def _row(identifier: str, spin: str) -> Row:
     domain = identity = ""
     components: tuple[tuple[str, float], ...] = ()
     exchange: tuple[tuple[int, float, float], ...] = ()
+    fock_coefficients: tuple[float, ...] = ()
     try:
         method = resolve_method(identifier, spin=spin)
         source = method.identifier
@@ -162,6 +164,9 @@ def _row(identifier: str, spin: str) -> Row:
                 (1, float(term.coefficient), float(term.omega))
                 for term in plan.exchange
             )
+            fock_coefficients = tuple(
+                float(term.fock_coefficient) for term in plan.exchange
+            )
     except (TypeError, ValueError, NotImplementedError) as error:
         reason = f"MethodIR is not natively representable: {error}"
         cpu = cuda = False
@@ -176,6 +181,7 @@ def _row(identifier: str, spin: str) -> Row:
         domain=domain,
         components=components,
         exchange=exchange,
+        fock_coefficients=fock_coefficients,
         cpu=cpu,
         cuda=cuda,
         reason=reason,
@@ -214,6 +220,7 @@ def rows() -> tuple[Row, ...]:
                     for component, coefficient in resolution.plan.semilocal.functional.components
                 ),
                 exchange=(),
+                fock_coefficients=(),
                 cpu=True,
                 cuda=False,
                 reason="automatic Libxc semilocal programs require the CPU backend",
@@ -227,12 +234,15 @@ def _q(value: str) -> str:
 
 def render(items: tuple[Row, ...]) -> str:
     components: list[tuple[str, float]] = []
-    exchanges: list[tuple[int, float, float]] = []
+    exchanges: list[tuple[int, float, float, float]] = []
     rows_cpp = []
     for row in items:
         offset_c, offset_e = len(components), len(exchanges)
         components.extend(row.components)
-        exchanges.extend(row.exchange)
+        exchanges.extend(
+            (*term, fock)
+            for term, fock in zip(row.exchange, row.fock_coefficients, strict=True)
+        )
         carrier = (
             "GENERATIVEQC_METHOD_PBE_RKS"
             if row.spin == 1
@@ -261,20 +271,10 @@ def render(items: tuple[Row, ...]) -> str:
         "#include <array>",
         "#include <cstdint>",
         "#include <string_view>",
-        '#include "generativeqc/generativeqc.h"',
+        '#include "methods/named_ks_catalog.hpp"',
         "",
-        "namespace generativeqc::cli::method_generated {",
-        "struct Component { std::string_view name; double coefficient; };",
-        "struct Exchange { std::int32_t kind; double coefficient; double omega; };",
-        "struct Method {",
-        "  std::string_view name, source, identity, domain;",
-        "  generativeqc_method carrier;",
-        "  std::uint32_t spin, component_offset, component_count;",
-        "  std::uint32_t exchange_offset, exchange_count;",
-        "  bool cpu, cuda;",
-        "  std::string_view reason;",
-        "};",
-        f"inline constexpr std::array<Component, {len(components)}> kComponents{{{{",
+        "namespace generativeqc::methods::named_ks::generated {",
+        f"inline constexpr std::array<generativeqc_ks_semilocal_component, {len(components)}> kComponents{{{{",
     ]
     output.extend(
         f"    {{{_q(name)}, {coefficient!r}}}," for name, coefficient in components
@@ -282,12 +282,12 @@ def render(items: tuple[Row, ...]) -> str:
     output.extend(
         [
             "}};",
-            f"inline constexpr std::array<Exchange, {len(exchanges)}> kExchanges{{{{",
+            f"inline constexpr std::array<generativeqc_ks_exchange_term, {len(exchanges)}> kExchanges{{{{",
         ]
     )
     output.extend(
-        f"    {{{kind}, {coefficient!r}, {omega!r}}},"
-        for kind, coefficient, omega in exchanges
+        f"    {{{kind}, {coefficient!r}, {omega!r}, {fock!r}}},"
+        for kind, coefficient, omega, fock in exchanges
     )
     output.extend(
         [
@@ -302,7 +302,7 @@ def render(items: tuple[Row, ...]) -> str:
             "         name.substr(10) == entry.name.substr(6))) return &entry;",
             "  return nullptr;",
             "}",
-            "}  // namespace generativeqc::cli::method_generated",
+            "}  // namespace generativeqc::methods::named_ks::generated",
             "",
         ]
     )

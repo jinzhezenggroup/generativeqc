@@ -22,6 +22,15 @@ capability authorities, serialization, and status handling.
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
 - [generativeqc_get_source_identity](#native-c-generativeqc-get-source-identity)
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
+- [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
+- [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
+- [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
+- [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
+- [generativeqc_response_recycle_state_v1_get](#native-c-generativeqc-response-recycle-state-v1-get)
+- [generativeqc_response_recycle_project_v1](#native-c-generativeqc-response-recycle-project-v1)
+- [generativeqc_response_recycle_update_v1](#native-c-generativeqc-response-recycle-update-v1)
+- [generativeqc_response_recycle_copy_v1](#native-c-generativeqc-response-recycle-copy-v1)
+- [generativeqc_response_recycle_destroy](#native-c-generativeqc-response-recycle-destroy)
 - [generativeqc_status_message](#native-c-generativeqc-status-message)
 - [generativeqc_response_action_v1](#native-c-generativeqc-response-action-v1)
 - [generativeqc_response_gmres_workspace_v1](#native-c-generativeqc-response-gmres-workspace-v1)
@@ -47,6 +56,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_one_electron_gradient_cuda](#native-c-generativeqc-system-one-electron-gradient-cuda)
 - [generativeqc_batch_get_last_fock_builds](#native-c-generativeqc-batch-get-last-fock-builds)
 - [generativeqc_system_cross_overlap_cpu](#native-c-generativeqc-system-cross-overlap-cpu)
+- [generativeqc_basis_projection_query_v1](#native-c-generativeqc-basis-projection-query-v1)
+- [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
@@ -447,6 +458,236 @@ completes. Caller must coordinate concurrent changes to its runtime device selec
 
 **Units.** Resource quantities are bytes or hardware counts, as named; version fields are CUDA
 integer versions.
+
+(native-c-generativeqc-scf-effort-decide-v1)=
+## generativeqc_scf_effort_decide_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_effort_decide_v1 ( const generativeqc_scf_effort_descriptor_v1 * descriptor , generativeqc_scf_effort_decision_v1 * output ) ;
+```
+
+**Behavior.** Select strict/hold/relax/tighten effort and next hysteresis state from
+an empirical diagnostic-to-error calibration; this is not a rigorous bound.
+
+**Inputs.** Initialize complete descriptor/output ABI headers. Both pointers and
+level_count positive finite tightening density_tolerances are required; the
+last level is strict. Controls/floor are positive finite; scales nonnegative
+finite, force fraction <1, stationarity factor >=1, relax_after >0, and state
+index < level_count. Only flags bits 0/1 and domain codes 0/1/2 are supported.
+A supplied force is nonnegative finite unless strict reproducibility ignores
+it. The caller owns calibration provenance, physical model and level validity.
+
+**Outputs.** On success atomically replaces output with a detached next state and
+optional selected-level estimate. Missing force/reproducibility/stationarity
+gates precede forecasts. Domain or nonfinite-forecast fallback is SUCCESS with
+STRICT_FALLBACK, not permission to execute an unqualified calculation.
+
+**Errors.** Invalid metadata, counts/overflow or pointers return INVALID_ARGUMENT;
+incompatible headers return ABI_MISMATCH. Output stays unchanged on failure.
+
+**Lifetime.** Borrows immutable descriptors/level values only for this call; retains
+no pointers and owns no physical calculation, device, lease or transition log.
+
+**Execution.** Synchronous host metadata operation with linear level work and
+constant native numeric storage; performs no SCF, provider or device operation.
+
+**Units.** Energy/force thresholds and forecasts use the supplied calibration's
+Hartree and Hartree/Bohr units; density RMS is not a physical residual metric.
+
+(native-c-generativeqc-scf-effort-verify-v1)=
+## generativeqc_scf_effort_verify_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_effort_verify_v1 ( const generativeqc_scf_effort_final_descriptor_v1 * descriptor , generativeqc_scf_effort_verification_v1 * output ) ;
+```
+
+**Behavior.** Verify all final strict-SCF and optimizer termination gates without
+treating empirical forecasts as a substitute for measured final observables.
+
+**Inputs.** Initialize both complete ABI headers. Both pointers are required.
+flags use only bits 0/1/2 and reserved=0. Energy is finite; change/density/force
+are finite nonnegative, thresholds finite positive. Caller supplies exact
+physical-model and strict-level equality and actual SCF convergence metadata.
+
+**Outputs.** On success atomically publishes status and every unmet gate. Equality
+meets a numeric gate. Any model mismatch is unverified; otherwise unmet gates
+produce observed_unmet. All measured gates passing produces observed_met only.
+
+**Errors.** Invalid pointers/metadata/numeric values return INVALID_ARGUMENT;
+incompatible complete headers return ABI_MISMATCH. Failed output is unchanged.
+
+**Lifetime.** Borrows immutable inputs for this call and retains no model, result,
+device, calculation or borrowed storage; publication belongs to the caller.
+
+**Execution.** Synchronous constant-storage host metadata verification; performs
+no scientific reevaluation, provider/device work or fallback SCF solve.
+
+**Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
+remains the selected SCF diagnostic, not a physical commutator residual.
+
+(native-c-generativeqc-response-recycle-capacity-v1-get)=
+## generativeqc_response_recycle_capacity_v1_get
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_capacity_v1_get ( const generativeqc_response_recycle_descriptor_v1 * descriptor , generativeqc_response_recycle_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query native CPU retained-vector and additional workspace capacities.
+
+**Inputs.** Full-size current-ABI descriptor/output headers; positive dimension and limits.
+
+**Outputs.** Writes capacity on success only, including a possible zero vector capacity.
+
+**Errors.** INVALID_ARGUMENT for invalid/overflowing sizes; ABI_MISMATCH for bad headers.
+
+**Lifetime.** Borrows descriptors synchronously and retains no pointers.
+
+**Execution.** Allocation-free CPU metadata query; no Python, compiler or device operation.
+
+**Units.** All storage/workspace fields are numeric payload bytes.
+
+(native-c-generativeqc-response-recycle-create-v1)=
+## generativeqc_response_recycle_create_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_create_v1 ( const generativeqc_response_recycle_descriptor_v1 * descriptor , generativeqc_response_recycle * * output ) ;
+```
+
+**Behavior.** Create an empty native CPU retained response-vector owner.
+
+**Inputs.** Full-size current-ABI descriptor with positive dimension/limits and nonnull slot.
+
+**Outputs.** Clears the slot after required nonnull checks; publishes an owner on success.
+
+**Errors.** Invalid/overflowing counts, ABI mismatch and allocation failure return status.
+
+**Lifetime.** Caller owns the handle and must destroy it; descriptors are not retained.
+
+**Execution.** Synchronous CPU metadata ownership; no dimension-sized allocation until work.
+
+(native-c-generativeqc-response-recycle-state-v1-get)=
+## generativeqc_response_recycle_state_v1_get
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_state_v1_get ( const generativeqc_response_recycle * owner , generativeqc_response_recycle_state_v1 * output ) ;
+```
+
+**Behavior.** Read generation, retained-vector count and actual native array allocation telemetry.
+
+**Inputs.** Live owner and full-size current-ABI output header.
+
+**Outputs.** Writes scalar state on success only; telemetry is not full endpoint accounting.
+
+**Errors.** INVALID_ARGUMENT for NULL; ABI_MISMATCH for an invalid output header.
+
+**Lifetime.** Copies metadata, not vector views; serialize operations/destruction per owner.
+
+**Execution.** Synchronous context-free CPU query, without scientific work or allocation.
+
+(native-c-generativeqc-response-recycle-project-v1)=
+## generativeqc_response_recycle_project_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_project_v1 ( const generativeqc_response_recycle * owner , uint64_t expected_generation , const generativeqc_response_columns_v1 * rhs , double * output , uint64_t output_count , uint64_t max_workspace_bytes ) ;
+```
+
+**Behavior.** Project one RHS onto the native retained orthonormal directions.
+
+**Inputs.** Live owner/current generation, full-size current-ABI FP64 one-column RHS descriptor,
+dimension-sized output and additional workspace budget. RHS may have signed/repeated strides.
+
+**Outputs.** Writes a detached guess on success only; output may alias borrowed RHS storage.
+
+**Errors.** Stale generation, shape/extent/overflow or nonfinite input are invalid; bad ABI
+returns ABI_MISMATCH. Insufficient budget returns OUT_OF_MEMORY before numeric allocation.
+
+**Lifetime.** Input storage is borrowed only during the call; output remains caller-owned.
+
+**Execution.** Synchronous CPU linear algebra. Caller validates physical reference/model leases;
+this numeric operation does not certify a physical operator or a converged solution.
+
+**Units.** max_workspace_bytes excludes existing retained storage and object/provider overhead.
+
+(native-c-generativeqc-response-recycle-update-v1)=
+## generativeqc_response_recycle_update_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_update_v1 ( generativeqc_response_recycle * owner , uint64_t expected_generation , const generativeqc_response_columns_v1 * solution , const generativeqc_response_columns_v1 * basis , uint64_t max_vectors , uint64_t max_retained_bytes , uint64_t max_workspace_bytes ) ;
+```
+
+**Behavior.** Atomically replace retained directions using old vectors, solution then basis,
+in that order, with twice-reorthogonalized MGS and cutoff 1e-12*max(1,original norm).
+
+**Inputs.** Live owner/current generation and full-size current-ABI borrowed FP64 solution
+(one column)/basis descriptors with matching dimension, positive next retained limits,
+plus additional workspace bytes. Limits may change without copying old vectors to the caller.
+
+**Outputs.** Success replaces vectors and increments generation. Values beyond reached capacity
+are not visited; failure preserves logical vectors/generation, not allocation-attempt telemetry.
+
+**Errors.** Invalid/stale/overflowing metadata and visited nonfinite input return status; bad ABI
+returns ABI_MISMATCH. Insufficient budget returns OUT_OF_MEMORY before numeric allocation.
+
+**Lifetime.** Inputs are borrowed synchronously and copied as needed; no native views escape.
+
+**Execution.** Synchronous CPU linear algebra, with bounded replacement not a full candidate panel.
+Caller validates physical compatibility and invokes updates only for accepted solves.
+
+**Units.** max_workspace_bytes excludes existing retained payload and object/provider overhead.
+
+(native-c-generativeqc-response-recycle-copy-v1)=
+## generativeqc_response_recycle_copy_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_recycle_copy_v1 ( const generativeqc_response_recycle * owner , uint64_t expected_generation , uint64_t first_column , uint64_t column_count , double * output , uint64_t output_count ) ;
+```
+
+**Behavior.** Copy retained directions for explicit diagnostics or transport.
+
+**Inputs.** Live owner/current generation, a valid contiguous column range, and
+output_count=dimension*column_count doubles;
+output may be NULL only when that count is zero.
+
+**Outputs.** Writes detached column-major vectors on success only.
+
+**Errors.** Stale generation, invalid pointers or output size return INVALID_ARGUMENT.
+
+**Lifetime.** Caller owns the copy, which survives owner replacement/destruction.
+
+**Execution.** Synchronous CPU copy, not part of normal solve projection/update scheduling.
+
+(native-c-generativeqc-response-recycle-destroy)=
+## generativeqc_response_recycle_destroy
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_response_recycle_destroy ( generativeqc_response_recycle * owner ) ;
+```
+
+**Behavior.** Release a CPU retained-vector owner and all its array payload.
+
+**Inputs.** Owned handle or NULL; NULL is a no-op, repeated destruction is invalid.
+
+**Lifetime.** Invalidates the handle, not detached caller-owned diagnostic copies.
+
+**Execution.** Synchronous cleanup; no Python/compiler/device or physical callback.
 
 (native-c-generativeqc-status-message)=
 ## generativeqc_status_message
@@ -1137,6 +1378,70 @@ to the caller. Keep the owner and its context alive throughout the call.
 and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Overlap is dimensionless; system geometry uses Bohr.
+
+(native-c-generativeqc-basis-projection-query-v1)=
+## generativeqc_basis_projection_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_basis_projection_query_v1 ( const generativeqc_basis_projection_descriptor_v1 * descriptor , generativeqc_basis_projection_capacity_v1 * output ) ;
+```
+
+**Behavior.** Query the shared occupied transport's conservative numeric capacity, without
+admitting a target calculation or inspecting numerical inputs.
+
+**Inputs.** Initialize descriptor and output struct_size/abi_version. Dimensions and positive
+finite policy thresholds are required; occupation is 1 or 2, input_kind is 0 or 1.
+maximum_ao bounds both AO dimensions. Array pointers/counts are ignored by this query.
+The input and output descriptors must not overlap.
+
+**Outputs.** Writes required target coefficient/density counts and numeric working capacity.
+The supplied workspace limit does not suppress a successful capacity report.
+
+**Errors.** Invalid metadata, overflow or ABI mismatch leave output unchanged.
+
+**Lifetime.** Borrows descriptors only for the call; no array or native owner is retained.
+
+**Execution.** Synchronous metadata-only query, without array reads, provider initialization,
+numerical allocation, eigensolver execution or accelerator access.
+
+**Units.** Counts are FP64 elements; capacity is bytes; metrics and residuals are dimensionless.
+
+(native-c-generativeqc-basis-project-cpu-v1)=
+## generativeqc_basis_project_cpu_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_basis_project_cpu_v1 ( generativeqc_context * context , const generativeqc_basis_projection_descriptor_v1 * descriptor , generativeqc_basis_projection_output_v1 * output ) ;
+```
+
+**Behavior.** Validate metric/occupied purity, transport the occupied subspace through the
+shared native owner, and publish a target seed; this never establishes target SCF convergence.
+
+**Inputs.** Live context for error details; versioned descriptor/output. Source/target overlaps
+have exact square counts, cross_overlap is target_AO by source_AO. Source state follows
+input_kind. Output capacities meet the query. Written output ranges are mutually disjoint
+and do not overlap any input array or either descriptor. Empty occupied output may be NULL.
+
+**Outputs.** On success copies detached coefficients/density and all diagnostics atomically with
+respect to refusal; unused buffer tails are unchanged. No input storage is modified.
+
+**Errors.** Invalid metadata, aliasing, nonfinite or rejected scientific proposals return
+INVALID_ARGUMENT; ABI mismatch returns ABI_MISMATCH. A positive workspace limit below the
+declared capacity returns OUT_OF_MEMORY before reading any numerical array. Provider failures
+propagate as native errors. Every failure preserves all output buffers and the output record;
+scientific/allocation errors provide context details, not a Python/reference retry.
+
+**Lifetime.** All arrays are borrowed for the synchronous call; output belongs to the caller.
+
+**Execution.** Explicit CPU FP64 transport using the shared CPU algebra/eigen provider. Context
+accelerator selection is irrelevant; no device transfer/probe occurs. Serialize shared-context
+calls and destruction. Caller input/output and provider overhead are outside the numeric cap.
+
+**Units.** Metrics, orbital coefficients, densities and diagnostic residuals follow the supplied
+AO convention; occupations/electron trace are electron counts and capacity is bytes.
 
 (native-c-generativeqc-system-df-gradient-cuda)=
 ## generativeqc_system_df_gradient_cuda

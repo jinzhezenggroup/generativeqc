@@ -18,12 +18,13 @@ from generativeqc import (
     Calculator,
     GridSpec,
     KsOptions,
-    MethodCapabilities,
     PrecisionCalculator,
     TargetErrorBudget,
     _native,
 )
 from generativeqc.initial_guess import _initial_guess_precision
+
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 BUDGET = TargetErrorBudget(1e-5, 1e-4, 3e-5)
@@ -73,7 +74,6 @@ extern "C" double allowance(unsigned index) {
 @pytest.fixture
 def constructor(monkeypatch: pytest.MonkeyPatch) -> Any:
     """Mock availability only; retain the actual public scientific constructor."""
-    import generativeqc.calculator as calculator_module
 
     def available(method: int, pointer: object) -> int:
         ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
@@ -86,17 +86,7 @@ def constructor(monkeypatch: pytest.MonkeyPatch) -> Any:
         generativeqc_method_available=available,
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
-    monkeypatch.setattr(
-        calculator_module,
-        "method_capabilities",
-        lambda name: MethodCapabilities(
-            name,
-            "hartree_fock" if name == "rhf" else "density_functional",
-            True,
-            True,
-            frozenset({"energy", "forces"}),
-        ),
-    )
+    install_registry_stub(library, frozenset({"energy", "forces"}))
     return library
 
 

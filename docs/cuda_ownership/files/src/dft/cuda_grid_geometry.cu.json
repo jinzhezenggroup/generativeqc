@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_grid_geometry.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Caller-arena moving Becke/AO geometry scheduling, immutable native quadrature authentication, bounded pair/point traversal, shared binary scaling of compiler-generated mixed product jets, finite/smooth-domain gates and transactional dual publication. All spatial AO and scalar first/mixed derivatives are build-time compiler AD; no Python, runtime generation or CPU numerical fallback.",
+  "regions": []
+}

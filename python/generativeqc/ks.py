@@ -625,6 +625,19 @@ def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     )
 
 
+def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Admit only the independently qualified physical-spin WB97M-V composition.
+
+    Compiler primitive rules are wider than public molecular qualification.
+    Compare resolved mathematics, not a user-provided selector or identifier.
+    """
+    return (
+        isinstance(method_ir, MethodIR)
+        and method_ir.semantic_payload()
+        == resolve_method("WB97M-V", spin=method_ir.spin).semantic_payload()
+    )
+
+
 def uses_molecular_nonlocal_domain(method_ir: MethodIR) -> bool:
     """Return the generated molecular nonlocal-domain capability for one KS graph."""
     try:
@@ -1114,11 +1127,14 @@ def profiled_ks_options(
     ).options
 
 
-def native_ks_options(options: typing.Any) -> typing.Any:
+def native_ks_options(
+    options: typing.Any, *, library: typing.Any = None, backend: int = 0
+) -> typing.Any:
     """Lower one compiler KS execution plan into the current semantic C ABI.
 
-    The ABI carries MethodIR primitives directly.  No named-method/family code
-    and no historical suffix version is selected here.
+    Already-selected libraries own compiled exact-identity catalog programs.
+    Custom/noncatalog graphs and missing-symbol/library-free metadata retain
+    explicit compiler lowering; a selected native refusal never retries it.
     """
     import ctypes
 
@@ -1133,6 +1149,44 @@ def native_ks_options(options: typing.Any) -> typing.Any:
         radii = (ctypes.c_double * 119)(*[fill] * 119)
         for z, radius in grid.element_radii:
             radii[z] = radius
+
+    domain = options.scf_domain.encode("ascii")
+    descriptor_type = (
+        _native.ApplicationPrecisionKsOptionsDescriptor
+        if options._precision_budget is not None
+        else _native.KsOptionsDescriptor
+    )
+    descriptor = descriptor_type(
+        struct_size=ctypes.sizeof(descriptor_type),
+        abi_version=_native.ABI_VERSION,
+        scf_domain=domain,
+        grid_version=grid.version,
+        radial_points=grid.radial_points,
+        angular_polar=grid.angular_polar,
+        angular_azimuth=grid.angular_azimuth,
+        partition_iterations=grid.partition_iterations,
+        coincident_tolerance=grid.coincident_tolerance,
+        tile_points=options.tile_points,
+        element_radii=radii,
+        element_radius_count=119 if radii is not None else 0,
+        xc_execution_schedule=_native.XC_EXECUTION_DEVICE_FUSED
+        if options.xc_schedule == "device_fused"
+        else _native.XC_EXECUTION_HOST_UNFUSED,
+    )
+    descriptor._domain_owner = domain
+    descriptor._radii_owner = radii
+    if options._precision_budget is not None:
+        descriptor.application_energy_budget = options._precision_budget[0]
+        descriptor.application_max_force_budget = options._precision_budget[1]
+        descriptor.application_rms_force_budget = options._precision_budget[2]
+    from ._ks_catalog_native import select_catalog_plan
+
+    if select_catalog_plan(library, options.method_ir, backend, descriptor):
+        if options._precision_budget is not None:
+            prefix = _native.KsOptionsDescriptor.from_buffer(descriptor)
+            prefix._extension_owner = descriptor
+            return prefix
+        return descriptor
 
     if _is_pbe_d4_composition(options.method_ir):
         semilocal = typing.cast("SemilocalXCPrimitive", options.method_ir.primitives[0])

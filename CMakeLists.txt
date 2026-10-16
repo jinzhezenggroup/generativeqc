@@ -7,6 +7,7 @@ find_package(Threads REQUIRED)
 include(GNUInstallDirs)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCGenerated.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCHessianAot.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCGeneratedSources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCCuda.cmake")
@@ -54,6 +55,11 @@ option(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT
 option(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
        "Link graph-qualified native CUDA stationary force profiles into the C++ core"
        ${GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT})
+option(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES
+       "Build opt-in native compiler-AD Hessians with full f/g closure by default" OFF)
+set(GENERATIVEQC_HESSIAN_AOT_INVENTORY
+    "" CACHE FILEPATH
+    "Optional explicit Hessian AOT inventory; empty selects complete factorized orbital-f/auxiliary-g closure")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
@@ -291,6 +297,10 @@ if(GENERATIVEQC_ENABLE_CUDA)
   endif()
 endif()
 
+if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES AND NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR "Hessian AOT leaves require CUDA")
+endif()
+
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
    NOT GENERATIVEQC_ENABLE_CUDA)
   message(FATAL_ERROR
@@ -326,6 +336,7 @@ if(GENERATIVEQC_ENABLE_CUBLASLT)
   target_link_libraries(generativeqc PUBLIC generativeqc_cublaslt)
 endif()
 generativeqc_configure_cpu_linalg(generativeqc)
+generativeqc_configure_private_cpu_linalg(generativeqc)
 generativeqc_add_gfn2_runtime(generativeqc)
 generativeqc_add_component_sources(generativeqc)
 generativeqc_register_host_generated_sources(generativeqc)
@@ -456,7 +467,8 @@ if(GENERATIVEQC_BUILD_CLI)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   find_package(LibArchive REQUIRED)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
-                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
+                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp
+                 src/cli/resources.cpp src/cli/hessian.cpp)
   set(GENERATIVEQC_CLI_BASIS_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
   generativeqc_register_generated_sources(
@@ -469,42 +481,13 @@ if(GENERATIVEQC_BUILD_CLI)
       --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
       --output "${GENERATIVEQC_CLI_BASIS_HEADER}"
     COMMENT "Generating Python-free CLI basis catalog")
-  set(GENERATIVEQC_CLI_METHOD_HEADER
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_method_catalog.hpp")
-  # Bulk MethodIR provenance hashes these families, including modules the
-  # generator never imports. Import-only depfiles cannot invalidate those rows.
-  file(GLOB_RECURSE _generativeqc_cli_capability_inputs CONFIGURE_DEPENDS
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json")
-  generativeqc_register_generated_sources(
-    NAME generativeqc_cli_method_codegen
-    TARGET generativeqc_cli
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
-    OUTPUTS "${GENERATIVEQC_CLI_METHOD_HEADER}"
-    DEPENDS
-      ${_generativeqc_cli_capability_inputs}
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/bulk_ks.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/spec.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_work.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_capabilities.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_blacklist.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
-    ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
-    COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
   generativeqc_link_cli_core(generativeqc_cli)
+  if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
+    target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)
+    target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=1)
+  else()
+    target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=0)
+  endif()
   target_link_libraries(generativeqc_cli PRIVATE nlohmann_json::nlohmann_json
                         OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE
@@ -519,7 +502,8 @@ if(GENERATIVEQC_BUILD_CLI)
   if(GENERATIVEQC_PYTHON_WHEEL)
     # A native PATH launcher finds the full CLI in the adjacent wheel package.
     # The full binary stays beside its shared library for relocatable RPATH;
-    # neither installed command invokes Python at runtime.
+    # Normal native commands never invoke Python. The explicitly selected
+    # hessian/hvp compiler-runtime extension has its own interpreter contract.
     add_executable(generativeqc_wheel_launcher src/cli/wheel_launcher.cpp)
     set_target_properties(generativeqc_wheel_launcher PROPERTIES
       OUTPUT_NAME generativeqc
@@ -577,6 +561,13 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_gaussian.py"
                      $<TARGET_FILE:generativeqc_cli>)
+    add_test(NAME generativeqc_cli_hessian_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_hessian.py"
+                     $<TARGET_FILE:generativeqc_cli>)
+    set_tests_properties(generativeqc_cli_hessian_contract PROPERTIES
+                         ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>"
+                         TIMEOUT 600)
     add_test(NAME generativeqc_cli_rhf_cpu
              COMMAND generativeqc_cli run
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"

@@ -102,10 +102,6 @@ def test_resident_cpks_fault_status_and_cleanup(
             'extern "C" generativeqc_status generativeqc_rhf_response_resident_norm(',
         )
         + "\nnamespace generativeqc::runtime {\n"
-        + _definition(resources, "inline void cuda_resource_check(")
-        + "\n"
-        + _definition(resources, "class CudaDeviceScope")
-        + ";\n"
         + _definition(resources, "class OwnedCudaEvent")
         + ";\n}\nusing generativeqc::runtime::cuda_resource_check;\n"
         + handoff_policy
@@ -116,12 +112,19 @@ def test_resident_cpks_fault_status_and_cleanup(
         + MAIN
     )
     path = tmp_path / "resident_cpks_status.cpp"
+    (tmp_path / "cuda_runtime_api.h").write_text("")
     path.write_text(source)
     binary = tmp_path / "resident_cpks_status"
     native_cxx.build_executable(
         [path],
         binary,
-        compile_args=["-std=c++20", "-O0", "-I", str(ROOT / "include")],
+        compile_args=[
+            "-std=c++20",
+            "-O0",
+            "-I" + str(ROOT / "include"),
+            "-I" + str(ROOT / "src"),
+            "-I" + str(tmp_path),
+        ],
     )
     result = subprocess.run(
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
@@ -151,7 +154,7 @@ PREFIX = r"""
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
-enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
+enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
 enum cublasStatus_t {
   CUBLAS_STATUS_SUCCESS, CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED
 };
@@ -183,6 +186,7 @@ cublasStatus_t blas_status(Site site) {
   return blas_failure;
 }
 const char* cudaGetErrorString(cudaError_t) { return "injected CUDA failure"; }
+cudaError_t cudaGetLastError() { return cudaSuccess; }
 cudaError_t cudaGetDevice(int* device) {
   auto status = cuda_status(get_device);
   if (status == cudaSuccess) *device = current_device;
@@ -242,6 +246,7 @@ cublasStatus_t cublasDnrm2(cublasHandle_t, int, const double*, int, double* valu
   *value = bad_norm ? std::numeric_limits<double>::infinity() : 2;
   return blas_status(blas_norm);
 }
+#include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
 cudaError_t resource_cuda_malloc(void** output, std::size_t bytes) {
   auto status = cuda_status(allocate);

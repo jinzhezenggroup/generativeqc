@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/cuda_device_scope.hpp",
+  "reason": "Shared thread-local CUDA device selection and restoration for resource owners and the xTB descriptor adapter, with throwing/status boundaries and explicit cleanup retry; no scientific arithmetic.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

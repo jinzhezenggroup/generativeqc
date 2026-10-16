@@ -1,0 +1,30 @@
+{
+  "schema": "generativeqc.degree7-rejected-retention.v1",
+  "date": "2026-10-15",
+  "base_commit": "cb8781fb1bdcfb9166ef07cfed463c0482dea752",
+  "decision": "reject degree-seven six-only cooperative consumer; remove experimental code; preserve defaults and README figures",
+  "source_binding": "qualified frozen native and consumer match",
+  "native_source_identity": "3035ff1931cb74c8a39909d28d47ab6815d1f20f42f250a31963e072c3fa071d",
+  "native_library_sha256": "018f81de976f28bd9147bdbcf5329cdb5adb524cf672688dadb74ca69da91ddc",
+  "complete_native_populations": 4,
+  "complete_native_calls": 48,
+  "maximum_energy_error_eh": 1.5234036254696548e-11,
+  "maximum_force_error_eh_per_bohr": 3.5187851764317823e-11,
+  "artifacts": [
+    {
+      "path": "observations.json.xz",
+      "sha256": "2217611d5b6daf5b8a472fd6f485832d11be21830a3c906f96e5a5106062ca68",
+      "bytes": 107408
+    },
+    {
+      "path": "receipts.json.xz",
+      "sha256": "429971249796612576bc5c10c774f3ac0b2915ef5f7a856fb9ac53daa1ab2abc",
+      "bytes": 97860
+    },
+    {
+      "path": "experiment.patch.xz",
+      "sha256": "397b918210ca230be8e3c73fb67985fef992d24a932373a8b630c32fa9ddb96b",
+      "bytes": 13264
+    }
+  ]
+}

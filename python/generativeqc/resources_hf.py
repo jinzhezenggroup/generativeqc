@@ -23,13 +23,13 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     byte_product,
     checked_bytes,
-    plan_resources,
 )
 
 from .basis import BasisSet
 from .basis_capabilities import require_basis, resolved_basis_metadata
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
+from .resources_planning import plan_resources
 
 # Newly tracked controls may be absent from earlier schema-1 checkpoints.
 # Preserve that distinction in restart provenance; absence is not a claim
@@ -39,6 +39,7 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
     "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
+    "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
     "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
     "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
     "GENERATIVEQC_CANONICAL_RSH_VALUES",
@@ -122,6 +123,7 @@ def _basis_record(
     role: typing.Any,
     *,
     derivative_order: typing.Any = 1,
+    library: typing.Any = None,
 ) -> typing.Any:
     selected = _snapshot_basis(basis, representation)
     mode = (
@@ -148,22 +150,16 @@ def _basis_record(
         multiplicity=multiplicity,
         role=role,
     )
-    cartesian = sum(
-        (s.angular_momentum + 1) * (s.angular_momentum + 2) // 2 for s in shells
-    )
-    nbf = (
-        cartesian
-        if mode == "cartesian"
-        else sum(2 * s.angular_momentum + 1 for s in shells)
-    )
+    from .resources_basis import _basis_shape
+
+    angular = tuple(int(shell.angular_momentum) for shell in shells)
+    primitives = tuple(len(shell.primitives) for shell in shells)
     record = {
-        "nbf": checked_bytes(nbf, "AO dimension"),
-        "cartesian_nbf": checked_bytes(cartesian),
-        "shells": len(shells),
-        "primitives": sum(len(s.primitives) for s in shells),
-        "shell_angular": tuple(int(s.angular_momentum) for s in shells),
-        "shell_primitive_counts": tuple(len(s.primitives) for s in shells),
-        "maximum_angular": max(s.angular_momentum for s in shells),
+        **_basis_shape(
+            angular, primitives, mode, library=library if backend == "cpu" else None
+        ),
+        "shell_angular": angular,
+        "shell_primitive_counts": primitives,
         "representation": mode,
         "basis_hash": metadata["mathematical_identity"],
     }
@@ -624,6 +620,7 @@ def hf_resource_request(
             charge,
             multiplicity,
             "orbital",
+            library=library,
         )
         if max(electrons.nalpha, electrons.nbeta) > orbital["nbf"]:
             raise ValueError(
@@ -652,6 +649,7 @@ def hf_resource_request(
                     charge,
                     multiplicity,
                     "auxiliary",
+                    library=library,
                 )
             )
         items.append(
@@ -897,4 +895,8 @@ def estimate_hf_resources(
 ) -> typing.Any:
     """Return an HF dry-run plan using compact topology and no native execution."""
     budget = ResourceBudget() if budget is None else budget
-    return plan_resources((hf_resource_request(systems, **options),), budget)
+    return plan_resources(
+        (hf_resource_request(systems, **options),),
+        budget,
+        library=options.get("library"),
+    )

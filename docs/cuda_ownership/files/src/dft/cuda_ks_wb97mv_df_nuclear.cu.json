@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_df_nuclear.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Canonical RKS/UKS adapter binds the actual normalized orbital/auxiliary topology and immutable CUDA DF basis to the accepted complete WB97M-V fitted model. Owns an independent bounded arena and reauthenticates accepted state, source identity and stream before publication, preserving primary scratch/occupied leases. No mathematical derivative authority, reconstructed numerical basis, Python or runtime compilation.",
+  "regions": []
+}

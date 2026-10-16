@@ -139,16 +139,17 @@ def test_mixed_consumers_fail_before_artifact_or_record_access(
             operation()
 
 
-def test_range_second_intent_retains_omega_but_lowering_does_not_claim_support() -> (
-    None
-):
+def test_range_second_lowering_retains_omega_and_uses_modified_moments() -> None:
     operator = four_center_eri_operator(CoulombKernel("long_range", 0.123456789))
     ir = build_eri_second_ir((1, 0, 0, 0), operator=operator)
     payload = integral_to_payload(ir)
     assert payload["operator"]["omega"] == operator.omega
     assert integral_from_payload(json.loads(json.dumps(payload))) == ir
-    with pytest.raises(ValueError, match="full four-center"):
-        build_second_derivative_kernel(ir, (0,))
+    kernel = build_second_derivative_kernel(ir, (0,), output_indices=(0,))
+    assert kernel.integral.operator == operator
+    source = emit_second_derivative_primitive(kernel, backend="cpu")
+    assert "CoulombRange::Long" in source
+    assert float(operator.omega).hex() in source
 
 
 def test_lowering_requires_explicit_raw_and_bounded_output_selections() -> None:

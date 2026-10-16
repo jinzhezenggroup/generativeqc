@@ -3,7 +3,7 @@
 // the actual GFN CUDA build even if the official-header host probes still pass.
 #include <type_traits>
 
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "solver/cuda/generalized_eigen.hpp"
 
 namespace eigen = generativeqc::solver;

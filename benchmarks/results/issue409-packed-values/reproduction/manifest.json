@@ -6,6 +6,13 @@
     "libvibeqc.so": "c1d4c033b73e3b42da58acab0b67c2891f51e3d8d02e7dd72e3165febaf88547",
     "source.patch": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474"
   },
+  "source_patch_storage": {
+    "path": "source.patch.xz",
+    "encoding": "xz",
+    "bytes": 54212,
+    "sha256": "78cfe3098a1217bbd829b1a92cb5d808ef83ba786c034d89c530ca9b064bd4d1",
+    "decoded_bytes": 246001
+  },
   "validation": {
     "slurm_job_id": "9836",
     "cuda_visible_devices": "0",

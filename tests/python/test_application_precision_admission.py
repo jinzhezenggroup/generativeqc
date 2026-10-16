@@ -23,9 +23,50 @@ def test_native_budget_domain_admission(
 #include "scf/application_precision.hpp"
 #include "scf/fock_precision.hpp"
 int main() {
+  using generativeqc::dft::nonlocal_confirmation_tolerance;
+  using generativeqc::dft::nonlocal_inner_tolerance;
+  using generativeqc::dft::nonlocal_mixed_proposal_limit;
+  using generativeqc::dft::nonlocal_proposal_iteration_limit;
+  using generativeqc::dft::nonlocal_seed_iteration_limit;
+  constexpr auto proposal_limit =
+      nonlocal_seed_iteration_limit + nonlocal_proposal_iteration_limit + 2;
+  for (const unsigned target_limit : {1U, 2U, 3U, 4U, 20U, 180U, 1000U}) {
+    const auto mixed_limit = nonlocal_mixed_proposal_limit(target_limit);
+    assert(mixed_limit >= 1 && mixed_limit <= proposal_limit);
+    if (target_limit > 2) assert(mixed_limit + 2 <= target_limit);
+  }
+  assert(nonlocal_mixed_proposal_limit(180) == proposal_limit);
+  assert(nonlocal_mixed_proposal_limit(std::numeric_limits<unsigned>::max()) ==
+         proposal_limit);
+  assert(nonlocal_confirmation_tolerance(false, 1e-4) == 1e-9);
+  assert(nonlocal_confirmation_tolerance(true, 1e-4) == 1e-5);
+  assert(nonlocal_inner_tolerance(false, 1e-2, 1e-4) == 1e-7);
+  assert(nonlocal_inner_tolerance(false, 1e-6, 1e-4) == 1e-9);
+  assert(nonlocal_inner_tolerance(true, 1e-2, 1e-4) == 1e-5);
+  for (const auto density_tolerance : {1e-10, 1e-12}) {
+    assert(nonlocal_confirmation_tolerance(false, density_tolerance) == density_tolerance);
+    assert(nonlocal_confirmation_tolerance(true, density_tolerance) == density_tolerance);
+    assert(nonlocal_inner_tolerance(true, 1e-2, density_tolerance) == density_tolerance);
+  }
   using generativeqc::dft::admit_application_xc_warmup;
   using generativeqc::dft::admit_application_gradient;
   const std::array<double, 3> loose{1e-5, 1e-4, 3e-5};
+  using generativeqc::dft::admit_stationary_force_controls;
+  assert(admit_stationary_force_controls(1e-10, 1e-8, 1e-12, false));
+  assert(admit_stationary_force_controls(1e-10, 1e-8, 1e-12, true));
+  assert(admit_stationary_force_controls(1e-6, 1e-4, 1e-10, true));
+  assert(!admit_stationary_force_controls(1e-6, 1e-4, 1e-10, false));
+  for (const auto invalid : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+                             std::numeric_limits<double>::quiet_NaN()}) {
+    for (const auto budget : {false, true}) {
+      assert(!admit_stationary_force_controls(invalid, 1e-8, 1e-12, budget));
+      assert(!admit_stationary_force_controls(1e-10, invalid, 1e-12, budget));
+      assert(!admit_stationary_force_controls(1e-10, 1e-8, invalid, budget));
+    }
+  }
+  assert(!admit_stationary_force_controls(1.01e-6, 1e-4, 1e-10, true));
+  assert(!admit_stationary_force_controls(1e-6, 1.01e-4, 1e-10, true));
+  assert(!admit_stationary_force_controls(1e-6, 1e-4, 1.01e-10, true));
   using generativeqc::dft::admit_application_fock;
   using namespace generativeqc::scf;
   ResolvedFockBuild direct;
@@ -61,6 +102,28 @@ int main() {
   direct.spec.derivative_order = 0;
   direct.backend = FockBackend::Cpu;
   assert(!cuda_fock_precision_capabilities(direct).any_lower_precision());
+  auto range = direct;
+  range.backend = FockBackend::Cuda;
+  range.spec.coulomb.present = false;
+  for (const auto op : {FockOperator::ShortRange, FockOperator::LongRange}) {
+    range.spec.exchange.op = op;
+    assert(cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.omega = 0.0;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.omega = 0.3;
+    range.spec.derivative_order = 1;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.derivative_order = 0;
+    range.spec.spin = FockSpin::Unrestricted;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.spin = FockSpin::Restricted;
+    range.spec.exchange.approximation = FockApproximation::DensityFitted;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.spec.exchange.approximation = FockApproximation::Exact;
+    range.schedule = FockSchedule::CudaDfResident;
+    assert(!cuda_range_exchange_precision_capability(range));
+    range.schedule = FockSchedule::CudaIndependent;
+  }
   for (const auto aos : {24u, 384u, 768u})
     assert(admit_application_fock(loose, aos, 96, 2, true, true, true));
   for (const auto aos : {0u, 23u, 769u})

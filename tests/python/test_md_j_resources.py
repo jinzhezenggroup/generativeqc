@@ -6,7 +6,7 @@ import ctypes
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import test_ks_point_batch_resources as point_budget
@@ -14,8 +14,10 @@ from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc import ResourceBudget, resources_ks
 from generativeqc.resources_native import NativeDeviceLedger
 from generativeqc_compiler.common.resources import plan_resources
-from test_coulomb_optional_allocation import compile_cached_probe
 from test_direct_jk_optional_allocation import STUBS
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 native_probe = point_budget.native_probe
@@ -91,12 +93,19 @@ MD_STUBS = r"""
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <type_traits>
 #define __host__
 #define __device__
 // Use actual MD-J types, constants and Vec3/DeviceBatch ABI from production.
 #include "scf/cuda/direct_md_j.hpp"
+#include "scf/md_transform_layout.hpp"
+#ifndef GENERATIVEQC_MOLECULE_BASIS_HPP
+namespace generativeqc::molecule { inline constexpr std::size_t kMaximumAoExpansionTerms=3; }
+#endif
+using namespace generativeqc;
 using namespace generativeqc::scf::cuda_execution;
+using namespace generativeqc::scf;
 struct HostBatch {
   std::size_t nbf=8;
   std::vector<unsigned> shell_angular{1,2};
@@ -105,6 +114,14 @@ struct HostBatch {
   std::vector<std::int64_t> shell_pair_primitive_offsets{0,1,2,3};
   std::vector<std::int64_t> shell_primitive_offsets{0,1,2}, shell_ao_offsets{0,3,8};
   std::vector<std::int64_t> system_shell_offsets{0,2},system_shell_pair_offsets{0,3};
+  std::vector<std::uint8_t> ao_term_counts=std::vector<std::uint8_t>(8,1);
+  std::vector<std::uint8_t> ao_term_angular=std::vector<std::uint8_t>(8*9,0);
+  HostBatch() {
+    const unsigned angular[8][3]={{1,0,0},{0,1,0},{0,0,1},{2,0,0},
+                                 {1,1,0},{1,0,1},{0,2,0},{0,1,1}};
+    for(unsigned ao=0;ao<8;++ao)
+      for(unsigned axis=0;axis<3;++axis) ao_term_angular[ao*9+axis]=angular[ao][axis];
+  }
 };
 namespace runtime { bool active_device_resource_ledger=false; }
 std::size_t direct_jk_product(std::size_t a,std::size_t b) { return a*b; }
@@ -114,7 +131,7 @@ cudaError_t prepare_md_j(cudaStream_t, int, MdJView&, double*, double) { return 
 """
 
 MD_DRIVER = r"""
-void exercise(bool resident_source_only,bool ledger,int stage,int kind,const char* disabled) {
+int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char* disabled) {
   assert(live.empty());
   runtime::active_device_resource_ledger=ledger;
   if(disabled) setenv("GENERATIVEQC_DISABLE_MD_J",disabled,1);
@@ -158,6 +175,7 @@ void exercise(bool resident_source_only,bool ledger,int stage,int kind,const cha
     }
   }
   assert(live.empty());
+  return allocation_index;
 }
 int main() {
   // Resident-only sources must not allocate optional MD storage either.
@@ -165,8 +183,8 @@ int main() {
     for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
       // The same construction path is revisited after ledger binding/unbinding.
       for(bool ledger:{false,true,true,false}) {
-        exercise(resident_source_only,ledger,-1,1,disabled);
-        for(int stage=0;stage<20;++stage)
+        const auto allocations=exercise(resident_source_only,ledger,-1,1,disabled);
+        for(int stage=0;stage<allocations;++stage)
           for(int kind:{0,1,3,6}) exercise(resident_source_only,ledger,stage,kind,disabled);
       }
     }
@@ -178,6 +196,7 @@ int main() {
 @pytest.mark.parametrize("counted", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
+    native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
     counted: bool,
 ) -> None:
@@ -213,5 +232,130 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     (tmp_path / "cuda_runtime_api.h").write_text("#pragma once\n")
     cpp, binary = tmp_path / "md.cpp", tmp_path / "md"
     cpp.write_text(stubs + "\n".join(definitions) + driver)
-    compile_cached_probe(cpp, binary, include_dirs=(tmp_path,))
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
     subprocess.run([str(binary)], check=True, timeout=10)
+
+
+@pytest.mark.parametrize("atoms", [48, 96])
+@pytest.mark.parametrize("spherical", [False, True])
+def test_canonical_transform_storage_retains_existing_cap(
+    tmp_path: Path,
+    native_cxx: NativeCxx,
+    monkeypatch: pytest.MonkeyPatch,
+    atoms: int,
+    spherical: bool,
+) -> None:
+    """Inventory real basis expansions without constructing integrals or a GPU.
+
+    Capacity is the contract, not an exact internal operation count. In
+    particular the large-basis case must fit without raising the existing cap
+    or changing public-ledger admission. Printed inventories are diagnostic.
+    """
+    monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
+    basis = json.loads(
+        (ROOT / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json").read_text()
+    )
+    shells = []
+    for atomic_number, count in ((8, atoms // 3), (1, 2 * atoms // 3)):
+        element = next(
+            row for row in basis["elements"] if row["atomic_number"] == atomic_number
+        )
+        for _ in range(count):
+            for shell in element["shells"]:
+                for _ in shell["coefficients"]:
+                    shells.append((shell["angular_momentum"], len(shell["exponents"])))
+    shapes = ",".join(f"{{{angular},{primitives}}}" for angular, primitives in shells)
+    source, binary = tmp_path / "inventory.cpp", tmp_path / "inventory"
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaStream_t=void*; using cudaError_t=int;\n"
+    )
+    production = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
+    prefix = (
+        "#include <cassert>\n#include <cstdio>\n#include <cstdlib>\n"
+        "#include <cstring>\n#include <vector>\n#include <stdexcept>\n"
+        '#include "molecule/basis.hpp"\n'
+        + MD_STUBS.split("namespace runtime", 1)[0]
+        + "\nstd::size_t direct_jk_product(std::size_t first,std::size_t second) {\n"
+        "if(second && first>std::numeric_limits<std::size_t>::max()/second) throw std::bad_alloc();\n"
+        "return first*second; }\n"
+        + cpp_record_definition(production, "MdJHost")
+        + ";\n"
+    )
+    driver = r"""
+int main() {
+  HostBatch host;
+  host.nbf=0; host.shell_angular.clear(); host.shell_ao_offsets={0};
+  host.shell_primitive_offsets={0}; host.ao_term_counts.clear(); host.ao_term_angular.clear();
+  const unsigned shapes[][2]={SHAPES};
+  for(const auto& shape:shapes) {
+    host.shell_angular.push_back(shape[0]);
+    const auto expansion=generativeqc::molecule::ao_expansions(shape[0],REPRESENTATION);
+    host.nbf+=expansion.size(); host.shell_ao_offsets.push_back(host.nbf);
+    host.shell_primitive_offsets.push_back(host.shell_primitive_offsets.back()+shape[1]);
+    for(const auto& component:expansion) {
+      host.ao_term_counts.push_back(component.size());
+      for(unsigned term=0;term<3;++term) for(unsigned axis=0;axis<3;++axis)
+        host.ao_term_angular.push_back(term<component.size() ? component[term].component[axis] : 0);
+    }
+  }
+  host.shell_pair_first.clear(); host.shell_pair_second.clear();
+  host.shell_pair_systems.clear(); host.shell_pair_primitive_offsets={0};
+  std::size_t dense_values=0;
+  for(unsigned first=0;first<host.shell_angular.size();++first)
+    for(unsigned second=0;second<=first;++second) {
+      host.shell_pair_first.push_back(first); host.shell_pair_second.push_back(second);
+      host.shell_pair_systems.push_back(0);
+      const auto primitives=(host.shell_primitive_offsets[first+1]-host.shell_primitive_offsets[first])*
+                            (host.shell_primitive_offsets[second+1]-host.shell_primitive_offsets[second]);
+      host.shell_pair_primitive_offsets.push_back(host.shell_pair_primitive_offsets.back()+primitives);
+      dense_values+=primitives*md_j_hermite_count(host.shell_angular[first]+host.shell_angular[second])*
+                    (host.shell_ao_offsets[first+1]-host.shell_ao_offsets[first])*
+                    (host.shell_ao_offsets[second+1]-host.shell_ao_offsets[second]);
+    }
+  host.system_shell_offsets={0,static_cast<std::int64_t>(host.shell_angular.size())};
+  host.system_shell_pair_offsets={0,static_cast<std::int64_t>(host.shell_pair_first.size())};
+  MdJHost planned;
+  assert(planned.prepare(host,kMdJResidentCap));
+  const auto charged=kMdSourceFixedBytes+planned.pairs.size()*(sizeof(MdJPair)+3*sizeof(double)+sizeof(std::uint32_t))+
+      planned.primitives.size()*(sizeof(MdJPrimitive)+sizeof(std::uint32_t))+
+      host.system_shell_offsets.size()*3*sizeof(std::int64_t)+
+      planned.transform_slots.size()*sizeof(std::uint16_t)+(planned.transforms+2*planned.hermites)*sizeof(double);
+  assert(charged==planned.bytes && charged<=kMdJResidentCap);
+  const auto dense_bytes=charged-planned.pairs.size()*sizeof(std::uint32_t)-
+      planned.transform_slots.size()*sizeof(std::uint16_t)-planned.transforms*sizeof(double)+dense_values*sizeof(double);
+  std::printf("nbf=%zu pairs=%zu primitives=%zu dense_values=%zu sparse_values=%zu map_slots=%zu "
+              "dense_bytes=%zu sparse_bytes=%zu cap=%zu\n",host.nbf,planned.pairs.size(),
+              planned.primitives.size(),dense_values,planned.transforms,planned.transform_slots.size(),
+              dense_bytes,charged,kMdJResidentCap);
+}
+"""
+    representation = (
+        "GENERATIVEQC_BASIS_SPHERICAL" if spherical else "GENERATIVEQC_BASIS_CARTESIAN"
+    )
+    source.write_text(
+        prefix
+        + driver.replace("SHAPES", shapes).replace("REPRESENTATION", representation)
+    )
+    native_cxx.build_executable(
+        [source, ROOT / "src/molecule/basis.cpp"],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-O2",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
+    subprocess.run([str(binary)], check=True, timeout=30)

@@ -34,7 +34,7 @@
 #include "backends/cuda/gfn2_scc_potential.cuh"
 #include "backends/cuda/gfn2_scc_publication.cuh"
 #include "backends/cuda/gfn2_spin.cuh"
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 
 namespace generativeqc::xtb::detail::cuda {
 

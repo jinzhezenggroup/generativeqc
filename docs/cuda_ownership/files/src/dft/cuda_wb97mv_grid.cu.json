@@ -1,0 +1,14 @@
+{
+  "path": "src/dft/cuda_wb97mv_grid.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Checked arena ownership, density/point finite and symmetry guards, reference-fixed device VV10 screening, bounded ordered-pair traversal, scalar gates and transactional publication. Scalar XC/coefficient JVPs, bilateral pair AD and AO feature/potential maps are emitted at build time.",
+  "regions": [
+    {
+      "start": "__global__ void pair_reduce(",
+      "stop": "cudaError_t features(",
+      "role": "scientific",
+      "reason": "Deterministic integration and physical-spin lifting of compiler-AD ordered-pair cotangents, including the generated local beta coefficient; no handwritten response derivative equations."
+    }
+  ]
+}

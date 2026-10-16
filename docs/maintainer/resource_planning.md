@@ -50,6 +50,88 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+## Native composition authority
+
+With an already-loaded library exposing `generativeqc_resource_compose_v1`,
+runtime `plan_resources(..., library=library)`, calculator estimation and
+budgeted preparation use the shared C++ resource composition engine. The native
+CLI uses that same owner for effective caps, peak accounting and supported
+alternative selection; its `composition_inventory` metadata identifies the
+engine separately from the CLI's endpoint-inventory scope.
+
+The engine sweeps sparse inclusive-lifetime endpoints, accounts pageable plus
+pinned host storage and aggregate plus individual device caps simultaneously,
+and orders supported combinations by budget excess, total relative cost and
+lexical selection. Headroom uses the exact IEEE-754 rational value with upward
+rounding before fixed reserves. Cost and excess sums use wider integer
+arithmetic than individual byte capacities, so ranking cannot wrap int64 or
+uint64. Expired buffers retire before newly live buffers at an adjacent phase.
+
+The finite search limit remains explicit: exceeding it returns `unsupported`,
+not a false allocation failure. Every enumerated combination is checked,
+including overflow in a later alternative after a feasible prefix. For `P`
+combinations, at most `B` selected buffers and `S` memory spaces, native work is
+`O(P * (B log B + S))`, plus descriptor validation. Metadata scratch is linear
+in input buffers and spaces, not phase IDs or the Cartesian product. No
+scientific buffers, calculation contexts, backend probes or GPU allocations
+are created by the composition query.
+
+Supplied plans are checked by the native owner before scientific provider
+preparation, with their explicit selections held fixed. Validation does not
+silently replace a user-selected alternative with a cheaper one. Native
+authority also rechecks changed optional CPU force workspace before a
+force replay, preserving all live owners and selections. The revised plan is
+published only after successful execution; rejection leaves the energy plan
+and warm state usable. Discovered native errors propagate without retrying
+portable selection. Missing symbols
+or libraries retain provider-free portable planning; this adapter never loads a
+library itself. The compiler's separate portable planner remains available for
+offline generation without importing the runtime.
+
+`ResourcePlan` retains its portable data-only schema, independent derived-byte
+validation and serialization. A plan is not a native allocation receipt or
+execution lease. Method/provider inventories, allocation observation coverage,
+live provider reservations and session/lease lifecycle remain separately scoped;
+native composition alone does not establish complete endpoint/RSS accounting
+or complete the resource-authority cutover.
+
+`benchmarks/native_resource_composition.py` provides opt-in CPU endpoint timing:
+calculator construction, budgeted preparation, cold/warm/moved execution and
+prepared-owner close. Compare exact baseline/candidate Python trees in separate
+processes against the same compiled library, with the same thread settings and
+no competing benchmark load. The JSON retains every observation, energies,
+forces, convergence residuals, iteration/Fock counts (including unknown counts),
+iteration-branch histograms, source identity and the library checksum. A changed
+numerical/work signature invalidates a pooled timing comparison. This scoped
+procedure does not establish GPU performance or complete physical receipts.
+
+## Native device ledger binding
+
+An already-loaded library exposing
+`generativeqc_resource_ledger_create_from_buffers_v1` derives a prepared owner's
+numeric ledger limit and visible device from its selected capacity records.
+The same native sparse-lifetime accounting used for global composition sweeps
+the full inventory and the subset excluding `runtime_allowance`. Allowances
+are withheld independently; they cannot fund tracked numeric allocations.
+Subtracting independently measured peaks is not equivalent when lifetimes differ.
+
+The metadata-only query creates a handle compatible with existing ledger
+binding, observation, retained-provider reservations, journals and destruction.
+It performs no CUDA operation or device selection by availability. Missing or
+multiple visible devices are unsupported for this single-device owner; ordinals
+outside the native signed-device domain are rejected rather than narrowed.
+Invalid/overflowing/aliased records leave both handle and receipt unchanged.
+
+`device_ledger.capacity_admission` identifies this native owner and reports the
+full declared device peak separately from `limit_bytes`, the explicit numeric
+admission cap. Neither is a physical allocation/RSS measurement. The Python
+adapter publishes the handle only after receipt validation, releases unpublished
+metadata on validation failure, and never retries native rejection with portable
+accounting. Older libraries retain explicit portable capacity derivation; an
+allowance-only inventory has a zero numeric limit, not a fabricated allocation.
+Retained native buffers/reservations continue to outlive observation scopes and
+closed frontend handles until their actual owners release them.
+
 ## CUDA KS to force handoff
 
 CUDA KS keeps its admitted optional ERI value cache throughout SCF and after
@@ -103,6 +185,17 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
+CPU HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
+query obtain public/Cartesian AO, shell, primitive and maximum-angular counts
+from native compact expanded-contraction rows. The AO rule is shared with
+normalized native systems. Count overflow or native refusal never retries
+Python arithmetic; failed queries leave native outputs unchanged. The query
+does not read coordinates or coefficients, allocate scientific arrays, load a
+provider, or qualify an otherwise unsupported method/basis. Missing-symbol,
+library-free and CUDA planning retain explicit portable shape arithmetic.
+Python still owns basis expansion and mathematical provenance in this planner;
+these counts are not complete allocation, provider, lease or RSS authority.
+
 CPU RHF/UHF calculator plans with a discovered
 `generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
 summed fleet retained capacity and maximum serialized workspace from the same
@@ -116,9 +209,10 @@ unchanged. Native rejection propagates without a Python retry.
 Schedule identity records phase and fleet sizing owners separately. Libraries
 with only `generativeqc_resource_hf_cpu_host_v1` retain native phase sizing and
 portable fleet composition; library-free dry runs and older libraries retain
-portable metadata sizing without implicitly loading a provider. Budget
-candidate composition, admission and leases remain frontend-owned; native
-fleet sizing is not complete endpoint/RSS allocation accounting.
+portable metadata sizing without implicitly loading a provider. Declared-capacity
+selection and admission use the separately discovered native composition owner
+described above; prepared leases remain frontend-owned. Native fleet sizing is
+not complete endpoint/RSS allocation accounting.
 
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
@@ -161,8 +255,9 @@ does not initialize CUDA and is available in CPU-only libraries. Native shape
 validation preserves the uint32 ragged-offset and per-system atom bounds.
 The request records native versus portable sizing in its schedule identity;
 old libraries and library-free dry runs retain explicit portable metadata
-sizing, never used after native rejection. Python still presents estimates
-and composes local/global budget decisions, while the prepared native D3 owner
+sizing, never used after native rejection. Python presents the estimates and
+checks local budget eligibility; global declared-capacity selection uses the
+separately discovered native composition owner. The prepared native D3 owner
 continues to enforce its local retained-byte cap. These numeric capacities are
 not process RSS receipts or new CUDA scientific qualification.
 
