@@ -15,6 +15,7 @@ import os
 import statistics
 import time
 import typing
+from contextlib import contextmanager
 from pathlib import Path
 
 import generativeqc
@@ -160,7 +161,7 @@ def main() -> None:
     # Keep this descriptor throughout: a replaced pathname or symlink must never
     # redirect publication into someone else's receipt.
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("x") as stream:
+    with _owned_receipt(args.output) as stream:
         receipt = {
             "schema": "generativeqc.basis_projection_revision_endpoint.v1",
             "status": "running",
@@ -217,8 +218,27 @@ def main() -> None:
         except BaseException as error:
             receipt["status"] = "failed"
             receipt["error"] = {"type": type(error).__name__, "message": str(error)}
-            _write_receipt(stream, receipt)
+            try:
+                _write_receipt(stream, receipt)
+            except BaseException as journal_error:
+                raise error from journal_error
             raise
+
+
+@contextmanager
+def _owned_receipt(path: Path) -> typing.Iterator[typing.TextIO]:
+    """Reserve a destination and never replace an active error during close."""
+    stream = path.open("x")
+    try:
+        yield stream
+    except BaseException as error:
+        try:
+            stream.close()
+        except BaseException as close_error:
+            raise error from close_error
+        raise
+    else:
+        stream.close()
 
 
 def _validated_endpoint(inputs: dict[str, typing.Any]) -> dict[str, typing.Any]:
