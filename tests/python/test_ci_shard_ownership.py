@@ -219,12 +219,12 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
-        "core-a": (
+        "runtime-heavy": (
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
             "test_uccsd_solver.py",
-            "test_cc_triples_tiles.py",
         ),
+        "core-a": ("test_cc_triples_tiles.py",),
         "core-b": (
             "test_uccsd_response.py",
             "test_df_lambda_core_reuse.py",
@@ -269,8 +269,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
-        "tests/python/test_cuda_xc_point_contract.py": "core-a",
-        "tests/python/test_uccsd_solver.py": "core-a",
+        "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
+        "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
+        "tests/python/test_uccsd_solver.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-b",
@@ -281,6 +282,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         for name in (
             "test_aaa.py",
             "test_cc_triples_tiles_next.py",
+            "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
@@ -305,11 +307,15 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             # Missing tracked tests stay selected so pytest can fail closed.
             (tmp_path / relative).unlink()
     selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    assert selections["runtime-heavy"][0] == "loadfile"
     for path, owner in owners.items():
         actual = [
             shard for shard, (_, targets, _) in selections.items() if path in targets
         ]
         assert actual == ([owner] if tracked else [])
+        assert sum(targets.count(path) for _, targets, _ in selections.values()) == (
+            1 if tracked else 0
+        )
         assert not any(
             path in argument
             for _, _, arguments in selections.values()
@@ -373,11 +379,11 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_cpu_hf_high_l.py": "core-a",
         "tests/python/test_uccsd_t_lambda.py": "core-c",
     }
     owners = {
         **parallel,
+        "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_uccsd_gradient.py": "uccsd-forces",
         "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
