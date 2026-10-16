@@ -278,13 +278,19 @@ def test_shared_fast_fock_complete_endpoint(
     ),
 )
 def test_budget_fock_keeps_native_fp64_force_owner(
-    case_name: str, method: str, functional: str, monkeypatch: pytest.MonkeyPatch
+    case_name: str,
+    method: str,
+    functional: str,
+    monkeypatch: pytest.MonkeyPatch,
+    record_property: Any,
 ) -> None:
     """Relaxed Focks must not lose an already qualified native FP64 force body.
 
     The native prepared capability remains the authority. Forbid compatibility
     orchestration only for these independently gated, admitted complete graphs;
     unsupported graphs must retain their bounded compatibility consumer.
+    A moved proposal may fail its final-state proof, just as with the strict
+    compatibility consumer. Its recorded strict recovery is not FP32 success.
     """
     from generativeqc.batch import PreparedBatch
 
@@ -311,17 +317,35 @@ def test_budget_fock_keeps_native_fp64_force_owner(
                 for index, (element, position) in enumerate(case.atoms)
             ),
         )
-        for phase, current in (("cold", case), ("warm", case), ("moved", moved)):
+        for phase, current in (
+            ("cold", case),
+            ("artifact_replay", case),
+            ("moved", moved),
+        ):
             result = calculator.singlepoint(
                 current.atoms, properties=("energy", "forces")
             )
-            assert result.precision_validation.status == "qualified_budget_fock", phase
-            assert result.precision_validation.solve_count == 1
+            validation = result.precision_validation
             work = result.precision
-            assert work["mixed_stage_fock_builds"] > 0
-            assert (
-                work["strict_stage_fock_builds"] >= 2 and work["execution_retries"] == 0
-            )
+            record_property(f"{phase}_precision_status", validation.status)
+            if phase == "moved" and validation.status == "observed_met":
+                assert "budget_fock_failed_fp64_fallback" in validation.fallback_reasons
+                assert validation.solve_count <= 3
+                assert validation.solves[0].role == "candidate"
+                assert validation.solves[0].error is not None
+                assert validation.solves[0].fock_builds is None
+                assert any(solve.role == "fp64_audit" for solve in validation.solves)
+                assert all(
+                    solve.requested_precision == "fp64" and solve.error is None
+                    for solve in validation.solves[1:]
+                )
+                assert work["mixed_stage_fock_builds"] == 0
+            else:
+                assert validation.status == "qualified_budget_fock", (phase, validation)
+                assert validation.solve_count == 1
+                assert work["mixed_stage_fock_builds"] > 0
+                assert work["strict_stage_fock_builds"] >= 2
+                assert work["execution_retries"] == 0
             gradient = work.get("gradient") or {}
             assert not gradient.get("attempted_fp32_geometry_points", 0)
             assert not gradient.get("attempted_fp32_primitive_sources", 0)
@@ -341,5 +365,75 @@ def test_budget_fock_keeps_native_fp64_force_owner(
             assert abs(result.energy - oracle["energy"]) <= 1e-5
             assert np.max(np.abs(delta)) <= 1e-4
             assert np.sqrt(np.mean(delta * delta)) <= 3e-5
+    finally:
+        calculator.clear_cache()
+
+
+@pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
+def test_budget_fock_prepared_force_lifetime(
+    case_name: str, monkeypatch: pytest.MonkeyPatch, record_property: Any
+) -> None:
+    """Prepared warm/moved execution must keep native force ownership and identity."""
+    from generativeqc.batch import PreparedBatch
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("prepared budget Fock lost its native FP64 force consumer")
+
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cuda_force", forbidden)
+    case = benchmark_cases()[case_name]
+    moved = replace(
+        case,
+        atoms=tuple(
+            (element, (position[0] + (0.01 if index == 1 else 0.0), *position[1:]))
+            for index, (element, position) in enumerate(case.atoms)
+        ),
+    )
+    calculator = PrecisionCalculator(
+        method="pbe0-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        initial_guess=None,
+        max_iterations=180,
+        policy="fast",
+    )
+    try:
+        with calculator.prepare_batch([case.atoms], warm_start=True) as batch:
+            for phase, current in (("cold", case), ("warm", case), ("moved", moved)):
+                coordinates = (
+                    [[position for _, position in current.atoms]]
+                    if phase == "moved"
+                    else None
+                )
+                result = batch.execute(
+                    coordinates, strict=True, properties=("energy", "forces")
+                ).items[0]
+                validation = result.precision_validation
+                record_property(f"{phase}_precision_status", validation.status)
+                assert validation.status in ("qualified_budget_fock", "observed_met")
+                assert validation.solve_count <= 3
+                if phase == "cold":
+                    assert validation.status == "qualified_budget_fock"
+                    assert result.precision["mixed_stage_fock_builds"] > 0
+                gradient = result.precision.get("gradient") or {}
+                assert not gradient.get("attempted_fp32_geometry_points", 0)
+                assert not gradient.get("attempted_fp32_primitive_sources", 0)
+                oracle = (
+                    reference(
+                        case_name,
+                        GRID,
+                        4,
+                        functional="PBE0",
+                        backend="gpu4pyscf",
+                        case_snapshot=current,
+                    )
+                    if phase == "moved"
+                    else _oracle("PBE0", case_name)
+                )
+                delta = np.asarray(result.forces) - np.asarray(oracle["forces"])
+                assert abs(result.energy - oracle["energy"]) <= 1e-5
+                assert np.max(np.abs(delta)) <= 1e-4
+                assert np.sqrt(np.mean(delta * delta)) <= 3e-5
     finally:
         calculator.clear_cache()

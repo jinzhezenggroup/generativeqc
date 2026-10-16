@@ -61,11 +61,50 @@ its core SHA-256 is
 The separately generated force binaries and their authenticated manifests are
 unchanged between these two core builds.
 
+The initial scalar replay test incorrectly required every displaced proposal to
+publish a qualified mixed endpoint. A paired diagnostic on the unchanged
+packet-v4 incumbent and native-force-v5 displaces one H by `0.01 bohr` in the
+12-atom PBE case. Both reject the candidate's final physical-state proof and
+return `observed_met` after a recorded FP64 fallback and audit. The old
+compatibility consumer reports its detailed final-state commutator/density/etc.
+refusal; native preparation returns numerical failure. Neither publishes the
+rejected force. Retain the initial failed test receipt and both complete paired
+diagnostics; do not count this strict recovery as successful FP32 execution.
+
+The regression now separately verifies native ownership for scalar fresh-hcore
+calls, process-artifact replay and moved geometries, and for genuinely retained
+prepared warm/moved batches. Successful mixed returns require their actual
+work; moved numerical failure requires explicit bounded strict recovery with
+unknown failed-attempt work, not fabricated zero work. Every returned force
+still passes the same independent moving-grid oracle. No production numerical
+admission was relaxed to make the test pass.
+
 Raw measurements, freezes, build logs, diagnostic profiles and failed attempts
 remain in `../evidence-fast-goal-20261016/`. Node2 measurements cannot be divided
 by node4 RTX 5090 measurements to manufacture a before/after speedup. The
 source-matched packet-v4 96-atom result is historical evidence for that build,
 not a timing measurement of native-force-v5.
+
+The final same-card node4 comparison measures PBE/PBE0/r2SCAN at 3 and 12 atoms,
+with first calls and three repeat pairs per point. Each snapshot alternates
+FP64/Fast order in the middle repeat; the old and new snapshots are separate
+sequential jobs, not interleaved or randomized arms. Native force
+ownership reduces previous Fast endpoint medians by 67.5/73.1/55.6% at 3 atoms
+and 37.3/45.6/29.6% at 12 atoms. Both arms retain the same observed SCF work
+populations. These are complete endpoint gains, not FP32-kernel throughput.
+
+The final eight-family matrix retains all 128 independently checked returned
+calls and genuine mixed work in every Fast sample. PBE/r2SCAN at 3 atoms remain
+slower than optimized FP64; at 12 atoms their FP64/Fast ratios are 1.272/1.232.
+PBE0 is near parity, not a large demonstrated acceleration. Complete per-family
+results and scope are in the [tracked compact report](../../../../benchmarks/results/shared-fast-20261016/README.md).
+
+The final v5 source also completes the 96-atom/768-AO nonlocal endpoint under
+Slurm 1647 on node5, in 810.377 seconds with 17 mixed and four strict Focks.
+Its authenticated independent E/max-force/RMS-force errors are
+`6.68e-10 / 3.86e-6 / 1.17e-6`. This is a final-build numerical/large-size
+qualification pilot on a different physical GPU/driver, not a paired timing
+ratio against the node4 packet-v4 observations.
 
 ## Remaining limitation
 
