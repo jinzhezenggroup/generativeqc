@@ -34,7 +34,7 @@ STUBS = r"""
 #include <type_traits>
 #include <utility>
 using cudaStream_t = void*;
-enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
+enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown, cudaErrorInvalidDevice };
 int current_device = 1, owner_device = 0, allocations = 0, queries = 0, selections = 0;
 int synchronizations = 0, source_destroys = 0, stream_destroys = 0;
 int binding_destroys = 0, expected_binding_destroys = 0, binding_layout = 0;
@@ -57,6 +57,7 @@ cudaError_t cudaSetDevice(int value) {
   return cudaSuccess;
 }
 const char* cudaGetErrorString(cudaError_t) { return "mock CUDA failure"; }
+cudaError_t cudaGetLastError() { return cudaSuccess; }
 cudaError_t cudaStreamSynchronize(cudaStream_t stream) {
   assert(stream && stream_alive && current_device == owner_device);
   ++synchronizations;
@@ -75,6 +76,7 @@ void cublasDestroy(void*) {
   assert(binding_destroys == expected_binding_destroys && !eigen_alive);
   blas_alive = false;
 }
+#include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
 template <class T> struct TensorView { T* data; std::size_t size; };
 std::size_t size_mul(std::size_t a, std::size_t b, const char*) { return a * b; }
@@ -269,9 +271,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     }
     array_fields = {"metric_charge", "metric_potential"}
     assert (owned_fields | array_fields).issubset(fields)
-    unit = STUBS + _definition(resources, "inline void cuda_resource_check(")
+    unit = STUBS
     for marker in (
-        "class CudaDeviceScope",
         "template <class T>\nstruct BorrowedCudaBuffer",
         "template <class T>\nclass OwnedCudaBuffer",
     ):

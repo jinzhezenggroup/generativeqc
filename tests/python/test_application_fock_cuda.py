@@ -24,11 +24,129 @@ GRID = GridSpec(48, 16, 32)
 
 
 @cache
-def _oracle(functional: str) -> dict[str, Any]:
+def _oracle(functional: str, case_name: str = CASE) -> dict[str, Any]:
     """Evaluate identical moving quadrature with an independent SCF/force owner."""
     pytest.importorskip("pyscf")
     pytest.importorskip("gpu4pyscf")
-    return reference(CASE, GRID, 4, functional=functional, backend="gpu4pyscf")
+    return reference(case_name, GRID, 4, functional=functional, backend="gpu4pyscf")
+
+
+@pytest.mark.parametrize("selection", ("auto", "full", "partial", "refused"))
+def test_fast_range_source_composes_with_strict_refinement(
+    monkeypatch: pytest.MonkeyPatch, selection: str
+) -> None:
+    """Reuse, partial coverage and capacity fallback retain independent gates.
+
+    The range operator is selected by the execution plan, not the functional's
+    name. FP32 cache applications must not masquerade as new recurrences or
+    authorize strict refinement to consume the approximate source.
+    """
+    case = benchmark_cases()[CASE]
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "auto" if selection == "auto" else "1"
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+        "0x1555" if selection == "partial" else "0xfffffff",
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
+        "1" if selection == "refused" else str(1 << 30),
+    )
+    calculator = PrecisionCalculator(
+        method="wb97m-v-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        initial_guess=None,
+        max_iterations=180,
+        policy="fast",
+    )
+    try:
+        result = calculator.singlepoint(case.atoms, properties=("energy", "forces"))
+    finally:
+        calculator.clear_cache()
+    assert (
+        result.converged
+        and result.precision_validation.status == "qualified_budget_fock"
+    )
+    assert result.precision_validation.solve_count == 1
+    work = result.precision
+    assert work["execution_retries"] == 0 and work["strict_stage_fock_builds"] >= 2
+    assert any(
+        row["name"] == "exchange_k"
+        and row["compute"] == "fp32"
+        and row["storage"] == "fp32"
+        and row["count"] > 0
+        for row in work["operators"]
+    ) == (selection != "refused")
+    assert any(
+        row["name"] == "exchange_k"
+        and row["compute"] == "fp64"
+        and row["storage"] == "fp64"
+        and row["count"] > 0
+        for row in work["operators"]
+    )
+    oracle = _oracle("WB97M-V")
+    delta = np.asarray(result.forces) - np.asarray(oracle["forces"])
+    assert abs(result.energy - oracle["energy"]) <= 1e-5
+    assert np.max(np.abs(delta)) <= 1e-4
+    assert np.sqrt(np.mean(delta * delta)) <= 3e-5
+
+
+@pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
+def test_fast_nonlocal_refinement_refreshes_then_reuses_strict_anchor(
+    monkeypatch: pytest.MonkeyPatch, case_name: str, record_property: Any
+) -> None:
+    """Reuse a fresh strict anchor without publishing a provisional inner state.
+
+    The production mixed budget must retain the shared outer solver for both
+    molecular sizes. The first strict Fock replaces the mixed anchor; only later
+    strict inner steps may freeze that potential. Independent moving-grid
+    energy/force gates still apply to the complete returned endpoint.
+    """
+    monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
+    case = benchmark_cases()[case_name]
+    calculator = PrecisionCalculator(
+        method="wb97m-v-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        initial_guess=None,
+        max_iterations=180,
+        policy="fast",
+    )
+    try:
+        result = calculator.singlepoint(case.atoms, properties=("energy", "forces"))
+    finally:
+        calculator.clear_cache()
+    assert result.converged
+    validation = result.precision_validation
+    assert validation.status == "qualified_budget_fock" and validation.solve_count == 1
+    assert result.precision["execution_retries"] == 0
+    assert result.precision["fallback_count"] == 0
+    history = result.ks_diagnostic.to_payload()["history"]
+    scopes = {row["iteration"]: row["operator_scope"] for row in history}
+    strict_iterations = [
+        event["iteration"]
+        for event in result.precision["scf_fock_timeline"]
+        if event["kind"] == "strict_fock"
+    ]
+    assert strict_iterations and scopes[strict_iterations[0]] == "full-target"
+    assert any(
+        scopes[iteration] == "provisional-frozen-vv10"
+        for iteration in strict_iterations
+    )
+    assert all(row["operator_scope"] == "full-target" for row in history[-2:])
+    for name, count in result.ks_diagnostic.nonlocal_work.items():
+        record_property(name, count)
+    oracle = _oracle("WB97M-V", case_name)
+    difference = np.asarray(result.forces) - np.asarray(oracle["forces"])
+    assert abs(result.energy - oracle["energy"]) <= validation.budget.energy_abs
+    assert np.max(np.abs(difference)) <= validation.budget.force_max_abs
+    assert np.sqrt(np.mean(difference * difference)) <= validation.budget.force_rms
 
 
 @pytest.mark.parametrize(
@@ -75,7 +193,7 @@ def test_shared_fast_fock_complete_endpoint(
         record_property("strict_fock_builds", work["strict_stage_fock_builds"])
         record_property("solve_seconds", report.solves[0].seconds)
         exchange = calculator._candidate.ks_options.execution_plan.exchange
-        expected_k = calculator._candidate.ks_options.coefficients[2] != 0
+        expected_k = bool(exchange)
         assert (
             any(
                 row["name"] == "exchange_k"
@@ -86,9 +204,27 @@ def test_shared_fast_fock_complete_endpoint(
             == expected_k
         )
         if any(term.operator != "full-range" for term in exchange):
+            mixed_k = sum(
+                row["count"]
+                for row in work["operators"]
+                if row["name"] == "exchange_k" and row["compute"] == "fp32"
+            )
+            record_property("mixed_k_applications", mixed_k)
+            assert mixed_k > work["mixed_stage_fock_builds"]
             assert any(
                 row["name"] == "exchange_k"
                 and row["compute"] == "fp64"
+                and row["count"] > 0
+                for row in work["operators"]
+            )
+        if (
+            calculator._candidate.ks_options.execution_plan.nonlocal_correlation
+            is not None
+        ):
+            assert any(
+                row["name"] == "nonlocal_correlation"
+                and row["compute"] == "fp32"
+                and row["accumulation"] == "fp64"
                 and row["count"] > 0
                 for row in work["operators"]
             )

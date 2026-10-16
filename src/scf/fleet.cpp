@@ -5,14 +5,12 @@
 #include <cmath>
 #include <limits>
 #include <map>
-#include <new>
 #include <numeric>
 #include <stdexcept>
 #include <thread>
 #include <tuple>
 #include <utility>
 
-#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -35,22 +33,6 @@ WorkloadKey workload_key(const core::System& system, generativeqc_method method)
                                                       : system.electron_count / 2;
   const int beta = method == GENERATIVEQC_METHOD_UHF ? system.electron_count - alpha : alpha;
   return {molecule::ao_count(system), alpha, beta, primitive_count};
-}
-
-generativeqc_status exception_status() {
-  try {
-    throw;
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const generativeqc::Error& error) {
-    return error.status();
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
 }
 
 bool valid_coordinates(const std::vector<double>& coordinates, std::size_t atom_count) {
@@ -225,43 +207,59 @@ std::vector<FleetItemResult> FleetPlan::execute(
   last_density_fitting_metric_diagnostics_.clear();
   last_inactive_eigensolver_profile_.clear();
   std::vector<FleetItemResult> results(systems_.size());
+  const auto prepare_item = [&](std::size_t system_index, core::System& execution_system) {
+    FleetItemResult& item = results[system_index];
+    item.bucket_id = bucket_ids_[system_index];
+    item.executed_backend = execution_options.resolved_fock_build->backend == FockBackend::Cuda
+                                ? GENERATIVEQC_BACKEND_CUDA
+                                : GENERATIVEQC_BACKEND_CPU_REFERENCE;
+    execution_system = systems_[system_index];
+    if (!coordinates.empty() && coordinates[system_index].has_value()) {
+      if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
+        item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        return false;
+      }
+      apply_coordinates(execution_system, *coordinates[system_index]);
+    }
+    item.warm_start_used = warm_starts_enabled_ && warm_densities_[system_index].has_value();
+    return true;
+  };
+  const auto initial_density = [&](std::size_t system_index) -> const std::vector<double>* {
+    return results[system_index].warm_start_used ? &warm_densities_[system_index]->density
+                                                 : nullptr;
+  };
+  const auto finish_item = [&](std::size_t system_index, const core::System& execution_system) {
+    const FleetItemResult& item = results[system_index];
+    if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
+        warm_start_updates_enabled_)
+      retain_warm_state(system_index, execution_system, item.scf);
+  };
   const auto execute_one = [&](std::size_t system_index) {
     // CPU workers do not inherit the caller's thread-local observer. Open a
     // worker root so actual solves remain visible, indexed in source order.
     runtime::host_trace::Item traced_item(system_index);
     runtime::host_trace::Region item_trace("fleet_item");
     FleetItemResult& item = results[system_index];
-    item.bucket_id = bucket_ids_[system_index];
-    item.executed_backend = execution_options.resolved_fock_build->backend == FockBackend::Cuda
-                                ? GENERATIVEQC_BACKEND_CUDA
-                                : GENERATIVEQC_BACKEND_CPU_REFERENCE;
-    core::System execution_system = systems_[system_index];
-    if (!coordinates.empty() && coordinates[system_index].has_value()) {
-      if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-        item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-        return;
-      }
-      apply_coordinates(execution_system, *coordinates[system_index]);
-    }
+    core::System execution_system;
+    if (!prepare_item(system_index, execution_system)) return;
 
     auto item_options = execution_options;
     initial_guess::resolve_automatic_preliminary_guess(
         execution_system, *item_options.resolved_fock_build, item_options);
-    const bool has_warm_density = warm_starts_enabled_ && warm_densities_[system_index].has_value();
-    item.warm_start_used = has_warm_density;
+    const bool has_warm_density = item.warm_start_used;
     unsigned ordinary_attempts = 0, discarded_iterations = 0;
     std::size_t discarded_fock_builds = 0;
     bool discarded_work_complete = true;
-    const auto evaluate = [&](const std::vector<double>* initial_density) {
+    const auto evaluate = [&](const std::vector<double>* density) {
       const core::System auxiliary = auxiliary_for_geometry(auxiliary_template_, execution_system);
       auto attempt_options = item_options;
-      const bool warm_retry = has_warm_density && initial_density == nullptr;
+      const bool warm_retry = has_warm_density && density == nullptr;
       if (warm_retry) attempt_options.preliminary_guess.reset();
       ++ordinary_attempts;
       try {
         auto native = run_fock_strategy_cached(
             independent_fock_plans_[system_index], execution_system, &auxiliary, attempt_options,
-            device_id_, initial_density,
+            device_id_, density,
             cuda_df_orthogonalizers_.empty() ? nullptr : &cuda_df_orthogonalizers_[system_index]);
         if (warm_retry && item_options.preliminary_guess) {
           auto& diagnostic = native.preliminary_guess;
@@ -278,51 +276,30 @@ std::vector<FleetItemResult> FleetPlan::execute(
         return native;
       } catch (...) {
         discarded_work_complete = false;
+        // A thrown attempt has no final result. Keep known discarded work,
+        // but do not present the warm result again as the cold result.
+        item.scf = {};
+        if (has_warm_density && item_options.preliminary_guess) {
+          auto& diagnostic = item.scf.preliminary_guess;
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(item_options.preliminary_guess->kind);
+          diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
+          diagnostic.target_attempts = ordinary_attempts;
+          diagnostic.discarded_target_iterations = discarded_iterations;
+          diagnostic.discarded_target_fock_builds = discarded_fock_builds;
+          diagnostic.work_counters_complete = false;
+        }
         throw;
       }
     };
-    try {
-      const std::vector<double>* initial_density =
-          has_warm_density ? &warm_densities_[system_index]->density : nullptr;
-      item.scf = evaluate(initial_density);
-      if (execution_options.resolved_fock_build->backend == FockBackend::Cuda) {
-        item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
-      }
-      if (has_warm_density && !item.scf.converged) {
-        // A geometry change can make an otherwise topology-compatible density
-        // a poor numerical guess. Retry cold so warm starts never reduce the
-        // robustness of independent fleet items.
-        item.warm_start_fallback = true;
-        item.scf = evaluate(nullptr);
-      }
+    const auto attempt = [&](const std::vector<double>* density) {
+      item.scf = evaluate(density);
       item.status =
           item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
-    } catch (...) {
-      const auto first_status = exception_status();
-      // The opt-in preparation contract propagates allocation failures. Keep
-      // the existing no-policy warm lifecycle unchanged, and do not restart
-      // a failed warm/core attempt after allocation exhaustion in this mode.
-      const bool allocation_failure =
-          item_options.preliminary_guess && first_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-      const bool retry_exhausted = item_options.preliminary_guess && ordinary_attempts >= 2;
-      if (has_warm_density && !allocation_failure && !retry_exhausted) {
-        try {
-          item.warm_start_fallback = true;
-          item.scf = evaluate(nullptr);
-          item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
-                                           : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
-        } catch (...) {
-          item.status = exception_status();
-        }
-      } else {
-        item.status = first_status;
-      }
-    }
-
-    if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
-        warm_start_updates_enabled_) {
-      retain_warm_state(system_index, execution_system, item.scf);
-    }
+    };
+    execute_fleet_item_attempt(item, [&] { attempt(initial_density(system_index)); });
+    retry_fleet_item_cold(item, false, [&] { attempt(nullptr); });
+    finish_item(system_index, execution_system);
   };
 
   // Systems within a bucket have compatible matrix and primitive dimensions.
@@ -363,23 +340,11 @@ std::vector<FleetItemResult> FleetPlan::execute(
       initial_densities.reserve(bucket_size);
       for (std::size_t position = bucket_begin; position < bucket_end; ++position) {
         const std::size_t system_index = execution_order_[position];
-        FleetItemResult& item = results[system_index];
-        item.bucket_id = bucket_ids_[system_index];
-        core::System execution_system = systems_[system_index];
-        if (!coordinates.empty() && coordinates[system_index].has_value()) {
-          if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-            item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-            continue;
-          }
-          apply_coordinates(execution_system, *coordinates[system_index]);
-        }
-        const bool has_warm_density =
-            warm_starts_enabled_ && warm_densities_[system_index].has_value();
-        item.warm_start_used = has_warm_density;
+        core::System execution_system;
+        if (!prepare_item(system_index, execution_system)) continue;
         cuda_systems.push_back(std::move(execution_system));
         original_indices.push_back(system_index);
-        initial_densities.push_back(has_warm_density ? &warm_densities_[system_index]->density
-                                                     : nullptr);
+        initial_densities.push_back(initial_density(system_index));
       }
 
       if (!cuda_systems.empty()) {
@@ -436,19 +401,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
           FleetItemResult& item = results[system_index];
           item.status = cuda_results[slot].status;
           item.scf = std::move(cuda_results[slot].scf);
-          item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
-
-          if (item.warm_start_used && !cuda_results[slot].fock_only_diagnostic &&
-              item.status != GENERATIVEQC_STATUS_SUCCESS &&
-              item.status != GENERATIVEQC_STATUS_CUDA_ERROR &&
-              item.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
-            item.warm_start_fallback = true;
-            const std::vector<core::System> cold_system{cuda_systems[slot]};
-            const std::vector<const std::vector<double>*> cold_density{nullptr};
-            auto cold_options = execution_options;
-            // A failed warm call gets its ordinary core retry, not a new
-            // preliminary solve followed by another possible target retry.
-            cold_options.preliminary_guess.reset();
+          retry_fleet_item_cold(item, cuda_results[slot].fock_only_diagnostic, [&] {
             auto warm_diagnostic = item.scf.preliminary_guess;
             warm_diagnostic.target_attempts = 2;
             warm_diagnostic.discarded_target_iterations = item.scf.iterations;
@@ -456,34 +409,41 @@ std::vector<FleetItemResult> FleetPlan::execute(
             warm_diagnostic.work_counters_complete =
                 warm_diagnostic.work_counters_complete &&
                 item.status == GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
-            if (execution_options.preliminary_guess) {
-              // The budget admits one target arena. Drop the failed bucket
-              // before constructing the ordinary single-item core retry.
-              destroy_rhf_cuda_bucket_plan(cuda_bucket_plans_[bucket]);
-              cuda_bucket_plans_[bucket] = nullptr;
-            }
-            std::vector<RhfBucketItem> cold =
-                method_ == GENERATIVEQC_METHOD_UHF
-                    ? run_uhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
-                                          false)
-                    : run_rhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
-                                          false);
-            item.status = cold.front().status;
-            item.scf = std::move(cold.front().scf);
+            const bool completed = execute_fleet_item_attempt(item, [&] {
+              const std::vector<core::System> cold_system{cuda_systems[slot]};
+              const std::vector<const std::vector<double>*> cold_density{nullptr};
+              auto cold_options = execution_options;
+              // A failed warm call gets its ordinary core retry, not a new
+              // preliminary solve followed by another possible target retry.
+              cold_options.preliminary_guess.reset();
+              if (execution_options.preliminary_guess) {
+                // The budget admits one target arena. Drop the failed bucket
+                // before constructing the ordinary single-item core retry.
+                destroy_rhf_cuda_bucket_plan(cuda_bucket_plans_[bucket]);
+                cuda_bucket_plans_[bucket] = nullptr;
+              }
+              std::vector<RhfBucketItem> cold =
+                  method_ == GENERATIVEQC_METHOD_UHF
+                      ? run_uhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
+                                            false)
+                      : run_rhf_cuda_bucket(cold_system, cold_options, cold_density, device_id_,
+                                            false);
+              item.status = cold.front().status;
+              item.scf = std::move(cold.front().scf);
+            });
+            if (!completed) item.scf = {};
             if (execution_options.preliminary_guess) {
               const auto& work = item.scf.precision;
               if (work.operator_work_counters_valid)
                 item.scf.fock_builds = work.mixed_stage_fock_builds +
                                        work.strict_stage_fock_builds + work.post_scf_fock_builds;
-              warm_diagnostic.work_counters_complete =
-                  warm_diagnostic.work_counters_complete && work.operator_work_counters_valid;
+              warm_diagnostic.work_counters_complete = warm_diagnostic.work_counters_complete &&
+                                                       completed &&
+                                                       work.operator_work_counters_valid;
               item.scf.preliminary_guess = warm_diagnostic;
             }
-          }
-          if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
-              warm_start_updates_enabled_) {
-            retain_warm_state(system_index, cuda_systems[slot], item.scf);
-          }
+          });
+          finish_item(system_index, cuda_systems[slot]);
         }
       }
     } else if (cuda_density_fitting_enabled_) {
@@ -498,24 +458,14 @@ std::vector<FleetItemResult> FleetPlan::execute(
       initial_densities.reserve(bucket_size);
       for (std::size_t position = bucket_begin; position < bucket_end; ++position) {
         const std::size_t system_index = execution_order_[position];
-        FleetItemResult& item = results[system_index];
-        item.bucket_id = bucket_ids_[system_index];
-        core::System execution_system = systems_[system_index];
-        if (!coordinates.empty() && coordinates[system_index].has_value()) {
-          if (!valid_coordinates(*coordinates[system_index], execution_system.atoms.size())) {
-            item.status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-            malformed_coordinate = true;
-            continue;
-          }
-          apply_coordinates(execution_system, *coordinates[system_index]);
+        core::System execution_system;
+        if (!prepare_item(system_index, execution_system)) {
+          malformed_coordinate = true;
+          continue;
         }
-        const bool has_warm_density =
-            warm_starts_enabled_ && warm_densities_[system_index].has_value();
-        item.warm_start_used = has_warm_density;
         df_systems.push_back(std::move(execution_system));
         original_indices.push_back(system_index);
-        initial_densities.push_back(has_warm_density ? &warm_densities_[system_index]->density
-                                                     : nullptr);
+        initial_densities.push_back(initial_density(system_index));
         overlap_caches.push_back(&cuda_df_orthogonalizers_[system_index]);
         append_geometry_positions(df_systems.back(), bucket_positions);
       }
@@ -599,15 +549,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
           FleetItemResult& item = results[system_index];
           item.status = df_results[slot].status;
           item.scf = std::move(df_results[slot].scf);
-          item.executed_backend = GENERATIVEQC_BACKEND_CUDA;
-
-          // A warm density can be a poor guess after a geometry replay. Keep
-          // the batch's failure isolation, but retry that one item cold when
-          // the failure is numerical rather than a shared CUDA/OOM failure.
-          if (item.warm_start_used && item.status != GENERATIVEQC_STATUS_SUCCESS &&
-              item.status != GENERATIVEQC_STATUS_CUDA_ERROR &&
-              item.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
-            item.warm_start_fallback = true;
+          retry_fleet_item_cold(item, false, [&] {
             auto cold_options = execution_options;
             cold_options.preliminary_guess.reset();
             auto diagnostic = item.scf.preliminary_guess;
@@ -617,7 +559,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
             diagnostic.discarded_target_fock_builds = item.scf.fock_builds;
             if (item.status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
               diagnostic.work_counters_complete = false;
-            try {
+            const bool completed = execute_fleet_item_attempt(item, [&] {
               const core::System auxiliary =
                   auxiliary_for_geometry(auxiliary_template_, df_systems[slot]);
               item.scf = method_ == GENERATIVEQC_METHOD_UHF
@@ -629,15 +571,14 @@ std::vector<FleetItemResult> FleetPlan::execute(
                                    &cuda_df_orthogonalizers_[system_index]);
               item.status = item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS
                                                : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
-            } catch (...) {
-              item.status = exception_status();
+            });
+            if (!completed) {
+              item.scf = {};
+              diagnostic.work_counters_complete = false;
             }
             if (execution_options.preliminary_guess) item.scf.preliminary_guess = diagnostic;
-          }
-          if (item.status == GENERATIVEQC_STATUS_SUCCESS && warm_starts_enabled_ &&
-              warm_start_updates_enabled_) {
-            retain_warm_state(system_index, df_systems[slot], item.scf);
-          }
+          });
+          finish_item(system_index, df_systems[slot]);
         }
       }
     } else if (worker_count == 1) {

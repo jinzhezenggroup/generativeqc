@@ -901,6 +901,11 @@
           "path": "python/generativeqc/basis.py",
           "symbol": "BasisSet",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_method_native.py",
+          "symbol": "capabilities",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -909,13 +914,15 @@
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_common.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup now stays on the already-selected Calculator library rather than public cached/default-library discovery. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_selected_native_method_capabilities.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],
       "trackers": [

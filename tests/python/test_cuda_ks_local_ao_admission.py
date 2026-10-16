@@ -56,6 +56,12 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "struct CudaXcAoSelectionResources",
         )
     )
+    # Keep the storage constant with the real layout body instead of duplicating
+    # its value in the host-only extraction fixture.
+    totals_start = header.index(
+        "inline constexpr std::size_t kCudaXcTotalStorageElements ="
+    )
+    declarations += header[totals_start : header.index(";", totals_start) + 1]
     # Keep the exact production launcher signature in the host-storage census.
     # The CUDA stream is opaque here; this probe never calls a launcher.
     launcher_start = header.index("using CudaXcDensityLauncher =")

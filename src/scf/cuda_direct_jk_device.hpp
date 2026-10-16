@@ -72,13 +72,16 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
-/** Cache full-range FP32 recurrence values in FP32 storage, never strict ERIs.
- * Restricted, complete through-d canonical sources only. Publication is atomic
- * after finite validation; strict callers cannot consume this precision lease.
+/** Cache FP32 recurrence values in FP32 storage, never strict ERIs.
+ * Restricted through-d sources share full/SR/LR identity and bounded angular
+ * selection with strict sources. Unselected buckets evaluate mixed recurrences
+ * on replay. Publication follows finite validation; strict callers cannot borrow
+ * this precision lease or change its immutable operator, omega or bucket mask.
  */
-generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPlan* plan,
-                                                                 std::size_t maximum_bytes,
-                                                                 std::string& detail);
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail,
+    FockOperator source_operator = FockOperator::FullRange, double omega = 0.0,
+    std::uint32_t bucket_mask = (1U << 28) - 1);
 
 /** Retain exact values of one immutable radial operator, with bounded partial
  * residency. SR/LR values can serve only matching pure-exchange requests; full
@@ -227,7 +230,7 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
 
 /** Experimental value-only variant: evaluate Coulomb ERI recurrences in FP32
  * while retaining FP64 density reads, screening, accumulation and output.
- * Exchange remains FP64 unless mixed_exchange selects restricted full-range
+ * Exchange remains FP64 unless mixed_exchange selects restricted full/SR/LR
  * J/K sharing the same FP32 recurrence. The optional device counter is cleared
  * on the provider stream and counts only AO-ERI values actually evaluated by
  * the mixed recurrence after screening and zero-density rejection. The caller

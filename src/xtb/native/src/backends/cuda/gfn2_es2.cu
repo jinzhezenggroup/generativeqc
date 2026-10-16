@@ -5,11 +5,13 @@
 #include <cstdint>
 #include <limits>
 
-#include "backends/cuda/cuda_atomics.cuh"
 #include "backends/cuda/gfn2_es2.cuh"
 #include "generated_gfn2_es2_native.hpp"
+#include "runtime/cuda_atomic.cuh"
 
 namespace generativeqc::xtb::detail::cuda {
+
+using generativeqc::runtime::atomic_add_fp64;
 namespace {
 
 constexpr int kThreadsPerBlock = 256;

@@ -132,6 +132,7 @@ def test_cuda_dry_run_query_never_calls_profile_or_context(
         ("GENERATIVEQC_GRAPH_EIGENSOLVER_OVERRIDE", "graph_native"),
         ("GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile"),
         ("GENERATIVEQC_FINAL_FOCK_REBUILD", "1"),
+        ("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION", "1"),
     ],
 )
 def test_cuda_execution_rejects_changed_resource_schedule(

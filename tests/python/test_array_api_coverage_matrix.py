@@ -50,6 +50,8 @@ _NATIVE_CPU_CASES = {
     "slice_static": lambda x: xp.slice(x, ((0, 1), (0, 3))),
     "take_static": lambda x: xp.take(x, (1, 0), axis=0),
     "matmul": lambda x: xp.matmul(x, xp.matrix_transpose(x)),
+    "tensordot": lambda x: xp.tensordot(x, x, axes=((1,), (1,))),
+    "vecdot": lambda x: xp.vecdot(x, x[:1, :]),
     "einsum_extension": lambda x: xp.einsum("ij,ij->", x, x),
 }
 

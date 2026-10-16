@@ -70,6 +70,10 @@ macro(generativeqc_add_native_tests)
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_fleet_item_tests
+                       tests/native/test_fleet_item.cpp NO_GENERATIVEQC)
+  target_include_directories(generativeqc_fleet_item_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_df_ccsd_precision_policy_tests
                      tests/native/test_df_ccsd_precision_policy.cpp NO_GENERATIVEQC)
   if(GENERATIVEQC_ENABLE_CUDA)
@@ -199,6 +203,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_scf_proposal_tests tests/native/test_scf_proposals.cpp)
   generativeqc_native_test(generativeqc_self_consistent_tests tests/native/test_self_consistent.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_batch_tests tests/native/test_batch.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_method_execution_tests tests/native/test_method_execution.cpp)
   generativeqc_native_test(generativeqc_cpp_api_tests tests/native/test_cpp_batch.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_cartesian_integral_tests tests/native/test_cartesian_integrals.cpp)
   generativeqc_native_test(generativeqc_density_fitting_tests tests/native/test_density_fitting.cpp)
@@ -550,6 +555,9 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_cuda_generated_j_budget_tests
              COMMAND generativeqc_cuda_fock_provider_tests --generated-j-budget-only)
     set_tests_properties(generativeqc_cuda_generated_j_budget_tests PROPERTIES TIMEOUT 180)
+    add_test(NAME generativeqc_cuda_compensated_j_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --compensated-j-only)
+    set_tests_properties(generativeqc_cuda_compensated_j_tests PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cuda_lr_domain_tests
              COMMAND generativeqc_cuda_fock_provider_tests --lr-domain-only)
     set_tests_properties(generativeqc_cuda_lr_domain_tests PROPERTIES

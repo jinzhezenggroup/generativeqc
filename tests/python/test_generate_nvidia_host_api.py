@@ -68,10 +68,11 @@ def test_sdk_regeneration_is_deterministic_with_real_clang(tmp_path: Path) -> No
         "typedef cublasContext* cublasHandle_t;\n"
         "typedef int cublasStatus_t;\n"
         "enum cublasOperation_t { CUBLAS_OP_N=0, CUBLAS_OP_T=1 };\n"
-        "cublasStatus_t cublasDgemmBatched(cublasHandle_t, cublasOperation_t, "
+        'extern "C" cublasStatus_t cublasDgemmBatched(cublasHandle_t, cublasOperation_t, '
         "cublasOperation_t, int, int, int, const double*, const double*const*, "
         "int, const double*const*, int, const double*, double*const*, int, int);\n"
-        "cublasStatus_t cublasDgemm_v2(cublasHandle_t);\n"
+        'extern "C" cublasStatus_t cublasDgemm_v2(cublasHandle_t);\n'
+        "static inline cublasStatus_t cublasDgemm_v2(int) { return 0; }\n"
         "#define cublasDgemm cublasDgemm_v2\n"
     )
     (sdk / "cusolverDn.h").write_text(
@@ -79,14 +80,15 @@ def test_sdk_regeneration_is_deterministic_with_real_clang(tmp_path: Path) -> No
         "typedef int cusolverStatus_t;\n"
         "struct cusolverDnContext;\n"
         "typedef cusolverDnContext* cusolverDnHandle_t;\n"
-        "cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t*);\n"
+        'extern "C" cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t*);\n'
     )
 
     owner = tmp_path / "src/tensor/consumer.cu"
     owner.parent.mkdir(parents=True)
-    owner.write_text(
-        "void use() { cublasDgemmBatched(); cublasDgemm(); cusolverDnCreate(); }\n"
-    )
+    owner.write_text("void use() { cublasDgemm(); cusolverDnCreate(); }\n")
+    method = tmp_path / "src/xtb/native/consumer.cu"
+    method.parent.mkdir(parents=True)
+    method.write_text("void use() { cublasDgemmBatched(); }\n")
     existing = tmp_path / "generated.h"
     existing.write_text(
         "cublasStatus_t cublasDgemm_v2(cublasHandle_t arg0);\n"
@@ -157,12 +159,34 @@ def test_sdk_rejects_unrepresentable_function_abi(
     node = {
         "kind": "FunctionDecl",
         "name": "cublasNewThing",
+        "mangledName": "cublasNewThing",
         "type": {"qualType": signature},
         "inner": [{"kind": "ParmVarDecl", "type": {"qualType": "int"}}],
         **extra,
     }
     monkeypatch.setattr(codegen, "run_clang", lambda *args, **kwargs: json.dumps(node))
     with pytest.raises(ValueError, match=message):
+        codegen.sdk_functions("clang++", [], "cublas_v2.h")
+
+
+def test_sdk_rejects_conflicting_exported_abi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ignoring convenience wrappers must not hide genuine export conflicts."""
+    import json
+
+    nodes = [
+        {
+            "kind": "FunctionDecl",
+            "name": "cublasNewThing",
+            "mangledName": "cublasNewThing",
+            "type": {"qualType": f"cublasStatus_t ({kind})"},
+            "inner": [{"kind": "ParmVarDecl", "type": {"qualType": kind}}],
+        }
+        for kind in ("int", "double")
+    ]
+    monkeypatch.setattr(
+        codegen, "run_clang", lambda *args, **kwargs: "\n".join(map(json.dumps, nodes))
+    )
+    with pytest.raises(ValueError, match="conflicting NVIDIA SDK prototypes"):
         codegen.sdk_functions("clang++", [], "cublas_v2.h")
 
 

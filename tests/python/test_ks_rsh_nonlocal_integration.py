@@ -94,10 +94,11 @@ struct Owner {
   double *nonlocal_effective_gradient = &buffer, *nonlocal_workspace = &buffer;
   double *nonlocal_vrho = &buffer, *nonlocal_vsigma = &buffer;
   double *nonlocal_energy = &buffer;
-  bool nonlocal_cache_enabled = false, nonlocal_cache_ready = false;
+  bool nonlocal_cache_enabled = false, nonlocal_cache_ready = false, nonlocal_cache_mixed = false;
   std::string nonlocal_cache_schedule;
   int *nonlocal_cache_mismatch = nullptr;
   std::uint64_t *nonlocal_cache_counters = nullptr;
+  std::uint64_t* mixed_coulomb_work_counter() { return nonlocal_cache_counters; }
   int error = 0, *jk_error = &error, *range_jk_error = &error, *enabled = &error;
   int *nonlocal_domain_error = &error, *nonlocal_pair_error = &error;
   int device = 0;

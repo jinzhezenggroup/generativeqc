@@ -213,3 +213,64 @@ def test_flip_does_not_enumerate_unselected_axes(
     assert dict(gathers[0].attrs)["positions"] == (1, 0)
     unchanged = xp.trace(lambda x: xp.flip(x, axis=()), {"x": spec})
     assert all(node.op != "gather" for node in unchanged.nodes)
+
+
+@pytest.mark.parametrize(
+    ("shape", "key", "expected"),
+    (
+        ((10**12, 2), (slice(None), slice(None)), (10**12, 2)),
+        ((10**12, 0), (slice(None), slice(None)), (10**12, 0)),
+        ((10**12, 2), (slice(11, 14), slice(None)), (3, 2)),
+    ),
+)
+def test_contiguous_symbolic_subscript_does_not_expand_large_axes(
+    monkeypatch: pytest.MonkeyPatch,
+    shape: tuple[int, ...],
+    key: tuple[slice, ...],
+    expected: tuple[int, ...],
+) -> None:
+    # A symbolic slice must not allocate an index tuple proportional to its extent.
+    def bounded_range(*args: int) -> range:
+        result = range(*args)
+        assert len(result) <= 65536, "contiguous slice enumerated symbolic indices"
+        return result
+
+    monkeypatch.setattr(namespace, "range", bounded_range, raising=False)
+    spec = xp.TensorSpec(namespace._generic_indices(shape), role="input")
+    captured = xp.trace(lambda x: x[key], {"x": spec})
+    assert captured.outputs["output"].spec.shape == expected
+
+
+@pytest.mark.parametrize(
+    ("size", "key"),
+    (
+        (131074, slice(None, None, 2)),
+        (65537, slice(None, None, -1)),
+    ),
+)
+def test_symbolic_strided_subscript_rejects_oversized_gather(
+    size: int, key: slice
+) -> None:
+    spec = xp.TensorSpec(namespace._generic_indices((size,)), role="input")
+    with pytest.raises(ValueError, match="bounded static gather"):
+        xp.trace(lambda x: x[key], {"x": spec})
+
+
+@pytest.mark.parametrize(
+    "key",
+    (
+        slice(None),
+        slice(1, 5),
+        slice(3, 3),
+        slice(None, None, 2),
+        slice(None, None, -1),
+        slice(5, 0, -2),
+    ),
+)
+def test_captured_symbolic_subscript_matches_numpy(key: slice) -> None:
+    @xp.compile(backend="reference")
+    def expression(x: object) -> object:
+        return x[key]
+
+    values = np.arange(6, dtype=np.float64)
+    np.testing.assert_array_equal(expression(values), values[key])
