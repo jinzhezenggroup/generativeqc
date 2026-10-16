@@ -628,11 +628,74 @@ def test_omission_does_not_hide_completed_native_without_reference(
     }
     render(summary, tmp_path)
     assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    assert "GPU4PySCF cold/warm unavailable: 48 atoms" in (
+        tmp_path / "df-cold-warm.svg"
+    ).read_text()
     table = (tmp_path / "df-timings.md").read_text()
     assert annotation in table
     assert "10.000‡ | not run | 1.000‡ | not run" in table
     assert "| ωB97M-V | 48 |" in table
     assert "| ωB97M-V | 96 |" not in table
+
+
+
+def test_readme_chart_reports_missing_plotted_phases_not_moved_timeouts(
+    tmp_path: Path,
+) -> None:
+    """Direct/48 can be complete in the plot despite a later moved timeout."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": secs}
+        for phase, secs in [("cold", 20.0)] + [("warm", 2.0)] * 5
+    ]
+    native = {"status": "measured", "records": rows}
+    reference_48 = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "measured", "moved": "timeout"},
+        "records": rows,
+    }
+    reference_96 = {"status": "timeout", "records": []}
+    summary = {
+        "sizes": [48, 96],
+        "density_fitting": False,
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": atoms,
+                    "protocol": {"aos": atoms * 8},
+                    "engines": {
+                        "native": native,
+                        "reference": reference,
+                    },
+                }
+                for atoms, reference in [(48, reference_48), (96, reference_96)]
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    svg = (tmp_path / "dft-cold-warm.svg").read_text()
+    assert "GPU4PySCF cold/warm unavailable: 96 atoms" in svg
+    assert "GPU4PySCF cold/warm unavailable: 48 atoms" not in svg
+    assert "Reference sequence incomplete" not in svg
+
+
+def test_readme_chart_identifies_only_missing_warm_phase() -> None:
+    from tools.render_readme_dft import missing_plot_phase_annotations
+
+    native = {
+        "status": "measured",
+        "records": [{"phase": phase} for phase in ("cold", "warm")],
+    }
+    reference = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "timeout"},
+        "records": [{"phase": "cold"}],
+    }
+    point = {"atoms": 96, "engines": {"native": native, "reference": reference}}
+    assert missing_plot_phase_annotations([point]) == [
+        "GPU4PySCF warm unavailable: 96 atoms"
+    ]
 
 
 @pytest.mark.parametrize("priming_fails", [False, True])
