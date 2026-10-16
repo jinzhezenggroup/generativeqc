@@ -24,7 +24,7 @@ one budget solve, actual positive FP32 J and recurrence work, positive FP32 K
 when required, and positive FP32 nonlocal pair work for nonlocal models. Strict
 fallbacks are never counted as accelerated samples.
 
-The machine-readable summary retains all family points, including slowdowns,
+The [machine-readable summary](summary.json) retains all family points, including slowdowns,
 the same-card native-owner comparison, numerical maxima and semantic SCF work.
 The earlier packet-v4 comparison is explicitly a different source snapshot,
 not a measurement of the final native-force-v5 build.
@@ -56,6 +56,9 @@ The same physical node4 GPU separately compares the packet-v4 incumbent with
 native-force-v5. The change retains identical SCF iteration/mixed/strict work
 populations in both arms; it removes compatibility force orchestration and
 retains the qualified native FP64 force schedule.
+The old/new snapshots run as separate sequential jobs, not randomized or
+interleaved old/new arms. Within each snapshot the middle repeat reverses
+FP64/Fast order. Observed operator-work populations also match in both arms.
 
 | Endpoint | Previous Fast | New Fast | Elapsed reduction |
 | --- | ---: | ---: | ---: |
@@ -113,6 +116,25 @@ The packet optimization reuses immutable point-scale proofs; radius admission
 still runs per pair and FP64 weighted reductions remain unchanged. Its measured
 incremental endpoint gains must not be combined across hardware with the earlier
 density-screening gains. Unequal artifact warmups do not prove a cold-start gain.
+
+## Selected validation
+
+- Host precision/code-generation selections: 136 passed, 1062 GPU cases skipped;
+  the final admission/inventory selection separately passes eight tests. These
+  selections overlap and are not a whole-repository test count.
+- Earlier native-owner/cold selection: 26 passed on this production core. The
+  final file contains 28 cases and was not rerun in full after test expansion.
+- Final scalar artifact-replay/moved and retained prepared warm/moved lifecycle
+  selection: 12 passed on node4, Slurm 1045. Five families cover 3/12 atoms;
+  prepared lifetime cases cover PBE0 at both sizes. Every returned endpoint is
+  checked against the independent reference, including explicit moved recovery.
+- Final `compute-sanitizer --tool memcheck` selection: two 3-atom PBE0
+  scalar/prepared lifetime cases passed, zero errors, in the same finite Slurm
+  allocation. Sanitized runtimes are not benchmark samples. A requested time
+  extension was refused; the job still completed within its original 15 minutes.
+- Seven existing Fast-label/fallback-count assertions also fail on the baseline,
+  as retained in the density-screening decision. They are not waived, deleted or
+  counted as passing; no whole-repository green claim is made.
 
 ## Evidence retention and reproduction
 

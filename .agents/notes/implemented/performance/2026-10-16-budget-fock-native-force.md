@@ -106,6 +106,17 @@ Its authenticated independent E/max-force/RMS-force errors are
 qualification pilot on a different physical GPU/driver, not a paired timing
 ratio against the node4 packet-v4 observations.
 
+Final selected validation retains 136 host passes (1062 GPU cases skipped), an
+overlapping eight-test final admission/inventory pass, the earlier 26-case
+cold/native-owner pass, and 12 final scalar/prepared lifecycle passes. The final
+28-case GPU file was not rerun in full. Slurm 1045 also completes two 3-atom
+PBE0 scalar/prepared lifetime cases under compute-sanitizer memcheck with zero
+errors. A time-extension request was refused, but execution completed within
+the original finite 15-minute allocation. Keep the refusal receipt; do not
+classify sanitized execution as a performance sample. The seven documented
+baseline label/fallback-count failures remain visible; these selected passes
+do not establish a green whole-repository suite.
+
 ## Remaining limitation
 
 The shared mixed J route still uses canonical whole-shell recurrence rather
