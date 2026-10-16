@@ -795,6 +795,18 @@ density. A failed `run_progressive_hf` target has no retained target density. Th
 them. Keep calculators and policy inputs unchanged throughout an invocation;
 do not share prepared/estimator state with concurrent workflows.
 
+`run_progressive_hf` uses the selected target library's additive native HF
+execution controller when available. It owns stage order, success-dependent
+projection/density export, reverse-order cleanup and post-cleanup physical-audit
+scheduling. Python callbacks marshal the existing prepared owners; they do not
+replace their scientific kernels. Exceptions never cross the C callback ABI:
+the original exception is re-raised after cleanup, including cancellation.
+`diagnostics["execution_owner"]` reports `native-v1` or the explicit
+`portable-compatibility` path for an older library lacking the symbol. A native
+refusal never retries that compatibility path or loads another library.
+This does not migrate the Python physical-audit assembly, final-verification
+equations, general coarse-to-fine planning or force-aware execution policies.
+
 (python-progressive-backends)=
 ## Progressive support boundary
 
