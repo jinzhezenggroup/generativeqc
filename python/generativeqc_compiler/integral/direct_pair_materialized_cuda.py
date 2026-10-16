@@ -97,6 +97,10 @@ __device__ inline void contract_materialized_direct_pair_fock(
     std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr,
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr) {
   constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
+  // Mixed owners already publish one complete recurrence per shell quartet.
+  // Disjoint axis writers borrow immutable geometry and retire at the existing
+  // barriers; strict and legacy packet scheduling remain unchanged.
+  constexpr bool parallel_pair_axes = mixed || (AngularOrder == 3 && ComponentLanes == 32);
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
@@ -164,14 +168,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
   for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
     // Read immutable cached geometry directly: shared.first is not published
     // until the existing barrier, so other axis owners must not borrow it yet.
-    if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+    if constexpr (parallel_pair_axes) {
       if (threadIdx.x < 3U)
         prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra], li, lj, first, second,
                                          shared.bra, threadIdx.x, threadIdx.x + 1U);
     }
     if (threadIdx.x == 0) {
       shared.first = batch.shell_primitive_pairs[bra];
-      if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+      if constexpr (!parallel_pair_axes)
         prepare_materialized_direct_pair(shared.first, li, lj, first, second, shared.bra);
       const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
       const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
@@ -182,14 +186,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
       // All three axes retire with the unchanged Coulomb publication barrier.
-      if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+      if constexpr (parallel_pair_axes) {
         if (threadIdx.x < 3U)
           prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket], lk, ll, third, fourth,
                                            shared.ket, threadIdx.x, threadIdx.x + 1U);
       }
       if (threadIdx.x == 0) {
         shared.second = batch.shell_primitive_pairs[ket];
-        if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+        if constexpr (!parallel_pair_axes)
           prepare_materialized_direct_pair(shared.second, lk, ll, third, fourth, shared.ket);
         const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
         const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
