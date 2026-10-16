@@ -3,6 +3,12 @@
 Status: implemented; diagnostic finding, not a reference-kernel fix
 Date: 2026-10-16
 
+The unresolved diagnosis in this historical note is superseded by
+[the response-grid alignment control](2026-10-16-wb97mv-reference-cphf-grid.md).
+The earlier adapter left GPU4PySCF's separate default SG1 CPHF grid unchanged.
+The raw discrepancies and rejected timing ratios below remain historical facts,
+not evidence of a faulty vendor Hessian kernel.
+
 ## Problem and decision
 
 The independently energy-qualified native Hessian failed the unchanged 3e-6

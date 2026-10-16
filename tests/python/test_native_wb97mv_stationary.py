@@ -34,6 +34,7 @@ def _native(
     auxiliary_d: bool = False,
     auxiliary_g: bool = False,
     benchmark_h2: bool = False,
+    benchmark_water: bool = False,
     orbital_angular: int = 0,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
@@ -46,6 +47,7 @@ def _native(
     mode += "-auxd" if auxiliary_d else ""
     mode += "-auxg" if auxiliary_g else ""
     mode += "-benchmark-h2" if benchmark_h2 else ""
+    mode += "-benchmark-water" if benchmark_water else ""
     mode += "-orbd" if orbital_angular == 2 else "-orbf" if orbital_angular == 3 else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
@@ -90,8 +92,9 @@ class MolecularEnergy:
         )
         self.seed = np.array(result["density"]).reshape(self.spins, self.nao, self.nao)
         self.fitted, self.code = fitted, code
+        self.benchmark_water = result.get("benchmark_water", False)
         labels = [
-            f"{'Na' if ecp and atom == 0 else 'H'}{atom}"
+            f"{'Na' if ecp and atom == 0 else 'O' if self.benchmark_water and atom == 0 else 'H'}{atom}"
             for atom in range(len(self.centers))
         ]
         radial = [
@@ -100,6 +103,28 @@ class MolecularEnergy:
             [0.168855404, 0.4446345422],
         ]
         basis = {label: [[0, *radial]] for label in labels}
+        if self.benchmark_water:
+            records = json.loads(
+                (
+                    Path(__file__).resolve().parents[1]
+                    / "data/external_basis/sto-3g-ho.json"
+                ).read_text()
+            )
+            basis[labels[0]] = [
+                [
+                    angular,
+                    *[
+                        [float(exponent), float(coefficient)]
+                        for exponent, coefficient in zip(
+                            shell["exponents"], coefficients, strict=True
+                        )
+                    ],
+                ]
+                for shell in records["elements"]["8"]["electron_shells"]
+                for angular, coefficients in zip(
+                    shell["angular_momentum"], shell["coefficients"], strict=True
+                )
+            ]
         auxiliary_order = (
             4
             if result.get("auxiliary_g", False)
@@ -281,7 +306,7 @@ class MolecularEnergy:
                 projected.append(occupation * vectors @ vectors.T)
             return pack(np.array(projected) - density)
 
-        if self.orbital_angular:
+        if self.orbital_angular or self.benchmark_water:
             # Unconstrained density trials can be indefinite and leave VV10's
             # domain. Occupied/virtual rotations preserve positivity and rank
             # without borrowing native response or any derivative equations.
@@ -446,17 +471,35 @@ def test_benchmark_h2_full_hessian_against_independent_molecular_energies() -> N
     """Qualify the actual external-comparison geometry and grid, not a proxy."""
     pytest.importorskip("pyscf")
     result = _native(1, False, True, False, True, benchmark_h2=True)
-    actual = np.array(result["hessian"]).reshape(6, 6)
-    axes = np.eye(6).reshape(6, 2, 3)
+    _qualify_benchmark_matrix(result)
+
+
+def test_benchmark_water_full_hessian_against_independent_molecular_energies() -> None:
+    """Qualify all 81 entries of the actual seven-AO external water workload."""
+    pytest.importorskip("pyscf")
+    result = _native(1, False, True, False, True, benchmark_water=True)
+    assert result["nao"] == 7 and result["atoms"] == 3
+    _qualify_benchmark_matrix(result)
+
+
+def _qualify_benchmark_matrix(result: dict) -> None:
+    """Keep each raw entry and both independently reconverged energy stencils."""
+    coordinates = 3 * result["atoms"]
+    actual = np.array(result["hessian"]).reshape(coordinates, coordinates)
+    axes = np.eye(coordinates).reshape(coordinates, result["atoms"], 3)
+    expected_matrix = np.zeros_like(actual)
+    stencil_matrices = np.zeros((2, coordinates, coordinates))
     with _signed_density_libxc() as code:
         energy = MolecularEnergy(
             result, fitted=False, spherical=True, ecp=False, code=code
         )
         np.testing.assert_allclose(
-            energy(np.zeros((2, 3)), reference=True), result["energy"], atol=5e-9
+            energy(np.zeros((result["atoms"], 3)), reference=True),
+            result["energy"],
+            atol=5e-9,
         )
-        for row in range(6):
-            for column in range(row, 6):
+        for row in range(coordinates):
+            for column in range(row, coordinates):
                 estimates = []
                 for step in (0.004, 0.002):
                     estimates.append(
@@ -472,6 +515,27 @@ def test_benchmark_h2_full_hessian_against_independent_molecular_energies() -> N
                 expected = (4 * estimates[1] - estimates[0]) / 3
                 np.testing.assert_allclose(actual[row, column], expected, atol=8e-7)
                 np.testing.assert_allclose(actual[column, row], expected, atol=8e-7)
+                expected_matrix[row, column] = expected_matrix[column, row] = expected
+                stencil_matrices[:, row, column] = estimates
+                stencil_matrices[:, column, row] = estimates
+    if directory := os.environ.get("GENERATIVEQC_STATIONARY_RECEIPTS"):
+        from generativeqc_compiler.common.evidence import block_error
+
+        destination = Path(directory)
+        destination.mkdir(parents=True, exist_ok=True)
+        case = "water" if result.get("benchmark_water", False) else "h2"
+        receipt = {
+            "case": case,
+            "native_energy": result["energy"],
+            "steps": [0.004, 0.002],
+            "actual": actual.tolist(),
+            "energy_stencil_matrices": stencil_matrices.tolist(),
+            "expected": expected_matrix.tolist(),
+            "error": block_error(actual, expected_matrix, atol=8e-7, rtol=1e-7),
+        }
+        (destination / f"oracle-full-{case}.json").write_text(
+            json.dumps(receipt, indent=2) + "\n"
+        )
 
 
 def _qualify(

@@ -55,16 +55,18 @@ void run(bool unrestricted, const std::string& mode, bool full) {
              auxiliary_g = mode.find("auxg") != std::string::npos,
              orbital_d = mode.find("orbd") != std::string::npos,
              orbital_f = mode.find("orbf") != std::string::npos,
-             benchmark_h2 = mode.find("benchmark-h2") != std::string::npos;
+             benchmark_h2 = mode.find("benchmark-h2") != std::string::npos,
+             benchmark_water = mode.find("benchmark-water") != std::string::npos;
   const unsigned orbital_angular = orbital_f ? 3U : orbital_d ? 2U : 0U;
   const bool separate_auxiliary = auxiliary_d || auxiliary_g;
   const bool compact_fixture = separate_auxiliary || orbital_angular;
   require(!auxiliary_d || !auxiliary_g, "select only one independent auxiliary fixture");
   require(!orbital_d || !orbital_f, "select only one high-angular orbital fixture");
   require(!separate_auxiliary || fitted, "the independent auxiliary fixture requires DF");
-  require(!benchmark_h2 ||
+  require(!benchmark_h2 || !benchmark_water, "select only one external-comparison geometry");
+  require(!(benchmark_h2 || benchmark_water) ||
               (!unrestricted && !fitted && !ecp && !separate_auxiliary && !orbital_angular),
-          "the benchmark H2 fixture requires all-electron direct RKS");
+          "external-comparison fixtures require all-electron direct RKS");
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   if (spherical) system.basis_representation = core::kSphericalBasis;
@@ -97,6 +99,28 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   if (orbital_angular)
     system.shells.insert(system.shells.begin() + 1, {0, orbital_angular, {{0.48, 1.0}}});
   if (benchmark_h2) system.atoms[0].position = {0.03, -0.02, 0.01};
+  if (benchmark_water) {
+    // Use the CLI's canonical STO-3G decimals, not a rounded vendor basis alias.
+    system.atoms = {{8, {0.0, 0.0, 0.0}},
+                    {1, {1.43233673, 0.0, 1.10715266}},
+                    {1, {-1.43233673, 0.0, 1.10715266}}};
+    system.shells = {
+        {0,
+         0,
+         {{130.7093214, 0.1543289673}, {23.80886605, 0.5353281423}, {6.443608313, 0.4446345422}}},
+        {0,
+         0,
+         {{5.033151319, -0.09996722919}, {1.169596125, 0.3995128261}, {0.38038896, 0.7001154689}}},
+        {0,
+         1,
+         {{5.033151319, 0.155916275}, {1.169596125, 0.6076837186}, {0.38038896, 0.3919573931}}},
+        {1,
+         0,
+         {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}},
+        {2,
+         0,
+         {{3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422}}}};
+  }
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   std::optional<core::System> auxiliary;
@@ -123,7 +147,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = dft::semilocal_family_scf_domain(dft::SemilocalFamily::Wb97mv);
   ks.grid_version = 1;
-  ks.radial_points = compact_fixture || benchmark_h2 ? 8 : 12;
+  ks.radial_points = compact_fixture || benchmark_h2 || benchmark_water ? 8 : 12;
   ks.angular_polar = 4;
   ks.angular_azimuth = 8;
   ks.partition_iterations = 3;
@@ -231,6 +255,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
             << ",\"primitives\":" << shape.primitives << ",\"nao\":" << shape.nao
             << ",\"spins\":" << shape.spins << ",\"point_count\":" << shape.points
             << ",\"orbital_angular\":" << orbital_angular
+            << ",\"benchmark_water\":" << (benchmark_water ? "true" : "false")
             << ",\"auxiliary_d\":" << (auxiliary_d ? "true" : "false")
             << ",\"auxiliary_g\":" << (auxiliary_g ? "true" : "false") << ",\"energy\":" << energy
             << ",\"response_residual\":" << result.response.gmres.residual_norm;

@@ -146,6 +146,13 @@ route. The public route enters `generativeqc._native_hessian`, which calls
 constructing Python AO/CPKS providers. None of these paths differentiates SCF
 iterations, reconverges displaced geometries, or calls a reference engine.
 
+The independent GPU4PySCF comparator configures its SCF, NLC and CPHF response
+with the same moving atomic quadrature. Setting only `grids` and `nlcgrids`
+leaves a separate default SG1 CPHF grid and does not compare derivatives of the
+stated discretized model. Reference receipts record the response-grid policy
+and actual point count. The full raw-matrix acceptance gate remains unchanged;
+matching a quadrature does not establish chemical grid convergence.
+
 `generativeqc_compiler.method.stationary_grid_second` generates the AO `rho`, Cartesian
 density gradient and `tau` JVPs and mixed JVPs with TensorIR. The scalar Graph
 generates the semilocal feature Hessian, weighted VV10 pair gradient/JVP and

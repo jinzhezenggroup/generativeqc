@@ -139,6 +139,8 @@ def _reference_worker(arguments: argparse.Namespace) -> dict[str, Any]:
         "vv10_density_threshold": 1e-8,
         "semilocal_padded_grid_points": len(engine.grids.weights),
         "nlc_padded_grid_points": len(engine.nlcgrids.weights),
+        "response_grid_points": len(engine.cphf_grids.weights),
+        "response_grid_policy": "same-as-primary",
         "raw_symmetry_error": float(np.max(abs(matrix - matrix.T))),
         "work": work,
     }
@@ -528,6 +530,7 @@ def _measure(
                 "density_fitting": False,
                 "ecp": False,
                 "moving_grid_response": True,
+                "response_grid_policy": "same-as-primary",
                 "vv10_density_threshold": 1e-8,
                 "units": "hartree/bohr^2",
                 "timing_boundary": "fresh process, fresh SCF, full host Hessian and JSON",
