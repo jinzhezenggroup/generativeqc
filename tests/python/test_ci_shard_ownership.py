@@ -223,6 +223,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
             "test_uccsd_solver.py",
+            "test_wb97mv_ecp_hessian.py",
         ),
         "core-a": ("test_cc_triples_tiles.py", "test_wb97mv_hessian.py"),
         "core-b": (
@@ -273,6 +274,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
+        "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-b",
@@ -289,6 +291,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             "test_df_occupied_triples_next.py",
             "test_direct_exchange_queue_next.py",
             "test_uccsd_solver_next.py",
+            "test_wb97mv_ecp_hessian_next.py",
             "test_zzz.py",
             *insertions,
         )
