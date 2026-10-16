@@ -80,3 +80,61 @@ bounded memory for avoided recomputation; large closures still stream.
 
 Revisit batching directions or retaining direction-independent derivative
 ingredients only with a new work/storage plan and complete scientific gates.
+
+## Source-matched complete endpoint evidence
+
+After PR #2527 merged, rebuild both merged master
+`f37f96a1c3fee0da04ea0cc2c490f04140d65ae6` and integrated candidate
+`5aa703721fdce6a220838676af615d574f0fed05` with the same full default AOT
+inventory, CUDA 12.9/sm120 and verified ccache launchers. This avoids attributing
+concurrent master changes to the optimization. The candidate compiled identity
+matches a clean Git archive; native linkage contains no Python runtime.
+
+Slurm 3265 reserves node2 exclusively and exposes one RTX PRO 6000 Blackwell to
+the nested benchmark step. One first-observed and five primed, interleaved fresh
+processes per engine/case produce 36 complete startup/SCF/Hessian/JSON/teardown
+endpoints. Keep first-observed samples; exclude only those from the medians.
+The native numerical child cannot discover Python or compilers, and PTX JIT is
+disabled. Canonical WB97M-V, self-consistent VV10 and moving primary/NLC/CPHF
+8/4/8 grids are matched. This is a coarse-grid small-system latency diagnostic,
+not chemical grid convergence or a large-system scaling claim.
+
+| Case | Baseline native | Optimized native | GPU4PySCF |
+| --- | ---: | ---: | ---: |
+| H2 | 1.76805 s | 1.66781 s | 5.42347 s |
+| Water | 15.49040 s | 8.67943 s | 10.93261 s |
+
+Water uses 44.0% less complete endpoint time than baseline native and 20.6% less
+than GPU4PySCF. Its primitive component count is 7,001,316 versus 793,152;
+nine source builds and nine resident hits retain 217,856 optional bytes.
+Nine Hessian columns, 20 SCF iterations, 108 induced actions, 39,690 one-electron
+components and 81 grid mixed contractions are unchanged. Owner-accounted storage
+changes from 4,771,912 to 5,049,928 bytes, not total process/device memory.
+
+Every baseline/candidate raw matrix pair passes `3e-12`, with water maximum
+`6.8834e-15`; every candidate/GPU4PySCF pair passes `3e-6`, with water maximum
+`3.6033e-8`. Every final candidate matrix also passes the unchanged full-matrix
+independent-energy gate (`8e-7` absolute, `1e-7` relative). The latter reuses
+unchanged values-only reference stencils from Slurm 3240/source17 and does not
+claim those reference energies were recomputed on the final source.
+
+The retained historical source17/source616 profiles (Slurm 3244/3262) explain
+the removed work: 434,900 to 196,813 launches, 13.945 to 7.183 s total kernel
+duration, and 46,512 to 4,644 factorized integral launches. These are explicitly
+pre-master diagnostic executions, not final-source timings. Grid AD pairs remain
+35,316 launches/about 2.14 s and motivate future work rather than an unmeasured
+claim here. The authenticated raw measurements, gates, build receipts and
+reproduction scripts are in
+`benchmarks/results/wb97mv-hessian-direction-reuse-20261016/`.
+
+Slurm 3266 qualifies the final source-matched binaries on RTX PRO 6000:
+50 independent component/lifecycle cases, four resident/streamed full-Hessian
+pairs, four actual C++ CLI/API cases (including coupled UKS/DF/ECP spherical
+f/g), and three additional independent molecular HVP cases. Retain the four
+raw parity pairs as well as their unchanged `3e-12` absolute/relative gates.
+The entire 35-case stationary suite is not claimed as rerun. Slurm 3267 passes
+memcheck, initcheck, racecheck and synccheck without errors or race warnings.
+The separate host regression passes 833 tests with 12 opt-in skips; these are
+not substituted for real-GPU gates. The evidence tests independently recompute
+the raw matrix checks, work invariants and all timing ratios without requiring
+that a future timing run be favorable.
