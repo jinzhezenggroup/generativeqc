@@ -57,6 +57,33 @@ It is not a clean-source timing receipt. Raw inputs/results are retained in
 `.artifacts/wb97mv-hessian-aot-20261015/gpu4-curvature.log` and the immutable
 remote `native-api-20261016/.artifacts/slurm-3222/gpu4-curvature.json` deployment.
 
+## Clean-source repetition and NLC-disabled control
+
+Slurm 3227 repeated the diagnostic using clean native source
+`84abba9dc59359767c06ad188cbff815b0ac7268` and the unchanged installed reference.
+Every displaced reference calculation again used a fresh engine. A separate
+control sets `engine.nlc=0`; it is explicitly **not canonical WB97M-V**, never
+changes the official comparator and is not a timing/acceptance substitution.
+
+| Case / reference NLC | Analytic Hzz | Own-primal .02/.01 | Own-primal .004/.002 |
+| --- | ---: | ---: | ---: |
+| H2 / enabled | 0.24709299711411498 | 0.24699972475487422 | 0.24699972778208235 |
+| H2 / disabled control | 0.24620471280899386 | 0.24611144066377655 | 0.24611144395595788 |
+| Water / enabled | 0.11694845124148423 | 0.11713954684466898 | 0.11713853886874404 |
+| Water / disabled control | 0.11560702086223909 | 0.11579799950330501 | 0.11579718162124664 |
+
+All entries use Eh/Bohr². The H2 discrepancy persists at about 9.33e-5 when
+reference NLC is disabled; this excludes an absent VV10 contribution as its
+dominant explanation for that coordinate, without identifying a faulty source
+term. Water extrapolants differ by about 1e-6: this diagnostic is less precise
+there, but still far from its approximately 1.9e-4 analytic/primal discrepancy.
+It does not qualify every water matrix entry. No vendor kernel was patched.
+
+The complete reference inputs, energies, source/script hashes and exact runnable
+diagnostic are retained in
+`benchmarks/results/wb97mv-hessian-native-full-20261016/`. The official matched
+matrix gate still fails and all qualified performance ratios remain null.
+
 ## Revisit when
 
 Repeat the analytic/primal control with pinned upstream versions or an

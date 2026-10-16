@@ -668,7 +668,8 @@ whole-matrix publication. Raw Hessian symmetry is checked, not repaired.
 CLI commands require CUDA FP64 and linked closure, and never start Python/JIT.
 Their complete model is serialized from MethodIR at build time. Obsolete worker
 options are rejected, as is CPU CLI execution rather than silently retaining a
-Python fallback. Python APIs remain separate consumers.
+Python fallback. The public Python CUDA API marshals inputs to this same native
+owner; CPU and low-level development APIs remain separate consumers.
 
 `test_native_wb97mv_stationary.py` uses independently reconverged libcint/Libxc
 and direct-space VV10 values at two displacement steps. The native child has
@@ -735,12 +736,17 @@ The Python test driver supplies independent quadrature/Libxc/real-space oracles;
 numerical leaves and response components execute in standalone native processes,
 including tests with unavailable Python paths and an empty executable search
 path. These validate components, not a complete stationary molecular endpoint.
-The H/S, exact J/K, raw DF/inverse and residual-ECP source components remain
-separate from complete stationary molecular assembly, full integral coverage
-and production CLI wiring. Those integrations remain **unimplemented** by this package. Therefore it
-registers no molecular Hessian capability and cannot establish endpoint speed.
+These component receipts do not themselves qualify the native stationary
+composition, complete integral closure or production CLI. Run the independent
+molecular and actual CLI/public-frontend gates for the selected linked inventory;
+component tests alone cannot establish complete endpoint speed.
 
-### Representation, spin and fitting
+### CPU/development representation, spin and fitting
+
+The following Python owners serve CPU and explicit low-level development calls.
+Public CUDA calls instead use the native stationary owner described above,
+including its independent orbital/auxiliary layouts and linked through-g
+auxiliary admission.
 
 `generativeqc.hessian_basis` reads native normalized AO expansion records
 to construct a fixed Cartesian/public map. Integral densities and cotangents
@@ -773,8 +779,8 @@ retained eigenvectors or silently using exact integrals is not permitted.
 
 ### ECP and CUDA ownership
 
-The C++ executable also provides explicit `hessian`/`hvp` compiler-runtime
-commands. Their interpreter dependency, protocol, controls and examples are
+The C++ executable provides native `hessian`/`hvp` commands. Their Python-free
+runtime, linked AOT build selection, controls and examples are
 owned by [the native CLI guide](../user/native_cli.md#compiler-ad-wb97m-v-hessian-and-hvp).
 
 `generativeqc.ecp_hessian` differentiates the actual residual local potential
@@ -784,9 +790,12 @@ using the native coarse/fine ECP quadrature policy; every HVP must pass the
 retained absolute coarse/fine gate. Effective nuclear charges are used in
 attraction and nuclear repulsion, without subtracting the ECP tail twice.
 
-CUDA uses a **device-resident numerical endpoint**, requiring the optional
-`generativeqc[cuda-hessian]` dependency. The converged native snapshot is uploaded
-once. AO jets, moving Becke partitions, scalar functional/VV10 AD, first and
+The explicit low-level `cuda_composite_hessian` development owner uses a
+**device-resident numerical endpoint**, requiring the optional
+`generativeqc[cuda-hessian]` dependency. This is not the public CUDA frontend or
+CLI: those use the linked native owner and need neither CuPy nor snapshot export.
+In this development owner, the converged native snapshot is uploaded once.
+AO jets, moving Becke partitions, scalar functional/VV10 AD, first and
 second direct/DF integral AD, spherical pullbacks, ECP projectors, CPKS vectors,
 the Hessenberg least-squares problem and D/W reconstruction remain on one CUDA
 stream. Scientific derivatives are generated from the existing scalar Graph and

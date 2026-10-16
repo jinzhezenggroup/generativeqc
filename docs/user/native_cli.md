@@ -150,23 +150,26 @@ solver and stationary assembly, rather than merely precompiling isolated leaves.
 obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
 the separate Python API retains its existing CPU contract.
 
-For a reproducible small-shell package, generate a complete ordered s/p orbital
-and through-d auxiliary inventory before configuring CMake:
+For a complete ordered through-f orbital / through-g auxiliary integral
+selection, generate the factorized inventory before configuring CMake:
 
 ```bash
 python tools/complete_hessian_aot_inventory.py \
   --inventory manifests/hessian_aot_development.json \
-  --output .artifacts/wb97mv-sp-daux.json \
+  --output .artifacts/wb97mv-f-gaux.json \
   --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric \
-  --max-angular 1 --max-auxiliary-angular 2
+  --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized
 ```
 
 Set `GENERATIVEQC_HESSIAN_AOT_INVENTORY` to that file's absolute path alongside
-the CUDA, CLI and Hessian-AOT build options. This is complete for those finite
-shell bounds, not an orbital-d/f package. The tool can enumerate larger bounds,
-but enumeration alone does not prove practical build cost, numerical qualification
-or a complete shipped package. All generation and compilation happen at build
-time; the executable never expands the inventory on demand.
+the CUDA, CLI and Hessian-AOT build options. This selection is explicit, not the
+default development inventory. Smaller finite packages can lower the angular
+bounds. Enumeration alone is not numerical or performance qualification; see
+the [AOT package contract](../developer/dft_hessian.md#native-aot-development-package)
+for compiler ownership, physical selectors and independent gates. All generation
+and compilation happen at build time; the executable never expands the inventory
+on demand. The public Python CUDA Hessian frontend uses the same linked native
+owner, without CuPy numerical work or a runtime compiler.
 
 For example, the following **small-grid smoke test is not a grid-converged
 scientific calculation**:

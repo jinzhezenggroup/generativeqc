@@ -1,0 +1,53 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Numerical comparison failed; no comparative speed ratio is qualified.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4060,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "4c19963eb298bf6cbdf2181d6efa06ecb0d2d1d1c3f4f07ce26c883d38859340"
+    },
+    {
+      "bytes": 8424,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "e5780095aa1ac5f2600abbe9d9bd916c130fe1cf450df245c66191e86bdf9554"
+    },
+    {
+      "bytes": 2670,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "0e6cf6501249ccb06baad059e38fdede13cd86e7dcb6252561e1200cfa460760"
+    },
+    {
+      "bytes": 1461,
+      "path": "reference-selfcheck.json.gz",
+      "role": "summary",
+      "sha256": "c8ef0202c8857ff5de43497fecb4ed8be1b7d1b4c3b5f277c5441b3f6df878f0"
+    },
+    {
+      "bytes": 4084,
+      "path": "reference-selfcheck.py",
+      "role": "reproduction",
+      "sha256": "088a19abd7cb5fda7e17503a1bad4c7cbe3d8cdcbaaa24e1334118b91dcda399"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/wb97mv-hessian-native-full-20261016/reproduce.sh"
+    ],
+    "prerequisites": "At measured source on node2 Slurm controller: CUDA12.9.1 sm120, CMake/Ninja, verified compiler cache, compiler Python dependencies, GPU4PySCF1.8.1/PySCF2.14.0/CuPy13.6.0. Set CUDA_ROOT, REFERENCE_PYTHON and reference library search paths; preserve Slurm visibility. The reproduction script was not independently replayed.",
+    "source_restore": "Retain the bundle outside the checkout before restoring source.revision. Regenerate the full inventory with the checked recipe/hash; do not relabel earlier selected-tile package timings. Optional reference-selfcheck.py must run inside a finite single-visible-GPU srun, from the measured source with PYTHONPATH=python:.; it never changes the official comparator."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "84abba9dc59359767c06ad188cbff815b0ac7268"
+  }
+}

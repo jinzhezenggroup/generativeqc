@@ -104,8 +104,10 @@ Hessian additionally exposes `grid_budget_bytes` and `max_nonlocal_pairs`;
 the latter is a per-action ordered-pair work cap and may reject a fine/default
 grid. See the [DFT Hessian execution contract](../developer/dft_hessian.md) for
 the fixed-branch, resource and qualification scope, including the explicit
-device-resident CUDA numerical contract (with the `cuda-hessian` extra), explicit
+device-resident CUDA numerical contract with a linked native AOT package, explicit
 resource/response/quadrature failure gates, and rejection of rank-truncated DF metrics.
+Public CUDA Hessian/HVP calls need neither CuPy nor a runtime compiler; the
+`cuda-hessian` extra is retained for the separate low-level development owner.
 
 A precision option selects an admitted numerical policy. It does not certify
 observable accuracy or silently enable an unsupported method/derivative.
