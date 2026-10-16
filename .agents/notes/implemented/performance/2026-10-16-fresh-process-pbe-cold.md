@@ -59,5 +59,11 @@ retry, refinement or provisional operator. Compare actual Fock/timeline/operator
 counts, including finalization work. Synthetic fixtures remain explicitly
 synthetic and do not relabel the retained vector population as a cold measurement.
 
+The repository-wide retention audit subsequently exposed that the original guard
+ran after parsing and allocation. Load the stdlib guard from the collector's
+explicit file, protect its root during argument parsing, and validate the SDK's
+separate root before any allocation/provenance/scientific work. This preserves
+both boundaries when SDK packages shadow collector packages or CLI order changes.
+
 Refs #2072 and PR #2250; current usage is described in
 `docs/developer/xc_native_cuda.md`.

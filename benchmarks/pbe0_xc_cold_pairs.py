@@ -28,6 +28,24 @@ if not __debug__:
 
 ENDPOINT = "PBE_COLD_ENDPOINT="
 RESULT = "PBE_COLD_RESULT="
+_RETENTION_FILE = Path(__file__).resolve().parent / "_retention.py"
+
+
+def raw_output_path(path: str | Path, *, repository_root: Path | None = None) -> Path:
+    """Apply the stdlib guard without importing a shadowing SDK/science package."""
+    spec = importlib.util.spec_from_file_location("cold_retention", _RETENTION_FILE)
+    assert spec is not None and spec.loader is not None
+    retention = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(retention)
+    root = (
+        Path(__file__).resolve().parents[1]
+        if repository_root is None
+        else repository_root
+    )
+    try:
+        return retention.raw_output_path(path, repository_root=root)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
 def digest(path: Path) -> str:
@@ -360,7 +378,7 @@ def main() -> None:
     parser.add_argument("--sdk-source", type=Path, required=True)
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--expected-native-identity", required=True)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--feasibility", action="store_true")
     parser.add_argument("--timeout", type=float, default=1200)
@@ -369,6 +387,13 @@ def main() -> None:
     parser.add_argument("--geometry", type=int, choices=(0, 1))
     parser.add_argument("--nonce")
     args = parser.parse_args()
+    if args.output is not None:
+        # The SDK may be a different tree and --output may appear before it.
+        # Finish CLI admission for both roots before allocation or any imports.
+        try:
+            args.output = raw_output_path(args.output, repository_root=args.sdk_source)
+        except argparse.ArgumentTypeError as error:
+            parser.error(f"argument --output: {error}")
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
     if not (
@@ -398,17 +423,13 @@ def main() -> None:
             "output and five pairs (or one explicit feasibility pair) required"
         )
     sys.path[:0] = [str(args.sdk_source / "python"), str(args.sdk_source)]
-    from benchmarks._retention import raw_output_path
 
     # The collector/consumer version may be newer than a frozen SDK with an
     # unchanged native identity. Runtime and scientific helpers come from the
     # explicit SDK tree; this independent consumer comes with this collector.
     consumer = load_consumer()
 
-    output = raw_output_path(str(args.output))
-    output = raw_output_path(
-        output, repository_root=Path(__file__).resolve().parents[1]
-    )
+    output = args.output
     output.parent.mkdir(parents=True, exist_ok=True)
     # Windows' exclusive CRT open can follow a dangling symlink and create its
     # target. Reject that existing directory entry before reserving a new file.
@@ -456,6 +477,7 @@ def collect(args: argparse.Namespace, output: TextIO, consumer: Any) -> None:
     manifest = {
         "worker_sha256": digest(Path(__file__)),
         "consumer_sha256": digest(Path(consumer.__file__)),
+        "retention_guard_sha256": digest(_RETENTION_FILE),
         "sdk_source_head": source_head,
         "native_identity": args.expected_native_identity,
         "native_input_count": native_count,
@@ -562,6 +584,7 @@ def collect(args: argparse.Namespace, output: TextIO, consumer: Any) -> None:
     try:
         assert digest(Path(__file__)) == manifest["worker_sha256"]
         assert digest(Path(consumer.__file__)) == manifest["consumer_sha256"]
+        assert digest(_RETENTION_FILE) == manifest["retention_guard_sha256"]
         assert digest(args.library) == manifest["library_sha256"]
         assert digest(args.basis_file) == manifest["basis_sha256"]
         assert digest(args.reference) == manifest["reference_sha256"]

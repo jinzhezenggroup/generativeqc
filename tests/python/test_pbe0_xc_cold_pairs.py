@@ -484,7 +484,9 @@ def test_output_reservation_preserves_existing_inputs(
 
 
 def test_separate_collector_results_tree_is_protected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     source = tmp_path / "collector"
     output = source / "benchmarks/results/new-receipt.json"
@@ -496,9 +498,117 @@ def test_separate_collector_results_tree_is_protected(
     monkeypatch.setattr(
         collector, "__file__", str(source / "benchmarks/pbe0_xc_cold_pairs.py")
     )
-    with pytest.raises(ValueError, match="benchmarks/results"):
+    with pytest.raises(SystemExit) as error:
         collector.main()
+    assert error.value.code == 2
+    assert "argument --output:" in capsys.readouterr().err
     assert not output.exists()
+
+
+@pytest.mark.parametrize("root_kind", ("collector", "sdk"))
+@pytest.mark.parametrize("alias", ("direct", "symlink", "traversal"))
+@pytest.mark.parametrize("output_first", (False, True))
+def test_both_results_roots_are_rejected_before_allocation_or_imports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    root_kind: str,
+    alias: str,
+    output_first: bool,
+) -> None:
+    source, sdk = tmp_path / "collector", tmp_path / "sdk"
+    protected = (source if root_kind == "collector" else sdk) / "benchmarks/results"
+    protected.mkdir(parents=True)
+    original = protected / "prior.json"
+    original.write_text("retained evidence", encoding="utf-8")
+    target = original
+    if alias == "symlink":
+        target = tmp_path / "alias.json"
+        target.symlink_to(original)
+    elif alias == "traversal":
+        target = protected.parent.parent / ".artifacts/../benchmarks/results/prior.json"
+    argv = collector_args(tmp_path, target)
+    argv[argv.index("--sdk-source") + 1] = str(sdk)
+    if output_first:
+        index = argv.index("--output")
+        output = argv[index : index + 2]
+        del argv[index : index + 2]
+        argv[1:1] = output
+    monkeypatch.setattr(collector, "__file__", str(source / "benchmarks/collector.py"))
+    monkeypatch.setattr(sys, "argv", argv)
+    for name in (
+        "SLURM_JOB_ID",
+        "INSPIRE_JOB_NAME",
+        "CUDA_VISIBLE_DEVICES",
+        "NVIDIA_VISIBLE_DEVICES",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("invalid output reached scientific imports or provenance")
+
+    monkeypatch.setattr(collector, "load_consumer", forbidden)
+    monkeypatch.setattr(collector, "worker", forbidden)
+    monkeypatch.setattr(collector, "native_inventory", forbidden)
+    with pytest.raises(SystemExit) as error:
+        collector.main()
+    assert error.value.code == 2
+    diagnostic = capsys.readouterr().err
+    assert "argument --output:" in diagnostic and "benchmarks/results" in diagnostic
+    assert "allocation" not in diagnostic
+    assert original.read_text(encoding="utf-8") == "retained evidence"
+
+
+@pytest.mark.parametrize("root_kind", ("collector", "sdk"))
+def test_direct_script_rejects_results_without_scientific_packages(
+    tmp_path: Path,
+    root_kind: str,
+) -> None:
+    source, sdk = tmp_path / "collector", tmp_path / "sdk"
+    (source / "benchmarks").mkdir(parents=True)
+    for name in ("pbe0_xc_cold_pairs.py", "_retention.py"):
+        (source / "benchmarks" / name).write_bytes(
+            (ROOT / "benchmarks" / name).read_bytes()
+        )
+    (sdk / "generativeqc").mkdir(parents=True)
+    (sdk / "generativeqc/__init__.py").write_text(
+        "raise RuntimeError('early science import')", encoding="utf-8"
+    )
+    target = (
+        source if root_kind == "collector" else sdk
+    ) / "benchmarks/results/old.json"
+    argv = collector_args(tmp_path, target)
+    argv[0] = str(source / "benchmarks/pbe0_xc_cold_pairs.py")
+    argv[argv.index("--sdk-source") + 1] = str(sdk)
+    environment = {
+        k: v
+        for k, v in os.environ.items()
+        if k
+        not in (
+            "SLURM_JOB_ID",
+            "INSPIRE_JOB_NAME",
+            "CUDA_VISIBLE_DEVICES",
+            "NVIDIA_VISIBLE_DEVICES",
+            "PYTHONPATH",
+        )
+    }
+    result = subprocess.run(
+        [sys.executable, *argv],
+        check=False,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 2
+    assert (
+        "argument --output:" in result.stderr and "benchmarks/results" in result.stderr
+    )
+    assert (
+        "early science import" not in result.stderr
+        and "allocation" not in result.stderr
+    )
+    assert not target.parent.exists()
 
 
 @pytest.mark.parametrize("optimization", ("-O", "-OO"))

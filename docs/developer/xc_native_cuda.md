@@ -247,6 +247,10 @@ the collector tree, while production modules come from the frozen SDK.
 Output must be a new file; existing files and input aliases are rejected before
 collection. Collector and consumer refuse Python's `-O`/`-OO` modes so required
 validation cannot be optimized away. Journal errors preserve the primary failure.
+CLI admission protects the historical results trees of both collector and SDK
+before allocation checks, provenance or scientific imports.
+Deploy the collector with its sibling `_retention.py`; its hash is frozen with
+the independent tools, without editing the SDK checkout.
 
 The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
 `1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
