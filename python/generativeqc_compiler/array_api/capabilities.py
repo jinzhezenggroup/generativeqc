@@ -55,6 +55,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
     ),
@@ -113,6 +114,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
         "slice",
         "take",
         "broadcast_to_explicit_indices",
@@ -170,6 +172,11 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "flip": {
         "axis": "static-int|tuple|None",
         "capture": "gather extent <= 65536",
+    },
+    "roll": {
+        "shift": "static-int|tuple; broadcast with axis; repeated axes accumulate",
+        "axis": "static-int|tuple|None; None flattens in row-major order",
+        "capture": "generic-only; total nonidentity gather positions <= 65536",
     },
     "astype": {
         "dtype": "real float32/float64 only; bool identity unsupported",
@@ -263,6 +270,7 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
         "slice",

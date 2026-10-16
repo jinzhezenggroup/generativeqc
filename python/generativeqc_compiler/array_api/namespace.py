@@ -597,6 +597,63 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
     return _canonical_generic(VibeArray(node))
 
 
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> VibeArray:
+    """Roll generic arrays with a bounded total of static gather positions."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("roll scientific arrays require explicit TensorIR index maps")
+    if type(shift) is int:
+        shifts = (shift,)
+    elif isinstance(shift, tuple) and all(type(item) is int for item in shift):
+        shifts = shift
+    else:
+        raise TypeError("roll shift must be an integer or tuple of integers")
+    if axis is None:
+        flattened = reshape(value, (value.size,))
+        return reshape(roll(flattened, builtins.sum(shifts), axis=0), value.shape)
+    if type(axis) is int:
+        axes = (axis,)
+    elif isinstance(axis, tuple) and all(type(item) is int for item in axis):
+        axes = axis
+    else:
+        raise TypeError("roll axis must be an integer or tuple of integers")
+    axes = tuple(_axis(item, value.ndim, "roll") for item in axes)
+    if len(shifts) != len(axes):
+        if len(shifts) == 1:
+            shifts = shifts * len(axes)
+        elif len(axes) == 1:
+            axes = axes * len(shifts)
+        else:
+            raise ValueError("roll shift and axis must have broadcastable lengths")
+    offsets: dict[int, int] = {}
+    for position, offset in zip(axes, shifts, strict=True):
+        extent = value.shape[position]
+        offsets[position] = (offsets.get(position, 0) + offset) % (extent or 1)
+    # Check the complete map budget before constructing any gather positions.
+    if (
+        builtins.sum(
+            value.shape[position] for position, offset in offsets.items() if offset
+        )
+        > _MAX_STATIC_GATHER_POSITIONS
+    ):
+        raise ValueError("roll exceeds the bounded static gather index budget")
+    result = value
+    for position, offset in sorted(offsets.items()):
+        if offset:
+            extent = value.shape[position]
+            result = take(
+                result,
+                tuple((index - offset) % extent for index in range(extent)),
+                axis=position,
+            )
+    return result
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],
