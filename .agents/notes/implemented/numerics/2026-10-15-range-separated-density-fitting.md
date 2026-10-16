@@ -120,6 +120,12 @@ used throughout, and existing caches were not cleared.
 
 ## Revisit when
 
+The default-selection policy is superseded by
+[`../compatibility/2026-10-16-range-df-explicit-opt-in.md`](../compatibility/2026-10-16-range-df-explicit-opt-in.md):
+the fitted LR Hamiltonian remains available through explicit `df` selection,
+but unset/`direct` retain mixed DF/Direct LR for every endpoint. The numerical
+owners and response contracts described here are unchanged.
+
 Subsequent source-matched endpoint measurements and newly discovered
 practical-auxiliary force/grid-admission qualification limits are recorded in
 `../performance/2026-10-15-range-df-endpoint-observations.md`. Their exploratory

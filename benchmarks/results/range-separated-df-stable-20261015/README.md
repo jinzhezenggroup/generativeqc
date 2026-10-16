@@ -68,8 +68,17 @@ generic comparison gate requires at least five interleaved pairs and improvement
 beyond max(2%, twice the summed relative MAD); no campaign-specific tolerated
 regression was declared. Numerical qualification of the distinct fitted
 Hamiltonian is separate from accepting this replay tradeoff or promoting a
-performance default. That acceptance remains unresolved; force gains do not
-waive it, and no new optimization or GPU campaign is implied here.
+performance default. Performance-default promotion is not accepted; complete
+RI-J/K is retained only under the explicit `df` selector, while unset/`direct`
+retain the mixed Hamiltonian for both energy and forces. This bounded scope
+decision does not turn the recorded regression into a passing performance
+campaign or imply new optimization/GPU measurements. See the
+[opt-in decision](../../../.agents/notes/implemented/compatibility/2026-10-16-range-df-explicit-opt-in.md).
+
+A later [CPU scalar-layout follow-up](../range-df-scalar-layout-20261016/README.md)
+reduces the fitted-model replay overhead with source-matched interleaved
+measurements. It does not rewrite these historical timings or promote fitted LR
+by default.
 
 The stable candidate's maximum warm-force replay changes are 7.69e-10 and
 5.50e-11 Eh/bohr for SVP and TZVP respectively, replacing the earlier 1e-6

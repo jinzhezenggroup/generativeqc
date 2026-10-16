@@ -39,8 +39,8 @@ struct DensityFittingThreeCenter {
   // plans can preserve their indexing after dependent directions are removed.
   std::vector<double> values;
   // Optional provider-oriented cache: Q-major [Q][mu][nu]. Production CPU
-  // preparation materializes it only when the external dense-LA provider will
-  // use it, so repeated SCF exchange builds do not repack the immutable tensor.
+  // preparation retains it for the external dense-LA provider or within the
+  // bounded scalar-cache envelope. Absence retains the strided scalar fallback.
   std::vector<double> auxiliary_major_values;
 };
 

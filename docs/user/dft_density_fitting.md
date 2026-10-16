@@ -18,17 +18,20 @@ CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
 trajectory optimization. For the qualified molecular range-exchange/VV10
-composition (including WB97M-V), DF defaults to **complete RI-J/K**: the
-full-range J/K owner and the long-range K owner are both fitted. The latter uses
+composition (including WB97M-V), the default retains **full-range DF J/K plus
+exact Direct LR K**. Setting `GENERATIVEQC_DF_RANGE_EXCHANGE=df` before preparing
+a calculation explicitly selects **complete RI-J/K**: the full-range J/K owner
+and the long-range K owner are both fitted. The latter uses
 its own `erf(omega*r)/r` three-center integrals and auxiliary metric, with the
 same auxiliary basis and relative rank cutoff as the full-range owner. It does
 not reuse Coulomb-whitened factors for a different radial operator. CUDA orders
 the independent provider streams with device events, without a successful-path
 host fence.
 
-FP64 CPU and CUDA analytic-force implementations differentiate both fitted
-operators, including auxiliary-center and metric response, self-consistent VV10,
-Pulay and moving-grid response. Admission follows the resolved primitive graph and
+With complete RI-J/K selected, FP64 CPU and CUDA analytic-force implementations
+differentiate both fitted operators, including auxiliary-center and metric
+response, self-consistent VV10, Pulay and moving-grid response. Admission follows
+the resolved primitive graph and
 generated provider capabilities, not a functional-name whitelist. Other
 range-separated/nonlocal inventories remain rejected, as do ECP DF and
 automatic mixed precision. Full-range DF forces
@@ -36,15 +39,20 @@ continue to differentiate the same auxiliary basis and Coulomb metric used by
 the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
 
-`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` explicitly selects the retained mixed
-scheme: full-range DF J/K plus exact Direct LR. The default is `df`; other values
-are rejected. This selection is frozen when preparing a calculation. A missing
-LR fitting capability or insufficient memory is an error, not permission to
-silently switch Hamiltonians. Native snapshots authenticate the actual LR
-approximation, so derivatives never infer it from the current environment.
+`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` explicitly selects the default mixed
+scheme: full-range DF J/K plus exact Direct LR. Only `df` and `direct` are
+accepted when the variable is set. Complete RI-J/K is an opt-in scientific
+approximation, not an automatically promoted performance policy. Energy-only
+and energy-plus-force requests use the same preparation-time selection, including
+warm replay and geometry rebinding; requesting forces never changes the
+Hamiltonian. For an explicit `df` request, missing LR fitting capability or
+insufficient memory is an error, not permission to silently switch Hamiltonians.
+Native snapshots authenticate the actual LR approximation, so derivatives never
+infer it from the current environment.
 Range-fitted orbital and auxiliary shells currently require s/p/d/f coverage.
-On CUDA, an explicit `density_fitting_memory_budget_bytes` is split between the
-two prepared radial owners; zero retains each owner's automatic admission.
+For complete RI-J/K on CUDA, an explicit `density_fitting_memory_budget_bytes`
+is split between the two prepared radial owners; zero retains each owner's
+automatic admission.
 
 **VV10 itself is not an RI-J/K integral.** Its nonlocal correlation remains the
 existing self-consistent grid-pair evaluation; complete DF-J/K does not replace
@@ -59,9 +67,10 @@ derivative compositions are qualified. This does not admit ECP or unsupported
 auxiliary/basis domains, nor does admission alone establish a successful
 source-matched independent CUDA qualification.
 
-In explicit mixed mode, the CUDA force planner dry-queries the native LR derivative capacity under the
-live final-state token before AO/Becke tile admission. It charges that independent
-owner alongside the complete nonlocal/grid inventory, with the same conservative
+In default or explicit mixed mode, the CUDA force planner dry-queries the native
+LR derivative capacity under the live final-state token before AO/Becke tile
+admission. It charges that independent owner alongside the complete nonlocal/grid
+inventory, with the same conservative
 bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.
 The derivative bridge then enforces that additional allowance. Its reported host/device
 bounds do not include the DF response owner's separate resource envelope and
@@ -76,6 +85,18 @@ between LR and SR exchange coefficients; it never substitutes exact SR/full-rang
 exchange for fitted K. Semilocal, VV10, Pulay, nuclear and moving-grid sources reuse the
 existing complete CPU stationary consumer. Production execution does not call
 PySCF or a reference oracle.
+
+CPU scalar exchange can retain an optional auxiliary-major copy of each fitted
+three-center tensor, capped at 16 MiB per owner. It changes layout, not the fitted
+Hamiltonian, precision or auxiliary rank. The copy is included in retained numeric
+capacity; this per-owner cap is not a whole-process memory bound. Tensors outside
+the scalar cache envelope, or optional allocation failures, keep the uncached
+contraction. The external dense-linear-algebra provider retains its existing
+layout policy independently of this scalar cap.
+The cached scalar schedule can additionally use one AO-matrix transpose and one
+AO row of temporary scratch; if that optional allocation fails, it retains the
+cached dot-product contraction instead. All auxiliary columns and the original
+per-element accumulation order remain unchanged.
 
 The CPU RSH-DF force domain covers all-electron s/p/d/f orbitals, at most
 8 atoms, 64 AOs and 128 primitives, with native unpruned grids and distinct

@@ -766,13 +766,13 @@ void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
       const double cold = result.energy;
       // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on this exact
       // basis/grid: DF full-range J/K with the orbital basis as auxiliary.
-      // WB97M-V fits its LR correction by default and with the explicit df
-      // selector; direct retains exact get_k(omega=0.3). The fitted oracle
+      // WB97M-V fits its LR correction only with the explicit df selector;
+      // default/direct retain exact get_k(omega=0.3). The fitted oracle
       // independently whitens libcint LR tensors in normalized auxiliary
       // coordinates with relative eigenvalue cutoff 1e-10. Generic PBE-RSH
       // remains exact-LR in all selector modes; WB97M-V retains complete VV10.
       // Reproduce with tools/verify_mixed_df_rsh_cpu.py (H2 and H2- doublet).
-      const bool fitted_range = wb97mv && (!range_mode || std::strcmp(range_mode, "df") == 0);
+      const bool fitted_range = wb97mv && range_mode && std::strcmp(range_mode, "df") == 0;
       const double oracle =
           wb97mv ? (fitted_range ? (open_shell ? -0.8133366864606449 : -1.2849268498992195)
                                  : (open_shell ? -0.8191434240565644 : -1.2886176659087356))

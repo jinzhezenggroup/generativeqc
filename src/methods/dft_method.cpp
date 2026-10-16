@@ -1238,7 +1238,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
   /** Stationary bridge for a full-range DF primary and an independent LR
-   * owner (fitted by default, exact in explicit mixed mode). Admission separately qualifies the
+   * owner (exact by default, fitted only by explicit opt-in). Admission separately qualifies the
    * complete semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
    *
    * Only legacy Direct LR needs a separate lazy derivative owner. Fitted LR

@@ -25,6 +25,97 @@ def _practical_auxiliary() -> Any:
 
 
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize("spin", (0, 1))
+@pytest.mark.parametrize(
+    "selector", (None, "direct", "df"), ids=("default", "direct", "df")
+)
+def test_range_exchange_selection_is_frozen_for_all_endpoints(
+    device: str,
+    spin: int,
+    selector: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Opt-in LR fitting cannot change with properties, replay or geometry."""
+    if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+    if device == "cuda":
+        assert os.environ.get("SLURM_JOB_ID")
+    if selector is None:
+        monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", selector)
+    fitted_range = selector == "df"
+    atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
+    if spin:
+        atoms.append(("H", (1.8, -0.1, -0.3)))
+    calculator = Calculator(
+        method="wb97m-v-uks" if spin else "wb97m-v-rks",
+        basis="sto-3g",
+        auxiliary_basis="sto-3g",
+        device=device,
+        density_fitting="auto",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-14,
+        max_iterations=200,
+    )
+    with calculator.prepare_batch(
+        [atoms], multiplicities=[spin + 1], warm_start=True
+    ) as batch:
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_RANGE_EXCHANGE", "direct" if fitted_range else "df"
+        )
+        cold = batch.execute(strict=True, properties=("energy",)).items[0]
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert snapshot.range_density_fitted == fitted_range
+            warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            with pytest.raises(ValueError, match="stale"):
+                _ = snapshot.range_density_fitted
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert snapshot.range_density_fitted == fitted_range
+        moved = list(atoms)
+        moved[1] = (
+            atoms[1][0],
+            tuple(np.asarray(atoms[1][1]) + np.array((0.03, -0.02, 0.04))),
+        )
+        rebound = batch.execute(
+            coordinates=([position for _, position in moved],),
+            strict=True,
+            properties=("energy", "forces"),
+        ).items[0]
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert snapshot.range_density_fitted == fitted_range
+    assert cold.converged and warm.converged and rebound.converged
+    assert warm.energy == pytest.approx(cold.energy, abs=2e-10)
+    assert cold.energy == pytest.approx(
+        _mixed_pyscf_energy(calculator, atoms, spin, fitted_range=fitted_range),
+        abs=2e-8,
+    )
+    assert rebound.energy == pytest.approx(
+        _mixed_pyscf_energy(calculator, moved, spin, fitted_range=fitted_range),
+        abs=2e-8,
+    )
+    step = 2e-4
+    energies = []
+    for sign in (1, -1):
+        displaced = list(moved)
+        displaced[1] = (
+            moved[1][0],
+            tuple(np.asarray(moved[1][1]) + np.array((0.0, 0.0, sign * step))),
+        )
+        energies.append(
+            _mixed_pyscf_energy(calculator, displaced, spin, fitted_range=fitted_range)
+        )
+    assert -rebound.forces[1][2] == pytest.approx(
+        (energies[0] - energies[1]) / (2 * step), abs=3e-7
+    )
+
+
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
 @pytest.mark.parametrize(
     "basis,spin,materialized",
     (
@@ -48,7 +139,7 @@ def test_practical_lr_auxiliary_stationary_force_and_replay(
         assert os.environ.get("SLURM_JOB_ID")
         if materialized:
             pytest.skip("materialized derivative storage is a CPU diagnostic")
-    monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     monkeypatch.setenv(
         "GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", str(int(materialized))
     )
@@ -131,7 +222,7 @@ def test_complete_ri_jk_vv10_energy_and_force(
         pytest.skip("requires an explicitly Slurm-allocated CUDA device")
     if device == "cuda":
         assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
         atoms.append(("H", (1.8, -0.1, -0.3)))
@@ -207,7 +298,7 @@ def test_complete_ri_jk_vv10_energy_and_force(
         ).items[0]
         with closing(NativeKsSnapshot(batch, 0)) as snapshot:
             assert snapshot.range_density_fitted
-    monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     fresh = calculator.singlepoint(
         moved, multiplicity=spin + 1, properties=("energy", "forces")
     )

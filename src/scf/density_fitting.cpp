@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <new>
 #include <numeric>
 #include <stdexcept>
 #include <vector>
@@ -83,8 +84,8 @@ void validate_three_center(const DensityFittingThreeCenter& three_center) {
     // This cache is a layout copy, not a second scientific input. Both vectors
     // are publicly mutable; finite same-sized stale caches must not change J/K.
     const auto pairs = three_center.nbf * three_center.nbf;
-    for (std::size_t auxiliary = 0; auxiliary < three_center.naux; ++auxiliary)
-      for (std::size_t pair = 0; pair < pairs; ++pair)
+    for (std::size_t pair = 0; pair < pairs; ++pair)
+      for (std::size_t auxiliary = 0; auxiliary < three_center.naux; ++auxiliary)
         if (three_center.auxiliary_major_values[auxiliary * pairs + pair] !=
             three_center.values[pair * three_center.naux + auxiliary])
           throw std::invalid_argument("orthonormalized DF provider cache is stale");
@@ -169,6 +170,19 @@ std::vector<double> build_exchange(const DensityFittingThreeCenter& three_center
   // create a bounded temporary without changing the public tensor contract.
   constexpr std::size_t kDenseExchangeMinimum = 16;
   const bool use_dense_provider = nbf >= kDenseExchangeMinimum && tensor::cpu_openblas_built();
+  std::vector<double> scalar_transpose;
+  std::vector<double> auxiliary_exchange_row;
+  if (!use_dense_provider && !three_center.auxiliary_major_values.empty()) {
+    // One AO matrix and one row enable both products' contiguous output lanes.
+    // Optional scratch refusal retains the cached dot-product schedule below.
+    try {
+      scalar_transpose.resize(nbf * nbf);
+      auxiliary_exchange_row.resize(nbf);
+    } catch (const std::bad_alloc&) {
+      std::vector<double>().swap(scalar_transpose);
+      std::vector<double>().swap(auxiliary_exchange_row);
+    }
+  }
   std::vector<double> temporary_auxiliary_major;
   const double* auxiliary_major = nullptr;
   tensor::CpuLinalgPlan dense_plan;
@@ -195,6 +209,51 @@ std::vector<double> build_exchange(const DensityFittingThreeCenter& three_center
                        0.0, dense_plan);
       tensor::cpu_gemm('N', 'T', nbf, nbf, nbf, transformed_density.data(), bq, exchange.data(),
                        1.0, 1.0, dense_plan);
+      continue;
+    }
+
+    if (!three_center.auxiliary_major_values.empty()) {
+      const double* auxiliary_matrix =
+          three_center.auxiliary_major_values.data() + auxiliary * nbf * nbf;
+      if (!scalar_transpose.empty())
+        for (std::size_t row = 0; row < nbf; ++row)
+          for (std::size_t column = 0; column < nbf; ++column)
+            scalar_transpose[row * nbf + column] = auxiliary_matrix[column * nbf + row];
+      std::fill(transformed_density.begin(), transformed_density.end(), 0.0);
+      for (std::size_t mu = 0; mu < nbf; ++mu) {
+        double* transformed_row = transformed_density.data() + mu * nbf;
+        for (std::size_t kappa = 0; kappa < nbf; ++kappa) {
+          const double factor = auxiliary_matrix[mu * nbf + kappa];
+          const double* density_row = density.data() + kappa * nbf;
+          // Contiguous output lanes preserve each element's kappa sum order.
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda)
+            transformed_row[lambda] += factor * density_row[lambda];
+        }
+      }
+      for (std::size_t mu = 0; mu < nbf; ++mu) {
+        const double* transformed_row = transformed_density.data() + mu * nbf;
+        if (!scalar_transpose.empty()) {
+          // A transposed panel handles nonsymmetric public tensors too; each
+          // element retains the original lambda and outer auxiliary sum order.
+          std::fill(auxiliary_exchange_row.begin(), auxiliary_exchange_row.end(), 0.0);
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda) {
+            const double factor = transformed_row[lambda];
+            const double* auxiliary_row = scalar_transpose.data() + lambda * nbf;
+            for (std::size_t nu = 0; nu < nbf; ++nu)
+              auxiliary_exchange_row[nu] += factor * auxiliary_row[nu];
+          }
+          for (std::size_t nu = 0; nu < nbf; ++nu)
+            exchange[index(mu, nu, nbf)] += auxiliary_exchange_row[nu];
+          continue;
+        }
+        for (std::size_t nu = 0; nu < nbf; ++nu) {
+          const double* auxiliary_row = auxiliary_matrix + nu * nbf;
+          double value = 0.0;
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda)
+            value += transformed_row[lambda] * auxiliary_row[lambda];
+          exchange[index(mu, nu, nbf)] += value;
+        }
+      }
       continue;
     }
 
@@ -631,8 +690,18 @@ DensityFittingThreeCenter orthonormalize_density_fitting_three_center(
   }
 
   constexpr std::size_t kPersistentDenseExchangeMinimum = 16;
-  if (nbf >= kPersistentDenseExchangeMinimum && tensor::cpu_openblas_built()) {
-    result.auxiliary_major_values.resize(tensor_elements);
+  constexpr std::size_t kScalarExchangeCacheMaximumBytes = 16U << 20;
+  const bool external_provider = tensor::cpu_openblas_built();
+  if (nbf >= kPersistentDenseExchangeMinimum &&
+      (external_provider || tensor_elements <= kScalarExchangeCacheMaximumBytes / sizeof(double))) {
+    // The scalar schedule borrows the same immutable layout as BLAS. Keep its
+    // optional retained copy bounded; absent capacity retains the strided path.
+    try {
+      result.auxiliary_major_values.resize(tensor_elements);
+    } catch (const std::bad_alloc&) {
+      if (external_provider) throw;
+      return result;
+    }
     for (std::size_t mu = 0; mu < nbf; ++mu)
       for (std::size_t nu = 0; nu < nbf; ++nu)
         for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary)
