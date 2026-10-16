@@ -5,7 +5,7 @@ reuses the shared range-moment recurrence, with a representability guard for
 subnormal highest moments. FP64, derivatives, Fock accumulation and SCF
 publication policies remain unchanged. There is no functional-name dispatch.
 
-`summary.json` contains compact independently audited receipts, not raw logs,
+`summary.json.xz` contains compact independently audited receipts, not raw logs,
 energies/forces, binaries or profiles. Historical failures stay in local
 evidence. No Release, external backup or publishing workflow is involved.
 
@@ -59,6 +59,12 @@ visibility. `tests/python/test_mixed_boys_table.py` exercises the production
 owner for CPU and opt-in CUDA (including no-FMA). The endpoint protocol is
 the repository's `benchmarks/pbe0_precision.py` complete native E/F consumer,
 using the independent oracle and grid/basis specified above. Source/core,
-sample and independent-auditor SHA256 receipts in `summary.json` identify the
+sample and independent-auditor SHA256 receipts in `summary.json.xz` identify the
 retained local populations; they are not substitutes for rerunning a changed
 source. See the implemented Agent Note for the rejected unguarded alternative.
+
+The JSON summary is losslessly compressed to preserve the aggregate evidence
+budget, including when this branch is merged with newer master evidence.
+Read with Python's `lzma.open` or `xz -dc summary.json.xz`. The earlier axis
+campaign's summary receives the same storage-only transformation; decompressed
+bytes match Git blob `51352dd114b1aae7540c4f2b8201d117349161ad` exactly.

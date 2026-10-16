@@ -82,6 +82,12 @@ starts. This is not evidence of a Fast timeout, and it is not erased or
 replaced. Node2 evidence is numerical only because of its known NVML mismatch.
 The separately predeclared clean integration is not v16 performance evidence.
 
-Compact receipts: `benchmarks/results/fast-boys-fp32-20261017/summary.json`.
+Compact receipts: `benchmarks/results/fast-boys-fp32-20261017/summary.json.xz`.
 Raw observations, rejected alternatives and complete work comparisons remain
 local. No generic FP64 optimization or functional-specific policy is added.
+
+When newer master evidence is included in CI's test merge, the uncompressed
+new summary exceeds the unchanged aggregate 64MiB budget. Losslessly compress
+both this new summary and the earlier owned axis summary, preserving identical
+decompressed bytes and existing Git history. This is storage-only, not another
+production optimization; verify both branch and read-only merged-tree budgets.
