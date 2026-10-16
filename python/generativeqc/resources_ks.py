@@ -496,6 +496,7 @@ def _cuda_stationary_descriptor(
     density_tolerance: float,
     screening_tolerance: float,
     application_precision_budget: typing.Any = None,
+    library: typing.Any = None,
 ) -> typing.Any:
     """Serialize the resolved model; native admission owns scientific predicates."""
     from . import _generated_methods, _native
@@ -522,7 +523,9 @@ def _cuda_stationary_descriptor(
         if precision == "fp64"
         else _native.PRECISION_AUTO,
     )
-    descriptor.ks_options = ctypes.pointer(native_ks_options(model))
+    descriptor.ks_options = ctypes.pointer(
+        native_ks_options(model, library=library, backend=_native.BACKEND_CUDA)
+    )
     if application_precision_budget is not None:
         descriptor.application_energy_budget = application_precision_budget.energy_abs
         descriptor.application_max_force_budget = (
@@ -770,6 +773,7 @@ def ks_resource_request(
             multiplicity,
             "orbital",
             derivative_order=0,
+            library=library,
         )
         if (
             not electrons.nalpha
@@ -1006,6 +1010,7 @@ def ks_resource_request(
                     )
             descriptor = _cuda_stationary_descriptor(
                 model,
+                library=library,
                 precision=precision,
                 max_iterations=max_iterations,
                 diis_history=diis_history,

@@ -32,11 +32,11 @@
 #include "cli/options.hpp"
 #include "cli/profiles.hpp"
 #include "cli/resources.hpp"
-#include "cli_method_catalog.hpp"
 #include "dft/grid.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
+#include "methods/named_ks_catalog.hpp"
 
 #ifndef GENERATIVEQC_CLI_VERSION
 #define GENERATIVEQC_CLI_VERSION "unknown"
@@ -328,7 +328,7 @@ void print_methods(bool json, bool libxc = false) {
     first = false;
   }
   if (libxc) {
-    for (const auto& entry : generativeqc::cli::method_generated::kMethods) {
+    for (const auto& entry : generativeqc::cli::method_generated::methods()) {
       if (!entry.name.starts_with("libxc:") && !entry.name.starts_with("libxc-uks:")) continue;
       if (json) {
         if (!first) std::cout << ",\n";
@@ -347,7 +347,7 @@ void print_methods(bool json, bool libxc = false) {
 }
 
 void print_compositions(bool json) {
-  using generativeqc::cli::method_generated::kMethods;
+  const auto kMethods = generativeqc::cli::method_generated::methods();
   if (json)
     std::cout << "[\n";
   else
@@ -787,14 +787,11 @@ int run(RunOptions options) {
     generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
     composed.set_grid(options.grid);
     using namespace generativeqc::cli::method_generated;
-    for (std::uint32_t i = 0; i < row->component_count; ++i) {
-      const auto& term = kComponents[row->component_offset + i];
-      composed.add_semilocal(std::string(term.name), term.coefficient);
+    for (const auto& term : components(*row)) {
+      composed.add_semilocal(term.component_id, term.coefficient);
     }
-    for (std::uint32_t i = 0; i < row->exchange_count; ++i) {
-      const auto& term = kExchanges[row->exchange_offset + i];
-      composed.add_exact_exchange(static_cast<generativeqc_ks_exchange_operator>(term.kind),
-                                  term.coefficient, term.omega);
+    for (const auto& term : exchanges(*row)) {
+      composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
     }
     return composed.prepare(context, system, method);
   }();

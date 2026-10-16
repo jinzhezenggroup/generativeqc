@@ -328,6 +328,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
+    "molecule/basis.hpp",
     "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
@@ -344,6 +345,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/queue_plan.hpp",
     "scf/direct_task_layout.hpp",
+    "scf/md_transform_layout.hpp",
     "scf/aot_shell_registry.hpp",
     "scf/cuda/direct_jk_kernels.hpp",
     "scf/cuda/direct_md_j.hpp",
@@ -355,6 +357,8 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda_direct_jk_device.hpp",
     "runtime/",
 )
+CUDA_MODULES["md_transform_metadata"] = ("scf/md_transform_layout.hpp",)
+CUDA_ALLOWED["md_transform_metadata"] = ()
 CUDA_MODULES["cuda_one_electron_export"] = (
     "one_electron_export",
     "one_electron_export_batch",

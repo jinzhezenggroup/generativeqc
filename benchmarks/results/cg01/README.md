@@ -12,7 +12,7 @@ hashes. Both native builds record `VIBEQC_CUDA_FAST_COMPILE=OFF`.
 | [CUDA HF](hf-cuda-sm120.json) | Same H2 control on the Slurm-assigned RTX 5090, actual backend `cuda` | Energy error `1.95e-14 Eh`, force max error `5.31e-15 Eh/bohr` |
 | [CUDA compilation](compile-sm120.json) | Deterministic generated SSSS source, NVCC 12.9, `-O3 -arch=sm_120`; four PTXAS resource rows | Compiled successfully; no GPU numerical or production claim |
 | [Class numerical tier](gpu-not-run.json) | Full #135 class-isolated f-shell matrix | Explicitly not scheduled by this small protocol control |
-| [Capability table](capabilities.json) | Projection of the existing 55-class catalog, including all 34 f classes | Six distinct stages; FPPS selection explicitly provisional |
+| [Capability table](capabilities.json.xz) | Projection of the existing 55-class catalog, including all 34 f classes | Six distinct stages; FPPS selection explicitly provisional |
 
 Each HF artifact contains 40 raw synchronized samples across cold native plan
 construction, unchanged-geometry replay, changed geometry and energy-plus-force
@@ -59,3 +59,8 @@ equation, serialized IR, schedule and object hashes, and resources parsed with
 the existing `parse_ptxas_resources` helper. Its complete IR and schedule are
 saved under `settings`; the compiler command and raw PTXAS diagnostics are
 retained. These measurements do not alter the historical capability catalog.
+
+The capability table is losslessly XZ-compressed. [Storage identities](storage.json)
+record the exact stored and decoded bytes; the decoded JSON and historical
+scientific source identities are unchanged. Read it with Python
+`lzma.open(path, "rt")` or `tools.generativeqc_validation.record.load_json`.

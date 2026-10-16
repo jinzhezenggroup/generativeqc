@@ -123,6 +123,7 @@ def _basis_record(
     role: typing.Any,
     *,
     derivative_order: typing.Any = 1,
+    library: typing.Any = None,
 ) -> typing.Any:
     selected = _snapshot_basis(basis, representation)
     mode = (
@@ -149,22 +150,16 @@ def _basis_record(
         multiplicity=multiplicity,
         role=role,
     )
-    cartesian = sum(
-        (s.angular_momentum + 1) * (s.angular_momentum + 2) // 2 for s in shells
-    )
-    nbf = (
-        cartesian
-        if mode == "cartesian"
-        else sum(2 * s.angular_momentum + 1 for s in shells)
-    )
+    from .resources_basis import _basis_shape
+
+    angular = tuple(int(shell.angular_momentum) for shell in shells)
+    primitives = tuple(len(shell.primitives) for shell in shells)
     record = {
-        "nbf": checked_bytes(nbf, "AO dimension"),
-        "cartesian_nbf": checked_bytes(cartesian),
-        "shells": len(shells),
-        "primitives": sum(len(s.primitives) for s in shells),
-        "shell_angular": tuple(int(s.angular_momentum) for s in shells),
-        "shell_primitive_counts": tuple(len(s.primitives) for s in shells),
-        "maximum_angular": max(s.angular_momentum for s in shells),
+        **_basis_shape(
+            angular, primitives, mode, library=library if backend == "cpu" else None
+        ),
+        "shell_angular": angular,
+        "shell_primitive_counts": primitives,
         "representation": mode,
         "basis_hash": metadata["mathematical_identity"],
     }
@@ -625,6 +620,7 @@ def hf_resource_request(
             charge,
             multiplicity,
             "orbital",
+            library=library,
         )
         if max(electrons.nalpha, electrons.nbeta) > orbital["nbf"]:
             raise ValueError(
@@ -653,6 +649,7 @@ def hf_resource_request(
                     charge,
                     multiplicity,
                     "auxiliary",
+                    library=library,
                 )
             )
         items.append(

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -12,6 +13,7 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -24,6 +26,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/direct_task_layout.hpp"
+#include "scf/md_transform_layout.hpp"
 
 namespace generativeqc::scf {
 
@@ -97,6 +100,7 @@ struct MdJHost {
   std::vector<MdJPair> pairs;
   std::vector<MdJPrimitive> primitives;
   std::vector<std::uint32_t> ordered;
+  std::vector<std::uint16_t> transform_slots;
   std::array<std::size_t, 6> class_offsets{};
   std::size_t transforms{}, hermites{}, bytes{};
   bool work_counts{};
@@ -127,6 +131,25 @@ struct MdJHost {
                                sizeof(MdJPrimitive) + sizeof(std::uint32_t));
     bytes += direct_jk_product(host.system_shell_offsets.size(), 3 * sizeof(std::int64_t));
     if (bytes > available) return false;
+    std::map<MdTransformShell, std::size_t> signatures;
+    std::vector<MdTransformShell> expansions;
+    std::vector<std::size_t> shell_signatures;
+    for (std::size_t shell = 0; shell < host.shell_angular.size(); ++shell) {
+      MdTransformShell expansion;
+      for (auto ao = host.shell_ao_offsets[shell]; ao < host.shell_ao_offsets[shell + 1]; ++ao) {
+        MdTransformComponent component;
+        for (unsigned term = 0; term < host.ao_term_counts[ao]; ++term) {
+          const auto offset = (ao * molecule::kMaximumAoExpansionTerms + term) * 3;
+          component.push_back({host.ao_term_angular[offset], host.ao_term_angular[offset + 1],
+                               host.ao_term_angular[offset + 2]});
+        }
+        expansion.push_back(std::move(component));
+      }
+      const auto [signature, inserted] = signatures.emplace(expansion, expansions.size());
+      if (inserted) expansions.push_back(std::move(expansion));
+      shell_signatures.push_back(signature->second);
+    }
+    std::map<std::pair<std::size_t, std::size_t>, std::pair<std::uint32_t, std::uint32_t>> maps;
     for (std::size_t index = 0; index < total_pairs; ++index) {
       const auto first = host.shell_pair_first[index], second = host.shell_pair_second[index];
       const auto system = host.shell_pair_systems[index];
@@ -134,11 +157,25 @@ struct MdJHost {
       const auto count = md_j_hermite_count(angular);
       const auto first_count = host.shell_ao_offsets[first + 1] - host.shell_ao_offsets[first];
       const auto second_count = host.shell_ao_offsets[second + 1] - host.shell_ao_offsets[second];
-      const auto component_count = direct_jk_product(first_count, second_count);
+      const auto signature = std::make_pair(shell_signatures[first], shell_signatures[second]);
+      auto map = maps.find(signature);
+      if (map == maps.end()) {
+        const auto layout =
+            md_transform_layout(expansions[signature.first], expansions[signature.second], angular);
+        const auto map_bytes = direct_jk_product(layout.slots.size(), sizeof(std::uint16_t));
+        if (map_bytes > available - bytes ||
+            transform_slots.size() >
+                std::numeric_limits<std::uint32_t>::max() - layout.slots.size())
+          return false;
+        const auto offset = static_cast<std::uint32_t>(transform_slots.size());
+        bytes += map_bytes;
+        transform_slots.insert(transform_slots.end(), layout.slots.begin(), layout.slots.end());
+        map = maps.emplace(signature, std::make_pair(offset, layout.values)).first;
+      }
       const auto primitive_count =
           host.shell_pair_primitive_offsets[index + 1] - host.shell_pair_primitive_offsets[index];
       const auto pair_hermites = direct_jk_product(primitive_count, count);
-      const auto pair_transforms = direct_jk_product(pair_hermites, component_count);
+      const auto pair_transforms = direct_jk_product(primitive_count, map->second.second);
       const auto extra_bytes =
           direct_jk_product(pair_transforms + 2 * pair_hermites, sizeof(double));
       if (extra_bytes > available - bytes) return false;
@@ -149,7 +186,7 @@ struct MdJHost {
            static_cast<std::int32_t>(host.shell_ao_offsets[second] - ao_base),
            static_cast<std::int32_t>(first_count), static_cast<std::int32_t>(second_count), angular,
            count, static_cast<std::uint32_t>(primitives.size()),
-           static_cast<std::uint32_t>(primitives.size() + primitive_count)});
+           static_cast<std::uint32_t>(primitives.size() + primitive_count), map->second.first});
       for (auto first_primitive = host.shell_primitive_offsets[first];
            first_primitive < host.shell_primitive_offsets[first + 1]; ++first_primitive) {
         for (auto second_primitive = host.shell_primitive_offsets[second];
@@ -161,7 +198,7 @@ struct MdJHost {
                                 hermites,
                                 0.0,
                                 {}});
-          transforms += component_count * count;
+          transforms += map->second.second;
           hermites += count;
         }
       }
@@ -1083,6 +1120,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             md.pairs = upload_vector(md_host.pairs);
             md.primitives = upload_vector(md_host.primitives);
             md.ordered_primitives = upload_vector(md_host.ordered);
+            md.transform_slots = upload_vector(md_host.transform_slots);
             md.shell_offsets = upload_vector(host.system_shell_offsets);
             md.pair_offsets = upload_vector(host.system_shell_pair_offsets);
             std::vector<std::int64_t> primitive_offsets;
@@ -1173,8 +1211,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     if (plan->md_j.minimum_bounds) {
       info.schedule = "md-j-hermite/retained-k";
       info.host_preparation_bytes +=
-          sizeof(md_host) +
-          runtime::vector_capacities(md_host.pairs, md_host.primitives, md_host.ordered);
+          sizeof(md_host) + runtime::vector_capacities(md_host.pairs, md_host.primitives,
+                                                       md_host.ordered, md_host.transform_slots);
     }
     info.derivative_order = derivative_order;
     info.screening_tolerance = screening_tolerance;

@@ -13,6 +13,7 @@
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
 #include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
 #include "runtime/residency_observer.hpp"
@@ -32,6 +33,42 @@
 #endif
 
 extern "C" {
+
+/** Private allocation-free compact topology query. Each row is an already
+ * expanded contraction, not an element template. The scalar AO rules are the
+ * same ones used by normalized systems; no coefficients, coordinates, provider
+ * or scientific arrays are accessed. Output is transactional on invalid input
+ * or count overflow. Results are public AOs, Cartesian AOs, shells, primitives
+ * and maximum angular momentum, bounded by size_t and signed-int64 metadata.
+ * Counts do not establish complete allocation authority. */
+int generativeqc_resource_basis_shape_v1(const std::uint32_t* angular_momenta,
+                                         const std::uint64_t* primitive_counts,
+                                         std::size_t shell_count, int representation,
+                                         std::uint64_t* output, std::size_t count) {
+  if (!angular_momenta || !primitive_counts || !shell_count || !output || count != 5 ||
+      (representation != GENERATIVEQC_BASIS_CARTESIAN &&
+       representation != GENERATIVEQC_BASIS_SPHERICAL))
+    return 1;
+  std::array<std::uint64_t, 5> result{0, 0, shell_count, 0, 0};
+  const auto maximum = std::min<std::uint64_t>(std::numeric_limits<std::size_t>::max(),
+                                               std::numeric_limits<std::int64_t>::max());
+  if (shell_count > maximum) return 1;
+  for (std::size_t index = 0; index < shell_count; ++index) {
+    const auto angular = angular_momenta[index];
+    const auto aos = generativeqc::molecule::shell_ao_count(angular, representation);
+    const auto cartesian = generativeqc::molecule::cartesian_count(angular);
+    const auto primitives = primitive_counts[index];
+    if (!aos || !cartesian || !primitives || aos > maximum - result[0] ||
+        cartesian > maximum - result[1] || primitives > maximum - result[3])
+      return 1;
+    result[0] += aos;
+    result[1] += cartesian;
+    result[3] += primitives;
+    result[4] = std::max(result[4], static_cast<std::uint64_t>(angular));
+  }
+  std::copy(result.begin(), result.end(), output);
+  return 0;
+}
 
 /** Private allocation-free D3 layout query, shared with D3Plan::prepare().
  * Six outputs: plan host, execution host, device, tables, workspace and total
