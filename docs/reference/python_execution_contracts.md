@@ -93,6 +93,13 @@ The [generated method catalog](../public_methods.md) discovers selectors.
 backend, basis, spin, precision, density fitting, ECP and grid choices.
 `method_capabilities(name)` is a backend-neutral registry query; it loads the
 native registry and is not a probe proving a requested device/context works.
+Its public discovery cache does not determine a `Calculator`'s registry view:
+the calculator queries its already-selected native library and verifies the
+canonical carrier with the installed named-method ABI when present. An older
+library without that optional lookup retains explicit numeric-ID compatibility;
+a selected lookup/query error or inconsistent publication does not rediscover a
+default library or fall back to cached/Python capability metadata. Public aliases,
+explicit compiler compositions and later contextual admission remain separate.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
 CPU, direct, all-electron, Cartesian, strict-FP64, closed-shell LDA/PBE RKS domain

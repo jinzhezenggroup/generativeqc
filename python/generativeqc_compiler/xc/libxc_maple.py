@@ -832,6 +832,7 @@ class _Evaluator:
             "t_total",
             "n_total",
             "n_spin",
+            "lda_x_spin",
             "screen_dens",
             "screen_dens_zeta",
             "z_thr",
@@ -1280,6 +1281,10 @@ class _Evaluator:
             rs = self._as_expr(arguments[0])
             z = self._as_expr(arguments[1])
             return (1 + z) * self._as_expr(self._intrinsic("n_total", (rs,))) / 2
+        if name == "lda_x_spin":
+            if len(arguments) != 2:
+                raise MapleImportError("lda_x_spin requires rs and zeta")
+            return self._lda_x_spin(*(self._as_expr(value) for value in arguments))
         if name == "screen_dens":
             if len(arguments) != 2:
                 raise MapleImportError("screen_dens requires rs and zeta")

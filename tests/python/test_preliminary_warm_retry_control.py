@@ -171,10 +171,13 @@ HARNESS = r"""
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
 #include "methods/method.hpp"
+#include "methods/execution_failure.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/fleet_item.hpp"
 using generativeqc::methods::MethodError;
+using generativeqc::methods::item_exception_status;
+using generativeqc::methods::retryable_seed_failure;
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
 using scf::execute_fleet_item_attempt;
@@ -206,7 +209,7 @@ struct Item : scf::FleetItemResult {
 std::string scenario;
 unsigned calls{}, preparations{};
 std::vector<bool> policies, seeds;
-// DFT_FAILURE_POLICY
+
 Native solve(const Options& options, const std::vector<double>* seed) {
   ++calls;
   policies.push_back(options.preliminary_guess.has_value());
@@ -416,18 +419,12 @@ def host_control_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("source-control harness requires ccache and a C++20 compiler")
     subprocess.run([ccache, "--version"], check=True, capture_output=True)
     hf, dft, options, policy = control_sources()
-    owner = (ROOT / "src/methods/dft_method.cpp").read_text()
-    failures = "\n".join(
-        cpp_function_definition(owner, name)
-        for name in ("item_exception_status", "retryable_seed_failure")
-    )
     direct, fitted = hf_bucket_retry_sources()
     source = HARNESS.replace("// HF_RETRY", hf).replace("// DFT_RETRY", dft)
     source = source.replace("// HF_DIRECT_RETRY", direct)
     source = source.replace("// HF_DF_RETRY", fitted)
     source = source.replace("// DFT_OPTIONS", options)
     source = source.replace("// DFT_POLICY", policy)
-    source = source.replace("// DFT_FAILURE_POLICY", failures)
     directory = tmp_path_factory.mktemp("preliminary-control")
     path = directory / "control.cpp"
     object_path = directory / "control.o"

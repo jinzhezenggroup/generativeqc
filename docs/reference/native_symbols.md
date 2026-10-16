@@ -22,6 +22,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
 - [generativeqc_get_source_identity](#native-c-generativeqc-get-source-identity)
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
+- [generativeqc_scf_effort_decide_v1](#native-c-generativeqc-scf-effort-decide-v1)
+- [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
 - [generativeqc_response_recycle_create_v1](#native-c-generativeqc-response-recycle-create-v1)
 - [generativeqc_response_recycle_state_v1_get](#native-c-generativeqc-response-recycle-state-v1-get)
@@ -437,6 +439,76 @@ completes. Caller must coordinate concurrent changes to its runtime device selec
 
 **Units.** Resource quantities are bytes or hardware counts, as named; version fields are CUDA
 integer versions.
+
+(native-c-generativeqc-scf-effort-decide-v1)=
+## generativeqc_scf_effort_decide_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_effort_decide_v1 ( const generativeqc_scf_effort_descriptor_v1 * descriptor , generativeqc_scf_effort_decision_v1 * output ) ;
+```
+
+**Behavior.** Select strict/hold/relax/tighten effort and next hysteresis state from
+an empirical diagnostic-to-error calibration; this is not a rigorous bound.
+
+**Inputs.** Initialize complete descriptor/output ABI headers. Both pointers and
+level_count positive finite tightening density_tolerances are required; the
+last level is strict. Controls/floor are positive finite; scales nonnegative
+finite, force fraction <1, stationarity factor >=1, relax_after >0, and state
+index < level_count. Only flags bits 0/1 and domain codes 0/1/2 are supported.
+A supplied force is nonnegative finite unless strict reproducibility ignores
+it. The caller owns calibration provenance, physical model and level validity.
+
+**Outputs.** On success atomically replaces output with a detached next state and
+optional selected-level estimate. Missing force/reproducibility/stationarity
+gates precede forecasts. Domain or nonfinite-forecast fallback is SUCCESS with
+STRICT_FALLBACK, not permission to execute an unqualified calculation.
+
+**Errors.** Invalid metadata, counts/overflow or pointers return INVALID_ARGUMENT;
+incompatible headers return ABI_MISMATCH. Output stays unchanged on failure.
+
+**Lifetime.** Borrows immutable descriptors/level values only for this call; retains
+no pointers and owns no physical calculation, device, lease or transition log.
+
+**Execution.** Synchronous host metadata operation with linear level work and
+constant native numeric storage; performs no SCF, provider or device operation.
+
+**Units.** Energy/force thresholds and forecasts use the supplied calibration's
+Hartree and Hartree/Bohr units; density RMS is not a physical residual metric.
+
+(native-c-generativeqc-scf-effort-verify-v1)=
+## generativeqc_scf_effort_verify_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_scf_effort_verify_v1 ( const generativeqc_scf_effort_final_descriptor_v1 * descriptor , generativeqc_scf_effort_verification_v1 * output ) ;
+```
+
+**Behavior.** Verify all final strict-SCF and optimizer termination gates without
+treating empirical forecasts as a substitute for measured final observables.
+
+**Inputs.** Initialize both complete ABI headers. Both pointers are required.
+flags use only bits 0/1/2 and reserved=0. Energy is finite; change/density/force
+are finite nonnegative, thresholds finite positive. Caller supplies exact
+physical-model and strict-level equality and actual SCF convergence metadata.
+
+**Outputs.** On success atomically publishes status and every unmet gate. Equality
+meets a numeric gate. Any model mismatch is unverified; otherwise unmet gates
+produce observed_unmet. All measured gates passing produces observed_met only.
+
+**Errors.** Invalid pointers/metadata/numeric values return INVALID_ARGUMENT;
+incompatible complete headers return ABI_MISMATCH. Failed output is unchanged.
+
+**Lifetime.** Borrows immutable inputs for this call and retains no model, result,
+device, calculation or borrowed storage; publication belongs to the caller.
+
+**Execution.** Synchronous constant-storage host metadata verification; performs
+no scientific reevaluation, provider/device work or fallback SCF solve.
+
+**Units.** Energy/change/tolerance are Hartree; forces Hartree/Bohr. Density RMS
+remains the selected SCF diagnostic, not a physical commutator residual.
 
 (native-c-generativeqc-response-recycle-capacity-v1-get)=
 ## generativeqc_response_recycle_capacity_v1_get

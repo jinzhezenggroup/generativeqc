@@ -14,9 +14,6 @@ namespace generativeqc::xtb::detail {
 // here. Context/cache ownership belongs to Gfn2RuntimeBridge; the imported
 // external context and GFN1 cache API had no implementation or consumers.
 #if defined(GENERATIVEQC_XTB_HAS_CUDA)
-bool resolve_cuda_device(std::int32_t requested_device, std::int32_t& resolved_device,
-                         std::string& error);
-
 /* Upload immutable GFN2 tables once for each CUDA device used by this process. */
 bool ensure_cuda_gfn2_parameters(std::int32_t device_id, std::string& error);
 

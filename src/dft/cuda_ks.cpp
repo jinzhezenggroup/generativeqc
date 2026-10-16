@@ -496,8 +496,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // consumers even after a geometry move. Warm calls only retain an existing
     // audited source; they never construct a quartic one for a single Fock.
     // Complete endpoints qualify screened SPD sources on substantial grids.
-    if (automatic_range &&
-        (!nonlocal_outer_active || xc_layout.npoint < 65536 || maximum_angular > 2))
+    // The short budget-confirmation tail cannot amortize a second quartic
+    // source after retiring the mixed lease. Explicit residency requests still
+    // exercise strict sources; automatic refinement retains streamed values.
+    if (automatic_range && (!nonlocal_outer_active || strict_refinement ||
+                            xc_layout.npoint < 65536 || maximum_angular > 2))
       return;
     const bool source_cold_phase = cold || (automatic_range && nonlocal_outer_active);
     const auto buckets = direct_jk_resident_bucket_policy(
@@ -3018,11 +3021,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // and repeat expensive changing-density sweeps without improving the
     // accepted physical state. The original energy gate still has to pass;
     // this is neither an acceptance shortcut nor a provisional-state replay.
+    const auto nonlocal_confirmation =
+        nonlocal_confirmation_tolerance(budget_stationarity, options.density_tolerance);
     const bool confirm_nonlocal_stationary_density =
         nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen &&
         physical.density_change < options.density_tolerance &&
-        physical.residual < std::min(1e-9, options.density_tolerance) &&
-        physical.maximum_residual < std::min(1e-9, options.density_tolerance);
+        physical.residual < nonlocal_confirmation &&
+        physical.maximum_residual < nonlocal_confirmation;
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     // Budget Fock already requires consecutive fresh FP64 physical Focks and
@@ -3055,10 +3060,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // exception cannot certify a physical iterate; ordinary AUTO still
       // clears history and every route retains the full FP64 refinement gate.
       strict_refinement = true;
-      // Initializers and frozen potentials only propose densities. A precision
-      // handoff must resume fresh target evaluations, never refine a retained
-      // mixed potential or let the outer solver postpone the FP64 audit.
-      nonlocal_outer_active = nonlocal_seed_stage = nonlocal_frozen_stage = false;
+      // Discard the mixed anchor, but retain the admitted outer solver. The
+      // next iteration must rebuild the full FP64 target before its potential
+      // can seed any frozen inner steps. Those steps remain provisional and
+      // cannot satisfy the consecutive fresh-target publication gates.
+      nonlocal_seed_stage = nonlocal_frozen_stage = false;
       nonlocal_exact_epoch_iterations = 0;
       final_closure = false;
       final_corrections = 0;
@@ -3090,7 +3096,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       output.converged = false;
       is_active = output.iterations < options.max_iterations;
       const double target_residual_gate = std::min(1e-9, options.density_tolerance);
-      if (physical.maximum_residual < target_residual_gate ||
+      if (confirm_nonlocal_stationary_density || physical.maximum_residual < target_residual_gate ||
           output.iterations + 20 >= options.max_iterations) {
         // Close with consecutive fresh physical Focks and the original strict
         // energy/density/residual gates, never an inner or stale-potential gate.
@@ -3098,8 +3104,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else {
         nonlocal_frozen_stage = true;
         nonlocal_inner_iterations = 0;
-        nonlocal_inner_residual_tolerance = std::clamp(
-            physical.maximum_residual * 1e-3, std::min(1e-12, target_residual_gate * 0.1), 1e-7);
+        nonlocal_inner_residual_tolerance = nonlocal_inner_tolerance(
+            budget_stationarity, physical.maximum_residual, options.density_tolerance);
         // The just-computed target Fock is also the first exact Fock of this
         // fixed-potential inner problem. Retain that one valid DIIS entry.
       }

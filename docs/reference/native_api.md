@@ -72,6 +72,29 @@ failed native status calls. `Error::status()` preserves the status code.
 `Calculation::execute` checks supported properties; omitted forces are
 represented by `std::optional` rather than an all-zero vector.
 
+## Empirical SCF effort policy
+
+`generativeqc_scf_effort_decide_v1` selects an already-defined strict/hold/relax/
+tighten level and detached hysteresis state. It applies the supplied empirical
+diagnostic envelope, joint-domain metadata and inclusive energy/force allowances.
+Strict reproducibility, missing force and near-stationary cleanup precede
+forecasting. Out-of-domain or nonfinite-forecast fallback is an explicit successful
+`STRICT_FALLBACK` decision, not a failed native call or permission to run an
+unqualified model. Integer counts and density-level storage are checked; native
+storage is constant and level work is linear, with no physical SCF/device work.
+
+`generativeqc_scf_effort_verify_v1` independently checks the measured final model,
+strict-level, convergence, energy-change, density and force gates. It reports
+every unmet gate; a model mismatch takes `unverified` precedence. Equality passes
+each numeric gate. This does not replace the caller's actual strict cleanup solve.
+
+Both protocols borrow inputs only for the call and publish detached scalar
+records on success; errors preserve output. Complete ABI headers are required.
+The caller owns calibration provenance, physical identity comparisons and leases;
+neither an empirical estimate nor a caller-supplied identity flag authenticates a
+physical calculation. See [accuracy policy](../user/accuracy.md#native-scf-effort-decisions)
+and the source-owned [symbol contracts](native_symbols.md).
+
 (response-recycle)=
 ## CPU response recycle vectors
 

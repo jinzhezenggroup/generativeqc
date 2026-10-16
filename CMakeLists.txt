@@ -326,6 +326,7 @@ if(GENERATIVEQC_ENABLE_CUBLASLT)
   target_link_libraries(generativeqc PUBLIC generativeqc_cublaslt)
 endif()
 generativeqc_configure_cpu_linalg(generativeqc)
+generativeqc_configure_private_cpu_linalg(generativeqc)
 generativeqc_add_gfn2_runtime(generativeqc)
 generativeqc_add_component_sources(generativeqc)
 generativeqc_register_host_generated_sources(generativeqc)
@@ -498,7 +499,7 @@ if(GENERATIVEQC_BUILD_CLI)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_blacklist.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_libxc_methods.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"

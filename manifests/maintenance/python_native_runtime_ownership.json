@@ -759,23 +759,37 @@
         {
           "path": "python/generativeqc/force_aware_scf.py",
           "symbol": "ForceAwareScfPolicy",
-          "classification": "scientific-runtime"
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/force_aware_scf.py",
+          "symbol": "ForceAwareScfPolicy._propose_next_python",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/force_aware_scf.py",
+          "symbol": "ForceAwareScfPolicy._verify_final_python",
+          "classification": "compatibility"
         }
       ],
       "native_scientific_sources": [
         "src/scf/preliminary_guess.cpp",
         "src/scf/initial_guess/minao.cpp",
-        "src/runtime/execution_precision.hpp"
+        "src/runtime/execution_precision.hpp",
+        "src/scf/effort_policy.hpp"
       ],
       "native_callers": [
-        "src/api/c_api_calculation.cpp"
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_scf_effort.cpp"
       ],
       "remaining_python_runtime": [
-        "Baseline automatic model/element selection, progressive/coarse-to-fine stages and force-aware strict closure are Python-owned; the bounded native MINAO seed and retry state machine already exists."
+        "Progressive/coarse-to-fine physical execution and force-aware strict cleanup execution remain Python-owned. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance, custom types and old-protocol compatibility remain explicit Python work."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
-        "tests/python/test_progressive_controller_native.py"
+        "tests/python/test_progressive_controller_native.py",
+        "tests/python/test_native_scf_effort.py",
+        "tests/native/test_scf_effort_sdk.cpp"
       ],
       "trackers": [
         "#933"
@@ -905,6 +919,11 @@
           "path": "python/generativeqc/basis.py",
           "symbol": "BasisSet",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_method_native.py",
+          "symbol": "capabilities",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -913,13 +932,15 @@
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_common.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup now stays on the already-selected Calculator library rather than public cached/default-library discovery. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_selected_native_method_capabilities.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],
       "trackers": [

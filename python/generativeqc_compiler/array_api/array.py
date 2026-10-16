@@ -170,8 +170,10 @@ class VibeArray:
         return namespace.negative(self)
 
     def __pos__(self) -> VibeArray:
-        """Return this symbolic array unchanged for unary plus."""
-        return self
+        """Apply the real-valued symbolic positive operation."""
+        from . import namespace
+
+        return namespace.positive(self)
 
     def __getitem__(self, key: object) -> VibeArray:
         """Build symbolic indexing through the Array API namespace."""

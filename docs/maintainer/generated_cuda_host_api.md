@@ -11,12 +11,16 @@ therefore carry the function declarations needed by NVCC.
   opaque handles, ABI enums and stable value/type definitions.
 - `src/runtime/nvidia_host_api/generativeqc_nvidia_host_functions.h` is
   **generated**. It owns all cuBLAS/cuSOLVER function prototypes and
-  NVIDIA `_v2` aliases used in the main native CUDA wheel.
+  NVIDIA `_v2` aliases used across native CUDA consumers, including xTB.
 - `tools/generate_nvidia_host_api.py` discovers in-tree CUDA calls and
   reads NVIDIA SDK declarations through Clang's AST, not ad hoc regex
   reconstruction of pointer constness or argument types.
-- The separate xTB-native host ABI and CUDA driver functions remain
-  independently owned; they are **not** migrated by this change.
+- xTB uses the same declarations; it does not maintain a second cuBLAS/cuSOLVER
+  interface. Its graph-capable route retains explicit compile-time minimum
+  provider versions and runtime admission/fallback checks.
+- `src/runtime/nvidia_host_api/generativeqc_nvidia_driver_api.h` owns the minimal
+  CUDA driver ABI needed for borrowed-allocation validation. Driver declarations
+  remain separate from the generated host-library inventory.
 
 ## Fast pre-merge check (no toolkit or GPU needed)
 
@@ -53,6 +57,7 @@ python tools/generate_nvidia_host_api.py --check-usage
 ```
 
 The generator selects existing used declarations and any new API calls; it
+selects the exported C-linkage ABI rather than SDK C++ convenience overloads,
 preserves versioned exported symbols and emits the same output given identical
 headers and source. If a symbol or declaration is unavailable, or its parameter
 shape is too complex to represent safely, generation stops. Variadic signatures

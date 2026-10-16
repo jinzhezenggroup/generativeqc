@@ -252,6 +252,13 @@ def less_equal(x1: object, x2: object) -> typing.Any:
     return _compare("less_equal", x1, x2)
 
 
+def positive(x: object) -> typing.Any:
+    """Preserve a real array under eager or symbolic unary plus."""
+    if isinstance(x, VibeArray):
+        return _namespace.positive(x)
+    return _eager_compute(np.positive, _eager_array(x))
+
+
 def negative(x: object) -> typing.Any:
     """Negate each element of a host or symbolic array."""
     if isinstance(x, VibeArray):
@@ -420,6 +427,18 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
         else _namespace._normalized_axes(axis, array.ndim, "flip")
     )
     return np.flip(array, axis=axes)
+
+
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> typing.Any:
+    """Roll generic arrays along static axes using bounded gather maps."""
+    if isinstance(x, VibeArray):
+        return _namespace.roll(x, shift, axis=axis)
+    return np.roll(_eager_data_array(x), shift, axis=axis)
 
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:

@@ -20,6 +20,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_context.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_resource_planning.cpp
+    src/api/c_api_scf_effort.cpp
     src/api/c_api_response_recycle.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
@@ -87,6 +88,7 @@ endfunction()
 function(generativeqc_add_posthf_cc_sources target)
   target_sources(${target} PRIVATE
     src/methods/mp2_method.cpp
+    src/methods/correlated_batch.cpp
     src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/uccsd_method.cpp
