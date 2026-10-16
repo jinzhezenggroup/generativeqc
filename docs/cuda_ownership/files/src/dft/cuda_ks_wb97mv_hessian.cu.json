@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_hessian.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Accepted-state stationary WB97M-V orchestration: exclusively owned bounded arenas, live binding authentication, paired source passes around compiler-AD CPKS, cached moving-grid contractions, deterministic physical pair gathering and whole-result publication. All W, spin totals, source composition, pair signs/reductions and nuclear/integral/grid derivatives come from build-time compiler maps. No handwritten scientific derivative, Python, runtime JIT, host contraction, symmetry repair or exact-for-DF substitution.",
+  "regions": []
+}

@@ -61,6 +61,8 @@ def directional_ao_jets(
     independent of any XC functional and reuses the existing normalized native
     jet ordering; no coordinate-by-AO Jacobian is materialized.
     """
+    from generativeqc_compiler.common.array_execution import arrays as np
+
     checked_int(order, "AO directional jet order", low=0, high=2)
     values = immutable(jets)
     full_domain = jet_indices(order + 1)

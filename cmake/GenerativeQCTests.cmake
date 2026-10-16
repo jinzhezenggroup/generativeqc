@@ -128,6 +128,10 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_resident_weights.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     set_tests_properties(generativeqc_ks_resident_weights_tests PROPERTIES TIMEOUT 240)
+    generativeqc_native_test(generativeqc_ks_resident_frame_tests
+                       tests/native/test_ks_resident_frame.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
+    set_tests_properties(generativeqc_ks_resident_frame_tests PROPERTIES TIMEOUT 120)
     generativeqc_native_test(generativeqc_df_density_seed_tests tests/native/test_df_density_seed.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver SKIP_77)
     set_property(SOURCE "${GENERATIVEQC_GRID_SOURCE}" src/dft/cuda_ks.cpp src/dft/cuda_xc.cpp

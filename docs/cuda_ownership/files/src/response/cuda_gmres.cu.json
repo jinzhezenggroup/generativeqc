@@ -1,0 +1,7 @@
+{
+  "path": "src/response/cuda_gmres.cu",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Native workspace admission, nonaliasing checks, borrowed-stream launch sequencing and discrete-status control for compiler-owned GMRES kernels. Iterative numerical scalars, vector reductions, rotations, triangular solves and true-residual acceptance remain in generated CUDA.",
+  "regions": []
+}

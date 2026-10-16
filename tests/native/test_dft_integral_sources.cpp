@@ -7,9 +7,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
 #include "generativeqc/generativeqc.h"
 #include "integrals/s_integrals.hpp"
+#include "molecule/basis.hpp"
 
 extern "C" generativeqc_status generativeqc_ks_batch_supported_properties_v1(
     const generativeqc_batch* batch, std::uint32_t index, generativeqc_property_flags* output);
@@ -448,10 +450,71 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   generativeqc_batch_destroy(batch);
 }
 
+/** Native preparation has no opaque ABI auxiliary handle. Prove that both
+ * prepared consumers honor its decoded System, while unresolved ABI requests
+ * still fail rather than silently fitting in the orbital basis. */
+void test_decoded_native_auxiliary(bool unrestricted) {
+  using namespace generativeqc;
+  Environment environment(0.0, unrestricted);
+  auto auxiliary = environment.system->data;
+  auxiliary.shells = {{0, 0, {{0.8, 1.0}}}, {0, 2, {{0.6, 1.0}}}, {1, 0, {{0.65, 1.0}}}};
+  std::string detail;
+  require(molecule::validate_and_normalize(auxiliary, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          "invalid independent native auxiliary fixture");
+  generativeqc_system opaque_auxiliary{auxiliary};
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
+  descriptor.max_iterations = 200;
+  descriptor.diis_history = 8;
+  descriptor.energy_tolerance = 1e-12;
+  descriptor.density_tolerance = 1e-10;
+  descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  descriptor.density_fitting_relative_threshold = 1e-10;
+  auto& context = environment.context->state;
+  const auto& system = environment.system->data;
+  auto default_plan = methods::prepare_calculation(context, system, descriptor);
+  const auto default_result = default_plan->execute(false);
+  auto native_plan = methods::prepare_calculation(context, system, descriptor, &auxiliary);
+  const auto native_result = native_plan->execute(false);
+  descriptor.density_fitting_auxiliary_basis = &opaque_auxiliary;
+  auto abi_plan = methods::prepare_calculation(context, system, descriptor, &auxiliary);
+  const auto abi_result = abi_plan->execute(false);
+  require(default_result.convergence.converged && native_result.convergence.converged &&
+              abi_result.convergence.converged,
+          "native auxiliary SCF did not converge");
+  require(std::abs(native_result.energy - abi_result.energy) < 1e-11 &&
+              std::abs(native_result.energy - default_result.energy) > 1e-5,
+          "decoded native auxiliary did not select the independent fit basis");
+  descriptor.density_fitting_auxiliary_basis = nullptr;
+  auto batch = methods::prepare_batch(context, {system}, descriptor, 0, &auxiliary);
+  const auto results = batch->execute(methods::Coordinates(1), false);
+  require(results.size() == 1 && results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              results[0].calculation.convergence.converged &&
+              std::abs(results[0].calculation.energy - abi_result.energy) < 1e-11,
+          "native batch ignored the decoded auxiliary");
+  descriptor.density_fitting_auxiliary_basis = &opaque_auxiliary;
+  for (const bool batched : {false, true}) {
+    bool rejected = false;
+    try {
+      if (batched)
+        (void)methods::prepare_batch(context, {system}, descriptor, 0);
+      else
+        (void)methods::prepare_calculation(context, system, descriptor);
+    } catch (const methods::MethodError& error) {
+      rejected = error.status() == GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    require(rejected, "unresolved ABI auxiliary silently selected a default basis");
+  }
+}
+
 }  // namespace
 
 int main() {
   try {
+    for (const bool unrestricted : {false, true}) test_decoded_native_auxiliary(unrestricted);
     for (const auto fitting :
          {GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE, GENERATIVEQC_DENSITY_FITTING_NONE})
       for (const bool pbe0 : {false, true}) {

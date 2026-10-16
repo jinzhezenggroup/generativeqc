@@ -452,6 +452,31 @@
       ]
     },
     {
+      "id": "wb97mv-native-cuda-second-order",
+      "method_families": ["density_functional"],
+      "backends": ["cuda"],
+      "representations": ["cartesian", "spherical"],
+      "properties": ["hvp", "hessian"],
+      "spins": ["restricted", "unrestricted"],
+      "approximations": ["direct", "density-fitting", "range-separated", "nonlocal", "ecp"],
+      "python_sites": [
+        {"path": "python/generativeqc/calculator.py", "symbol": "Calculator.hessian", "classification": "wrapper"},
+        {"path": "python/generativeqc/_native_hessian.py", "symbol": "run_native_cuda", "classification": "wrapper"},
+        {"path": "python/generativeqc_compiler/integral/factorized_second.py", "symbol": "emit_factorized_second", "classification": "compiler-ad"}
+      ],
+      "native_scientific_sources": [
+        "src/dft/cuda_ks_wb97mv_hessian.cu",
+        "src/dft/cuda_ks_wb97mv_df_nuclear.cu",
+        "src/dft/cuda_ks_wb97mv_response.cu"
+      ],
+      "native_callers": ["src/api/c_api_ks_hessian.cpp", "src/cli/hessian.cpp"],
+      "remaining_python_runtime": [],
+      "tests": ["tests/python/test_native_hessian_frontend.py", "tests/python/test_wb97mv_hessian_cli_cuda.py", "tests/python/test_native_wb97mv_stationary.py"],
+      "trackers": ["#2527"],
+      "qualification": "source-inventory-only",
+      "method_selectors": ["method-ir:wb97m-v-rks", "method-ir:wb97m-v-uks"]
+    },
+    {
       "id": "ks-molecular-second-order",
       "method_families": [
         "density_functional"

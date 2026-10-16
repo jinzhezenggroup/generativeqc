@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from _cpp_source_support import cpp_function_definition
 from generativeqc._stationary_rsh_cpu import RangeExchangeExecutor
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
@@ -19,9 +20,10 @@ def test_native_cuda_rsh_integral_bridge_is_method_neutral() -> None:
     source = (
         Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
     ).read_text(encoding="utf-8")
-    begin = source.index("generativeqc_status cuda_integral_gradient(")
-    end = source.index("Result execute_impl(bool compute_forces)", begin)
-    bridge = source[begin:end]
+    # The single-state bridge is distinct from the batch forwarding overload.
+    # Extract its complete body, excluding unrelated snapshot/export methods.
+    state = source[: source.index("class KsPreparedBatch")]
+    bridge = cpp_function_definition(state, "cuda_integral_gradient")
     assert "execution_plan_.range_exchange" in bridge
     assert "range_strategy_" in bridge
     assert "SemilocalFamily::Wb97mv" not in bridge
