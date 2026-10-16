@@ -422,6 +422,18 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     return np.flip(array, axis=axes)
 
 
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> typing.Any:
+    """Roll generic arrays along static axes using bounded gather maps."""
+    if isinstance(x, VibeArray):
+        return _namespace.roll(x, shift, axis=axis)
+    return np.roll(_eager_data_array(x), shift, axis=axis)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 

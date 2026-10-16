@@ -44,6 +44,7 @@ _NATIVE_CPU_CASES = {
     "squeeze": lambda x: xp.squeeze(x[:1, :], axis=0),
     "moveaxis": lambda x: xp.moveaxis(x, 0, 1),
     "flip": lambda x: xp.flip(x),
+    "roll": lambda x: xp.roll(x, 1, axis=-1),
     "matrix_transpose": xp.matrix_transpose,
     "slice": lambda x: xp.slice(x, ((0, 1), (0, 3))),
     "take": lambda x: xp.take(x, (1, 0), axis=0),
