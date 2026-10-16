@@ -61,9 +61,6 @@ def overlay_native(
             ):
                 raise ValueError("r²SCAN-3c independent endpoint gate failed")
         point["engines"]["native"] = copy.deepcopy(native)
-    result.setdefault("panel_annotations", {})["r2scan-3c"] = (
-        "GenerativeQC: 2026-10-16 composition"
-    )
     result["evidence_note"] = (
         "The [measurement report](../xc-diagonal-potential-20261016/README.md#homepage-update) "
         "identifies the mixed sources. "
