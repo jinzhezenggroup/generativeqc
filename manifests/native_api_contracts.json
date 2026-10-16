@@ -265,6 +265,38 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_scf_effort_decide_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "cec6e032401810a267929b40fccd8f40335c1fac0312ab4f79687741f2b10202",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_scf_effort_verify_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "e135e60d62db0964de36459ac204412dfbee233e414d90175666dfa32371a7d7",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_status_message": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

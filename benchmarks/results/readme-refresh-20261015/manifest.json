@@ -14,8 +14,8 @@
       "sha256": "8ece67acc72796429c3f6c892f142593f7fef50145eb21d82b9f761d86bab8bd"
     },
     "dft-cold-warm.svg": {
-      "bytes": 83606,
-      "sha256": "2289ade08e95fe3625f7bea1835bde905c9f61ba89700736986a0a1328232296"
+      "bytes": 83604,
+      "sha256": "5f545c356a16b6c6a89d6f899a2be47290170e5b7c2548b533bada2c93ad46f2"
     },
     "build-settings.json": {
       "bytes": 15352,
@@ -30,8 +30,8 @@
       "sha256": "88702498d183661e378dcff64c4e4cbe4de9f1e781916564b88c892d74720621"
     },
     "df-cold-warm.svg": {
-      "bytes": 84879,
-      "sha256": "94becbb77b75c3b44f6dc0617b14277a5405aaee78903ccacb16e868f00a17ac"
+      "bytes": 84881,
+      "sha256": "6e247dc25bd666a08899588fbf2c4d865c322d819a112bfe822678f4f62b4299"
     },
     "df-timings.md": {
       "bytes": 4664,
