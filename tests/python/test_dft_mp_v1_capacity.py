@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SHA = "f" * 40
 SPD_CONTRACT_FILES = (
     "src/molecule/basis.cpp",
+    "src/molecule/basis.hpp",
     "src/dft/ao_grid.cpp",
     "src/dft/bridge.cpp",
     "python/generativeqc/_stationary_cuda.py",
@@ -315,6 +316,9 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
 
     assert result["schema"] == "generativeqc.dft-mp-v1.stationary-capacity.v2"
     assert result["source"]["sha"] == SOURCE_SHA
+    assert result["source"]["runtime_owner_sha256"]["src/molecule/basis.hpp"] == (
+        qualify_capacity._lf_sha256((ROOT / "src/molecule/basis.hpp").read_bytes())
+    )
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
     )
@@ -381,7 +385,13 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
-        "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
+        "73c8ab3e116dde28f94c4f988f3b9f418ea11a09414ac342ac310d76cf020410"
+    )
+    assert result["basis"]["native_shell_ao_count_contract_sha256"] == (
+        "e69f53d3da18e44119894075fc898559006f88edcddab5770204f88e306154e5"
+    )
+    assert result["basis"]["native_cartesian_shell_count_contract_sha256"] == (
+        "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
     )
     assert result["grid"] == {
         "source_only_molecular_grid_sha256": (
@@ -2311,17 +2321,108 @@ def test_spherical_component_count_fails_closed_when_basis_creation_moves(
         qualify_capacity._spd_expansion_contract(tmp_path)
 
 
-def test_spherical_ao_count_fails_closed_when_native_count_moves(
+def test_spherical_ao_count_contract_tracks_shared_native_owners(
     tmp_path: Path,
 ) -> None:
     spd_contract_tree(tmp_path)
+    result = qualify_capacity._spd_expansion_contract(tmp_path)
+    assert result["native_spherical_ao_count_contract_sha256"] == (
+        qualify_capacity.NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256
+    )
+    assert result["native_shell_ao_count_contract_sha256"] == (
+        qualify_capacity.NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256
+    )
+    assert result["native_cartesian_shell_count_contract_sha256"] == (
+        qualify_capacity.NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (
+            "shell_ao_count(shell.angular_momentum, system.basis_representation)",
+            "cartesian_count(shell.angular_momentum)",
+        ),
+        ("count += functions;", "count += functions + 1;"),
+    ],
+)
+def test_spherical_ao_count_fails_closed_when_native_count_moves(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    spd_contract_tree(tmp_path)
+    qualify_capacity._spd_expansion_contract(tmp_path)
     target = tmp_path / "src/molecule/basis.cpp"
     source = target.read_text(encoding="utf-8")
-    old = "? 2 * static_cast<std::size_t>(shell.angular_momentum) + 1"
     assert old in source
-    target.write_text(source.replace(old, old[:-1] + "2", 1), encoding="utf-8")
+    target.write_text(source.replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="spherical AO count contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("owner", "old", "new"),
+    [
+        (
+            "shell_ao_count",
+            "2 * static_cast<std::uint64_t>(angular_momentum) + 1",
+            "2 * static_cast<std::uint64_t>(angular_momentum) + 2",
+        ),
+        (
+            "shell_ao_count",
+            "representation != GENERATIVEQC_BASIS_SPHERICAL",
+            "representation == GENERATIVEQC_BASIS_SPHERICAL",
+        ),
+        ("shell_ao_count", "std::uint64_t count", "std::uint32_t count"),
+        (
+            "shell_ao_count",
+            "count > std::numeric_limits<std::size_t>::max() ? 0 : ",
+            "",
+        ),
+        (
+            "cartesian_count",
+            "(n + 1) * ((n + 2) / 2)",
+            "(n + 1) * ((n + 4) / 2)",
+        ),
+        ("cartesian_count", "n % 2 == 0", "n % 2 != 0"),
+        (
+            "cartesian_count",
+            "count > std::numeric_limits<std::size_t>::max() ? 0 : ",
+            "",
+        ),
+    ],
+)
+def test_spherical_ao_count_fails_closed_when_shared_shell_owner_moves(
+    tmp_path: Path, owner: str, old: str, new: str
+) -> None:
+    spd_contract_tree(tmp_path)
+    qualify_capacity._spd_expansion_contract(tmp_path)
+    target = tmp_path / "src/molecule/basis.hpp"
+    source = target.read_text(encoding="utf-8")
+    start = source.index(f"[[nodiscard]] constexpr std::size_t {owner}(")
+    prefix, body = source[:start], source[start:]
+    assert old in body
+    target.write_text(prefix + body.replace(old, new, 1), encoding="utf-8")
+    label = "shell AO" if owner == "shell_ao_count" else "Cartesian shell"
+
+    with pytest.raises(RuntimeError, match=f"native {label} count contract changed"):
+        qualify_capacity._spd_expansion_contract(tmp_path)
+
+
+@pytest.mark.parametrize("owner", ["shell_ao_count", "cartesian_count"])
+def test_spherical_ao_count_fails_closed_when_shared_shell_owner_is_missing(
+    tmp_path: Path, owner: str
+) -> None:
+    spd_contract_tree(tmp_path)
+    qualify_capacity._spd_expansion_contract(tmp_path)
+    target = tmp_path / "src/molecule/basis.hpp"
+    source = target.read_text(encoding="utf-8")
+    old = f"[[nodiscard]] constexpr std::size_t {owner}("
+    assert old in source
+    target.write_text(source.replace(old, old.replace(owner, "missing"), 1))
+
+    with pytest.raises(RuntimeError, match="native source block is missing"):
         qualify_capacity._spd_expansion_contract(tmp_path)
 
 
