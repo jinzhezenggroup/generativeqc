@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
-from math import copysign, isfinite
+from math import copysign, isfinite, prod
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
@@ -681,8 +681,13 @@ def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
     if repeats == 1:
         return value
     shape = value.shape
-    expanded = shape[: position + 1] + (1,) + shape[position + 1 :]
-    repeated = shape[: position + 1] + (repeats,) + shape[position + 1 :]
+    # Collapse the leading and trailing groups so a valid rank-64 input
+    # does not need a rank-65 intermediate. Empty inputs use a harmless
+    # unit trailing group without multiplying possibly huge empty extents.
+    inner = prod(shape[position + 1 :]) if value.size else 1
+    outer = value.size // inner
+    expanded = (outer, 1, inner)
+    repeated = (outer, repeats, inner)
     output = shape[:position] + (shape[position] * repeats,) + shape[position + 1 :]
     return reshape(broadcast_to(reshape(value, expanded), repeated), output)
 

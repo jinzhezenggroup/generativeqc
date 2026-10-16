@@ -167,3 +167,28 @@ def test_repeat_keeps_native_resource_limits(tmp_path: Any) -> None:
             compiled(np.ones(2))
     finally:
         compiled.close()
+
+
+@pytest.mark.parametrize("dtype", [np.bool_, np.float32, np.float64])
+@pytest.mark.parametrize("count", [0, 1, 2])
+@pytest.mark.parametrize("axis", [0, 31, -1])
+@pytest.mark.parametrize("empty", [False, True])
+def test_repeat_preserves_maximum_numpy_rank(
+    dtype: Any, count: int, axis: int, empty: bool
+) -> None:
+    shape = (2,) + (1,) * 30 + (3,) + (1,) * 31 + (0 if empty else 2,)
+    values = np.resize(np.array([-0.0, 0.0, 1.25, -2.5]), shape).astype(dtype)[::-1]
+    expected = np.repeat(values, count, axis=axis)
+    compiled = xp.compile(lambda x: xp.repeat(x, count, axis=axis), backend="reference")
+    try:
+        program = compiled.lower(values)
+        assert max(len(node.spec.shape) for node in program.live_nodes) <= 64
+        result = compiled(values)
+        assert result.shape == expected.shape
+        assert result.dtype == expected.dtype
+        np.testing.assert_array_equal(result, expected)
+        if dtype is not np.bool_:
+            np.testing.assert_array_equal(np.signbit(result), np.signbit(expected))
+        assert not np.shares_memory(result, values)
+    finally:
+        compiled.close()
