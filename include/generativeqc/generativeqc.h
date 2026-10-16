@@ -2270,6 +2270,86 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_cross_overlap_cpu(
     generativeqc_context* context, const generativeqc_system* target,
     const generativeqc_system* source, double* output, size_t output_count);
 
+/** Borrowed real row-major basis transport. input_kind is 0 for occupied
+ * columns (source_AO by occupied), 1 for a pure source_AO-square HF density.
+ * A zero workspace limit is unbounded; maximum_ao remains a required bound. */
+typedef struct generativeqc_basis_projection_descriptor_v1 {
+  uint32_t struct_size, abi_version, input_kind, occupation;
+  uint64_t source_ao, target_ao, occupied, maximum_ao, maximum_workspace_bytes;
+  double relative_threshold, validation_tolerance, maximum_residual;
+  const double* source_overlap;
+  const double* target_overlap;
+  const double* cross_overlap;
+  const double* source_state;
+  uint64_t source_overlap_count, target_overlap_count, cross_overlap_count, source_state_count;
+} generativeqc_basis_projection_descriptor_v1;
+
+/** Shape-only owner-visible numeric capacity. Caller input/output arrays,
+ * metadata, allocator and provider-internal retained overhead are excluded.
+ * This conservative declaration is not a complete physical/RSS memory bound. */
+typedef struct generativeqc_basis_projection_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t coefficient_count, density_count, numeric_workspace_bytes;
+} generativeqc_basis_projection_capacity_v1;
+
+/** Caller-owned detached target coefficients/density and invariant diagnostics.
+ * Coefficient gauges may differ across providers; compare density/invariants.
+ * Unused output-buffer tails are not written. */
+typedef struct generativeqc_basis_projection_output_v1 {
+  uint32_t struct_size, abi_version;
+  double* coefficients;
+  uint64_t coefficient_capacity;
+  double* density;
+  uint64_t density_capacity;
+  uint64_t source_metric_rank, target_metric_rank, occupied_rank;
+  double minimum_projected_norm_squared, projection_residual, normal_equation_residual;
+  double metric_orthogonality_error, electron_trace, metric_idempotency_error;
+} generativeqc_basis_projection_output_v1;
+
+/** @native-contract generativeqc_basis_projection_query_v1
+ * @behavior Query the shared occupied transport's conservative numeric capacity, without
+ * admitting a target calculation or inspecting numerical inputs.
+ * @inputs Initialize descriptor and output struct_size/abi_version. Dimensions and positive
+ * finite policy thresholds are required; occupation is 1 or 2, input_kind is 0 or 1.
+ * maximum_ao bounds both AO dimensions. Array pointers/counts are ignored by this query.
+ * The input and output descriptors must not overlap.
+ * @outputs Writes required target coefficient/density counts and numeric working capacity.
+ * The supplied workspace limit does not suppress a successful capacity report.
+ * @errors Invalid metadata, overflow or ABI mismatch leave output unchanged.
+ * @lifetime Borrows descriptors only for the call; no array or native owner is retained.
+ * @execution Synchronous metadata-only query, without array reads, provider initialization,
+ * numerical allocation, eigensolver execution or accelerator access.
+ * @units Counts are FP64 elements; capacity is bytes; metrics and residuals are dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_basis_projection_query_v1(
+    const generativeqc_basis_projection_descriptor_v1* descriptor,
+    generativeqc_basis_projection_capacity_v1* output);
+
+/** @native-contract generativeqc_basis_project_cpu_v1
+ * @behavior Validate metric/occupied purity, transport the occupied subspace through the
+ * shared native owner, and publish a target seed; this never establishes target SCF convergence.
+ * @inputs Live context for error details; versioned descriptor/output. Source/target overlaps
+ * have exact square counts, cross_overlap is target_AO by source_AO. Source state follows
+ * input_kind. Output capacities meet the query. Written output ranges are mutually disjoint
+ * and do not overlap any input array or either descriptor. Empty occupied output may be NULL.
+ * @outputs On success copies detached coefficients/density and all diagnostics atomically with
+ * respect to refusal; unused buffer tails are unchanged. No input storage is modified.
+ * @errors Invalid metadata, aliasing, nonfinite or rejected scientific proposals return
+ * INVALID_ARGUMENT; ABI mismatch returns ABI_MISMATCH. A positive workspace limit below the
+ * declared capacity returns OUT_OF_MEMORY before reading any numerical array. Provider failures
+ * propagate as native errors. Every failure preserves all output buffers and the output record;
+ * scientific/allocation errors provide context details, not a Python/reference retry.
+ * @lifetime All arrays are borrowed for the synchronous call; output belongs to the caller.
+ * @execution Explicit CPU FP64 transport using the shared CPU algebra/eigen provider. Context
+ * accelerator selection is irrelevant; no device transfer/probe occurs. Serialize shared-context
+ * calls and destruction. Caller input/output and provider overhead are outside the numeric cap.
+ * @units Metrics, orbital coefficients, densities and diagnostic residuals follow the supplied
+ * AO convention; occupations/electron trace are electron counts and capacity is bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_basis_project_cpu_v1(
+    generativeqc_context* context, const generativeqc_basis_projection_descriptor_v1* descriptor,
+    generativeqc_basis_projection_output_v1* output);
+
 /** Owned numeric staging and explicit transfers for a generic DF gradient.
  * Caller-owned systems/weights and opaque CUDA allocations are excluded. */
 typedef struct generativeqc_df_gradient_resources {

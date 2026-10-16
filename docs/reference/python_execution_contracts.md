@@ -102,9 +102,19 @@ default library or fall back to cached/Python capability metadata. Public aliase
 explicit compiler compositions and later contextual admission remain separate.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
-CPU, direct, all-electron, Cartesian, strict-FP64, closed-shell LDA/PBE RKS domain
-currently checked by those methods; a low-level CUDA response kernel does not
-expand it.
+CPU direct all-electron Cartesian strict-FP64 closed-shell LDA/PBE domain,
+or canonical strict-FP64 WB97M-V with RKS/UKS, CPU/CUDA, Cartesian/spherical,
+direct/full-rank DF and all-electron/scalar-semilocal ECP combinations.
+Per-geometry numerical gates still apply. WB97M-V uses compiler automatic differentiation and implicit CPKS,
+not numerical differentiation of displaced forces. Its bounded scalar-column
+Hessian additionally exposes `grid_budget_bytes` and `max_nonlocal_pairs`;
+the latter is a per-action ordered-pair work cap and may reject a fine/default
+grid. See the [DFT Hessian execution contract](../developer/dft_hessian.md) for
+the fixed-branch, resource and qualification scope, including the explicit
+device-resident CUDA numerical contract with a linked native AOT package, explicit
+resource/response/quadrature failure gates, and rejection of rank-truncated DF metrics.
+Public CUDA Hessian/HVP calls need neither CuPy nor a runtime compiler; the
+`cuda-hessian` extra is retained for the separate low-level development owner.
 
 A precision option selects an admitted numerical policy. It does not certify
 observable accuracy or silently enable an unsupported method/derivative.

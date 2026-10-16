@@ -86,7 +86,7 @@ is used as a tuning oracle only, not a production execution fallback.
 - Each real case records 30 A/B pairs versus 45 requested by the equivalent
   unfiltered campaign. No matched overall tuning-time speedup is claimed.
 - Compact source-pinned evidence and all scalar timing samples are retained in
-  `benchmarks/results/tensor-screening-508/qualification.json`.
+  `benchmarks/results/tensor-screening-508/qualification.json.xz` (lossless XZ).
 
 The subsequent broad GPU regression completed on retry in finite Slurm job
 10083: **113 passed, 1 skipped** in 523.05 s, with pytest exit status 0. It covers

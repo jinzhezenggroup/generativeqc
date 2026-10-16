@@ -94,8 +94,9 @@ class StationaryMeanField:
             raise UnsupportedMethod("unsupported XC point-model contract")
         if self.hamiltonian not in ("all-electron", "scalar-semilocal-ecp"):
             raise UnsupportedMethod("unsupported stationary hamiltonian contract")
+        if self.coulomb not in ("direct-full-range", "density-fitted-full-rank"):
+            raise UnsupportedMethod("unsupported stationary coulomb contract")
         supported = {
-            "coulomb": "direct-full-range",
             "occupations": "fixed-integer",
             "topology_policy": "stable-explicit-grid-v1",
             "dtype": "float64",

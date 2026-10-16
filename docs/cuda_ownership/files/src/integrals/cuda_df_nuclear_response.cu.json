@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_df_nuclear_response.cu",
+  "role": "runtime",
+  "subsystem": "df_derivatives",
+  "reason": "Checked linked-AOT closure, integer shell traversal and bounded two-pass raw DF scheduling. Borrows actual normalized primitive/component data and six-term auxiliary-g public expansions. Caches compiler value/gradient/gradient-JVP leaves once per primitive component per pass; compiler-owned fixed-projection weighted AD and deterministic physical-center scatter retain every incidence. Charges repeated component-tile records, primitive-field/cache/projection/scatter reductions and jointly staged publication. No recurrence or derivative authority, host numerical contraction, Python or runtime compilation.",
+  "regions": []
+}

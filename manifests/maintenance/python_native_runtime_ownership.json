@@ -452,6 +452,31 @@
       ]
     },
     {
+      "id": "wb97mv-native-cuda-second-order",
+      "method_families": ["density_functional"],
+      "backends": ["cuda"],
+      "representations": ["cartesian", "spherical"],
+      "properties": ["hvp", "hessian"],
+      "spins": ["restricted", "unrestricted"],
+      "approximations": ["direct", "density-fitting", "range-separated", "nonlocal", "ecp"],
+      "python_sites": [
+        {"path": "python/generativeqc/calculator.py", "symbol": "Calculator.hessian", "classification": "wrapper"},
+        {"path": "python/generativeqc/_native_hessian.py", "symbol": "run_native_cuda", "classification": "wrapper"},
+        {"path": "python/generativeqc_compiler/integral/factorized_second.py", "symbol": "emit_factorized_second", "classification": "compiler-ad"}
+      ],
+      "native_scientific_sources": [
+        "src/dft/cuda_ks_wb97mv_hessian.cu",
+        "src/dft/cuda_ks_wb97mv_df_nuclear.cu",
+        "src/dft/cuda_ks_wb97mv_response.cu"
+      ],
+      "native_callers": ["src/api/c_api_ks_hessian.cpp", "src/cli/hessian.cpp"],
+      "remaining_python_runtime": [],
+      "tests": ["tests/python/test_native_hessian_frontend.py", "tests/python/test_wb97mv_hessian_cli_cuda.py", "tests/python/test_native_wb97mv_stationary.py"],
+      "trackers": ["#2527"],
+      "qualification": "source-inventory-only",
+      "method_selectors": ["method-ir:wb97m-v-rks", "method-ir:wb97m-v-uks"]
+    },
+    {
       "id": "ks-molecular-second-order",
       "method_families": [
         "density_functional"
@@ -776,26 +801,50 @@
           "path": "python/generativeqc/force_aware_scf.py",
           "symbol": "ForceAwareScfPolicy._verify_final_python",
           "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "project_occupied",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "project_density",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "_project_occupied_python",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "_project_density_python",
+          "classification": "compatibility"
         }
       ],
       "native_scientific_sources": [
         "src/scf/preliminary_guess.cpp",
         "src/scf/initial_guess/minao.cpp",
         "src/runtime/execution_precision.hpp",
-        "src/scf/effort_policy.hpp"
+        "src/scf/effort_policy.hpp",
+        "src/scf/initial_guess/density.cpp",
+        "src/scf/occupied_projection.cpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
-        "src/api/c_api_scf_effort.cpp"
+        "src/api/c_api_scf_effort.cpp",
+        "src/api/c_api_projection.cpp"
       ],
       "remaining_python_runtime": [
-        "Progressive/coarse-to-fine physical execution and force-aware strict cleanup execution remain Python-owned. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance, custom types and old-protocol compatibility remain explicit Python work."
+        "Progressive/coarse-to-fine physical execution and force-aware strict cleanup execution remain Python-owned. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance, custom types and old-protocol compatibility remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
         "tests/python/test_progressive_controller_native.py",
         "tests/python/test_native_scf_effort.py",
-        "tests/native/test_scf_effort_sdk.cpp"
+        "tests/native/test_scf_effort_sdk.cpp",
+        "tests/python/test_native_basis_projection.py"
       ],
       "trackers": [
         "#933"

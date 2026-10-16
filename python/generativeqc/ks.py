@@ -625,6 +625,19 @@ def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     )
 
 
+def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Admit only the independently qualified physical-spin WB97M-V composition.
+
+    Compiler primitive rules are wider than public molecular qualification.
+    Compare resolved mathematics, not a user-provided selector or identifier.
+    """
+    return (
+        isinstance(method_ir, MethodIR)
+        and method_ir.semantic_payload()
+        == resolve_method("WB97M-V", spin=method_ir.spin).semantic_payload()
+    )
+
+
 def uses_molecular_nonlocal_domain(method_ir: MethodIR) -> bool:
     """Return the generated molecular nonlocal-domain capability for one KS graph."""
     try:

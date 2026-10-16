@@ -1,0 +1,10 @@
+{
+  "name": "ecp_nuclear_response",
+  "outputs": [
+    "generated/response/ecp_response.cuh",
+    "generated/response/ecp_density.cuh",
+    "generated/response/ecp_quadrature.hpp"
+  ],
+  "owner": "python/generativeqc_compiler/method/ecp_response.py",
+  "scope": "Build-only fixed-measure AO energy bilinear VJP/JVP, order-two AO Taylor AD and physical spin-density sums. The integral compiler ecp_fixed_grid.py freezes incumbent two-grid Legendre constants through existing radial/harmonic graphs; incumbent generated ECP helpers own potentials, projections and convergence. Runtime receives linked CUDA and verbatim constants, never a compiler/Python numerical dependency. Coarse/fine admission remains mandatory. This does not register a stationary molecular Hessian."
+}

@@ -27,6 +27,7 @@
 #endif
 
 #include "cli/geometry_command.hpp"
+#include "cli/hessian.hpp"
 #include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 #include "cli/profiles.hpp"
@@ -212,6 +213,7 @@ void print_usage(std::ostream& out) {
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc optimize INPUT.xyz [run and geometry options]\n"
+         "  generativeqc hessian|hvp INPUT.xyz --backend cuda [options]\n"
          "  generativeqc profile show|clear\n"
          "  generativeqc resources INPUT.xyz [run and budget options]\n"
          "  generativeqc profile install ARCHIVE.zip\n"
@@ -258,6 +260,12 @@ void print_usage(std::ostream& out) {
          "  --opt-max-step F         Max per-atom displacement (Bohr; default: 0.35)\n"
          "  --plan-only              Print selected stages; do not initialize a device\n"
          "  --output FILE.xyz        Write final Angstrom XYZ, refusing to overwrite\n";
+  out << "Native compiler AD Hessian/HVP options (linked CUDA AOT; no Python/JIT):\n"
+         "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
+         "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
+         "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
+         "  --response-budget-bytes N --max-nonlocal-pairs N\n"
+         "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
 }
 
 int basis_command(int argc, char** argv) {
@@ -434,6 +442,8 @@ RunOptions parse_run(int argc, char** argv) {
   RunOptions options;
   const bool resources = std::string_view(argv[1]) == "resources";
   const bool optimizing = std::string_view(argv[1]) == "optimize";
+  const bool compiler_second_order =
+      std::string_view(argv[1]) == "hessian" || std::string_view(argv[1]) == "hvp";
   if (resources) {
     options.method_name = "rhf";
     options.method = GENERATIVEQC_METHOD_RHF;
@@ -679,7 +689,9 @@ RunOptions parse_run(int argc, char** argv) {
     options.grid.angular_polar = native_grid.angular_polar;
     options.grid.angular_azimuth = native_grid.angular_azimuth;
   }
-  if (options.composition) {
+  // The explicit compiler consumer owns complete nonlocal Hessian admission;
+  // the native KsComposition-only catalog must not stand in for that contract.
+  if (options.composition && !compiler_second_order) {
     const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA ? options.composition->cuda
                                                                        : options.composition->cpu;
     if (!admitted) {
@@ -1124,6 +1136,18 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "basis") return basis_command(argc, argv);
+    if (command == "hessian" || command == "hvp") {
+      if (argc == 3 &&
+          (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
+        print_usage(std::cout);
+        return 0;
+      }
+      auto invocation = generativeqc::cli::parse_hessian_invocation(argc, argv);
+      std::vector<char*> arguments;
+      for (auto& argument : invocation.run_arguments) arguments.push_back(argument.data());
+      const auto options = parse_run(static_cast<int>(arguments.size()), arguments.data());
+      return generativeqc::cli::hessian_command(options, read_xyz(options), invocation);
+    }
     if (command == "run") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {

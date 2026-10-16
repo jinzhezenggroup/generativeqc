@@ -3,7 +3,8 @@
 This record qualifies the optional bounded PySCF reference, not #178/#179
 analytic integration. Source hashes, complete bases/coordinates, all three
 gradient-difference steps, actual Hessians and per-case gates are retained in
-`qualification.json`. All gates pass for H2/STO-3G and custom 12-AO water.
+`qualification.json.xz` (losslessly compressed JSON). All gates pass for
+H2/STO-3G and custom 12-AO water.
 
 Reproduce with the optional reference dependencies installed:
 

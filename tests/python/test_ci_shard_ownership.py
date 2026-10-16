@@ -219,13 +219,14 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
-        "core-a": (
+        "runtime-heavy": (
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
             "test_uccsd_solver.py",
-            "test_cc_triples_tiles.py",
         ),
+        "core-a": ("test_cc_triples_tiles.py", "test_wb97mv_hessian.py"),
         "core-b": (
+            "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
@@ -269,8 +270,9 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
-        "tests/python/test_cuda_xc_point_contract.py": "core-a",
-        "tests/python/test_uccsd_solver.py": "core-a",
+        "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
+        "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
+        "tests/python/test_uccsd_solver.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
         "tests/python/test_direct_exchange_queue.py": "core-b",
@@ -281,6 +283,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         for name in (
             "test_aaa.py",
             "test_cc_triples_tiles_next.py",
+            "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_df_lambda_mixed_precision_next.py",
             "test_df_occupied_triples_next.py",
@@ -305,11 +308,15 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             # Missing tracked tests stay selected so pytest can fail closed.
             (tmp_path / relative).unlink()
     selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    assert selections["runtime-heavy"][0] == "loadfile"
     for path, owner in owners.items():
         actual = [
             shard for shard, (_, targets, _) in selections.items() if path in targets
         ]
         assert actual == ([owner] if tracked else [])
+        assert sum(targets.count(path) for _, targets, _ in selections.values()) == (
+            1 if tracked else 0
+        )
         assert not any(
             path in argument
             for _, _, arguments in selections.values()
@@ -373,11 +380,11 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_cpu_hf_high_l.py": "core-a",
         "tests/python/test_uccsd_t_lambda.py": "core-c",
     }
     owners = {
         **parallel,
+        "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_uccsd_gradient.py": "uccsd-forces",
         "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
@@ -505,10 +512,96 @@ def test_fresh_frontiers_reject_invalid_worker_counts(workers: int) -> None:
         _frontier_indices((True, False), workers)
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("bucket", range(3))
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+@pytest.mark.parametrize("family", ("rks", "uks", "lambda", "all"))
+def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
+    event: str, bucket: int, presence: str, family: str, tmp_path: Path
+) -> None:
+    """Inventory insertions cannot collide fresh owners or shift ordinary slots."""
+    frontiers = {
+        "rks": ("tests/python/test_wb97mv_hessian.py", "core-a"),
+        "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
+        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-c"),
+    }
+    owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
+    ordinary = [
+        f"tests/python/test_early_{index:02d}.py" for index in range(6 + bucket)
+    ]
+    ordinary.extend(f"{path[:-3]}_next.py" for path in owners)
+    ordinary.extend(f"tests/python/test_zlater_{index}.py" for index in range(6))
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*ordinary, *(owners if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    for relative in owners:
+        if presence == "untracked":
+            (tmp_path / relative).touch()
+        elif presence == "missing":
+            # Missing tracked tests stay selected so pytest fails closed.
+            (tmp_path / relative).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    selected = Counter(
+        target
+        for _, targets, _ in selections.values()
+        for target in targets
+        if target in inventory or target in owners
+    )
+    assert selected == Counter(inventory)
+    for path, owner in owners.items():
+        assert [
+            shard for shard, (_, targets, _) in selections.items() if path in targets
+        ] == ([owner] if tracked else [])
+    for owner, shard in enumerate(("core-a", "core-b", "core-c")):
+        distribution, targets, extra = selections[shard]
+        assert distribution == "worksteal"
+        assert targets == [
+            path
+            for index, path in enumerate(inventory)
+            if owners.get(path) == shard or (path not in owners and index % 3 == owner)
+        ]
+        priorities = [
+            argument.split("=", 1)[1]
+            for argument in extra
+            if argument.startswith("--ci-fresh-priority=")
+        ]
+        assert priorities == [
+            path for path, expected in owners.items() if tracked and expected == shard
+        ]
+        assert ("tools.pytest_ci_fresh_frontier" in extra) == bool(priorities)
+    for _, _, extra in selections.values():
+        assert all(
+            not any(path in argument for path in owners)
+            for argument in extra
+            if not argument.startswith("--ci-fresh-priority=")
+        )
+
+
 @pytest.mark.parametrize("filtered", (False, True))
 @pytest.mark.parametrize("mode", ("worksteal", "load", "serial"))
+@pytest.mark.parametrize(
+    "fresh_suites",
+    (
+        (("test_frontier_fresh.py", 8),),
+        (
+            ("test_uccsd_t_lambda.py", 17),
+            ("test_wb97mv_hessian.py", 10),
+            ("test_wb97mv_uks_hessian.py", 4),
+        ),
+    ),
+)
 def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
-    filtered: bool, mode: str, tmp_path: Path
+    filtered: bool,
+    mode: str,
+    fresh_suites: tuple[tuple[str, int], ...],
+    tmp_path: Path,
 ) -> None:
     """Observe parallel startup and unchanged serial/-k selection behavior."""
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
@@ -529,13 +622,13 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
         "def test_drop(value):\n    assert value >= 0\n",
         encoding="utf-8",
     )
-    fresh = tmp_path / "test_frontier_fresh.py"
-    fresh.write_text(
-        "import pytest\n"
-        "@pytest.mark.parametrize('value', range(8))\n"
-        "def test_fresh(value):\n    assert value >= 0\n",
-        encoding="utf-8",
-    )
+    for name, count in fresh_suites:
+        (tmp_path / name).write_text(
+            "import pytest\n"
+            f"@pytest.mark.parametrize('value', range({count}))\n"
+            "def test_fresh(value):\n    assert value >= 0\n",
+            encoding="utf-8",
+        )
     command = [
         sys.executable,
         "-m",
@@ -549,10 +642,10 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
         "-n",
         "0" if mode == "serial" else "4",
         f"--dist={'no' if mode == 'serial' else mode}",
-        "--ci-fresh-priority=test_frontier_fresh.py",
+        *(f"--ci-fresh-priority={name}" for name, _ in fresh_suites),
         "-q",
         str(normal),
-        str(fresh),
+        *(str(tmp_path / name) for name, _ in fresh_suites),
     ]
     if filtered:
         command.extend(("-k", "not test_drop"))
@@ -582,9 +675,8 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
     ]
     assert len(records) == (1 if mode == "serial" else 4)
     if mode == "worksteal":
-        assert all(
-            entries[0].startswith("test_frontier_fresh.py::") for entries in records
-        )
+        prefixes = tuple(f"{name}::" for name, _ in fresh_suites)
+        assert all(entries[0].startswith(prefixes) for entries in records)
     actual = Counter(node for entries in records for node in entries)
     expected = Counter(
         f"test_frontier_ordinary.py::test_ordinary[{value}]" for value in range(32)
@@ -594,7 +686,9 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
             f"test_frontier_ordinary.py::test_drop[{value}]" for value in range(8)
         )
     expected.update(
-        f"test_frontier_fresh.py::test_fresh[{value}]" for value in range(8)
+        f"{name}::test_fresh[{value}]"
+        for name, count in fresh_suites
+        for value in range(count)
     )
     assert actual == expected
     if mode == "serial":

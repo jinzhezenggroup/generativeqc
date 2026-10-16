@@ -174,6 +174,8 @@ def _validate_partition_provenance(
     point's large atomic measure must not amplify that partition roundoff into
     a false provenance failure. Actual AO integration still uses native weights.
     """
+    from generativeqc_compiler.common.array_execution import arrays as np
+
     raw, actual, expected = map(np.asarray, (atomic_weights, weights, fractions))
     if (
         raw.ndim != 1
