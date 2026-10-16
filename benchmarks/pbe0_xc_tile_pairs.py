@@ -277,7 +277,7 @@ def main() -> None:
 
     def observe_force(arm: str, original: Any) -> Any:
         def observed(*values: Any) -> Any:
-            result = original(*values)
+            result = original(*values, tile_points=256)
             force_work[arm] = result[1]
             return result
 
@@ -289,7 +289,31 @@ def main() -> None:
                 f"{arm} E+F failed: status={item.status}, "
                 f"message={item.status_message}, converged={item.converged}"
             )
-        return force_work[arm]
+        try:
+            work = force_work.pop(arm)
+        except KeyError:
+            record["force_request_failure"] = {
+                "selection": arm,
+                "reason": "selected force route did not publish the requested receipt",
+            }
+            save("unsupported-force-route")
+            raise RuntimeError(
+                f"{arm} force request receipt unavailable on selected route"
+            ) from None
+        requested = work.get("grid_tile_points_requested")
+        if (
+            type(requested) is not int
+            or requested != 256
+            or work.get("grid_tile_schedule") != "explicit"
+        ):
+            record["force_request_failure"] = {
+                "selection": arm,
+                "required_tile_points": 256,
+                "native_force_work_raw": work,
+            }
+            save("unsupported-force-request")
+            raise RuntimeError(f"{arm} fixed force tile request was not honored")
+        return work
 
     try:
         for arm, tile in tiles.items():
@@ -350,6 +374,7 @@ def main() -> None:
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     item = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
@@ -397,6 +422,7 @@ def main() -> None:
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     primed = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
@@ -427,6 +453,7 @@ def main() -> None:
             ) -> dict[str, int]:
                 assert owners[arm]._warm_updates is False
                 with point_batch_selection(arm):
+                    force_work.pop(arm, None)
                     item = (
                         owners[arm]
                         .execute(

@@ -81,8 +81,22 @@ def run_fake_campaign(
         def set_warm_start_updates(self, enabled: bool) -> None:
             self._warm_updates = enabled
 
-        def _public_dft_cuda_force(self) -> tuple[np.ndarray, dict[str, int]]:
-            return np.zeros((1, 3)), {"tile_points": 256}
+        def _public_dft_cuda_force(
+            self, *, tile_points: int | None = None
+        ) -> tuple[np.ndarray, dict[str, Any]]:
+            requested = {
+                "force-request-missing": None,
+                "force-request-other": 512,
+                "force-request-bool": True,
+                "force-request-float": 256.0,
+            }.get(mutation, tile_points)
+            return np.zeros((1, 3)), {
+                "tile_points": 256,
+                "grid_tile_points_requested": requested,
+                "grid_tile_schedule": (
+                    "budget-auto" if mutation == "force-schedule-auto" else "explicit"
+                ),
+            }
 
         def execute(self, coords: Any, *, strict: bool, properties: Any) -> Any:
             assert strict is False and properties == ("energy", "forces")
@@ -108,7 +122,12 @@ def run_fake_campaign(
             failed_force = (
                 mutation == "force-status" and self.tile == 256 and len(self.calls) == 1
             )
-            forces, _ = (None, None) if failed_force else self._public_dft_cuda_force()
+            if failed_force:
+                forces = None
+            elif mutation == "force-route-bypass" and not self._warm_updates:
+                forces = np.zeros((1, 3))
+            else:
+                forces, _ = self._public_dft_cuda_force()
             candidate = (
                 self.tile == 512
                 or self.point_specialization == "1"
@@ -338,6 +357,12 @@ def test_tiles_force_policy_and_frozen_replays(
             tile = record["scf_tiles"][row["selection"]]
             assert diagnostic["native_ks_diagnostic"]["tile_points"] == tile
             assert diagnostic["native_force_work_raw"]["tile_points"] == 256
+            assert (
+                diagnostic["native_force_work_raw"]["grid_tile_points_requested"] == 256
+            )
+            assert (
+                diagnostic["native_force_work_raw"]["grid_tile_schedule"] == "explicit"
+            )
             assert diagnostic["native_scf_ao_work"]["tiles"] == 256 // (tile // 256)
             assert diagnostic["iterations"] == diagnostic["fock_builds"] == 1
 
@@ -373,6 +398,32 @@ def test_failed_force_reports_public_status(
         match="baseline E\\+F failed: status=3, message=prepared derivative source unavailable",
     ):
         run_fake_campaign(monkeypatch, tmp_path, "force-status")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "force-request-missing",
+        "force-request-other",
+        "force-request-bool",
+        "force-request-float",
+        "force-schedule-auto",
+    ),
+)
+def test_actual_fixed_force_request_is_required(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: str
+) -> None:
+    with pytest.raises(RuntimeError, match="fixed force tile request was not honored"):
+        run_fake_campaign(monkeypatch, tmp_path, mutation, point_specialization=True)
+
+
+def test_native_force_route_cannot_reuse_a_previous_force_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    with pytest.raises(RuntimeError, match="force request receipt unavailable"):
+        run_fake_campaign(
+            monkeypatch, tmp_path, "force-route-bypass", point_specialization=True
+        )
 
 
 def test_retained_publication_and_complete_pairs() -> None:

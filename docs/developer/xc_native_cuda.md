@@ -206,6 +206,16 @@ Current promotion requires explicit v3 producer/policy provenance; relabeling
 or stripping fields cannot turn a shared equal-spin or unknown legacy consumer
 into promotion evidence.
 
+The producer requests a fixed 256-point force tile through the selected Python
+force composition entry before active-AO policy resolution and execution. It
+requires an integer `grid_tile_points_requested=256` and an `explicit` schedule
+in each actual force receipt. A prepared native-force route that bypasses that
+entry is unsupported by this campaign unless it supplies the requested receipt;
+the producer cannot reuse a previous call's work. Normal public force calls
+retain their budget-selected policy. A fixed request does not establish phased
+route support: the independent consumer still requires the original absolute
+phase/work counts and complete endpoint qualification.
+
 The producer retains constructor, owner preparation and initial E+F timestamp
 segments, their own-work sum, observed span and excluded interleaving/provenance
 gaps. Preparation/setup durations retain their earlier meanings. Moved setup

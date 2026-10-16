@@ -169,12 +169,14 @@ def test_stationary_artifact_selector_keeps_source_emission_in_jit_branch(
 @pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("missing_artifact", (False, True))
+@pytest.mark.parametrize("tile_points", (None, 256))
 def test_public_aot_force_does_not_probe_nvcc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     missing_artifact: bool,
     method: str,
     spin: str,
+    tile_points: int | None,
 ) -> None:
     class Basis:
         shells = ()
@@ -208,7 +210,7 @@ def test_public_aot_force_does_not_probe_nvcc(
 
     def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
         assert kwargs["compiler"] is None
-        assert kwargs["tile_points"] is None
+        assert kwargs["tile_points"] == tile_points
         assert kwargs["max_grid_points"] is None
         assert kwargs["max_grid_pair_visits"] is None
         assert kwargs["target"] is target
@@ -237,13 +239,28 @@ def test_public_aot_force_does_not_probe_nvcc(
     )
     if missing_artifact:
         with pytest.raises(FileNotFoundError, match="missing packaged"):
-            PreparedBatch._public_dft_cuda_force(batch, 0, ())
+            PreparedBatch._public_dft_cuda_force(batch, 0, (), tile_points=tile_points)
     else:
-        force, work = PreparedBatch._public_dft_cuda_force(batch, 0, ())
+        force, work = PreparedBatch._public_dft_cuda_force(
+            batch, 0, (), tile_points=tile_points
+        )
         np.testing.assert_array_equal(force, -np.ones((2, 3)))
         assert work["tensor_executions"] == 0
+        workload = work["force_active_ao_policy"]["workload"]
+        assert workload["tile_points"] == tile_points
+        assert workload["tile_policy"] == (
+            "budget-auto" if tile_points is None else "fixed"
+        )
     source.close.assert_called_once()
     assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)
+
+
+@pytest.mark.parametrize("tile_points", (True, 0, -1, 256.0, "256"))
+def test_explicit_force_tile_rejects_invalid_request_before_owner_use(
+    tile_points: object,
+) -> None:
+    with pytest.raises(ValueError, match="force tile size must be a positive integer"):
+        PreparedBatch._public_dft_cuda_force(None, 0, (), tile_points=tile_points)
 
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))

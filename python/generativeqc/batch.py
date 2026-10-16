@@ -636,9 +636,23 @@ class PreparedBatch:
         return compiler
 
     def _public_dft_cuda_force(
-        self, index: typing.Any, atoms: typing.Any
+        self,
+        index: typing.Any,
+        atoms: typing.Any,
+        *,
+        tile_points: int | None = None,
     ) -> typing.Any:
-        """Execute a compiler-selected stationary CUDA force composition."""
+        """Execute a stationary CUDA force with an optional fixed-tile request.
+
+        Qualification callers bind the force-policy workload and execution to
+        the same explicit tile size. Unspecified requests retain budget-auto.
+        The prepared native-force capability route is separate and does not
+        consume this private entry point's request.
+        """
+        if tile_points is not None and (
+            type(tile_points) is not int or tile_points <= 0
+        ):
+            raise ValueError("force tile size must be a positive integer")
         from generativeqc_compiler.dft import NativeAO
         from generativeqc_compiler.method.stationary_cuda import (
             stationary_aot_profile_for_plan,
@@ -690,10 +704,10 @@ class PreparedBatch:
                 target = self._stationary_cuda_target()
                 if composite_force:
                     max_device_bytes, max_host_bytes = 1 << 30, 2 << 30
-                    tile_policy, policy_tile_points = "budget-auto", None
                 else:
                     max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
-                    tile_policy, policy_tile_points = "budget-auto", None
+                tile_policy = "budget-auto" if tile_points is None else "fixed"
+                policy_tile_points = tile_points
 
                 profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
                 resident_provider = getattr(source, "cuda_resident_grid", None)
@@ -761,6 +775,7 @@ class PreparedBatch:
                             )
                         ),
                         library=Path(str(self._library._name)).resolve(),
+                        tile_points=policy_tile_points,
                         max_device_bytes=max_device_bytes,
                         max_host_bytes=max_host_bytes,
                         active_ao_cutoff=decision.cutoff,
