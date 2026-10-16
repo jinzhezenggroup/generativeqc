@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import TextIO
 
+import numpy as np
 import pytest
 
 from benchmarks.compare_wb97mv_hessian_gpu4pyscf import (
@@ -21,6 +22,75 @@ from benchmarks.compare_wb97mv_hessian_gpu4pyscf import (
     _run_child,
     _summarize,
 )
+
+
+def _default_package_evidence() -> dict:
+    from tools.generativeqc_validation.record import load_publication_record
+
+    return load_publication_record(
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/wb97mv-hessian-default-fg-20261016"
+    )
+
+
+def test_full_default_package_retains_source_matched_native_cli_results() -> None:
+    """A later packaging build must not relabel earlier molecular receipts."""
+    from generativeqc_compiler.common.evidence import validate_evidence
+
+    record = _default_package_evidence()
+    validate_evidence(record)
+    qualification = record["qualification"]
+    assert qualification["slurm"]["source_revision"] == record["revision"]
+    assert record["stages"]["numerical"]["status"] == "pass"
+    assert record["performance"]["status"] == "not-run"
+    for result in qualification["cli_outputs"].values():
+        assert result["native_source_identity"] == record["hashes"]["source"]
+        assert result["backend"] == "cuda"
+        assert result["diagnostics"]["runtime_python"] is False
+        assert result["diagnostics"]["runtime_compilation"] is False
+        assert result["diagnostics"]["numerical_host_fallbacks"] == 0
+    prior = qualification["prior_molecular_qualification"]
+    assert prior["base_revision"] != record["revision"]
+    assert prior["source_identity"] != record["hashes"]["source"]
+    assert prior["library_sha256"] != qualification["binary_sha256"]["library"]
+
+
+def test_full_default_package_preserves_independent_energy_stencils() -> None:
+    """Recompute the reported extrapolants and unchanged numerical gates."""
+    from generativeqc_compiler.common.evidence import block_error
+
+    qualification = _default_package_evidence()["qualification"]
+    rows = (
+        qualification["independent_oracle"]
+        + qualification["prior_molecular_qualification"]["high_angular_oracles"]
+    )
+    assert any(row["orbital_angular"] == 3 and row["auxiliary_g"] for row in rows)
+    for row in rows:
+        assert row["steps"] == [0.004, 0.002]
+        coarse, fine = np.asarray(row["energy_stencil_hvps"])
+        expected = (4 * fine - coarse) / 3
+        np.testing.assert_array_equal(row["expected"], expected)
+        assert row["error"]["atol"] == 8e-7
+        assert row["error"]["rtol"] == 3e-5
+        observed = block_error(row["actual"], expected, atol=8e-7, rtol=3e-5)
+        assert observed["passed"] and row["error"]["passed"]
+        assert observed["max_absolute_error"] == pytest.approx(
+            row["error"]["max_absolute_error"], rel=1e-12, abs=1e-18
+        )
+
+
+def test_high_angular_raw_matrices_preserve_symmetry_and_hvp_parity() -> None:
+    """Audit the retained raw full f/g matrices against their separate HVPs."""
+    qualification = _default_package_evidence()["qualification"]
+    matrices = qualification["prior_molecular_qualification"]["raw_full_matrices"]
+    assert {row["spins"] for row in matrices.values()} == {1, 2}
+    for row in matrices.values():
+        size = 3 * row["atoms"]
+        matrix = np.asarray(row["hessian"]).reshape(size, size)
+        np.testing.assert_allclose(matrix, matrix.T, atol=2e-7, rtol=0)
+        np.testing.assert_allclose(
+            matrix @ np.asarray(row["motion"]), row["hvp"], atol=2e-8, rtol=0
+        )
 
 
 @pytest.mark.parametrize("devices", (0, 2, 4))

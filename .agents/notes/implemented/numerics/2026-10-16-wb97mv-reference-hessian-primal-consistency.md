@@ -84,6 +84,43 @@ diagnostic are retained in
 `benchmarks/results/wb97mv-hessian-native-full-20261016/`. The official matched
 matrix gate still fails and all qualified performance ratios remain null.
 
+## Additional isolation controls, not a replacement comparator
+
+The unchanged installed reference was also tested on H2 with NLC explicitly
+disabled. Slurm 3230 found that the own-primal full-Hessian discrepancy is not
+exclusive to MGGA, range separation or VV10: the fine-stencil analytic-minus-
+Richardson errors include approximately `2.7333e-5` for LDA/VWN,
+`-3.9486e-6` for PBE, and `9.3269e-5` for WB97M-V without NLC. HF agreed to
+approximately `6e-11`. These controls do not change the canonical comparison.
+
+Slurm 3234 separately fixed the AO density matrix and displaced the last H z
+coordinate. The reference `_get_exc_deriv2_grid_response` agreed with its own
+fixed-density XC-energy curvature to at most `1.04e-10` for LDA/VWN, PBE and
+NLC-disabled WB97M-V using the same `.004/.002` Richardson stencil.
+`_get_vxc_deriv1_grid_response`, transformed into the fixed origin MO/occupied
+frame, agreed with displaced numerical-integration potentials to at most
+`5.69e-12`. Earlier long-double Becke-weight controls likewise did not expose
+a weight-jet explanation. These are directional controls, not a proof that every
+frozen term or geometry is correct.
+
+Slurm 3238 scaled the positive density matrix by `1±h` rather than moving nuclei.
+For LDA/VWN, PBE and NLC-disabled WB97M-V, the complete Fock contraction agrees
+with the first electronic-energy derivative within `4.32e-13`, and the
+`gen_response(hermi=1)` contraction agrees with the second derivative within
+`1.07e-10`. HF's first-energy derivative agrees within `6.67e-15`; the generic
+RKS/HF response interface raises an AO-shape `ValueError`, so its second-response
+comparison is explicitly unavailable. The first Slurm 3236 diagnostic stopped
+on that exception; the revised driver retains the unavailable HF result and
+continues the other planned controls rather than silently declaring it passing.
+This does not describe a failure of the separately tested HF Hessian endpoint.
+
+Raw scripts/results remain in local
+`.artifacts/wb97mv-hessian-aot-20261015/reference-{model-controls,weight-control,frozen-control,density-control}*`.
+The fixed-density and density-scaled controls narrow future investigation but do
+not identify a faulty full-Hessian assembly term or resolve the official matrix
+gate. Do not introduce compensating native terms, patch vendor kernels, or claim
+an accepted speed ratio from these diagnostics.
+
 ## Revisit when
 
 Repeat the analytic/primal control with pinned upstream versions or an
