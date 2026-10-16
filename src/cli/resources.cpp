@@ -149,9 +149,9 @@ Json hf_inventory(const std::array<Bytes, 4>& inventory) {
   return result;
 }
 
-scf::CpuKsHostResourceShape cpu_ks_shape(const Topology& shape, Bytes atoms, Bytes spins,
-                                         const RunOptions& options, Bytes ecp_terms,
-                                         Bytes ecp_workspace) {
+scf::KsHostResourceShape ks_host_shape(const Topology& shape, Bytes atoms, Bytes spins,
+                                       const RunOptions& options, Bytes ecp_terms,
+                                       Bytes ecp_workspace) {
   return {atoms,
           shape.nbf,
           shape.cartesian_nbf,
@@ -164,7 +164,7 @@ scf::CpuKsHostResourceShape cpu_ks_shape(const Topology& shape, Bytes atoms, Byt
                    options.grid.angular_azimuth}),
           options.grid.radial_points,
           options.grid.angular_polar,
-          256,
+          options.backend == GENERATIVEQC_BACKEND_CUDA ? options.grid.tile_points : 256,
           options.diis_history,
           options.max_iterations.value_or(100),
           options.method_name.starts_with("pbe"),
@@ -175,47 +175,8 @@ scf::CpuKsHostResourceShape cpu_ks_shape(const Topology& shape, Bytes atoms, Byt
 Json ks_inventory(const std::array<Bytes, 16>& inventory) {
   Json result = Json::object();
   for (std::size_t index = 0; index < inventory.size(); ++index)
-    result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
+    result[scf::ks_host_resource_keys[index]] = inventory[index];
   return result;
-}
-
-Json ks_inventory(const Topology& shape, Bytes atoms, Bytes spins, const RunOptions& options,
-                  Bytes ecp_terms, Bytes ecp_workspace) {
-  const bool cuda = options.backend == GENERATIVEQC_BACKEND_CUDA;
-  if (!cuda) {
-    return ks_inventory(scf::cpu_ks_host_resources(
-        cpu_ks_shape(shape, atoms, spins, options, ecp_terms, ecp_workspace)));
-  }
-  const Bytes orbital_aos = shape.nbf, cartesian_aos = shape.cartesian_nbf;
-  const Bytes n2 = product({orbital_aos, orbital_aos}),
-              c2 = product({cartesian_aos, cartesian_aos});
-  const Bytes points = product({atoms, options.grid.radial_points, options.grid.angular_polar,
-                                options.grid.angular_azimuth});
-  const Bytes packed = sum({3 * atoms, 2 * shape.primitives, 16 * orbital_aos});
-  const Bytes metadata = sum({8192,
-                              product({512, sum({atoms, shape.shells, shape.primitives, orbital_aos,
-                                                 cartesian_aos, ecp_terms})}),
-                              16384u});
-  const Bytes grid = product({36, points});
-  const Bytes basis = product({8, packed});
-  const Bytes warm = sum({product({8, n2, 4 + 4 * spins}), product({96, atoms})});
-  const Bytes history = product({256, options.max_iterations.value_or(100)});
-  const Bytes provider = product({8, 2 * n2});
-  const Bytes solver = orbital_aos > 16 ? sum({1024 * 1024, product({128, n2})}) : 0;
-  const Bytes retained = sum({metadata, grid, basis, warm, history, provider, solver, 16384u});
-  const Bytes matrix = sum({product({8, spins, n2, 128 + 2 * (options.diis_history + 1)}),
-                            product({16, options.diis_history + 1, options.diis_history + 1})});
-  const Bytes quadrature =
-      sum({product({16, sum({options.grid.radial_points, options.grid.angular_polar})}), 8 * atoms,
-           product({8, sum({4 * atoms, 2 * (512 + 256)})})});
-  const Bytes pairs = shape.shells * (shape.shells + 1) / 2;
-  const Bytes setup =
-      sum({product({2048, sum({1, atoms, shape.shells, shape.primitives, orbital_aos, cartesian_aos,
-                               pairs, product({pairs, pairs})})}),
-           product({64, sum({c2, n2, product({orbital_aos, cartesian_aos})})}), quadrature, basis});
-  return {{"retained", retained},
-          {"setup_workspace", sum({setup, ecp_workspace})},
-          {"scf_workspace", matrix}};
 }
 
 struct DfTiles {
@@ -592,7 +553,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   } else if (cpu && ks) {
     scf::CpuKsHostFleetResources fleet;
     plan["item_inventory"] = ks_inventory(fleet.append(
-        cpu_ks_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        ks_host_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
         options.batch));
     const auto aggregate = fleet.inventory();
     retained = aggregate[12];
@@ -665,12 +626,14 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
           "KS CUDA inventory requires a CUDA library and valid launch/DIIS dimensions";
       return emit();
     }
-    const auto inventory =
-        ks_inventory(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace);
-    plan["item_inventory"] = inventory;
-    retained = inventory["retained"].get<Bytes>();
-    workspace = std::max(inventory["setup_workspace"].get<Bytes>(),
-                         inventory["scf_workspace"].get<Bytes>());
+    scf::KsHostFleetResources host_fleet;
+    plan["item_inventory"] = ks_inventory(host_fleet.append(
+        ks_host_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        options.batch, scf::KsHostExecution::cuda_fused));
+    const auto host_inventory = host_fleet.inventory();
+    retained = host_inventory[12];
+    workspace = host_inventory[13];
+    plan["host_fleet_composition"] = "native-declared-capacity";
     scf::CudaKsDeviceFleetResources fleet;
     std::array<Bytes, 6> device_item{};
     try {
@@ -721,7 +684,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
   }
-  if (!cpu && ks) retained = product({options.batch, retained});
+  // Each native fleet already applies batch multiplicity to retained storage.
   const Bytes resident_device =
       plan["resident_bytes"].value("device:" + std::to_string(options.device_id), Bytes{0});
   if (resident_device > device)

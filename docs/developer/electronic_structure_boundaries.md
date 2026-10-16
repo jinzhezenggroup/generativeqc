@@ -28,6 +28,16 @@ still admit basis, provider, backend, precision and requested properties. This
 does not qualify every catalog entry, retire custom MethodIR compilation or
 establish complete method/basis/CLI parity.
 
+### KS host capacity ownership
+
+`src/scf/ks_host_resources.hpp` owns CPU and CUDA KS host capacity and fleet
+lifetimes for Python metadata planning and the native CLI. Binding reservations
+come from the same CUDA-header-free constants used by the actual tensor
+bindings. Host sizing neither discovers providers nor admits new scientific
+domains. Consumer allowances and old-library compatibility are specified in
+[resource planning](../maintainer/resource_planning.md); device inventories,
+prepared leases and endpoint allocation receipts remain separate contracts.
+
 ### Method-neutral infrastructure
 
 The following directories are method-neutral owners:

@@ -277,32 +277,46 @@ def basis() -> BasisSet:
 
 
 @pytest.mark.parametrize("method", ("rhf", "pbe-rks"))
+@pytest.mark.parametrize("native_ecp", (False, True))
+@pytest.mark.parametrize("native_host_fleet", (False, True))
 def test_deferred_cuda_library_records_the_actual_ecp_owners(
+    library: typing.Any,
     basis: BasisSet,
     cuda_layout_library: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
     method: str,
+    native_ecp: bool,
+    native_host_fleet: bool,
 ) -> None:
-    """KS sizes host storage before loading the device-layout library."""
+    """Implicit and explicit loads retain the same actual sizing provenance."""
+    selected = SimpleNamespace(**vars(cuda_layout_library))
+    if not native_ecp:
+        del selected.generativeqc_resource_ecp_workspace_v1
+    if native_host_fleet:
+        selected.generativeqc_resource_ks_cuda_host_fleet_v1 = (
+            library.generativeqc_resource_ks_cuda_host_fleet_v1
+        )
 
     def load_library(*, device: str) -> typing.Any:
         assert device == "cpu"
-        return cuda_layout_library
+        return selected
 
     monkeypatch.setattr(_native, "load_library", load_library)
     estimate = estimate_hf_resources if method == "rhf" else estimate_ks_resources
-    plan = estimate(
-        [[("Na", (0, 0, 0)), ("H", (0, 0, 3))]],
-        basis=basis,
-        method=method,
-        backend="cuda",
-    ).require_feasible()
+    systems = [[("Na", (0, 0, 0)), ("H", (0, 0, 3))]]
+    options = {"basis": basis, "method": method, "backend": "cuda"}
+    plan = estimate(systems, **options).require_feasible()
+    explicit = estimate(systems, library=selected, **options).require_feasible()
+    assert plan.requests == explicit.requests
+    assert plan.peak_bytes == explicit.peak_bytes
+    assert plan.resident_bytes == explicit.resident_bytes
     controls = json.loads(plan.requests[0].identity.schedule)
+    expected = "native-ecp-v1" if native_ecp else "portable-metadata-v1"
     if method == "rhf":
-        assert controls["ecp_inventory"] == "native-ecp-v1"
+        assert controls["ecp_inventory"] == expected
     else:
-        assert controls["ecp_host_inventory"] == "portable-metadata-v1"
-        assert controls["ecp_device_inventory"] == "native-ecp-v1"
+        assert controls["ecp_host_inventory"] == expected
+        assert controls["ecp_device_inventory"] == expected
 
 
 @pytest.mark.parametrize("method", ("rhf", "uhf", "pbe-rks", "pbe-uks"))

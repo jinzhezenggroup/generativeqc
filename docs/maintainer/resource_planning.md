@@ -244,8 +244,25 @@ and fleet authority separately. Libraries exposing only
 fleet composition; old/no-library dry runs retain portable metadata sizing
 without implicitly loading a provider. Neither sizing query executes
 quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
-allocator/RSS receipts remain outside this bridge; CUDA capacity formulas and
-fleet composition are unchanged.
+allocator/RSS receipts remain outside this bridge.
+
+CUDA KS host inventories use the same `scf::KsHostFleetResources` owner through
+the additive `generativeqc_resource_ks_cuda_host_fleet_v1` query. An item adds
+the XC host-unfused selector to the CPU query's seventeen scalar shape fields.
+The query shares the transaction, overflow and no-provider-discovery contract,
+and is available in CPU-only libraries. CUDA host bounds include independent
+solver, matrix and structured binding reservations; host-unfused XC matrices
+are retained, while setup and host XC tiles are serialized workspace. CUDA
+shapes do not inherit CPU integral fourth powers or through-g admission.
+
+Python supplies its snapshot-grid and force-consumer retained allowances once
+per fleet; they coexist with every preparation and replay. The energy-only
+native CLI supplies neither allowance. These are lifetime inputs, not new
+force eligibility or admission. Missing symbols retain portable host sizing;
+selected native refusal or inconsistent publication cannot retry that path.
+Schedule identity records CUDA host fleet authority separately from device
+inventory and ECP queries. Device fleet composition and complete
+provider/allocation/lease authority are outside this host bridge.
 
 HF/KS ECP workspace sizing uses the already loaded library's
 `generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.
@@ -256,8 +273,9 @@ storage. A discovered query's rejection propagates without portable retry.
 Old libraries and library-free dry runs retain explicit metadata-only sizing;
 all-electron inputs need no ECP query or policy import. ECP sizing provenance is
 separate from the enclosing HF/KS inventory in the schedule identity. KS records
-host and device ECP owners separately because CUDA dry runs can load their
-layout-query library after sizing host storage. This changes sizing ownership,
+host and device ECP owners separately because old-library and portable host
+paths need not discover the same ECP query as device layout planning. This changes
+sizing ownership,
 not scientific qualification, native admission/leases or allocation receipts.
 
 D3(BJ) planning uses the already loaded library's private

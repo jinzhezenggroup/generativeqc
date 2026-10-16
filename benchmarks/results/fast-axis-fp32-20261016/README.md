@@ -26,12 +26,16 @@ Focks and passes its independent `1e-7 / 1e-6 / 3e-6` gates. It is one control,
 not a median FP64/Fast ratio or equal-work arithmetic-throughput measurement.
 Separate 96-atom PBE/PBE0 repeats are neutral; no gain is claimed for them.
 
-`summary.json` retains compact timings, observable errors, work counts, actual
+`summary.json.xz` retains compact timings, observable errors, work counts, actual
 devices/drivers and source/core/receipt digests. The retained accuracy oracle's
 historical timing is never used. The third population was explicitly amended
 before observing it after the generic v7 trial failed its predeclared gate;
 all v7 evidence remains separate outside Git. No failed or slower Fast sample
 is removed from this axis population.
+
+The summary is losslessly compressed; `xz -dc summary.json.xz` reproduces the
+original JSON bytes (Git blob `51352dd114b1aae7540c4f2b8201d117349161ad`).
+This storage change does not alter qualification or numerical evidence.
 
 Qualification base: `072ba064643a21f470cd889c965475e2d1f8475c`, not current-master
 integration qualification. Raw matrices, full receipts, failures and scripts
