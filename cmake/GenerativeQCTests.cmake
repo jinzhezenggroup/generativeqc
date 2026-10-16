@@ -515,6 +515,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_device_resources.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
+  generativeqc_native_test(generativeqc_hf_cuda_resource_tests
+                       tests/native/test_hf_cuda_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)

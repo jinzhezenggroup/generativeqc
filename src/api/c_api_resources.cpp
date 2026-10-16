@@ -21,6 +21,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
@@ -770,6 +771,43 @@ int generativeqc_resource_hf_cpu_fleet_v1(const std::uint64_t* shapes, std::size
     for (std::size_t index = 0; index < item_count; ++index) {
       const auto phases = scf::cpu_hf_host_resources(item_at(index).shape);
       std::copy(phases.begin(), phases.end(), values + 3 + 4 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Direct CUDA HF fleet composition without CUDA/provider construction.
+ * Each nine-slot item follows CudaHfResourceShape. Outputs are the four fleet
+ * slots followed by arena/host/ECP for each item. Allocator/ECP leaf capacities
+ * are inputs, not recomputed here. Disjoint buffers and two scalar passes make
+ * publication transactional for malformed later items and aggregate overflow.
+ */
+int generativeqc_resource_hf_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 9 || !values) return -1;
+  const auto item_count = shape_count / 9;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 4) / 3 ||
+      value_count != 4 + 3 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 9 * index;
+      return scf::CudaHfResourceShape{shape[0], shape[1], shape[2], shape[3], shape[4],
+                                      shape[5], shape[6], shape[7], shape[8]};
+    };
+    scf::CudaHfFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cuda_hf_item_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 4 + 3 * index);
     }
     std::copy(aggregate.begin(), aggregate.end(), values);
     return 0;
