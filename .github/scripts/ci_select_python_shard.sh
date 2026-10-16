@@ -333,6 +333,10 @@ core_fresh_frontier_c=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
+  # Run 38867209562 delayed cold RKS water by 352 s behind corrected Lambda.
+  # Keep all three fresh Hessian/Lambda families on distinct stable owners,
+  # without removing their original slots from the ordinary modulo split.
+  tests/python/test_wb97mv_hessian.py
   tests/python/test_mixed_rsh_df_forces.py
   # Keep complete high-angular HF parallel with its original core slot;
   # the native TensorIR CPU file now has a dedicated compiler transfer.
@@ -346,6 +350,7 @@ core_hotspots_a=(
   tests/python/test_cc_triples_tiles.py
 )
 core_hotspots_b=(
+  tests/python/test_wb97mv_uks_hessian.py
   # The added restricted-CUDA test shifted this complete response file
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
   # and its original enumeration slot; all cases stay selected.
@@ -390,8 +395,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
       pinned_core_owner["${path}"]=2
     done
     # Start both function-scoped WB97M-V Hessian suites early: cold RKS water
-    # and UKS H3 HVPs otherwise become late tails. Follow each file's existing
-    # modulo owner, including on the merge-composed CI tree.
+    # and UKS H3 HVPs otherwise become late tails. Their distinct pinned owners
+    # avoid corrected-Lambda startup contention on source and merge trees.
     fresh_frontier_paths=(
       tests/python/test_wb97mv_hessian.py
       tests/python/test_wb97mv_uks_hessian.py
