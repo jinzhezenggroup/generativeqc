@@ -1,136 +1,111 @@
-# Current-source exact Direct force recurrence/contraction reuse
+# PBE0 48-atom cold follow-up: interleaved fresh-process controls
 
-Clean scientific exports: master `5348b9e66` after #2531/#2532/#2540 and
-incumbent `4bdffe3ce` (#2541: preweighted order-six Boys roots and existing
-order-seven Hermite-axis convolution). Later test/docs commits preserve native
-inputs. These are the campaign-cutoff revisions, not later master changes.
-1753-input native inventories match loaded images; hashes and environments
-are retained. Both arithmetic improvements are automatic in their admitted
-generated consumers on the branch, not an opt-in. No PR is merged here.
+This packet addresses the original single-population cold observation
+23.372648→24.088161s (+3.06%) for #2549 relative to #2541. That historical
+measurement is retained, not replaced or discarded. The full qualified
+48/96-atom r²SCAN-3c, PBE0 and HF packet remains at immutable commit
+`631f0b003884094f758a349e4a0418f6b54eec6a`, same publication path; the earlier
+master/incumbent packet remains at `4eb9fd859a69a31fa21c5fbbe9b13f7d36a9d90a`.
+Only this task's own current publication is superseded; storage budgets and
+unrelated evidence are unchanged. No Release, tag or external archive is made.
 
-This supersedes the frozen-composition evidence at this working-tree path.
-The original full bundle, including its independent arrays, rejected DAG patch
-and detailed historical source-algebra counters, remains at immutable commit
-`6369de44fe1f30759b3d07c8f267f4a02d0d70dd`, same path. No historical result is
-relabeled as current. Only this PR's own publication is replaced; no unrelated
-evidence, storage policy, Release, tag or external archive is changed.
+## Protocol and scope
 
-## Complete E+F
+There is **no production/compiler change** in this follow-up. Sources remain
+incumbent `4bdffe3ceaa57e7a201f76a5687ad2d1933e6f1e` and response
+`00fced59f8d083839e4bc0761f91a1e94e8ccc0b`, with the exact previously qualified
+Release/sm_120 libraries and native identities verified for every population.
 
-RTX5090, CUDA12.9.1, official Release/sm_120, strict FP64, portable=0,
-fast_compile=0. Canonical def2-mTZVPP,544/1088 spherical AOs, unchanged moving
-48×16×32 Becke grid/atom, original screening1e-12/SCF convergence. HF/PBE0:
-def2-SVP. Finite Slurm allocations preserve device visibility. Primary96 uses
-the same n4 GPU; primary48 and separate diagnostic profiles each use a matched
-n1 allocation. Diagnostic stationary caches are isolated from clean endpoints.
-Every population retains cold + five warm + moved + five moved-warm calls and
-the unchanged1800-second process timeout. Times are seconds, warm medians:
+All primary runs share one scheduler-assigned RTX5090 on n1, within a finite
+25-minute Slurm allocation. Ten independent Python processes run in the
+predeclared order **A B B A B A A B A B**, five per source. Every process retains
+the unchanged cold + five warm + moved + five moved-warm E+F sequence, original
+1800-second process timeout, def2-SVP basis, moving48×16×32 grid per atom,
+strict FP64, screening/convergence, reference inputs and actual build counts.
+No process is prewarmed, no cache is cleared/disabled and no sample is trimmed.
+Cold includes preparation exactly as in the original benchmark.
 
-| Case | Phase | Master s | Incumbent s |
-| --- | --- | ---: | ---: |
-| r2scan-3c-48 | cold | 75.817234 | 69.934962 |
-| r2scan-3c-48 | warm | 21.438233 | 15.226590 |
-| r2scan-3c-48 | moved | 56.877101 | 50.849639 |
-| r2scan-3c-48 | moved-warm | 21.439160 | 15.253462 |
-| r2scan-3c-96 | cold | 411.282020 | 386.116851 |
-| r2scan-3c-96 | warm | 90.798641 | 65.477918 |
-| r2scan-3c-96 | moved | 260.105874 | 234.961981 |
-| r2scan-3c-96 | moved-warm | 90.800574 | 65.707564 |
-| pbe0-48 | cold | 23.735617 | 23.372648 |
-| pbe0-48 | warm | 4.559350 | 4.258826 |
-| pbe0-48 | moved | 22.465948 | 22.088725 |
-| pbe0-48 | moved-warm | 4.575266 | 4.257219 |
-| hf-48 | cold | 11.001145 | 10.937647 |
-| hf-48 | warm | 0.742660 | 0.741202 |
-| hf-48 | moved | 7.206905 | 7.204627 |
-| hf-48 | moved-warm | 0.745415 | 0.742078 |
+The previous3.06% difference was a valid single observation, not proof of a
+repeatable source-induced regression. This follow-up tests reproducibility;
+it does not claim an additional runtime optimization or universal performance
+promotion. GPU clocks/temperature/power were recorded separately without
+changing clock/power settings. Full raw native histories and monitoring remain
+hash-bound in the ignored campaign directory.
 
-incumbent/master96 warm/moved-warm reductions: 27.89%/27.64%.
-Incumbent remains 2.46× historical GPU4PySCF26.59s; no fresh competitor measurement.
+## Complete endpoints
 
-Actual cold/moved iteration/build counts (every warm call1/1):
+| Endpoint | Incumbent median s | Response median s | Change |
+| --- | ---: | ---: | ---: |
+| cold | 23.425425 | 23.371673 | -0.229% |
+| warm | 4.274105 | 4.214359 | -1.398% |
+| moved | 22.087280 | 22.112491 | +0.114% |
+| moved-warm | 4.278988 | 4.225750 | -1.244% |
 
-| Case | Master | Incumbent |
-| --- | --- | --- |
-| r2scan-3c-48 | 19/19; 13/13 | 19/19; 13/13 |
-| r2scan-3c-96 | 24/24; 13/13 | 24/24; 13/13 |
-| pbe0-48 | 17/18; 12/12 | 17/18; 12/12 |
-| hf-48 | 21/22; 16/17 | 21/22; 16/17 |
+Warm entries are medians of the five per-process five-call medians. All25 individual calls per source/phase remain retained; positive changes are regressions.
 
-All 96 primary calls complete and pass independent gates1e-8Eh/1e-7Eh/Bohr. Maximum errors: 3.8653525e-11Eh and 6.0142558e-11Eh/Bohr. Every trajectory/count remains explicit, including any moved convergence difference.
+| Pair | Incumbent cold s | Response cold s | Change |
+| --- | ---: | ---: | ---: |
+| 1 | 23.141314 | 23.150135 | +0.038% |
+| 2 | 23.432668 | 23.371673 | -0.260% |
+| 3 | 24.132459 | 23.399186 | -3.039% |
+| 4 | 23.420661 | 23.371244 | -0.211% |
+| 5 | 23.425425 | 23.390243 | -0.150% |
 
-## Diagnostic profile
+No repeatable3.06% source regression is observed. The cold median difference is effectively flat; it is not claimed as a statistically significant optimization. All120 primary calls complete and independently pass original-reference gates. Maximum errors are 7.503331290e-12Eh /2.492095419e-11Eh/Bohr. Every process retains cold17/18 and moved12/12 SCF iterations/physical Fock builds; all warm calls1/1.
 
-Separate intrusive warm captures, not substituted for clean endpoint times:
+The original cold gap is0.715512s. Its exclusive force `python_packing` owner changes0.067221→0.720458s:0.653236s, about91.3% of the total gap. That owner includes host task preparation and resident AO-map setup; the receipt does not isolate a CPU, GC, cache, driver or scheduler cause. Its five new cold samples return to0.065–0.152s on response, and0.067–0.080s on incumbent. The original sample is retained, but is not established as a stable order-six arithmetic regression.
 
-| Device group | Master s | Incumbent s |
+## Diagnostic accounting
+
+Separate intrusive cold/first-warm captures use the same assigned GPU UUID for
+both sources. They are not substituted for clean endpoint timings. Published
+profiles retain mutually exclusive host owners, separate device windows and
+kernel device sums. Never add kernel sums to host waits or parent scopes.
+
+The original warm-only SQLite reducer rejects an all-call capture with two
+public roots; the raw incumbent capture was complete and retained. The selected
+reducer works on temporary copies, removing only the other public root marker,
+without changing any kernel/API event or selected call's nested scopes. Both
+original SQLite hashes and exact selected root bounds are retained. The
+response capture completes in a subsequent finite Slurm allocation, with the
+same GPU UUID checked before reusing the incumbent capture. This diagnostic
+reduction issue does not interrupt any primary population.
+
+| Cold diagnostic device window | Incumbent s | Response s |
 | --- | ---: | ---: |
-| direct_j | 8.402367 | 8.353921 |
-| cuda_ks_xc_shared | 4.538393 | 4.550966 |
-| direct_force_generated_low | 4.678396 | 4.678237 |
-| direct_force_order6_spatial | 21.968210 | 17.549077 |
-| direct_force_order7_cooperative | 28.218229 | 7.375439 |
-| direct_force_order8_materialized | 5.809917 | 5.824592 |
+| cuda_ks_exact_jk_shared | 3.841285205 | 3.845416478 |
+| cuda_ks_xc_shared | 6.662236798 | 6.632718059 |
+| direct_force_low_and_order6 | 0.889814033 | 0.837128539 |
+| direct_force_order7_cooperative | 0.072384245 | 0.072169014 |
+| direct_force_order8_materialized | 0.179144627 | 0.179311312 |
 
-`profile-summary.json.xz` preserves mutually exclusive host owners and separate
-device windows for SCF J/K, XC/AO/grid, order6/7/8 J′, other force/Becke,
-snapshot/decode/final validation, preparation and synchronization. Device times
-are not added to host waits. Resource rows retain actual register, launch and
-shared-memory bounds, not achieved occupancy or full process peak memory.
+All four diagnostic calls also pass independent E/F gates; host/device reconciliation errors are below1e-7s. The generated-low/order-six device window improves, rather than showing the historical cold spike. These intrusive captures are supporting attribution only. Forty-four focused profile/benchmark host tests pass.
 
-master entered order6/7/8 primitive products: 2,400,504,912/1,250,544/95,976.
-incumbent entered order6/7/8 primitive products: 2,400,504,912/1,250,544/95,976.
+## Independent checks and replay
 
-All other census counters are retained, including order-seven bra/ket/Coulomb
-preparations and contractions. Unexposed counters remain null. No machine
-instruction/FLOP reduction is fabricated: prior Nsight Compute reports
-ERR_NVGPUCTRPERM. The immutable frozen evidence retains entered source-algebra
-counts and resource/sanitizer qualification for these unchanged generated
-arithmetic components; current-source native profiles and independent complete
-endpoint gates are retained here.
+Every primary and diagnostic energy/force array and both independent geometry
+oracles are retained losslessly in standard NumPy/XZ. Per-call timings, counts,
+gates and metadata are in `numeric-index.json.xz`; per-process summaries and
+all five cold pairs are in `endpoint-summary.json.xz`. Run
+`python verify-arrays.py` to independently recompute every published gate;
+`--restore-references` reconstructs the original oracle JSON inputs.
 
-## Validation and replay
+`reproduction.json.xz` retains the exact executed orchestration, independent
+analysis and per-call profile selector as ordinary UTF-8 sources, plus selected
+raw Slurm/cache/test/diagnostic receipts and hashes of full native inputs.
+The executed first runner contains the documented warm-only reducer mismatch;
+for an uninterrupted replay, replace its final `summarize_dft_profile` invocation
+with `python summarize-calls.py <profile-directory>`. The primary commands and
+GPU captures remain unchanged. The follow-up `profile.sh` reuses an existing
+incumbent capture only on the identical assigned UUID.
 
-588 focused host checks pass after master synchronization, including independent
-70-digit Wick sums and correlated-Gaussian integral/derivative tests. Six actual-
-linked independent Libcint GPU cases pass both spins, Cartesian/spherical and
-separate/combined J′/K′. Compiler structure541 modules/0 errors. Overlapping
-suites are not summed. Existing bounded fallback, exact Direct semantics,
-FP64, screening, symmetry/signs and force accumulation remain unchanged.
+Restore the original sources/build environment using `build.sh` and the
+immutable predecessor packet. On n1 the campaign root is
+`/data/jzzeng/gqc-direct-next-20261016`; adapt that root and the cluster Python
+wrapper paths for another installation. Extract the `sources` entries of
+`reproduction.json.xz`, then run the exact finite Slurm argv in `publication.json`.
+Every real-GPU replay must preserve Slurm-assigned `CUDA_VISIBLE_DEVICES`.
 
-Two follow-up primitive-reuse probes are rejected: warp-local Boys/prefactor
-sharing cuts actual radial preparations32-fold but slightly regresses both
-partitions; subgroup Wick-term sharing gives no consistent useful gain. Both
-have exact zero derivative differences for full/partial/singleton masks;
-neither is enabled. Different AO layouts are not compared across trials.
-The accurate but slower scalar DAG and earlier cooperative-six/page-width
-experiments remain rejected. A separate response-factoring candidate is tracked
-in #2549; no result for that additional code is included in this two-arm table.
-
-Every primary E/F array and both independent geometry oracles are retained
-losslessly in standard `numeric-arrays.npy.xz`; `numeric-index.json.xz` keeps
-protocols, shapes, offsets, per-call timings/counts/gates and reference metadata.
-`python verify-arrays.py` recomputes all gates; `--restore-references` reconstructs
-oracle inputs. Other records use ordinary JSON/XZ. Detailed native histories,
-inventories, build/cache/probe/Nsight receipts remain hash-bound under ignored
-`.artifacts/direct-reuse-next/` and remote
-`/data/jzzeng/gqc-direct-next-20261016` on n1/n4. This is scoped numerical and
-matched endpoint acceptance, not formal global interleaved performance promotion.
-
-Build exact exports with `SOURCE_ROOT=... bash build.sh`, verified ccache4.5.1,
-explicit CXX/CUDA launchers and checkout-root CCACHE_BASEDIR; shared cache is
-retained. Place source under `ARM/source`, libraries/manifests under
-`ARM/runtime`; restore references and decompress `def2-svp.json.gz`. Adapt the
-cluster Python wrappers retained in the immutable frozen bundle. HF's wrapper
-retains already-returned valid native physical-build counters after timing.
-
-```bash
-GQC_DIRECT_REUSE_ROOT=/path/to/campaign srun --partition=main \
-  --gres=gpu:5090:1 --nodes=1 --ntasks=1 --cpus-per-task=8 --mem=28G \
-  --time=00:35:00 bash run-gpu.sh incumbent r2scan-3c 96 endpoint
-```
-
-Use `profile` for diagnostics (remove local `defer-profiles` scheduling marker),
-`tests` for Libcint checks and `counted` for HF. No independent oracle runs in
-production. Next: generated contraction/preparation arithmetic reuse, not
-CTA/page tuning. Historical GPU4PySCF26.59s is a target, not a fresh measurement.
+No method-name workaround, screening/tolerance change, force approximation or
+default-path change is introduced. The original qualified r²SCAN improvements
+remain at the immutable predecessor; both implementation PRs remain unmerged.

@@ -28,8 +28,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("spatial_reuse", (False, True))
-def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -> None:
-    """Check every center/axis, all pair partitions of orders 4--6 and LR limits."""
+@pytest.mark.parametrize("coincident", (False, True))
+def test_full_and_lr_all_center_gradients(
+    tmp_path: Path, spatial_reuse: bool, coincident: bool
+) -> None:
+    """Check every center/axis, pair partition, LR limit and zero radial response."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("host gradient probes require c++ and ccache")
@@ -50,7 +53,10 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -
         "inline unsigned __popc(unsigned x) { return __builtin_popcount(x); }\n"
     )
     source = tmp_path / "probe.cpp"
-    probe = PROBE
+    probe = PROBE.replace(
+        "constexpr bool Coincident = false;",
+        f"constexpr bool Coincident = {'true' if coincident else 'false'};",
+    )
     if spatial_reuse:
         probe = probe.replace(
             "primitive_eri_order456_gradient<A+B,C+D,true>",
@@ -129,6 +135,7 @@ PROBE = r"""
 #include <cstdlib>
 #include <limits>
 using namespace generativeqc::scf::cuda_execution;
+constexpr bool Coincident = false;
 using generativeqc::integrals::CoulombRange;
 unsigned checks = 0;
 double maximum_error = 0.0;
@@ -144,6 +151,9 @@ void check_partition() {
     for (double scale : {0.4, 1.0, 3.0}) {
       std::array<Vec3<double>,4> positions{{{0.1,-0.2,-0.8},{0.3,0.1,0.7},
                                           {-0.5,0.6,0.2},{0.8,-0.4,0.3}}};
+      // At a common center the radial displacement vanishes, but displaced
+      // finite differences must still recover every nuclear-center response.
+      if constexpr (Coincident) positions.fill(positions[0]);
       const double exponent[4]{0.8*scale,0.6*scale,0.7*scale,0.9*scale};
       for (double omega : {0.0,1e-8,0.3,2.0,1e4}) {
         double gradient[4][3];
