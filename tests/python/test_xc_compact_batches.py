@@ -102,6 +102,7 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         + "namespace generativeqc::dft::cuda_xc_detail { namespace {\n"
         + features
         + _emit_panels()
+        + _emit_panels(diagonal_one_sided=True)
         + matrices
         + "}}\n"
         + batch
