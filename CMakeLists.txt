@@ -499,7 +499,7 @@ if(GENERATIVEQC_BUILD_CLI)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_blacklist.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_libxc_methods.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"

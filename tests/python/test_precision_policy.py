@@ -24,6 +24,8 @@ from generativeqc import (
 )
 from generativeqc import precision_policy as implementation
 
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+
 ATOMS = (("H", (0, 0, -0.7)), ("H", (0, 0, 0.7)))
 ENERGY = TargetAccuracy((ObservableTarget("energy", "absolute", "Eh", absolute=1e-6),))
 
@@ -784,7 +786,6 @@ def test_property_fallback_preserves_later_energy_only_auto(
 @pytest.fixture
 def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use actual scientific resolution and capability gates without a GPU."""
-    import generativeqc.calculator as calculator_module
     from generativeqc import _native
 
     def available(method: int, pointer: object) -> int:
@@ -797,13 +798,7 @@ def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
         generativeqc_method_available=available,
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
-    monkeypatch.setattr(
-        calculator_module,
-        "method_capabilities",
-        lambda name: MethodCapabilities(
-            name, "density_functional", True, True, frozenset({"energy"})
-        ),
-    )
+    install_registry_stub(library, frozenset({"energy"}))
 
 
 @pytest.mark.parametrize("method", ("m06-2x-rks", "mn15-rks"))

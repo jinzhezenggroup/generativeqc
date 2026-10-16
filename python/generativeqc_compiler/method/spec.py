@@ -16,16 +16,16 @@ from typing import ClassVar
 
 from generativeqc_compiler.common.exact import require_fraction
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc._generated_libxc_methods import (
+    LIBXC_METHODS,
+)
+from generativeqc_compiler.xc._generated_libxc_methods import (
+    METHOD_METADATA_SEMANTICS as LIBXC_METHOD_METADATA_SEMANTICS,
+)
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.spec import COMPONENTS, FunctionalSpec
 from generativeqc_compiler.xc.spec import VERSION as XC_VERSION
 
-from ._generated_libxc_methods import (
-    LIBXC_METHODS,
-)
-from ._generated_libxc_methods import (
-    METHOD_METADATA_SEMANTICS as LIBXC_METHOD_METADATA_SEMANTICS,
-)
 from .basis_binding import BasisBinding, r2scan3c_def2_mtzvpp_h_ar
 from .dispersion import (
     D4_METHOD_SUFFIX,
@@ -613,8 +613,15 @@ def _generated_libxc_method_specs() -> dict[str, MethodSpec]:
                 "generated Libxc method metadata needs regeneration"
             )
         components = _generated_components(record)
+        direct_component = record.get("direct_semilocal_component")
         direct_stem = record["direct_semilocal_stem"]
-        if direct_stem is not None:
+        if direct_component is not None:
+            if not isinstance(direct_component, str):
+                raise UnsupportedMethod(
+                    "generated Libxc direct component must be a name"
+                )
+            components = ((direct_component, Fraction(1)),)
+        elif direct_stem is not None:
             if not isinstance(direct_stem, str):
                 raise UnsupportedMethod(
                     "generated Libxc direct semilocal stem must be a string"

@@ -4,7 +4,7 @@
 
 - Importer semantics: libxc-maple-graph/v11
 - Pinned Maple files: **27** (23 functional + 4 support)
-- Static direct-import candidates: **22/23**
+- Static direct-import candidates: **23/23**
 
 A direct-import candidate means every audited conditional profile parses and the top-level Maple f call graph contains no callable target unknown to the current Graph evaluator. It is not a production-support claim: numerical qualification, bindings, endpoint policy, and CPU/CUDA gates remain separate.
 
@@ -27,7 +27,7 @@ A direct-import candidate means every audited conditional profile parses and the
 | lda_c_pz.mpl | lda_exc | 2 | 0 | — | yes |
 | lda_c_vwn.mpl | lda_exc | 1 | 0 | — | yes |
 | lda_c_vwn_rpa.mpl | lda_exc | 1 | 0 | — | yes |
-| lda_x.mpl | lda_exc | 2 | 0 | lda_x_spin | no |
+| lda_x.mpl | lda_exc | 2 | 0 | — | yes |
 | lda_x_erf.mpl | lda_exc | 2 | 0 | — | yes |
 | mgga_c_r2scan.mpl | mgga_exc | 4 | 0 | — | yes |
 | mgga_c_rscan.mpl | mgga_exc | 4 | 0 | — | yes |
@@ -41,7 +41,6 @@ A direct-import candidate means every audited conditional profile parses and the
 ## Current evaluator gaps
 
 - No functional source has a parser-syntax failure in the audited profiles.
-- lda_x.mpl reaches lda_x_spin, which is not exposed as a callable Maple target by the current Graph evaluator.
 - util.mpl has 3/3 standalone support-import failures. Functional imports retain their separate evaluator/include context.
 
 These are importer/evaluator coverage findings only. They do not weaken the existing requirement for independent E/vxc/fxc, endpoint, provenance, and backend qualification before a functional is cut over to production.

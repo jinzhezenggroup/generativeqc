@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from generativeqc_compiler.method import METHOD_CATALOG
-from generativeqc_compiler.method._generated_libxc_methods import (
+from generativeqc_compiler.xc._generated_libxc_methods import (
     BLOCKED_LIBXC_METHODS,
     LIBXC_METHODS,
 )
@@ -122,6 +122,203 @@ def test_representable_generated_methods_need_no_named_catalog_edit() -> None:
     for name in ("REVB3LYP", "KMLYP", "QTP17", "RCAM-B3LYP", "TUNED-CAM-B3LYP"):
         assert name in LIBXC_METHODS
         assert name in METHOD_CATALOG
+
+
+def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
+    # No manually authored B97M-V or WB97X-V exchange/VV10 constants.
+    b97mv = extract_method_registrations(
+        (FULL_LIBXC / "mgga_xc_b97mv.c").read_text(),
+        "mgga_xc_b97mv.c",
+        direct_combined=True,
+    )
+    (pure,) = b97mv
+    assert pure["status"] == "generated"
+    assert pure["identifier"] == "B97M-V"
+    assert pure["components"] == [["MGGA_XC_B97M_V", "1"]]
+    assert (pure["nonlocal_variant"], pure["nlc_b"], pure["nlc_c"]) == (
+        "vv10",
+        "6",
+        "1/100",
+    )
+    assert pure["short_range_exchange"] == pure["long_range_exchange"] == "0"
+
+    wb97 = extract_method_registrations(
+        (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text(),
+        "hyb_gga_xc_wb97.c",
+        direct_combined=True,
+    )
+    rows = {row["registration"]: row for row in wb97}
+    vv10 = rows["HYB_GGA_XC_WB97X_V"]
+    assert vv10["status"] == "generated"
+    assert vv10["identifier"] == "WB97X-V"
+    assert vv10["direct_semilocal_component"] == "HYB_GGA_XC_WB97X_V"
+    assert (vv10["short_range_exchange"], vv10["long_range_exchange"]) == (
+        "167/1000",
+        "1",
+    )
+    assert vv10["range_omega"] == "3/10"
+    assert (vv10["nonlocal_variant"], vv10["nlc_b"], vv10["nlc_c"]) == (
+        "vv10",
+        "6",
+        "1/100",
+    )
+    # The shared C initializer enables VV10 only in the -V switch arm.
+    for name in (
+        "HYB_GGA_XC_WB97",
+        "HYB_GGA_XC_WB97X",
+        "HYB_GGA_XC_WB97X_D",
+        "HYB_GGA_XC_WB97X_D3",
+    ):
+        assert rows[name]["status"] == "generated"
+        assert rows[name]["nonlocal_variant"] is None
+
+
+def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.xc._generated_libxc_methods import LIBXC_METHODS
+
+    for name in ("B97M-V", "WB97X-V", "GAS22"):
+        assert name in LIBXC_METHODS
+        spec = METHOD_CATALOG[name]
+        assert spec.nonlocal_correlation is not None
+        assert spec.nonlocal_correlation.b == Fraction(6)
+        assert spec.nonlocal_correlation.c == Fraction(1, 100)
+        method = resolve_method(name, spin="unpolarized")
+        semilocal = next(
+            primitive
+            for primitive in method.primitives
+            if primitive.kind == "semilocal_xc"
+        )
+        provenance = semilocal.functional.to_payload()
+        assert provenance["qualification"] == "representation-only"
+        assert provenance["production_admitted"] is False
+
+    assert METHOD_CATALOG["WB97X-V"].short_range_exchange == Fraction(167, 1000)
+    assert METHOD_CATALOG["WB97X-V"].long_range_exchange == 1
+    assert METHOD_CATALOG["WB97X-V"].range_omega == Fraction(3, 10)
+
+
+@pytest.mark.parametrize("field", ("direct_semilocal_component", "registration"))
+@pytest.mark.parametrize("invalid", (123, 0, False, (), ""))
+def test_nonlocal_component_inventory_rejects_invalid_generated_names(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    invalid: object,
+) -> None:
+    import importlib.util
+    import sys
+
+    from generativeqc_compiler.xc import _generated_libxc_methods as generated
+    from generativeqc_compiler.xc import spec
+
+    record = dict(generated.LIBXC_METHODS["B97M-V"])
+    record[field] = invalid
+    monkeypatch.setattr(generated, "LIBXC_METHODS", {"B97M-V": record})
+    name = "generativeqc_compiler.xc._invalid_generated_name"
+    module_spec = importlib.util.spec_from_file_location(name, spec.__file__)
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    with pytest.raises(
+        (TypeError, ValueError), match="nonlocal component must be a name"
+    ):
+        module_spec.loader.exec_module(module)
+
+
+def test_unmodeled_nonlocal_initializer_control_flow_fails_closed() -> None:
+    source = (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text()
+    modified = source.replace(
+        "p->nlc_C = 0.01;",
+        "p->nlc_C = 0.01; unknown_parameter_mutation(p);",
+    )
+    rows = extract_method_registrations(
+        modified, "hyb_gga_xc_wb97.c", direct_combined=True
+    )
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V")
+    assert result["status"] == "blocked"
+    assert "initializer" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    (
+        ("switch(p->info->number)", "switch(p->nspin)"),
+        ("case XC_HYB_GGA_XC_WB97X_V:", "default:"),
+        ("break;", ""),
+        ("p->nlc_b = 6.0;", "if (p->nspin == 1) p->nlc_b = 6.0;"),
+        ("p->nlc_b = 6.0;", "return; p->nlc_b = 6.0;"),
+        (
+            "case XC_HYB_GGA_XC_WB97X_V:",
+            "case XC_HYB_GGA_XC_WB97: case XC_HYB_GGA_XC_WB97X_V:",
+        ),
+        (
+            "break;",
+            "break; case XC_HYB_GGA_XC_WB97X_V: p->nlc_b = 7.0; break;",
+        ),
+    ),
+)
+def test_nonlocal_initializer_rejects_unmodeled_switch_semantics(
+    old: str,
+    new: str,
+) -> None:
+    source = (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text()
+    assert old in source
+    rows = extract_method_registrations(
+        source.replace(old, new), "hyb_gga_xc_wb97.c", direct_combined=True
+    )
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V")
+    assert result["status"] == "blocked"
+
+
+def test_registration_switch_does_not_admit_setter_control_flow() -> None:
+    source = (LIBXC / "hyb_gga_xc_b3lyp.c").read_text()
+    old = "p->mix_coef[0] = 1.0 - a0 - ax;"
+    new = "switch (p->info->number) { case XC_HYB_GGA_XC_B3LYP: " + old + " break; }"
+    assert old in source
+    rows = extract_method_registrations(source.replace(old, new))
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_B3LYP")
+    assert result["status"] == "blocked"
+    assert "control flow" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "name,remove_marker",
+    (
+        ("src/mgga_xc_b97mv.c", False),
+        ("src/mgga_xc_b97mv.c", True),
+        ("src/gga_xc_b97.c", False),
+    ),
+)
+def test_nonlocal_discovery_authenticates_before_marker_selection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    remove_marker: bool,
+) -> None:
+    import json
+
+    from tools import generate_libxc_methods as generator
+
+    registry = json.loads(generator.REGISTRY.read_text())
+    source = registry["sources"][generator.NONLOCAL_SOURCE_ID]
+    source["files"] = {name: source["files"][name]}
+    registry_path = tmp_path / "manifest.json"
+    registry_path.write_text(json.dumps(registry))
+    fulltree = tmp_path / "fulltree"
+    owner = fulltree / name
+    owner.parent.mkdir(parents=True)
+    original = (generator.NONLOCAL_SOURCE_ROOT / name).read_bytes()
+    altered = (
+        original.replace(b"XC_FLAGS_VV10", b"XC_FLAGS_OTHER")
+        if remove_marker
+        else original + b"\n/* altered source */\n"
+    )
+    assert altered != original
+    owner.write_bytes(altered)
+    monkeypatch.setattr(generator, "REGISTRY", registry_path)
+    monkeypatch.setattr(generator, "NONLOCAL_SOURCE_ROOT", fulltree)
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        generator.build_catalog()
 
 
 def test_complex_dynamic_mix_owners_remain_explicitly_blocked() -> None:

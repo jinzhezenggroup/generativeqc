@@ -268,3 +268,8 @@ generated/kernel sources. The complete-endpoint memchecks recorded in the
 previous section belong to the pre-retry-fix core `b89a605b...`, not this new
 core; do not relabel those observations. All raw logs, XMLs, source freezes
 and both earlier combined failures remain in the external evidence directory.
+
+The [2026-10-16 handoff follow-up](../performance/2026-10-16-nonlocal-strict-handoff-reuse.md)
+retains the already-admitted outer solver across a normal precision handoff,
+after discarding and rebuilding its mixed anchor. Numerical-failure recovery
+still clears the provisional solver entirely; the retry fix above is retained.
