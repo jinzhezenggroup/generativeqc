@@ -666,6 +666,11 @@
       ],
       "python_sites": [
         {
+          "path": "python/generativeqc/resources_basis.py",
+          "symbol": "_basis_shape",
+          "classification": "wrapper"
+        },
+        {
           "path": "python/generativeqc/resources_hf.py",
           "symbol": "hf_resource_request",
           "classification": "scientific-runtime"
@@ -706,7 +711,9 @@
         "src/api/c_api_resource_planning.cpp",
         "src/runtime/resource_planning.cpp",
         "src/api/c_api_resource_ledger_plan.cpp",
-        "src/runtime/resource_ledger_plan.cpp"
+        "src/runtime/resource_ledger_plan.cpp",
+        "src/molecule/basis.hpp",
+        "src/molecule/basis.cpp"
       ],
       "native_callers": [
         "src/api/c_api_resources.cpp",
@@ -716,6 +723,7 @@
         "src/api/c_api_resource_ledger_plan.cpp"
       ],
       "remaining_python_runtime": [
+        "CPU HF/KS compact expanded-contraction topology counts use an additive native query on the selected library, sharing AO representation arithmetic with normalized native systems. Python still expands basis records and owns mathematical provenance, capability checks and ECP descriptors. Missing-symbol, library-free and CUDA shape plans retain explicit portable arithmetic. Native refusal does not retry portable sizing; shape counts are not full allocation/provider/lease authority.",
         "CPU HF and KS per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit consumer-workspace allowance to the native fleet peak check without transferring consumer eligibility/admission policy. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. D3(BJ) retained plan/execution, table and workspace capacities query the same native layout used by D3Plan::prepare, including a shape-only CUDA selector. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python still constructs CUDA KS fleets and CPU force allowance/eligibility policy.",
         "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query."
       ],
@@ -726,6 +734,7 @@
         "tests/python/test_hf_host_resources.py",
         "tests/python/test_ks_host_resources.py",
         "tests/python/test_ks_fleet_resources.py",
+        "tests/python/test_native_basis_shape.py",
         "tests/python/test_ecp_resources.py",
         "tests/native/test_d3_resources.cpp",
         "tests/python/test_d3_native_resources.py",

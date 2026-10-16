@@ -259,8 +259,17 @@ BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
 )
+# The normalized-system caller delegates representation arithmetic to these
+# shared shell owners. Pin both helpers as well as the caller so moving the
+# equation does not leave arithmetic, width or overflow checks unauthenticated.
+NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256 = (
+    "e69f53d3da18e44119894075fc898559006f88edcddab5770204f88e306154e5"
+)
+NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256 = (
+    "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
+)
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
-    "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
+    "73c8ab3e116dde28f94c4f988f3b9f418ea11a09414ac342ac310d76cf020410"
 )
 # The complete predicate also admits exact automatic Libxc components through
 # the bounded all-electron CPU owner. Its shared context rejects CUDA. CUDA
@@ -2422,6 +2431,18 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
         raise RuntimeError("native spherical AO count contract changed")
 
+    shell_source = (repository / "src/molecule/basis.hpp").read_text(encoding="utf-8")
+    shell_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t shell_ao_count("
+    )
+    if shell_count_digest != NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native shell AO count contract changed")
+    cartesian_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t cartesian_count("
+    )
+    if cartesian_count_digest != NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native Cartesian shell count contract changed")
+
     stationary_source = (
         repository / "python/generativeqc/_stationary_cuda.py"
     ).read_text(encoding="utf-8")
@@ -2442,6 +2463,8 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
         "ao_packer_contract_sha256": packer_digest,
         "ao_pack_bridge_contract_sha256": bridge_digest,
         "native_spherical_ao_count_contract_sha256": ao_count_digest,
+        "native_shell_ao_count_contract_sha256": shell_count_digest,
+        "native_cartesian_shell_count_contract_sha256": cartesian_count_digest,
         "stationary_layout_contract_sha256": layout_digest,
         "sparse_spherical_component_terms": {
             "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
@@ -3711,6 +3734,7 @@ def _build_report(
         "python/generativeqc_compiler/dft/grid.py",
         "python/generativeqc_compiler/xc/quadrature_cuda.py",
         "src/molecule/basis.cpp",
+        "src/molecule/basis.hpp",
         "src/dft/ao_grid.cpp",
         "src/dft/bridge.cpp",
         "src/dft/grid.hpp",
