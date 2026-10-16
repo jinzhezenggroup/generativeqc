@@ -30,6 +30,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_ecp.cpp
     src/api/error.cpp
     src/methods/registry.cpp
+    src/methods/named_ks_catalog.cpp
     src/methods/prepared_execution.cpp)
 endfunction()
 

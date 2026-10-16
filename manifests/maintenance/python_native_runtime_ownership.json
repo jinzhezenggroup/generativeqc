@@ -984,17 +984,21 @@
       "native_scientific_sources": [
         "src/methods/generated_method_manifest.hpp",
         "src/methods/registry.cpp",
+        "src/methods/named_ks_catalog.cpp",
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
         "src/cli/main.cpp",
+        "src/methods/named_ks_catalog.cpp",
         "src/api/c_api_common.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup now stays on the already-selected Calculator library rather than public cached/default-library discovery. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup stays on the already-selected Calculator library. The CLI and Python KS wire lowering now share one library-owned build-time catalog: complete matching MethodIR identities and numerical domains borrow native scientific component/exchange arrays while caller execution controls remain unchanged. Same-name custom graphs, noncatalog/unrepresented domains and missing-symbol/library-free metadata retain explicit compiler lowering; actual native refusal never retries it. Basis expansion and complete frontend/SDK/CLI model resolution remain separate gaps."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_native_ks_catalog.py",
+        "tests/native/test_named_ks_catalog.cpp",
         "tests/python/test_selected_native_method_capabilities.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],
