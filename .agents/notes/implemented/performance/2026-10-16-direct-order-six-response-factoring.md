@@ -185,3 +185,60 @@ small implementation step is per-component axis-factorized coefficient/response
 contraction from canonical compiler Hermite IR, reducing actual Wick/contraction
 or primitive-preparation arithmetic without warp-shuffle overhead. Do not
 revisit CTA/page-width tuning or the rejected sharing probes without new evidence.
+
+## Follow-up: PBE0 cold observation is not a reproducible source regression
+
+The original 23.372648 to 24.088161-second PBE0/def2-SVP48 cold observation
+(+3.06%) remains valid historical data. It was one population per source,
+not an established repeatable regression. Its original exclusive force ledger
+places 0.067221 to 0.720458 seconds in `python_packing`: the 0.653236-second
+increase accounts for about 91.3% of the total 0.715512-second endpoint gap.
+This owner includes task preparation and resident AO-map setup; its old receipt
+does not isolate a CPU, GC, driver, cache or scheduler cause. Do not invent one,
+or equate the spike with slower order-six executed arithmetic.
+
+A finite Slurm allocation on one assigned n1 RTX5090 repeats the unchanged
+complete benchmark in ten fresh Python processes, predeclared ABBA BAAB AB
+order, five populations per source. Every process retains cold, five warm,
+moved and five moved-warm calls, original 1800-second timeout, grid, basis,
+FP64, screening, convergence and independent references. No process is
+prewarmed, no cache is cleared or disabled, and no sample is trimmed.
+The two measured scientific sources and qualified native images are unchanged.
+
+| Complete E+F seconds | Incumbent median | Response median | Change |
+| --- | ---: | ---: | ---: |
+| Cold | 23.425425 | 23.371673 | -0.229% |
+| Warm | 4.274105 | 4.214359 | -1.398% |
+| Moved | 22.087280 | 22.112491 | +0.114% |
+| Moved-warm | 4.278988 | 4.225750 | -1.244% |
+
+Warm summaries are medians of five per-process five-call medians, with all
+25 calls per source/phase retained. Paired cold changes are +0.038%, -0.260%,
+-3.039%, -0.211% and -0.150%; even the opposite-sign baseline outlier is kept.
+The five response cold packing times are 0.065 to 0.152 seconds, incumbent
+0.067 to 0.080 seconds. The cold result is effectively flat, not an additional
+statistically established speedup. Existing evidence does not support a
+repeatable 3.06% source-induced cold regression.
+
+All 120 primary calls complete and pass the original independent gates;
+maximum errors are 7.503331289626658e-12 Eh and 2.4920954189155964e-11 Eh/Bohr.
+Each cold remains 17 iterations/18 physical Fock builds, moved 12/12 and every
+warm 1/1. Separate matched intrusive captures also pass all four diagnostic
+E/F gates. Generated-low/order-six device time changes 0.889814 to 0.837129
+seconds cold and 0.896416 to 0.838039 seconds warm; SCF J/K cold device time
+is 3.841285 to 3.845416 seconds. Exclusive host/device ledgers reconcile below
+1e-7 seconds, without adding kernel sums to host waits. The original warm-only
+SQLite reducer rejects the two-call capture; a retained selector removes only
+the other public root marker in a temporary copy, preserving all selected
+kernel/API events and nested scopes. Both original database hashes are retained.
+
+No production change, PBE0-specific dispatch, GC suppression, clock tuning,
+tolerance change, rollback or default change is justified by these results.
+If cold tails recur, split the packing owner into bounded subscopes before
+choosing another optimization; do not label or fix an assumed cause.
+Forty-four focused profiling/benchmark host tests pass. The new scoped packet
+retains all 124 primary/diagnostic arrays and replay inputs at the existing
+publication path. The complete preceding implementation qualification remains
+immutable at `631f0b003884094f758a349e4a0418f6b54eec6a`, same path; the older
+master/incumbent bridge remains unchanged. Only our own packet is superseded,
+without raising storage limits or deleting unrelated evidence. No PR is merged.

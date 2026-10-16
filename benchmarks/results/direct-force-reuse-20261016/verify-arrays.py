@@ -25,10 +25,10 @@ count = 0
 for case, data in index["cases"].items():
     energy_reference = array(f"{case}/reference/energy")
     force_reference = array(f"{case}/reference/forces")
-    for arm, rows in data["arms"].items():
+    for arm, rows in (data["arms"] | data.get("diagnostic_arms", {})).items():
         energies = array(f"{case}/{arm}/energy")
         forces = array(f"{case}/{arm}/forces")
-        assert len(rows) == 12
+        assert len(rows) == (2 if arm in data.get("diagnostic_arms", {}) else 12)
         for position, row in enumerate(rows):
             geometry = row["geometry"]
             energy_error = abs(energies[position] - energy_reference[geometry])

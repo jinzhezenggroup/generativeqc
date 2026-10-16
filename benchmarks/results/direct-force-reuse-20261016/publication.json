@@ -1,70 +1,46 @@
 {
   "archives": [],
   "decision": {
-    "reason": "Independent arrays and scoped exact Direct endpoint qualification; all three source revisions explicit. Not universal interleaved performance promotion.",
+    "reason": "All repeated primary/diagnostic arrays independently accurate; scoped cold nonregression observations without replacing historical measurements.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 47536,
+      "bytes": 34120,
       "path": "numeric-arrays.npy.xz",
       "role": "samples",
-      "sha256": "7a3d9f9036731dcf8c61655103b129b8360e8dc6af7dd97c8991abb5870856b1"
+      "sha256": "0f4d91ef3075f4111ce22440d48b36bd2be20b8ea9e483cbb9d4368d4941a503"
     },
     {
-      "bytes": 10440,
+      "bytes": 13552,
       "path": "numeric-index.json.xz",
       "role": "summary",
-      "sha256": "a5d8e557fa3032850032a7299ea3cc8c444ea95b249fdfab72cadc9839cfe499"
+      "sha256": "676e0b89fd3dbf2af3e9d2d53aed4d6f7c504e4e3f95363f2245e187a371193c"
     },
     {
-      "bytes": 3668,
-      "path": "profile-summary.json.xz",
-      "role": "summary",
-      "sha256": "a69310d7aa6e3d50899b352ed417fd28ab6319e776d7d53c0bbde47149054988"
-    },
-    {
-      "bytes": 4092,
-      "path": "qualification.json.xz",
-      "role": "summary",
-      "sha256": "7c0c67f7a017acc4888469fba274073e1e8fcbeaffbfcd35d8e6ba4387c5524f"
-    },
-    {
-      "bytes": 3668,
-      "path": "validation.json.xz",
-      "role": "evidence",
-      "sha256": "ee15555a3c934fa1e57225e7b1fd1e0ec5a0ef68ca718b95fe799f0fc281eefe"
-    },
-    {
-      "bytes": 7492,
+      "bytes": 3924,
       "path": "endpoint-summary.json.xz",
       "role": "summary",
-      "sha256": "607e4cc0b510f34da28b089b7c5f522576bb1e73ba944ad631abdb5c7d4cdc8f"
+      "sha256": "9d6a1cfb8da0da70d86be95782795fc3a2805585ec244ac362760cf864a3b093"
     },
     {
-      "bytes": 7088,
-      "path": "primitive-trials.json.xz",
-      "role": "reproduction",
-      "sha256": "23b515b29e0708d3e12fa732c584b5e0b909f6b059d42f963d84f4bdaaf52676"
+      "bytes": 17772,
+      "path": "profile-summary.json.xz",
+      "role": "summary",
+      "sha256": "0fb341ee8a7b9c879a39f23ae08da12f1e9bb0dc05c005ac2230511dd524e355"
     },
     {
-      "bytes": 1717,
-      "path": "run-gpu.sh.gz",
+      "bytes": 8892,
+      "path": "reproduction.json.xz",
       "role": "reproduction",
-      "sha256": "66377a8de9e2a39061bedba66d87a93cb27cffa80f1c351bee4806cd36ef1d14"
+      "sha256": "82a7e4c7dc76a22803c76e8b3c7c72de7bb09b1c619acb8b8ab58e5f2939ae42"
     },
     {
-      "bytes": 503,
-      "path": "with-native-work.py.gz",
-      "role": "reproduction",
-      "sha256": "781adc8c720b9a28cca12a236078be0aa7888cdbe3c4797ce5172401b4d46a05"
-    },
-    {
-      "bytes": 850,
-      "path": "def2-svp.json.gz",
-      "role": "reproduction",
-      "sha256": "cc379e1c76528fb956979ffb9848b24694562bdd56a5ba9e1df33e81d3acf828"
+      "bytes": 3544,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "613ab9e77e62f596defd89194cc6400d0f5046bb65bb6782c330489902ec821c"
     },
     {
       "bytes": 1055,
@@ -73,16 +49,22 @@
       "sha256": "bec51fa29d594654e5f08f79ccefca81acc3a29f4f37b8c3f017f5bd6f9dd8e7"
     },
     {
-      "bytes": 2433,
-      "path": "verify-arrays.py",
+      "bytes": 850,
+      "path": "def2-svp.json.gz",
       "role": "reproduction",
-      "sha256": "e8dc2063e41e7646a24d54e691c7e824891f9a89c6e7ad4bff84f4fab2b41097"
+      "sha256": "cc379e1c76528fb956979ffb9848b24694562bdd56a5ba9e1df33e81d3acf828"
     },
     {
-      "bytes": 8429,
+      "bytes": 2520,
+      "path": "verify-arrays.py",
+      "role": "reproduction",
+      "sha256": "75d9f2314c5daa2a1469148bd99aef7e33efb8a6584da3410fd6184e2c44899e"
+    },
+    {
+      "bytes": 7045,
       "path": "README.md",
       "role": "summary",
-      "sha256": "7a55e6feefb3e9b8f4e4d2f603c8135758f743790e63a4f07637b898a08fde56"
+      "sha256": "7fad6fc1b35543a1ee92d769b758eb8bfd58e2a0d838880ece44cec952ebfdb0"
     }
   ],
   "reproduction": {
@@ -94,13 +76,9 @@
       "--ntasks=1",
       "--cpus-per-task=8",
       "--mem=28G",
-      "--time=00:35:00",
+      "--time=00:25:00",
       "bash",
-      "run-gpu.sh",
-      "incumbent",
-      "r2scan-3c",
-      "96",
-      "endpoint"
+      "run.sh"
     ]
   },
   "schema": "generativeqc.benchmark-publication.v1",
