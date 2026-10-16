@@ -150,6 +150,24 @@ solver and stationary assembly, rather than merely precompiling isolated leaves.
 obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
 the separate Python API retains its existing CPU contract.
 
+For a reproducible small-shell package, generate a complete ordered s/p orbital
+and through-d auxiliary inventory before configuring CMake:
+
+```bash
+python tools/complete_hessian_aot_inventory.py \
+  --inventory manifests/hessian_aot_development.json \
+  --output .artifacts/wb97mv-sp-daux.json \
+  --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric \
+  --max-angular 1 --max-auxiliary-angular 2
+```
+
+Set `GENERATIVEQC_HESSIAN_AOT_INVENTORY` to that file's absolute path alongside
+the CUDA, CLI and Hessian-AOT build options. This is complete for those finite
+shell bounds, not an orbital-d/f package. The tool can enumerate larger bounds,
+but enumeration alone does not prove practical build cost, numerical qualification
+or a complete shipped package. All generation and compilation happen at build
+time; the executable never expands the inventory on demand.
+
 For example, the following **small-grid smoke test is not a grid-converged
 scientific calculation**:
 

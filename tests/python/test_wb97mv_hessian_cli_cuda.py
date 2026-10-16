@@ -101,6 +101,7 @@ def invoke_cli(
     assert diagnostics["displaced_scf_evaluations"] == 0
     assert diagnostics["runtime_python"] is False
     assert diagnostics["runtime_compilation"] is False
+    assert diagnostics["scf_iterations"] > 0
     for name in (
         "first_integral_backend",
         "second_integral_backend",

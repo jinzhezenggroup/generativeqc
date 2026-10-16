@@ -243,6 +243,7 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
       {"grid_mixed_contractions", work.grid.nuclear_contractions},
       {"vv10_reference_pairs", work.induced.grid.reference_pairs + work.grid.reference_pairs},
       {"native_execution_seconds", seconds},
+      {"scf_iterations", solved[0].calculation.convergence.iterations},
       {"response_iterations", result.response.gmres.iterations},
       {"ecp_ad_backend", work.ecp.workspace_bytes ? Json("cuda") : Json(nullptr)},
       {"df_integral_ad_backend", work.raw_df.workspace_bytes ? Json("cuda") : Json(nullptr)}};

@@ -51,8 +51,11 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   const bool fitted = mode.find("df") != std::string::npos,
              ecp = mode.find("ecp") != std::string::npos,
              spherical = mode.find("spherical") != std::string::npos,
-             auxiliary_d = mode.find("auxd") != std::string::npos;
+             auxiliary_d = mode.find("auxd") != std::string::npos,
+             benchmark_h2 = mode.find("benchmark-h2") != std::string::npos;
   require(!auxiliary_d || fitted, "the independent d auxiliary fixture requires DF");
+  require(!benchmark_h2 || (!unrestricted && !fitted && !ecp && !auxiliary_d),
+          "the benchmark H2 fixture requires all-electron direct RKS");
   core::System system;
   system.multiplicity = unrestricted ? 2 : 1;
   if (spherical) system.basis_representation = core::kSphericalBasis;
@@ -82,6 +85,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     }
     if (ecp) system.ecp_terms = {{0, -1, 2, 0.8, -0.4}, {0, 0, 2, 0.8, 0.3}};
   }
+  if (benchmark_h2) system.atoms[0].position = {0.03, -0.02, 0.01};
   std::string detail;
   require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   std::optional<core::System> auxiliary;
@@ -107,7 +111,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   ks.abi_version = GENERATIVEQC_ABI_VERSION;
   ks.scf_domain = dft::semilocal_family_scf_domain(dft::SemilocalFamily::Wb97mv);
   ks.grid_version = 1;
-  ks.radial_points = auxiliary_d ? 8 : 12;
+  ks.radial_points = auxiliary_d || benchmark_h2 ? 8 : 12;
   ks.angular_polar = 4;
   ks.angular_azimuth = 8;
   ks.partition_iterations = 3;

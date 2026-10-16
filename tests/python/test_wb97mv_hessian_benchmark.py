@@ -16,7 +16,27 @@ if TYPE_CHECKING:
 
 import pytest
 
-from benchmarks.compare_wb97mv_hessian_gpu4pyscf import _run_child, _summarize
+from benchmarks.compare_wb97mv_hessian_gpu4pyscf import (
+    _measure,
+    _run_child,
+    _summarize,
+)
+
+
+@pytest.mark.parametrize("devices", (0, 2, 4))
+def test_matched_comparison_rejects_non_single_gpu_steps(
+    devices: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """GPU4PySCF must not silently use more devices than the native endpoint."""
+    from argparse import Namespace
+    from types import SimpleNamespace
+
+    runtime = SimpleNamespace(getDeviceCount=lambda: devices)
+    monkeypatch.setitem(
+        sys.modules, "cupy", SimpleNamespace(cuda=SimpleNamespace(runtime=runtime))
+    )
+    with pytest.raises(RuntimeError, match="exactly one Slurm-visible GPU"):
+        _measure(Namespace(), {}, tmp_path, lambda: None)
 
 
 def test_native_benchmark_command_has_no_worker_or_compilation_controls() -> None:
@@ -400,7 +420,8 @@ def test_complete_host_injected_run_retains_samples_and_shape_failure(
     monkeypatch.setenv("GENERATIVEQC_LIBRARY", sys.executable)
     cp = SimpleNamespace(
         cuda=SimpleNamespace(
-            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None)),
+            runtime=SimpleNamespace(getDeviceCount=lambda: 1),
         )
     )
     monkeypatch.setitem(sys.modules, "cupy", cp)
@@ -493,7 +514,8 @@ def test_nonfinite_child_result_retains_failed_journal_and_exact_raw_log(
     monkeypatch.setenv("GENERATIVEQC_LIBRARY", sys.executable)
     cp = SimpleNamespace(
         cuda=SimpleNamespace(
-            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None)),
+            runtime=SimpleNamespace(getDeviceCount=lambda: 1),
         )
     )
     monkeypatch.setitem(sys.modules, "cupy", cp)

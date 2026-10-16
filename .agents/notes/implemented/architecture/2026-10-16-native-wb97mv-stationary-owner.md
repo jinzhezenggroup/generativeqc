@@ -103,6 +103,46 @@ The separate spherical-d fit passed all four RKS/UKS and all-electron/ECP
 values-only reconverged energy gates (Slurm 3162, 172.29 s), including raw
 source/metric projection checks against independent libcint ERIs.
 
+### Completed combination and sanitizer runs
+
+Slurm 3148 passed all eight RKS combinations in 389.72 s; Slurm 3149 passed
+all eight UKS combinations in 2137.29 s. Together with the four independent
+auxiliary cases these are twenty completed molecular energy-oracle gates,
+not a count of individual derivative leaves. The shared default-auxiliary
+path is unchanged by the decoded-native auxiliary admission fix.
+
+Slurm 3164 additionally ran the actual accepted UKS/DF/ECP stationary owner
+with an independent spherical-d auxiliary through synccheck, racecheck,
+initcheck and memcheck. All four tools exited successfully with zero reported
+errors; racecheck reported zero hazards or warnings. This supplements, rather
+than substitutes for, the earlier accepted UKS/DF no-ECP sanitizer run. The
+native probe exercises deliberate GMRES failure, output preservation and
+owner revocation in the same accepted case.
+
+An isolated build-only preflight emitted one ffff Cartesian component's
+full-range value/gradient/gradient-JVP source in 6.59 s (84,340 KiB peak RSS,
+377,862 source bytes). It neither compiled nor qualified full ffff closure.
+This is a concrete reason not to equate a finite inventory enumerator with a
+practical complete high-angular package or extrapolate an endpoint speed claim.
+
+The exact H2 external-benchmark geometry and 8-by-4-by-8 grid additionally
+passed a full-matrix independent reconverged energy check (Slurm 3168,
+37.94 s). Every symmetric matrix entry is checked with Richardson-extrapolated
+mixed energy differences, not just one directional projection. This is a test
+oracle only and introduces no finite differences into the production endpoint.
+
+### Benchmark device-count admission
+
+An exclusive node allocation with all four GPUs visible caused GPU4PySCF to
+automatically use multiple devices, while the native CLI used device zero.
+Slurm 3169 was therefore cancelled and cannot support a matched single-GPU
+speed claim, even for its completed H2 samples. Never fix this by overriding
+`CUDA_VISIBLE_DEVICES`: reserve the exclusive node with `salloc`, then let
+`srun --gres=gpu:pro6000:1` assign one device to the measurement step. The driver
+now rejects any step whose CUDA device count is not exactly one before running
+an endpoint. Native diagnostics also expose actual SCF iterations alongside
+the existing integral/grid/induced-action counts.
+
 The selected development package still does not contain practical complete
 orbital-f / auxiliary-g ERI/DF closure. Broad molecular qualification and matched
 external complete-endpoint GPU4PySCF timings remain outstanding. No source/probe

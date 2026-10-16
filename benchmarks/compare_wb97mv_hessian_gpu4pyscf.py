@@ -10,6 +10,9 @@ the full host Hessian. Timings include process startup and result serialization.
 Persistent compilation caches are reused, not purged: sample zero is first
 observed use, not a claimed empty-cache cold start. Later samples are interleaved
 artifact-primed fresh-process runs, not converged-density or plan reuse.
+Exactly one device must be visible in the benchmark step: GPU4PySCF otherwise
+automatically distributes work over every visible GPU. For an exclusive-node
+allocation, use a nested single-GPU Slurm step rather than editing visibility.
 
 The default coarse grid is a latency/implementation diagnostic, not a chemically
 grid-converged benchmark. DF is deliberately not enabled: the engines' default
@@ -491,6 +494,11 @@ def _measure(
 ) -> None:
     import cupy as cp
 
+    if cp.cuda.runtime.getDeviceCount() != 1:
+        raise RuntimeError(
+            "matched endpoints require exactly one Slurm-visible GPU; "
+            "use a single-GPU srun step and preserve CUDA_VISIBLE_DEVICES"
+        )
     library = Path(os.environ["GENERATIVEQC_LIBRARY"])
     accelerator = cuda_accelerator_metadata(cp)
     if accelerator.get("nvidia_smi"):
@@ -515,6 +523,7 @@ def _measure(
             "workload": {
                 "basis": arguments.basis,
                 "representation": "spherical",
+                "visible_gpu_count": 1,
                 "grid": asdict(_grid(arguments)),
                 "density_fitting": False,
                 "ecp": False,

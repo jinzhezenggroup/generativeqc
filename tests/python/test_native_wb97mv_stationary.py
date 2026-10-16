@@ -32,6 +32,7 @@ def _native(
     full: bool,
     *,
     auxiliary_d: bool = False,
+    benchmark_h2: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -41,6 +42,7 @@ def _native(
     mode += "-spherical" if spherical else ""
     mode += "-ecp" if ecp else ""
     mode += "-auxd" if auxiliary_d else ""
+    mode += "-benchmark-h2" if benchmark_h2 else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -290,6 +292,38 @@ def test_independent_spherical_d_auxiliary_stationary_hvp(
     pytest.importorskip("pyscf")
     result = _native(spins, True, True, ecp, False, auxiliary_d=True)
     _qualify(result, fitted=True, spherical=True, ecp=ecp, full=False)
+
+
+def test_benchmark_h2_full_hessian_against_independent_molecular_energies() -> None:
+    """Qualify the actual external-comparison geometry and grid, not a proxy."""
+    pytest.importorskip("pyscf")
+    result = _native(1, False, True, False, True, benchmark_h2=True)
+    actual = np.array(result["hessian"]).reshape(6, 6)
+    axes = np.eye(6).reshape(6, 2, 3)
+    with _signed_density_libxc() as code:
+        energy = MolecularEnergy(
+            result, fitted=False, spherical=True, ecp=False, code=code
+        )
+        np.testing.assert_allclose(
+            energy(np.zeros((2, 3)), reference=True), result["energy"], atol=5e-9
+        )
+        for row in range(6):
+            for column in range(row, 6):
+                estimates = []
+                for step in (0.004, 0.002):
+                    estimates.append(
+                        sum(
+                            first
+                            * second
+                            * energy(step * (first * axes[row] + second * axes[column]))
+                            for first in (1, -1)
+                            for second in (1, -1)
+                        )
+                        / (4 * step**2)
+                    )
+                expected = (4 * estimates[1] - estimates[0]) / 3
+                np.testing.assert_allclose(actual[row, column], expected, atol=8e-7)
+                np.testing.assert_allclose(actual[column, row], expected, atol=8e-7)
 
 
 def _qualify(
