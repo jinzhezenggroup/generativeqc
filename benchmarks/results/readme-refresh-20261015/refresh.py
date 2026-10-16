@@ -69,6 +69,14 @@ def verify() -> dict[str, int]:
             or hashlib.sha256(payload).hexdigest() != receipt["sha256"]
         ):
             raise ValueError(f"publication checksum mismatch: {relative}")
+        if "uncompressed" in receipt:
+            expanded = lzma.decompress(payload)
+            identity = receipt["uncompressed"]
+            if (
+                len(expanded) != identity["bytes"]
+                or hashlib.sha256(expanded).hexdigest() != identity["sha256"]
+            ):
+                raise ValueError(f"historical figure identity mismatch: {relative}")
     for relative, receipt in manifest["baseline_files"].items():
         payload = (ROOT.parent / relative).read_bytes()
         if hashlib.sha256(payload).hexdigest() != receipt["sha256"]:

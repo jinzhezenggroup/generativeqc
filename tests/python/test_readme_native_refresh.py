@@ -209,3 +209,33 @@ def test_refresh_rejects_relabeling_the_frozen_build(
     path.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="frozen build"):
         publication["module"]["verify"]()
+
+
+@pytest.mark.parametrize("corrupt_expanded_identity", [False, True])
+def test_refresh_checks_losslessly_archived_figure_identity(
+    publication: dict, corrupt_expanded_identity: bool
+) -> None:
+    """A valid archive checksum cannot conceal changes to historical SVG bytes."""
+    retain(publication)
+    root = publication["root"]
+    original = b"<svg>historical figure</svg>"
+    compressed = lzma.compress(original)
+    (root / "figure.svg.xz").write_bytes(compressed)
+    path = root / "manifest.json"
+    manifest = json.loads(path.read_bytes())
+    manifest["files"]["figure.svg.xz"] = {
+        "bytes": len(compressed),
+        "sha256": hashlib.sha256(compressed).hexdigest(),
+        "uncompressed": {
+            "bytes": len(original),
+            "sha256": "wrong"
+            if corrupt_expanded_identity
+            else hashlib.sha256(original).hexdigest(),
+        },
+    }
+    path.write_text(json.dumps(manifest))
+    if corrupt_expanded_identity:
+        with pytest.raises(ValueError, match="historical figure identity"):
+            publication["module"]["verify"]()
+    else:
+        publication["module"]["verify"]()

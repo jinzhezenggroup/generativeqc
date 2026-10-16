@@ -124,14 +124,19 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). Native results
-use a frozen combined snapshot of #2531 and #2532; GPU4PySCF timings and
-independent references are historical, not rerun. Cold includes setup and the
+**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
+Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
+#2563, #2567 and the #2558 force stack. All other native points retain the frozen
+#2531 + #2532 snapshot; GPU4PySCF timings and independent references are
+historical, not rerun. Cold includes setup and the
 first E+F call; warm reuses converged density. The water clusters have
 3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
 
-The figures describe a frozen snapshot, not a timing claim for the current
-checkout. The earlier Direct/96 moved regression remains rejected (+15.985%).
+The figures combine explicitly frozen sources, not a timing claim for the current
+checkout. The [r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update)
+records the exact measured composition, accuracy gates and actual SCF work;
+the force overlay is not part of #2567. The earlier Direct/96 moved regression
+remains rejected (+15.985%).
 The [stationary-energy repair](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
 and [integrated-head Direct/48/96 requalification](benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
 are retained separately, without relabeling either historical cohort.
@@ -140,7 +145,7 @@ Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
 
 **Direct J/K**
 
-![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/dft-cold-warm.svg)
+![Cold and warm direct HF and DFT energy-plus-force timings](assets/readme-dft-performance.svg)
 
 **Density fitting (DF)** — cc-pVDZ-JKFIT for both engines.
 
@@ -149,7 +154,8 @@ Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
 Native ωB97M-V DF/48 lacks an independent accuracy reference; DF/96 is omitted
 (no complete E+F call). Small-system compilation-cache priming is recorded
 separately, never subtracted from cold. See the
-[Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
+[updated r²SCAN-3c Direct timings](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update),
+[other Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
 [DF timings](benchmarks/results/readme-refresh-20261015/df-timings.md), and
 [protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
 
