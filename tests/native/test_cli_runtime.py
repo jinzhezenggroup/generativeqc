@@ -525,6 +525,94 @@ class RuntimeTests(unittest.TestCase):
                     )
                     self.assertEqual(bounded.returncode, status, bounded.stderr)
 
+    def test_cuda_ks_cli_uses_shared_native_host_fleet_without_gpu(self) -> None:
+        """Device stubs do not replace the real host ABI or CLI aggregation."""
+        if sys.platform != "linux":
+            self.skipTest("host-only interposition fixture requires Linux")
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_ks_cuda_host_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.c_uint64,
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        for method in KS_INVENTORY_METHODS:
+            for batch in (1, 3):
+                with self.subTest(method=method, batch=batch):
+                    arguments = (
+                        "--backend",
+                        "cuda",
+                        "--method",
+                        method,
+                        "--batch",
+                        str(batch),
+                        "--max-iterations",
+                        "250",
+                    )
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    radial, polar, azimuth = plan["controls"]["grid"]
+                    item = (
+                        2,
+                        2,
+                        2,
+                        2,
+                        6,
+                        2 if method.endswith("uks") else 1,
+                        0,
+                        0,
+                        2 * radial * polar * azimuth,
+                        radial,
+                        polar,
+                        256,
+                        8,
+                        250,
+                        int(method.startswith("pbe")),
+                        0,
+                        0,
+                        0,
+                    )
+                    shapes = (ctypes.c_uint64 * (18 * batch))(*(item * batch))
+                    values = (ctypes.c_uint64 * (15 + 16 * batch))()
+                    self.assertEqual(
+                        query(shapes, len(shapes), 0, 0, values, len(values)), 0
+                    )
+                    self.assertEqual(
+                        plan["host_fleet_composition"], "native-declared-capacity"
+                    )
+                    self.assertEqual(plan["resident_bytes"]["pageable"], values[12])
+                    self.assertEqual(plan["peak_bytes"]["host"], values[14])
+                    self.assertEqual(
+                        plan["item_inventory"]["retained"] * batch, values[12]
+                    )
+                    self.assertEqual(
+                        plan["item_inventory"]["matrix_binding_host"], 16 << 10
+                    )
+                    self.assertEqual(
+                        plan["item_inventory"]["structured_binding_host"], 32 << 10
+                    )
+                    self.assertEqual(plan["item_inventory"]["ao_grid_cache"], 0)
+                    peak = values[14]
+                    for capacity, status in ((peak, 0), (peak - 1, 2)):
+                        bounded = self.resources(
+                            *arguments, "--host-bytes", str(capacity)
+                        )
+                        self.assertEqual(bounded.returncode, status, bounded.stderr)
+                    allowance = 384 << 20
+                    self.assertEqual(
+                        query(shapes, len(shapes), allowance, 0, values, len(values)), 0
+                    )
+                    self.assertEqual(values[14], peak + allowance)
+                    self.assertEqual(
+                        values[12], plan["resident_bytes"]["pageable"] + allowance
+                    )
+
     def test_cpu_ks_cli_uses_shared_native_host_inventory(self) -> None:
         """The Python-free command exposes each authoritative host owner."""
         library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))

@@ -42,6 +42,7 @@ from .resources_hf import (
 from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
+_CUDA_FORCE_HOST_CAP = 256 << 20
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
     "provider_allowance",
@@ -106,7 +107,7 @@ def _cpu_host_shape(
         int(model.has_nonlocal_correlation),
         _ecp_workspace(item, library=library),
     )
-    return tuple(checked_bytes(value, "CPU KS host shape") for value in dimensions)
+    return tuple(checked_bytes(value, "KS host shape") for value in dimensions)
 
 
 def _cpu_host_result(values: typing.Sequence[int], model: typing.Any) -> dict[str, int]:
@@ -160,45 +161,103 @@ def _native_cpu_fleet_inventory(
     workspace_floor: int,
     **options: typing.Any,
 ) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
+    """Preserve the CPU fleet ABI and its transient-only consumer allowance."""
+    return _native_host_fleet_inventory(
+        library, items, backend="cpu", workspace_floor=workspace_floor, **options
+    )
+
+
+def _native_host_fleet_inventory(
+    library: typing.Any,
+    items: typing.Sequence[typing.Any],
+    *,
+    backend: str,
+    workspace_floor: int = 0,
+    retained_allowance: int = 0,
+    **options: typing.Any,
+) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
     """Query all retained owners and serialized workspace before publication.
 
-    The supplied consumer allowance is capacity metadata, not native admission
-    of its force provider. Only missing symbols permit the older per-item path.
+    Consumer allowances describe lifetimes, not provider admission. CUDA cache
+    and force owners remain retained across replay; CPU force scratch remains
+    a transient floor. Only missing symbols permit the older per-item path.
+    Transport consistency checks validate publication without retrying sizing.
     """
-    query = getattr(library, "generativeqc_resource_ks_cpu_fleet_v1", None)
+    if backend not in ("cpu", "cuda"):
+        raise ValueError("KS host inventory requires cpu or cuda backend")
+    cuda = backend == "cuda"
+    symbol = (
+        "generativeqc_resource_ks_cuda_host_fleet_v1"
+        if cuda
+        else "generativeqc_resource_ks_cpu_fleet_v1"
+    )
+    query = getattr(library, symbol, None)
     if query is None:
         return None
+    if not cuda and retained_allowance:
+        raise ValueError("the CPU fleet ABI has no retained consumer allowance")
     dimensions = tuple(
         value
         for item in items
-        for value in _cpu_host_shape(item, library=library, **options)
+        for value in (
+            *_cpu_host_shape(item, library=library, **options),
+            *((int(options["model"].xc_schedule == "host_unfused"),) if cuda else ()),
+        )
     )
     shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
     values = (ctypes.c_uint64 * (15 + 16 * len(items)))()
     query.argtypes = [
         ctypes.POINTER(ctypes.c_uint64),
         ctypes.c_size_t,
-        ctypes.c_uint64,
+        *([ctypes.c_uint64] * (2 if cuda else 1)),
         ctypes.POINTER(ctypes.c_uint64),
         ctypes.c_size_t,
     ]
     query.restype = ctypes.c_int
+    floor = checked_bytes(workspace_floor, "KS workspace allowance")
+    allowance = checked_bytes(retained_allowance, "KS retained consumer allowance")
     if query(
         shapes,
         len(shapes),
-        checked_bytes(workspace_floor, "CPU KS workspace allowance"),
+        *((allowance, floor) if cuda else (floor,)),
         values,
         len(values),
     ):
-        raise ValueError("native CPU KS fleet inventory rejected shape or capacity")
-    aggregate = [checked_bytes(value, "CPU KS fleet capacity") for value in values[:15]]
-    if aggregate[12] != sum(aggregate[:12]) or aggregate[14] != sum(aggregate[12:14]):
-        raise ValueError("native CPU KS fleet inventory returned inconsistent peak")
+        raise ValueError(
+            f"native {backend.upper()} KS fleet inventory rejected shape or capacity"
+        )
+    aggregate = [
+        checked_bytes(value, f"{backend.upper()} KS fleet capacity")
+        for value in values[:15]
+    ]
+    if aggregate[12] != sum(aggregate[:12]) + allowance or aggregate[14] != sum(
+        aggregate[12:14]
+    ):
+        raise ValueError(
+            f"native {backend.upper()} KS fleet inventory returned inconsistent peak"
+        )
     host = [
         _cpu_host_result(values[15 + 16 * index : 31 + 16 * index], options["model"])
         for index in range(len(items))
     ]
     totals = dict(zip(_CPU_HOST_PERSISTENT_KEYS, aggregate[:12], strict=True))
+    if any(
+        row["retained"] != sum(row[key] for key in _CPU_HOST_PERSISTENT_KEYS)
+        for row in host
+    ):
+        raise ValueError(
+            "native KS fleet inventory returned inconsistent retained item"
+        )
+    if any(totals[key] != sum(row[key] for row in host) for key in totals):
+        raise ValueError(
+            "native KS fleet inventory returned inconsistent component totals"
+        )
+    if aggregate[13] != max(
+        floor, *(max(row["setup_workspace"], row["scf_workspace"]) for row in host)
+    ):
+        raise ValueError(
+            "native KS fleet inventory returned inconsistent serialized workspace"
+        )
     return host, totals, aggregate[13]
 
 
@@ -325,6 +384,7 @@ def _item_host_inventory(
     xc_schedule_staging = (
         byte_product(8, n2, 2 * spins + (2 if spins == 2 else 0)) if host_unfused else 0
     )
+    retained += xc_schedule_staging
     nonlocal_provider = 0
     nonlocal_work = 0
     if model.has_nonlocal_correlation:
@@ -883,21 +943,32 @@ def ks_resource_request(
                 "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK or set both to 0/off"
             ),
         )
-    native_inventory = (
-        _native_cpu_fleet_inventory(
-            library,
-            items,
-            workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
-            diis_history=diis_history,
-            max_iterations=history_iterations,
-            requires_first_ao_derivatives=requires_first_ao_derivatives,
-            model=model,
-        )
-        if backend == "cpu"
-        else None
+    if backend == "cuda" and library is None:
+        from . import _native
+
+        try:
+            library = _native.load_library(device="cpu")
+        except (NotImplementedError, RuntimeError, OSError) as error:
+            return ResourceRequest(
+                name, identity, (), exclusions, unsupported_reason=str(error)
+            )
+    native_inventory = _native_host_fleet_inventory(
+        library,
+        items,
+        backend=backend,
+        workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
+        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + _CUDA_FORCE_HOST_CAP)
+        if backend == "cuda"
+        else 0,
+        diis_history=diis_history,
+        max_iterations=history_iterations,
+        requires_first_ao_derivatives=requires_first_ao_derivatives,
+        model=model,
     )
     if native_inventory is not None:
         host, totals, host_phase_peak = native_inventory
+        if backend == "cuda":
+            controls["cuda_host_fleet_composition"] = "native-declared-capacity"
     else:
         host = [
             _item_host_inventory(
@@ -957,7 +1028,7 @@ def ks_resource_request(
         estimates.append(
             ResourceEstimate(
                 "serialized generated KS force host staging cap",
-                256 << 20,
+                _CUDA_FORCE_HOST_CAP,
                 "pageable",
                 first_phase,
                 last_phase,
@@ -976,10 +1047,6 @@ def ks_resource_request(
     device = []
     native_stationary = False
     try:
-        if backend == "cuda" and library is None:
-            from . import _native
-
-            library = _native.load_library(device="cpu")
         if library is not None:
             options_version = getattr(library, "generativeqc_ks_options_version", None)
             if callable(options_version):
