@@ -292,6 +292,37 @@ void run(bool unrestricted, const std::string& mode) {
       require(ecp_response.values(ecp_motion, alias, lease.stream) == cudaErrorInvalidValue,
               "actual ECP source admitted an immutable canonical/grid output alias");
     }
+    const auto ecp_geometry = reference.geometry_reference();
+    require(ecp_geometry.atomic_weights,
+            "actual ECP fixture lacks its retained native atomic measure");
+    const auto atomic_weights = download(ecp_geometry.atomic_weights, shape.points);
+    const auto ecp_publication_preserved = [&] {
+      return download(ecp_matrices, matrices.size()) == matrices &&
+             download(ecp_vector_storage, vectors.size()) == vectors &&
+             download(ecp_geometry.atomic_weights, atomic_weights.size()) == atomic_weights;
+    };
+    for (const auto member :
+         {&integrals::CudaEcpNuclearValues::local, &integrals::CudaEcpNuclearValues::nonlocal,
+          &integrals::CudaEcpNuclearValues::direction_local,
+          &integrals::CudaEcpNuclearValues::direction_nonlocal}) {
+      auto atomic_alias = ecp_values;
+      atomic_alias.*member = const_cast<double*>(ecp_geometry.atomic_weights);
+      require(
+          ecp_response.values(ecp_motion, atomic_alias, lease.stream) == cudaErrorInvalidValue &&
+              ecp_publication_preserved(),
+          "ECP value alias changed its immutable atomic measure or outputs");
+    }
+    for (const auto member : {&integrals::CudaEcpNuclearVectors::gradient_local,
+                              &integrals::CudaEcpNuclearVectors::gradient_nonlocal,
+                              &integrals::CudaEcpNuclearVectors::hvp_local,
+                              &integrals::CudaEcpNuclearVectors::hvp_nonlocal}) {
+      auto atomic_alias = ecp_vectors;
+      atomic_alias.*member = const_cast<double*>(ecp_geometry.atomic_weights);
+      require(ecp_response.contract(ecp_motion, input, atomic_alias, lease.stream) ==
+                      cudaErrorInvalidValue &&
+                  ecp_publication_preserved(),
+              "ECP contraction alias changed its immutable atomic measure or outputs");
+    }
     auto invalid = direction;
     invalid[0] = std::numeric_limits<double>::quiet_NaN();
     check(cudaMemcpy(input, invalid.data(), elements * sizeof(double), cudaMemcpyHostToDevice));

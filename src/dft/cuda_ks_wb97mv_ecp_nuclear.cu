@@ -105,6 +105,7 @@ struct CudaKsWb97mvEcpNuclear::Impl {
     if (capture != cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
     if ((error = authenticate(this)) != cudaSuccess) return error;
     const auto lease = grid.reference();
+    const auto* atomic_weights = grid.geometry_reference().atomic_weights;
     const Range sources[]{{direction, 3 * shape.atoms * sizeof(double)},
                           {spin_direction, spin_direction ? spin_bytes : 0}};
     const auto device_range = [&](Range range) {
@@ -129,6 +130,8 @@ struct CudaKsWb97mvEcpNuclear::Impl {
           !disjoint(range.pointer, range.bytes, lease.basis, basis_bytes) ||
           !disjoint(range.pointer, range.bytes, lease.points, 3 * points * sizeof(double)) ||
           !disjoint(range.pointer, range.bytes, lease.weights, points * sizeof(double)) ||
+          (atomic_weights &&
+           !disjoint(range.pointer, range.bytes, atomic_weights, points * sizeof(double))) ||
           !disjoint(range.pointer, range.bytes, lease.density, spin_bytes) ||
           !disjoint(range.pointer, range.bytes, frame.coefficients, spin_bytes) ||
           !disjoint(range.pointer, range.bytes, frame.orbital_energies,
