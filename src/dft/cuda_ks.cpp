@@ -3025,9 +3025,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.maximum_residual < std::min(1e-9, options.density_tolerance);
     const bool confirm_direct_stationary_density =
         spins == 1 && !has_exchange && !fitted_coulomb && !fitted_exchange &&
-        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
-        !budget_fock && !precision_schedule.any_lower_precision() &&
-        provider.system().ecp_terms.empty() &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk && !budget_fock &&
+        !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
         detail::stationary_density_needs_energy_confirmation(
