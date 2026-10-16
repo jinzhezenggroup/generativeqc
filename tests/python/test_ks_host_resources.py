@@ -60,7 +60,7 @@ def test_native_matches_independent_portable_lifetime_bound(
             "ecp_terms": 2,
         },
     }
-    monkeypatch.setattr(resources_ks, "_ecp_workspace", lambda item: 768)
+    monkeypatch.setattr(resources_ks, "_ecp_workspace", lambda item, **kwargs: 768)
     options = {
         "diis_history": 8,
         "max_iterations": 100,
@@ -121,10 +121,13 @@ def test_production_query_and_legacy_metadata_have_equal_bounds_distinct_identit
     library: typing.Any,
 ) -> None:
     class LegacyLibrary:
-        """Hide only the new query while retaining the installed ABI contract."""
+        """Retain the installed ABI while hiding the additive sizing queries."""
 
         def __getattr__(self, name: str) -> typing.Any:
-            if name == "generativeqc_resource_ks_cpu_host_v1":
+            if name in (
+                "generativeqc_resource_ks_cpu_host_v1",
+                "generativeqc_resource_ks_cpu_fleet_v1",
+            ):
                 raise AttributeError(name)
             return getattr(library, name)
 

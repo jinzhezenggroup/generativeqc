@@ -66,6 +66,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "tensor-algebra": (
         "matmul",
+        "tensordot",
+        "vecdot",
         "einsum_extension",
     ),
 }
@@ -117,6 +119,8 @@ SUPPORTED_FUNCTIONS = frozenset(
         "slice_static",
         "take_static",
         "matmul",
+        "tensordot",
+        "vecdot",
         "matrix_transpose",
         "einsum_extension",
     }
@@ -182,6 +186,14 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     },
     "slice": {
         "ranges": "static in-bounds half-open",
+    },
+    "tensordot": {
+        "axes": "static-int|pair-of-axis-sequences; equal contracted extents",
+        "capture": "generic-real-only; at most 52 distinct labels",
+    },
+    "vecdot": {
+        "axis": "static-int; equal contracted extents; broadcast remaining axes",
+        "capture": "generic-real-only; rank <= 52",
     },
     "einsum_extension": {
         "equation": "explicit-output; no ellipsis",
@@ -258,6 +270,8 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "slice_static",
         "take_static",
         "matmul",
+        "tensordot",
+        "vecdot",
         "einsum_extension",
     }
 )

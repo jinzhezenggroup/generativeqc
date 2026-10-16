@@ -1,0 +1,164 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Generation-linked replay passes independent complete DF E/force and strict actual first-K/Fock gates. Measured 96-atom warm endpoint wins are retained; the feature remains opt-in without universal/default promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 10644,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "efdab7e52880ea43bc6991e50a39abe9fe4010f85e4ec3233d89684b206a289b"
+    },
+    {
+      "bytes": 10590,
+      "path": "analyze.py",
+      "role": "reproduction",
+      "sha256": "1816adf34961ffbfdc65a2105abc0302469097a894d2bc204059d6474e05087a"
+    },
+    {
+      "bytes": 5244,
+      "path": "cache-stats.txt",
+      "role": "summary",
+      "sha256": "20b69f4542b1f6f90d971d51ca237248b19a823b26cd00fc82f2908980e22b2f"
+    },
+    {
+      "bytes": 3932,
+      "path": "compiler-launchers.txt",
+      "role": "summary",
+      "sha256": "35bb73c91f1f69f417a6828ead1bbb5ef9ca102487279cf88a08095f5e630687"
+    },
+    {
+      "bytes": 537,
+      "path": "errors.json",
+      "role": "summary",
+      "sha256": "aaf92aa468f7ee9974671330df4ec92147cb03227afa1365543bcb5d162455bc"
+    },
+    {
+      "bytes": 9723,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "e7d9c574d57f65155f34c463ebe7a51b55ecba9fb26f67ac26ac2302ea42031e"
+    },
+    {
+      "bytes": 720,
+      "path": "executions.json.gz",
+      "role": "summary",
+      "sha256": "fd152b0d491be524127567c7a37641a63adcd202db86ba05d0f94350f0bb4c1c"
+    },
+    {
+      "bytes": 25491,
+      "path": "focused-test.cpp.gz",
+      "role": "input",
+      "sha256": "282d323357caf7d71690e574538e365ef1b101c2bf72ae4da84c4e89815ec287"
+    },
+    {
+      "bytes": 31926,
+      "path": "histories.json.gz",
+      "role": "samples",
+      "sha256": "ef416f6c1bd805676ad350991cb7472ce18beb71a414cbf374088fb9d94c331a"
+    },
+    {
+      "bytes": 14522,
+      "path": "inputs/cc-pvdz-jkfit.json",
+      "role": "input",
+      "sha256": "f590a16beb33a594f7fb6cede495881d242f97f7b6ed9fd93d78c53df1afe480"
+    },
+    {
+      "bytes": 3567,
+      "path": "inputs/def2-svp-ho.json",
+      "role": "input",
+      "sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc"
+    },
+    {
+      "bytes": 3584,
+      "path": "interleaved.json.gz",
+      "role": "samples",
+      "sha256": "237ef4ab705f15b4e92d4cc7bb6e4858394bcc099ed5df9e45b4258a461f9ba1"
+    },
+    {
+      "bytes": 1024,
+      "path": "matrix-audits.json.gz",
+      "role": "summary",
+      "sha256": "876914f5b36afa60bbd714d977489dc1c0f74dd29ca83166a4ec835f1470a99b"
+    },
+    {
+      "bytes": 16624,
+      "path": "measured-runner.py",
+      "role": "reproduction",
+      "sha256": "a2aa16d56082f6435186d7de78da07aebded22212379c709180724d1080726a2"
+    },
+    {
+      "bytes": 37084,
+      "path": "measured-source.patch",
+      "role": "source-patch",
+      "sha256": "441bab799cb16bae9646fdc0f51eee6c1ddee7c6b74efbc6ebc281a8502262ab"
+    },
+    {
+      "bytes": 6960,
+      "path": "provenance.json.gz",
+      "role": "summary",
+      "sha256": "2612860e465b3692b40410f8a1a9168ad492a30875f5dc189eb993080857126c"
+    },
+    {
+      "bytes": 10915,
+      "path": "raw-receipts.json.gz",
+      "role": "summary",
+      "sha256": "247d2bbfa650ae051e56279e23049a63a1e6a936ce744426890c714225ed856c"
+    },
+    {
+      "bytes": 3119,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "f47dad9382660bf33e73b9f2654baa648022a8a9dc12285d1aeebd12d569c633"
+    },
+    {
+      "bytes": 6965,
+      "path": "reproduce_ab.py",
+      "role": "reproduction",
+      "sha256": "e332990403a282ad6e0176dd10de10189cf4584909bd10a8310fd4e45d5e1b64"
+    },
+    {
+      "bytes": 7169,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "b1d3d0970a41f798195283f49275c2d204726c8c4bac4667151881720db7eb42"
+    },
+    {
+      "bytes": 567,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "0d2c0339200ed1a80cebf8d1fe8f07707e8939947655bd5bc04ff0b9e4e0a743"
+    },
+    {
+      "bytes": 1356,
+      "path": "summary.json.gz",
+      "role": "summary",
+      "sha256": "bb8bad5f7eeeeefad82687da260c09bdf9499b33f01b6a7ff212090970852b69"
+    },
+    {
+      "bytes": 21450,
+      "path": "work-ledger.json.gz",
+      "role": "summary",
+      "sha256": "5c4ad28a488443bf636f0373603c9c337d3933b3a01bf849df1e63f9f7202488"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/ks-df-warm-factor-20261015/reproduce.sh",
+      "clean",
+      "m06-2x",
+      "96"
+    ],
+    "prerequisites": "Use a separate source-restored checkout; run build and independent reference stages first; CUDA 12.9, GCC 13, verified compiler cache, a compatible Slurm RTX5090 node, GPU4PySCF/PySCF/CuPy and retained basis snapshots. See README.md.",
+    "source_restore": "Check out source.revision, apply measured-source.patch, copy measured-runner.py to benchmarks/ks_df_warm_factor.py and verify source-files.sha256; never reset the unrelated dirty publishing checkout."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "36574095876e4d12a3945b39cef72f6c77895f00"
+  }
+}

@@ -165,6 +165,19 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
+  if(argc==2 && std::strcmp(argv[1],"--budget-only")==0) {
+    HostBatch host; DeviceBatch borrowed;
+    auto owner=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
+    assert(owner);
+    const auto bytes=owner->device_bytes;
+    owner.reset(); assert(live_allocations==0);
+    auto exact=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,bytes,false,nullptr);
+    assert(exact && exact->device_bytes==bytes);
+    exact.reset(); assert(live_allocations==0);
+    auto short_owner=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,bytes-1,false,nullptr);
+    assert(!short_owner && live_allocations==0);
+    return 0;
+  }
   assert(argc==8);
   const bool pair_cooperative=std::atoi(argv[7])!=0;
   cuda_policy::pair_cooperative_policy=pair_cooperative;
@@ -303,6 +316,11 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cpp.write_text(STUBS + preparation + DRIVER)
     compile_cached_probe(cpp, binary)
     return binary
+
+
+def test_compensated_j_exact_and_one_byte_short_budget(allocation_probe: Path) -> None:
+    """Both Cartesian planes must be charged before optional admission."""
+    subprocess.run([str(allocation_probe), "--budget-only"], check=True, timeout=10)
 
 
 @pytest.mark.parametrize("stage", [1, 2, 3, 4, 5])

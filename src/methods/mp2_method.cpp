@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include "methods/batch_capabilities.hpp"
+#include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/df_rccsdt_method.hpp"
@@ -39,7 +40,7 @@ struct DeviceScope {
   ~DeviceScope() { cudaSetDevice(previous); }
 };
 #endif
-class Mp2Prepared final : public PreparedCalculation {
+class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalculation {
  public:
   Mp2Prepared(Capabilities caps, core::ContextState& context, core::System system,
               std::optional<core::System> auxiliary, scf::ScfOptions options, std::size_t budget,
@@ -66,6 +67,11 @@ class Mp2Prepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
   }
+  Result execute_seeded_reference(bool compute_forces, const scf::HfWarmState* seed, bool* fallback,
+                                  std::optional<scf::HfWarmState>* candidate) override {
+    return execute_with_reference_seed(compute_forces, seed, fallback, candidate);
+  }
+
   Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
@@ -76,8 +82,10 @@ class Mp2Prepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr, components);
   }
 
-  void transfer_cuda_reference_plan_to(Mp2Prepared& target) noexcept {
-    target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
+  void transfer_reference_execution_to(ReferenceSeededCalculation& target) override {
+    auto* compatible = dynamic_cast<Mp2Prepared*>(&target);
+    if (!compatible) throw std::logic_error("incompatible correlated reference owner");
+    compatible->cuda_reference_plan_ = std::move(cuda_reference_plan_);
   }
 
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
@@ -164,28 +172,9 @@ class Mp2Prepared final : public PreparedCalculation {
         return candidate;
       };
 
-      scf::ScfResult hf;
-      if (initial_density) {
-        bool retried_cold = false;
-        try {
-          hf = run_reference(initial_density);
-        } catch (...) {
-          retried_cold = true;
-          if (warm_start_fallback) *warm_start_fallback = true;
-          hf = run_reference(nullptr);
-        }
-        if (!retried_cold && (!hf.converged || !hf.reference)) {
-          // Retire the unsuccessful proposal before allocating a cold solve.
-          hf = {};
-          if (warm_start_fallback) *warm_start_fallback = true;
-          hf = run_reference(nullptr);
-        }
-      } else {
-        hf = run_reference(nullptr);
-      }
-      if (!hf.converged || !hf.reference)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
-                          "HF did not converge; no MP2 energy evaluated");
+      auto hf = warm_reference::solve_reference(initial_density, scf::FockSpin::Restricted,
+                                                warm_start_fallback, run_reference,
+                                                "HF did not converge; no MP2 energy evaluated");
 
       reference_capacity =
           std::max(reference_capacity,
@@ -575,146 +564,6 @@ class Mp2Prepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-generativeqc_status item_exception_status() {
-  try {
-    throw;
-  } catch (const MethodError& error) {
-    return error.status();
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-}
-
-class Mp2PreparedBatch final : public PreparedBatch,
-                               public BatchWarmStarts,
-                               public BatchCorrelationDiagnostics {
- public:
-  Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
-                   std::vector<core::System> systems,
-                   const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : PreparedBatch(context.requested_backend, context.device_id),
-        capabilities_(capabilities),
-        context_(&context),
-        systems_(std::move(systems)),
-        warm_starts_enabled_(warm_starts_enabled),
-        warm_states_(systems_.size()) {
-    descriptor_ = descriptor;
-    descriptor_.density_fitting_auxiliary_basis = nullptr;
-    descriptor_.ks_options = nullptr;
-    owners_.reserve(systems_.size());
-    owner_coordinates_.reserve(systems_.size());
-    for (const auto& system : systems_) {
-      owners_.push_back(prepare_mp2_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(warm_reference::coordinates(system));
-    }
-  }
-
-  [[nodiscard]] std::size_t size() const noexcept override { return systems_.size(); }
-
-  void invalidate_result() override {
-    for (auto& owner : owners_) owner->invalidate_result();
-  }
-
-  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
-                                            bool compute_forces) override {
-    if (!coordinates.empty() && coordinates.size() != size())
-      throw std::invalid_argument("MP2 batch coordinates do not match system count");
-    std::vector<BatchItemResult> results(size());
-    for (std::size_t index = 0; index < size(); ++index) {
-      auto& result = results[index];
-      result.bucket_id = index;
-      result.calculation.energy = std::numeric_limits<double>::quiet_NaN();
-      result.calculation.executed_backend = context_->requested_backend;
-      try {
-        auto target = systems_[index];
-        auto target_coordinates = warm_reference::coordinates(target);
-        if (!coordinates.empty() && coordinates[index]) {
-          if (!warm_reference::valid_coordinates(*coordinates[index], target))
-            throw std::invalid_argument("invalid MP2 batch item coordinates");
-          target_coordinates = *coordinates[index];
-          warm_reference::set_coordinates(target, target_coordinates);
-        }
-        if (target_coordinates != owner_coordinates_[index]) {
-          auto candidate = prepare_mp2_calculation(capabilities_, *context_, target, descriptor_);
-          auto& current_owner = static_cast<Mp2Prepared&>(*owners_[index]);
-          auto& candidate_owner = static_cast<Mp2Prepared&>(*candidate);
-          current_owner.transfer_cuda_reference_plan_to(candidate_owner);
-          owners_[index] = std::move(candidate);
-          owner_coordinates_[index] = std::move(target_coordinates);
-        }
-
-        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
-        result.warm_start_used = has_warm_state;
-        bool warm_start_fallback = false;
-        std::optional<scf::HfWarmState> next_warm_state;
-        auto& owner = static_cast<Mp2Prepared&>(*owners_[index]);
-        result.calculation = owner.execute_with_reference_seed(
-            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
-            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
-        result.warm_start_fallback = warm_start_fallback;
-        if (next_warm_state) warm_states_[index].swap(next_warm_state);
-        result.status = GENERATIVEQC_STATUS_SUCCESS;
-      } catch (...) {
-        result.status = item_exception_status();
-      }
-    }
-    return results;
-  }
-
-  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
-      std::size_t index) const override {
-    if (index >= owners_.size())
-      throw std::invalid_argument("correlation diagnostic batch index is out of range");
-    return owners_[index]->correlation_diagnostic();
-  }
-
-  void clear_warm_starts() override {
-    for (auto& state : warm_states_) state.reset();
-  }
-
-  [[nodiscard]] std::size_t warm_density_size(std::size_t index) const override {
-    const auto n = molecule::ao_count(systems_.at(index));
-    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / sizeof(double))
-      throw std::invalid_argument("MP2 warm density dimensions overflow");
-    return posthf::checked_mul(n, n);
-  }
-
-  [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(
-      std::size_t index) const override {
-    return warm_states_.at(index);
-  }
-
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
-    if (!warm_starts_enabled_ || states.size() != size())
-      throw std::invalid_argument("checkpoint restore requires a matching warm-enabled MP2 batch");
-
-    for (std::size_t index = 0; index < size(); ++index)
-      if (states[index])
-        warm_reference::validate_checkpoint(systems_[index], *states[index], "MP2");
-
-    for (std::size_t index = 0; index < size(); ++index)
-      if (states[index]) warm_states_[index].swap(states[index]);
-  }
-
-  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
-
- private:
-  Capabilities capabilities_;
-  core::ContextState* context_{};
-  std::vector<core::System> systems_;
-  bool warm_starts_enabled_{};
-  bool warm_start_updates_enabled_{true};
-  std::vector<std::optional<scf::HfWarmState>> warm_states_;
-  generativeqc_method_descriptor descriptor_{};
-  std::vector<std::unique_ptr<PreparedCalculation>> owners_;
-  std::vector<std::vector<double>> owner_coordinates_;
-};
 }  // namespace
 
 generativeqc_status validate_mp2_system(generativeqc_method, const core::System& system,
@@ -894,7 +743,8 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
   if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "conventional MP2 batch does not accept an auxiliary basis");
-  return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor,
-                                            warm_starts_enabled);
+  return prepare_correlated_batch(capabilities, context, std::move(systems), descriptor,
+                                  warm_starts_enabled, prepare_mp2_calculation, "MP2",
+                                  GENERATIVEQC_METHOD_RHF, true, false);
 }
 }  // namespace generativeqc::methods::detail

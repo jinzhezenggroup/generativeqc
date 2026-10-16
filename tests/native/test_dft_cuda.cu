@@ -187,6 +187,31 @@ std::vector<double> density(std::size_t n, unsigned spins) {
   return d;
 }
 
+/** The public resource request must suffice exactly, while one byte less must
+ * fail before publication for every curated spin/functional layout. */
+void workspace_boundary_cases() {
+  const auto molecule = system();
+  const AoBasis basis(molecule);
+  const MolecularGrid grid(molecule, {1, 2, 2, 4, 3, 1e-12});
+  for (std::uint32_t functional = 0; functional < 5; ++functional)
+    for (bool unrestricted : {false, true}) {
+      Fixture exact(basis, grid, functional, unrestricted, 7);
+      bool rejected = false;
+      try {
+        CudaXcPlan undersized(exact.layout, basis.packed, grid.points(), grid.weights(),
+                              exact.arena, exact.layout.device_bytes - 1, exact.stream);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected, "XC accepted an arena smaller than its resource request");
+      exact.submit(density(basis.nao, unrestricted ? 2 : 1));
+      const auto result = exact.scalars();
+      require(result.error == 0 && std::isfinite(result.energy),
+              "exactly sized XC arena did not publish a finite result");
+      exact.canary();
+    }
+}
+
 void json_vector(const std::vector<double>& values) {
   std::cout << '[';
   for (std::size_t index = 0; index < values.size(); ++index) {
@@ -1040,6 +1065,12 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 1 || (argc == 2 && std::string(argv[1]) == "--workspace-boundary"))
+      workspace_boundary_cases();
+    if (argc == 2 && std::string(argv[1]) == "--workspace-boundary") {
+      std::cout << "CUDA XC exact-arena execution and one-byte refusal gates passed\n";
+      return 0;
+    }
     if (argc == 5 && std::string(argv[1]) == "--automatic-points-json") {
       automatic_point_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
                              static_cast<unsigned>(std::stoul(argv[3])), std::stoull(argv[4]));

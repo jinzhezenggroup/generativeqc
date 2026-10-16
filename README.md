@@ -124,24 +124,30 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF and DFT energy + analytic forces** on an RTX 5090
-(2026-10-13–14), compared with GPU4PySCF under matched FP64, basis, and grid
-settings. Cold includes construction, preparation, and the first calculation
-(compiler caches retained); warm reuses a fixed converged density. Measurements retain
-their individually qualified source/build identities. The report includes complete
-direct and DF r²SCAN-3c populations through 96 atoms and direct ωB97M-V at 48 atoms.
+**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). Native results
+use a frozen combined snapshot of #2531 and #2532; GPU4PySCF timings and
+independent references are historical, not rerun. Cold includes setup and the
+first E+F call; warm reuses converged density. The water clusters have
+3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
+
+This frozen snapshot predates #2532's bounded default: exact-Direct pure-J
+owners at 1088+ AOs use the host proof. The separate earlier Direct/96 moved
+regression remains held; see the [bounded-default decision](.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md).
 
 **Direct J/K**
 
-![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
+![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/dft-cold-warm.svg)
 
-**Density fitting (DF)** — both engines use cc-pVDZ-JKFIT.
+**Density fitting (DF)** — cc-pVDZ-JKFIT for both engines.
 
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/df-cold-warm.svg)
+![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
 
-See the [direct timing table](benchmarks/results/readme-dft-20261013/timings.md),
-[DF timing table](benchmarks/results/readme-dft-20261013/df-timings.md),
-and [protocol, accuracy, and provenance](benchmarks/results/readme-dft-20261013/README.md).
+Native ωB97M-V DF/48 lacks an independent accuracy reference; DF/96 is omitted
+(no complete E+F call). Small-system compilation-cache priming is recorded
+separately, never subtracted from cold. See the
+[Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
+[DF timings](benchmarks/results/readme-refresh-20261015/df-timings.md), and
+[protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

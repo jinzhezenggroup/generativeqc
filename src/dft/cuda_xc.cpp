@@ -173,9 +173,9 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   elements = size_add(elements, size_mul(feature_storage, out.tile_points, overflow), overflow);
   const auto matrix = size_mul(out.nao, out.nao, overflow);
   elements = size_add(elements, size_mul(out.spins, matrix, overflow), overflow);
-  elements = size_add(elements, 3, overflow);
-  // Preserve the historical double-sized error slot so resource bounds and
-  // diagnostics remain byte-for-byte unchanged.
+  elements = size_add(elements, kCudaXcTotalStorageElements, overflow);
+  // The compensated totals and historical double-sized error slot share the
+  // same overflow-checked request used by allocation and resource planning.
   out.device_bytes = size_mul(size_add(elements, 1, overflow), sizeof(double), overflow);
   return out;
 }
@@ -341,7 +341,7 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   point_totals_ = take_double(size_mul(3, l.tile_points, "CUDA XC workspace layout overflow"));
   const auto matrix = size_mul(l.nao, l.nao, "CUDA XC workspace layout overflow");
   potential_ = take_double(size_mul(l.spins, matrix, "CUDA XC workspace layout overflow"));
-  totals_ = take_double(3);
+  totals_ = take_double(kCudaXcTotalStorageElements);
   auto* error_storage = take_double(1);
   error_ = reinterpret_cast<int*>(error_storage);
   if (l.ao_map_entries) {

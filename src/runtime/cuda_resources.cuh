@@ -8,30 +8,10 @@
 #include <utility>
 
 #include "bounded_workspace.hpp"
+#include "cuda_device_scope.hpp"
 #include "resource_cuda.cuh"
 
 namespace generativeqc::runtime {
-
-inline void cuda_resource_check(cudaError_t status) {
-  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
-  if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
-}
-
-class CudaDeviceScope {
- public:
-  using StatusChecker = void (*)(cudaError_t);
-
-  explicit CudaDeviceScope(int device, StatusChecker check = cuda_resource_check) {
-    check(cudaGetDevice(&previous_));
-    check(cudaSetDevice(device));
-  }
-  CudaDeviceScope(const CudaDeviceScope&) = delete;
-  CudaDeviceScope& operator=(const CudaDeviceScope&) = delete;
-  ~CudaDeviceScope() { (void)cudaSetDevice(previous_); }
-
- private:
-  int previous_{};
-};
 
 class OwnedCudaStream {
  public:

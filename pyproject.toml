@@ -27,7 +27,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8"]
+# Required by the benchmark publication renderer regression; do not skip it.
+test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
 reference-test = [
   "scipy>=1.10",
@@ -95,6 +96,7 @@ wheel.py-api = "py3"
 "src/runtime/allocation_measurement.hpp" = "generativeqc_compiler/assets/src/runtime/allocation_measurement.hpp"
 "src/runtime/bounded_workspace.hpp" = "generativeqc_compiler/assets/src/runtime/bounded_workspace.hpp"
 "src/runtime/cuda_resources.cuh" = "generativeqc_compiler/assets/src/runtime/cuda_resources.cuh"
+"src/runtime/cuda_device_scope.hpp" = "generativeqc_compiler/assets/src/runtime/cuda_device_scope.hpp"
 "src/runtime/resource_cuda.cuh" = "generativeqc_compiler/assets/src/runtime/resource_cuda.cuh"
 "src/runtime/resource_ledger.hpp" = "generativeqc_compiler/assets/src/runtime/resource_ledger.hpp"
 "src/runtime/residency_boundaries.hpp" = "generativeqc_compiler/assets/src/runtime/residency_boundaries.hpp"

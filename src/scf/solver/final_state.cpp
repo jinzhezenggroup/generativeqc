@@ -36,7 +36,9 @@ bool valid_identity(const FinalStateIdentity& current, std::size_t n,
       n > std::numeric_limits<std::size_t>::max() / n || !current.solve_epoch ||
       current.occupied.size() != spins || !std::isfinite(limits.density_tolerance) ||
       limits.density_tolerance <= 0 || !std::isfinite(limits.energy_tolerance) ||
-      limits.energy_tolerance <= 0 || limits.maximum_corrections > 64)
+      limits.energy_tolerance <= 0 || limits.maximum_corrections > 64 ||
+      (limits.stationarity_tolerance &&
+       (!std::isfinite(*limits.stationarity_tolerance) || *limits.stationarity_tolerance <= 0)))
     return false;
   try {
     validate_resolved_fock_build(current.model);
@@ -174,7 +176,9 @@ bool accept_final_state_products(const FinalStateIdentity& current, std::size_t 
   const bool require_eigen_residual = limits.require_canonicality || !limits.allow_stationary_reuse;
   for (const auto& frame : diagnostic.eigenframes)
     if (!accept_eigen_frame(frame, detail, require_eigen_residual)) return false;
-  const double tolerance = std::min(1e-8, limits.density_tolerance);
+  const double tolerance =
+      std::min(limits.stationarity_tolerance.value_or(1e-8), limits.density_tolerance);
+  const double canonical_density_tolerance = limits.stationarity_tolerance ? tolerance : 1e-8;
   for (double value : {diagnostic.maximum_commutator, diagnostic.density_rms,
                        diagnostic.maximum_trace_error, diagnostic.maximum_idempotency_error,
                        diagnostic.maximum_density_error, diagnostic.maximum_canonical_error}) {
@@ -188,7 +192,8 @@ bool accept_final_state_products(const FinalStateIdentity& current, std::size_t 
       diagnostic.density_rms > tolerance || diagnostic.maximum_trace_error > 1e-8 ||
       diagnostic.maximum_idempotency_error > 1e-8 ||
       (limits.require_canonicality &&
-       (diagnostic.maximum_density_error > 1e-8 || diagnostic.maximum_canonical_error > 1e-8))) {
+       (diagnostic.maximum_density_error > canonical_density_tolerance ||
+        diagnostic.maximum_canonical_error > 1e-8))) {
     detail =
         "final state failed physical commutator, density, electron trace, idempotency, energy "
         "or requested canonicality checks";
@@ -311,7 +316,8 @@ FinalStateSelection select_final_state(
           diagnostic.fixed_point_density_rms =
               std::max(diagnostic.fixed_point_density_rms, norm / n);
         }
-        const double tolerance = std::min(1e-8, limits.density_tolerance);
+        const double tolerance =
+            std::min(limits.stationarity_tolerance.value_or(1e-8), limits.density_tolerance);
         accepted = std::isfinite(diagnostic.maximum_fixed_point_density_error) &&
                    std::isfinite(diagnostic.fixed_point_density_rms) &&
                    diagnostic.maximum_fixed_point_density_error <= tolerance &&

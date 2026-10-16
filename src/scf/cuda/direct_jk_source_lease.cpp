@@ -106,6 +106,12 @@ generativeqc_status DirectJkSourceLease::prepare(
   }
   if (systems.size() != 1) return finish(GENERATIVEQC_STATUS_SUCCESS);
   const auto& system = systems.front();
+  if (mixed_recurrence_ &&
+      (spins != 1 || std::any_of(system.shells.begin(), system.shells.end(),
+                                 [](const auto& shell) { return shell.angular_momentum > 2; }))) {
+    reason_ = "mixed source requires restricted through-d values";
+    return finish(GENERATIVEQC_STATUS_SUCCESS);
+  }
   const auto nbf = molecule::ao_count(system);
   if (selection == DirectJkSourceSelection::automatic) {
     unsigned maximum_angular = 0;
@@ -140,10 +146,10 @@ generativeqc_status DirectJkSourceLease::prepare(
       checked_mul(checked_add(output_elements_, correction_elements_), sizeof(double));
   // Match the common response owner's conservative host-preparation inventory;
   // explicit scratch includes the diagnostic integer and last-action census.
-  const auto bucket_layout_bytes =
-      bucket_mask == (1U << 28) - 1 && source_operator_ == FockOperator::FullRange
-          ? 0
-          : checked_mul(systems.size(), 28 * sizeof(std::size_t));
+  const auto bucket_layout_bytes = !mixed_recurrence_ && bucket_mask == (1U << 28) - 1 &&
+                                           source_operator_ == FockOperator::FullRange
+                                       ? 0
+                                       : checked_mul(systems.size(), 28 * sizeof(std::size_t));
   const auto overhead = checked_add(
       bucket_layout_bytes,
       checked_add(
@@ -198,10 +204,10 @@ generativeqc_status DirectJkSourceLease::prepare(
                        available > remaining_reserve ? available - remaining_reserve : 0);
   source_value_count_ = cuda_direct_jk_resident_value_bytes(direct_.get()) / sizeof(double);
   source_screening_ = screening;
+  const auto selected_values =
+      cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_mask) / sizeof(double);
   const auto required_values =
-      bucket_mask == (1U << 28) - 1
-          ? source_value_count_ * sizeof(double)
-          : cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_mask);
+      checked_mul(selected_values, mixed_recurrence_ ? sizeof(float) : sizeof(double));
   const auto compensation_elements = cuda_direct_jk_compensation_elements(direct_.get(), spins);
   runtime::df_progress::Scope::number("required_source_value_bytes", required_values);
   runtime::df_progress::Scope::number("source_value_allowance_bytes", allowance);
@@ -233,10 +239,17 @@ generativeqc_status DirectJkSourceLease::prepare(
     }
     return finish(cuda_status(error));
   }
-  runtime::df_progress::Scope::number("source_values_requested", required_values / sizeof(double));
+  runtime::df_progress::Scope::number(
+      "source_values_requested",
+      required_values / (mixed_recurrence_ ? sizeof(float) : sizeof(double)));
+  runtime::df_progress::Scope::label("source_precision", mixed_recurrence_ ? "fp32" : "fp64");
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
-  status = prepare_cuda_direct_jk_range_resident_values(direct_.get(), allowance, bucket_mask,
-                                                        source_operator_, source_omega_, reason_);
+  status =
+      mixed_recurrence_
+          ? prepare_cuda_direct_jk_mixed_resident_values(
+                direct_.get(), allowance, reason_, source_operator_, source_omega_, bucket_mask)
+          : prepare_cuda_direct_jk_range_resident_values(direct_.get(), allowance, bucket_mask,
+                                                         source_operator_, source_omega_, reason_);
   if (optional_refusal(status)) {
     return refuse_optional();
   }
@@ -245,9 +258,13 @@ generativeqc_status DirectJkSourceLease::prepare(
   value_bytes_ = diagnostic.resident_value_bytes;
   value_count_ = diagnostic.resident_value_count;
   capacity_bytes_ = checked_add(overhead, value_bytes_);
-  reason_ = value_count_ == source_value_count_
-                ? "admitted phase-local canonical FP64 values"
-                : "admitted partial canonical FP64 values plus exact Direct buckets";
+  reason_ = mixed_recurrence_
+                ? (value_count_ == source_value_count_
+                       ? "admitted phase-local canonical FP32 values with FP64 contraction"
+                       : "admitted partial canonical FP32 values plus mixed Direct buckets")
+                : (value_count_ == source_value_count_
+                       ? "admitted phase-local canonical FP64 values"
+                       : "admitted partial canonical FP64 values plus exact Direct buckets");
   return finish(GENERATIVEQC_STATUS_SUCCESS, true);
 }
 
@@ -270,9 +287,19 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
   }
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
-  const auto status = enqueue_cuda_direct_jk_compensated_device(
-      direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
-      correction_elements_, last_error_, screening, census_, detail, true, beta, beta_exchange);
+  if (mixed_recurrence_ && (spec.spin != FockSpin::Restricted || beta || beta_exchange)) {
+    detail = "mixed resident source requires restricted density";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto status =
+      mixed_recurrence_
+          ? enqueue_cuda_direct_jk_mixed_resident_device(
+                direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
+                correction_elements_, last_error_, screening, census_, detail)
+          : enqueue_cuda_direct_jk_compensated_device(
+                direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
+                correction_elements_, last_error_, screening, census_, detail, true, beta,
+                beta_exchange);
   if (status == GENERATIVEQC_STATUS_SUCCESS) last_screening_ = screening;
   return status;
 }

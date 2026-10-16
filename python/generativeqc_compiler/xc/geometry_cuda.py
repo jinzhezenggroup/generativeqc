@@ -14,6 +14,7 @@ from ._generated_native_semilocal import (
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
+from .scalar_schedule import XcScalarConsumer, select_xc_scalar_schedule
 from .semilocal_codegen import emit_polarized_semilocal, emit_r2scan_program
 from .spec import FunctionalSpec
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
@@ -47,8 +48,10 @@ def _emit_composed_point(
 ) -> str:
     """Reuse the energy consumer's exact generated graph and boundary policy.
 
-    The force consumer changes only the rho/sigma/tau-to-Cartesian ABI; it
-    never differentiates clipping or substitutes an interior point formula.
+    The force consumer never differentiates clipping or substitutes an interior
+    point formula. Imported programs use the same bounded FP64 force schedule
+    for either spin and every functional, without altering any SCF point graph.
+    Curated programs already lower the same bounded powers after AD.
     """
     polarized = replace(semilocal, spin="polarized")
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
@@ -77,8 +80,14 @@ def _emit_composed_point(
             name: Fraction(weight) for name, weight in record["components"]
         }:
             raise ValueError("stationary split-hybrid point composition mismatch")
+        schedule = select_xc_scalar_schedule(
+            consumer=XcScalarConsumer.STATIONARY_FORCE,
+            scalar_type=scalar_type,
+        )
         body, _, selected = emit_split_hybrid_device_body(
-            identifier, scalar_type=scalar_type
+            identifier,
+            scalar_type=scalar_type,
+            lower_integer_powers=schedule.lower_integer_powers,
         )
         # The generated symbol follows the same canonical registry convention.
         import re

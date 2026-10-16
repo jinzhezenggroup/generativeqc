@@ -46,6 +46,7 @@ constexpr unsigned cudaEventDefault = 0;
 extern "C" {
 cudaError_t cudaGetDevice(int*);
 cudaError_t cudaSetDevice(int);
+cudaError_t cudaGetLastError(void);
 const char* cudaGetErrorString(cudaError_t);
 cudaError_t cudaMalloc(void**, std::size_t);
 cudaError_t cudaFree(void*);

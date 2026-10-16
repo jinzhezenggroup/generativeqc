@@ -50,6 +50,9 @@ struct GeneratedCoulombPlan {
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
+  /** Coulomb owns two contiguous Cartesian planes: sum followed by rounding
+   * correction. Every J writer shares them; projection folds once per build.
+   * Compensation improves accuracy, not a bitwise-reproducibility guarantee. */
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{},
       *shell_bounds{};
   ShellPairDensityBounds* shell_pair_density_bounds{};
@@ -76,7 +79,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     std::size_t budget, bool allow_bounded_shell_fallback = false,
     detail::BoundedDirectHostSchedule* bounded_schedule = nullptr);
 
-/** Enqueue raw J from total spin density. Inputs and result use public AO order.
+/** Enqueue compensated raw J from total spin density in public AO order.
  * The same stream owns every transform, scatter and projection; no host copies.
  */
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* density,

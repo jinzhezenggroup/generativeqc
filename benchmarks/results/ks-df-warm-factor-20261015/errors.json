@@ -1,0 +1,26 @@
+{
+  "energy": {
+    "passed": true,
+    "atol": 1e-08,
+    "rtol": 0,
+    "max_absolute_error": 3.637978807091713e-11,
+    "max_scaled_error": 0.003637978807091713,
+    "rms_error": 1.9065137407704922e-11,
+    "shape": [
+      216
+    ]
+  },
+  "forces": {
+    "passed": true,
+    "atol": 1e-07,
+    "rtol": 0,
+    "max_absolute_error": 1.6344120501443626e-10,
+    "max_scaled_error": 0.0016344120501443626,
+    "rms_error": 3.540219891299103e-11,
+    "shape": [
+      31752
+    ]
+  },
+  "k_bound": 8.243e-13,
+  "fock_bound": 2.154e-13
+}

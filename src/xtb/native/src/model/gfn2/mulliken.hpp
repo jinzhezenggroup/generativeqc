@@ -12,8 +12,8 @@
 #include "model/gfn2/basis.hpp"
 #include "model/gfn2/integrals.hpp"
 #include "model/gfn2/mulliken_kernels.hpp"
-#include "model/gfn2/parallel_executor.hpp"
 #include "model/gfn2/wavefunction.hpp"
+#include "runtime/parallel_executor.hpp"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
@@ -53,7 +53,7 @@ class MullikenPlan {
   [[nodiscard]] std::int64_t hamiltonian_scratch_elements() const noexcept;
   [[nodiscard]] std::size_t resident_bytes() const noexcept;
   /* Internal observability for tests and diagnostics; this is not a public ABI. */
-  [[nodiscard]] CpuIsa cpu_isa() const noexcept;
+  [[nodiscard]] generativeqc::runtime::CpuIsa cpu_isa() const noexcept;
 
   [[nodiscard]] const std::vector<std::int64_t>& atom_offsets() const noexcept;
   [[nodiscard]] const std::vector<std::int64_t>& batch_shell_offsets() const noexcept;
@@ -200,7 +200,7 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenDensityView& density, const MullikenPopulationView& population,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel = nullptr);
+    const generativeqc::runtime::ChunkExecutor* parallel = nullptr);
 
 /*
  * Compute q = n0 - P:S and atomic d/Q = -P:D/Q. The ket AO determines the
@@ -239,7 +239,7 @@ generativeqc_xtb_status_t add_mulliken_hamiltonian_system_cpu(
     const MullikenPlan& plan, const MullikenIntegralView& integrals,
     const MullikenPotentialView& potential, const MullikenHamiltonianView& hamiltonian,
     std::int64_t system, const MullikenWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel = nullptr);
+    const generativeqc::runtime::ChunkExecutor* parallel = nullptr);
 
 /*
  * Accumulate scalar, dipole, and quadrupole SCC potential shifts into H:

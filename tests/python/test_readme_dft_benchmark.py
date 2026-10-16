@@ -38,6 +38,29 @@ def test_precision_consumer_provenance_is_retained() -> None:
         assert len(sources[f"python/generativeqc/{filename}"]) == 64
 
 
+def test_force_schedule_consumer_provenance_is_retained() -> None:
+    """Bind runtime schedule experiments to their actual native consumers."""
+    sources = source_hashes()
+    for filename in (
+        "direct_force_class_domains.cu",
+        "direct_force_class_domains.hpp",
+        "direct_force_class_pages.cuh",
+        "direct_force_diagnostic.hpp",
+        "direct_spd_force_schedule.hpp",
+    ):
+        assert len(sources[f"src/scf/cuda/{filename}"]) == 64
+    compiler_owner = (
+        "python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
+    )
+    assert len(sources[compiler_owner]) == 64
+    for path in (
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_final_validation_policy.hpp",
+        "python/generativeqc/resources_hf.py",
+    ):
+        assert len(sources[path]) == 64
+
+
 def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
     spec = specification("hf")
     assert spec.native_method == "rhf"
@@ -349,12 +372,27 @@ def test_reference_timeout_never_skips_native_runner(
     assert json.loads((point / "native.json").read_text())["native_ran"]
 
 
-def test_composite_protocol_retains_basis_and_corrections() -> None:
-    spec = specification("r2scan-3c")
-    result = protocol(3, load_r2scan3c_basis(), GridSpec(), 5, benchmark=spec)
+@pytest.mark.parametrize("density_fitting", (False, True))
+def test_composite_protocol_retains_basis_and_corrections(
+    density_fitting: bool,
+) -> None:
+    """Both README panels retain the defining basis and full 3c corrections."""
+    spec = replace(specification("r2scan-3c"), density_fitting=density_fitting)
+    result = protocol(
+        3,
+        load_r2scan3c_basis(),
+        GridSpec(),
+        5,
+        benchmark=spec,
+        auxiliary_basis=SimpleNamespace(
+            name="explicit-jkfit", identity="auxiliary-identity"
+        ),
+    )
     assert spec.native_method == "r2scan-3c-rks"
     assert spec.reference_xc == "R2SCAN"
     assert result["basis"] == "def2-mTZVPP"
+    assert result["representation"] == "spherical"
+    assert result["density_fitting"] == density_fitting
     assert result["aos"] == 34
     assert result["d4_parameters"]["s9"] == 2.0
     assert "included in every endpoint" in result["reference_corrections"]
@@ -559,3 +597,140 @@ def test_mixed_wb97mv_oracle_rejects_unmatched_reference(
     )
     with pytest.raises(ValueError, match="requires restricted full-J/K DF"):
         configure_reference_mixed_rsh_df(engine)
+
+
+def test_omission_does_not_hide_completed_native_without_reference(
+    tmp_path: Path,
+) -> None:
+    """Only the incomplete size is absent; an unchecked native size stays visible."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": seconds}
+        for phase, seconds in [("cold", 10.0)] + [("warm", 1.0)] * 5
+    ]
+    native = {"status": "completed_unchecked", "records": rows}
+    reference = {"status": "not_run", "records": []}
+    annotation = "96: incomplete E+F omitted"
+    summary = {
+        "sizes": [3, 12, 48, 96],
+        "density_fitting": True,
+        "panel_annotations": {"wb97m-v": annotation},
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": 48,
+                    "protocol": {"aos": 384},
+                    "engines": {"native": native, "reference": reference},
+                }
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    table = (tmp_path / "df-timings.md").read_text()
+    assert annotation in table
+    assert "10.000‡ | not run | 1.000‡ | not run" in table
+    assert "| ωB97M-V | 48 |" in table
+    assert "| ωB97M-V | 96 |" not in table
+
+
+@pytest.mark.parametrize("priming_fails", [False, True])
+def test_cache_priming_precedes_fresh_measurements(
+    tmp_path: Path, priming_fails: bool
+) -> None:
+    """Only compilation artifacts persist; a failed primer admits no measurement."""
+    script = Path("benchmarks/results/readme-wb97mv-20261014/reproduce.sh").resolve()
+    runner = tmp_path / "benchmarks/run_readme_dft_benchmarks.sh"
+    runner.parent.mkdir()
+    runner.write_text(
+        'printf "%s\\t%s\\t%s\\t%s\\n" "$README_BENCHMARK_DENSITY_FITTING" '
+        '"$README_BENCHMARK_SIZES" "$README_BENCHMARK_OUTPUT" '
+        '"$README_BENCHMARK_POINT_TIMEOUT" >> calls.tsv\n'
+        'mkdir -p "$README_BENCHMARK_OUTPUT"\n'
+        'if [[ "$FAIL_PRIMING" == 1 && "$README_BENCHMARK_OUTPUT" == */compiler-cache-priming/* ]]; then exit 7; fi\n'
+    )
+    environment = os.environ | {
+        "SLURM_JOB_ID": "mock-no-gpu",
+        "GENERATIVEQC_LIBRARY": "mock-not-loaded.so",
+        "README_BENCHMARK_MODES": "none cuda",
+        "README_BENCHMARK_SIZES": "3 12 48 96",
+        "FAIL_PRIMING": "1" if priming_fails else "0",
+    }
+    result = subprocess.run(
+        ["bash", str(script), "output"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    calls = [
+        line.split("\t") for line in (tmp_path / "calls.tsv").read_text().splitlines()
+    ]
+    assert calls[0] == ["none", "3 12", "output/compiler-cache-priming/none", "1800"]
+    if priming_fails:
+        assert result.returncode != 0
+        assert len(calls) == 1
+        return
+    assert result.returncode == 0, result.stderr
+    assert calls[1:5] == [
+        ["none", str(atoms), "output/none", "3600" if atoms == 96 else "1800"]
+        for atoms in (3, 12, 48, 96)
+    ]
+    assert calls[5] == ["cuda", "3 12", "output/compiler-cache-priming/cuda", "1800"]
+    assert calls[6:] == [
+        ["cuda", str(atoms), "output/cuda", "1800"] for atoms in (3, 12, 48)
+    ]
+
+
+def test_svg_compaction_preserves_geometry_and_text_whitespace() -> None:
+    """Presentation reuse must not alter path coordinates or text spacing."""
+    import runpy
+    from xml.etree import ElementTree
+
+    compact = runpy.run_path("benchmarks/results/readme-wb97mv-20261014/refresh.py")[
+        "compact_svg_presentation"
+    ]
+    paths = "".join(
+        f'<path d="M {index} 0 L {index} 1" fill="#087e8b" stroke="#087e8b" stroke-width="1.7" stroke-linecap="square"/>'
+        for index in range(20)
+    )
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg"><defs/><g>{paths}</g><text>cold <tspan>3</tspan> atoms</text></svg>'
+    result = compact(svg)
+    assert len(result) < len(svg)
+    tree = ElementTree.fromstring(result)
+    retained = tree.findall(".//{http://www.w3.org/2000/svg}path")
+    assert [element.attrib["d"] for element in retained] == [
+        f"M {index} 0 L {index} 1" for index in range(20)
+    ]
+    assert all(element.attrib["stroke-linecap"] == "square" for element in retained)
+    assert all("class" in element.attrib for element in retained)
+    assert "stroke-width:1.7px" in result
+    text = tree.find("{http://www.w3.org/2000/svg}text")
+    assert text is not None and "".join(text.itertext()) == "cold 3 atoms"
+
+
+def test_small_cold_audit_rejects_a_reused_measurement_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful primer must not qualify a warmed Calculator as cold."""
+    import runpy
+
+    module = runpy.run_path("benchmarks/results/readme-wb97mv-20261014/refresh.py")
+    original_reader = module["read_summary"]
+
+    def patched_reader(path: Path) -> dict[str, Any]:
+        summary = original_reader(path)
+        if (
+            path.parent.name == "readme-wb97mv-20261014"
+            and path.name == "summary.json.xz"
+        ):
+            summary["methods"]["wb97m-v"][0]["cache_priming"][
+                "fresh_measurement_process"
+            ] = False
+        return summary
+
+    monkeypatch.setitem(module["verify"].__globals__, "read_summary", patched_reader)
+    with pytest.raises(ValueError, match="separate cache primer"):
+        module["verify"]()

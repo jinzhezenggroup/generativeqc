@@ -535,6 +535,20 @@ def matmul(x1: object, x2: object) -> typing.Any:
     return _eager_compute(np.matmul, *_eager_operands(x1, x2))
 
 
+def tensordot(x1: object, x2: object, *, axes: object = 2) -> typing.Any:
+    """Contract generic arrays along static axis pairs."""
+    if _symbolic(x1, x2):
+        return _namespace.tensordot(x1, x2, axes=axes)
+    return _eager_compute(np.tensordot, *_eager_operands(x1, x2), axes=axes)
+
+
+def vecdot(x1: object, x2: object, *, axis: object = -1) -> typing.Any:
+    """Compute real vector dot products with broadcast batch dimensions."""
+    if _symbolic(x1, x2):
+        return _namespace.vecdot(x1, x2, axis=axis)
+    return _eager_compute(np.vecdot, *_eager_operands(x1, x2), axis=axis)
+
+
 def einsum(
     equation: str,
     *operands: object,

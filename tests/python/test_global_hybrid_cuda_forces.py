@@ -154,20 +154,20 @@ def test_pbe0_auto_force_uses_strict_final_state() -> None:
 
 @pytest.mark.parametrize("name", ("M06-2X", "MN15"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_split_hybrid_auto_scf_remains_fail_closed(name: str, spin: str) -> None:
-    """Reject the unsupported SCF route before either energy or force execution."""
+def test_split_hybrid_auto_shares_the_public_force_route(name: str, spin: str) -> None:
+    """XC code generation does not change the shared J/K arithmetic capability."""
     from generativeqc import Calculator, GridSpec, KsOptions
 
-    with pytest.raises(NotImplementedError, match="split-global-hybrid SCF"):
-        Calculator(
-            method=f"{name.lower()}-{spin}",
-            device="cuda",
-            basis="sto-3g",
-            precision="auto",
-            ks_options=KsOptions(
-                grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
-            ),
-        )
+    calculator = Calculator(
+        method=f"{name.lower()}-{spin}",
+        device="cuda",
+        basis="sto-3g",
+        precision="auto",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+    )
+    assert "forces" in calculator.capabilities.supported_properties
 
 
 @pytest.mark.parametrize(
@@ -178,7 +178,9 @@ def test_split_hybrid_auto_scf_remains_fail_closed(name: str, spin: str) -> None
         ("B3LYP", "fp64"),
         ("B3LYP", "auto"),
         ("M06-2X", "fp64"),
+        ("M06-2X", "auto"),
         ("MN15", "fp64"),
+        ("MN15", "auto"),
         ("PBE0-alias", "fp64"),
         ("PBE0-alias", "auto"),
     ),

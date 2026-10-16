@@ -363,8 +363,9 @@ def emit_registry(path: Path = MANIFEST) -> str:
 
 def emit_python_registry(path: Path = MANIFEST) -> str:
     """Emit typed immutable mappings without changing existing consumer APIs."""
+    entries = registry_entries(path)
     rows = []
-    for entry in registry_entries(path):
+    for entry in entries:
         rows.extend(
             [
                 f'    {json.dumps(entry["identifier"])}: cast("SplitHybridRecord", MappingProxyType({{',
@@ -408,6 +409,7 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
             "    for record in SPLIT_HYBRIDS.values()",
             '    for component, _ in record["components"]',
             ")",
+            "",
             "# fmt: on",
             "",
         ]

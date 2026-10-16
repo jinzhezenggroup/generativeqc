@@ -1,0 +1,40 @@
+{
+  "native_derivative_bytes": 424962557,
+  "nonlocal_bytes": 434257968,
+  "basis_numeric_bytes": 250368,
+  "queries": "Pure native capacity queries and CPU metadata planner; no device work",
+  "2GiB_host": {
+    "error": "no admitted stationary CUDA grid schedule: composite stationary numeric capacity budget exceeded"
+  },
+  "4GiB_host": {
+    "device_bound": 1981354125,
+    "host_bound": 2605403181,
+    "tile_points": 1024,
+    "native_bytes": 577956349
+  },
+  "preparation_only_device_memory": {
+    "host": "n4",
+    "native_endpoint_timing": false,
+    "numerical_qualification": false,
+    "automatic_df_free_bytes": 1178271744,
+    "16GiB_df_free_bytes": 6083510272,
+    "12GiB_df_free_bytes": 8818196480,
+    "cupy_pool_bytes": 0,
+    "cuda_async_pool_reserved_bytes": 0,
+    "cuda_async_pool_used_bytes": 0,
+    "trim_reclaimed_bytes": 0
+  },
+  "automatic_df_prepared_budget": {
+    "total_bytes": 21686697984,
+    "value_bytes": 17349358388,
+    "response_bytes": 4337339596
+  },
+  "explicit12GiB_df_prepared_budget": {
+    "total_bytes": 12884901888,
+    "value_bytes": 8228165057,
+    "response_bytes": 4656736831,
+    "value_peak_bytes": 8222682574,
+    "value_storage": 0,
+    "note": "Bounded streamed value fallback, not the automatic resident B/U layout"
+  }
+}

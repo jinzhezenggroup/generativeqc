@@ -646,26 +646,54 @@
           "classification": "scientific-runtime"
         },
         {
+          "path": "python/generativeqc/resources_d3.py",
+          "symbol": "d3_resource_request",
+          "classification": "scientific-runtime"
+        },
+        {
           "path": "python/generativeqc/resources_native.py",
           "symbol": "NativeDeviceLedger",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/resources_planning.py",
+          "symbol": "plan_resources",
           "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
         "src/api/c_api_resources.cpp",
+        "src/scf/hf_host_resources.hpp",
+        "src/scf/ks_host_resources.hpp",
+        "src/dft/dispersion/d3_runtime.cpp",
         "src/runtime/resource_ledger.hpp",
-        "src/runtime/tracked_allocator.hpp"
+        "src/runtime/tracked_allocator.hpp",
+        "src/api/c_api_resource_planning.cpp",
+        "src/runtime/resource_planning.cpp"
       ],
       "native_callers": [
         "src/api/c_api_resources.cpp",
-        "src/cli/resources.cpp"
+        "src/cli/resources.cpp",
+        "src/dft/dispersion/d3_runtime.cpp",
+        "src/api/c_api_resource_planning.cpp"
       ],
       "remaining_python_runtime": [
-        "Python still computes endpoint inventories and admission candidates. Native allocation receipts do not prove complete planner coverage; MINAO numeric capacity is already a native additive query."
+        "CPU HF and KS per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit consumer-workspace allowance to the native fleet peak check without transferring consumer eligibility/admission policy. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. D3(BJ) retained plan/execution, table and workspace capacities query the same native layout used by D3Plan::prepare, including a shape-only CUDA selector. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python still constructs CUDA KS fleets and CPU force allowance/eligibility policy.",
+        "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query."
       ],
       "tests": [
         "tests/python/test_resources.py",
-        "tests/python/test_minao_default.py"
+        "tests/native/test_hf_host_resources.cpp",
+        "tests/native/test_ks_host_resources.cpp",
+        "tests/python/test_hf_host_resources.py",
+        "tests/python/test_ks_host_resources.py",
+        "tests/python/test_ks_fleet_resources.py",
+        "tests/python/test_ecp_resources.py",
+        "tests/native/test_d3_resources.cpp",
+        "tests/python/test_d3_native_resources.py",
+        "tests/python/test_minao_default.py",
+        "tests/python/test_native_resource_planning.py",
+        "tests/native/test_resource_planning.cpp"
       ],
       "trackers": [
         "#933",
@@ -867,6 +895,11 @@
           "path": "python/generativeqc/basis.py",
           "symbol": "BasisSet",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_method_native.py",
+          "symbol": "capabilities",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -875,13 +908,15 @@
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_common.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and owns alias/composition preflight. Native method-name/capability lookup now stays on the already-selected Calculator library rather than public cached/default-library discovery. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_selected_native_method_capabilities.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],
       "trackers": [

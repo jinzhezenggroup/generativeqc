@@ -30,6 +30,7 @@ from .xc_point_cuda import (
     emit_equal_spin_point_selector,
     emit_point_traversal,
 )
+from .xc_totals_cuda import emit_compensated_xc_totals
 
 _GRID_SCIENTIFIC_KERNELS = r"""#include "../tensor/cuda_runtime.cuh"
 #include "xc_point.hpp"
@@ -919,6 +920,7 @@ __global__ void accumulate_totals(const double* point_totals, I count, double* t
   for (I p = 0; p < count; ++p) value += point_totals[channel * count + p];
   totals[channel] = finite(totals[channel] + value, error, 3);
 }
+@COMPENSATED_TOTALS@
 }  // namespace
 @POINT_DISPATCH@
 }  // namespace generativeqc::dft::cuda_xc_detail
@@ -1187,7 +1189,9 @@ def emit_native_xc_contraction_kernels(
     return (
         _NATIVE_XC_CONTRACTION_KERNELS.replace(
             "@POINT_PROGRAM@", emit_native_xc_point_program()
-        ).replace(
+        )
+        .replace("@COMPENSATED_TOTALS@", emit_compensated_xc_totals())
+        .replace(
             "@POINT_DISPATCH@",
             emit_native_xc_point_dispatch()
             + "\n"
@@ -1487,6 +1491,7 @@ def emit_grid_source(
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),
             asset_path("src/runtime/cuda_resources.cuh"),
+            asset_path("src/runtime/cuda_device_scope.hpp"),
             asset_path("src/runtime/resource_cuda.cuh"),
             asset_path("src/runtime/resource_ledger.hpp"),
             asset_path("src/runtime/residency_boundaries.hpp"),

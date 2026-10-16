@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -224,8 +224,13 @@
     },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
-      "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
+      "reason": "Retain unchanged Direct/DF numerical summaries required by current README compositions. The complete superseded 15-file report, original manifest, source reconstruction and ancillary receipts are recoverable from merged commit 449cd63ccfbdb298c97b78f3c2d85edff0041310 via the hash/size-pinned snapshot, fully restored and verified before retirement. No live samples, gates, source identities or repository budget are changed.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
+    },
+    "readme-wb97mv-20261014": {
+      "owner": "README WB97M-V native endpoint refresh",
+      "reason": "Retain compact direct/DF charts and seven complete source-bound WB97M-V populations; unchanged functionals reference the previous archive. Native 3/12-atom points are remeasured in fresh processes after separate compilation-cache priming, with original 3-atom observations losslessly retained and references shared unchanged. DF/48 remains visible without a matching reference; only incomplete DF/96 is omitted. SVG presentation sharing is pixel-identical and fits the unchanged aggregate budget. No raw run archive, production default promotion or policy-cap change is introduced.",
+      "review_document": "benchmarks/results/readme-wb97mv-20261014/README.md"
     },
     "vv10-range-followups-20261014": {
       "owner": "source-bound VV10 range reuse and default benchmark follow-ups",
@@ -242,15 +247,30 @@
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
       "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
     },
+    "vv10-warp-packet-20261015": {
+      "owner": "guarded FP64 rotating-partner VV10 pair traversal",
+      "reason": "Compact complete 3/12-atom off/on E/F records, independent references, exact source/library inventory, semantic pair work and sanitizer receipts. Larger original-limit failures remain separately retained; no profiler database, binary, storage-budget increase or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-warp-packet-20261015/README.md"
+    },
     "vv10-wide-pair-20261014": {
       "owner": "experimental large-domain VV10 pair schedule",
       "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
       "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "owner": "bounded DFT scheduling qualification for #2475–#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
+    },
+    "r2scan3c-final-validation-20261015": {
+      "owner": "r2SCAN-3c Direct/DF resident final-validation qualification",
+      "reason": "Retain all 192 complete comparison calls, full-precision numerical arrays, independent cold/moved geometry references, paired timings and SCF work, failures and exact source/binary bindings. The 2%/MAD label is descriptive, not enablement; work-confounded Direct/96 cold/moved samples stay visible. No raw profiler stream, binary or policy-cap increase is introduced.",
+      "review_document": "benchmarks/results/r2scan3c-final-validation-20261015/README.md"
+    },
+    "readme-refresh-20261015": {
+      "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
+      "reason": "Retain all 63 complete native FP64 populations (756 timed E+F calls), actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes, and separate primer receipts. The 12 WB97M-V DF/48 calls remain explicitly unchecked. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
+      "review_document": "benchmarks/results/readme-refresh-20261015/README.md"
     }
   },
   "files": [
@@ -431,28 +451,12 @@
       "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9"
     },
     {
-      "bytes": 139337,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue377-379-df",
-      "path": "benchmarks/results/issue377-379-df/gpu4pyscf/water-32mer-4s4-def2-svp-spherical.json",
-      "role": "scientific-record",
-      "sha256": "33164661464fc63b15e277d97755053cec3188f7063e0219624a41676b955aa6"
-    },
-    {
       "bytes": 944957,
       "classification": "test-reference-input",
       "family": "issue377-379-df",
       "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
       "role": "reference-input",
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
-    },
-    {
-      "bytes": 149040,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue377-379-df",
-      "path": "benchmarks/results/issue377-379-df/source-validation.json",
-      "role": "decision-or-audit-record",
-      "sha256": "08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569"
     },
     {
       "bytes": 219056,
@@ -559,44 +563,12 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 185892,
-      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
-      "role": "Complete DF endpoint chart"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 298072,
       "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "bytes": 189107,
-      "sha256": "4bed4aea491bf39a802ac14ecbd3f1a4fa9af107c8d1bd83bb85196ee7701fcd",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete direct endpoint chart"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 359344,
-      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
-      "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 426364,
-      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4",
-      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
@@ -623,12 +595,36 @@
       "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
     },
     {
+      "path": "benchmarks/results/vv10-warp-packet-20261015/evidence.json.xz",
+      "family": "vv10-warp-packet-20261015",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independent E/F, semantic pair work and source-bound packet qualification",
+      "bytes": 142064,
+      "sha256": "134ddb110994824e29195af84243c8c4bb879db07b2b4b0b943d52cba54e6dc5"
+    },
+    {
       "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
       "family": "vv10-wide-pair-20261014",
       "bytes": 183856,
       "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
       "classification": "required-compact-accepted-evidence",
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
+    },
+    {
+      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
+      "family": "r2scan3c-final-validation-20261015",
+      "bytes": 185084,
+      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
+      "family": "readme-refresh-20261015",
+      "bytes": 174628,
+      "sha256": "14db1bdfcd47efd3209805413fb07755b05dcd9a3519ca5e7a5371b95f3b6fc9",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete native E+F scalar populations, work/gates and source/binary/raw/Slurm/primer receipts; unchecked accuracy remains explicit"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

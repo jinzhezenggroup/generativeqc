@@ -62,6 +62,8 @@ constexpr int GENERATIVEQC_STATUS_NOT_IMPLEMENTED=2, GENERATIVEQC_STATUS_NUMERIC
 int cudaGetLastError() { return 0; }
 void check(int code) { assert(code == 0); }
 int launches = 0;
+constexpr int cudaMemcpyDeviceToDevice=3;
+int cudaMemcpyAsync(void*, const void*, std::size_t, int, void*) { ++launches; return 0; }
 template<class... T> void launch_spin_matrix_product_kernel(T...) { ++launches; }
 namespace scf {
 struct Source {
@@ -111,6 +113,7 @@ struct Owner {
       scf::prepared_cuda_occupied_fock_binding(provider);
   bool pending_fitted_occupied=true, final_fitted_projection_ready=false;
   bool warm_orbitals_ready=true;
+  bool warm_orbitals_are_ao=false;
   unsigned spins=1;
   std::array<std::size_t,2> occupations{1,0};
   int device=0;
@@ -146,6 +149,7 @@ int main(int argc, char** argv) {
   assert(argc == 3);
   const std::string mode=argv[1];
   Owner owner;
+  owner.warm_orbitals_are_ao=mode == "ao";
   auto& source=owner.provider.source;
   source.value_storage.pairs=std::string(argv[2]) == "packed-single" ? 1 : 0;
   source.revoke_projection_leases();
@@ -181,7 +185,7 @@ int main(int argc, char** argv) {
   assert(plan.resident_final_fitted_projection(token,binding,detail) == GENERATIVEQC_STATUS_SUCCESS);
   assert(binding && launches == 1);
   assert(binding.occupied_coefficients == owner.proposal && binding.generation == token.generation);
-  if (mode == "unchanged") return 0;
+  if (mode == "unchanged" || mode == "ao") return 0;
   if (mode == "new-state") {
     ++owner.final_generation;
   } else {
@@ -222,6 +226,7 @@ int main(int argc, char** argv) {
     "mode",
     [
         "unchanged",
+        "ao",
         "revoked",
         "same-rank",
         "different-rank",

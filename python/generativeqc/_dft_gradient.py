@@ -156,12 +156,15 @@ class StationaryKsState:
         grid: typing.Any = None,
         *,
         index: typing.Any = 0,
+        allow_budget_stationarity: bool = False,
     ) -> typing.Any:
         """Read the actual current #162 state and verify its AO/grid sources.
 
         CPU RKS and CUDA KS owners provide a validated handoff. Native SCF keeps
         its own regularization identity; #163-A consumes that exact point model
         before applying the compiler-generated density/AO geometry pullback.
+        Force callers may explicitly consume a native-authenticated physical
+        allowance; ordinary and response callers retain the strict default.
         """
         from ._ks_snapshot import NativeKsSnapshot
 
@@ -172,7 +175,9 @@ class StationaryKsState:
         source = NativeKsSnapshot(batch, index)
         try:
             state = cls(**source.decode(basis, grid))
-            StationaryDerivativeContract(state.identity).validate(state)
+            StationaryDerivativeContract(
+                state.identity, allow_budget_stationarity=allow_budget_stationarity
+            ).validate(state)
             return state
         except Exception:
             source.close()
@@ -217,9 +222,28 @@ class StationaryDerivativeContract:
     state_identity: StationaryKsIdentity
     topology_policy: str = "stable-explicit-grid-v1"
     sign: str = "gradient"
+    allow_budget_stationarity: bool = False
     identity: str = field(init=False)
 
+    @classmethod
+    def for_native_force(cls, state: typing.Any) -> typing.Any:
+        """Consume only the live native owner's authenticated force allowance.
+
+        All force compositions share this policy. Array algebra and native
+        identity/proof validation remain mandatory; ordinary/response contracts
+        retain their strict default rather than inheriting a force budget.
+        """
+        return cls(
+            state.identity,
+            allow_budget_stationarity=getattr(
+                state._source, "stationarity_tolerance", _RESIDUAL_TOLERANCE
+            )
+            > _RESIDUAL_TOLERANCE,
+        )
+
     def __post_init__(self) -> None:
+        if type(self.allow_budget_stationarity) is not bool:
+            raise TypeError("budget stationarity selection must be boolean")
         if not isinstance(self.state_identity, StationaryKsIdentity):
             raise TypeError("stationary derivative requires a KS state identity")
         if self.topology_policy != "stable-explicit-grid-v1":
@@ -242,7 +266,7 @@ class StationaryDerivativeContract:
         return "mgga" if ingredients == ("rho", "sigma", "tau") else "gga"
 
     def to_payload(self) -> typing.Any:
-        return {
+        payload = {
             "schema": "generativeqc.stationary-dft-derivative/v2",
             "state": self.state_identity.to_payload(),
             "spin": self.spin,
@@ -252,6 +276,9 @@ class StationaryDerivativeContract:
             "held_fixed": "density while evaluating explicit XC geometry partials",
             "force_capability": "unsupported",
         }
+        if self.allow_budget_stationarity:
+            payload["budget_stationarity"] = "native-owner-allowance"
+        return payload
 
     def validate(self, state: typing.Any) -> None:
         """Require both numerical consistency and the live native #162 proof."""
@@ -267,6 +294,8 @@ class StationaryDerivativeContract:
 
     def _validate_arrays(self, state: typing.Any) -> typing.Any:
         """Check array algebra only; this diagnostic never proves stationarity."""
+        from ._ks_snapshot import NativeKsSnapshot
+
         if not isinstance(state, StationaryKsState):
             raise TypeError("expected a stationary KS state")
         if state.identity != self.state_identity:
@@ -275,9 +304,14 @@ class StationaryDerivativeContract:
             raise ValueError(
                 "stationary derivative requires successful converged physical state"
             )
+        residual_tolerance = _RESIDUAL_TOLERANCE
+        if self.allow_budget_stationarity and type(state._source) is NativeKsSnapshot:
+            residual_tolerance = state._source.stationarity_tolerance
+        if not np.isfinite(residual_tolerance) or not 0 < residual_tolerance <= 1e-4:
+            raise ValueError("invalid native stationary force allowance")
         if (
             not np.isfinite(state.physical_residual)
-            or not 0 <= state.physical_residual <= _RESIDUAL_TOLERANCE
+            or not 0 <= state.physical_residual <= residual_tolerance
         ):
             raise ValueError("physical residual exceeds the stationary derivative gate")
 
@@ -308,7 +342,7 @@ class StationaryDerivativeContract:
                 raise ValueError("orbitals are not S-orthonormal")
             expected_density = (c * occupations[block]) @ c.T
             if not np.allclose(
-                density[block], expected_density, atol=_ARRAY_TOLERANCE, rtol=1e-10
+                density[block], expected_density, atol=residual_tolerance, rtol=1e-10
             ):
                 raise ValueError("density reconstruction mismatch")
             expected_weighted = (c * (occupations[block] * energies[block])) @ c.T

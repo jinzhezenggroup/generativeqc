@@ -120,7 +120,7 @@ int main() {
       if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "host XC")) return 1;
       options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
       descriptor.precision_mode = GENERATIVEQC_PRECISION_AUTO;
-      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "mixed precision")) return 1;
+      if (!check(GENERATIVEQC_STATUS_SUCCESS, "shared Direct AUTO precision")) return 1;
       descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
       if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,

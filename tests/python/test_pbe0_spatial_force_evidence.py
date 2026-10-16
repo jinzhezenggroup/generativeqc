@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import lzma
@@ -13,6 +14,7 @@ from generativeqc_compiler.common.evidence import block_error, canonical_hash
 from generativeqc_compiler.common.performance import assess_comparison
 from generativeqc_compiler.common.timing import interleaved_selection_order
 
+from benchmarks.df_policy_endpoint import read_reference_bytes
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
 
@@ -157,8 +159,26 @@ def test_storage_compaction_preserves_canonical_measurements() -> None:
     assert len(metadata["files"]) == 7
     assert metadata["saved_bytes"] == 668780
     for row in metadata["files"]:
-        data = (ROOT / row["path"]).read_bytes()
+        data = read_reference_bytes(ROOT / row["path"])
         assert hashlib.sha256(data).hexdigest() == row["stored_sha256"]
         assert len(data) == row["stored_bytes"]
         assert canonical_hash(json.loads(data)) == row["canonical_sha256"]
         assert row["original_bytes"] > row["stored_bytes"]
+
+
+def test_storage_compaction_rejects_changed_expanded_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gzip integrity alone cannot admit changed historical measurements."""
+    metadata = json.loads((BUNDLE / "storage-compaction.json").read_text())
+    for index, row in enumerate(metadata["files"]):
+        data = read_reference_bytes(ROOT / row["path"])
+        path = tmp_path / row["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if index == len(metadata["files"]) - 1:
+            path = path.with_suffix(".json.gz")
+            data = gzip.compress(data + b" ", mtime=0)
+        path.write_bytes(data)
+    monkeypatch.setattr(f"{__name__}.ROOT", tmp_path)
+    with pytest.raises(AssertionError):
+        test_storage_compaction_preserves_canonical_measurements()
