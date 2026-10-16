@@ -148,3 +148,31 @@ def test_mixed_pair_rejects_extremes_without_publication(
     assert admitted == expected
     if not admitted:
         assert list(output) == [9182.5] * 4
+
+
+@pytest.mark.parametrize("slot", range(5))
+@pytest.mark.parametrize("upper", [False, True])
+@pytest.mark.parametrize("direction", [-math.inf, None, math.inf])
+def test_bilateral_admission_keeps_fp64_domain_edges(
+    mixed_pair: Any, slot: int, upper: bool, direction: float | None
+) -> None:
+    """Scale proofs must be decided before adjacent FP64 inputs round to float.
+
+    Test both point legs and the independently varying radius. The first value
+    outside a boundary must leave the caller's output untouched, even when its
+    FP32 representation is identical to the admitted boundary's representation.
+    """
+    lower_bound, upper_bound = (2**-16, 4096.0) if slot == 0 else (2**-8, 256.0)
+    boundary = upper_bound if upper else lower_bound
+    value = boundary if direction is None else math.nextafter(boundary, direction)
+    inputs = [1.0] * 6
+    inputs[slot] = value
+    output = (ct.c_double * 6)(*[9182.5] * 6)
+    admitted = mixed_pair.bilateral((ct.c_double * 6)(*inputs), output)
+    assert admitted == (lower_bound <= value <= upper_bound)
+    if admitted:
+        assert list(output) == pytest.approx(
+            _reference("vv10", tuple(inputs)), rel=3e-6, abs=1e-30
+        )
+    else:
+        assert list(output) == [9182.5] * 6

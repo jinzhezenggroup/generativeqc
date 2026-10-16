@@ -394,6 +394,74 @@ void raw_range_oracle(const Fixture& fixture, bool mixed = false) {
             << " maximum_error " << maximum_error << "\n";
 }
 
+/** Qualify density-conditioned mixed J/K independently, including raw K's
+ * full weight. Each call changes the density or selected outputs so stale
+ * maxima and accidentally shared J-K/2 screening cannot pass by replay. */
+void raw_mixed_full_range_oracle(const Fixture& fixture) {
+  const auto elements = fixture.density.size();
+  unsigned checks = 0;
+  double maximum_error = 0.0;
+  for (const double screening : {0.0, 1e-12}) {
+    scf::CudaDirectJkPlan* raw{};
+    scf::CudaDirectJkDiagnostic diagnostic;
+    std::string detail;
+    require(scf::create_cuda_direct_jk_plan(0, {fixture.system}, 0, screening, 2ULL << 30, &raw,
+                                            diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "mixed full-range preparation: " + detail);
+    std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+        raw, scf::destroy_cuda_direct_jk_plan);
+    runtime::OwnedCudaBuffer<double> matrices(0, 3 * elements, plan->stream);
+    runtime::OwnedCudaBuffer<int> error(0, 1, plan->stream);
+    runtime::OwnedCudaBuffer<std::uint64_t> work(0, 1, plan->stream);
+    auto* ordered_pairs = plan->materialized_pair_order;
+    require(ordered_pairs != nullptr, "whole-shell J/K schedule was not admitted");
+    for (const bool materialized : {true, false})
+      for (unsigned channels = 1; channels <= 3; ++channels)
+        for (const double scale : {1.0, -0.5, 0.0}) {
+          auto density = fixture.density;
+          for (auto& value : density) value *= scale;
+          cuda_check(cudaMemcpyAsync(matrices.get(), density.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, plan->stream));
+          auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.37);
+          spec.coulomb.present = (channels & 1U) != 0;
+          spec.exchange.present = (channels & 2U) != 0;
+          plan->materialized_pair_order = materialized ? ordered_pairs : nullptr;
+          const auto status = scf::enqueue_cuda_direct_jk_device_mixed_j(
+              plan.get(), spec, matrices.get(), nullptr, elements,
+              spec.coulomb.present ? matrices.get() + elements : nullptr,
+              spec.exchange.present ? matrices.get() + 2 * elements : nullptr, nullptr, error.get(),
+              detail, work.get(), spec.exchange.present);
+          plan->materialized_pair_order = ordered_pairs;
+          require(status == GENERATIVEQC_STATUS_SUCCESS, "mixed full-range execution: " + detail);
+          int failure = 0;
+          std::uint64_t recurrences = 0;
+          cuda_check(cudaMemcpyAsync(&failure, error.get(), sizeof(failure), cudaMemcpyDeviceToHost,
+                                     plan->stream));
+          cuda_check(cudaMemcpyAsync(&recurrences, work.get(), sizeof(recurrences),
+                                     cudaMemcpyDeviceToHost, plan->stream));
+          cuda_check(cudaStreamSynchronize(plan->stream));
+          require(!failure && (scale == 0.0 || recurrences > 0),
+                  "mixed full-range failure or missing executed FP32 work");
+          for (unsigned channel = 0; channel < 2; ++channel) {
+            if (!(channels & (1U << channel))) continue;
+            std::vector<double> actual(elements);
+            cuda_check(cudaMemcpy(actual.data(), matrices.get() + (channel + 1) * elements,
+                                  elements * sizeof(double), cudaMemcpyDeviceToHost));
+            const auto& expected = channel == 0 ? fixture.coulomb : fixture.exchange;
+            for (std::size_t index = 0; index < elements; ++index) {
+              const double difference = std::abs(actual[index] - scale * expected[index]);
+              require(std::isfinite(actual[index]) && difference < 2e-6,
+                      "independent mixed full-range J/K parity");
+              maximum_error = std::max(maximum_error, difference);
+            }
+          }
+          ++checks;
+        }
+  }
+  std::cout << "mixed full-range oracle checks " << checks << " maximum_error " << maximum_error
+            << "\n";
+}
+
 /** Independent signed-density SR/LR K matrices qualify both mixed schedules.
  * Turning off optional shell-pair ordering exercises its bounded AO fallback;
  * no oracle participates in native preparation or contraction. */
@@ -897,6 +965,7 @@ int main(int argc, char** argv) {
                           range_oracle);
     std::cout << std::setprecision(17);
     if (mixed_range_oracle) {
+      raw_mixed_full_range_oracle(fixture);
       raw_mixed_range_oracle(fixture);
       raw_range_oracle(fixture, true);
     } else if (range_oracle) {
