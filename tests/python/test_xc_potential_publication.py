@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from _cc_owner_test_support import compile_owner
+from _cpp_source_support import cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,6 +70,7 @@ struct DeviceAllocationError : std::bad_alloc {};
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 }
 using runtime::PrecisionPhase;
+@OCCUPIED_DENSITY@
 struct CudaXcDensityBinding { runtime::NativeLoweringPrecision precision; };
 namespace tensor {
 struct PreparedPanelProduct { bool enabled() const { return true; } };
@@ -89,7 +91,7 @@ int expected_point_launcher{};
 bool expected_fp32_contractions{};
 CudaXcAoPrecision expected_ao_precision{CudaXcAoPrecision::Fp64};
 struct Layout {
-  std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
+  std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2}, jets{4};
   bool local_ao{}, response{}, fp32_contractions{};
   CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
   std::size_t feature_terms{5}, device_bytes{};
@@ -104,11 +106,12 @@ template <class... T> void enqueue(T... args) {
   assert(std::get<0>(values).fp32_contractions == expected_fp32_contractions);
   assert(std::get<0>(values).ao_precision == expected_ao_precision);
   assert(std::get<1>(values) == expected_point_launcher);
-  assert(std::get<sizeof...(T)-5>(values) == expected_density_provider);
-  assert(std::get<sizeof...(T)-4>(values) == expected_potential_binding);
-  assert(std::get<sizeof...(T)-3>(values) == expected_batch_plan);
-  assert(std::get<sizeof...(T)-2>(values) == expected_batch_launcher);
-  assert(std::get<sizeof...(T)-1>(values) == expected_batch_arena);
+  assert(std::get<sizeof...(T)-6>(values) == expected_density_provider);
+  assert(std::get<sizeof...(T)-5>(values) == expected_potential_binding);
+  assert(std::get<sizeof...(T)-4>(values) == expected_batch_plan);
+  assert(std::get<sizeof...(T)-3>(values) == expected_batch_launcher);
+  assert(std::get<sizeof...(T)-2>(values) == expected_batch_arena);
+  assert(!std::get<sizeof...(T)-1>(values).coefficients);
   ++bodies;
 }
 }
@@ -140,7 +143,7 @@ struct CudaXcPlan {
   void publish_submitted_generation(std::uint64_t);
   void publish_potential_work();
   void enqueue_impl(const double*, const double*, std::size_t, std::uint64_t,
-                    PrecisionPhase, double*, double*, bool);
+                    PrecisionPhase, double*, double*, bool, CudaXcOccupiedDensity occupied={});
 };
 """
     driver = r"""
@@ -219,7 +222,12 @@ int main(int argc, char** argv) {
 }
 """
     cpp, binary = directory / "publication.cpp", directory / "publication"
-    cpp.write_text(source + methods + driver)
+    occupied = cpp_record_definition(
+        (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
+    )
+    cpp.write_text(
+        source.replace("@OCCUPIED_DENSITY@", occupied + ";") + methods + driver
+    )
     compile_owner(compiler, directory, [cpp], binary)
     return binary
 

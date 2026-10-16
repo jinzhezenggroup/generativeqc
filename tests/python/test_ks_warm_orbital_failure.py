@@ -105,6 +105,7 @@ struct Owner {
   bool warm_orbitals_are_ao = false;
   bool warm_energy_baseline = false, final_state_ready = false;
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
+  bool occupied_xc_frame_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
   bool warm_factor_storage = false;
