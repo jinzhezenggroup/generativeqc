@@ -48,12 +48,25 @@ RSH_COMPONENTS = (
 PW91_COMPONENTS = ("GGA_X_PW91", "GGA_C_PW91")
 P86_COMPONENTS = ("LDA_C_PZ", "GGA_C_P86")
 WB97MV_COMPONENTS = ("MGGA_X_WB97M_V", "MGGA_C_WB97M_V")
+
+
+def _source_nonlocal_component_name(record: typing.Mapping[str, object]) -> str:
+    name = record.get("direct_semilocal_component")
+    if name is None:
+        name = record["registration"]
+    if not isinstance(name, str):
+        raise TypeError("generated Libxc nonlocal component must be a name")
+    if not name:
+        raise ValueError("generated Libxc nonlocal component must be a name")
+    return name
+
+
 # These are mathematical MethodIR components only: no point, SCF, gradient, or
 # CUDA qualification is inferred from a pinned Libxc registration.
 SOURCE_NONLOCAL_COMPONENTS = tuple(
     sorted(
         {
-            record.get("direct_semilocal_component") or record["registration"]
+            _source_nonlocal_component_name(record)
             for record in LIBXC_METHODS.values()
             if record["nonlocal_variant"] is not None
             and (

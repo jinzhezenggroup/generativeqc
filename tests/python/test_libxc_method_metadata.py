@@ -198,6 +198,33 @@ def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
     assert METHOD_CATALOG["WB97X-V"].range_omega == Fraction(3, 10)
 
 
+@pytest.mark.parametrize("field", ("direct_semilocal_component", "registration"))
+@pytest.mark.parametrize("invalid", (123, 0, False, (), ""))
+def test_nonlocal_component_inventory_rejects_invalid_generated_names(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    invalid: object,
+) -> None:
+    import importlib.util
+    import sys
+
+    from generativeqc_compiler.method import _generated_libxc_methods as generated
+    from generativeqc_compiler.xc import spec
+
+    record = dict(generated.LIBXC_METHODS["B97M-V"])
+    record[field] = invalid
+    monkeypatch.setattr(generated, "LIBXC_METHODS", {"B97M-V": record})
+    name = "generativeqc_compiler.xc._invalid_generated_name"
+    module_spec = importlib.util.spec_from_file_location(name, spec.__file__)
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    with pytest.raises(
+        (TypeError, ValueError), match="nonlocal component must be a name"
+    ):
+        module_spec.loader.exec_module(module)
+
+
 def test_unmodeled_nonlocal_initializer_control_flow_fails_closed() -> None:
     source = (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text()
     modified = source.replace(
