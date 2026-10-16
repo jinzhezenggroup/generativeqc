@@ -361,6 +361,29 @@ _RAW_LIBXC_METHODS: dict[str, dict[str, object]] = json.loads(
     "source": "hyb_gga_xc_b3lyp.c",
     "source_sha256": "0f481a2b55787ce7d6aac346c1c29987dd4f83c70c64ff1b7e90f6ee09ef1e3f"
   },
+  "B97M-V": {
+    "components": [
+      [
+        "MGGA_XC_B97M_V",
+        "1"
+      ]
+    ],
+    "direct_semilocal_stem": null,
+    "exact_exchange": "0",
+    "family": "mgga",
+    "flags": "XC_FLAGS_3D | XC_FLAGS_VV10 | XC_FLAGS_NEEDS_TAU | MAPLE2C_FLAGS",
+    "libxc_id": 254,
+    "long_range_exchange": "0",
+    "metadata_semantics": "libxc-hybrid-method-metadata/v1",
+    "nlc_b": "6",
+    "nlc_c": "1/100",
+    "nonlocal_variant": "vv10",
+    "range_omega": "0",
+    "registration": "MGGA_XC_B97M_V",
+    "short_range_exchange": "0",
+    "source": "mgga_xc_b97mv.c",
+    "source_sha256": "7e3e897a94bd2b15e34d34924275954836d35a6f58d0979b71f017c88426d673"
+  },
   "CAM-B3LYP": {
     "components": [
       [
@@ -554,6 +577,25 @@ _RAW_LIBXC_METHODS: dict[str, dict[str, object]] = json.loads(
     "short_range_exchange": "19/100",
     "source": "hyb_gga_xc_cam_b3lyp.c",
     "source_sha256": "8f542a15f19f084246b038905d04f67afc01bd3720de8e7110e8ae0a86d19384"
+  },
+  "GAS22": {
+    "components": [],
+    "direct_semilocal_component": "HYB_MGGA_XC_GAS22",
+    "direct_semilocal_stem": "GAS22",
+    "exact_exchange": "0",
+    "family": "hyb_mgga",
+    "flags": "XC_FLAGS_3D | XC_FLAGS_HYB_CAM | XC_FLAGS_NEEDS_TAU | XC_FLAGS_VV10 | MAPLE2C_FLAGS",
+    "libxc_id": 658,
+    "long_range_exchange": "1",
+    "metadata_semantics": "libxc-hybrid-method-metadata/v1",
+    "nlc_b": "6",
+    "nlc_c": "1/100",
+    "nonlocal_variant": "vv10",
+    "range_omega": "3/10",
+    "registration": "HYB_MGGA_XC_GAS22",
+    "short_range_exchange": "3/20",
+    "source": "hyb_mgga_xc_gas22.c",
+    "source_sha256": "2e86abe3d4572d00de955e020b216722fb26490ceba7a9eedb0ad1aa5f88b1d6"
   },
   "KMLYP": {
     "components": [
@@ -937,6 +979,25 @@ _RAW_LIBXC_METHODS: dict[str, dict[str, object]] = json.loads(
     "short_range_exchange": "3/20",
     "source": "hyb_mgga_xc_wb97mv.c",
     "source_sha256": "896263dad36b75bbb9d42b5e4718d62e8d57e261fd326ebcfc0350c80d39c3d2"
+  },
+  "WB97X-V": {
+    "components": [],
+    "direct_semilocal_component": "HYB_GGA_XC_WB97X_V",
+    "direct_semilocal_stem": "WB97X_V",
+    "exact_exchange": "0",
+    "family": "hyb_gga",
+    "flags": "XC_FLAGS_3D | XC_FLAGS_HYB_CAM | XC_FLAGS_VV10 | MAPLE2C_FLAGS",
+    "libxc_id": 466,
+    "long_range_exchange": "1",
+    "metadata_semantics": "libxc-hybrid-method-metadata/v1",
+    "nlc_b": "6",
+    "nlc_c": "1/100",
+    "nonlocal_variant": "vv10",
+    "range_omega": "3/10",
+    "registration": "HYB_GGA_XC_WB97X_V",
+    "short_range_exchange": "167/1000",
+    "source": "hyb_gga_xc_wb97.c",
+    "source_sha256": "e9a149fb74512ef9ab87d4758bb1ec0dff4855b7ea4be5f4a72a4b801e70f7ce"
   }
 }"""
 )
