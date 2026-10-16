@@ -213,6 +213,8 @@ def reference_engine(
     Supplying atomic rules (not just static final coordinates) is essential:
     GPU4PySCF rebuilds its grids to evaluate analytic partition/grid response.
     Three original-Becke iterations with no radius adjustment match GridSpec.
+    The Hessian response uses that same primary grid, not GPU4PySCF's default
+    secondary SG1 CPHF grid, which would differentiate a different quadrature.
     """
     import cupy as cp
     from gpu4pyscf.dft import gen_grid, rks, uks
@@ -248,6 +250,7 @@ def reference_engine(
         grids.becke_scheme = gen_grid.original_becke
         grids.prune = None
         grids.gen_atomic_grids = lambda mol, *args, **kwargs: table
+    engine.cphf_grids = engine.grids
     engine.small_rho_cutoff = 0
     engine.conv_tol = 1e-11
     engine.conv_tol_grad = 1e-8

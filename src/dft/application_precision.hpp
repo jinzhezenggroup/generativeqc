@@ -11,6 +11,36 @@
 
 namespace generativeqc::dft {
 
+/** Force arithmetic and SCF arithmetic have separate admission contracts.
+ * Budget-converged densities may feed the existing FP64 force consumer; only
+ * strict SCF controls may authorize independently qualified mixed gradients. */
+inline bool admit_stationary_force_controls(double energy, double density, double screening,
+                                            bool budget_stationarity) noexcept {
+  const std::array<double, 3> controls{energy, density, screening};
+  const std::array<double, 3> ceilings = budget_stationarity
+                                             ? std::array<double, 3>{1e-6, 1e-4, 1e-10}
+                                             : std::array<double, 3>{1e-10, 1e-8, 1e-12};
+  for (std::size_t index = 0; index < controls.size(); ++index)
+    if (!std::isfinite(controls[index]) || controls[index] <= 0.0 ||
+        controls[index] > ceilings[index])
+      return false;
+  return true;
+}
+
+inline constexpr unsigned nonlocal_proposal_iteration_limit = 16;
+/** Preserve the incumbent twelve-Fock warmup's eleven initializer steps.
+ * Extra mixed budget belongs to the target's frozen-potential proposal, not
+ * to a more accurate solution of the deliberately incomplete seed operator. */
+inline constexpr unsigned nonlocal_seed_iteration_limit = 11;
+
+/** Bound one initializer, one mixed target, and one frozen-potential proposal.
+ * Two iterations remain reserved for fresh strict targets. The provisional
+ * inner residual selects a precision handoff, never physical convergence. */
+inline unsigned nonlocal_mixed_proposal_limit(unsigned target_limit) noexcept {
+  const auto proposal_limit = nonlocal_seed_iteration_limit + nonlocal_proposal_iteration_limit + 2;
+  return std::min(proposal_limit, target_limit > 2 ? target_limit - 2 : 1U);
+}
+
 /** Stop proposing sub-tolerance density changes before a fresh energy check.
  * This selects a proposal, not convergence or an observable-error certificate.
  * Budget-Fock confirmation uses a residual one order below its 1e-4 physical

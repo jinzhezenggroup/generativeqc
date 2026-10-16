@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_grid.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Borrowed ordinary-stream, caller-arena, authenticated basis/quadrature/density contracts for the build-time compiler-AD WB97M-V fixed-grid response component. No interpreter, allocator or complete Hessian capability.",
+  "regions": []
+}

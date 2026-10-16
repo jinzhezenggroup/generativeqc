@@ -45,6 +45,39 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
+generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::size_t index,
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                                    std::string& detail, bool prepare) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->resident_orbital_frame(index, expected, binding, detail, prepare);
+  binding = {};
+  detail = "resident orbital frame requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   dft::CudaKsResidentFockBinding& binding,
+                                                   std::string& detail) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->resident_fock_sources(index, expected, binding, detail);
+  binding = {};
+  detail = "resident Fock sources require a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     dft::CudaKsResidentGridBinding& binding,
+                                                     std::string& detail) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->resident_grid_reference(index, expected, binding, detail);
+  binding = {};
+  detail = "resident basis/grid requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t index,
                                               const dft::CudaKsFinalStateToken& expected,
                                               int& device, const double*& alpha,

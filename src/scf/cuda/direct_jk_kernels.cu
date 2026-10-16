@@ -13,6 +13,7 @@
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
+#include "scf/cuda/direct_screening.cuh"
 
 namespace generativeqc::scf {
 namespace {
@@ -95,7 +96,8 @@ __global__ void materialized_canonical_jk_kernel(
     double omega, double screening, const double* bounds, const double* density,
     const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census,
     std::uint64_t* mixed_work = nullptr, double* coulomb_correction = nullptr,
-    double* exchange_correction = nullptr) {
+    double* exchange_correction = nullptr, const double* shell_bounds = nullptr,
+    const ShellPairDensityBounds* shell_density_bounds = nullptr) {
   using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
   using Recurrence = MaterializedDirectPairRecurrence<AngularOrder, Scalar>;
   static_assert(std::is_trivially_copyable_v<Recurrence> && alignof(Recurrence) <= 16);
@@ -121,6 +123,24 @@ __global__ void materialized_canonical_jk_kernel(
     const ActiveShellQuartetTile task{static_cast<std::uint32_t>(rows.order[first_begin + first]),
                                       static_cast<std::uint32_t>(rows.order[second_begin + second]),
                                       0};
+    if constexpr (MixedJ) {
+      if (shell_bounds && shell_density_bounds) {
+        // Raw J and raw K need independent full-weight bounds: using RHF's
+        // J-K/2 predicate here would incorrectly halve the K admission bound.
+        // One uniform CTA decision precedes the recurrence's shared barriers.
+        const bool survives =
+            threadIdx.x == 0 &&
+            ((coulomb &&
+              direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
+                  batch, task.first_pair, task.second_pair, screening, shell_bounds,
+                  shell_density_bounds, nullptr, false, true)) ||
+             (exchange &&
+              direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
+                  batch, task.first_pair, task.second_pair, screening, shell_bounds,
+                  shell_density_bounds, nullptr, true, false)));
+        if (!__syncthreads_or(survives)) continue;
+      }
+    }
     contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
                                            component_lanes>(
         batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
@@ -931,7 +951,8 @@ void launch_materialized_canonical_mixed_j_kernel(
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, double screening, const double* bounds,
     const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
-    std::uint64_t* mixed_work, double* exchange, DirectCoulombRange range, double omega) {
+    std::uint64_t* mixed_work, double* exchange, DirectCoulombRange range, double omega,
+    const double* shell_bounds, const ShellPairDensityBounds* shell_density_bounds) {
   if (!first_count || !second_count) return;
   constexpr std::size_t maximum_blocks = 4096;
   const auto dense_upper_bound =
@@ -944,12 +965,12 @@ void launch_materialized_canonical_mixed_j_kernel(
       materialized_canonical_jk_kernel<true, order, true><<<blocks, threads, 0, stream>>>(     \
           batch, rows, first_begin, first_count, second_begin, second_count,                   \
           integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, mixed_work);                                                             \
+          work_count, mixed_work, nullptr, nullptr, shell_bounds, shell_density_bounds);       \
     else                                                                                       \
       materialized_canonical_jk_kernel<false, order, true><<<blocks, threads, 0, stream>>>(    \
           batch, rows, first_begin, first_count, second_begin, second_count,                   \
           integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count, mixed_work);                                                             \
+          work_count, mixed_work, nullptr, nullptr, shell_bounds, shell_density_bounds);       \
     break
   switch (angular_order) {
     GENERATIVEQC_MATERIALIZED_MIXED_ORDER(0);

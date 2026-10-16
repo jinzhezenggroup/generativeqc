@@ -12,9 +12,18 @@ This is only lossless compression of this task's historical documentation to
 retain subsequent XC evidence within the unchanged 64-MiB repository cap.
 No scientific record, force array, reference, timing sample, executable
 reproducer or qualification gate changes. `SHA256SUMS` covers every current
-member. `recovery.json` separately identifies all 44 original tracked members at
+member. `recovery.json.xz` separately identifies all 44 original tracked members at
 `ef02ef322e809a905cca09e7d2b3323b9d1972ae`, including full original envelopes and
 negative-trial receipts; the pooled working view is not that full archive.
+
+Both provenance JSONs are lossless archives. Inspect either without writing:
+
+```bash
+python -c 'import lzma,sys; print(lzma.open(sys.argv[1], "rt").read(), end="")' \
+  benchmarks/results/md-j-sparse-support-20261016/recovery.json.xz
+```
+
+Use `source-and-build.json.xz` in the same directory for source/build provenance.
 
 Recompute all 96 native E/F gates against eight independent geometry references
 and export maintained safe reproducer scripts, using **fresh** destinations:

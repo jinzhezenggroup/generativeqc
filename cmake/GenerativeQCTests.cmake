@@ -128,6 +128,10 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_resident_weights.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     set_tests_properties(generativeqc_ks_resident_weights_tests PROPERTIES TIMEOUT 240)
+    generativeqc_native_test(generativeqc_ks_resident_frame_tests
+                       tests/native/test_ks_resident_frame.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
+    set_tests_properties(generativeqc_ks_resident_frame_tests PROPERTIES TIMEOUT 120)
     generativeqc_native_test(generativeqc_df_density_seed_tests tests/native/test_df_density_seed.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver SKIP_77)
     set_property(SOURCE "${GENERATIVEQC_GRID_SOURCE}" src/dft/cuda_ks.cpp src/dft/cuda_xc.cpp
@@ -171,10 +175,14 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_uhf_final_state_tests tests/native/test_uhf_final_state.cpp)
     generativeqc_native_test(generativeqc_warm_subspace_tests tests/native/test_warm_subspace.cpp)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
+    generativeqc_native_test(generativeqc_occupied_projection_tests tests/native/test_occupied_projection.cpp)
+    generativeqc_native_test(generativeqc_basis_projection_sdk_tests tests/native/test_basis_projection_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
+    generativeqc_native_test(generativeqc_response_recycle_sdk_tests
+                            tests/native/test_response_recycle_sdk.cpp NO_SRC_INCLUDE)
     generativeqc_native_test(generativeqc_rhf_resident_policy_tests tests/native/test_rhf_resident_policy.cpp NO_GENERATIVEQC)
     target_include_directories(generativeqc_rhf_resident_policy_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     generativeqc_native_test(generativeqc_low_rank_preconditioner_tests tests/native/test_low_rank_preconditioner.cpp)

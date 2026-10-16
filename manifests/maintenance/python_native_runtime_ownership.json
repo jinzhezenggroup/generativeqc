@@ -452,6 +452,31 @@
       ]
     },
     {
+      "id": "wb97mv-native-cuda-second-order",
+      "method_families": ["density_functional"],
+      "backends": ["cuda"],
+      "representations": ["cartesian", "spherical"],
+      "properties": ["hvp", "hessian"],
+      "spins": ["restricted", "unrestricted"],
+      "approximations": ["direct", "density-fitting", "range-separated", "nonlocal", "ecp"],
+      "python_sites": [
+        {"path": "python/generativeqc/calculator.py", "symbol": "Calculator.hessian", "classification": "wrapper"},
+        {"path": "python/generativeqc/_native_hessian.py", "symbol": "run_native_cuda", "classification": "wrapper"},
+        {"path": "python/generativeqc_compiler/integral/factorized_second.py", "symbol": "emit_factorized_second", "classification": "compiler-ad"}
+      ],
+      "native_scientific_sources": [
+        "src/dft/cuda_ks_wb97mv_hessian.cu",
+        "src/dft/cuda_ks_wb97mv_df_nuclear.cu",
+        "src/dft/cuda_ks_wb97mv_response.cu"
+      ],
+      "native_callers": ["src/api/c_api_ks_hessian.cpp", "src/cli/hessian.cpp"],
+      "remaining_python_runtime": [],
+      "tests": ["tests/python/test_native_hessian_frontend.py", "tests/python/test_wb97mv_hessian_cli_cuda.py", "tests/python/test_native_wb97mv_stationary.py"],
+      "trackers": ["#2527"],
+      "qualification": "source-inventory-only",
+      "method_selectors": ["method-ir:wb97m-v-rks", "method-ir:wb97m-v-uks"]
+    },
+    {
       "id": "ks-molecular-second-order",
       "method_families": [
         "density_functional"
@@ -567,6 +592,11 @@
           "classification": "scientific-runtime"
         },
         {
+          "path": "python/generativeqc/_response_recycle_native.py",
+          "symbol": "NativeRecycle",
+          "classification": "wrapper"
+        },
+        {
           "path": "python/generativeqc/response_xc.py",
           "symbol": "FixedDensityXCDerivativeKernel",
           "classification": "scientific-runtime"
@@ -575,15 +605,20 @@
       "native_scientific_sources": [
         "src/response/native_gmres.cpp",
         "src/response/resident_gmres.cpp",
-        "src/response/linear_problem.hpp"
+        "src/response/linear_problem.hpp",
+        "src/response/recycle.hpp"
       ],
-      "native_callers": [],
+      "native_callers": [
+        "src/api/c_api_response_recycle.cpp"
+      ],
       "remaining_python_runtime": [
-        "Native vector/Krylov owners coexist with Python method-specific operator callbacks, RHS/block/recycle schedules and XC tiles. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
+        "Eligible CPU FP64 recycle-vector retention, projection and old-first MGS replacement use the native owner without normal per-solve vector publication. Python retains method-specific operators, GMRES/RHS/block/recycled schedules, rank SVD, explicit seed/transport/foreign compatibility and XC tiles. This does not complete molecular HVP or cross-backend resource authority. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
       ],
       "tests": [
         "tests/python/test_stationary_nuclear_batch_host.py",
-        "tests/python/test_posthf_low_rank_blas_ownership.py"
+        "tests/python/test_posthf_low_rank_blas_ownership.py",
+        "tests/python/test_native_response_recycle.py",
+        "tests/native/test_response_recycle_sdk.cpp"
       ],
       "trackers": [
         "#932",
@@ -631,6 +666,11 @@
       ],
       "python_sites": [
         {
+          "path": "python/generativeqc/resources_basis.py",
+          "symbol": "_basis_shape",
+          "classification": "wrapper"
+        },
+        {
           "path": "python/generativeqc/resources_hf.py",
           "symbol": "hf_resource_request",
           "classification": "scientific-runtime"
@@ -671,7 +711,9 @@
         "src/api/c_api_resource_planning.cpp",
         "src/runtime/resource_planning.cpp",
         "src/api/c_api_resource_ledger_plan.cpp",
-        "src/runtime/resource_ledger_plan.cpp"
+        "src/runtime/resource_ledger_plan.cpp",
+        "src/molecule/basis.hpp",
+        "src/molecule/basis.cpp"
       ],
       "native_callers": [
         "src/api/c_api_resources.cpp",
@@ -681,6 +723,7 @@
         "src/api/c_api_resource_ledger_plan.cpp"
       ],
       "remaining_python_runtime": [
+        "CPU HF/KS compact expanded-contraction topology counts use an additive native query on the selected library, sharing AO representation arithmetic with normalized native systems. Python still expands basis records and owns mathematical provenance, capability checks and ECP descriptors. Missing-symbol, library-free and CUDA shape plans retain explicit portable arithmetic. Native refusal does not retry portable sizing; shape counts are not full allocation/provider/lease authority.",
         "CPU HF and KS per-item/retained/serialized-fleet capacities share native CLI/C++ owners when their additive queries are discovered. KS passes its explicit consumer-workspace allowance to the native fleet peak check without transferring consumer eligibility/admission policy. HF/KS CPU/CUDA ECP workspace sizing uses the discovered native two-grid query, independently of the enclosing inventory ABI. D3(BJ) retained plan/execution, table and workspace capacities query the same native layout used by D3Plan::prepare, including a shape-only CUDA selector. Library-free dry runs and old libraries retain explicit portable metadata sizing, including per-item-only ABI fallback. Python still constructs CUDA KS fleets and CPU force allowance/eligibility policy.",
         "Discovered native global composition owns sparse lifetime peaks, exact effective caps, supported-candidate ranking and fixed-selection declared-capacity admission, shared with the CLI. Selected device-ledger binding also derives numeric limits and allowance-separated declared peaks natively, without CUDA operations. Python still constructs method/provider inventories and supported alternatives; ResourcePlan independently validates and serializes derived metadata. Library-free/old-library planning and ledger compatibility, compiler planning and generic session/retry lifecycle remain portable. Native allocation receipts do not prove complete planner coverage or endpoint/RSS bounds; MINAO numeric capacity is already a native additive query."
       ],
@@ -691,6 +734,7 @@
         "tests/python/test_hf_host_resources.py",
         "tests/python/test_ks_host_resources.py",
         "tests/python/test_ks_fleet_resources.py",
+        "tests/python/test_native_basis_shape.py",
         "tests/python/test_ecp_resources.py",
         "tests/native/test_d3_resources.cpp",
         "tests/python/test_d3_native_resources.py",
@@ -766,26 +810,50 @@
           "path": "python/generativeqc/force_aware_scf.py",
           "symbol": "ForceAwareScfPolicy._verify_final_python",
           "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "project_occupied",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "project_density",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "_project_occupied_python",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/projection.py",
+          "symbol": "_project_density_python",
+          "classification": "compatibility"
         }
       ],
       "native_scientific_sources": [
         "src/scf/preliminary_guess.cpp",
         "src/scf/initial_guess/minao.cpp",
         "src/runtime/execution_precision.hpp",
-        "src/scf/effort_policy.hpp"
+        "src/scf/effort_policy.hpp",
+        "src/scf/initial_guess/density.cpp",
+        "src/scf/occupied_projection.cpp"
       ],
       "native_callers": [
         "src/api/c_api_calculation.cpp",
-        "src/api/c_api_scf_effort.cpp"
+        "src/api/c_api_scf_effort.cpp",
+        "src/api/c_api_projection.cpp"
       ],
       "remaining_python_runtime": [
-        "Progressive/coarse-to-fine physical execution and force-aware strict cleanup execution remain Python-owned. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance, custom types and old-protocol compatibility remain explicit Python work."
+        "Progressive/coarse-to-fine physical execution and force-aware strict cleanup execution remain Python-owned. Eligible NUM03 forecasting, next-effort hysteresis and measured final gates use shared native metadata decisions; fitting, provenance, custom types and old-protocol compatibility remain explicit Python work. Plain-policy occupied-basis projection and pure-density reconstruction share the existing native transport and ordinary CPU eigen provider; old-protocol/custom/unbounded policy domains retain explicit compatibility. Numeric working-capacity admission is not full physical/provider memory authority or target convergence."
       ],
       "tests": [
         "tests/python/test_minao_default.py",
         "tests/python/test_progressive_controller_native.py",
         "tests/python/test_native_scf_effort.py",
-        "tests/native/test_scf_effort_sdk.cpp"
+        "tests/native/test_scf_effort_sdk.cpp",
+        "tests/python/test_native_basis_projection.py"
       ],
       "trackers": [
         "#933"

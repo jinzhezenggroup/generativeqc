@@ -1,0 +1,7 @@
+{
+  "path": "src/response/cuda_cpks.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Borrowed native prepared-reference, coupled induced-Fock, workspace, stream and status contracts for compiler-owned CPKS maps and device-scalar GMRES. This component does not register a complete molecular Hessian or substitute a Python/host provider.",
+  "regions": []
+}

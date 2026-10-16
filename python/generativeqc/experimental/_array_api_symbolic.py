@@ -441,6 +441,13 @@ def roll(
     return np.roll(_eager_data_array(x), shift, axis=axis)
 
 
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
+    """Repeat elements using a static integer count during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.repeat(x, repeats, axis=axis)
+    return np.repeat(_eager_data_array(x), repeats, axis=axis)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
@@ -733,6 +740,8 @@ def asarray(
             return value
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
+        if copy is False:
+            raise ValueError("asarray dtype conversion requires a copy")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
     if "unknown-nested" in source_kinds:

@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_df_response.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Native full-rank fitted-primary source, bounded workspace/work and transactional multi-output contracts. Declares immutable live-owner leases, signed-density semantics, cutoff separation and distinct frozen-D Fock/source-weight motion without implementing scientific algebra.",
+  "regions": []
+}
