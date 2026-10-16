@@ -586,13 +586,6 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     owner->charge(owner->one_electron.work().device_bytes);
-    auto exact_options = options.exact;
-    exact_options.part = owner->has_df ? CudaWb97mvJkPart::correction : CudaWb97mvJkPart::exact;
-    exact_options.max_workspace_bytes =
-        std::min(exact_options.max_workspace_bytes, owner->remaining);
-    status = owner->exact.prepare(batch, item, expected, exact_options, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    owner->charge(owner->exact.work().workspace_bytes);
     if (owner->has_df) {
       auto raw_options = options.raw_df;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
@@ -613,6 +606,14 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       owner->charge(owner->ecp.device_bytes());
     }
+    // Reserve every mandatory consumer before optional integral residency.
+    auto exact_options = options.exact;
+    exact_options.part = owner->has_df ? CudaWb97mvJkPart::correction : CudaWb97mvJkPart::exact;
+    exact_options.max_workspace_bytes =
+        std::min(exact_options.max_workspace_bytes, owner->remaining);
+    status = owner->exact.prepare(batch, item, expected, exact_options, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    owner->charge(owner->exact.work().workspace_bytes);
     check(response::cuda_cpks_reference_weights(
         owner->cpks_reference.shape(), owner->options.cpks, owner->cpks_reference.reference(),
         owner->at(owner->weights), owner->at(owner->cpks_offset), owner->cpks_bytes,

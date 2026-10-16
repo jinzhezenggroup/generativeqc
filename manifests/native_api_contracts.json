@@ -2,6 +2,185 @@
   "schema_version": 1,
   "policy": "Source-owned structured facets plus reviewed signatures and C++ public record fields; no debt allowlist. Structural coverage requires semantic source review. Generated identifiers are covered by the public method catalog. Implicit/inherited C++ operations are not separately declared by this wrapper.",
   "declarations": {
+    "generativeqc_response_action_v1": {
+      "kind": "c-callback",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "9fd7c4ce9993923b1f5f204a94cbc182fac6b3e5b03460361d7dbe3b33eb0d7c",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_gmres_workspace_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "cd41b42580a1abd4bdf6b6cf880cf7cd0ca1df5e6aa3e638d1deeb32198d94c3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_solve_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "9501e10c2093d7dfbd19bc2a3fb8eddc44b05327de6eaa21f49278fd61c9be97",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_result_view_v1_get": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "eb32f01b958e81e79ca1a97f7f6d275ddb8897fbb5f384e49317098642fa42c0",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_result_destroy": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "661b3c680b22fb11fde5964fdae9f420161a441a244d83b0a9ca339faeb73f85",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult": {
+      "kind": "cpp-type",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "4424521774398e40f78e21279ccf785fa0b30e4ee726e6d3c0abd8f3dbebfc16",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::ResponseResult": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "8bb18de095a4e8ae7729bce430530adeea053e51a62259950328d3bc920c7a50",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::~ResponseResult": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "64bf4c00928485d92a26339c8106e4ac2a32256f8b0267c53419e286b2126c02",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::ResponseResult-copy": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "d50a16ac50f5a5df4c7926158cce5a0fc43b09c29af3633ce65751972bb81fa3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::operator=-copy": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "515142e1a8716fcc2cadff76208d83cdb63b79795240bbc551d99cd0604e762a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::operator=-move": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "71c84fb029dee305d0c7b1f7aa96c72bc93d48d52a07ab8037fa5531def80bc4",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::ResponseResult-move": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "e0866163c2a920ff95ff46e6508d1cf0e92514b820000c49b4ae1ee0b3901939",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::ResponseResult::data": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "07ebacc656c10aca75da556f40911ba28b677e94c13a1c49f0e4ef121643c695",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_calculation_execute_components_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

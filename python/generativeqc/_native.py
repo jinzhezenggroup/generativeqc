@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import os
 import typing
+from functools import lru_cache
 from pathlib import Path
 
 from ._generated_methods import METHOD_CONSTANTS as _METHOD_CONSTANTS
@@ -1136,6 +1137,117 @@ def optional_response_recycle_library() -> ctypes.CDLL | None:
         function.argtypes = arguments
         function.restype = None if name.endswith("destroy") else ctypes.c_int32
     return library
+
+
+ResponseAction = ctypes.CFUNCTYPE(
+    ctypes.c_int32,
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.c_size_t,
+)
+
+
+class ResponseGmresDescriptor(ctypes.Structure):
+    """Borrowed synchronous CPU action and bounded shared-GMRES controls."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("rhs", ctypes.POINTER(ctypes.c_double)),
+        ("initial_guess", ctypes.POINTER(ctypes.c_double)),
+        ("apply", ResponseAction),
+        ("apply_data", ctypes.c_void_p),
+        ("precondition", ResponseAction),
+        ("precondition_data", ctypes.c_void_p),
+        ("rtol", ctypes.c_double),
+        ("atol", ctypes.c_double),
+        ("restart", ctypes.c_uint64),
+        ("max_iterations", ctypes.c_uint64),
+        ("max_workspace_bytes", ctypes.c_uint64),
+        ("reorthogonalize", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("breakdown_tolerance", ctypes.c_double),
+        ("true_residual_every", ctypes.c_uint64),
+        ("stagnation_window", ctypes.c_uint64),
+        ("stagnation_tolerance", ctypes.c_double),
+    ]
+
+
+class ResponseResultView(ctypes.Structure):
+    """Arrays borrow an immutable native result handle, never its input callbacks."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("reason", ctypes.c_int32),
+        ("converged", ctypes.c_int32),
+        ("dimension", ctypes.c_uint64),
+        ("solution", ctypes.POINTER(ctypes.c_double)),
+        ("solution_count", ctypes.c_uint64),
+        ("history", ctypes.POINTER(ctypes.c_double)),
+        ("history_count", ctypes.c_uint64),
+        ("basis", ctypes.POINTER(ctypes.c_double)),
+        ("basis_columns", ctypes.c_uint64),
+        ("residual_norm", ctypes.c_double),
+        ("relative_residual", ctypes.c_double),
+        ("iterations", ctypes.c_uint64),
+        ("restarts", ctypes.c_uint64),
+        ("operator_actions", ctypes.c_uint64),
+        ("preconditioner_actions", ctypes.c_uint64),
+        ("workspace_bytes", ctypes.c_uint64),
+        ("measured_workspace_peak_bytes", ctypes.c_uint64),
+        ("workspace_allocation_count", ctypes.c_uint64),
+        ("orthogonalization_seconds", ctypes.c_double),
+        ("operator_seconds", ctypes.c_double),
+    ]
+
+
+@lru_cache(maxsize=8)
+def _load_response_library(path: str) -> ctypes.CDLL | None:
+    """Bind only the additive CPU response protocol; an older library is explicit compatibility."""
+    library = ctypes.CDLL(path)
+    names = (
+        "generativeqc_response_gmres_workspace_v1",
+        "generativeqc_response_solve_v1",
+        "generativeqc_response_result_view_v1_get",
+        "generativeqc_response_result_destroy",
+    )
+    if any(not hasattr(library, name) for name in names):
+        return None
+    library.generativeqc_status_message.argtypes = [ctypes.c_int]
+    library.generativeqc_status_message.restype = ctypes.c_char_p
+    library.generativeqc_response_gmres_workspace_v1.argtypes = [
+        ctypes.POINTER(ResponseGmresDescriptor),
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    library.generativeqc_response_gmres_workspace_v1.restype = ctypes.c_int32
+    library.generativeqc_response_solve_v1.argtypes = [
+        ctypes.POINTER(ResponseGmresDescriptor),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.generativeqc_response_solve_v1.restype = ctypes.c_int32
+    library.generativeqc_response_result_view_v1_get.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ResponseResultView),
+    ]
+    library.generativeqc_response_result_view_v1_get.restype = ctypes.c_int32
+    library.generativeqc_response_result_destroy.argtypes = [ctypes.c_void_p]
+    library.generativeqc_response_result_destroy.restype = None
+    return library
+
+
+def optional_response_library() -> ctypes.CDLL | None:
+    """Discover AOT host GMRES without compiling, selecting a CUDA profile or probing a device.
+
+    Discovery remains live for explicit path overrides. Only absence of an installed
+    library/additive protocol permits compatibility, never a load error or solve rejection.
+    """
+    for candidate in _candidate_paths():
+        if candidate.exists():
+            return _load_response_library(str(candidate.resolve()))
+    return None
 
 
 def _installed_package_library() -> Path | None:
