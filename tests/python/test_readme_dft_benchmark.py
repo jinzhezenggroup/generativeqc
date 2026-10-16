@@ -638,7 +638,6 @@ def test_omission_does_not_hide_completed_native_without_reference(
     assert "| ωB97M-V | 96 |" not in table
 
 
-
 def test_readme_chart_reports_missing_plotted_phases_not_moved_timeouts(
     tmp_path: Path,
 ) -> None:

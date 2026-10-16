@@ -131,7 +131,6 @@ def phase_statistics(entry: dict[str, Any], phase: str) -> tuple[float, float, f
     return center, center - min(times), max(times) - center
 
 
-
 def missing_plot_phase_annotations(points: list[dict[str, Any]]) -> list[str]:
     """Annotate missing plotted endpoints, not missing later benchmark phases.
 
