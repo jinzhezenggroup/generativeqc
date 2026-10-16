@@ -101,21 +101,34 @@ r²SCAN uses canonical def2-mTZVPP spherical AOs and the unchanged moving Becke
 48 × 16 × 32 per-atom grid, strict FP64, screening 1e-12 and original SCF gates.
 The PBE0/HF representative controls use the same def2-SVP inputs in both arms.
 
-`raw/` retains every endpoint and its independent two-geometry E/F reference.
+`evidence.json.xz` pools every qualified endpoint's scientific scalar fields,
+full scientific protocols and independent cold/moved geometry oracles.
+`forces.npz` is standard NumPy NPZ (ZIP_LZMA): all corresponding force values
+remain exact FP64 bits, with slices declared in the metadata. Duplicate
+provenance is shared instead of repeated. No history or network fetch is needed
+to recheck any live numerical/performance claim.
 HF reference status is explicitly `accuracy_only_historical_reconstruction`:
 both independent geometry oracles exist, but no fresh reference HF timing
 population is claimed. Every HF call still passes the ordinary E/F gates.
 The initial strict-loader HF setup rejection and a missing-launcher 48-atom
-setup failure occurred before calculation; their logs remain in `trials/` and
-the validation archive. Neither is silently counted as a completed population.
+setup failure occurred before calculation. Their reasons and transient log
+identities remain under the bundle's `trials`/`validation` entries. Neither is
+silently counted as a completed population.
 `python benchmarks/results/md-j-sparse-support-20261016/summarize.py` recomputes
-all geometry/protocol/convergence/accuracy gates and medians into `summary.json`.
+all geometry/protocol/convergence/accuracy gates and medians into the ignored
+`.artifacts/md-j-sparse-support-20261016-summary.json`. NumPy reads the ordinary
+FP64 NPZ; no production calculation, GPU or reference package is required.
+One-off migration checks verify every retained scalar and every qualified
+force bit against the original records, and reproduce the entire prior summary
+exactly. Full transient envelopes/logs remain in hash-identified ignored local
+storage; they are not new permanent test fixtures or a required history fetch.
 
 ## Source-matched profile and remaining work
 
 The intrusive cold/first-warm profile is **not** the clean timing population.
-`profile/` retains the original records, trace events, force census and per-call
-summaries. The summary uses mutually exclusive host wall-time intervals and
+The bundle's `profiles` entries retain the force census and per-call numerical
+windows. Full trace/kernel streams remain in hash-identified ignored storage.
+The summary uses mutually exclusive host wall-time intervals and
 separate device activity windows. Device seconds must never be added to host
 wall time. Unmeasured counters remain null, never zero.
 
@@ -151,7 +164,7 @@ Complete exclusive **host wall** ledger (not device sums):
 All original per-call intervals and reconciliation errors are in the retained
 summaries; rounding the table is not a replacement for those ledgers.
 Synchronization API observations are separately recorded in
-`profile/synchronization-and-resources.json`. Both arms observe 13,780 cold and
+the bundle's `profiles["synchronization-and-resources.json"]`. Both arms observe 13,780 cold and
 4,808 warm synchronize calls. The opt-in MD work census performs a pageable
 copy/fence, moving blocked time between API names. Its lower event-wait sum is
 **not** a separate production synchronization speedup and must not be added to
@@ -198,7 +211,7 @@ normal J supplies the discrepancy. Existing normal density-contribution
 screening differs from MD's AO-only oracle. Dense-vs-sparse MD at 48 differs by
 at most 1.60e-13. No production tolerance changes; complete E/F gates decide
 endpoint qualification. Selected-pair checks do not prove whole-matrix parity.
-`validation/resident-md-work.json` retains actual angular counter rows. For the
+The bundle's `validation["resident-md-work.json"]` retains actual angular counter rows. For the
 96-atom dense diagnostic, one MD J call executes 2,225,962,462 uniform radial
 roots, 4,013,275,668 density-consumer directions, 95,324,371,844 contraction
 summands and 242,399,046 residual roots (43,920,982 admitted residual tasks).
@@ -213,7 +226,7 @@ The first focused attempt is also excluded: `scancel` left predecessor timeout
 children alive, including a verified n5 GPU process. A canceled n4 predecessor
 profile completed at 15:51:47, after the focused job began at 15:44:47. That
 overlap invalidates its 542.922-second cold control, which is retained in
-`trials/`, not hidden. Guarded replacement allocations first verify no existing
+the bundle's `trials` scalar records, not hidden. Guarded replacement allocations first verify no existing
 compute contexts; source revisions and numerical conditions are unchanged.
 
 An intermediate build verification omitted checkout-root `CCACHE_BASEDIR`,
@@ -226,7 +239,16 @@ compilation. Runtime caches are retained, not reset to manufacture cold wins.
 
 The retained `run-endpoint.sh`/`run-probe.sh` scripts document exact environments,
 native-library selection, canonical inputs, reference handling, 1800-second
-population bound and Slurm receipts. Paths point to the retained frozen source
+population bound and Slurm receipts. Export their exact source with:
+
+```bash
+python benchmarks/results/md-j-sparse-support-20261016/summarize.py \
+  --export-reproducers .artifacts/md-j-reproducers
+```
+
+The script texts are stored under `evidence.json.xz` → `reproducers`; full
+receipts, selected material logs, transient identities and raw envelope hashes
+are pooled in the same bundle. Paths point to the retained frozen source
 exports under `/data/jzzeng/gqc-direct-md-20261016/`; adapt filesystem roots,
 not scientific parameters. CUDA 12.9.1, GNU 11.4, Release sm120, shell/native and
 stationary CUDA AOT enabled (`r2scan_rks;pbe0_rks`), CPU stationary AOT disabled.

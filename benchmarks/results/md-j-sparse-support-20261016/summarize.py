@@ -7,21 +7,39 @@ Profile windows are deliberately separate from clean endpoint measurements.
 
 from __future__ import annotations
 
+import argparse
 import json
 import lzma
 import statistics
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parent
 CASES = (("r2scan-3c", 96), ("r2scan-3c", 48), ("pbe0", 48), ("hf", 48))
 PHASES = ["cold", *["warm"] * 5, "moved", *["moved-warm"] * 5]
+with lzma.open(ROOT / "evidence.json.xz", "rt") as stream:
+    EVIDENCE = json.load(stream)
+with np.load(ROOT / "forces.npz", allow_pickle=False) as arrays:
+    FORCES = arrays["forces"]
+assert FORCES.dtype == np.dtype("<f8") and FORCES.ndim == 1
+assert np.isfinite(FORCES).all()
 
 
 def load(relative: str) -> Any:
-    """Read a retained record without modifying its original measurements."""
-    with lzma.open(ROOT / relative, "rt") as stream:
-        return json.load(stream)
+    """Resolve pooled metadata and exact standard-NPZ FP64 force slices offline."""
+    if relative in EVIDENCE["profiles"]:
+        return EVIDENCE["profiles"][relative]
+    record = dict(EVIDENCE["records"][relative])
+    record["protocol"] = EVIDENCE["protocols"][record.pop("protocol_key")]
+    record["records"] = [dict(row) for row in record["records"]]
+    for row in record["records"]:
+        offset, atoms = row.pop("forces_slice")
+        assert atoms == record["protocol"]["atoms"]
+        assert 0 <= offset and offset + 3 * atoms <= FORCES.size
+        row["forces"] = FORCES[offset : offset + 3 * atoms].reshape(atoms, 3).tolist()
+    return record
 
 
 def qualify(record: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +138,20 @@ def force_work(census: list[dict[str, Any]]) -> dict[str, Any]:
 
 def main() -> None:
     """Write a checked summary, keeping host and device accounting separate."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT.parents[2]
+        / ".artifacts/md-j-sparse-support-20261016-summary.json",
+    )
+    parser.add_argument("--export-reproducers", type=Path)
+    arguments = parser.parse_args()
+    if arguments.export_reproducers:
+        arguments.export_reproducers.mkdir(parents=True, exist_ok=True)
+        for name, source in EVIDENCE["reproducers"].items():
+            assert Path(name).name == name
+            (arguments.export_reproducers / name).write_text(source)
     output: dict[str, Any] = {"endpoint_cases": {}, "diagnostic_profiles": {}}
     for method, atoms in CASES:
         name = f"{method}-{atoms}"
@@ -162,9 +194,8 @@ def main() -> None:
             },
             "force_work": force_work(load(f"profile/{arm}-census.json.xz")),
         }
-    (ROOT / "summary.json").write_text(
-        json.dumps(output, indent=2, allow_nan=False) + "\n"
-    )
+    arguments.output.parent.mkdir(parents=True, exist_ok=True)
+    arguments.output.write_text(json.dumps(output, indent=2, allow_nan=False) + "\n")
     for name, result in output["endpoint_cases"].items():
         print(name, result["candidate_change_percent"])
 
