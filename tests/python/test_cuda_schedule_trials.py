@@ -28,7 +28,7 @@ from tools.cuda_schedule_trials import (
 @pytest.fixture
 def sources() -> dict[str, str]:
     return {
-        RESOURCE_PATH: '''"""Unicode Ω fixture: byte offsets must remain correct."""
+        RESOURCE_PATH: '''"""Unicode 惟 fixture: byte offsets must remain correct."""
 GEOMETRY_THREADS = 32
 BECKE_COOPERATIVE_THREADS = 32
 BECKE_PAIR_TILE_ROWS = 4
@@ -55,7 +55,7 @@ auto d = stationary_becke_threads;
 """,
         BATCH_PATH: '''class PreparedBatch:
     def _public_dft_cuda_force(self, index, atoms):
-        """Unicode β before the edited expression."""
+        """Unicode 尾 before the edited expression."""
         composite_force = bool(index)
         if composite_force:
             max_device_bytes, max_host_bytes = 1 << 30, 2 << 30
@@ -181,6 +181,80 @@ def test_budget_only_trial_does_not_change_tile_policy(sources: dict[str, str]) 
     workload, kwargs = namespace["PreparedBatch"]()._public_dft_cuda_force(0, None)
     assert workload == ("fixed", 256, 1 << 30, 256 << 20)
     assert "tile_points" not in kwargs
+
+
+def shared_request_source(source: str) -> str:
+    """Executable fixture for the current shared explicit-request binding."""
+    source = source.replace(
+        "def _public_dft_cuda_force(self, index, atoms):",
+        "def _public_dft_cuda_force(self, index, atoms, *, tile_points=None):",
+    )
+    source = source.replace(
+        '            tile_policy, policy_tile_points = "budget-auto", None\n', ""
+    )
+    source = source.replace(
+        '            tile_policy, policy_tile_points = "fixed", 256\n', ""
+    )
+    return source.replace(
+        "        workload = ",
+        '        tile_policy = "budget-auto" if tile_points is None else "fixed"\n'
+        "        policy_tile_points = tile_points\n"
+        "        workload = ",
+    )
+
+
+def test_legacy_policy_expression_is_not_silently_replaced(
+    sources: dict[str, str],
+) -> None:
+    sources[BATCH_PATH] = sources[BATCH_PATH].replace(
+        'tile_policy, policy_tile_points = "fixed", 256',
+        "tile_policy, policy_tile_points = choose_policy()",
+    )
+    with pytest.raises(ValueError, match="unknown legacy"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+
+
+@pytest.mark.parametrize("composite", (False, True))
+@pytest.mark.parametrize("explicit_tile", (None, 256, 768))
+def test_shared_request_trial_changes_only_ordinary_unspecified_tile(
+    sources: dict[str, str], composite: bool, explicit_tile: int | None
+) -> None:
+    sources[BATCH_PATH] = shared_request_source(sources[BATCH_PATH])
+    text = render_trial(sources, CudaScheduleTrial(grid_tile_points=512))[BATCH_PATH]
+    namespace = {}
+    exec(text, namespace)  # noqa: S102 - controlled executable policy fixture
+    workload, execution = namespace["PreparedBatch"]()._public_dft_cuda_force(
+        int(composite), None, tile_points=explicit_tile
+    )
+    expected = explicit_tile if explicit_tile is not None or composite else 512
+    assert workload[:2] == ("budget-auto" if expected is None else "fixed", expected)
+    if composite:
+        assert execution == "composite" and workload[2:] == (1 << 30, 2 << 30)
+    else:
+        assert execution["tile_points"] == expected
+
+
+@pytest.mark.parametrize("mutation", ("policy", "request", "duplicate"))
+def test_shared_policy_trial_rejects_unknown_bindings(
+    sources: dict[str, str], mutation: str
+) -> None:
+    text = shared_request_source(sources[BATCH_PATH])
+    if mutation == "policy":
+        text = text.replace(
+            '"budget-auto" if tile_points is None else "fixed"', "choose(tile_points)"
+        )
+    elif mutation == "request":
+        text = text.replace(
+            "policy_tile_points = tile_points", "policy_tile_points = None"
+        )
+    else:
+        text = text.replace(
+            "        workload = ",
+            "        policy_tile_points = None\n        workload = ",
+        )
+    sources[BATCH_PATH] = text
+    with pytest.raises(ValueError):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
 
 
 def test_foreign_grid_structure_rejects_before_partial_changes(
