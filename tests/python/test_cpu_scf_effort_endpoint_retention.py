@@ -8,7 +8,7 @@ import json
 import sys
 import types
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import pytest
 
@@ -305,3 +305,111 @@ def test_nonfinite_result_does_not_poison_failure_receipt(
     assert receipt["status"] == "failed"
     assert receipt["cases"]["h2-original"]["samples"] == []
     assert "first_use" not in receipt["cases"]["h2-original"]
+
+
+@pytest.mark.parametrize("exception_type", [RuntimeError, KeyboardInterrupt])
+def test_buffered_journal_close_keeps_original_scientific_exception(
+    invocation: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    exception_type: type[BaseException],
+) -> None:
+    """A failed raw write leaves bytes buffered, so close attempts the write again."""
+    import errno
+    import io
+
+    original_open = Path.open
+    output = invocation["output"]
+    failure = exception_type("original scientific failure")
+    fail_writes = False
+    streams: list[Any] = []
+
+    class ReceiptDevice(io.RawIOBase):
+        def __init__(self, raw: Any) -> None:
+            self.raw = raw
+
+        def writable(self) -> bool:
+            return True
+
+        def seekable(self) -> bool:
+            return True
+
+        def seek(self, offset: int, whence: int = 0) -> int:
+            return self.raw.seek(offset, whence)
+
+        def tell(self) -> int:
+            return self.raw.tell()
+
+        def truncate(self, size: int | None = None) -> int:
+            return self.raw.truncate(size)
+
+        def write(self, data: Any) -> int:
+            if fail_writes:
+                raise OSError(errno.ENOSPC, "receipt device full")
+            return self.raw.write(data)
+
+        def close(self) -> None:
+            try:
+                self.raw.close()
+            finally:
+                super().close()
+
+    def open_receipt(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+        stream = original_open(path, mode, *args, **kwargs)
+        if path == output and mode == "x":
+            raw = stream.detach().detach()
+            stream = io.TextIOWrapper(
+                io.BufferedWriter(ReceiptDevice(raw)), encoding="utf-8"
+            )
+            streams.append(stream)
+        return stream
+
+    def fail(*args: Any) -> Any:
+        nonlocal fail_writes
+        fail_writes = True
+        raise failure
+
+    monkeypatch.setattr(Path, "open", open_receipt)
+    monkeypatch.setattr(runner, "endpoint", fail)
+    with pytest.raises(exception_type) as caught:
+        runner.main()
+    assert caught.value is failure
+    assert streams and all(stream.closed for stream in streams)
+    assert json.loads(output.read_text())["status"] == "running"
+
+
+def test_successful_body_does_not_suppress_receipt_close_error(
+    invocation: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_open = Path.open
+    failure = OSError("receipt close failed")
+
+    class Receipt:
+        def __init__(self, stream: Any) -> None:
+            self.stream = stream
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.stream, name)
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+        def close(self) -> None:
+            self.stream.close()
+            raise failure
+
+    def open_receipt(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+        stream = original_open(path, mode, *args, **kwargs)
+        return (
+            Receipt(stream) if path == invocation["output"] and mode == "x" else stream
+        )
+
+    monkeypatch.setattr(Path, "open", open_receipt)
+    with pytest.raises(OSError) as caught:
+        runner.main()
+    assert caught.value is failure
+    receipt = json.loads(invocation["output"].read_text())
+    assert receipt["status"] == "complete"
+    assert all(len(row["samples"]) == 3 for row in receipt["cases"].values())
