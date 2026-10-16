@@ -662,6 +662,31 @@ def roll(
     return result
 
 
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
+    """Repeat generic elements with static reshape/broadcast metadata."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError(
+            "repeat scientific arrays require explicit TensorIR index maps"
+        )
+    if type(repeats) is not int:
+        raise TypeError("repeat requires a static integer repetition count")
+    if repeats < 0:
+        raise ValueError("repeat count must be nonnegative")
+    if axis is None:
+        value = reshape(value, (value.size,))
+        position = 0
+    else:
+        position = _axis(axis, value.ndim, "repeat")
+    if repeats == 1:
+        return value
+    shape = value.shape
+    expanded = shape[: position + 1] + (1,) + shape[position + 1 :]
+    repeated = shape[: position + 1] + (repeats,) + shape[position + 1 :]
+    output = shape[:position] + (shape[position] * repeats,) + shape[position + 1 :]
+    return reshape(broadcast_to(reshape(value, expanded), repeated), output)
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],

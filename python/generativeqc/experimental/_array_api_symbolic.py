@@ -441,6 +441,13 @@ def roll(
     return np.roll(_eager_data_array(x), shift, axis=axis)
 
 
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
+    """Repeat elements using a static integer count during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.repeat(x, repeats, axis=axis)
+    return np.repeat(_eager_data_array(x), repeats, axis=axis)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
