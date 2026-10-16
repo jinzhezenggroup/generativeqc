@@ -64,12 +64,12 @@ def test_one_sided_diagonal_panels_match_full_bilinear(family: str, jets: int) -
     bindings.update({f"c{term}": coefficients[term, :, None] for term in range(5)})
     actual = np.zeros((19, 19))
     for one_sided in (False, True):
-        graph, roots = compact_panel_program(family, diagonal_one_sided=one_sided)
+        graph, roots = compact_panel_program(family)
         panels = evaluate_array_graph(graph, roots, bindings)
         potential = np.zeros_like(actual)
         for jet, panel in enumerate(panels):
             cross = ao[jet].T @ (weights[:, None] * panel)
-            potential += cross if one_sided and jet else cross + cross.T
+            potential += 2 * cross if one_sided and jet else cross + cross.T
         if one_sided:
             np.testing.assert_allclose(potential, actual, rtol=3e-14, atol=5e-13)
         else:

@@ -1,6 +1,6 @@
 # Decision: contract diagonal XC bilinears only once
 
-Status: implemented; complete-endpoint qualification in progress
+Status: superseded before promotion by the range-guarded consumer
 Date: 2026-10-16
 
 ## Problem
@@ -77,3 +77,15 @@ or a prepared density-factor representation can remove arithmetic without
 changing input-density semantics, scientific gates or bounded resource ownership.
 The independently qualified Direct-force stack remains a separate dependency;
 do not combine historical timings arithmetically to claim a stacked endpoint.
+
+## Range-domain review
+
+Review of #2567 found two finite-input counterexamples outside the molecular
+samples: full-panel preparation could overflow where the canonical half panel
+remained finite, and amplified preparation underflow could destroy exact signed
+cancellation. Nonfinite rejection alone does not address the latter. Consequently
+the full-panel source and its endpoint campaign are not promoted, even though
+their independent molecular gates pass. The superseding implementation restores
+canonical preparation and adds an explicit shared-operand range witness; see
+[the range-guard decision](2026-10-16-xc-diagonal-range-guard.md). The rejected
+full-panel source remains reproducible in commit `1a0e1d50e`.

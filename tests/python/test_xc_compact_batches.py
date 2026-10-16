@@ -224,6 +224,14 @@ std::atomic<std::size_t> density_terms{},potential_terms{};
 #define __device__
 #define __shared__ static
 void __syncthreads() { block_barrier->arrive_and_wait(); }
+std::array<int,256> block_votes;
+int __syncthreads_or(int predicate) {
+  block_votes[threadIdx.y*blockDim.x+threadIdx.x]=predicate;
+  __syncthreads();
+  const int result=std::any_of(block_votes.begin(),block_votes.end(),[](int value){return value;});
+  __syncthreads();
+  return result;
+}
 double __shfl_down_sync(unsigned,double value,int offset) {
   const unsigned lane=threadIdx.x, warp=lane/32;
   shuffle_values[lane]=value;
@@ -268,6 +276,48 @@ void close(double value,double expected) {
 
 _NUMERICS = r"""
 using namespace generativeqc::dft::cuda_xc_detail;
+void check_diagonal_ranges() {
+  constexpr I active=16,count=16,panel=active*count;
+  for (int trial=0;trial<3;++trial) {
+    std::vector<double> ao(4*panel),coefficients(5*count),weights(count),work(4*panel),
+        diagonal_work(4*panel),baseline(active*active),candidate(active*active);
+    if (trial==0) {
+      std::fill_n(ao.begin()+panel,active,1e-100);
+      coefficients[4*count]=5e307;
+      weights[0]=4e100;
+    } else if (trial==1) {
+      ao[panel]=ao[panel+active+1]=0x1p300;
+      ao[panel+1]=ao[panel+active]=0x1p-600;
+      coefficients[4*count]=0x1p-475;
+      coefficients[4*count+1]=-0x1p-475;
+      weights[0]=weights[1]=0x1p800;
+    } else {
+      ao[panel]=0x1p-60;
+      ao[panel+1]=0x1p100;
+      coefficients[4*count]=0x1p-1020;
+      weights[0]=0x1p1000;
+    }
+    int error=0;
+    launch({2,1,1},{128,1,1},[&] {
+      compact_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
+          active,count,1,5,4,work.data(),&error);
+      compact_diagonal_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
+          active,count,1,5,4,diagonal_work.data(),&error);
+    });
+    assert(error==0 && work==diagonal_work);
+    launch({1,1,1},{16,16,1},[&] {
+      tiled_potential_body<true,double>(ao.data(),work.data(),active,count,4,nullptr,
+          baseline.data(),nullptr,false,&error,nullptr,active,0);
+      tiled_potential_body<true,double,true>(ao.data(),diagonal_work.data(),active,count,4,nullptr,
+          candidate.data(),nullptr,false,&error,nullptr,active,0,weights.data());
+    });
+    assert(error==0 && candidate==baseline);
+    for (double value : candidate) assert(std::isfinite(value));
+    if (trial==0) close(candidate[1],2e208);
+    else if (trial==1) assert(candidate[1]==0.0);
+    else assert(candidate[1]==0x1p19);
+  }
+}
 int main() {
   constexpr I full_n=64,spins=2,jets=4,terms=5,work_jets=4;
   std::vector<std::size_t> ids;
@@ -392,5 +442,6 @@ int main() {
   assert(potential==serial_potential);
   for (I channel=0;channel<3;++channel) assert(totals[channel]==serial_totals[channel]);
   assert(error==0);
+  check_diagonal_ranges();
 }
 """

@@ -83,13 +83,13 @@ __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const dou
 }
 
 __global__ void batch_local_diagonal_potentials(const CudaXcCompactTile* tiles, const double* ao,
-    const double* work, double* potential, I spins, I work_jets, int* error) {
+    const double* work, double* potential, I spins, I work_jets, int* error, const double* weights) {
   const auto& tile = tiles[blockIdx.z / spins];
   const I columns = (tile.active + @TILE@ - 1) / @TILE@;
   if (!tile.active || blockIdx.x >= columns * (columns + 1) / 2) return;
   tiled_potential_body<true, double, true>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
       tile.count, work_jets, nullptr, potential + tile.potential_offset, nullptr, false,
-      error, nullptr, tile.active, blockIdx.z % spins);
+      error, nullptr, tile.active, blockIdx.z % spins, weights + tile.begin);
 }
 
 __device__ I compact_row_lower_bound(const size_t* map, I active, I row) {
@@ -216,7 +216,7 @@ inline void launch_batch_potential_typed(cudaStream_t stream, const CudaXcLayout
   const I columns = (max_active + @TILE@ - 1) / @TILE@;
   if (diagonal)
     batch_local_diagonal_potentials<<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
-        dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);
+        dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error, weights);
   else
     batch_local_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);

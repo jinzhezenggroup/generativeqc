@@ -21,9 +21,11 @@ __global__ void density_probe(const double* density, const double* ao, double* o
 
 template <class Arithmetic, bool DiagonalJets = false>
 __global__ void potential_probe(const double* ao, const double* work, double* output, I count,
-                                I active, I full, I jets, const size_t* ids, int* error) {
-  tiled_potential_body<true, Arithmetic, DiagonalJets>(
-      ao, work, active, count, jets, nullptr, output, nullptr, true, error, ids, full, blockIdx.z);
+                                I active, I full, I jets, const size_t* ids, int* error,
+                                const double* weights = nullptr) {
+  tiled_potential_body<true, Arithmetic, DiagonalJets>(ao, work, active, count, jets, nullptr,
+                                                       output, nullptr, true, error, ids, full,
+                                                       blockIdx.z, weights);
 }
 
 /** Test the actual generated scientific bodies with no production library.
@@ -31,7 +33,8 @@ __global__ void potential_probe(const double* ao, const double* work, double* ou
  * arithmetic-domain rejection from CUDA setup/execution failure. */
 extern "C" int mixed_contractions(const double* density, const double* ao, const double* work,
                                   double* products, double* potential, I count, I active, I full,
-                                  I jets, const size_t* ids, int mixed, I spins) {
+                                  I jets, const size_t* ids, int mixed, I spins,
+                                  const double* weights) {
   const auto ao_panel = count * active * jets;
   const auto panel = spins * ao_panel;
   const auto matrix = spins * full * full;
@@ -39,12 +42,13 @@ extern "C" int mixed_contractions(const double* density, const double* ao, const
   size_t* device_ids{};
   int* error{};
   int status = -1;
-  if (cudaMalloc(&allocation, (2 * matrix + 3 * panel) * sizeof(double)) != cudaSuccess)
+  if (cudaMalloc(&allocation, (2 * matrix + 3 * panel + count) * sizeof(double)) != cudaSuccess)
     return status;
   auto* device_ao = allocation + matrix;
   auto* device_work = device_ao + panel;
   auto* device_products = device_work + panel;
   auto* device_potential = device_products + panel;
+  auto* device_weights = device_potential + matrix;
   const bool setup =
       cudaMalloc(&device_ids, active * sizeof(size_t)) == cudaSuccess &&
       cudaMalloc(&error, sizeof(int)) == cudaSuccess &&
@@ -55,6 +59,8 @@ extern "C" int mixed_contractions(const double* density, const double* ao, const
       cudaMemcpy(device_work, work, panel * sizeof(double), cudaMemcpyHostToDevice) ==
           cudaSuccess &&
       cudaMemcpy(device_potential, potential, matrix * sizeof(double), cudaMemcpyHostToDevice) ==
+          cudaSuccess &&
+      cudaMemcpy(device_weights, weights, count * sizeof(double), cudaMemcpyHostToDevice) ==
           cudaSuccess &&
       cudaMemcpy(device_ids, ids, active * sizeof(size_t), cudaMemcpyHostToDevice) == cudaSuccess;
   if (setup) {
@@ -71,11 +77,12 @@ extern "C" int mixed_contractions(const double* density, const double* ao, const
           allocation, device_ao, device_products, count, active, full, jets, device_ids, error);
       if (mixed == 2)
         potential_probe<double, true><<<potential_grid, dim3(16, 16)>>>(
-            device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
+            device_ao, device_work, device_potential, count, active, full, jets, device_ids, error,
+            device_weights);
       else if (mixed == 3)
         tiled_diagonal_potential<<<potential_grid, dim3(16, 16)>>>(
             device_ao, device_work, active, count, jets, nullptr, device_potential, nullptr, true,
-            error, device_ids, full);
+            error, device_ids, full, device_weights);
       else
         potential_probe<double><<<potential_grid, dim3(16, 16)>>>(
             device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
