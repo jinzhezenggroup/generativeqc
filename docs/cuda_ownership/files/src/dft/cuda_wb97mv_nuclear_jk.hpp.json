@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_nuclear_jk.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Nonmovable caller-arena native J/K nuclear source contract: exact linked closure, signed RKS/UKS inputs, explicit primitive/projection/reduction work limits, mandatory bounded shell cache, original-stream live ownership and joint five-output publication. Frozen-density Fock motion and stationary weight response remain distinct. No fitted-primary or complete Hessian capability is advertised.",
+  "regions": []
+}

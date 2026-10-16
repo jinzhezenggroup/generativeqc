@@ -155,10 +155,19 @@ def test_custom_fraction_is_composed_and_zero_exchange_is_absent(
                 plan.integral_block("exact_exchange", terms=3)
 
 
-@pytest.mark.parametrize("name", ("CAM-B3LYP", "R2SCAN", "PBE0-D3(BJ)"))
+@pytest.mark.parametrize("name", ("PBE0-D3(BJ)",))
 def test_unsupported_second_order_primitives_remain_fail_closed(name: str) -> None:
     with pytest.raises(UnsupportedMethod, match="second-order rule|ingredients"):
         StationaryHVPPlan(resolve_method(name), StationaryMeanField(SCF_POINT_MODEL))
+
+
+@pytest.mark.parametrize("name", ("CAM-B3LYP", "R2SCAN"))
+def test_shared_range_and_tau_primitive_rules_are_compiler_plannable(name: str) -> None:
+    plan = StationaryHVPPlan(resolve_method(name), StationaryMeanField(SCF_POINT_MODEL))
+    if name == "R2SCAN":
+        assert "tau" in plan.active_ingredients
+    else:
+        assert {"exchange_short_range", "exchange_long_range"} <= set(plan.source_names)
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))

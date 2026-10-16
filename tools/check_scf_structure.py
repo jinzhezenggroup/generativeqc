@@ -38,6 +38,9 @@ ALLOWED = {
 # Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
+    # The immutable DF basis lease is exported only by its actual source owner;
+    # it does not authorize dependencies on KS consumers or mutable plan state.
+    "scf/cuda/df_source.cpp": ("scf/cuda_density_fitting_basis.hpp",),
     "scf/initial_guess/huckel.cpp": (
         "molecule/basis.hpp",
         "scf/fock_prepared.hpp",

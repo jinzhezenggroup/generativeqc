@@ -171,14 +171,16 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
- * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
+ * into a prepared calculation. Native callers supply an already decoded System
+ * without an opaque C ABI handle; that explicit source must take precedence.
+ * Only omission of both forms requests the orbital basis as the fit basis. */
 std::optional<core::System> ks_auxiliary_template(const generativeqc_method_descriptor& descriptor,
                                                   const core::System* native_auxiliary) {
-  if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
-  if (native_auxiliary == nullptr)
+  if (native_auxiliary != nullptr) return *native_auxiliary;
+  if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "auxiliary basis must be resolved at the API boundary");
-  return *native_auxiliary;
+  return std::nullopt;
 }
 
 void validate_ks_auxiliary_geometry(const core::System& system,
@@ -664,6 +666,45 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status resident_orbital_frame(const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      if (prepare) {
+        dft::KsFinalStateDiagnostic diagnostic;
+        return cuda_->prepare_resident_final_orbital_frame(expected, binding, diagnostic, detail);
+      }
+      return cuda_->resident_final_orbital_frame(expected, binding, detail);
+    }
+#endif
+    detail = "resident orbital frame requires a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  generativeqc_status resident_fock_sources(const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->resident_final_fock_sources(expected, binding, detail);
+#endif
+    detail = "resident Fock sources require a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  generativeqc_status resident_grid_reference(const dft::CudaKsFinalStateToken& expected,
+                                              dft::CudaKsResidentGridBinding& binding,
+                                              std::string& detail) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->resident_final_grid(expected, binding, detail);
+#endif
+    detail = "resident basis/grid requires a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected, int& device,
@@ -2593,6 +2634,39 @@ class KsPreparedBatch final : public PreparedBatch,
     return status;
   }
 
+  generativeqc_status resident_orbital_frame(std::size_t index,
+                                             const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_orbital_frame(expected, binding, detail, prepare);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_fock_sources(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_fock_sources(expected, binding, detail);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_grid_reference(std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              dft::CudaKsResidentGridBinding& binding,
+                                              std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_grid_reference(expected, binding, detail);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status resident_density(std::size_t index,
                                        const dft::CudaKsFinalStateToken& expected, int& device,
                                        const double*& alpha, const double*& beta,
@@ -2898,6 +2972,7 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system);
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+        execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
         (!system.ecp_terms.empty() ||
          std::any_of(system.atoms.begin(), system.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; })))

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .compiler_lifetime import start_owned_process
 from .compiler_process import CompileResult, kill_compiler_group, run_compiler
 
 if TYPE_CHECKING:
@@ -310,7 +311,7 @@ def _run_sccache(
         environment.pop("SCCACHE_STARTUP_NOTIFY", None)
         environment.pop("SCCACHE_START_SERVER", None)
         with tempfile.TemporaryFile(mode="w+") as server_log:
-            server = subprocess.Popen(
+            server = start_owned_process(
                 [str(launcher.path)],
                 env={**environment, "SCCACHE_START_SERVER": "1"},
                 stdin=subprocess.DEVNULL,

@@ -77,6 +77,9 @@ class PreparedFockPlan {
 
   const ResolvedFockBuild& strategy() const noexcept;
   const core::System& system() const noexcept;
+  /** Actual immutable normalized auxiliary topology, or null for exact owners.
+   * Numerical consumers borrow device basis sources, not host reconstructions. */
+  const core::System* auxiliary_system() const noexcept;
   const integrals::IntegralData& one_electron() const noexcept;
   /** Materialize deferred CUDA H'/S' only for the exact host force fallback.
    * The ordinary stationary CUDA consumer contracts D/W directly and does not

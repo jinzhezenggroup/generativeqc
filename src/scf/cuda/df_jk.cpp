@@ -25,6 +25,26 @@ int cuda_density_fitting_device(const CudaDensityFittingJkPlan* plan) noexcept {
   return plan ? plan->device_id : -1;
 }
 
+CudaDfReadonlySource cuda_density_fitting_readonly_source(
+    const CudaDensityFittingJkPlan* plan) noexcept {
+  int device = -1;
+  if (!plan || plan->batch_size != 1 || plan->metric_full_rank.size() != 1 ||
+      !plan->metric_full_rank[0] || !plan->inverse_square_roots || !plan->integral_source ||
+      cudaGetDevice(&device) != cudaSuccess || device != plan->device_id)
+    return {};
+  return {plan->device_id, plan->stream, plan->integral_source,      plan->inverse_square_roots,
+          plan->nbf,       plan->naux,   plan->factor_basis_identity};
+}
+
+CudaDfReadonlyMetric cuda_density_fitting_readonly_metric(
+    const CudaDensityFittingJkPlan* plan) noexcept {
+  if (!cuda_density_fitting_readonly_source(plan) || !plan->metric_eigenvalues ||
+      plan->metric_response_valid.size() != 1 || !plan->metric_response_valid[0])
+    return {};
+  return {plan->metric_eigenvalues, plan->metric_relative_threshold, plan->naux,
+          plan->factor_basis_identity};
+}
+
 // Host/item/device adapters share the same J/K builders and term selection.
 namespace {
 

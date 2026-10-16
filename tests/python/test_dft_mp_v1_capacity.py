@@ -1985,7 +1985,10 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
         ),
         (
             "_shells_for_atoms",
-            "consumer=self._auxiliary_basis_consumer(selected_operator)",
+            (
+                "consumer=self._auxiliary_basis_consumer("
+                "selected_operator, derivative_order)"
+            ),
             "consumer=None",
         ),
         ("_shells_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
@@ -2031,7 +2034,7 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
         ("_create_native_system", "(*cores)", "(*(0 for _ in cores))"),
         (
             "_create_native_system",
-            'if basis is not None and self._auxiliary_basis_consumer("df_metric"):',
+            "if auxiliary_consumer:",
             "if False:",
         ),
         ("_create_native_system", "_native.check(", "(lambda *args, **kwargs: None)("),
