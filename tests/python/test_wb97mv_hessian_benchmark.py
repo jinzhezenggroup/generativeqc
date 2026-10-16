@@ -478,7 +478,7 @@ def test_complete_host_injected_run_retains_samples_and_shape_failure(
     from benchmarks import compare_wb97mv_hessian_gpu4pyscf as runner
 
     output = tmp_path / "output.json"
-    _runner_arguments(monkeypatch, output, "--repeats", "1")
+    _runner_arguments(monkeypatch, output, "--repeats", "1", "--timeout-seconds", "17")
     monkeypatch.setenv("GENERATIVEQC_LIBRARY", sys.executable)
     cp = SimpleNamespace(
         cuda=SimpleNamespace(
@@ -493,6 +493,7 @@ def test_complete_host_injected_run_retains_samples_and_shape_failure(
     monkeypatch.setattr(runner, "asdict", lambda _: {})
 
     def sample(command: list[str], prefix: Path, timeout: float) -> dict:
+        assert timeout == 17, "both native and reference receive the same deadline"
         retained = json.loads(output.read_text())
         assert retained["status"] == "running"
         return {

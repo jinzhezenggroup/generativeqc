@@ -49,8 +49,8 @@ The remaining native matrix was stopped at the user's request after the slow
 initial result. Timeouts and stopped points are not endpoint timings or bounds
 on warm latency. Performance analysis and optimization are deferred.
 
-The [three-atom paired record](water3.json.gz) and [six-atom reference record](water6-reference.json)
-retain full forces, convergence and repeats. The [summary](summary.json) retains
+The [three-atom paired record](water3.json.gz) and [six-atom reference record](water6-reference.json.gz)
+retain full forces, convergence and repeats. The [summary](summary.json.gz) retains
 every attempt's status, stage, raw SHA-256 and original ignored artifact path,
 plus source/binary identities, environment and derivative work counts. No
 uncompleted repeat contributes a median.

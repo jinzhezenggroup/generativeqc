@@ -580,8 +580,7 @@ def _measure(
                     row = _run_child(
                         command,
                         logs / label,
-                        arguments.timeout_seconds
-                        + (30 if engine == "generativeqc" else 0),
+                        arguments.timeout_seconds,
                     )
                 except Exception as error:
                     record["failure"] = str(error)

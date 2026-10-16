@@ -1,6 +1,6 @@
 # Decision: parallel primitive AD with ordered contraction
 
-Status: implemented; real-device qualification in progress
+Status: implemented; selected-closure device qualification complete
 Date: 2026-10-16
 
 ## Problem
@@ -66,8 +66,14 @@ all the ordered-contraction and late-failure controls, and both actual CLI
 oracle cases (Slurm 3179, 70.83 s). Two host native contracts passed in 29.47 s;
 the local compiler/queued-failure gate passed 25 cases with 52 explicit GPU
 skips. Compiler structure checks covered 563 modules with zero dependency
-errors; all repository hooks passed. The 21-case molecular oracle and complete
-four-tool sanitizer runs are still in progress, so this is not promotion.
+errors; all repository hooks passed. Slurm 3185 completed the 21 molecular
+energy-oracle cases: all 16 spin/backend/layout/ECP combinations, four
+independent spherical-d auxiliary cases, and the exact H2 benchmark full matrix.
+Four disjoint pytest subprocesses shared the single Slurm-visible GPU; all
+passed (6/5/5/5 cases). The earlier serial Slurm 3180 was canceled, not counted
+as a passing receipt. Slurm 3182 completed synccheck, racecheck, initcheck and
+memcheck on accepted UKS/DF/ECP with the independent spherical-d auxiliary:
+zero errors, and zero racecheck hazards or warnings.
 
 Slurm 3183 additionally profiles the same complete water HVP using the parallel
 schedule. Its diagnostic internal endpoint time is 3.658911347 s; the returned
@@ -75,6 +81,29 @@ HVP differs from Slurm 3176 by less than 9e-15 Eh/Bohr squared, with identical
 reported semantic work counts and unchanged response convergence. This run is
 not an exclusive unprofiled Hessian measurement and is not a comparative
 speedup qualification.
+
+Slurm 3186 subsequently measured complete, unprofiled H2 and water Hessians
+from clean source `74c90701cfc95a2f7faa0f8e0397692197180a6a`. An exclusive
+four-GPU allocation exposed exactly one GPU to the measurement step. Both
+engines completed first-observed use plus two interleaved artifact-primed
+fresh-process/fresh-SCF repeats. Native/GPU4PySCF primed medians were
+1.717712493846193/5.59893289511092 s for H2 and
+13.43672386649996/10.781149864429608 s for water. The unchanged 3e-6
+Eh/Bohr-squared inter-engine gate still failed, at
+9.326707032836223e-5 and 0.0010456709790797603 respectively. Qualified ratios
+remain null: the independent native energy oracles do not establish why the
+two engines disagree. Small 8-by-4-by-8 grids are not grid-converged chemistry.
+The measured script still included an obsolete native-only 30 s deadline
+margin (630 s native, 600 s reference); no sample approached either limit.
+The subsequent runner cleanup gives both engines the requested deadline and
+is not retroactively part of this measured source.
+
+Full matrices, semantic counts, all twelve endpoint samples, exact selected
+inventory and reproduction are retained in
+`benchmarks/results/wb97mv-hessian-native-parallel-20261016/`. The first
+deployment attempt (Slurm 3184) failed importing a benchmark helper before
+measurement and is not timing evidence. Complete f/g closure and migration of
+the separate legacy Python Hessian numerical API remain outside this receipt.
 
 ## Revisit when
 
