@@ -1,7 +1,7 @@
-# Proposal: guarded FP32 Boys tables in the shared Direct evaluator
+# Guarded FP32 Boys tables in the shared Direct evaluator
 
-Status: implementation staged; exact-head GPU/endpoints/performance pending
-Date: 2026-10-16
+Status: qualified isolated speed population and exact integrated-source endpoints
+Date: 2026-10-17
 
 ## Motivation and ownership
 
@@ -55,3 +55,33 @@ against its source-matched e4 master control on the same clean physical GPU.
 Use unchanged Fast E/max-force/RMS gates `1e-5 /1e-4 /3e-5` and strict gates
 `1e-7 /1e-6 /3e-6`. Keep all slower/failed observations and first preparation costs.
 No Release, external backup or raw evidence bundle is authorized or published.
+
+## Completed guarded qualification
+
+The isolated guarded v16 population at e4 has all 27 complete returns: three
+baseline-Fast/guarded-Fast/guarded-strict triples per method. Median baseline
+Fast/guarded Fast is PBE 1.024647, PBE0 1.024906, WB97M-V 1.051289; all nine
+pairs improve. Fock counts match. WB recurrence work differs by -5431 out of
+approximately 20.39 billion; do not assert identical operator work. PBE/PBE0
+precision work matches; their force-semantic comparison remains false because
+provenance/artifact fields, streams and nested timers differ. An exhaustive
+audit finds no arithmetic-counter differences; do not widen its exclusions.
+
+Exact head `17fc57d69`, integrating master `8141cc7db`, has production identity
+`3f82094939da7d22ad91e99139d8716767686f36efb7f9addae4e0c7aa6e76ee`.
+The core's compiled identity and all six official force manifests authenticate.
+Its Boys/range header bytes match v16. Job3283 passes 157 native tests without
+skips, memcheck has zero errors, and CPU/CUDA-FMA/CUDA-no-FMA each qualify 420
+scaled seeds. Job3284 passes six moved matrices and 32 small family E/F
+returns. Clean RTX5090 job1083 independently qualifies all six PBE/PBE0/
+WB97M-V96 strict/Fast integration returns at the unchanged gates.
+
+Retain the additional job3284 timeout: PBE/PBE0 complete, but WB's independent
+reference does not return before the 60-minute limit, so no native WB sample
+starts. This is not evidence of a Fast timeout, and it is not erased or
+replaced. Node2 evidence is numerical only because of its known NVML mismatch.
+The separately predeclared clean integration is not v16 performance evidence.
+
+Compact receipts: `benchmarks/results/fast-boys-fp32-20261017/summary.json`.
+Raw observations, rejected alternatives and complete work comparisons remain
+local. No generic FP64 optimization or functional-specific policy is added.
