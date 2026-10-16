@@ -91,6 +91,68 @@ def test_primed_medians_exclude_first_observed_sample() -> None:
     assert summary["generativeqc_over_gpu4pyscf_wall_ratio"] == pytest.approx(5 / 3)
 
 
+def test_retained_native_h2_comparison_is_single_gpu_and_unqualified() -> None:
+    """Keep raw endpoint timings without promoting a failed numerical match."""
+    from tools.generativeqc_validation.record import load_publication_record
+
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/wb97mv-hessian-native-h2-20261016"
+    )
+    payload = load_publication_record(directory, role="samples", name="samples.json")
+    evidence = load_publication_record(directory)
+    assert payload["workload"]["visible_gpu_count"] == 1
+    case = payload["cases"]["h2"]
+    assert len(case["samples"]) == 6
+    summary = _summarize(case["samples"], 3e-6)
+    assert summary == case["summary"]
+    assert not summary["accepted"]
+    assert summary["maximum_hessian_error_hartree_per_bohr2"] > 3e-6
+    assert summary["generativeqc_over_gpu4pyscf_wall_ratio"] is None
+    assert evidence["stages"]["numerical"]["status"] == "fail"
+    assert evidence["performance"]["status"] != "pass"
+    assert evidence["revision"] == payload["provenance"]["source_commit"]
+    for row in case["samples"]:
+        if row["engine"] == "generativeqc":
+            diagnostics = row["result"]["diagnostics"]
+            assert diagnostics["runtime_python"] is False
+            assert diagnostics["runtime_compilation"] is False
+            assert diagnostics["numerical_host_fallbacks"] == 0
+            assert diagnostics["completed_directions"] == 6
+            assert diagnostics["scf_iterations"] > 0
+            assert diagnostics["exact_primitive_components"] > 0
+
+
+def test_retained_native_molecular_attempts_do_not_qualify_speed() -> None:
+    """A failed comparator and a mismatched first-use pair never become medians."""
+    from tools.generativeqc_validation.record import load_publication_record
+
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/wb97mv-hessian-native-h2-20261016"
+    )
+    attempts = load_publication_record(
+        directory, role="samples", name="molecular-attempts.json"
+    )
+    water = attempts["water"]["cases"]["water"]
+    assert len(water["samples"]) == 2
+    assert {row["repeat"] for row in water["samples"]} == {0}
+    summary = _summarize(water["samples"], 3e-6)
+    assert summary == water["summary"]
+    assert not summary["accepted"]
+    assert summary["generativeqc_over_gpu4pyscf_wall_ratio"] is None
+    assert all(
+        value is None
+        for value in summary["artifact_primed_fresh_process_median_seconds"].values()
+    )
+    oh = attempts["molecules"]["cases"]["oh"]
+    assert {row["engine"] for row in oh["samples"]} == {"generativeqc"}
+    assert "GPU4PySCF SCF did not converge" in oh["failure"]
+    assert oh.get("summary") is None
+    for attempt in attempts.values():
+        assert attempt["workload"]["visible_gpu_count"] == 1
+
+
 def test_inaccurate_repeat_prevents_a_qualified_speed_ratio() -> None:
     rows = [
         _sample("generativeqc", 3.0, 1.001),

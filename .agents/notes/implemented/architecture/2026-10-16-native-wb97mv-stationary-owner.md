@@ -143,10 +143,47 @@ now rejects any step whose CUDA device count is not exactly one before running
 an endpoint. Native diagnostics also expose actual SCF iterations alongside
 the existing integral/grid/induced-action counts.
 
+Slurm 3172 used that exclusive-allocation/single-GPU-step protocol on an RTX
+PRO 6000 Blackwell with CUDA12.9, GPU4PySCF1.8.1, PySCF2.14.0 and CuPy13.6.0.
+Three fresh-process samples per engine include SCF, full host Hessian and JSON;
+the last two, interleaved artifact-primed samples have medians 3.6709855967201293 s
+for native GenerativeQC and 5.449104098370299 s for GPU4PySCF. The unchanged
+3e-6 Eh/Bohr squared common gate fails: maximum Hessian discrepancy is
+9.326707032836223e-5. The qualified ratio remains null, not a speedup claim.
+The separate native full-matrix energy oracle passes, but does not resolve the
+inter-engine derivative disagreement. No reference implementation is modified.
+
+The complete paired matrices, times, work counts, binary/source identities and
+finite selected build inventory are retained through the shared publication
+contract in `benchmarks/results/wb97mv-hessian-native-h2-20261016/`. The
+publication decision is explicitly performance-inconclusive.
+
+Slurm 3173 completed the native OH endpoint in 216.06045223632827 s, but the
+GPU4PySCF SCF did not converge. There is no paired OH timing or speed ratio.
+Slurm 3174 completed one first-observed water endpoint per engine: native
+557.0842585428618 s and GPU4PySCF 11.834284264128655 s. These are not
+artifact-primed medians. Their maximum Hessian discrepancy is
+0.0010456709708001055 Eh/Bohr squared, again outside the unchanged 3e-6
+gate, so the qualified ratio remains null. The native water record reports
+20 SCF iterations, nine completed directions, 108 induced Fock actions,
+7,001,316 exact primitive-component evaluations, 39,690 one-electron
+primitive-component evaluations, 81 grid mixed contractions and 663,552 VV10
+reference pairs. Its response iteration count (eight) describes only the
+last direction, not the total solve. Both complete attempt records, including
+the OH comparator failure, are retained as `molecular-attempts.json.gz` in
+the same publication. The large molecular latency cliff remains unresolved;
+H2 cannot stand in for molecular endpoint performance.
+
+The aggregate evidence-retention budget was already almost full. New JSON
+members use lossless deterministic gzip; the older WB97M-V water3 receipt is
+also gzip-compressed without changing any decoded scientific bytes, with its
+README link updated. No storage budget or numerical gate is relaxed.
+
 The selected development package still does not contain practical complete
-orbital-f / auxiliary-g ERI/DF closure. Broad molecular qualification and matched
-external complete-endpoint GPU4PySCF timings remain outstanding. No source/probe
-timing or arena size demonstrates completion or comparative endpoint speed.
+orbital-f / auxiliary-g ERI/DF closure. Broad molecular qualification and an
+accepted external complete-endpoint GPU4PySCF comparison remain outstanding.
+No source/probe timing or arena size demonstrates completion or comparative
+endpoint speed.
 
 ## Revisit when
 
