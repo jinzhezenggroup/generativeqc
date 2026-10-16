@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
 from benchmarks._retention import raw_output_path
 
 if TYPE_CHECKING:
