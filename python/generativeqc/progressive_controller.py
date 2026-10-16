@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import time
 import typing
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -1164,7 +1164,24 @@ def run_progressive_hf(
             raise ValueError("unknown native progressive HF operation")
         return 0
 
-    execution_owner = run_hf_schedule(target_calculator._library, operation)
+    def guarded_operation(event: HFEvent, failure_info: tuple) -> int:
+        """Close an acquired owner if its preparation callback cannot complete."""
+        try:
+            return operation(event, failure_info)
+        except BaseException as error:
+            # Native ownership is published only after PREPARE returns. Keep
+            # acquisition and its bookkeeping exception-safe until that handoff.
+            if event in (HFEvent.PREPARE_SOURCE, HFEvent.PREPARE_TARGET):
+                owner = (
+                    source_owner if event == HFEvent.PREPARE_SOURCE else target_owner
+                )
+                if owner is not None:
+                    # Preserve the preparation failure, including cancellation.
+                    with suppress(BaseException):
+                        owner.__exit__(type(error), error, error.__traceback__)
+            raise
+
+    execution_owner = run_hf_schedule(target_calculator._library, guarded_operation)
     cleanup_seconds = target_cleanup_seconds + source_cleanup_seconds
     target_fock_builds = target_result.fock_builds
     if physical_audit is not None and target_fock_builds is not None:

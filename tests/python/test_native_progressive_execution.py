@@ -155,3 +155,91 @@ def test_reentrant_and_parallel_calls_have_independent_lifetimes(library: Any) -
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(run, range(40)))
+
+
+@pytest.mark.parametrize("native", [True, False])
+@pytest.mark.parametrize("failed_owner", ["source", "target"])
+@pytest.mark.parametrize("error_type", [MemoryError, KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize("cleanup_raises", [False, True])
+@pytest.mark.parametrize("failed_at", ["enter", "bookkeeping"])
+def test_preparation_callback_failure_closes_acquired_owner(
+    library: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    native: bool,
+    failed_owner: str,
+    error_type: type[BaseException],
+    cleanup_raises: bool,
+    failed_at: str,
+) -> None:
+    """A PREPARE callback may fail after prepare_batch returns an owned batch."""
+    from generativeqc import progressive_controller as controller
+
+    live: set[str] = set()
+    entered: list[str] = []
+    closed: list[tuple[str, tuple]] = []
+    original = error_type("after successful preparation")
+    injected = False
+
+    class Owner:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            # PreparedBatch owns its resources before __enter__ checks openness.
+            live.add(self.name)
+            entered.append(self.name)
+
+        def __enter__(self) -> Any:
+            if failed_at == "enter" and self.name == failed_owner:
+                raise original
+            return self
+
+        def __exit__(self, *failure_info: object) -> None:
+            assert self.name in live
+            live.remove(self.name)
+            closed.append((self.name, failure_info))
+            if cleanup_raises:
+                raise RuntimeError("secondary cleanup failure")
+
+        def execute(self, **_kwargs: Any) -> Any:
+            return SimpleNamespace(
+                items=[SimpleNamespace(succeeded=False, status_message="cold source")]
+            )
+
+    def perf_counter() -> float:
+        nonlocal injected
+        if failed_at == "bookkeeping" and failed_owner in live and not injected:
+            injected = True
+            raise original
+        return 0.0
+
+    stage = SimpleNamespace(estimated_cost_units=1, error_evidence=None)
+    plan = SimpleNamespace(problem=None, budget=None, stages=(stage, stage))
+    selected = library if native else SimpleNamespace()
+    source = SimpleNamespace(
+        prepare_batch=lambda *_args, **_kwargs: Owner("source"), _library=selected
+    )
+    target = SimpleNamespace(
+        prepare_batch=lambda *_args, **_kwargs: Owner("target"), _library=selected
+    )
+    monkeypatch.setattr(controller, "DeterministicHFPlan", SimpleNamespace)
+    monkeypatch.setattr(controller, "make_deterministic_hf_plan", lambda *a, **kw: plan)
+    monkeypatch.setattr(controller, "time", SimpleNamespace(perf_counter=perf_counter))
+
+    with pytest.raises(error_type) as raised:
+        controller.run_progressive_hf(plan, source, target, [])
+    assert raised.value is original
+    assert not live
+    assert [name for name, _ in closed] == list(reversed(entered))
+    for _, failure_info in closed:
+        assert failure_info[0] is error_type
+        assert failure_info[1] is original
+        traceback = failure_info[2]
+        frames = []
+        while traceback is not None:
+            frames.append(traceback.tb_frame.f_code.co_name)
+            traceback = traceback.tb_next
+        assert ("perf_counter" if failed_at == "bookkeeping" else "__enter__") in frames
+
+    # The failed call and its cleanup cannot poison the next native invocation.
+    fresh, _, owners = operation_log()
+    run_hf_schedule(selected, fresh)
+    assert not owners
