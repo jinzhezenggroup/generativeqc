@@ -34,6 +34,7 @@ NONLOCAL_PAIR_RATIONAL_VERSION = "nonlocal-pair-vv10-bounded-energy-denominator-
 NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION = (
     "nonlocal-pair-vv10-bounded-unit-reciprocal-fp64-v1"
 )
+NONLOCAL_PAIR_MIXED_VERSION = "nonlocal-pair-bounded-fp32-rational-fp64-sums-v2"
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
 
@@ -219,8 +220,8 @@ def build_nonlocal_pair_program(
         raise TypeError("pair representation and output demands must be Boolean")
     if rational_derivatives and not (variant == VV10 and features):
         raise ValueError("rational derivatives require VV10 features")
-    if partner_features and not (variant == VV10 and features and rational_derivatives):
-        raise ValueError("partner features require bounded rational VV10 features")
+    if partner_features and not (variant == VV10 and features):
+        raise ValueError("partner features require VV10 features")
     if reciprocal_energy and not rational_derivatives:
         raise ValueError("reciprocal energy requires bounded rational derivatives")
     scalar = TensorSpec((), role="input", differentiable=True)
@@ -305,10 +306,17 @@ def build_nonlocal_pair_program(
                         multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
                     )
             else:
-                logarithmic = add(
-                    add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
-                )
-                outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
+                if partner_features:
+                    dphi_dgj = multiply(
+                        negative_phi, add(divide(one, gj), divide(one, gsum))
+                    )
+                    outputs["dphi_domega_j"] = multiply(dphi_dgj, r2)
+                    outputs["dphi_dkappa_j"] = dphi_dgj
+                if geometry:
+                    logarithmic = add(
+                        add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
+                    )
+                    outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
     return Program(
         outputs,
         provenance={

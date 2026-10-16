@@ -454,7 +454,8 @@ generativeqc_status enqueue_prepared_cuda_rsh_values(
 generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,
-    int* numerical_error, std::string& detail) {
+    int* numerical_error, std::string& detail, bool mixed_exchange,
+    std::uint64_t* mixed_work_count) {
   const auto binding = prepared_cuda_fock_binding(plan);
   auto* source = plan.cuda_direct_source();
   const auto& primary = plan.strategy();
@@ -462,12 +463,17 @@ generativeqc_status enqueue_prepared_cuda_exchange_correction(
   if (!binding || !source || correction.backend != FockBackend::Cuda ||
       spec.derivative_order != 0 || spec.spin != primary.spec.spin || spec.coulomb.present ||
       !spec.exchange.present || spec.exchange.approximation != FockApproximation::Exact ||
-      spec.exchange.op != FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
-      correction.screening_tolerance != primary.screening_tolerance) {
+      (spec.exchange.op != FockOperator::LongRange &&
+       spec.exchange.op != FockOperator::ShortRange) ||
+      spec.exchange.omega <= 0.0 || correction.screening_tolerance != primary.screening_tolerance) {
     detail = "CUDA range correction is incompatible with the prepared primary Fock owner";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
+  if (mixed_exchange)
+    return enqueue_cuda_direct_jk_device_mixed_j(source, spec, density, beta, matrix_elements,
+                                                 nullptr, alpha_exchange, beta_exchange,
+                                                 numerical_error, detail, mixed_work_count, true);
   return enqueue_cuda_direct_jk_device(source, spec, density, beta, matrix_elements, nullptr,
                                        alpha_exchange, beta_exchange, numerical_error, detail);
 }

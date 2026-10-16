@@ -22,6 +22,7 @@ from ._api_types import (
     Result,
     Shell,
 )
+from ._method_native import capabilities as _native_method_capabilities
 from ._model_resolution import (
     ModelResolutionInput,
     resolve_model_identity,
@@ -125,38 +126,7 @@ def method_capabilities(method: str) -> MethodCapabilities:
             raise ValueError(f"unknown method {method!r}") from error
         method_id = _METHODS[carrier]
     library = _native.load_library()
-    native = _native.MethodCapabilitiesDescriptor(
-        ctypes.sizeof(_native.MethodCapabilitiesDescriptor),
-        _native.ABI_VERSION,
-        0,
-        0,
-        0,
-        0,
-        0,
-    )
-    _native.check(
-        library,
-        library.generativeqc_method_get_capabilities(method_id, ctypes.byref(native)),
-    )
-    family = {
-        _native.METHOD_FAMILY_HARTREE_FOCK: "hartree_fock",
-        _native.METHOD_FAMILY_DENSITY_FUNCTIONAL: "density_functional",
-        _native.METHOD_FAMILY_COUPLED_CLUSTER: "coupled_cluster",
-        _native.METHOD_FAMILY_PERTURBATION: "perturbation",
-        _native.METHOD_FAMILY_SEMIEMPIRICAL: "semiempirical",
-    }[native.family]
-    properties = set()
-    if native.supported_properties & _native.PROPERTY_ENERGY:
-        properties.add("energy")
-    if native.supported_properties & _native.PROPERTY_FORCES:
-        properties.add("forces")
-    return MethodCapabilities(
-        method=canonical,
-        family=family,
-        available=bool(native.available),
-        supports_batch=bool(native.supports_batch),
-        supported_properties=frozenset(properties),
-    )
+    return _native_method_capabilities(library, canonical, method_id)
 
 
 class Calculator:
@@ -905,7 +875,13 @@ class Calculator:
             raise NotImplementedError(
                 f"method {method!r} is reserved but not implemented"
             )
-        self._capabilities = method_capabilities(self._method_name)
+        self._capabilities = _native_method_capabilities(
+            self._library, self._method_name, self._method
+        )
+        if self._automatic_libxc_name is not None:
+            self._capabilities = replace(
+                self._capabilities, supported_properties=frozenset({"energy"})
+            )
         if density_fitting_mode in (
             _native.DENSITY_FITTING_CORRELATION_CUDA,
             _native.DENSITY_FITTING_FULL_CUDA,
@@ -2165,6 +2141,7 @@ class Calculator:
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
+            library=self._library,
         )
 
     def _effective_ks_selection(
@@ -2240,10 +2217,9 @@ class Calculator:
         only when explicitly requested in ``properties``. Other contexts retain
         their existing conservative capacity allowance.
         """
-        from generativeqc_compiler.common.resources import (
-            ResourceBudget,
-            plan_resources,
-        )
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        from .resources_planning import plan_resources
 
         systems = tuple(
             tuple(Atom.from_value(atom) for atom in system) for system in systems
@@ -2278,6 +2254,7 @@ class Calculator:
         return plan_resources(
             tuple(requests),
             ResourceBudget() if budget is None else budget,
+            library=self._library,
         )
 
     def prepare_batch(

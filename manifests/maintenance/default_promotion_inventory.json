@@ -793,22 +793,30 @@
       "id": "dft.resident-final-validation",
       "classification": "already-default",
       "controls": [
-        "dft-policy:ks-device-final-validation-auto"
+        "dft-policy:ks-device-final-validation-auto",
+        "hf-runtime:GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"
       ],
       "owner_issues": [
         1598,
         2220
       ],
       "sources": [
+        "python/generativeqc/resources_hf.py",
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_final_validation_policy.hpp"
       ],
-      "rationale": "Unset selects resident final-state matrix products for strict-FP64 exact-direct full-range restricted global hybrids with at least 384 AOs, using signed exchange and authenticated source/operator capabilities instead of a PBE0-only identity. The retained 384/768-AO complete E+F timing and accuracy evidence is PBE0-specific; gains on B3LYP, Minnesota and other hybrids are not inferred. Bounded packets, matrix handle, existing accepted generation, published scratch-lease gates and explicit 0 rollback remain unchanged.",
-      "revisit_condition": "Collect same-source independent E+F, GPU-sanitizer and cold/warm/moved timing evidence for newly eligible B3LYP and other global hybrids. Keep the 384-AO cutoff until shape-dependent profitability is measured; separately qualify UKS/DF/RSH and never relabel PBE0 timing evidence.",
+      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with exact-direct J/K at 384 or more AOs and exact-direct or density-fitted pure-J KS at 544 or more AOs. Stationary-density energy confirmation repairs the ordinary strict exact-direct pure-J SCF tail without changing any convergence gate, replacing the temporary 1088-AO admission hold. Source-bound Direct/48/96 complete cold/warm/moved/moved-warm control/default comparisons retain independent scientific gates and semantic work. The repair and integrated-head cohorts retain their own native image identities and per-call work counts separately. The original 192 r2SCAN-3c calls and candidate plots remain historical and the +15.985% Direct/96 moved failure is still rejected. Positive Direct/48 benefits below the descriptive 2%/MAD label remain enabled; DF and the prior PBE0 384/768-AO evidence retain their separate scope. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 fallback remain unchanged; explicit 1 remains experimental outside the default scope.",
+      "revisit_condition": "Require source-bound complete cold/warm/moved/moved-warm endpoint nonregression and independent scientific acceptance for further changes; changed SCF work, a verifier repair or a warm-only gain cannot waive a slower complete endpoint. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified for default admission. Preserve original source identities and negatives; do not infer other-functional timing gains. Separately qualify UKS, fitted exchange, RSH, nonlocal, incremental, ECP, lower precision and device-chunk stationary confirmation; retain the bounded fallback and unchanged true maximum-residual gate.",
       "evidence": [
         "pr:#2220",
         "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
+        "note:.agents/notes/implemented/performance/2026-10-15-pure-j-resident-final-validation.md",
+        "note:.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md",
+        "note:.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md",
         "docs:docs/user/ks_options.md",
+        "benchmarks:benchmarks/results/r2scan3c-final-validation-20261015/README.md",
+        "benchmarks:benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md",
+        "benchmarks:benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md",
         "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
         "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
       ]

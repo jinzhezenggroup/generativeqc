@@ -46,6 +46,7 @@ SHIM = r"""
 using cudaError_t = int;
 using cudaStream_t = void*;
 constexpr int cudaSuccess=0, cudaErrorMemoryAllocation=2, cudaErrorUnknown=999;
+constexpr int cudaErrorInvalidDevice=101;
 constexpr int cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2, cudaStreamNonBlocking=1;
 int fail_copy=0, copy_calls=0, fail_sync=0, sync_calls=0, error_kind=999;
 int invalid=0, streams=0, buffers=0, current_device=3;
@@ -53,6 +54,7 @@ std::vector<std::function<void()>> pending;
 const char* cudaGetErrorString(int) { return "injected CUDA failure"; }
 int cudaGetDevice(int* value) { *value=current_device; return 0; }
 int cudaSetDevice(int value) { current_device=value; return 0; }
+int cudaGetLastError() { return 0; }
 int cudaStreamCreateWithFlags(cudaStream_t* stream,unsigned) {
   *stream=reinterpret_cast<void*>(1); ++streams; return 0;
 }
@@ -76,6 +78,7 @@ int cudaStreamSynchronize(cudaStream_t) {
   for (auto& operation:pending) operation();
   pending.clear(); return 0;
 }
+#include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
 template<class T> struct TensorView { T* data; std::size_t size; };
 std::size_t size_mul(std::size_t a,std::size_t b,const char*) { return a*b; }
@@ -166,9 +169,8 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/cc/df_source_cuda.cu").read_text()
     header = (ROOT / "src/cc/df_source.hpp").read_text()
     resources = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
-    unit = SHIM + definition(resources, "inline void cuda_resource_check(")
+    unit = SHIM
     for marker in (
-        "class CudaDeviceScope",
         "class OwnedCudaStream",
         "template <class T>\nstruct BorrowedCudaBuffer",
         "template <class T>\nclass OwnedCudaBuffer",
@@ -179,6 +181,7 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         unit += definition(header, marker) + ";\n"
     unit += definition(source, "DFMP2Result evaluate_df_mp2_cuda(") + DRIVER
     directory = tmp_path_factory.mktemp("df-mp2-host-lifetime")
+    (directory / "cuda_runtime_api.h").write_text("")
     cpp, obj, executable = (
         directory / name for name in ("lifetime.cpp", "lifetime.o", "lifetime")
     )
@@ -194,6 +197,8 @@ def lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "-fsanitize=address",
             "-fsanitize-address-use-after-scope",
             "-fno-pie",
+            "-I" + str(directory),
+            "-I" + str(ROOT / "src"),
             "-c",
             str(cpp),
             "-o",

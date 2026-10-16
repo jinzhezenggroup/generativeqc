@@ -8,9 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 from generativeqc import Atom, Calculator, CBSBasis, _native
-from generativeqc._api_types import MethodCapabilities
 from generativeqc.basis import BasisShell
 from generativeqc.basis_capabilities import basis_capability
+
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
 
 @pytest.fixture
@@ -21,17 +22,9 @@ def available_mp2(monkeypatch: pytest.MonkeyPatch) -> None:
         ctypes.cast(output, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
-    monkeypatch.setattr(
-        _native,
-        "load_library",
-        lambda **kwargs: SimpleNamespace(generativeqc_method_available=available),
-    )
-    monkeypatch.setattr(
-        "generativeqc.calculator.method_capabilities",
-        lambda method: MethodCapabilities(
-            method, "perturbation", True, True, frozenset({"energy", "forces"})
-        ),
-    )
+    library = SimpleNamespace(generativeqc_method_available=available)
+    install_registry_stub(library, frozenset({"energy", "forces"}))
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
 
 
 @pytest.mark.usefixtures("available_mp2")

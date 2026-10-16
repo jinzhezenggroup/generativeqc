@@ -677,14 +677,14 @@ generativeqc_xtb_status_t validate_iteration_bindings(
     const CpuLinearAlgebraBackend& backend, const EigensolverOverlapCache& overlap_cache,
     const WavefunctionView& wavefunction, const SccMixerState& mixer_state,
     const SccDriverState& state, const SccDriverWorkspace& workspace, std::string& error);
-generativeqc_xtb_status_t prepare_potentials_and_hamiltonian(const SccDriverPlanData& data,
-                                                       const SccDriverGeometryView& geometry,
-                                                       const SccDriverWorkspace& workspace,
-                                                       std::string& error,
-                                                       const SccParallelExecutor* parallel);
+generativeqc_xtb_status_t prepare_potentials_and_hamiltonian(
+    const SccDriverPlanData& data, const SccDriverGeometryView& geometry,
+    const SccDriverWorkspace& workspace, std::string& error,
+    const generativeqc::runtime::ChunkExecutor* parallel);
 generativeqc_xtb_status_t prepare_system_potentials_and_hamiltonian(
     const SccDriverPlanData& data, const SccDriverGeometryView& geometry, std::size_t system,
-    const SccDriverWorkspace& workspace, std::string& error, const SccParallelExecutor* parallel);
+    const SccDriverWorkspace& workspace, std::string& error,
+    const generativeqc::runtime::ChunkExecutor* parallel);
 void copy_raw_population_system(const WavefunctionLayout& layout, std::size_t system,
                                 const SccDriverWorkspace& workspace);
 generativeqc_xtb_status_t rebuild_mixed_atomic_charges(const SccDriverPlanData& data, std::size_t system,
@@ -703,7 +703,7 @@ generativeqc_xtb_status_t iterate_scc_driver_batch_cpu(
     const CpuLinearAlgebraBackend& backend, const EigensolverOverlapCache& overlap_cache,
     const WavefunctionView& wavefunction, const SccMixerState& mixer_state,
     const SccDriverState& state, const SccDriverWorkspace& workspace, std::string& error,
-    const SccParallelExecutor* parallel) {
+    const generativeqc::runtime::ChunkExecutor* parallel) {
   generativeqc_xtb_status_t status = validate_plan(plan, error);
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     return status;
@@ -2334,7 +2334,8 @@ generativeqc_xtb_status_t gather_mixed_multipoles_system(const SccDriverPlanData
 
 generativeqc_xtb_status_t prepare_system_potentials_and_hamiltonian(
     const SccDriverPlanData& data, const SccDriverGeometryView& geometry, std::size_t system,
-    const SccDriverWorkspace& workspace, std::string& error, const SccParallelExecutor* parallel) {
+    const SccDriverWorkspace& workspace, std::string& error,
+    const generativeqc::runtime::ChunkExecutor* parallel) {
   const WavefunctionLayout& layout = data.wavefunction;
   const double nan = std::numeric_limits<double>::quiet_NaN();
 
@@ -2612,11 +2613,10 @@ generativeqc_xtb_status_t prepare_system_potentials_and_hamiltonian(
   return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-generativeqc_xtb_status_t prepare_potentials_and_hamiltonian(const SccDriverPlanData& data,
-                                                       const SccDriverGeometryView& geometry,
-                                                       const SccDriverWorkspace& workspace,
-                                                       std::string& error,
-                                                       const SccParallelExecutor* parallel) {
+generativeqc_xtb_status_t prepare_potentials_and_hamiltonian(
+    const SccDriverPlanData& data, const SccDriverGeometryView& geometry,
+    const SccDriverWorkspace& workspace, std::string& error,
+    const generativeqc::runtime::ChunkExecutor* parallel) {
   const WavefunctionLayout& layout = data.wavefunction;
   const std::size_t batch = static_cast<std::size_t>(layout.batch_size);
   const double nan = std::numeric_limits<double>::quiet_NaN();

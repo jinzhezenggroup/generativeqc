@@ -7,8 +7,8 @@
 namespace generativeqc::scf {
 
 /** Arithmetic capabilities of the shared Direct value consumer, not a method
- * qualification. Range exchange and fitted providers retain their own strict
- * consumers. Basis/resource admission and final physical validation belong to
+ * qualification. Fitted providers retain their own strict consumers.
+ * Basis/resource admission and final physical validation belong to
  * the enclosing solver; neither XC identity nor exchange fraction selects J/K
  * recurrence precision. */
 struct CudaFockPrecisionCapabilities {
@@ -32,6 +32,22 @@ inline CudaFockPrecisionCapabilities cuda_fock_precision_capabilities(
   };
   const bool coulomb = exact_full_range(spec.coulomb);
   return {coulomb, coulomb && exact_full_range(spec.exchange)};
+}
+
+/** Shared SR/LR values retain FP64 radial moments and output accumulation.
+ * Whole-shell contraction stays FP64; bounded AO contraction follows the same
+ * mixed scalar policy as full-range values. Derivatives and fitted sources
+ * are deliberately outside this capability. */
+inline bool cuda_range_exchange_precision_capability(const ResolvedFockBuild& strategy) noexcept {
+  const auto& spec = strategy.spec;
+  const auto& term = spec.exchange;
+  const bool direct_schedule = strategy.schedule == FockSchedule::CudaFused ||
+                               strategy.schedule == FockSchedule::CudaIndependent;
+  return strategy.backend == FockBackend::Cuda && direct_schedule && spec.version == 1 &&
+         spec.derivative_order == 0 && spec.spin == FockSpin::Restricted && !spec.coulomb.present &&
+         term.present && term.approximation == FockApproximation::Exact &&
+         (term.op == FockOperator::ShortRange || term.op == FockOperator::LongRange) &&
+         term.omega > 0.0 && std::isfinite(term.omega) && std::isfinite(term.coefficient);
 }
 
 }  // namespace generativeqc::scf

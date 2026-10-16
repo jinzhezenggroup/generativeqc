@@ -25,6 +25,42 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
+def test_float_scalar_lowering_rounds_arithmetic_and_preserves_failed_outputs(
+    tmp_path: Path, native_cxx: typing.Any
+) -> None:
+    """A float signature alone must not silently promote constants or algebra."""
+    value = input_tensor("value", TensorSpec((), role="input"))
+    program = Program({"result": power(add(value, constant("1/10")), "1/2")})
+    source = emit_scalar_cpp(program, function_name="probe", scalar_type="float")
+    unit = tmp_path / "float.cpp"
+    unit.write_text(
+        "#include <cmath>\n"
+        + source
+        + '\nextern "C" bool run(double value, float* result) { return probe(value, *result); }\n'
+    )
+    library = native_cxx.build_shared(
+        [unit],
+        tmp_path / "float.so",
+        compile_args=["-std=c++17", "-O2", "-ffp-contract=off"],
+    )
+    call = ct.CDLL(str(library)).run
+    call.argtypes = [ct.c_double, ct.POINTER(ct.c_float)]
+    call.restype = ct.c_bool
+    for argument in (1 + 2**-25, 0.1, 16777217.0):
+        actual = ct.c_float(-9182.5)
+        assert call(argument, ct.byref(actual))
+        rounded_sum = ct.c_float(
+            ct.c_float(argument).value + ct.c_float(0.1).value
+        ).value
+        assert actual.value == ct.c_float(math.sqrt(rounded_sum)).value
+    for argument in (math.nan, math.inf, 1e39, -1.0):
+        actual = ct.c_float(-9182.5)
+        assert not call(argument, ct.byref(actual))
+        assert actual.value == -9182.5
+    with pytest.raises(ValueError, match="scalar_type"):
+        emit_scalar_cpp(program, function_name="probe", scalar_type="half")
+
+
 def _compiled(
     tmp_path: Path, name: str, *, output_dependency_order: bool = False
 ) -> typing.Any:

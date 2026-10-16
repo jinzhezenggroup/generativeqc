@@ -57,6 +57,7 @@ def compile_hvp_assembly(
     headers = (
         asset_path("src/runtime/bounded_workspace.hpp"),
         asset_path("src/runtime/cuda_resources.cuh"),
+        asset_path("src/runtime/cuda_device_scope.hpp"),
         asset_path("src/runtime/resource_cuda.cuh"),
         asset_path("src/runtime/resource_ledger.hpp"),
     )

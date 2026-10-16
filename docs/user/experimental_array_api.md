@@ -157,15 +157,28 @@ Outside capture, creation follows the full CPU eager standard, including integer
 and complex dtypes and explicit `device="cpu"`; these compiled restrictions do
 not apply. See [execution boundaries](#execution-boundaries).
 
+In both eager and captured programs, `.T` requires a two-dimensional matrix.
+Use `.mT` / `matrix_transpose` for the final two axes of a matrix stack, or
+`permute_dims` with an explicit permutation for arbitrary-rank arrays.
+
 The current compiled frontend supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
-dimension, and static indexing with integers, slices (including negative
+dimension, `tensordot` with static contraction counts or pairs of axis sequences,
+and `vecdot` with a static signed axis. These two contractions accept generic
+real float32/float64 arrays (with ordinary promotion), require equal contracted
+extents, and reuse TensorIR einsum. `vecdot` broadcasts only the remaining axes;
+`tensordot` retains left free axes followed by right free axes. Capture permits
+at most 52 distinct contraction labels; scientific index domains require explicit
+`einsum`. The frontend also supports static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
+Captured `positive(x)` and unary `+x` preserve float32/float64 values, signed
+zeros and scientific index metadata. Both reject Boolean arrays and integer
+control tensors; unary plus does not turn them into numeric data.
 `sum` and `mean` accept static axes, and generic arrays may use
 `keepdims=True` to retain reduced singleton axes. Shape utilities also include
 `broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
-`moveaxis` and `flip`. `expand_dims` accepts the 2025.12 multi-axis tuple
+`moveaxis`, `flip` and `roll`. `expand_dims` accepts the 2025.12 multi-axis tuple
 form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
 reshape, transpose, broadcast and gather semantics. Six elementwise comparisons
 (`equal`, `not_equal`, `greater`, `greater_equal`, `less`, `less_equal`, plus
@@ -449,8 +462,16 @@ same-device consumer handoff extension.
 
 Capture accepts CPU bool/float32/float64 inputs and the compiler's bounded
 operation set; backend execution has narrower dtype/primitive admission.
+Captured `asarray(..., copy=False)` rejects dtype changes; `copy=True` or
+`copy=None` permits an explicit supported real cast. Same-dtype conversion does
+not imply aliasing of compiled outputs, which remain detached from inputs.
 Shape/axis values must be static. Captured `flip` retains
-its 65,536-index budget per reversed axis. Scientific domains retain explicit
+its 65,536-index budget per reversed axis. Captured `roll` accepts static integer
+shifts and signed axes (including tuples and repeated axes); `axis=None` rolls
+the flattened row-major array and restores its shape. Its total gather-map budget
+is 65,536 positions across axes with nonzero effective shifts, checked before
+constructing any maps. Empty axes and shifts by whole axis lengths need no maps.
+Scientific domains retain explicit
 metadata requirements. Compiled reductions do not introduce implicit dtype
 conversions, compiled empty means remain unsupported, and reference execution
 requires finite inputs/results with positive `log`/`pow` and nonnegative `sqrt`

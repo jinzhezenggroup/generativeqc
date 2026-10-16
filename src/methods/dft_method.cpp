@@ -29,10 +29,13 @@
 #include "methods/dft_method_owner_port.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "methods/exact_density_response_cache.hpp"
+#include "methods/execution_failure.hpp"
+#include "methods/geometry.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/fock_precision.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/mean_field.hpp"
@@ -297,17 +300,30 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 /** One immutable CUDA admission rule for metadata and complete force consumers.
  * Availability is deliberately context-specific, not a method-global force bit.
  * Optional compiled bindings, precise Fock coefficients, representation and
- * FP64 final states are prerequisites. Budget-admitted AUTO may narrow the
- * gradient, never the final token checks; other contexts retain their consumer. */
+ * FP64 final states are prerequisites. Strict-density AUTO may narrow the
+ * gradient; budget-Fock AUTO reuses only the FP64 force body. Neither route
+ * weakens the final token checks; other contexts retain their consumer. */
 const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
   const bool application =
-      options.energy_tolerance <= 1e-10 && options.density_tolerance <= 1e-8 &&
-      options.screening_tolerance <= 1e-12 &&
+      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                           options.screening_tolerance, false) &&
       dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
                                       maximum_angular, execution_plan.spin_channels == 1);
+  const bool budget_force =
+      options.precision_mode == GENERATIVEQC_PRECISION_AUTO && options.resolved_fock_build &&
+      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                           options.screening_tolerance, true) &&
+      dft::admit_application_fock(
+          options.application_precision_budget, aos, atoms, maximum_angular,
+          execution_plan.spin_channels == 1 &&
+              options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+          all_electron,
+          scf::cuda_fock_precision_capabilities(*options.resolved_fock_build).coulomb) &&
+      dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
+                                                  execution_plan.spin_channels == 1);
   // Above the retained-pair regime, the incumbent phased strict consumer is
   // faster than native inline cooperative FP64. Do not slow the comparator
   // merely to make both precision modes use an identical execution schedule.
@@ -317,7 +333,7 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   if (!all_electron ||
       maximum_angular > ((qualify_through_d || native_shape || application) ? 2U : 1U) ||
       grid.partition_iterations != 3 ||
-      (options.precision_mode != GENERATIVEQC_PRECISION_FP64 && !application) ||
+      (options.precision_mode != GENERATIVEQC_PRECISION_FP64 && !application && !budget_force) ||
       options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
       !options.resolved_fock_build ||
       options.resolved_fock_build->backend != scf::FockBackend::Cuda ||
@@ -1159,7 +1175,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
                      [](const auto& atom) { return atom.ecp_core != 0; });
     return dft::spatial_spd_force_default_eligible(
         fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range,
-        options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
+        options_.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
+            (admitted_cuda_stationary_binding() && application_gradient_qualification() == 0));
   }
 
   generativeqc_status cuda_full_range_integral_derivatives(
@@ -1803,6 +1820,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Both capacity planning and execution consume the same budget/model gate.
    * In particular, strict SCF does not imply strict derivative arithmetic. */
   std::uint64_t application_gradient_qualification() const noexcept {
+    if (!dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
+                                              options_.screening_tolerance, false))
+      return 0;
     const auto* binding = admitted_cuda_stationary_binding();
     if (!binding) return 0;
     std::size_t maximum_angular = 0;
@@ -2199,65 +2219,6 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
 };
 
-std::vector<double> positions(const core::System& system) {
-  std::vector<double> out;
-  out.reserve(3 * system.atoms.size());
-  for (const auto& atom : system.atoms)
-    out.insert(out.end(), atom.position.begin(), atom.position.end());
-  return out;
-}
-
-bool valid_positions(const std::vector<double>& coordinates, const core::System& system) {
-  return coordinates.size() == 3 * system.atoms.size() &&
-         std::all_of(coordinates.begin(), coordinates.end(),
-                     [](double value) { return std::isfinite(value); });
-}
-
-void set_positions(core::System& system, const std::vector<double>& coordinates) {
-  for (std::size_t i = 0; i < system.atoms.size(); ++i)
-    std::copy_n(coordinates.begin() + 3 * i, 3, system.atoms[i].position.begin());
-}
-
-generativeqc_status item_exception_status() {
-  try {
-    throw;
-  } catch (const MethodError& error) {
-    return error.status();
-  } catch (const generativeqc::Error& error) {
-    return error.status();
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-}
-
-bool retryable_seed_failure(generativeqc_status status, const std::exception_ptr& failure) {
-  if (status != GENERATIVEQC_STATUS_NOT_CONVERGED &&
-      status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
-      status != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
-    return false;
-  if (!failure) return true;
-  try {
-    std::rethrow_exception(failure);
-  } catch (const MethodError&) {
-    return true;
-  } catch (const generativeqc::Error&) {
-    return true;
-  } catch (const std::invalid_argument&) {
-    return true;
-  } catch (...) {
-    // The public status mapper also classifies untyped runtime exceptions as
-    // numerical failures. CUDA graph launch errors use that path, so status
-    // alone cannot authorize a second solve after possibly submitted work.
-    return false;
-  }
-}
-
 /** Independent native KS owners, with ordinary-stream round-robin CUDA work.
  * Geometry is rebuilt per item, while model/basis/charge/spin remain immutable.
  * No HF graph or Python calculation loop participates in this schedule. */
@@ -2350,19 +2311,11 @@ class KsPreparedBatch final : public PreparedBatch,
     std::vector<scf::HfWarmState> candidates(size());
     for (std::size_t i = 0; i < size(); ++i) {
       auto& result = results[i];
-      result.bucket_id = i;  // One ordinary stream/owner per stable input slot.
-      result.calculation.executed_backend = backend_;
-      result.calculation.energy = std::numeric_limits<double>::quiet_NaN();
       try {
-        auto target = systems_[i];
-        if (!coordinates.empty() && coordinates[i]) {
-          if (!valid_positions(*coordinates[i], target))
-            throw std::invalid_argument("invalid KS batch item coordinates");
-          set_positions(target, *coordinates[i]);
-        }
+        auto target = geometry::bind_batch_item(systems_[i], coordinates, i, result, backend_, i);
         auto& item = items_[i];
-        candidates[i].coordinates = positions(target);
-        if (!item.plan || positions(item.plan->system()) != candidates[i].coordinates) {
+        candidates[i].coordinates = geometry::coordinates(target);
+        if (!item.plan || geometry::coordinates(item.plan->system()) != candidates[i].coordinates) {
           // Preserve the last GOOD seed before freeing its device owner. This
           // explicit rebuild download is never part of routine SCF iterations.
           materialize_warm(i);
@@ -2577,12 +2530,12 @@ class KsPreparedBatch final : public PreparedBatch,
       if (!states[i]) continue;
       const auto& state = *states[i];
       if (state.density.size() != warm_density_size(i) ||
-          !valid_positions(state.coordinates, systems_[i]) || state.iterations < 0 ||
+          !geometry::valid_coordinates(state.coordinates, systems_[i]) || state.iterations < 0 ||
           !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
           !std::isfinite(state.density_rms) || state.density_rms < 0)
         throw std::invalid_argument("invalid KS seed dimensions or diagnostics");
       auto source = systems_[i];
-      set_positions(source, state.coordinates);
+      geometry::set_coordinates(source, state.coordinates);
       scf::initial_guess::EigenOperation eigen;
 #if GENERATIVEQC_HAS_CUDA
       if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr)
@@ -2982,8 +2935,10 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
-        dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                shape[1], shape[0], shape[4]) != 0);
+        dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                             options.screening_tolerance, false) &&
+            dft::application_gradient_qualification(*binding, options.application_precision_budget,
+                                                    shape[1], shape[0], shape[4]) != 0);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

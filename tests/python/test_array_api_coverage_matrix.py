@@ -17,6 +17,7 @@ _NATIVE_CPU_CASES = {
     "multiply": lambda x: xp.multiply(x, x),
     "divide": lambda x: xp.divide(x, 2),
     "negative": xp.negative,
+    "positive": xp.positive,
     "pow": lambda x: xp.pow(x, 2),
     "exp": xp.exp,
     "log": xp.log,
@@ -44,12 +45,15 @@ _NATIVE_CPU_CASES = {
     "squeeze": lambda x: xp.squeeze(x[:1, :], axis=0),
     "moveaxis": lambda x: xp.moveaxis(x, 0, 1),
     "flip": lambda x: xp.flip(x),
+    "roll": lambda x: xp.roll(x, 1, axis=-1),
     "matrix_transpose": xp.matrix_transpose,
     "slice": lambda x: xp.slice(x, ((0, 1), (0, 3))),
     "take": lambda x: xp.take(x, (1, 0), axis=0),
     "slice_static": lambda x: xp.slice(x, ((0, 1), (0, 3))),
     "take_static": lambda x: xp.take(x, (1, 0), axis=0),
     "matmul": lambda x: xp.matmul(x, xp.matrix_transpose(x)),
+    "tensordot": lambda x: xp.tensordot(x, x, axes=((1,), (1,))),
+    "vecdot": lambda x: xp.vecdot(x, x[:1, :]),
     "einsum_extension": lambda x: xp.einsum("ij,ij->", x, x),
 }
 

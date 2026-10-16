@@ -32,8 +32,11 @@ def cache_workers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         " assert 'SCCACHE_STARTUP_NOTIFY' not in os.environ\n"
         " child = subprocess.Popen([sys.executable, '-c', "
         "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)'])\n"
-        " (root / (endpoint.parent.name + '.json')).write_text(json.dumps(\n"
+        " record = root / (endpoint.parent.name + '.json')\n"
+        " pending = record.with_suffix('.tmp')\n"
+        " pending.write_text(json.dumps(\n"
         "  {'server':os.getpid(), 'child':child.pid, 'endpoint':str(endpoint), 'cache':os.environ['SCCACHE_DIR']}))\n"
+        " pending.replace(record)\n"
         " if os.environ.get('QC_TEST_STARTUP') == 'fail':\n"
         "  print('server startup failed', flush=True); sys.exit(17)\n"
         " if os.environ.get('QC_TEST_STARTUP') != 'hang': endpoint.touch()\n"
@@ -103,14 +106,32 @@ def test_owned_workers_stop_on_every_outcome(
 
 
 @pytest.mark.parametrize("startup,code", [("fail", 17), ("hang", 124)])
-def test_startup_uses_the_same_budget_and_cleans_children(
+def test_startup_failure_and_timeout_clean_children(
     cache_workers: Path, monkeypatch: pytest.MonkeyPatch, startup: str, code: int
 ) -> None:
     monkeypatch.setenv("QC_TEST_STARTUP", startup)
-    result = compiler_cache.run_cached_compiler(["success"], 0.2, label="probe")
+    # Both cleanup paths need time to start Python and fork the recorded child.
+    # The short-budget contract is checked separately below.
+    result = compiler_cache.run_cached_compiler(["success"], 2, label="probe")
     assert result.returncode == code
-    assert result.duration_seconds < 1.2
+    assert result.timed_out == (startup == "hang")
+    assert result.duration_seconds < 3
+    if startup == "fail":
+        assert "server startup failed" in result.stderr
     _assert_workers_stopped(cache_workers, 1)
+
+
+def test_hanging_startup_uses_short_budget(
+    cache_workers: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("QC_TEST_STARTUP", "hang")
+    result = compiler_cache.run_cached_compiler(["success"], 0.2, label="probe")
+    assert result.returncode == 124 and result.timed_out
+    assert result.duration_seconds < 1.2
+    # Expiry may precede the Python fixture's PID receipt. The longer-budget
+    # test above requires a real child; still check any receipt produced here.
+    count = len(list(cache_workers.glob("gqc-scc-*.json")))
+    _assert_workers_stopped(cache_workers, count)
 
 
 @pytest.mark.parametrize(

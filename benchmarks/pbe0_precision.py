@@ -77,6 +77,7 @@ def reference(
     basis: Any = None,
     auxiliary_basis: Any = None,
     backend: str = "pyscf",
+    case_snapshot: Any = None,
 ) -> dict[str, Any]:
     """PySCF owns SCF, integrals, XC, partition and analytic moving-grid response.
 
@@ -109,7 +110,7 @@ def reference(
     from pyscf import dft, gto, lib
 
     lib.num_threads(threads)
-    case = benchmark_cases()[case_name]
+    case = benchmark_cases()[case_name] if case_snapshot is None else case_snapshot
     basis = snapshot_basis(
         case.generativeqc_basis if basis is None else basis, case.basis_representation
     )
@@ -282,19 +283,36 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def native_sample(mode: str, options: dict[str, Any], case_name: str) -> dict[str, Any]:
+def native_sample(
+    mode: str,
+    options: dict[str, Any],
+    case_name: str,
+    *,
+    include_build_metadata: bool = False,
+    case_snapshot: Any = None,
+) -> dict[str, Any]:
     """Include construction, SCF, all analytic forces, export and cache release."""
+    if include_build_metadata and mode not in ("fp64", "fast"):
+        raise ValueError("build attestation requires FP64 or one-solve Fast")
     runtime = ctypes.CDLL("libcudart.so.12")
     if runtime.cudaDeviceSynchronize() != 0:
         raise RuntimeError("CUDA synchronization failed before endpoint")
-    case = benchmark_cases()[case_name]
+    case = benchmark_cases()[case_name] if case_snapshot is None else case_snapshot
     started = perf_counter()
     calculator = (
         PrecisionCalculator(**options, policy=mode)
         if mode in ("audit_auto", "fast")
         else Calculator(**options, precision=mode)
     )
+    build_before = None
+    provenance_seconds = 0.0
     try:
+        if include_build_metadata:
+            provenance_started = perf_counter()
+            build_before = native_build_metadata(
+                calculator._candidate if mode == "fast" else calculator
+            )
+            provenance_seconds = perf_counter() - provenance_started
         result = calculator.singlepoint(
             case.atoms,
             charge=case.charge,
@@ -306,7 +324,8 @@ def native_sample(mode: str, options: dict[str, Any], case_name: str) -> dict[st
         calculator.clear_cache()
     if runtime.cudaDeviceSynchronize() != 0:
         raise RuntimeError("CUDA synchronization failed after endpoint")
-    seconds = perf_counter() - started
+    observed_span_seconds = perf_counter() - started
+    seconds = observed_span_seconds - provenance_seconds
     if not result.converged or result.executed_backend != "cuda":
         raise RuntimeError("endpoint did not converge on CUDA")
     try:
@@ -314,7 +333,24 @@ def native_sample(mode: str, options: dict[str, Any], case_name: str) -> dict[st
         evidence_error = None
     except ValueError as error:
         evidence_error = str(error)
+    # Hash the actual executed candidate after the complete endpoint timer.
+    # The caller must reject Fast fallback/audit results before making a claim.
+    build = (
+        native_build_metadata(calculator._candidate if mode == "fast" else calculator)
+        if include_build_metadata
+        else None
+    )
     return {
+        **(
+            {
+                "native_build": build,
+                "native_build_before": build_before,
+                "excluded_provenance_seconds": provenance_seconds,
+                "observed_span_seconds": observed_span_seconds,
+            }
+            if include_build_metadata
+            else {}
+        ),
         "mode": mode,
         "seconds": seconds,
         "energy": result.energy,

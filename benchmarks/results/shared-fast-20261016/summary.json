@@ -1,0 +1,967 @@
+{
+  "schema": "generativeqc.shared-fast-qualification-summary.v1",
+  "scope": "Direct restricted KS, spherical def2-SVP, GridSpec(48,16,32), complete E+F",
+  "timing": "fresh calculator/hcore, warm process/artifacts, first calls retained, 3-repeat medians, attestation excluded",
+  "hardware": {
+    "family_comparison": "node4 RTX 5090, GPU-5430ba2e-194a-b6d1-f12c-6b99f6d34efd",
+    "earlier_negative_matrix": "node2 RTX PRO 6000; no cross-card speed ratios",
+    "final_96_accuracy_pilot": "node5 RTX 5090, GPU-c17495e9-988d-0626-8bdd-95d0d1b47f36; no paired speed claim"
+  },
+  "gates_fast_E_maxF_RMS": [
+    1e-05,
+    0.0001,
+    3e-05
+  ],
+  "gates_family_fp64_E_maxF_RMS": [
+    1e-07,
+    1e-06,
+    3e-06
+  ],
+  "candidate_family_matrix": {
+    "file": "fast-vs-fp64-families-v5.json",
+    "sha256": "4a4357967e1be46572af016e37408f59a69f3f98bc3a6848f570b5138ba48884",
+    "slurm_job_id": "1039",
+    "source_identity": "0d351ff90f03b77b6f3cad07fef225e4a4ac13f72c32384172043ae10c0b2410",
+    "core_sha256": "caf921d07b7909f501e715419b3563a9a4660930d0be7260467c293d9cd6dde8",
+    "samples_per_point_per_arm": 4,
+    "median_repeats": 3,
+    "points": [
+      {
+        "atoms": 3,
+        "method": "lda-rks",
+        "median_seconds": {
+          "fp64": 1.9077355719637126,
+          "fast": 2.0752402091166005
+        },
+        "fp64_over_fast": 0.9192842175970597,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 8.384404281969182e-13,
+            "max_force_Eh_per_bohr": 1.7163026555522265e-10,
+            "rms_force_Eh_per_bohr": 8.738014569534499e-11
+          },
+          "fast": {
+            "energy_Eh": 6.636469151999336e-12,
+            "max_force_Eh_per_bohr": 9.264071736403423e-07,
+            "rms_force_Eh_per_bohr": 4.900786301306269e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              13
+            ]
+          },
+          "fast": {
+            "iterations": [
+              12
+            ],
+            "mixed_focks": [
+              10
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "pbe-rks",
+        "median_seconds": {
+          "fp64": 0.5325149949640036,
+          "fast": 0.748961333069019
+        },
+        "fp64_over_fast": 0.7110046559839301,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 9.805489753489383e-13,
+            "max_force_Eh_per_bohr": 2.3799273662916676e-10,
+            "rms_force_Eh_per_bohr": 1.3231243846766362e-10
+          },
+          "fast": {
+            "energy_Eh": 6.963318810448982e-13,
+            "max_force_Eh_per_bohr": 1.8338492857594701e-07,
+            "rms_force_Eh_per_bohr": 9.162969934674093e-08
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              13
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "pbe0-rks",
+        "median_seconds": {
+          "fp64": 0.5655423869611695,
+          "fast": 0.5542172830319032
+        },
+        "fp64_over_fast": 1.0204344113328823,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 9.237055564881302e-13,
+            "max_force_Eh_per_bohr": 6.98272550891943e-11,
+            "rms_force_Eh_per_bohr": 3.722634332288785e-11
+          },
+          "fast": {
+            "energy_Eh": 4.800426722795237e-11,
+            "max_force_Eh_per_bohr": 2.047087889867072e-06,
+            "rms_force_Eh_per_bohr": 1.1158348038753282e-06
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              13
+            ]
+          },
+          "fast": {
+            "iterations": [
+              11
+            ],
+            "mixed_focks": [
+              9
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "b3lyp-rks",
+        "median_seconds": {
+          "fp64": 0.6115523870103061,
+          "fast": 0.601674122037366
+        },
+        "fp64_over_fast": 1.0164179654918357,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 8.952838470577262e-13,
+            "max_force_Eh_per_bohr": 5.2730264599176735e-11,
+            "rms_force_Eh_per_bohr": 2.6358371713556776e-11
+          },
+          "fast": {
+            "energy_Eh": 4.405364961712621e-13,
+            "max_force_Eh_per_bohr": 1.9461848488333544e-07,
+            "rms_force_Eh_per_bohr": 1.1386411685210682e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              14
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              14
+            ]
+          },
+          "fast": {
+            "iterations": [
+              12
+            ],
+            "mixed_focks": [
+              10
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "r2scan-rks",
+        "median_seconds": {
+          "fp64": 1.0887477459618822,
+          "fast": 1.1944327020319179
+        },
+        "fp64_over_fast": 0.9115187018153061,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 9.521272659185342e-13,
+            "max_force_Eh_per_bohr": 1.4872147957589732e-10,
+            "rms_force_Eh_per_bohr": 6.092905660983875e-11
+          },
+          "fast": {
+            "energy_Eh": 8.37019342725398e-12,
+            "max_force_Eh_per_bohr": 9.807836356401367e-07,
+            "rms_force_Eh_per_bohr": 5.339750624252397e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              12
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              12
+            ]
+          },
+          "fast": {
+            "iterations": [
+              11
+            ],
+            "mixed_focks": [
+              9
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "m06-2x-rks",
+        "median_seconds": {
+          "fp64": 1.2445403169840574,
+          "fast": 1.0687827710062265
+        },
+        "fp64_over_fast": 1.1644464625981579,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 9.521272659185342e-13,
+            "max_force_Eh_per_bohr": 8.543388219095505e-12,
+            "rms_force_Eh_per_bohr": 3.4997808214553214e-12
+          },
+          "fast": {
+            "energy_Eh": 5.722711193811847e-11,
+            "max_force_Eh_per_bohr": 2.6559344603604984e-06,
+            "rms_force_Eh_per_bohr": 1.3485879002888868e-06
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              14
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              14
+            ]
+          },
+          "fast": {
+            "iterations": [
+              11
+            ],
+            "mixed_focks": [
+              9
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "mn15-rks",
+        "median_seconds": {
+          "fp64": 8.823977065971121,
+          "fast": 8.695847897906788
+        },
+        "fp64_over_fast": 1.0147345226789415,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 8.526512829121202e-13,
+            "max_force_Eh_per_bohr": 2.5343727116933223e-11,
+            "rms_force_Eh_per_bohr": 1.4927251845694243e-11
+          },
+          "fast": {
+            "energy_Eh": 8.242295734817162e-13,
+            "max_force_Eh_per_bohr": 3.292769124030315e-08,
+            "rms_force_Eh_per_bohr": 1.7985566278681424e-08
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              14
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              14
+            ]
+          },
+          "fast": {
+            "iterations": [
+              12
+            ],
+            "mixed_focks": [
+              10
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 3,
+        "method": "wb97m-v-rks",
+        "median_seconds": {
+          "fp64": 6.513846015906893,
+          "fast": 4.840837779920548
+        },
+        "fp64_over_fast": 1.3456030365086522,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 9.521272659185342e-13,
+            "max_force_Eh_per_bohr": 7.685363456744199e-11,
+            "rms_force_Eh_per_bohr": 3.9619302863074854e-11
+          },
+          "fast": {
+            "energy_Eh": 4.376943252282217e-12,
+            "max_force_Eh_per_bohr": 1.5602862823982377e-07,
+            "rms_force_Eh_per_bohr": 9.672754238372591e-08
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              26
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              26
+            ]
+          },
+          "fast": {
+            "iterations": [
+              17
+            ],
+            "mixed_focks": [
+              15
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "lda-rks",
+        "median_seconds": {
+          "fp64": 4.837570122093894,
+          "fast": 4.105785608990118
+        },
+        "fp64_over_fast": 1.178232519374963,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 2.9558577807620168e-12,
+            "max_force_Eh_per_bohr": 1.5508394568541917e-10,
+            "rms_force_Eh_per_bohr": 7.687703762282949e-11
+          },
+          "fast": {
+            "energy_Eh": 1.688249540165998e-10,
+            "max_force_Eh_per_bohr": 9.867707162491968e-07,
+            "rms_force_Eh_per_bohr": 4.612650203022271e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              15
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              15
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "pbe-rks",
+        "median_seconds": {
+          "fp64": 3.497102413093671,
+          "fast": 2.7501731289085
+        },
+        "fp64_over_fast": 1.271593550360088,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 3.240074875066057e-12,
+            "max_force_Eh_per_bohr": 1.7143664265972802e-10,
+            "rms_force_Eh_per_bohr": 8.789975133159606e-11
+          },
+          "fast": {
+            "energy_Eh": 1.7388401829521172e-10,
+            "max_force_Eh_per_bohr": 7.035277265199369e-07,
+            "rms_force_Eh_per_bohr": 3.161117822404617e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              15
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              15
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "pbe0-rks",
+        "median_seconds": {
+          "fp64": 1.9520500501384959,
+          "fast": 1.9453582890564576
+        },
+        "fp64_over_fast": 1.0034398604718127,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 1.4779288903810084e-12,
+            "max_force_Eh_per_bohr": 3.1308133863205967e-10,
+            "rms_force_Eh_per_bohr": 2.0708279048316443e-10
+          },
+          "fast": {
+            "energy_Eh": 5.275069270282984e-11,
+            "max_force_Eh_per_bohr": 6.477974001661835e-07,
+            "rms_force_Eh_per_bohr": 2.7282876026367923e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              14
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              14
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "b3lyp-rks",
+        "median_seconds": {
+          "fp64": 2.1216328410664573,
+          "fast": 2.022238210076466
+        },
+        "fp64_over_fast": 1.0491508025586327,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 1.8758328224066645e-12,
+            "max_force_Eh_per_bohr": 3.5991654101508175e-11,
+            "rms_force_Eh_per_bohr": 1.9544505234066824e-11
+          },
+          "fast": {
+            "energy_Eh": 8.054712452576496e-11,
+            "max_force_Eh_per_bohr": 4.841749854378463e-07,
+            "rms_force_Eh_per_bohr": 2.3590709090903778e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              15
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              15
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "r2scan-rks",
+        "median_seconds": {
+          "fp64": 4.843831120058894,
+          "fast": 3.9314241129904985
+        },
+        "fp64_over_fast": 1.2320805338842873,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 3.751665644813329e-12,
+            "max_force_Eh_per_bohr": 8.076672664003581e-11,
+            "rms_force_Eh_per_bohr": 3.741054818702921e-11
+          },
+          "fast": {
+            "energy_Eh": 1.7615775504964404e-10,
+            "max_force_Eh_per_bohr": 4.6912621121109055e-07,
+            "rms_force_Eh_per_bohr": 2.139043871781447e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              15
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              15
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "m06-2x-rks",
+        "median_seconds": {
+          "fp64": 3.4607215671567246,
+          "fast": 3.069974453188479
+        },
+        "fp64_over_fast": 1.1272802493722431,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 5.684341886080801e-13,
+            "max_force_Eh_per_bohr": 2.8873192725598074e-10,
+            "rms_force_Eh_per_bohr": 1.3002536740504567e-10
+          },
+          "fast": {
+            "energy_Eh": 8.895995051716454e-11,
+            "max_force_Eh_per_bohr": 1.6435707137496536e-06,
+            "rms_force_Eh_per_bohr": 6.400538738805207e-07
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              16
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              16
+            ]
+          },
+          "fast": {
+            "iterations": [
+              13
+            ],
+            "mixed_focks": [
+              11
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "mn15-rks",
+        "median_seconds": {
+          "fp64": 10.081015994073823,
+          "fast": 9.772760036052205
+        },
+        "fp64_over_fast": 1.0315423643765371,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 6.821210263296962e-13,
+            "max_force_Eh_per_bohr": 3.361089184750199e-10,
+            "rms_force_Eh_per_bohr": 1.9702666764589174e-10
+          },
+          "fast": {
+            "energy_Eh": 9.663381206337363e-11,
+            "max_force_Eh_per_bohr": 2.847195766486621e-06,
+            "rms_force_Eh_per_bohr": 1.1662162767472428e-06
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              15
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              15
+            ]
+          },
+          "fast": {
+            "iterations": [
+              12
+            ],
+            "mixed_focks": [
+              10
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      },
+      {
+        "atoms": 12,
+        "method": "wb97m-v-rks",
+        "median_seconds": {
+          "fp64": 23.431294001988135,
+          "fast": 13.804709282005206
+        },
+        "fp64_over_fast": 1.6973406337887484,
+        "accuracy_maxima": {
+          "fp64": {
+            "energy_Eh": 1.7053025658242404e-12,
+            "max_force_Eh_per_bohr": 7.12447656425752e-10,
+            "rms_force_Eh_per_bohr": 3.2929175943843746e-10
+          },
+          "fast": {
+            "energy_Eh": 2.55226950685028e-10,
+            "max_force_Eh_per_bohr": 8.399460835750716e-06,
+            "rms_force_Eh_per_bohr": 3.9820910891905466e-06
+          }
+        },
+        "scf_work": {
+          "fp64": {
+            "iterations": [
+              28
+            ],
+            "mixed_focks": [
+              0
+            ],
+            "strict_focks": [
+              28
+            ]
+          },
+          "fast": {
+            "iterations": [
+              18
+            ],
+            "mixed_focks": [
+              16
+            ],
+            "strict_focks": [
+              2
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "returned_family_samples": {
+    "total": 128,
+    "fp64": 64,
+    "genuine_fast": 64,
+    "strict_recovery_counted_as_fast": 0
+  },
+  "family_error_maxima": {
+    "fp64": {
+      "energy_Eh": 3.751665644813329e-12,
+      "max_force_Eh_per_bohr": 7.12447656425752e-10,
+      "rms_force_Eh_per_bohr": 3.2929175943843746e-10
+    },
+    "fast": {
+      "energy_Eh": 2.55226950685028e-10,
+      "max_force_Eh_per_bohr": 8.399460835750716e-06,
+      "rms_force_Eh_per_bohr": 3.9820910891905466e-06
+    }
+  },
+  "same_card_native_force_improvement": [
+    {
+      "atoms": 3,
+      "method": "pbe-rks",
+      "old_fast_seconds": 2.302243856131099,
+      "new_fast_seconds": 0.748961333069019,
+      "old_over_new": 3.073915507356293,
+      "elapsed_reduction_percent": 67.46820146465102,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    },
+    {
+      "atoms": 3,
+      "method": "pbe0-rks",
+      "old_fast_seconds": 2.057887858012691,
+      "new_fast_seconds": 0.5542172830319032,
+      "old_over_new": 3.713142698753099,
+      "elapsed_reduction_percent": 73.06863535474122,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    },
+    {
+      "atoms": 3,
+      "method": "r2scan-rks",
+      "old_fast_seconds": 2.691438982030377,
+      "new_fast_seconds": 1.1944327020319179,
+      "old_over_new": 2.2533199044632783,
+      "elapsed_reduction_percent": 55.62103729615829,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    },
+    {
+      "atoms": 12,
+      "method": "pbe-rks",
+      "old_fast_seconds": 4.3852088149869815,
+      "new_fast_seconds": 2.7501731289085,
+      "old_over_new": 1.594521002656804,
+      "elapsed_reduction_percent": 37.28524125215085,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    },
+    {
+      "atoms": 12,
+      "method": "pbe0-rks",
+      "old_fast_seconds": 3.574265707982704,
+      "new_fast_seconds": 1.9453582890564576,
+      "old_over_new": 1.8373302892786414,
+      "elapsed_reduction_percent": 45.57320445674401,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    },
+    {
+      "atoms": 12,
+      "method": "r2scan-rks",
+      "old_fast_seconds": 5.583021183963865,
+      "new_fast_seconds": 3.9314241129904985,
+      "old_over_new": 1.4201014755737085,
+      "elapsed_reduction_percent": 29.58249694121269,
+      "same_scf_work": true,
+      "same_operator_work_population": {
+        "fast": true,
+        "fp64": true
+      },
+      "timing_classification": "matched-SCF-work"
+    }
+  ],
+  "same_card_job_order": "separate sequential old/new jobs; FP64/Fast order reversed in middle repeat within each snapshot; not randomized old/new",
+  "operator_work_receipt_sha256": "be6fe264325175cd7cfcd50ac8041353355874de4fd40db157978840623522eb",
+  "same_card_baseline_receipt": {
+    "file": "fast-vs-fp64-families-v4-n4.json",
+    "sha256": "899baf410560d626a23d0ccf206677ea8697ac254d1be867402de1ea8e7ebccb",
+    "slurm_job_id": "1038",
+    "source_identity": "9e709e551c8261fad08c1c0011fbb3cec4e1ae259c9ca466c78c07d5a76b3b28",
+    "core_sha256": "b6a06237afe3f03b0eb416b0dc9f64c13bece29ad86297b4a2730610601975f7",
+    "samples_per_point_per_arm": 4,
+    "median_repeats": 3
+  },
+  "earlier_negative_matrix": {
+    "file": "fast-vs-fp64-families-v1.json",
+    "sha256": "b66aff55ea537ce79dff57a5147dce992145b0aafd7de2c1499d08f2ed263010",
+    "slurm_job_id": "3226"
+  },
+  "final_96_accuracy_pilot": {
+    "seconds": 810.376512125018,
+    "independent_accuracy": {
+      "status": "checked",
+      "reference_timing_used": false,
+      "reference_kind": "authenticated-retained-independent-accuracy-only",
+      "reference_source_commit": "99e7c54b2aa52f8cc7861f0f9f95226a152d4824",
+      "reference_receipt_sha256": "640f27951ae4778fed105c778baa89b84bc4fba543aec4b5f4f136fad036d57c",
+      "tracked_summary_sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519",
+      "records": [
+        {
+          "worker": "native-force-v5-fast-96-n5-r1.json",
+          "worker_sha256": "3565754e4fc4e2e2ca514cf5d20e08286599bc323a704180df45f26738f3c5e6",
+          "source_identity": "0d351ff90f03b77b6f3cad07fef225e4a4ac13f72c32384172043ae10c0b2410",
+          "core_sha256": "caf921d07b7909f501e715419b3563a9a4660930d0be7260467c293d9cd6dde8",
+          "errors": {
+            "energy_Eh": 6.675691111013293e-10,
+            "max_force_Eh_per_bohr": 3.855259240737041e-06,
+            "rms_force_Eh_per_bohr": 1.1664981177366843e-06
+          },
+          "gates": {
+            "energy_Eh": 1e-05,
+            "max_force_Eh_per_bohr": 0.0001,
+            "rms_force_Eh_per_bohr": 3e-05
+          },
+          "passed": true
+        }
+      ]
+    }
+  },
+  "selected_validation": [
+    {
+      "file": "native-force-v5-host-expanded.xml",
+      "sha256": "d392c5fd7a551086fa351831397bd4031efe1337cb99d7976ff6169d48f85bc7",
+      "tests": 1198,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 1062
+    },
+    {
+      "file": "native-force-v5-final-host.xml",
+      "sha256": "0731636ab493ccdcc7de1a05ff38559bb7c705794b0811a517aee1605ac52030",
+      "tests": 8,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "native-force-v5-admission.xml",
+      "sha256": "830d701f1b1a725a2abb6d23b28ec29943159202d77362b792ba250e02fd3688",
+      "tests": 26,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "native-force-v5-lifecycle-r2.xml",
+      "sha256": "f29720a1e0d3329e250949f295bdb6403926548ca41c3bf27820630c85ba13c8",
+      "tests": 12,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "native-force-v5-native-memcheck.xml",
+      "sha256": "09b05be525308c0937d7bf528523a1b51c777fc0747a9509f0c70f80b9f47fce",
+      "tests": 2,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "validation_scope": "Selections overlap; admission ran earlier 26-case cold selection; final 28-case file was not run in full; final lifecycle selection ran 12; sanitizer selection ran 2, zero errors",
+  "memcheck": {
+    "slurm_job_id": "1045",
+    "tool": "compute-sanitizer --tool memcheck",
+    "errors": 0,
+    "log_sha256": "04e4df757d37478ef4f118443540368cdc671cd822564ed27b5a07d50e6d23ff"
+  },
+  "whole_repository_suite_green": false,
+  "known_baseline_failures": "Seven superseded Fast-label/fallback-count assertions documented in the density-screening decision; not waived or counted as passes.",
+  "retained_failed_attempts": [
+    "native-force-v5-lifecycle-initial.xml",
+    "moved-pbe12-v5-diagnostic-slurm.log",
+    "moved-pbe12-v4-diagnostic-slurm.log",
+    "native-force-v5-sanitizer-finite-extension.log"
+  ],
+  "raw_evidence": {
+    "storage": "ignored local workspace, not a GitHub Release or public artifact",
+    "local_archive": "/home/jzzeng/codes/qc-branch-audit-20260922/evidence-fast-goal-20261016/raw-evidence.zip",
+    "archive_sha256": "a50dbe4bd402fef7a300105c3509d4769a0172d92f8d673032ec50f22995748a",
+    "archive_bytes": 763447,
+    "manifest_sha256": "cf1001a6236c67c12d765d27363df81f41e9503b5a67b31e8babddd67750e3de",
+    "members": 105,
+    "source_commit": "a4c1abe2a85412fab7760e1cb76045d7b9e222ee"
+  }
+}

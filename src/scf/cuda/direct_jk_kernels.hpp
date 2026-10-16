@@ -143,13 +143,18 @@ void launch_canonical_jk_kernel(
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
-/** Shared whole-shell FP32 recurrence with FP64 contraction/products/scatter. */
+/** Shared whole-shell FP32 recurrence with FP64 contraction/products/scatter.
+ * Optional shell bounds borrow geometry storage and density maxima refreshed
+ * on this stream. Null bounds retain geometry-only component admission. */
 void launch_materialized_canonical_mixed_j_kernel(
     cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, double screening, const double* bounds,
     const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
-    std::uint64_t* mixed_work, double* exchange = nullptr);
+    std::uint64_t* mixed_work, double* exchange = nullptr,
+    DirectCoulombRange range = DirectCoulombRange::Full, double omega = 0.0,
+    const double* shell_bounds = nullptr,
+    const ShellPairDensityBounds* shell_density_bounds = nullptr);
 
 /** Angular-bucketed recurrence-only FP32 J with FP64 density/scatter/projection. */
 void launch_canonical_mixed_j_kernel(
@@ -159,7 +164,8 @@ void launch_canonical_mixed_j_kernel(
     std::size_t second_count, bool same_bucket, bool unrestricted, double screening,
     const double* bounds, const double* density, double* coulomb, std::uint64_t* work_census,
     std::uint64_t* mixed_coulomb_work_count, double* coulomb_correction = nullptr,
-    double* exchange = nullptr, double* exchange_correction = nullptr);
+    double* exchange = nullptr, double* exchange_correction = nullptr,
+    DirectCoulombRange range = DirectCoulombRange::Full, double omega = 0.0);
 
 /** Freeze the same mixed recurrence in canonical geometry-only FP32 slots. */
 void launch_canonical_mixed_resident_values_kernel(
@@ -167,7 +173,8 @@ void launch_canonical_mixed_resident_values_kernel(
     unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool same_bucket, double screening, const double* bounds,
-    float* values, std::size_t work_limit);
+    float* values, std::size_t work_limit, DirectCoulombRange range = DirectCoulombRange::Full,
+    double omega = 0.0);
 
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */

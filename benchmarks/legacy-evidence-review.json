@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -224,7 +224,7 @@
     },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
-      "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
+      "reason": "Retain unchanged Direct/DF numerical summaries required by current README compositions. The complete superseded 15-file report, original manifest, source reconstruction and ancillary receipts are recoverable from merged commit 449cd63ccfbdb298c97b78f3c2d85edff0041310 via the hash/size-pinned snapshot, fully restored and verified before retirement. No live samples, gates, source identities or repository budget are changed.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     },
     "readme-wb97mv-20261014": {
@@ -258,9 +258,19 @@
       "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "owner": "bounded DFT scheduling qualification for #2475–#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
+    },
+    "r2scan3c-final-validation-20261015": {
+      "owner": "r2SCAN-3c Direct/DF resident final-validation qualification",
+      "reason": "Retain all 192 complete comparison calls, full-precision numerical arrays, independent cold/moved geometry references, paired timings and SCF work, failures and exact source/binary bindings. The 2%/MAD label is descriptive, not enablement; work-confounded Direct/96 cold/moved samples stay visible. No raw profiler stream, binary or policy-cap increase is introduced.",
+      "review_document": "benchmarks/results/r2scan3c-final-validation-20261015/README.md"
+    },
+    "readme-refresh-20261015": {
+      "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
+      "reason": "Retain all 63 complete native FP64 populations (756 timed E+F calls), actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes, and separate primer receipts. The 12 WB97M-V DF/48 calls remain explicitly unchecked. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
+      "review_document": "benchmarks/results/readme-refresh-20261015/README.md"
     }
   },
   "files": [
@@ -449,28 +459,12 @@
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
     },
     {
-      "bytes": 219056,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue394-deferred",
-      "path": "benchmarks/results/issue394-deferred/prototype.patch",
-      "role": "source-provenance",
-      "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
       "path": "benchmarks/results/issue404-combined-rys/summary.json",
       "role": "decision-or-audit-record",
       "sha256": "c584f057cea4a1b5e4ac898ed3c9af5d03ee90131ad73551f5d1bb49948a99a8"
-    },
-    {
-      "bytes": 246001,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue409-packed-values",
-      "path": "benchmarks/results/issue409-packed-values/reproduction/source.patch",
-      "role": "source-provenance",
-      "sha256": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474"
     },
     {
       "bytes": 135548,
@@ -561,14 +555,6 @@
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 426364,
-      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4",
-      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 428796,
@@ -607,6 +593,22 @@
       "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
       "classification": "required-compact-accepted-evidence",
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
+    },
+    {
+      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
+      "family": "r2scan3c-final-validation-20261015",
+      "bytes": 185084,
+      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
+      "family": "readme-refresh-20261015",
+      "bytes": 174628,
+      "sha256": "14db1bdfcd47efd3209805413fb07755b05dcd9a3519ca5e7a5371b95f3b6fc9",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete native E+F scalar populations, work/gates and source/binary/raw/Slurm/primer receipts; unchecked accuracy remains explicit"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

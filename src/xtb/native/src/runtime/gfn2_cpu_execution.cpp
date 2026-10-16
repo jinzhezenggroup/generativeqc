@@ -831,7 +831,8 @@ generativeqc_xtb_status_t SystemExecution::infer(const CpuLinearAlgebraBackend& 
 struct Gfn2CpuExecutionCache::Impl {
   enum class TaskFailure : std::uint8_t { kNone, kAllocation, kException, kUnknown };
 
-  explicit Impl(CpuIsa cpu_isa) : mulliken_kernels(mulliken_kernels_for_cpu_isa(cpu_isa)) {}
+  explicit Impl(generativeqc::runtime::CpuIsa cpu_isa)
+      : mulliken_kernels(mulliken_kernels_for_cpu_isa(cpu_isa)) {}
 
   ~Impl() { backend.release_thread_resources(); }
 
@@ -967,7 +968,7 @@ struct Gfn2CpuExecutionCache::Impl {
   }
 };
 
-Gfn2CpuExecutionCache::Gfn2CpuExecutionCache(CpuIsa cpu_isa)
+Gfn2CpuExecutionCache::Gfn2CpuExecutionCache(generativeqc::runtime::CpuIsa cpu_isa)
     : impl_(std::make_unique<Impl>(cpu_isa)) {}
 Gfn2CpuExecutionCache::~Gfn2CpuExecutionCache() = default;
 
