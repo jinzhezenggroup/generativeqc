@@ -212,6 +212,88 @@ def test_unmodeled_nonlocal_initializer_control_flow_fails_closed() -> None:
     assert "initializer" in result["reason"]
 
 
+@pytest.mark.parametrize(
+    "old, new",
+    (
+        ("switch(p->info->number)", "switch(p->nspin)"),
+        ("case XC_HYB_GGA_XC_WB97X_V:", "default:"),
+        ("break;", ""),
+        ("p->nlc_b = 6.0;", "if (p->nspin == 1) p->nlc_b = 6.0;"),
+        ("p->nlc_b = 6.0;", "return; p->nlc_b = 6.0;"),
+        (
+            "case XC_HYB_GGA_XC_WB97X_V:",
+            "case XC_HYB_GGA_XC_WB97: case XC_HYB_GGA_XC_WB97X_V:",
+        ),
+        (
+            "break;",
+            "break; case XC_HYB_GGA_XC_WB97X_V: p->nlc_b = 7.0; break;",
+        ),
+    ),
+)
+def test_nonlocal_initializer_rejects_unmodeled_switch_semantics(
+    old: str,
+    new: str,
+) -> None:
+    source = (FULL_LIBXC / "hyb_gga_xc_wb97.c").read_text()
+    assert old in source
+    rows = extract_method_registrations(
+        source.replace(old, new), "hyb_gga_xc_wb97.c", direct_combined=True
+    )
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_WB97X_V")
+    assert result["status"] == "blocked"
+
+
+def test_registration_switch_does_not_admit_setter_control_flow() -> None:
+    source = (LIBXC / "hyb_gga_xc_b3lyp.c").read_text()
+    old = "p->mix_coef[0] = 1.0 - a0 - ax;"
+    new = "switch (p->info->number) { case XC_HYB_GGA_XC_B3LYP: " + old + " break; }"
+    assert old in source
+    rows = extract_method_registrations(source.replace(old, new))
+    result = next(row for row in rows if row["registration"] == "HYB_GGA_XC_B3LYP")
+    assert result["status"] == "blocked"
+    assert "control flow" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    "name,remove_marker",
+    (
+        ("src/mgga_xc_b97mv.c", False),
+        ("src/mgga_xc_b97mv.c", True),
+        ("src/gga_xc_b97.c", False),
+    ),
+)
+def test_nonlocal_discovery_authenticates_before_marker_selection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    remove_marker: bool,
+) -> None:
+    import json
+
+    from tools import generate_libxc_methods as generator
+
+    registry = json.loads(generator.REGISTRY.read_text())
+    source = registry["sources"][generator.NONLOCAL_SOURCE_ID]
+    source["files"] = {name: source["files"][name]}
+    registry_path = tmp_path / "manifest.json"
+    registry_path.write_text(json.dumps(registry))
+    fulltree = tmp_path / "fulltree"
+    owner = fulltree / name
+    owner.parent.mkdir(parents=True)
+    original = (generator.NONLOCAL_SOURCE_ROOT / name).read_bytes()
+    altered = (
+        original.replace(b"XC_FLAGS_VV10", b"XC_FLAGS_OTHER")
+        if remove_marker
+        else original + b"\n/* altered source */\n"
+    )
+    assert altered != original
+    owner.write_bytes(altered)
+    monkeypatch.setattr(generator, "REGISTRY", registry_path)
+    monkeypatch.setattr(generator, "NONLOCAL_SOURCE_ROOT", fulltree)
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        generator.build_catalog()
+
+
 def test_complex_dynamic_mix_owners_remain_explicitly_blocked() -> None:
     assert set(BLOCKED_LIBXC_METHODS) == {
         "HYB_GGA_XC_APF",

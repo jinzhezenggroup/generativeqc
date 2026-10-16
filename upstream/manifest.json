@@ -142,12 +142,12 @@
     },
     "libxc-method-metadata": {
       "canonical_inputs": {
-        "python/generativeqc_compiler/xc/libxc_method_metadata.py": "e6d0b27e3e5a68a7dd59434a72039d14b138a4502038348afc930080e9db0857",
+        "python/generativeqc_compiler/xc/libxc_method_metadata.py": "1c0517435e8101d83f19cfb35cc094e42a242b52adf141249013382cec4ec096",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b",
         "tools/libxc_method_metadata.py": "c1dfd47bfd94811c1eef3dd077eb0d758f7f3ae3a059cd0c40c32126798f2716"
       },
       "generator": "tools/generate_libxc_methods.py",
-      "generator_sha256": "f3d0bafad28cdefea898445519ac57825ed38b36e963e6109e681c9ca3708a59",
+      "generator_sha256": "7a19842ce3c95390da6d6f403647616cf01bb6c9b70697ec5901ddbfa2155be5",
       "input_identity_sha256": "aa1123524c7c173d270806ce1f0eebaf7131448d99d77c633a912d6c31bbaea2",
       "inputs": [
         "libxc-7.0.0",
@@ -349,7 +349,7 @@
     "libxc-7.0.0": {
       "admission": {
         "importer": "python/generativeqc_compiler/xc/libxc_maple.py",
-        "importer_sha256": "3d08bdc3bd0474de18090d49624772d93bce3e1586afe55f64840166cfbe8ed7",
+        "importer_sha256": "07e95db2a208a0101baa0e07d06ff2e02d74c9c4f780d07792492384d874e676",
         "semantics": "libxc-maple-graph/v11"
       },
       "collections": {

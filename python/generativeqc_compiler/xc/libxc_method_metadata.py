@@ -96,7 +96,13 @@ def _fraction_value(
         raise MethodMetadataError("singular hybrid arithmetic") from error
 
 
-def _function_body(text: str, name: str) -> str:
+def _function_body(
+    text: str,
+    name: str,
+    *,
+    registration_id: int | None = None,
+    definitions: dict[str, str | None] | None = None,
+) -> str:
     if not re.fullmatch(_IDENTIFIER, name):
         raise MethodMetadataError("hybrid owner is not a named C function")
     matches = list(
@@ -108,6 +114,13 @@ def _function_body(text: str, name: str) -> str:
     if len(matches) != 1:
         raise MethodMetadataError(f"missing or ambiguous hybrid owner function: {name}")
     body, _ = brace_body(text, matches[0].end() - 1)
+    # Only initializer callers opt into the bounded registration selector.
+    # Select before validating linear semantics so mix and VV10 extraction use
+    # the same reachable statements. Setter control flow remains unsupported.
+    if registration_id is not None:
+        if definitions is None:
+            raise MethodMetadataError("initializer selection needs pinned definitions")
+        body = _select_initializer_branch(body, definitions, registration_id)
     # This extractor models linear metadata owners, not C control flow.
     # Ignore quoted text, but reject branches/loops/early returns before regex
     # extraction can mistake a conditional assignment for an unconditional one.
@@ -373,7 +386,11 @@ def _select_initializer_branch(
     body = switch.group("body")
     arm = re.compile(r"\bcase\s+(XC_[A-Za-z0-9_]+)\s*:\s*(.*?)\bbreak\s*;", re.DOTALL)
     matches = list(arm.finditer(body))
-    if not matches or arm.sub("", body).strip():
+    if (
+        not matches
+        or arm.sub("", body).strip()
+        or any(re.search(r"\b(?:case|default)\b", match.group(2)) for match in matches)
+    ):
         raise MethodMetadataError("initializer switch has unmodeled case semantics")
     selected = []
     for match in matches:
@@ -512,12 +529,14 @@ def extract_method_registrations(
                 init_alpha = init_beta = init_omega = Fraction(0)
                 nlc_b = nlc_c = None
             else:
-                init_body = _function_body(text, init_name)
+                init_body = _function_body(
+                    text, init_name, registration_id=libxc_id, definitions=definitions
+                )
                 initial = _initial_mix(init_body, definitions)
                 component_ids = None if initial is None else initial[0]
                 initial_mix = None if initial is None else initial[1]
                 init_alpha, init_beta, init_omega, nlc_b, nlc_c = _init_state(
-                    init_body, definitions, libxc_id
+                    init_body, definitions
                 )
             if fields[3] in _HYBRID_FAMILIES:
                 mix, alpha, beta, omega = _setter_state(

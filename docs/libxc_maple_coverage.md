@@ -41,7 +41,6 @@ A direct-import candidate means every audited conditional profile parses and the
 ## Current evaluator gaps
 
 - No functional source has a parser-syntax failure in the audited profiles.
-- All audited functional entry calls resolve, including the shared `lda_x_spin` helper.
 - util.mpl has 3/3 standalone support-import failures. Functional imports retain their separate evaluator/include context.
 
 These are importer/evaluator coverage findings only. They do not weaken the existing requirement for independent E/vxc/fxc, endpoint, provenance, and backend qualification before a functional is cut over to production.

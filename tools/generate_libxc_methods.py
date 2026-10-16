@@ -74,11 +74,11 @@ def _sources() -> list[tuple[Path, str]]:
         if not path.is_file():
             raise ValueError(f"missing pinned Libxc nonlocal owner: {name}")
         raw = path.read_bytes()
-        if b"XC_FLAGS_VV10" not in raw or path.name in original_names:
-            continue
         actual = hashlib.sha256(raw).hexdigest()
         if actual != metadata["sha256"]:
             raise ValueError(f"pinned Libxc nonlocal owner SHA-256 mismatch: {name}")
+        if b"XC_FLAGS_VV10" not in raw or path.name in original_names:
+            continue
         result.append((path, actual))
     if not result:
         raise ValueError("no pinned Libxc method owners")
