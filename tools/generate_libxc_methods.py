@@ -29,7 +29,7 @@ NONLOCAL_SOURCE_ID = "libxc-7.0.0-fulltree"
 NONLOCAL_SOURCE_ROOT = ROOT / "upstream" / "libxc-fulltree" / REVISION
 _NONLOCAL_OWNER = re.compile(r"src/(?:hyb_)?(?:gga|mgga)_xc_[a-z0-9_]+\.c\Z")
 OUTPUT = (
-    ROOT / "python" / "generativeqc_compiler" / "method" / "_generated_libxc_methods.py"
+    ROOT / "python" / "generativeqc_compiler" / "xc" / "_generated_libxc_methods.py"
 )
 
 

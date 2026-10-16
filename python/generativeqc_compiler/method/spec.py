@@ -16,16 +16,16 @@ from typing import ClassVar
 
 from generativeqc_compiler.common.exact import require_fraction
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc._generated_libxc_methods import (
+    LIBXC_METHODS,
+)
+from generativeqc_compiler.xc._generated_libxc_methods import (
+    METHOD_METADATA_SEMANTICS as LIBXC_METHOD_METADATA_SEMANTICS,
+)
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.spec import COMPONENTS, FunctionalSpec
 from generativeqc_compiler.xc.spec import VERSION as XC_VERSION
 
-from ._generated_libxc_methods import (
-    LIBXC_METHODS,
-)
-from ._generated_libxc_methods import (
-    METHOD_METADATA_SEMANTICS as LIBXC_METHOD_METADATA_SEMANTICS,
-)
 from .basis_binding import BasisBinding, r2scan3c_def2_mtzvpp_h_ar
 from .dispersion import (
     D4_METHOD_SUFFIX,

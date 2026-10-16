@@ -9,9 +9,9 @@ from pathlib import Path
 
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
-from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
 
 from . import _generated_split_hybrids, libxc_bulk
+from ._generated_libxc_methods import LIBXC_METHODS
 from ._generated_split_hybrids import SPLIT_HYBRID_COMPONENTS, SPLIT_HYBRIDS
 from .b88_vwn_maple import b88_vwn_maple_provenance
 from .ityh_maple import ityh_maple_provenance

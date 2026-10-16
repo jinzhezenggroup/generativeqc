@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from generativeqc_compiler.method import METHOD_CATALOG
-from generativeqc_compiler.method._generated_libxc_methods import (
+from generativeqc_compiler.xc._generated_libxc_methods import (
     BLOCKED_LIBXC_METHODS,
     LIBXC_METHODS,
 )
@@ -175,7 +175,7 @@ def test_fulltree_nonlocal_methods_use_pinned_source_definitions() -> None:
 
 def test_nonlocal_libxc_methods_have_representation_only_method_ir() -> None:
     from generativeqc_compiler.method import resolve_method
-    from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
+    from generativeqc_compiler.xc._generated_libxc_methods import LIBXC_METHODS
 
     for name in ("B97M-V", "WB97X-V", "GAS22"):
         assert name in LIBXC_METHODS
@@ -208,7 +208,7 @@ def test_nonlocal_component_inventory_rejects_invalid_generated_names(
     import importlib.util
     import sys
 
-    from generativeqc_compiler.method import _generated_libxc_methods as generated
+    from generativeqc_compiler.xc import _generated_libxc_methods as generated
     from generativeqc_compiler.xc import spec
 
     record = dict(generated.LIBXC_METHODS["B97M-V"])
