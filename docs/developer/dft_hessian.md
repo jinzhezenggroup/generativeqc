@@ -587,6 +587,14 @@ JVP. Compiler TensorIR owns physical D/W spin totals, negative overlap weights,
 frozen nuclear Fock assembly, pair-incidence signs/reductions and final sums.
 Native code owns only resource/lifetime/traversal and finite/publication gates.
 
+The linked integral emitter assigns one CUDA block to each raw component and
+evaluates up to 64 independent primitive records concurrently. Shared storage
+holds scaled fields until one lane contracts them in the original radial order;
+this is not a reassociated tree sum or floating-point atomic reduction. Longer
+record lists stream successive bounded batches, and every lane participates in
+the failure barrier before a component can publish. The derivative graphs,
+normalization, shell/AO projections and global workspace contract are unchanged.
+
 The frozen pass uses zero density/weight motion. After converged CPKS, the
 second source pass includes solved dD/dW. DF retains dA/dV across that boundary,
 reruns the full inverse/source-weight AD with dD, then contracts the raw source.

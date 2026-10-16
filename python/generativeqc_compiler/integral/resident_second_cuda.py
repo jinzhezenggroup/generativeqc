@@ -1,8 +1,10 @@
 """Device-pointer lowering of existing integral value/gradient/gradient-JVP AD.
 
 This deliberately bounded schedule streams radial products and component tiles.
-It introduces no integral recurrence, derivative rule, host numerical contract,
-or molecular derivative tensor. FP64 outputs remain on the caller's stream.
+Independent primitive evaluations run concurrently, but each component retains
+the original ordered FP64 contraction. It introduces no integral recurrence,
+derivative rule, host numerical contract, or molecular derivative tensor. FP64
+outputs remain on the caller's stream.
 """
 
 from typing import Any
@@ -68,19 +70,38 @@ __device__ bool resident_evaluate(int component, const double* record,
     const double* direction, double* output) {{ {evaluate} }}
 __global__ void resident_integral_kernel(const double* records, size_t count,
     const long long* atoms, const double* molecular_direction, double* output, int* status) {{
-  const int component = blockIdx.x * blockDim.x + threadIdx.x;
+  const int component = blockIdx.x;
   if (component >= {components}) return;
+  __shared__ double terms[{outputs}][64];
   double direction[{3 * centers}];
   for (int center=0; center<{centers}; ++center)
     for (int axis=0; axis<3; ++axis)
       direction[3*center+axis] = molecular_direction[3*atoms[center]+axis];
   double result[{outputs}]{{}};
-  for (size_t radial=0; radial<count; ++radial) {{
-    const double* record=records+radial*{stride};
-    double values[{outputs}];
-    if (!resident_evaluate(component, record, direction, values)) {{ atomicExch(status, 1); return; }}
-    for (int index=0; index<{outputs}; ++index) result[index]+=record[{stride - 1}]*values[index];
+  for (size_t begin=0; begin<count;) {{
+    const size_t active = count-begin < 64 ? count-begin : 64;
+    bool valid = true;
+    if (threadIdx.x < active) {{
+      const double* record=records+(begin+threadIdx.x)*{stride};
+      double values[{outputs}]{{}};
+      valid = resident_evaluate(component, record, direction, values);
+      for (int index=0; index<{outputs}; ++index)
+        terms[index][threadIdx.x]=record[{stride - 1}]*values[index];
+    }}
+    if (__syncthreads_or(!valid)) {{
+      if (threadIdx.x == 0) atomicExch(status, 1);
+      return;
+    }}
+    // Parallelize expensive primitive AD, not the contraction: preserve radial
+    // addition order, including cancellation, without floating-point atomics.
+    if (threadIdx.x == 0)
+      for (int index=0; index<{outputs}; ++index)
+        for (size_t radial=0; radial<active; ++radial)
+          result[index]+=terms[index][radial];
+    __syncthreads();
+    begin+=active;
   }}
+  if (threadIdx.x != 0) return;
   for (int index=0; index<{outputs}; ++index) {{
     if (!isfinite(result[index])) atomicExch(status, 2);
     output[component*{outputs}+index]=result[index];
@@ -88,7 +109,7 @@ __global__ void resident_integral_kernel(const double* records, size_t count,
 }}
 extern "C" int generativeqc_resident_integral(const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status, cudaStream_t stream) {{
-  resident_integral_kernel<<<1,32,0,stream>>>(records,count,atoms,direction,output,status);
+  resident_integral_kernel<<<{components},64,0,stream>>>(records,count,atoms,direction,output,status);
   return static_cast<int>(cudaGetLastError());
 }}
 """

@@ -135,6 +135,80 @@ def test_native_integral_failure_publishes_no_partial_values(probe: Path) -> Non
     assert "no output published" in failure.value.stderr
 
 
+@pytest.mark.parametrize("invalid_record", (1, 63, 64, 128))
+def test_native_integral_late_failure_does_not_deadlock_or_publish(
+    probe: Path, invalid_record: int
+) -> None:
+    """Every primitive lane participates in failure barriers, including tails."""
+    records = np.tile([0.7, 1.1, 0.1, -0.2, 0.3, -0.4, 0.2, 1.1, 1], (129, 1))
+    records[invalid_record, 0] = -0.7
+    values = np.r_[records.ravel(), 0, 1, 0.03, -0.01, 0.04, -0.02, 0.05, -0.01]
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        _run(probe, "integral", "overlap_full_range_0_0_c0", 129, 2, values=values)
+    assert failure.value.stdout == ""
+    assert "no output published" in failure.value.stderr
+
+
+@pytest.mark.parametrize(
+    "specification", INVENTORY.integrals, ids=lambda specification: specification.name
+)
+def test_native_integral_parallel_primitives_retain_ordered_contraction(
+    probe: Path, specification: object
+) -> None:
+    """AD may run in parallel, but cancellation must retain radial input order.
+
+    The separate quadrature test qualifies each leaf's arithmetic. This gate
+    isolates contraction scheduling, including multi-component tiles, partial
+    warps, exact block boundaries and multiple batches. Single-record results
+    provide the uncontracted fields; host multiplication and ordered additions
+    deliberately avoid reassociation or a tree reduction.
+    """
+    request = specification
+    centers = np.array(
+        [
+            [0.13, -0.31, 0.24],
+            [-0.43, 0.27, 0.51],
+            [0.68, -0.14, -0.22],
+            [-0.21, 0.48, -0.63],
+        ]
+    )[: request.centers]
+    exponents = np.array([0.6, 0.8, 1.1, 0.9])[: len(request.angular)]
+    direction = np.random.default_rng(1925).normal(size=centers.shape) * 0.1
+    suffix = np.r_[np.arange(request.centers), direction.ravel()]
+    uncontracted = {}
+    for scale in (0.75, 1.0, 1.2):
+        record = np.r_[exponents * scale, centers.ravel(), 1.0]
+        uncontracted[scale] = np.array(
+            _run(
+                probe,
+                "integral",
+                request.name,
+                1,
+                request.centers,
+                values=np.r_[record, suffix],
+            )
+        )
+    pattern = ((0.75, 1e16), (1.0, 1.0), (0.75, -1e16), (1.2, -0.17), (1.0, 0.73))
+    for count in (1, 31, 32, 63, 64, 65, 129):
+        records = []
+        expected = np.zeros_like(uncontracted[1.0])
+        for radial in range(count):
+            scale, weight = pattern[radial % len(pattern)]
+            records.append(np.r_[exponents * scale, centers.ravel(), weight])
+            expected += weight * uncontracted[scale]
+        actual = np.array(
+            _run(
+                probe,
+                "integral",
+                request.name,
+                count,
+                request.centers,
+                values=np.r_[np.asarray(records).ravel(), suffix],
+            )
+        )
+        np.testing.assert_array_equal(actual, expected)
+
+
 def _moments(
     argument: complex, order: int, lower: float = 0, upper: float = 1
 ) -> complex:
