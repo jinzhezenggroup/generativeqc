@@ -129,20 +129,26 @@ def test_native_ragged_host_fleet_matches_portable_lifetimes(
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
 @pytest.mark.parametrize("schedule", ("device_fused", "host_unfused"))
+@pytest.mark.parametrize("native_device", (False, True))
 def test_public_bounds_legacy_compatibility_and_exact_budgets(
-    library: typing.Any, monkeypatch: pytest.MonkeyPatch, method: str, schedule: str
+    library: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    schedule: str,
+    native_device: bool,
 ) -> None:
-    """Device leaves are stubs; host composition uses the actual CPU-loaded ABI."""
+    """Real host ownership composes with native or older device-fleet protocols."""
     monkeypatch.setattr(resources_ks, "_cuda_library_identity", lambda _: {})
     monkeypatch.setattr(
         resources_ks,
-        "_cuda_item_inventory",
+        "_cuda_leaf_inventory",
         lambda *args, **kwargs: {
             "state": 8,
             "xc": 8,
             "coulomb": 8,
-            "setup": 24,
+            "quadrature_setup": 0,
             "matrix_provider": 8,
+            "ecp_workspace": 0,
         },
     )
     systems = [
@@ -154,12 +160,17 @@ def test_public_bounds_legacy_compatibility_and_exact_budgets(
         "method": method,
         "ks_options": KsOptions(xc_schedule=schedule),
     }
+    selected = (
+        library
+        if native_device
+        else LibraryView(library, "generativeqc_resource_ks_cuda_fleet_v1")
+    )
     native = estimate_ks_resources(
-        systems, library=library, **settings
+        systems, library=selected, **settings
     ).require_feasible()
     legacy = estimate_ks_resources(
         systems,
-        library=LibraryView(library, "generativeqc_resource_ks_cuda_host_fleet_v1"),
+        library=LibraryView(selected, "generativeqc_resource_ks_cuda_host_fleet_v1"),
         **settings,
     ).require_feasible()
     assert native.peak_bytes == legacy.peak_bytes
@@ -179,13 +190,15 @@ def test_public_bounds_legacy_compatibility_and_exact_budgets(
         host_bytes=native.peak_bytes["host"], device_bytes=native.peak_bytes["device"]
     )
     estimate_ks_resources(
-        systems, library=library, budget=budget, **settings
+        systems, library=selected, budget=budget, **settings
     ).require_feasible()
     short = ResourceBudget(
         host_bytes=budget.host_bytes - 1, device_bytes=budget.device_bytes
     )
     assert (
-        estimate_ks_resources(systems, library=library, budget=short, **settings).status
+        estimate_ks_resources(
+            systems, library=selected, budget=short, **settings
+        ).status
         == "infeasible"
     )
 

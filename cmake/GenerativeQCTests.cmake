@@ -233,6 +233,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_spherical_tests tests/native/test_spherical.cpp)
   generativeqc_native_test(generativeqc_spherical_eri_projection_tests tests/native/test_spherical_eri_projection.cpp)
   generativeqc_native_test(generativeqc_basis_contract_tests tests/native/test_basis_contract.cpp)
+  generativeqc_native_test(generativeqc_progressive_hf_tests tests/native/test_progressive_hf.cpp)
   generativeqc_native_test(generativeqc_named_ks_catalog_tests tests/native/test_named_ks_catalog.cpp)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
@@ -501,6 +502,10 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_native_api_inputs_tests tests/native/test_native_api_inputs.cpp)
+  generativeqc_native_test(generativeqc_basis_catalog_tests tests/native/test_basis_catalog.cpp)
+  generativeqc_native_test(generativeqc_basis_template_tests tests/native/test_basis_template.cpp)
+  generativeqc_native_test(generativeqc_basis_catalog_sdk_tests tests/native/test_basis_catalog_sdk.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_builtin_basis_sdk_tests tests/native/test_builtin_basis_sdk.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_integral_sources_tests
                        tests/native/test_dft_integral_sources.cpp)
@@ -508,6 +513,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_host_resources.cpp)
   generativeqc_native_test(generativeqc_ks_cuda_host_resource_tests
                        tests/native/test_ks_cuda_host_resources.cpp)
+  generativeqc_native_test(generativeqc_ks_device_resource_tests
+                       tests/native/test_ks_device_resources.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests

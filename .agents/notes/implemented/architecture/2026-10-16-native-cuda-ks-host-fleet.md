@@ -70,3 +70,16 @@ consumers as a workspace floor would lose their coexistence with preparation.
 Reusing CPU formulas for CUDA would impose irrelevant fourth-power overflow and
 angular restrictions. Removing portable metadata planning would break older
 SDKs; using it after native failure would hide malformed capacities.
+
+## Integration with the device fleet owner (2026-10-17)
+
+The independently delivered
+[CUDA device fleet owner](2026-10-16-native-cuda-ks-fleet-composition.md) and this
+host owner compose different memory spaces. The native CLI must invoke both,
+not resolve their shared dispatch branch by restoring either legacy polynomial.
+Both owners receive the homogeneous batch multiplicity exactly once; Python
+retained host consumer allowances remain absent from this ordinary CLI path.
+The synthetic-leaf CLI contract exercises both actual compiled fleet ABIs and
+exact/one-byte-short limits in each space, without treating those controls as
+real-GPU science. Integration does not introduce new consumer admission or
+claim complete provider/lease/RSS authority.

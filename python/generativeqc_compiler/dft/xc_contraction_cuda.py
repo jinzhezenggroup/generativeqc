@@ -49,8 +49,8 @@ class XcMatrixSchedule:
 
     @property
     def potential_shared_bytes(self) -> int:
-        # Four padded FP64 panels plus the two shared tile indices.
-        return 4 * self.tile * (self.tile + 1) * 8 + 16
+        # Four FP64 panels, exact-scaling flags and two shared tile indices.
+        return (4 * 8 + 1) * self.tile * (self.tile + 1) + 16
 
     @property
     def shared_bytes(self) -> int:
@@ -176,8 +176,9 @@ def compact_panel_program(family: str) -> tuple:
     """Factor the symmetric bilinear into A*W^T + W*A^T.
 
     The value panel absorbs both gradient legs. The scalar and diagonal kinetic
-    terms get a one-half because symmetric assembly visits each twice. Derive
-    their coefficients from the canonical bilinear instead of restating them.
+    terms get a one-half because symmetric assembly visits each twice. Keep
+    that preparation order even for the one-sided consumer: moving the factor
+    of two into this graph changes its overflow and underflow domain.
     """
     graph, x, y, _coefficients, bilinear = ao_pair_bilinear(family)
 
@@ -228,7 +229,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     )
 
 
-def _emit_panels() -> str:
+def _emit_panels(*, diagonal_one_sided: bool = False) -> str:
     lines = [
         r"""
 __device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
@@ -262,7 +263,12 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
                                 work, error);
 }
 """)
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if diagonal_one_sided:
+        source = source.replace(
+            "compact_potential_panels", "compact_diagonal_potential_panels"
+        )
+    return source
 
 
 _TILED_TEMPLATE = r"""
@@ -335,10 +341,11 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false, class Arithmetic = double>
+template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
-    double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin) {
+    double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin,
+    const double* diagonal_weights = nullptr) {
   __shared__ I tile_mu, tile_nu;
   if (threadIdx.x == 0 && threadIdx.y == 0) {
     const I pair = blockIdx.x;
@@ -355,11 +362,18 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
   }
   __syncthreads();
   __shared__ Arithmetic am[@TILE@][@PAD@], an[@TILE@][@PAD@], wm[@TILE@][@PAD@], wn[@TILE@][@PAD@];
+  __shared__ unsigned char scaled_wn[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
   Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
+    // Additional panels are diagonal bilinears derived by compact_panel_program.
+    // Preserve canonical half-panel preparation. Only bounded operand tiles
+    // reuse a doubled right panel; unsafe tiles keep both original products.
+    // The upper bound prevents scaling/product overflow and amplification of
+    // preparation underflow. It is independent of the method and AO count.
+    const bool cross = !DiagonalJets || jet == 0;
     const double* a = ao+jet*panel;
     const double* w = work+(spin*work_jets+jet)*panel;
     for (I begin = 0; begin < count; begin += @TILE@) {
@@ -367,10 +381,32 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       am[y][x] = p < count && mu < n ? a[p*n+mu] : 0.0;
       an[y][x] = p < count && nu_load < n ? a[p*n+nu_load] : 0.0;
       wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
-      wn[y][x] = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
-      __syncthreads();
-      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu))
-        for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+      const Arithmetic right = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
+      bool reuse_diagonal = false;
+      if (DiagonalJets && !cross) {
+        const bool scaled = fabs(right) <= 0x1p128;
+        scaled_wn[y][x] = scaled;
+        wn[y][x] = scaled ? right+right : right;
+        const bool unsafe_weight = !diagonal_weights ||
+            (p < count && fabs(diagonal_weights[p]) > 0x1p128);
+        const bool unsafe = unsafe_weight || !scaled || fabs(am[y][x]) > 0x1p128 ||
+            fabs(an[y][x]) > 0x1p128 || fabs(wm[y][x]) > 0x1p128;
+        reuse_diagonal = !__syncthreads_or(unsafe);
+      } else {
+        wn[y][x] = right;
+        __syncthreads();
+      }
+      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
+        if (cross)
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+        else if (reuse_diagonal)
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y];
+        else
+          for (I k = 0; k < @TILE@; ++k) {
+            const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];
+            value += am[k][x]*original_right+wm[k][x]*an[k][y];
+          }
+      }
       __syncthreads();
     }
   }
@@ -399,6 +435,13 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
     bool accumulate, int* error, const size_t* ao_ids, I full_n) {
   tiled_potential_body<false, Arithmetic>(ao, work, n, count, work_jets, point_totals, potential, totals,
                         accumulate, error, ao_ids, full_n, blockIdx.z);
+}
+
+__global__ void tiled_diagonal_potential(const double* ao, const double* work, I n, I count,
+    I work_jets, const double* point_totals, double* potential, double* totals,
+    bool accumulate, int* error, const size_t* ao_ids, I full_n, const double* weights) {
+  tiled_potential_body<false, double, true>(ao, work, n, count, work_jets, point_totals,
+      potential, totals, accumulate, error, ao_ids, full_n, blockIdx.z, weights);
 }
 
 inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
@@ -442,6 +485,17 @@ inline void generated_potential(cudaStream_t stream, const double* ao,
     return;
   }
   if (tiled_xc_admitted(n, count, spins, work_jets)) {
+    if constexpr (std::is_same_v<Arithmetic, double>) {
+      if (work_jets == 4) {
+        compact_diagonal_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+            ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
+        generativeqc_tensor::cuda_check(cudaGetLastError());
+        const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
+        tiled_diagonal_potential<<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
+            ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n,weights);
+        return;
+      }
+    }
     compact_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
         ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
@@ -535,11 +589,12 @@ def emit_native_xc_matrix_schedule(
     density_source: str = "",
 ) -> str:
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
+    panels = _emit_panels() + _emit_panels(diagonal_one_sided=True)
     return (
-        emit_potential_portfolio(_emit_panels() + _emit_tiled(schedule))
-        + '\n#include "tensor/cuda_panel_product.cuh"\n'
+        emit_potential_portfolio(panels + _emit_tiled(schedule))
+        + '\n#include "tensor/cuda_panel_product.cuh"\n#include <type_traits>\n'
         + "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
-        + _emit_panels()
+        + panels
         + _emit_tiled(schedule)
         + _emit_density_factor()
         + _emit_density_factor(indexed=True)

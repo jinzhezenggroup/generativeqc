@@ -46,6 +46,13 @@ capability authorities, serialization, and status handling.
 - [generativeqc_context_get_last_detail](#native-c-generativeqc-context-get-last-detail)
 - [generativeqc_context_last_error](#native-c-generativeqc-context-last-error)
 - [generativeqc_system_create](#native-c-generativeqc-system-create)
+- [generativeqc_bundled_basis_catalog_sha256](#native-c-generativeqc-bundled-basis-catalog-sha256)
+- [generativeqc_system_create_bundled](#native-c-generativeqc-system-create-bundled)
+- [generativeqc_system_create_basis_template_v1](#native-c-generativeqc-system-create-basis-template-v1)
+- [generativeqc_builtin_basis_count_v1](#native-c-generativeqc-builtin-basis-count-v1)
+- [generativeqc_builtin_basis_name_v1](#native-c-generativeqc-builtin-basis-name-v1)
+- [generativeqc_builtin_basis_query_v1](#native-c-generativeqc-builtin-basis-query-v1)
+- [generativeqc_system_create_builtin_basis_v1](#native-c-generativeqc-system-create-builtin-basis-v1)
 - [generativeqc_system_destroy](#native-c-generativeqc-system-destroy)
 - [generativeqc_system_create_ecp](#native-c-generativeqc-system-create-ecp)
 - [generativeqc_system_ecp_integrals](#native-c-generativeqc-system-ecp-integrals)
@@ -142,6 +149,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Context::get](#native-cpp-generativeqc-context-get)
 - [generativeqc::System](#native-cpp-generativeqc-system)
 - [generativeqc::System::System](#native-cpp-generativeqc-system-system)
+- [generativeqc::System::System-bundled](#native-cpp-generativeqc-system-system-bundled)
+- [generativeqc::System::System-basis-template](#native-cpp-generativeqc-system-system-basis-template)
 - [generativeqc::System::System-ecp](#native-cpp-generativeqc-system-system-ecp)
 - [generativeqc::System::~System](#native-cpp-generativeqc-system-destructor-system)
 - [generativeqc::System::System-copy](#native-cpp-generativeqc-system-system-copy)
@@ -1077,6 +1086,204 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Atom xyz are Bohr; Gaussian exponents use inverse Bohr squared and coefficients follow
 the shell/basis normalization contract.
+
+(native-c-generativeqc-bundled-basis-catalog-sha256)=
+## generativeqc_bundled_basis_catalog_sha256
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API const char * generativeqc_bundled_basis_catalog_sha256 ( void ) ;
+```
+
+**Behavior.** Query the canonical-JSON SHA-256 of the compiled bundled basis source pack.
+
+**Outputs.** Returns a nonnull, lowercase 64-digit NUL-terminated checksum, not a method
+capability or a checksum of normalized geometry-dependent basis data.
+
+**Lifetime.** Borrows immutable library storage; valid until the library is unloaded.
+
+**Errors.** No failure status; does not throw or require a context.
+
+**Execution.** Synchronous, thread-safe metadata query; no file, Python, compiler or GPU access.
+
+(native-c-generativeqc-system-create-bundled)=
+## generativeqc_system_create_bundled
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_bundled ( generativeqc_context * context , const generativeqc_system_descriptor * descriptor , const char * basis_name , const char * expected_catalog_sha256 , generativeqc_system * * system ) ;
+```
+
+**Behavior.** Expand a compiled bundled basis and create a normalized owning system through
+the same validation/normalization owner as generativeqc_system_create.
+
+**Inputs.** A live context, full-size current-ABI descriptor, positive atom_count and atoms;
+shell/primitive pointers and counts must all be zero. Other descriptor fields retain
+their usual meaning. basis_name is a nonnull NUL-terminated bundled name (ASCII case and
+underscore aliases accepted). Optional expected_catalog_sha256 must exactly match the
+catalog query, binding caller provenance to the compiled pack; NULL opts out of this check.
+
+**Outputs.** Writes a new owning system; after required nonnull checks, clears the output
+before validation. Unknown/missing-element bases are rejected, never downloaded or retried.
+
+**Lifetime.** Copies atoms and expanded basis; caller buffers/strings may be released on return.
+Prepared consumers own their copies as for generativeqc_system_create.
+
+**Errors.** ABI_MISMATCH for version/size mismatch; INVALID_ARGUMENT for malformed input,
+unknown names/elements or catalog mismatch. Backend/scientific/allocation errors retain
+system_create statuses. Required-null rejection may leave output unchanged; other failures
+leave it NULL. This constructor does not broaden backend or method capability admission.
+
+**Execution.** Synchronous; serialize with operations on this context. Compiled constants only:
+no file/network access, Python import, runtime compiler, or reference-oracle calculation.
+
+**Units.** Geometry and Gaussian data follow the system_create atomic-unit contract.
+
+(native-c-generativeqc-system-create-basis-template-v1)=
+## generativeqc_system_create_basis_template_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_basis_template_v1 ( generativeqc_context * context , const generativeqc_system_descriptor * descriptor , const generativeqc_basis_template_descriptor_v1 * basis , generativeqc_system * * system ) ;
+```
+
+**Behavior.** Expand element-local general contractions and scalar ECP source channels,
+then create an owning system through the existing normalization/ECP admission owners.
+
+**Inputs.** A live context and full-size current-ABI system and basis-template descriptors.
+The system has positive atom_count/atoms and zero shell/primitive pointers/counts;
+its charge, multiplicity and representation retain their usual meaning. Basis arrays
+follow the v1 record contracts and remain immutable for this call. Every input atom
+needs one matching element. Cartesian/spherical conventions are not reinterpreted.
+
+**Outputs.** Writes a copied normalized system, clearing the slot after required nonnull
+argument checks. Atom order, shell/row order, exact zeros and ECP local-channel semantics
+are preserved. No partially expanded system is published on failure.
+
+**Lifetime.** Copies all required data; no atom/template/array storage survives by reference.
+Prepared consumers own their copies, so the source system may be destroyed after prepare.
+
+**Errors.** ABI_MISMATCH for descriptor version/size mismatch; INVALID_ARGUMENT for malformed
+records, ranges, overflow, missing elements or unsupported scalar ECP shapes. Native
+allocation/backend/scientific errors retain existing system_create[_ecp] statuses.
+Required-null rejection may leave output unchanged; other failures leave it NULL.
+
+**Execution.** Synchronous; serialize operations on this context. No files, network, Python,
+compiler, reference-oracle work or new method/backend capability admission.
+
+**Units.** Coordinates and Gaussian/ECP arrays use the existing system/ECP atomic units.
+
+(native-c-generativeqc-builtin-basis-count-v1)=
+## generativeqc_builtin_basis_count_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_builtin_basis_count_v1 ( void ) ;
+```
+
+**Behavior.** Count immutable AOT basis names shared with the native CLI.
+
+**Inputs.** No arguments or context are required.
+
+**Outputs.** Returns the number of valid discovery ordinals.
+
+**Lifetime.** Catalog storage belongs to the loaded native library.
+
+**Errors.** No allocation, provider initialization or failure status occurs.
+
+**Execution.** Synchronous immutable lookup, safe without a calculation or device.
+
+**Units.** Returns a dimensionless count, not an execution-capability claim.
+
+(native-c-generativeqc-builtin-basis-name-v1)=
+## generativeqc_builtin_basis_name_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API const char * generativeqc_builtin_basis_name_v1 ( uint64_t index ) ;
+```
+
+**Behavior.** Discover the canonical name at a catalog ordinal.
+
+**Inputs.** index is zero-based and less than builtin_basis_count_v1().
+
+**Outputs.** Returns a NUL-terminated name, or NULL for an invalid ordinal.
+
+**Lifetime.** The borrowed immutable string remains valid while the library is loaded.
+
+**Errors.** Invalid indices return NULL without allocation or provider initialization.
+
+**Execution.** Synchronous immutable lookup; it does not admit any scientific consumer.
+
+**Units.** index is dimensionless; names use the established case/underscore aliases on input.
+
+(native-c-generativeqc-builtin-basis-query-v1)=
+## generativeqc_builtin_basis_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_builtin_basis_query_v1 ( const generativeqc_builtin_basis_descriptor_v1 * descriptor , generativeqc_builtin_basis_capacity_v1 * capacity ) ;
+```
+
+**Behavior.** Query shared AOT basis expansion counts and canonical pack provenance.
+
+**Inputs.** Versioned records, a byte-counted name, bounded nonempty atom array and valid
+representation. reserved is zero. Optional expected_pack_checksum has exactly64 bytes.
+Charge/spin and coordinate physics are validated only when a system is created.
+
+**Outputs.** On success publishes shell/primitive/AO counts, raw expansion bytes and borrowed
+canonical name/checksum. maximum_expansion_bytes does not limit a metadata query.
+
+**Lifetime.** Inputs are borrowed for the call; records must not overlap. Returned strings
+borrow immutable library storage, not a context or caller input. Extension tails stay intact.
+
+**Errors.** ABI_MISMATCH for incompatible records; INVALID_ARGUMENT for malformed dimensions,
+alias/alignment/overflow, missing data or pack mismatch. Metadata allocation failure maps
+to OUT_OF_MEMORY. Refusal leaves output unchanged.
+
+**Execution.** Synchronous host metadata only; reads atom identities, never coordinates,
+numerical execution, runtime JSON/Python, an accelerator or a provider.
+
+**Units.** Counts are dimensionless and expansion bytes cover only detached raw shell/primitive
+buffers, excluding allocator metadata, caller atoms and normalized system/provider storage.
+
+(native-c-generativeqc-system-create-builtin-basis-v1)=
+## generativeqc_system_create_builtin_basis_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_builtin_basis_v1 ( generativeqc_context * context , const generativeqc_builtin_basis_descriptor_v1 * descriptor , generativeqc_system * * system ) ;
+```
+
+**Behavior.** Materialize a named shared AOT basis and call the existing system validation/
+normalization owner; no alternate scientific formula or custom-basis substitution is used.
+
+**Inputs.** Live context, versioned descriptor and disjoint nonnull system output slot. Coordinates,
+charge/spin and backend source limits obey system_create. Optional checksum binds exact pack
+contents. Zero maximum_expansion_bytes is unbounded; otherwise it bounds raw expansion only.
+
+**Outputs.** Publishes a newly owned system only after complete success. Refusal preserves the
+caller output slot. Release a successful handle with system_destroy; prepared data is copied.
+
+**Lifetime.** Descriptor/atom/name/checksum buffers are borrowed only during the call. The returned
+system owns detached normalized state; its lifetime does not depend on those inputs.
+
+**Errors.** ABI_MISMATCH for record versions; INVALID_ARGUMENT for malformed/aliased input,
+missing data, pack or physical validation; OUT_OF_MEMORY below raw expansion capacity or on
+allocation failure. Existing backend restrictions propagate; never retry another basis/CPU.
+
+**Execution.** Synchronous serialized context use, including destruction. Admission precedes raw
+expansion allocation and coordinate reads. This constructs metadata, not energy/integrals.
+
+**Units.** Coordinates are Bohr, Gaussian exponents inverse Bohr squared, and the native basis
+normalization contract is unchanged. Raw expansion capacity is not total system/RSS authority.
 
 (native-c-generativeqc-system-destroy)=
 ## generativeqc_system_destroy
@@ -3810,6 +4017,57 @@ Allocation failures may throw standard exceptions.
 
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
+
+(native-cpp-generativeqc-system-system-bundled)=
+## generativeqc::System::System-bundled
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+System ( Context & context , std :: span < const generativeqc_atom > atoms , std :: string_view basis_name , std :: int32_t charge = 0 , std :: uint32_t multiplicity = 1 , generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN )
+```
+
+**Behavior.** Expand a compiled bundled basis and own the normalized native system.
+
+**Inputs.** A live Context, nonempty native-domain atom span, bundled basis name, ionic charge,
+positive multiplicity and Cartesian/spherical representation. Embedded NUL names are
+rejected. Defaults are neutral closed-shell Cartesian. C bundled-constructor rules apply.
+
+**Lifetime.** Copies atoms and basis data; input buffers and basis_name need not outlive the
+constructor. Prepared consumers retain their own system copies.
+
+**Errors.** Throws Error for dimension/name/descriptor or native scientific/backend failures;
+local string allocation may throw standard allocation exceptions. No owner on failure.
+
+**Execution.** Synchronous; serialize with other operations on the Context. No Python or I/O.
+
+**Units.** Atom coordinates are Bohr, charge is in electron-charge units.
+
+(native-cpp-generativeqc-system-system-basis-template)=
+## generativeqc::System::System-basis-template
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+System ( Context & context , std :: span < const generativeqc_atom > atoms , const generativeqc_basis_template_descriptor_v1 & basis , std :: int32_t charge = 0 , std :: uint32_t multiplicity = 1 , generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN )
+```
+
+**Behavior.** Expand caller-supplied element templates and own the normalized system,
+retaining general contraction and scalar ECP source-channel semantics.
+
+**Inputs.** A live Context, nonempty native-domain atom span, initialized v1 template
+descriptor, charge, positive multiplicity and Cartesian/spherical representation.
+The C template-constructor validation and backend/scientific admission rules apply.
+
+**Lifetime.** Copies all required atom/basis/ECP data; input arrays may die on return.
+Prepared consumers retain their own copies after the System is destroyed.
+
+**Errors.** Throws Error for dimension/ABI/record errors or native execution preparation
+failures; native allocation errors retain their mapped status. No owner on failure.
+
+**Execution.** Synchronous; serialize with this Context. No I/O, Python or compiler.
+
+**Units.** Coordinates and Gaussian/ECP arrays follow the C atomic-unit contracts.
 
 (native-cpp-generativeqc-system-system-ecp)=
 ## generativeqc::System::System-ecp
