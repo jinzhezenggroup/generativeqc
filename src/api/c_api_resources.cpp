@@ -22,6 +22,7 @@
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
 #include "scf/hf_host_resources.hpp"
+#include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
 
@@ -462,6 +463,46 @@ int generativeqc_resource_quadrature_cuda_v1(std::size_t atoms, std::size_t poin
 #else
   return 2;
 #endif
+}
+
+/** Private shape-only CUDA fleet composition, available in CPU-only builds.
+ * Each input record has 13 slots in CudaKsDeviceResourceItem field order;
+ * slot 10 is a canonical boolean. Existing leaf queries own the supplied
+ * capacities. Nine aggregate outputs precede six diagnostic values per item.
+ * Both passes use scalar/stack storage; aliasing, malformed later records and
+ * overflow leave the complete output untouched. No device/provider is probed.
+ */
+int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 13 || !values) return -1;
+  const auto item_count = shape_count / 13;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 9) / 6 ||
+      value_count != 9 + 6 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 13 * index;
+      if (shape[10] > 1) throw std::invalid_argument("CUDA KS fleet requires a canonical boolean");
+      return scf::CudaKsDeviceResourceItem{shape[0],       shape[1],  shape[2], shape[3], shape[4],
+                                           shape[5],       shape[6],  shape[7], shape[8], shape[9],
+                                           shape[10] != 0, shape[11], shape[12]};
+    };
+    scf::CudaKsDeviceFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cuda_ks_device_item_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 9 + 6 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
 }
 
 /** Private execution-scope bridge. The selected CPU plan can explicitly cap
