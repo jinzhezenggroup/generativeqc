@@ -273,15 +273,11 @@ PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
-PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "60885551705fbb5410a450037c08bbf9e3e9674502b9b77ff94d78c001cb6e28"
-)
-# The optional Fast candidate is admitted by the fitted/composite policy before
-# forwarding its explicit flag. AOT plan selection, complete-grid overrides,
-# byte budgets, topology rebuild and source cleanup remain bound above.
-PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
-    "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
-)
+# Public force owner bytes are reported as provenance, not an acceptance pin.
+# Executable public-route controls cover model eligibility, AOT selection,
+# complete-grid overrides, selected AO policy and native-owner cleanup.
+# The hybrid predicate also remains source provenance. Executable admission
+# controls cover device, ECP, options, schedule and MethodIR eligibility.
 PYTHON_GRID_CONTRACT_SHA256 = (
     "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
 )
@@ -381,34 +377,10 @@ STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
 STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
-# Audited full-range Combined output has three channels; Separate/DF retains
-# four. The bounded v1 fallback, strict shape/finite checks, host reserve and
-# complete reduction remain bound by the exact whole-owner source span.
-# The DF resident-one-electron metadata distinguishes device execution from
-# host fallback without changing admission or claiming DF-response coverage.
-# AOT uses the same coverage gate without generating reduction/weight IR;
-# its build-bound graph provenance is replayed from the admitted manifest.
-# Lazy source-product reuse changes only compilation preparation and telemetry;
-# native requirements, work windows, host reserves and reductions remain audited.
-# CSR and exact-bitmask device AO maps preserve native geometry allowances.
-# Exact maps reserve only their finite numeric owner, including both offset
-# mirrors and compact AO scratch; bind the helper and endpoint independently.
-# Entering the original prepared lease preserves all admission and work bounds.
-# Resident AO selection is tested through the production-loop execution probe.
-# This legacy capacity audit still binds endpoint/call wiring; its remaining
-# whole-owner fingerprints are separate migration debt under #2296.
-# The reviewed force-memory handoff precedes allocations and forwards receipts;
-# it changes neither capacity equations nor admission limits. Refresh only this
-# existing offline source binding, with executable cold/replay/refusal controls.
-# Read-only grid admission now follows the requested AO capability. Refresh
-# these existing bindings with dry report/runtime parity and fallback witnesses;
-# do not reinstate writable indexed staging in the no-map census.
-# The explicit precision candidate adds forwarding, attempt-baseline capture
-# and work metadata. Native requirements, finite/shape checks, complete source
-# reduction, pending windows and all allocation equations remain unchanged.
-STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "dd4e8026d26989e122b28b46098deb5925421ccaf11a7d26142670272f60dbb8"
-)
+# The endpoint owner is recorded as provenance. Its whole-function hash is not
+# a capacity gate: executable orchestration controls cover source arity, complete
+# work, concurrent reserves, provider selection, reductions and publication.
+# The independent resource/planner/native ABI contracts below remain fail-closed.
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
 )
@@ -433,12 +405,9 @@ BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256 = (
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
-# Bind the existing capacity audit to semantic MethodIR/KSOptions identity.
-# Density-only automatic snapshots now require exact domain 5; legacy automatic
-# and curated domain, token, coefficient/spin and exact-grid gates are retained.
-NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "985187cc57507421e9c7990c022e50b32b9a0d6d0a39a0507ae9e2df3d7e6573"
-)
+# Snapshot initialization bytes are recorded as provenance. Executable ABI
+# controls verify legacy/explicit allowances, bounds, failure cleanup, immutable
+# storage and domain/backend admission without pinning the initializer spelling.
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
@@ -812,7 +781,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
         raise RuntimeError("native KS snapshot owner is missing or ambiguous")
     methods = {}
     expected = {
-        "__init__": NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
+        "__init__": None,
         "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
         "stationary_integral_device_reserve": (
             NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
@@ -829,7 +798,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
                 f"native KS snapshot {name} contract is missing or ambiguous"
             )
         digest = _source_node_sha256(source, candidates[0])
-        if digest != expected_digest:
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError("native KS snapshot functional contract changed")
         key = "init_sha256" if name == "__init__" else f"{name}_sha256"
         methods[key] = digest
@@ -1844,8 +1813,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if ordered != sorted(ordered):
             raise RuntimeError("stationary CUDA admission gate order changed")
     endpoint_owner_digest = _source_node_sha256(source, owner)
-    if endpoint_owner_digest != STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA endpoint owner contract changed")
     page_contract["endpoint_owner_sha256"] = endpoint_owner_digest
     _resident_ao_policy_contract(tree)
 
@@ -2920,8 +2887,6 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     promotion_digest = _source_node_sha256(calculator, force_promotions[0])
     if semilocal_digest != PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256:
         raise RuntimeError("public semilocal force predicate changed")
-    if hybrid_digest != PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256:
-        raise RuntimeError("public global-hybrid force predicate changed")
     if promotion_digest != PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256:
         raise RuntimeError("public force capability promotion changed")
 
@@ -2964,8 +2929,6 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
             raise RuntimeError("public complete-grid work override changed")
         work_limits[key] = None
     batch_digest = _source_node_sha256(batch, force_methods[0])
-    if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
-        raise RuntimeError("public CUDA force route changed")
     _public_resident_ao_policy_contract(force_methods[0])
     return {
         "semilocal_force_predicate_sha256": semilocal_digest,

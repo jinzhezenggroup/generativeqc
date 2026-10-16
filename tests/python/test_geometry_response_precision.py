@@ -167,9 +167,13 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         atoms=[NS(atomic_number=1)] * 2,
     )
 
-    class Contract:
-        def __init__(self, *a: Any) -> None:
-            pass
+    class Contract(r.StationaryDerivativeContract):
+        # Inherit real force-policy selection; replace only snapshot validation.
+        def __init__(
+            self, observed: object, *, allow_budget_stationarity: bool = False
+        ) -> None:
+            assert observed is state.identity
+            assert allow_budget_stationarity is False
 
         def validate(self, state: Any) -> None:
             h.events.append("validate")

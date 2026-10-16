@@ -45,6 +45,18 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+Strict-FP64 integration retains three published totals and three private
+rounding-correction words for XC energy and the two spin populations. One full
+32-thread warp reduces each channel with lane-local compensated sums and a
+fixed tree that merges both words. Corrections survive point-batch boundaries;
+only the final fold publishes the existing three-double result. All three low
+words are cleared with the totals at each enqueue and charged by the exact
+arena request (24 extra bytes), with no new full-grid storage or device
+allocation. Dense, compact, indexed and retained fallback consumers share this
+reduction. Existing FP32 contraction schedules keep their original accumulation.
+The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
+this is an accuracy improvement, not a bitwise-reproducible SCF contract.
+
 ### Experimental automatic AOT plumbing
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
@@ -171,11 +183,15 @@ Unsupported functional/response pairs fail during preparation. See the
 ### Bounded independent point submissions
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:
-it requests up to 32 original tiles within a 32-MiB **additional** per-owner device
-allowance. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+it requests up to 32 original tiles within an **additional** per-owner device
+allowance of 32 MiB per density-product jet: 32 MiB for a one-jet contraction
+and 128 MiB for a four-jet contraction. This is a resource-shape policy, not a
+functional-name selector. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
 overrides the request; zero or one explicitly retains the one-tile executor.
 `GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
-also retains the incumbent. This scheduling policy does not prune or specialize
+also retains the incumbent; an explicit byte cap is never scaled by the jet count.
+If the automatic larger allowance cannot retain a batch, preparation retries the
+original 32-MiB allowance before falling back to one tile. This scheduling policy does not prune or specialize
 the canonical scientific point source.
 
 Public `resource_budget` and `resource_plan` execution retains one-tile XC under
@@ -190,8 +206,8 @@ silently enlarged.
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
 batch size until complete retained panels fit; tiny domains, response, mixed
-arithmetic, insufficient allowance, and device/global-ledger allocation rejection
-retain the one-tile executor. No device model or molecule-size whitelist is used.
+arithmetic, insufficient allowance, and allocation rejection retain a bounded
+fallback, ultimately the one-tile executor. No device model or molecule-size whitelist is used.
 Prepare maps and arithmetic bindings first. Preparation is forbidden during
 capture or after evaluation; a retained batch also prevents later map discovery
 or a mixed-density rebind. Changed geometry creates and qualifies a new owner.
@@ -233,7 +249,9 @@ one-tile baseline. Compiled-resource evidence includes both the batched point
 kernel and its retained fallback for multi-tile automatic execution. The
 [default decision](../../.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md)
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
-source-specialization/composed ablations belong to the independent #2072 arm.
+the [capacity decision](../../.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md)
+qualifies the per-density-jet allowance and bounded retry. Source-specialization/composed
+ablations belong to the independent #2072 arm.
 
 **Resource-guarded compact contractions (default).**
 Ordinary native KS additionally requests batched mapped
@@ -539,3 +557,29 @@ least 65,536 active points. Smaller domains use the existing four-row schedule.
 Both branches select using the device count without a host synchronization;
 numerical admission, output ownership, ordered fallback and FP64 roots are
 unchanged. This experiment requires separate complete-endpoint qualification.
+
+The automatic VV10 pair schedule uses the rotating-partner packet kernel for
+admitted molecular domains with at least 65,536 grid points on any CUDA target
+supported by the build. There is no sm_120 whitelist: the generated schedule uses
+FP64 atomics and warp shuffles, not architecture-specific instructions. Smaller
+grids and refused numerical/output leases retain the ordered
+fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects the
+packet route, including small qualification fixtures; `parallel` restores the
+previous four-row bilateral schedule and `ordered` forces the ordered fallback.
+Unset and empty selectors both use automatic selection.
+Each warp loads 32 adjacent compact partners and rotates their
+inputs and bilateral FP64 partials through all lanes. After 32 steps each
+partner returns to its original lane for publication. Four rows per lane keep
+the 128-row tile size and scalar pair work unchanged; no extra workspace, host
+count read, allocation or synchronization is introduced. Padded lanes still
+participate in every shuffle. Numerical/output-lease admission, positive-zero
+response, exact-component reuse and ordered fallback retain their contracts.
+The changed reduction order retains independent numerical and complete-endpoint
+qualification requirements. This is a scheduling change, not a scientific
+approximation or a claim that all large molecular populations complete within
+their benchmark limits. See
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-default.md` for the
+promotion decision, measured scope and unresolved 96-atom endpoint boundary, and
+`.agents/notes/implemented/performance/2026-10-15-vv10-packet-portable-default.md`
+for architecture-independent selection. Hardware admission is not a claim of
+measured speedup on every supported architecture.

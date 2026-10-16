@@ -42,7 +42,8 @@
       "python/generativeqc_compiler/integral/production_shell_classes.json",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
-      "src/scf/types.hpp"
+      "src/scf/types.hpp",
+      "python/generativeqc_compiler/tensor/ad_program.py"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -77,6 +78,50 @@
         "issue:#597",
         "issue:#1895",
         ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
+      ]
+    },
+    {
+      "id": "ks.df-warm-factor-replay",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Unset or 1 permits exact density-generating AO-factor reuse only for strict-FP64 restricted DF seeds with the existing complete projection certificate and matching owner, source, device, stream, shape, rank, epoch and generation. U is rebuilt through the shared provider. Explicit 0, invalid values and ineligible seeds retain dense first K; no numeric storage or scientific gate is added or relaxed.",
+      "revisit_condition": "Qualify new precision, spin, metric, provider-capacity or lifetime domains independently. Preserve explicit rollback, exact density reconstruction and bounded fallbacks; retained 96-atom wins are not universal timing claims.",
+      "evidence": [
+        "docs/developer/ks_df_warm_seed.md",
+        ".agents/notes/implemented/performance/2026-10-15-ks-df-warm-factor-default.md",
+        "benchmarks/results/ks-df-warm-factor-20261015/publication.json",
+        "tests/python/test_ks_warm_factor.py",
+        "tests/native/test_ks_cuda.cpp",
+        "issue:#2474"
+      ]
+    },
+    {
+      "id": "ks.df-warm-factor-matrix-audit",
+      "classification": "diagnostic-test-only",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
+      "revisit_condition": "Keep numerical matrix validation separate from production replay and clean performance evidence; do not promote the diagnostic overhead as part of the execution policy.",
+      "evidence": [
+        "docs/developer/ks_df_warm_seed.md",
+        "benchmarks/results/ks-df-warm-factor-20261015/publication.json",
+        "tests/python/test_ks_df_warm_factor_benchmark.py",
+        "issue:#2474"
       ]
     },
     {
@@ -733,13 +778,14 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_point_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests up to 32 independent original XC tiles within an additional 32-MiB per-owner allowance. Compiler residency admission and the shared numeric resource ledger retain one-tile execution on tiny/response/mixed/resource-rejected domains; explicit zero/one tile or zero-byte overrides retain the incumbent. Independent E/V and complete cold/warm/moved PBE0 E/F gates pass, and retained endpoint populations show reduced time without added per-build AO/jet/contraction work. Point algebra and ordered accumulation are unchanged.",
+      "rationale": "Ordinary native KS requests up to 32 independent original XC tiles within an additional allowance of 32 MiB per density-product jet (32/128 MiB for one/four jets). Explicit byte caps are exact, and automatic allocation rejection retries the original 32-MiB allowance. Compiler residency admission and the shared numeric resource ledger retain one-tile execution on tiny/response/mixed/resource-rejected domains; explicit zero/one tile or zero-byte overrides retain the incumbent. Independent E/V and complete cold/warm/moved E/F gates qualify the policy without added per-build AO/jet/contraction work. Point algebra and ordered accumulation are unchanged.",
       "revisit_condition": "Refine resource/profitability admission using additional devices and workloads, not device or molecule-size whitelists. Retain opt-out, constrained-memory fallback and ordered E/V semantics. The small cold population, differing cold trajectories, hardware-counter permissions and separate #2072 composition remain disclosed follow-up qualification, not claims of universal profitability.",
       "evidence": [
         "issue:#2073",
         "pr:#2081",
         "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batches.md",
         "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md",
+        "note:.agents/notes/implemented/performance/2026-10-15-xc-point-capacity-by-work-shape.md",
         "docs:docs/developer/xc_native_cuda.md"
       ]
     },
@@ -747,22 +793,27 @@
       "id": "dft.resident-final-validation",
       "classification": "already-default",
       "controls": [
-        "dft-policy:ks-device-final-validation-auto"
+        "dft-policy:ks-device-final-validation-auto",
+        "hf-runtime:GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"
       ],
       "owner_issues": [
         1598,
         2220
       ],
       "sources": [
+        "python/generativeqc/resources_hf.py",
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_final_validation_policy.hpp"
       ],
-      "rationale": "Unset selects resident final-state matrix products for strict-FP64 exact-direct full-range restricted global hybrids with at least 384 AOs, using signed exchange and authenticated source/operator capabilities instead of a PBE0-only identity. The retained 384/768-AO complete E+F timing and accuracy evidence is PBE0-specific; gains on B3LYP, Minnesota and other hybrids are not inferred. Bounded packets, matrix handle, existing accepted generation, published scratch-lease gates and explicit 0 rollback remain unchanged.",
-      "revisit_condition": "Collect same-source independent E+F, GPU-sanitizer and cold/warm/moved timing evidence for newly eligible B3LYP and other global hybrids. Keep the 384-AO cutoff until shape-dependent profitability is measured; separately qualify UKS/DF/RSH and never relabel PBE0 timing evidence.",
+      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with exact-direct J/K at 384 or more AOs, exact-direct pure-J KS at 544 <= AOs < 1088, and density-fitted pure-J KS at 544 or more AOs. Exact-direct pure-J owners at 1088 AOs and above retain the host proof because the frozen Direct/96 moved endpoint failed complete-endpoint nonregression (+15.985%, 17 to 21 SCF iterations/builds). The 192 retained r2SCAN-3c E+F calls and original candidate plots remain historical; the verifier still rejects that negative. Direct/48's small positive benefit and DF's separate qualification remain enabled; the 2%/MAD label is not an enablement threshold. PBE0 retains its 384/768-AO evidence. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 rollback remain unchanged; explicit 1 remains experimental outside the default scope.",
+      "revisit_condition": "Removing or raising the 1088-AO exact-direct pure-J hold requires reviewed source-bound complete cold/warm/moved/moved-warm endpoint evidence, independent scientific acceptance and retained SCF work counts and negative observations. A verifier repair or warm-only gain does not clear the hold. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified. Preserve original source identities; do not infer other-functional timing gains. Separately qualify UKS, fitted exchange, RSH, nonlocal, incremental, ECP and lower-precision owners; retain the bounded fallback.",
       "evidence": [
         "pr:#2220",
         "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
+        "note:.agents/notes/implemented/performance/2026-10-15-pure-j-resident-final-validation.md",
+        "note:.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md",
         "docs:docs/user/ks_options.md",
+        "benchmarks:benchmarks/results/r2scan3c-final-validation-20261015/README.md",
         "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
         "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
       ]
@@ -1571,6 +1622,26 @@
         "tests/python/test_geometry_response_cache.py",
         ".agents/notes/proposed/2026-10-14-exact-geometry-response-reuse.md",
         "issue:#2426"
+      ]
+    },
+    {
+      "id": "tensor.external-mask-generated-jvp",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:linearize.allow_external_mask_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generated JVP for fixed external Boolean masks on generic finite FP64 arrays remains explicit. All live primal and forward domain checks are retained; only materializing native CPU is qualified. Default Boolean rejection and non-selection generated equations remain unchanged.",
+      "revisit_condition": "Broader dtype, backend, higher-order or public compiled AD admission requires separate source-matched independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_tensor_where_jvp_program.py",
+        "docs/developer/tensor_ir.md"
       ]
     }
   ]

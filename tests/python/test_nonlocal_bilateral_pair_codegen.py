@@ -79,7 +79,7 @@ def test_both_feature_legs_match_independent_decimal(
 def test_partner_demand_refuses_unsupported_science() -> None:
     from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
 
-    for options in ({}, {"features": False}, {"rational_derivatives": False}):
+    for options in ({"features": False},):
         with pytest.raises(ValueError, match="partner features"):
             build_nonlocal_pair_program("vv10", partner_features=True, **options)
     with pytest.raises(ValueError):

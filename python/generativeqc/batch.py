@@ -315,10 +315,10 @@ class PreparedBatch:
                 else (request, dispersion_request)
             )
             if resource_plan is None:
-                from generativeqc_compiler.common.resources import plan_resources
+                from .resources_planning import plan_resources
 
                 self.resource_plan = plan_resources(
-                    requests, calculator._resource_budget
+                    requests, calculator._resource_budget, library=self._library
                 )
             else:
                 owned = {r.name: r for r in resource_plan.requests}
@@ -335,6 +335,10 @@ class PreparedBatch:
                         "global resource plan differs from the calculator budget"
                     )
             self.resource_plan.require_feasible()
+            if resource_plan is not None:
+                from .resources_planning import validate_resource_plan
+
+                validate_resource_plan(self.resource_plan, library=self._library)
             if request.identity.backend == "cuda":
                 from .resources_native import NativeDeviceLedger
 
@@ -677,7 +681,9 @@ class PreparedBatch:
             charge=self._charges[index],
             multiplicity=self._multiplicities[index],
         ) as basis:
-            state = StationaryKsState.from_native(self, basis, index=index)
+            state = StationaryKsState.from_native(
+                self, basis, index=index, allow_budget_stationarity=True
+            )
             try:
                 if state._source.backend != "cuda" or (
                     "forces" not in calculator._capabilities.supported_properties
@@ -1086,11 +1092,9 @@ class PreparedBatch:
                 status="infeasible",
                 diagnostic="requested CPU forces exceed the prepared resource budget",
             )
-            if all(
-                candidate.peak_bytes.get(space, 0) <= limit
-                for space, limit in candidate.budget.limits().items()
-            ):
-                candidate = replace(candidate, status="feasible", diagnostic=None)
+            from .resources_planning import revalidate_resource_plan
+
+            candidate = revalidate_resource_plan(candidate, library=self._library)
             candidate.require_feasible()
         return current, candidate
 

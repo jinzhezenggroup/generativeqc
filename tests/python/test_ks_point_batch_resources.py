@@ -52,10 +52,13 @@ using cudaError_t = int;
 using cudaStream_t = void*;
 constexpr cudaError_t cudaSuccess=0, cudaErrorInvalidValue=1;
 constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
+inline std::size_t allocation_limit=~std::size_t{0};
 inline cudaError_t cudaGetDevice(int* d) { *d=0; return 0; }
 inline cudaError_t cudaSetDevice(int) { return 0; }
+inline cudaError_t cudaGetLastError() { return cudaSuccess; }
 inline const char* cudaGetErrorString(cudaError_t) { return "CUDA allocation double"; }
-inline cudaError_t cudaMalloc(void** p,std::size_t) {
+inline cudaError_t cudaMalloc(void** p,std::size_t bytes) {
+  if(bytes>allocation_limit) return cudaErrorMemoryAllocation;
   static std::uintptr_t next=4096;
   *p=reinterpret_cast<void*>(next+=4096); return 0;
 }
@@ -99,6 +102,7 @@ def native_probe(
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"
 #define __host__
 #define __device__
@@ -207,15 +211,34 @@ struct Xc {
   }
   const dft::CudaXcPointBatchPlan& point_batch_plan() const { return batch; }
 };
-std::size_t prepare_optional(std::vector<void*>& allocations) {
+std::size_t prepare_optional(std::vector<void*>& allocations,
+                            const dft::CudaXcLayout* layout=nullptr,
+                            std::size_t* selected_tiles=nullptr) {
   Xc owner(allocations);
+  if(layout) owner.layout=*layout;
   auto* xc=&owner;
+  const auto& xc_layout=owner.layout;
   dft::CudaKsResources resource;
   using dft::sum;
+  using dft::product;
 """
         + ks[start:end]
         + r"""
+  if(selected_tiles) *selected_tiles=owner.batch.tiles;
   return resource.xc_device_bytes;
+}
+extern "C" void capacity(std::size_t work_jets,std::size_t spins,std::size_t limit,
+                          std::uint64_t* result) {
+  auto layout=dft::cuda_xc_layout_shape(2,6,512,49152,1,spins==2,256);
+  layout.work_jets=work_jets;
+  layout.feature_terms=work_jets==4?5:4;
+  std::vector<void*> allocations;
+  std::size_t selected=1;
+  allocation_limit=limit;
+  result[0]=prepare_optional(allocations,&layout,&selected);
+  result[1]=selected;
+  for(auto* arena:allocations) assert(runtime::resource_cuda_free(arena)==cudaSuccess);
+  allocation_limit=~std::size_t{0};
 }
 extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
                       std::size_t later_workspace,std::uint64_t* result) {
@@ -249,8 +272,6 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
     # Compile the allocation owner and quadrature retention block unchanged.
     owned = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
     source += "namespace generativeqc::runtime {\n"
-    for signature in ("inline void cuda_resource_check(", "class CudaDeviceScope"):
-        source += _definition(owned, signature) + ";\n"
     for signature in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
         source += "template<class T>\n" + _definition(owned, signature) + ";\n"
     source += "}\n"
@@ -407,6 +428,8 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.fleet.restype = None
+    probe.capacity.argtypes = [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
+    probe.capacity.restype = None
     probe.grid_lifetime.argtypes = [
         ctypes.c_void_p,
         ctypes.c_size_t,
@@ -620,3 +643,34 @@ def test_unbudgeted_default_and_explicit_opt_out(
     result = (ctypes.c_uint64 * 5)()
     native_probe.fleet(None, 2, 1024, 0, result)
     assert list(result) == [2, 2 * expected, 0, 0, 0]
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_point_capacity_scales_with_work_jets_and_preserves_bounded_fallback(
+    native_probe: Any, monkeypatch: pytest.MonkeyPatch, spins: int
+) -> None:
+    """Four-jet panels retain batching without bypassing explicit or OOM bounds."""
+    for name in CONTROLS:
+        monkeypatch.delenv(name, raising=False)
+    unlimited = ctypes.c_size_t(-1).value
+
+    def capacity(work_jets: int, limit: int = unlimited) -> tuple[int, int]:
+        result = (ctypes.c_uint64 * 2)()
+        native_probe.capacity(work_jets, spins, limit, result)
+        return result[0], result[1]
+
+    automatic = capacity(4)
+    assert 32 << 20 < automatic[0] <= 128 << 20
+    monkeypatch.setenv(CONTROLS[1], str(128 << 20))
+    assert capacity(4) == automatic
+    monkeypatch.setenv(CONTROLS[1], str(32 << 20))
+    incumbent = capacity(4)
+    assert 0 < incumbent[0] <= 32 << 20
+    assert 1 < incumbent[1] <= automatic[1]
+    one_jet_explicit = capacity(1)
+    monkeypatch.delenv(CONTROLS[1])
+    assert capacity(1) == one_jet_explicit
+    assert capacity(4, 32 << 20) == incumbent
+    assert capacity(4, 1) == (0, 1)
+    monkeypatch.setenv(CONTROLS[1], "0")
+    assert capacity(4) == (0, 1)

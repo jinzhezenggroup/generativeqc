@@ -35,6 +35,7 @@ def orbital_probe(
         for signature in (
             "  void invalidate_warm_orbitals()",
             "  void clear_warm_state()",
+            "  void publish_warm_seed()",
             "  void audit_phase_source()",
             "  void retire_phase_source(bool audit)",
             "  void enqueue()",
@@ -75,6 +76,7 @@ int cudaStreamSynchronize(void*) { ++fences; return 0; }
 void check(int status, const char* detail = "injected copy failure") {
   if (status) throw std::runtime_error(detail);
 }
+namespace scf { struct PreparedCudaOccupiedFockBinding {}; }
 struct Owner {
   bool is_pending = false;
   struct Source {
@@ -100,10 +102,20 @@ struct Owner {
   int rebases = 0;
   bool device_chunk_mode = false, is_active = true, is_failed = false;
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
+  bool warm_orbitals_are_ao = false;
   bool warm_energy_baseline = false, final_state_ready = false;
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
+  bool warm_factor_storage = false;
+  scf::PreparedCudaOccupiedFockBinding warm_factor_binding{}, occupied_fock_binding{};
+  std::uint64_t warm_density_generation = 0, warm_factor_generation = 0;
+  std::uint64_t warm_factor_epoch = 0, warm_factor_owner = 0, owner = 1;
+  std::size_t warm_factor_rank = 0;
+  unsigned spins = 1;
+  std::size_t occupations[2]{1, 0};
+  struct { bool any_lower_precision() const { return false; } } precision_schedule;
+  bool warm_factor_replay_enabled() const { return false; }
   // This orbital-lifetime probe does not run the nonlocal initializer.
   bool confirm_nonlocal_stationary_density = false;
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
@@ -121,9 +133,10 @@ struct Owner {
   } output;
   struct {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
+    std::uint64_t fitted_warm_factor_publications = 0;
     std::uint64_t submitted_iterations = 3, phase_resident_fock_actions = 0;
   } movement;
-  double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8];
+  double density[8], proposal[8], warm[8], warm_orbitals[8], tmp1[8], tmp2[8];
   void* stream = nullptr;
   std::string scenario;
   void rebase_warm_energy() {

@@ -9,7 +9,6 @@ from generativeqc_compiler.common.resources import (
     ResourcePlan,
     ResourceRequest,
     ResourceSession,
-    plan_resources,
 )
 from generativeqc_compiler.dft.grid import GridPolicy, GridProfile, GridSpec
 
@@ -144,6 +143,7 @@ from .projection import (
 from .r2scan3c import load_r2scan3c_basis
 from .resources_hf import estimate_hf_resources
 from .resources_ks import estimate_ks_resources
+from .resources_planning import plan_resources
 
 _install_native_loader()
 del _install_native_loader

@@ -8,6 +8,7 @@
 
 #include "api/error.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
+#include "dft/dispersion/d3_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
@@ -19,6 +20,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/hf_host_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
 
@@ -30,6 +32,32 @@
 #endif
 
 extern "C" {
+
+/** Private allocation-free D3 layout query, shared with D3Plan::prepare().
+ * Six outputs: plan host, execution host, device, tables, workspace and total
+ * retained bytes. CUDA is a selector only, including in CPU-only libraries.
+ * Invalid selectors, shapes and schemas leave the output untouched.
+ */
+int generativeqc_resource_d3_layout_v1(int backend, std::uint64_t systems, std::uint64_t atoms,
+                                       std::uint64_t maximum_atoms, std::uint64_t* values,
+                                       std::size_t value_count) {
+  if (!values || value_count != 6 || (backend != 0 && backend != 1)) return -1;
+  try {
+    const auto usage = generativeqc::dft::dispersion::d3_resource_usage(
+        static_cast<generativeqc_backend>(backend), systems, atoms, maximum_atoms);
+    const std::array<std::uint64_t, 6> inventory{
+        usage.plan_host_bytes,
+        usage.execution_host_bytes,
+        usage.device_bytes,
+        usage.table_bytes,
+        usage.workspace_bytes,
+        usage.plan_host_bytes + usage.execution_host_bytes + usage.device_bytes};
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (const std::exception&) {
+    return -1;
+  }
+}
 
 /** Read immutable source tags from this actual library, with no CUDA or heap
  * work. Null is an unknown tag, not an inferred role/payload classification. */
@@ -610,6 +638,68 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
   }
 }
 
+/** Shape-only private CPU HF inventory, without provider discovery or execution.
+ * Ten shape slots follow CpuHfHostResourceShape; four outputs follow
+ * cpu_hf_host_resource_keys. Invalid requests preserve the complete output.
+ */
+int generativeqc_resource_hf_cpu_host_v1(const std::uint64_t* shape, std::size_t shape_count,
+                                         std::uint64_t* values, std::size_t value_count) {
+  if (!shape || shape_count != 10 || !values || value_count != 4) return -1;
+  try {
+    const generativeqc::scf::CpuHfHostResourceShape request{shape[0], shape[1], shape[2], shape[3],
+                                                            shape[4], shape[5], shape[6], shape[7],
+                                                            shape[8], shape[9]};
+    const auto inventory = generativeqc::scf::cpu_hf_host_resources(request);
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Shape-only CPU HF fleet inventory with transactional publication.
+ * Each 14-slot item is the ten phase-shape fields followed by orbital and
+ * auxiliary shell/primitive counts. Output is retained/workspace/peak followed
+ * by four phase capacities per item. Input must remain immutable and disjoint
+ * from output. Two bounded scalar passes avoid O(items) native scratch: first
+ * validate the entire fleet, then publish its already validated phase bounds.
+ * No allocation/provider/scientific work occurs on successful requests.
+ */
+int generativeqc_resource_hf_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 14 || !values) return -1;
+  const auto item_count = shape_count / 14;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 3) / 4 ||
+      value_count != 3 + 4 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 14 * index;
+      return scf::CpuHfHostResourceItem{{shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+                                         shape[6], shape[7], shape[8], shape[9]},
+                                        shape[10],
+                                        shape[11],
+                                        shape[12],
+                                        shape[13]};
+    };
+    scf::CpuHfHostFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto phases = scf::cpu_hf_host_resources(item_at(index).shape);
+      std::copy(phases.begin(), phases.end(), values + 3 + 4 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
 /** Shape-only private CPU host inventory, not an execution capability.
  * Successful queries use only scalar/stack storage, without heap/provider work.
  * Shape slots follow CpuKsHostResourceShape's field order (17 unsigned values);
@@ -627,6 +717,50 @@ int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t
         shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
     const auto inventory = generativeqc::scf::cpu_ks_host_resources(request);
     std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Transactional CPU KS fleet capacity query, without allocation or providers.
+ * Each input item has the existing 17-slot host shape. Output is twelve
+ * persistent component totals, retained/workspace/peak, then sixteen diagnostic
+ * capacities per item. The workspace floor is a caller-supplied consumer bound,
+ * not a capability/admission bit. Immutable input must be disjoint from output.
+ * Two scalar passes validate the full request before publishing with O(1)
+ * native scratch; malformed later items or aggregate overflow preserve output.
+ */
+int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t workspace_floor, std::uint64_t* values,
+                                          std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 17 || !values) return -1;
+  const auto item_count = shape_count / 17;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
+      value_count != 15 + 16 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 17 * index;
+      if (shape[14] > 1 || shape[15] > 1)
+        throw std::invalid_argument("CPU KS fleet requires canonical boolean slots");
+      return scf::CpuKsHostResourceShape{
+          shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+          shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+          shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    };
+    scf::CpuKsHostFleetResources fleet(workspace_floor);
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cpu_ks_host_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 15 + 16 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
     return 0;
   } catch (...) {
     return -1;

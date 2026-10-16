@@ -71,6 +71,7 @@ struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1}, gridDim{1};
 std::uint64_t pair_visits{};
 int last_admission_rejected = -1;
 void atomicExch(int* out, int value) { *out = value; }
+void atomicAdd(unsigned long long* out, unsigned long long value) { *out += value; }
 double __longlong_as_double(unsigned long long value) {
   double result;
   static_assert(sizeof(result) == sizeof(value));

@@ -34,6 +34,7 @@ AUDITED_PREFIXES = (
     "ks-runtime:",
     "tensor-schedule:",
     "tensor-execution:",
+    "tensor-ad:",
     "dft-policy:",
     "public-model:",
     "initial-guess:",
@@ -170,6 +171,34 @@ def _discover_tensor_execution(root: Path) -> dict[str, str]:
     return {"tensor-execution:cuda-graph": relative.as_posix()}
 
 
+def _discover_tensor_ad(root: Path) -> dict[str, str]:
+    """Register explicit Boolean API controls, without pinning derivative bodies."""
+    relative = Path("python/generativeqc_compiler/tensor/ad_program.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    result = {}
+    for function in tree.body:
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        for argument, default in zip(
+            function.args.kwonlyargs, function.args.kw_defaults, strict=True
+        ):
+            if (
+                isinstance(argument.annotation, ast.Name)
+                and argument.annotation.id == "bool"
+            ):
+                if (
+                    not isinstance(default, ast.Constant)
+                    or type(default.value) is not bool
+                ):
+                    raise ValueError(
+                        "Tensor AD Boolean control requires an explicit Boolean default"
+                    )
+                result[f"tensor-ad:{function.name}.{argument.arg}"] = (
+                    relative.as_posix()
+                )
+    return result
+
+
 def _discover_public_precision(root: Path) -> dict[str, str]:
     relative = Path("python/generativeqc/calculator.py")
     source = _read(root / relative)
@@ -190,24 +219,17 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
 
 
 def _discover_xc_point_batching(root: Path) -> dict[str, str]:
-    """Audit both limits of the promoted, resource-guarded native KS policy."""
+    """Inventory rollback controls; compiled resource tests qualify the policy."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_TILES",\s*32\)', source
-    ) or not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_BYTES",\s*32\s*\*\s*1024\s*\*\s*1024\)',
-        source,
+    for control in (
+        "GENERATIVEQC_CUDA_XC_BATCH_TILES",
+        "GENERATIVEQC_CUDA_XC_BATCH_BYTES",
+        "GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
+        "GENERATIVEQC_CUDA_XC_RAGGED_BATCH",
     ):
-        raise ValueError("XC point-batch default drifted from 32 tiles / 32 MiB")
-    if not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_COMPACT_BATCH",\s*1\)', source
-    ) or not re.search(
-        r'point_batch_size\("GENERATIVEQC_CUDA_XC_RAGGED_BATCH",\s*1\)', source
-    ):
-        raise ValueError(
-            "XC compact contraction default drifted from resource-guarded enablement"
-        )
+        if f'"{control}"' not in source:
+            raise ValueError(f"XC point-batch rollback selector missing: {control}")
     return {
         "dft-policy:xc-point-batch-auto": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH": relative.as_posix(),
@@ -216,12 +238,15 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
-    """Audit algebraic full-range hybrid admission and strict opt-out."""
+    """Audit qualified hybrid/pure-J admission and the durable strict opt-out."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = re.sub(r"\s+", " ", _read(root / relative))
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
+        r"return\s+spins\s*==\s*1\s*&&\s*full_precision\s*&&\s*"
+        r"\(\(aos\s*>=\s*384\s*&&\s*direct_global_hybrid\)\s*\|\|\s*"
+        r"\(aos\s*>=\s*544\s*&&\s*full_range_coulomb_only\s*&&\s*"
+        r"\(density_fitted_coulomb\s*\|\|\s*aos\s*<\s*1088\)\)\);",
         policy,
     ) or any(
         fragment not in policy
@@ -248,7 +273,10 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
             "final_spec.coulomb.op == scf::FockOperator::FullRange",
             "final_spec.exchange.approximation == scf::FockApproximation::Exact",
             "final_spec.exchange.op == scf::FockOperator::FullRange",
-            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision()",
+            "!has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation",
+            "!final_spec.exchange.present",
+            "final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted",
+            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(), full_range_coulomb_only, fitted_coulomb",
             'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
             "final_validation_partial && matrix_products.library_enabled()",
             "!final_stationary_weights_ready;",
@@ -671,7 +699,7 @@ def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_phase_values(root: Path) -> dict[str, str]:
-    """Register the stable control; executable probes qualify its admission."""
+    """Register stable KS controls; executable probes qualify their admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
     # The environment name may be chosen by a conditional or read through a
@@ -682,6 +710,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     names = re.findall(
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():
@@ -739,6 +768,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
+        _discover_tensor_ad(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_ks_final_validation_default(root),

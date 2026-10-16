@@ -258,8 +258,32 @@ backend-independent TensorIR `Program` DAGs:
   `Program.dumps()` and can be passed directly to `plan_cuda`.
 - Unrelated Boolean diagnostic outputs are pruned from a requested real path.
   Selecting a Boolean output or a real output whose ancestors contain Boolean
-  data rejects as non-differentiable; selected-branch `where` AD is not part of
-  this contract.
+  data rejects by default. `linearize(..., allow_external_mask_where=True)`
+  explicitly admits first-order generated forward JVP for fixed external
+  Boolean input/constant masks through the reference contract's validated
+  type-preserving views, on generic finite FP64 arrays only. Boolean values
+  never receive tangent storage; the canonical `where` selects real tangents.
+  Computed comparisons, Boolean outputs, scientific/control annotations,
+  packed/precision policies, FP32/mixed values and higher-order generation
+  reject. Native qualification is limited to the materializing CPU owner;
+  CUDA, portable/scalar, public compiled AD, VJP and HVP are outside this slice.
+  Generated real feeds preserve names, roles, dtypes and shapes but are declared
+  non-differentiable execution data. This existing typed boundary survives
+  reconstruction without provenance, replay and optimization; the result is
+  not another AD input space. Generation requires a declared real tangent input.
+- In that opt-in domain, output selection controls publication, while all
+  original live primal and forward derivative domains remain checked. Missing
+  real input directions become explicit zero-like values, so an unselected or
+  unreturned `sqrt(0)` derivative still rejects. Existing zero-coefficient
+  `add`, full reduction and broadcast edges retain validation through replay
+  and optimization, including empty requested outputs. Guards zero each
+  element before reducing, avoiding a new overflow from summing large finite
+  primals/tangents. The reduced guards form an exact +1 multiplier on each
+  output tangent, preserving signed zero and other finite FP64 values.
+  The CPU node/work/byte budgets charge this validation work.
+  Retained definitions alone are insufficient: only output-reachable work
+  executes. Non-selection forward programs keep the legacy generation version,
+  equations and derivative identities, including when the flag is set.
 - Reverse slice/gather use exact incidence matrices. Repeated einsum labels
   use exact identity projections. A packed parameter is expanded through an
   explicit unpack DAG, and its reverse output applies `unpack_transpose`

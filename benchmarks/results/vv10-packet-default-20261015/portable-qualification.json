@@ -1,0 +1,20 @@
+{
+  "schema": "generativeqc.vv10-portable-default-receipt.v1",
+  "date": "2026-10-15",
+  "parent_commit": "772857762946f01263c98bb9dad9c618d1db8ede",
+  "native_source_identity": "9490cd6569f3e403d09f5f832b4c9826f5581172696ab0d4833257db26cf96c1",
+  "library_sha256": "132cbf6520d81b40c8faf2efd96b4e2b0b9eeb98462388a61ab7677e86f96fc2",
+  "policy": "No architecture whitelist; existing size, numerical and output-lease guards unchanged",
+  "compile_only_sm": [60, 70, 80, 90, 100],
+  "toolchain": "CUDA 12.9.1, GCC 11.4, Release, verified ccache 4.5.1",
+  "host": {"passed": 224, "skipped": 56, "new_policy_cases": 42},
+  "gpu": {"node": "n4", "model": "RTX 5090", "slurm_job": 956, "time_limit": "00:20:00", "runtime": "00:06:31", "exit_code": "0:0"},
+  "passed": {"admission_oracle": 752, "runtime_lifecycle": 47, "memcheck": 6, "synccheck": 6, "independent_molecular_ef_finite_difference": 6},
+  "sanitizer_errors": 0,
+  "complete_endpoint": {"atoms": [3, 12], "calls": 24, "selector": "unset", "gate": "All complete calls independently compared offline with exact-protocol references in the original evidence.json.xz; native raw records retained unchanged", "energy_error_max": 3.183231456205249e-12, "force_error_max": 5.529865454434457e-11},
+  "initial_host_setup": "7 native-library discovery errors; subsequent scheduled native suite passed",
+  "raw_local": ".artifacts/vv10-portable",
+  "raw_remote": "n4:/data/jzzeng/gqc-vv10-portable-20261015/source/.artifacts/vv10-portable",
+  "raw_manifest_sha256": "7b76e721184b41c64179bf0e0aefb1922f9ddf7da3bf5b6dfcb42f5013d1faef",
+  "limits": "Receipt only; full raw logs remain ignored locally. Real-device qualification is RTX 5090-only; no cross-architecture speedup or completed 96-atom population claim. Historical archive unchanged."
+}

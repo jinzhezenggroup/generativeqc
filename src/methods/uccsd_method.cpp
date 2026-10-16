@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "cc/uccsd_solver.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "methods/ump2_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -61,10 +62,12 @@ class UccsdPrepared final : public PreparedCalculation {
       scf::PreparedFockPlan reference_plan(system_, nullptr, strategy);
       auto reference_options = reference_options_;
       reference_options.resolved_fock_build = reference_plan.strategy();
-      auto reference_result = scf::run_prepared_fock_strategy(reference_plan, reference_options);
-      if (!reference_result.converged || !reference_result.unrestricted_reference)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
-                          "UHF did not produce a converged physical unrestricted CC reference");
+      auto reference_result = warm_reference::solve_reference(
+          nullptr, scf::FockSpin::Unrestricted, nullptr,
+          [&](const std::vector<double>* seed) {
+            return scf::run_prepared_fock_strategy(reference_plan, reference_options, seed);
+          },
+          "UHF did not produce a converged physical unrestricted CC reference");
       const auto reference_seconds =
           std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
       const auto& reference = *reference_result.unrestricted_reference;

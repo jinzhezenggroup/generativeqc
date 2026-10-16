@@ -9,22 +9,24 @@
 namespace generativeqc::dft::dispersion {
 namespace {
 
-bool add_bytes(std::uint64_t& total, std::uint64_t value) {
-  if (value > std::numeric_limits<std::uint64_t>::max() - total) return false;
-  total += value;
-  return true;
-}
-
 std::uint64_t static_table_bytes() {
   return sizeof(d3_data::kElements) + sizeof(d3_data::kPairs) + sizeof(d3_data::kReferenceCn) +
          sizeof(d3_data::kReferenceC6);
 }
 
-D3ResourceUsage resources_for(generativeqc_backend backend, std::size_t systems, std::size_t atoms,
-                              std::size_t maximum_atoms, std::uint64_t maximum_bytes,
-                              bool& overflow) {
+}  // namespace
+
+D3ResourceUsage d3_resource_usage(generativeqc_backend backend, std::uint64_t systems,
+                                  std::uint64_t atoms, std::uint64_t maximum_atoms) {
+  constexpr auto maximum_count = std::numeric_limits<std::uint32_t>::max();
+  if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+      !systems || systems > maximum_count || !atoms || atoms > maximum_count || !maximum_atoms ||
+      maximum_atoms > kD3MaximumAtomsPerSystem || atoms < maximum_atoms + systems - 1 ||
+      atoms > systems * maximum_atoms)
+    throw std::invalid_argument("invalid D3 resource shape");
+  // The validated uint32 aggregate and per-system bound keep every capacity
+  // and their sum below signed int64, including on a 32-bit consumer.
   D3ResourceUsage r{};
-  r.maximum_bytes = maximum_bytes;
   r.total_atoms = atoms;
   r.system_count = static_cast<std::uint32_t>(systems);
   r.maximum_atoms = static_cast<std::uint32_t>(maximum_atoms);
@@ -44,14 +46,8 @@ D3ResourceUsage resources_for(generativeqc_backend backend, std::size_t systems,
                      systems * sizeof(D3Status) + systems * sizeof(double) +
                      3 * atoms * sizeof(double) + r.workspace_bytes + r.table_bytes;
   }
-  std::uint64_t total = 0;
-  overflow = !add_bytes(total, r.plan_host_bytes) || !add_bytes(total, r.execution_host_bytes) ||
-             !add_bytes(total, r.device_bytes);
-  if (!overflow && total > maximum_bytes) overflow = true;
   return r;
 }
-
-}  // namespace
 
 std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device_id,
                                         std::vector<std::uint32_t> offsets,
@@ -61,7 +57,8 @@ std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device
                                         std::string& detail, generativeqc_status& status) {
   status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
-      maximum_bytes == 0 || offsets.size() < 2 || offsets.front() != 0 ||
+      maximum_bytes == 0 || offsets.size() < 2 ||
+      offsets.size() - 1 > std::numeric_limits<std::uint32_t>::max() || offsets.front() != 0 ||
       offsets.back() != atomic_numbers.size() ||
       default_coordinates.size() != 3 * atomic_numbers.size() || !valid_d3_model(parameters)) {
     detail = "invalid or unsupported D3 production model descriptor";
@@ -95,10 +92,11 @@ std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device
     }
   }
 
-  bool budget_failure = false;
-  auto resources = resources_for(backend, offsets.size() - 1, atomic_numbers.size(), maximum_atoms,
-                                 maximum_bytes, budget_failure);
-  if (budget_failure) {
+  auto resources =
+      d3_resource_usage(backend, offsets.size() - 1, atomic_numbers.size(), maximum_atoms);
+  resources.maximum_bytes = maximum_bytes;
+  if (resources.plan_host_bytes + resources.execution_host_bytes + resources.device_bytes >
+      maximum_bytes) {
     status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     detail = "D3 production plan exceeds maximum_bytes";
     return nullptr;

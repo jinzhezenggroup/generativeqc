@@ -192,7 +192,8 @@ template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
 template<class... T> void mark_cached_pair_outputs_kernel(T&&...) {}
 void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout&,Vv10Parameters,int,cudaStream_t,
  const double*,const double*,const double*,const double*,void*,std::size_t,
- double*,double*,double*,double*,double*,int*,const int* = nullptr);
+ double*,double*,double*,double*,double*,int*,const int* = nullptr,
+ bool = false,std::uint64_t* = nullptr);
 """
 
 SUFFIX = r"""

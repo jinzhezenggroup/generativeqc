@@ -19,6 +19,7 @@ For the rationale and pinned historical receipts, see the
 | Dense reference linear algebra and mean-field arithmetic | `src/scf/reference/linalg.*`, `reference/mean_field.*` | Independent CPU reference numerics; no CUDA or method-driver dependencies |
 | Initial density and occupation preparation | `src/scf/initial_guess/` | Validated input state, orbital occupations and initial guesses; consumer owns system validation |
 | Method-neutral iteration limits and convergence bookkeeping | `src/solver/iteration_control.hpp`, `self_consistent.hpp` | Reusable solver control, not an HF-specific density or device policy |
+| HF fleet item lifecycle across CPU/CUDA | `src/scf/fleet.cpp`, `fleet_item.hpp` | Shared coordinate/seed binding, bounded cold retry, exception isolation and successful warm-state publication; backend schedules retain their native owners |
 | RHF/UHF CPU iteration, DIIS and proposal control | `src/scf/solver/mean_field_driver.*`, `solver/diis.*` | Consumes explicit prepared-provider and proposal contracts; scientific finalization remains method-owned |
 | Prepared CPU Fock construction and resource accounting | `src/scf/fock_prepared.*` | Owns direct/DF provider composition and shared capacity observation |
 | HF stationary gradient assembly | `src/scf/gradient/hf_gradient.*` | Consumes provider derivative contributions; does not own or mutate an SCF solver |

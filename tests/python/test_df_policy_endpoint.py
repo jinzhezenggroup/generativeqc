@@ -1,5 +1,7 @@
 """Scientific reference admission must fail before permissive NumPy arithmetic."""
 
+import gzip
+import hashlib
 import json
 import typing
 from pathlib import Path
@@ -12,6 +14,7 @@ from benchmarks.df_policy_endpoint import (
     CASES,
     endpoint_errors,
     independent_reference,
+    read_reference_bytes,
     require_frozen_checkpoint_geometry,
 )
 
@@ -37,7 +40,7 @@ def test_frozen_benchmark_checkpoint_rejects_changed_geometry() -> None:
 
 def reference_inputs(aos: typing.Any) -> typing.Any:
     """Reuse the versioned independent results without loading a native backend."""
-    reference = json.loads((EVIDENCE / f"{CASES[aos]}.json").read_text())
+    reference = json.loads(read_reference_bytes(EVIDENCE / f"{CASES[aos]}.json"))
     metadata = json.loads(json.dumps(reference["vibeqc"]["cold_convergence"]))
     for row in metadata:
         for role in ("orbital", "auxiliary"):
@@ -62,6 +65,59 @@ def test_retained_independent_references_match_current_workloads(
     energy, forces = independent_reference(reference, *args)
     np.testing.assert_array_equal(energy, args[1])
     np.testing.assert_array_equal(forces, args[2])
+
+
+@pytest.mark.parametrize("encoding", ["plain", "gzip", "historical-path"])
+def test_reference_storage_preserves_expanded_identity(
+    tmp_path: Path, encoding: str
+) -> None:
+    original = b'{\n  "energy": -76.12345678901234\n}\n'
+    requested = tmp_path / "reference.json"
+    stored = requested
+    data = original
+    if encoding != "plain":
+        stored = requested.with_suffix(".json.gz")
+        data = gzip.compress(original, mtime=0)
+        if encoding == "gzip":
+            requested = stored
+    stored.write_bytes(data)
+    restored = read_reference_bytes(requested)
+    assert restored == original
+    assert hashlib.sha256(restored).digest() == hashlib.sha256(original).digest()
+
+
+def test_reference_storage_never_masks_existing_corrupt_json(tmp_path: Path) -> None:
+    path = tmp_path / "reference.json"
+    path.write_bytes(b"invalid JSON")
+    path.with_suffix(".json.gz").write_bytes(gzip.compress(b"{}", mtime=0))
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(read_reference_bytes(path))
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_reference_storage_rejects_corrupt_gzip(tmp_path: Path, explicit: bool) -> None:
+    path = tmp_path / "reference.json"
+    packed = path.with_suffix(".json.gz")
+    packed.write_bytes(b"invalid gzip")
+    with pytest.raises(gzip.BadGzipFile):
+        read_reference_bytes(packed if explicit else path)
+
+
+def test_reference_storage_missing_oracle_does_not_select_other_files(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "other.json.gz").write_bytes(gzip.compress(b"{}", mtime=0))
+    with pytest.raises(FileNotFoundError):
+        read_reference_bytes(tmp_path / "reference.json")
+
+
+def test_compressed_reference_still_rejects_wrong_workload(tmp_path: Path) -> None:
+    reference, args = reference_inputs(96)
+    reference["workload"]["case"] = CASES[192]
+    path = tmp_path / "reference.json.gz"
+    path.write_bytes(gzip.compress(json.dumps(reference).encode(), mtime=0))
+    with pytest.raises(RuntimeError, match="workload differs: case"):
+        independent_reference(json.loads(read_reference_bytes(path)), *args)
 
 
 @pytest.mark.parametrize("aos", (648, 864))

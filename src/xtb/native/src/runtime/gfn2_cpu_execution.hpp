@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "cpu_dispatch/features.hpp"
+#include "runtime/cpu_isa.hpp"
 #include "runtime/types.hpp"
 
 namespace generativeqc::xtb::detail {
@@ -33,7 +33,8 @@ struct Gfn2CpuOrbitalSnapshot {
 // Every call resets SCC from the SAD state; GenerativeQC has no public warm-start API.
 class Gfn2CpuExecutionCache {
  public:
-  explicit Gfn2CpuExecutionCache(CpuIsa cpu_isa = CpuIsa::kBaseline);
+  explicit Gfn2CpuExecutionCache(
+      generativeqc::runtime::CpuIsa cpu_isa = generativeqc::runtime::CpuIsa::kBaseline);
   ~Gfn2CpuExecutionCache();
 
   Gfn2CpuExecutionCache(const Gfn2CpuExecutionCache&) = delete;

@@ -2,7 +2,7 @@
 // provider TU. Only the ABI-free borrowed-resource boundary crosses that seam.
 #include <type_traits>
 
-#include "runtime/nvidia_host_api.h"
+#include "runtime/nvidia_host_api/generativeqc_nvidia_host_api.h"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 
 namespace shared = generativeqc::solver::cuda;

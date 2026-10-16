@@ -10,6 +10,8 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
+#include "runtime/resource_planning.hpp"
+#include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
 #include "scf/ks_host_resources.hpp"
 
@@ -42,6 +44,7 @@ extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, 
 namespace generativeqc::cli {
 namespace {
 using Bytes = std::uint64_t;
+namespace resource = generativeqc::runtime::resources;
 constexpr Bytes maximum_bytes = std::numeric_limits<std::int64_t>::max();
 
 Bytes sum(std::initializer_list<Bytes> values) {
@@ -62,28 +65,43 @@ Bytes product(std::initializer_list<Bytes> values) {
   return result;
 }
 
-Bytes headroom_bytes(Bytes capacity, double fraction) {
-  if (fraction == 0 || capacity == 0) return 0;
-  int exponent = 0;
-  const double normalized = std::frexp(fraction, &exponent);
-  const Bytes numerator = static_cast<Bytes>(std::ldexp(normalized, 53));
-  const int shift = 53 - exponent;
-  // Multiply two limbs without an extension type, then round up the exact
-  // IEEE-754 rational product. Long-double multiplication is not exact here.
-  Bytes high = 0, low = 0;
-  for (unsigned bit = 0; bit < 53; ++bit) {
-    if (!(numerator & (Bytes{1} << bit))) continue;
-    const Bytes previous = low;
-    low += capacity << bit;
-    high += (bit ? capacity >> (64 - bit) : 0) + (low < previous ? 1 : 0);
+resource::Candidate inventory_candidate(Bytes retained_host, Bytes workspace_host,
+                                        Bytes retained_device, Bytes workspace_device,
+                                        Bytes cost = 0, Bytes lexical_rank = 0) {
+  return {cost,
+          lexical_rank,
+          {{retained_host, resource::kPageableSpace, 0, 0, true},
+           {workspace_host, resource::kPageableSpace, 0, 0, false},
+           {retained_device, resource::kFirstDeviceSpace, 0, 0, true},
+           {workspace_device, resource::kFirstDeviceSpace, 0, 0, false}}};
+}
+
+resource::Composition compose_inventory(const RunOptions& options,
+                                        std::vector<resource::Candidate> candidates) {
+  std::vector<resource::Limit> limits;
+  if (options.host_bytes)
+    limits.push_back({resource::kHostSpace, *options.host_bytes, options.host_reserve_bytes});
+  if (options.device_bytes)
+    limits.push_back({resource::kDeviceSpace, *options.device_bytes, options.device_reserve_bytes});
+  if (options.pinned_host_bytes)
+    limits.push_back({resource::kPinnedSpace, *options.pinned_host_bytes, 0});
+  const std::array<resource::Request, 1> requests{{{std::move(candidates)}}};
+  try {
+    return resource::compose(requests, limits, 5, options.headroom_fraction, 65536);
+  } catch (const std::overflow_error& error) {
+    throw UsageError(error.what());
   }
-  if (shift >= 128) return high || low ? 1 : 0;
-  if (shift >= 64) {
-    const int upper_shift = shift - 64;
-    const Bytes remainder = upper_shift ? high & ((Bytes{1} << upper_shift) - 1) : 0;
-    return (high >> upper_shift) + (remainder || low ? 1 : 0);
-  }
-  return (low >> shift) + (high << (64 - shift)) + ((low & ((Bytes{1} << shift) - 1)) ? 1 : 0);
+}
+
+Json composed_peaks(const resource::Composition& composition, int device_id, bool include_device) {
+  const auto& peaks = composition.accounting.peaks;
+  Json result{{"pageable", peaks[resource::kPageableSpace].bytes},
+              {"host", peaks[resource::kHostSpace].bytes},
+              {"pinned", peaks[resource::kPinnedSpace].bytes},
+              {"device", peaks[resource::kDeviceSpace].bytes}};
+  if (include_device)
+    result["device:" + std::to_string(device_id)] = peaks[resource::kFirstDeviceSpace].bytes;
+  return result;
 }
 
 struct Topology {
@@ -122,71 +140,49 @@ Json topology_json(const Topology& shape) {
 
 // These capacities follow the actual Jet/preparation/SCF lifetimes, not an
 // optimistic nbf^4-only estimate. Serialized workspaces do not scale with batch.
-Json hf_inventory(const Topology& orbital, const Topology* auxiliary, Bytes atoms, Bytes spins,
-                  Bytes history, Bytes ecp_workspace) {
-  const Bytes n2 = product({orbital.nbf, orbital.nbf});
-  const Bytes c2 = product({orbital.cartesian_nbf, orbital.cartesian_nbf});
-  const Bytes derivatives = product({3, atoms});
-  const Bytes nterms = sum({product({2, n2}), product({n2, n2})});
-  const Bytes cterms = sum({product({2, c2}), product({c2, c2})});
-  const Bytes conventional = sum({product({8, derivatives + 1, nterms}), 8 * derivatives});
-  const Bytes cartesian = sum({product({8, derivatives + 1, cterms}), 8 * derivatives});
-  const Bytes jet = sum({product({8, derivatives + 1}), 64});
-  const Bytes angular = std::max(orbital.angular, auxiliary ? auxiliary->angular : 0);
-  const Bytes order =
-      std::max({4 * orbital.angular, 2 * orbital.angular + (auxiliary ? auxiliary->angular : 0),
-                auxiliary ? 2 * auxiliary->angular : 0});
-  const Bytes hermite = product({6, angular + 3, angular + 3, 2 * angular + 4});
-  const Bytes recurrence = product({jet, sum({product({order + 1, order + 1, order + 1, order + 1}),
-                                              hermite, 256, derivatives})});
-  Bytes preparation = sum(
-      {product({jet, cterms}),
-       std::max(recurrence, sum({cartesian, conventional, product({8, nterms})})), ecp_workspace});
-  Bytes resident = conventional;
-  const Bytes matrix = sum(
-      {product({8, spins, n2, 64 + 2 * (history + 1)}), product({16, history + 1, history + 1})});
-  Bytes iteration = sum({resident, matrix}), finalization = iteration;
-  if (auxiliary) {
-    const Bytes count =
-        sum({product({auxiliary->nbf, auxiliary->nbf}), product({n2, auxiliary->nbf})});
-    const Bytes cart_count = sum({product({auxiliary->cartesian_nbf, auxiliary->cartesian_nbf}),
-                                  product({c2, auxiliary->cartesian_nbf})});
-    const Bytes raw = product({8, derivatives + 1, count});
-    const Bytes cart_raw = product({8, derivatives + 1, cart_count});
-    const Bytes transformed = product({8, n2, auxiliary->nbf});
-    preparation = std::max(
-        {preparation,
-         sum({conventional, product({jet, cart_count}),
-              std::max(recurrence, sum({cart_raw, raw, product({8, count})}))}),
-         sum({conventional, raw, transformed, product({128, auxiliary->nbf, auxiliary->nbf})})});
-    resident = sum({resident, raw, transformed});
-    iteration = sum({resident, matrix, product({8, sum({auxiliary->nbf, 4 * n2})})});
-    finalization = sum({resident, matrix,
-                        product({8, sum({product({32, auxiliary->nbf, auxiliary->nbf}),
-                                         product({2, n2, auxiliary->nbf}), 8 * derivatives})})});
-  }
-  return {{"preparation", preparation},
-          {"iteration", iteration},
-          {"finalization", finalization},
-          {"integral_state", resident}};
+Json hf_inventory(const std::array<Bytes, 4>& inventory) {
+  Json result = Json::object();
+  for (std::size_t index = 0; index < inventory.size(); ++index)
+    result[scf::cpu_hf_host_resource_keys[index]] = inventory[index];
+  return result;
+}
+
+scf::CpuKsHostResourceShape cpu_ks_shape(const Topology& shape, Bytes atoms, Bytes spins,
+                                         const RunOptions& options, Bytes ecp_terms,
+                                         Bytes ecp_workspace) {
+  return {atoms,
+          shape.nbf,
+          shape.cartesian_nbf,
+          shape.shells,
+          shape.primitives,
+          spins,
+          shape.angular,
+          ecp_terms,
+          product({atoms, options.grid.radial_points, options.grid.angular_polar,
+                   options.grid.angular_azimuth}),
+          options.grid.radial_points,
+          options.grid.angular_polar,
+          256,
+          options.diis_history,
+          options.max_iterations.value_or(100),
+          options.method_name.starts_with("pbe"),
+          false,
+          ecp_workspace};
+}
+
+Json ks_inventory(const std::array<Bytes, 16>& inventory) {
+  Json result = Json::object();
+  for (std::size_t index = 0; index < inventory.size(); ++index)
+    result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
+  return result;
 }
 
 Json ks_inventory(const Topology& shape, Bytes atoms, Bytes spins, const RunOptions& options,
                   Bytes ecp_terms, Bytes ecp_workspace) {
   const bool cuda = options.backend == GENERATIVEQC_BACKEND_CUDA;
   if (!cuda) {
-    const auto inventory = scf::cpu_ks_host_resources(
-        {atoms, shape.nbf, shape.cartesian_nbf, shape.shells, shape.primitives, spins,
-         shape.angular, ecp_terms,
-         product({atoms, options.grid.radial_points, options.grid.angular_polar,
-                  options.grid.angular_azimuth}),
-         options.grid.radial_points, options.grid.angular_polar, 256, options.diis_history,
-         options.max_iterations.value_or(100), options.method_name.starts_with("pbe"), false,
-         ecp_workspace});
-    Json result = Json::object();
-    for (std::size_t index = 0; index < inventory.size(); ++index)
-      result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
-    return result;
+    return ks_inventory(scf::cpu_ks_host_resources(
+        cpu_ks_shape(shape, atoms, spins, options, ecp_terms, ecp_workspace)));
   }
   const Bytes orbital_aos = shape.nbf, cartesian_aos = shape.cartesian_nbf;
   const Bytes n2 = product({orbital_aos, orbital_aos}),
@@ -414,14 +410,14 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   Json limits = Json::object();
   const auto limit = [&](const char* name, std::optional<Bytes> cap, Bytes reserve) {
     if (cap) {
-      const Bytes withheld = headroom_bytes(*cap, options.headroom_fraction);
-      limits[name] = *cap - withheld > reserve ? *cap - withheld - reserve : 0;
+      limits[name] = resource::effective_capacity(*cap, reserve, options.headroom_fraction);
     }
   };
   limit("host", options.host_bytes, options.host_reserve_bytes);
   limit("device", options.device_bytes, options.device_reserve_bytes);
   limit("pinned", options.pinned_host_bytes, 0);
   Json plan = {{"schema_version", 1},
+               {"composition_inventory", "native-resource-composition-v1"},
                {"scope", "native-cli-allocation-inventory-v1"},
                {"source_identity", generativeqc_get_source_identity()},
                {"budget", budget},
@@ -576,24 +572,29 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   }
   Bytes retained = 0, workspace = 0, device = 0;
   if (cpu && hf) {
-    const auto inventory = hf_inventory(orbital, auxiliary ? &*auxiliary : nullptr, atoms.size(),
-                                        spins, options.diis_history, ecp_workspace);
-    plan["item_inventory"] = inventory;
-    workspace =
-        std::max({inventory["preparation"].get<Bytes>(), inventory["iteration"].get<Bytes>(),
-                  inventory["finalization"].get<Bytes>()});
-    retained =
-        sum({product({8, sum({product({4, spins, orbital.nbf, orbital.nbf}),
-                              product({24, atoms.size()})})}),
-             product({128, sum({orbital.primitives, orbital.shells, atoms.size()})}),
-             auxiliary ? product({128, sum({auxiliary->primitives, auxiliary->shells})}) : 0});
+    scf::CpuHfHostFleetResources fleet;
+    const auto phases =
+        fleet.append({{atoms.size(), orbital.nbf, orbital.cartesian_nbf, spins, orbital.angular,
+                       options.diis_history, auxiliary ? auxiliary->nbf : 0,
+                       auxiliary ? auxiliary->cartesian_nbf : 0, auxiliary ? auxiliary->angular : 0,
+                       ecp_workspace},
+                      orbital.shells,
+                      orbital.primitives,
+                      auxiliary ? auxiliary->shells : 0,
+                      auxiliary ? auxiliary->primitives : 0},
+                     options.batch);
+    plan["item_inventory"] = hf_inventory(phases);
+    const auto aggregate = fleet.inventory();
+    retained = aggregate[0];
+    workspace = aggregate[1];
   } else if (cpu && ks) {
-    const auto inventory =
-        ks_inventory(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace);
-    plan["item_inventory"] = inventory;
-    retained = inventory["retained"].get<Bytes>();
-    workspace = std::max(inventory["setup_workspace"].get<Bytes>(),
-                         inventory["scf_workspace"].get<Bytes>());
+    scf::CpuKsHostFleetResources fleet;
+    plan["item_inventory"] = ks_inventory(fleet.append(
+        cpu_ks_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        options.batch));
+    const auto aggregate = fleet.inventory();
+    retained = aggregate[12];
+    workspace = aggregate[13];
   } else if (hf && fitted) {
     if (auxiliary->nbf > 128) {
       plan["diagnostic"] = "CUDA DF inventory requires <=128 auxiliary AOs";
@@ -614,37 +615,30 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
           orbital, *auxiliary, atoms.size(), spins,
           std::max<Bytes>(1, static_cast<Bytes>((electrons + unpaired) / 2)), options);
       plan["candidates"] = candidates;
-      const auto peaks = [&](const Json& candidate) {
-        const Bytes host_peak = sum({candidate.at("retained_host").get<Bytes>(),
-                                     candidate.at("workspace_host").get<Bytes>()});
-        const Bytes device_peak = sum({candidate.at("retained_device").get<Bytes>(),
-                                       candidate.at("workspace_device").get<Bytes>(),
-                                       candidate.at("runtime_allowance_device").get<Bytes>()});
-        return Json{{"pageable", host_peak},
-                    {"host", host_peak},
-                    {"pinned", 0},
-                    {"device", device_peak},
-                    {"device:" + std::to_string(options.device_id), device_peak}};
-      };
-      const Json* selected = &candidates.at(0);
-      bool feasible = false;
-      for (const auto& candidate : candidates) {
-        const auto peak = peaks(candidate);
-        bool fits = true;
-        for (auto cap = limits.begin(); cap != limits.end(); ++cap)
-          if (peak.value(cap.key(), Bytes{0}) > cap.value().get<Bytes>()) fits = false;
-        if (fits) {
-          selected = &candidate;
-          feasible = true;
-          break;
-        }
+      std::vector<std::string> names;
+      for (const auto& candidate : candidates)
+        names.push_back(candidate.at("name").get<std::string>());
+      std::sort(names.begin(), names.end());
+      std::vector<resource::Candidate> choices;
+      for (std::size_t index = 0; index < candidates.size(); ++index) {
+        const auto& candidate = candidates.at(index);
+        const auto rank =
+            std::lower_bound(names.begin(), names.end(), candidate.at("name").get<std::string>()) -
+            names.begin();
+        choices.push_back(inventory_candidate(
+            candidate.at("retained_host").get<Bytes>(), candidate.at("workspace_host").get<Bytes>(),
+            sum({candidate.at("retained_device").get<Bytes>(),
+                 candidate.at("runtime_allowance_device").get<Bytes>()}),
+            candidate.at("workspace_device").get<Bytes>(), index, rank));
       }
-      plan["selection"] = selected->at("name");
-      plan["peak_bytes"] = peaks(*selected);
-      plan["resident_bytes"] = {{"pageable", selected->at("retained_host")},
-                                {"device:" + std::to_string(options.device_id),
-                                 sum({selected->at("retained_device").get<Bytes>(),
-                                      selected->at("runtime_allowance_device").get<Bytes>()})}};
+      const auto composition = compose_inventory(options, std::move(choices));
+      const bool feasible = composition.status == resource::Status::feasible;
+      plan["selection"] = candidates.at(composition.selections.front()).at("name");
+      plan["peak_bytes"] = composed_peaks(composition, options.device_id, true);
+      plan["resident_bytes"] = {
+          {"pageable", composition.accounting.resident[resource::kPageableSpace].bytes},
+          {"device:" + std::to_string(options.device_id),
+           composition.accounting.resident[resource::kFirstDeviceSpace].bytes}};
       plan["status"] = feasible ? "feasible" : "infeasible";
       if (!feasible) plan["diagnostic"] = "no native DF allocation alternative fits all budgets";
     } catch (const UsageError&) {
@@ -716,15 +710,20 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
   }
-  retained = product({options.batch, retained});
-  const Bytes host = sum({retained, workspace});
-  plan["peak_bytes"] = {{"pageable", host}, {"host", host}, {"pinned", 0}, {"device", device}};
-  if (device) plan["peak_bytes"]["device:" + std::to_string(options.device_id)] = device;
-  plan["resident_bytes"]["pageable"] = retained;
-  plan["status"] = "feasible";
+  if (!cpu) retained = product({options.batch, retained});
+  const Bytes resident_device =
+      plan["resident_bytes"].value("device:" + std::to_string(options.device_id), Bytes{0});
+  if (resident_device > device)
+    throw UsageError("resident device capacity exceeds the complete peak");
+  const auto composition = compose_inventory(
+      options,
+      {inventory_candidate(retained, workspace, resident_device, device - resident_device)});
+  plan["peak_bytes"] = composed_peaks(composition, options.device_id, device != 0);
+  plan["resident_bytes"]["pageable"] =
+      composition.accounting.resident[resource::kPageableSpace].bytes;
+  plan["status"] = composition.status == resource::Status::feasible ? "feasible" : "infeasible";
   for (auto cap = limits.begin(); cap != limits.end(); ++cap) {
     if (plan["peak_bytes"].value(cap.key(), Bytes{0}) > cap.value().get<Bytes>()) {
-      plan["status"] = "infeasible";
       plan["diagnostic"] = "allocation inventory exceeds " + cap.key() + " budget";
       break;
     }

@@ -56,3 +56,10 @@ shape service can replace the remaining portable metadata compatibility path.
 
 #2227 R2/R5/R6; #933/#934; `docs/maintainer/resource_planning.md`;
 `src/scf/ks_host_resources.hpp`; `python/generativeqc/resources_ks.py`.
+
+## Follow-up: Fleet capacity authority
+
+`2026-10-15-native-cpu-ks-fleet-sizing.md` moves CPU retained-component sums,
+serialized workspace maxima and complete-peak checks to a shared native fleet
+owner. The per-item query described here remains the compatibility path for
+libraries without the additive fleet query; its equations and ABI are unchanged.

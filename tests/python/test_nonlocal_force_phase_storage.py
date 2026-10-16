@@ -292,12 +292,14 @@ def test_force_phase_aliases_poison_invalid_generation_then_recover(
         )
 
 
-@pytest.mark.parametrize("schedule", ("ordered", "parallel", "parallel-wide"))
+@pytest.mark.parametrize(
+    "schedule", (None, "ordered", "parallel", "parallel-wide", "parallel-packet")
+)
 @pytest.mark.parametrize("cross_stream", (False, True))
 def test_exact_pair_component_reuse_and_invalidation(
     cuda_runtime: tuple[Any, ct.CDLL],
     monkeypatch: pytest.MonkeyPatch,
-    schedule: str,
+    schedule: str | None,
     cross_stream: bool,
 ) -> None:
     """A byte-equal ingredient key may reuse seeds; changed inputs never do.
@@ -307,7 +309,10 @@ def test_exact_pair_component_reuse_and_invalidation(
     density change must miss even if some derived local scales round equally.
     """
     monkeypatch.setenv("GENERATIVEQC_VV10_COMPONENT_REUSE", "1")
-    monkeypatch.setenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", schedule)
+    if schedule is None:
+        monkeypatch.delenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", schedule)
     cp, library = cuda_runtime
     count = 129
     spec = original_nonlocal_correlation("vv10")
@@ -366,6 +371,51 @@ def test_exact_pair_component_reuse_and_invalidation(
         )
         _seed_device(cp, owner, producer, consumer, density, gradient)
         assert owner.diagnostic(include_work=True).pair_evaluations == 5
+
+
+@pytest.mark.parametrize("count", (65535, 65536, 65537))
+@pytest.mark.parametrize("selector", (None, ""))
+def test_automatic_pair_schedule_matches_sparse_independent_oracle(
+    cuda_runtime: tuple[Any, ct.CDLL],
+    monkeypatch: pytest.MonkeyPatch,
+    count: int,
+    selector: str | None,
+) -> None:
+    """Cross the automatic admission boundary with bounded physical pair work.
+
+    Spread a small independently differentiated domain across a large molecular
+    grid. Screened rows must stay zero, while signed and positive-zero active
+    weights retain their feature, coordinate and quadrature responses. Unset and
+    empty selectors both exercise production automatic selection, not an opt-in.
+    """
+    cp, library = cuda_runtime
+    if selector is None:
+        monkeypatch.delenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", selector)
+    monkeypatch.setenv("GENERATIVEQC_VV10_COMPONENT_REUSE", "0")
+    spec = original_nonlocal_correlation("vv10")
+    small_points, small_weights, small_density, small_gradient = _inputs(137)
+    indices = np.linspace(0, count - 1, len(small_weights), dtype=np.int64)
+    points = np.zeros((count, 3))
+    weights = np.ones(count)
+    density = np.full(count, THRESHOLD / 2)
+    gradient = np.zeros((count, 3))
+    points[indices] = small_points
+    weights[indices] = small_weights
+    density[indices] = small_density
+    gradient[indices] = small_gradient
+    expected = np.zeros((6, count))
+    expected[:, indices] = _reference(
+        small_points, small_weights, small_density, small_gradient, spec
+    )
+    stream = cp.cuda.Stream(non_blocking=True)
+    with (
+        NonlocalFixedGridPlan(spec, count, device="cuda", library=library) as plan,
+        _owner(plan, points, weights, library) as owner,
+    ):
+        result = _seed_device(cp, owner, stream, stream, density, gradient)
+        np.testing.assert_allclose(result, expected, rtol=2e-11, atol=1e-12)
 
 
 def test_large_grid_automatic_reuse_has_explicit_opt_out(
