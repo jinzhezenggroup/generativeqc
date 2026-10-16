@@ -13,9 +13,13 @@
       "bytes": 2988,
       "sha256": "8ece67acc72796429c3f6c892f142593f7fef50145eb21d82b9f761d86bab8bd"
     },
-    "dft-cold-warm.svg": {
-      "bytes": 83604,
-      "sha256": "5f545c356a16b6c6a89d6f899a2be47290170e5b7c2548b533bada2c93ad46f2"
+    "dft-cold-warm.svg.xz": {
+      "bytes": 8372,
+      "sha256": "9307ab14fd6b530e003acdc192da6bbea7c17b574d4cad3f33ad37e75d08ebca",
+      "uncompressed": {
+        "bytes": 83604,
+        "sha256": "5f545c356a16b6c6a89d6f899a2be47290170e5b7c2548b533bada2c93ad46f2"
+      }
     },
     "build-settings.json": {
       "bytes": 15352,
@@ -26,8 +30,8 @@
       "sha256": "92c165cecbbb62cd7943f7a01f7fdc4478b8154ff487b05614036bf32488b56f"
     },
     "README.md": {
-      "bytes": 4758,
-      "sha256": "88702498d183661e378dcff64c4e4cbe4de9f1e781916564b88c892d74720621"
+      "bytes": 5216,
+      "sha256": "822bf635cb1bff2ee7574b48191a8cae9fd82ed8c3c07f5df97cbc7093d69ed5"
     },
     "df-cold-warm.svg": {
       "bytes": 84881,
@@ -58,8 +62,8 @@
       "sha256": "1633c4a5f6a45582acf60b6e42df11656fee70416d59345e840c627d5aef4754"
     },
     "refresh.py": {
-      "bytes": 10316,
-      "sha256": "d39981332dd8240b3d42370442b845296ab8a90074201d6e9242961332ee1ebb"
+      "bytes": 10695,
+      "sha256": "b01f9d8b8bd8c36bf574e8c0155c22209bf8c3edc7f57b9685e2d4dd0ae79086"
     }
   },
   "baseline_files": {

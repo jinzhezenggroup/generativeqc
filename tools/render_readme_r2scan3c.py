@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
+import lzma
 import math
 import runpy
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from tools.generativeqc_validation.xc_diagonal_evidence import summarize
 from tools.render_readme_dft import timing_cell, work_cell
@@ -58,12 +62,12 @@ def overlay_native(
                 raise ValueError("r²SCAN-3c independent endpoint gate failed")
         point["engines"]["native"] = copy.deepcopy(native)
     result.setdefault("panel_annotations", {})["r2scan-3c"] = (
-        "GenerativeQC 48/96: 2026-10-16 composition"
+        "GenerativeQC: 2026-10-16 composition"
     )
     result["evidence_note"] = (
         "The [measurement report](../xc-diagonal-potential-20261016/README.md#homepage-update) "
         "identifies the mixed sources. "
-        "Only native Direct r²SCAN-3c/48/96 is updated from "
+        "Only native Direct r²SCAN-3c/3/12/48/96 is updated from "
         "[qualified XC/force-stack evidence](../xc-diagonal-potential-20261016/README.md); "
         "all other observations and independent arrays remain in the "
         "[frozen publication](../readme-refresh-20261015/README.md)."
@@ -71,10 +75,88 @@ def overlay_native(
     return result
 
 
+def small_updates(
+    summary: dict[str, Any], data: dict[str, Any], byteplanes: np.ndarray
+) -> dict[int, dict[str, Any]]:
+    """Reconstruct every small-case force bit and recheck independent oracles.
+
+    Each new geometry's first returned force is its storage anchor, never its
+    scientific reference. Warm samples retain lossless XORs from that anchor;
+    historical independent arrays alone decide the scientific acceptance gate.
+    """
+    small = data["readme_small"]
+    if set(small["populations"]) != {"3", "12"}:
+        raise ValueError("small-case qualification requires both populations")
+    template = data["populations"]["qualified-stack/candidate/r2scan-3c-96"]
+    expected_build = {
+        "library_sha256": template["native_build"]["library_sha256"],
+        "source_identity": template["native_build"]["probe"]["source_identity"],
+    }
+    updates = {}
+    for point in summary["methods"]["r2scan-3c"]:
+        atoms = point["atoms"]
+        if str(atoms) not in small["populations"]:
+            continue
+        population = small["populations"][str(atoms)]
+        protocol_bytes = json.dumps(
+            point["protocol"], sort_keys=True, separators=(",", ":")
+        ).encode()
+        if not (
+            hashlib.sha256(protocol_bytes).hexdigest() == population["protocol_sha256"]
+            and population["native_build"] == expected_build
+            and population["native_experiment"] == template["native_experiment"]
+            and population["exit_status"] == 0
+            and population["idle_before_after"] is True
+            and small["population_limit_seconds"] == 1800
+        ):
+            raise ValueError("small-case protocol, source or execution differs")
+        references = {row["geometry"]: row for row in point["independent_references"]}
+        rows = copy.deepcopy(population["records"])
+        force_digest = hashlib.sha256()
+        for row in rows:
+            column = row.pop("forces_delta")
+            anchor = row.pop("force_anchor")
+            force_words = byteplanes[:, column, :].T.copy().reshape(-1).view("<u8")
+            if anchor is not None:
+                force_words ^= byteplanes[:, anchor, :].T.copy().reshape(-1).view("<u8")
+            forces = force_words.view("<f8")[: 3 * atoms].reshape(atoms, 3)
+            oracle = references[row["geometry"]]
+            energy_error = abs(row["energy"] - oracle["energy"])
+            force_error = float(np.max(np.abs(forces - oracle["forces"])))
+            if not (
+                np.isfinite(forces).all()
+                and math.isfinite(energy_error)
+                and energy_error <= 1e-8
+                and force_error <= 1e-7
+                and row["status"] == 0
+            ):
+                raise ValueError("small-case independent energy/force gate failed")
+            force_digest.update(forces.tobytes())
+            row.update(
+                forces=forces.tolist(),
+                energy_error=energy_error,
+                force_error=force_error,
+            )
+        if force_digest.hexdigest() != population["force_stream_sha256"]:
+            raise ValueError("small-case returned force bits changed")
+        updates[atoms] = {
+            "protocol": point["protocol"],
+            "native": {
+                "status": "measured",
+                "records": rows,
+                "library_sha256": expected_build["library_sha256"],
+                "scheduler": population["scheduler"],
+                "evidence_key": f"readme_small/populations/{atoms}",
+            },
+        }
+    return updates
+
+
 def combined_summary() -> dict[str, Any]:
     """Audit both retained publications before constructing the presentation.
 
-    The evidence reader replays 32 full force gates; the 48-atom candidate's
+    The original reader replays 32 full force gates and this supplement adds
+    24 small-case gates. The 48-atom candidate's
     force gates are collection-time independent-validation receipts, not newly
     replayable arrays. Both sources retain every scalar sample and work count.
     """
@@ -105,6 +187,11 @@ def combined_summary() -> dict[str, Any]:
                 "evidence_key": key,
             },
         }
+    packet = RESULTS / "xc-diagonal-potential-20261016"
+    with lzma.open(packet / "evidence.json.xz", "rt") as stream:
+        data = json.load(stream)
+    with np.load(packet / "forces.npz", allow_pickle=False) as archive:
+        updates.update(small_updates(summary, data, archive["xor_byteplanes"]))
     return overlay_native(summary, updates)
 
 
@@ -120,8 +207,6 @@ def render_publication(summary: dict[str, Any], destination: Path) -> None:
         "| ---: | ---: | ---: | ---: | ---: |",
     ]
     for point in summary["methods"]["r2scan-3c"]:
-        if point["atoms"] not in (48, 96):
-            continue
         native = point["engines"]["native"]
         cells = [timing_cell(native, phase) for phase in ("moved", "moved-warm")]
         cells += [work_cell(native, phase) for phase in ("moved", "moved-warm")]
@@ -138,7 +223,7 @@ def main() -> None:
     summary = combined_summary()
     if args.output:
         render_publication(summary, args.output)
-    print(json.dumps({"updated_native_direct_atoms": [48, 96], "gpu_rerun": False}))
+    print(json.dumps({"updated_native_direct_atoms": [3, 12, 48, 96]}))
 
 
 if __name__ == "__main__":

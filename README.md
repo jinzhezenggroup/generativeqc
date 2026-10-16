@@ -125,7 +125,7 @@ print(first.energies)
 ## Benchmarks
 
 **Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
-Direct r²SCAN-3c at 48/96 atoms uses the qualified 2026-10-16 composition of
+Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
 #2563, #2567 and the #2558 force stack. All other native points retain the frozen
 #2531 + #2532 snapshot; GPU4PySCF timings and independent references are
 historical, not rerun. Cold includes setup and the

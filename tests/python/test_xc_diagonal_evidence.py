@@ -1,6 +1,7 @@
 """Exercise the retained scientific envelope, not source spelling or timings."""
 
 import hashlib
+import json
 import lzma
 import shutil
 from pathlib import Path
@@ -75,8 +76,15 @@ def test_evidence_recompression_preserves_exact_json() -> None:
     decoded = lzma.decompress(
         (xc_diagonal_evidence.ROOT / "evidence.json.xz").read_bytes()
     )
-    assert len(decoded) == 685839
+    assert len(decoded) == 709770
     assert hashlib.sha256(decoded).hexdigest() == (
+        "069022fe928c65835c8c8858680e88d5b64dbcab227e151f694384e98bfff9eb"
+    )
+    original = json.loads(decoded)
+    original.pop("readme_small")
+    legacy = json.dumps(original, separators=(",", ":"), allow_nan=False).encode()
+    assert len(legacy) == 685839
+    assert hashlib.sha256(legacy).hexdigest() == (
         "4c6e19d0812c08a4030f0918f4f25f6c0540b3f2ea07fe3181c8957225f3b737"
     )
 

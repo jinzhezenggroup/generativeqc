@@ -19,7 +19,12 @@ DF-CCSD(T)/CBS is unaffected.
   normalized away; neither an individual kernel gain nor a universal speedup
   is implied.
 
-![Direct cold and warm E+F](dft-cold-warm.svg)
+![Direct cold and warm E+F](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/36a80785990124d03e9b005b12951957b584167e/benchmarks/results/readme-refresh-20261015/dft-cold-warm.svg)
+
+The superseded Direct figure is retained losslessly as `dft-cold-warm.svg.xz`;
+the preview uses its existing Git snapshot. The verifier checks both stored
+and expanded identities. This storage-only compaction makes room for the
+native r²SCAN-3c update without removing observations or raising the 64-MiB cap.
 
 ![DF cold and warm E+F](df-cold-warm.svg)
 

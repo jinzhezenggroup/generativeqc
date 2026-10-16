@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import copy
+import json
+import lzma
+import runpy
 
+import numpy as np
 import pytest
 
 from tools.render_readme_dft import phase_statistics, work_cell
-from tools.render_readme_r2scan3c import PHASE_COUNTS, overlay_native
+from tools.render_readme_r2scan3c import (
+    PHASE_COUNTS,
+    RESULTS,
+    overlay_native,
+    small_updates,
+)
 
 
 @pytest.fixture
@@ -98,3 +107,51 @@ def test_overlay_rejects_unqualified_endpoints(
         update["native"]["records"][0][field] = value
     with pytest.raises(ValueError):
         overlay_native(summary, updates)
+
+
+@pytest.fixture
+def small_publication() -> tuple[dict, dict, np.ndarray]:
+    """Use retained independent arrays, not a candidate-derived accuracy oracle."""
+    previous = runpy.run_path(str(RESULTS / "readme-refresh-20261015/refresh.py"))
+    summary = previous["combined_summary"]("summary.json.xz")
+    packet = RESULTS / "xc-diagonal-potential-20261016"
+    with lzma.open(packet / "evidence.json.xz", "rt") as stream:
+        data = json.load(stream)
+    with np.load(packet / "forces.npz", allow_pickle=False) as archive:
+        byteplanes = archive["xor_byteplanes"]
+    return summary, data, byteplanes
+
+
+def test_small_cases_replay_every_returned_force(
+    small_publication: tuple[dict, dict, np.ndarray],
+) -> None:
+    """All five repeats and both geometries must have independently valid forces."""
+    summary, data, byteplanes = small_publication
+    updates = small_updates(summary, data, byteplanes)
+    assert set(updates) == {3, 12}
+    overlay_native(summary, updates)
+    for atoms, update in updates.items():
+        for row in update["native"]["records"]:
+            assert np.shape(row["forces"]) == (atoms, 3)
+            assert row["energy_error"] <= 1e-8
+            assert row["force_error"] <= 1e-7
+
+
+@pytest.mark.parametrize("failure", ["force-bit", "energy", "protocol", "build"])
+def test_small_replay_rejects_corruption_and_false_accuracy_receipts(
+    small_publication: tuple[dict, dict, np.ndarray], failure: str
+) -> None:
+    """Collection-time success flags cannot replace independent gate replay."""
+    summary, data, byteplanes = small_publication
+    population = data["readme_small"]["populations"]["3"]
+    if failure == "force-bit":
+        column = population["records"][0]["forces_delta"]
+        byteplanes[0, column, 0] ^= 1
+    elif failure == "energy":
+        population["records"][0]["energy"] += 1e-5
+    elif failure == "protocol":
+        summary["methods"]["r2scan-3c"][0]["protocol"]["grid"]["radial_points"] = 24
+    else:
+        population["native_build"]["source_identity"] = "wrong-source"
+    with pytest.raises(ValueError):
+        small_updates(summary, data, byteplanes)
