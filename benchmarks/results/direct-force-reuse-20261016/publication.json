@@ -7,40 +7,46 @@
   },
   "files": [
     {
-      "bytes": 47844,
+      "bytes": 47536,
       "path": "numeric-arrays.npy.xz",
       "role": "samples",
-      "sha256": "70ca4ade73b709a149bfc99a1e7a91e8fad4dc17e7dbdb4dab6dde38c25e0d00"
+      "sha256": "7a3d9f9036731dcf8c61655103b129b8360e8dc6af7dd97c8991abb5870856b1"
     },
     {
-      "bytes": 10436,
+      "bytes": 10440,
       "path": "numeric-index.json.xz",
       "role": "summary",
-      "sha256": "2eeb604ddf281d59af73c0b89e11df7636ac841473429d8485a2b6b88000b86c"
+      "sha256": "a5d8e557fa3032850032a7299ea3cc8c444ea95b249fdfab72cadc9839cfe499"
     },
     {
-      "bytes": 3692,
+      "bytes": 3668,
       "path": "profile-summary.json.xz",
       "role": "summary",
-      "sha256": "78910b986fa119368dd9f23be5f9a82cb8c85bd1c4abf737ba8c59928d338955"
+      "sha256": "a69310d7aa6e3d50899b352ed417fd28ab6319e776d7d53c0bbde47149054988"
     },
     {
-      "bytes": 3828,
+      "bytes": 4092,
       "path": "qualification.json.xz",
       "role": "summary",
-      "sha256": "a1e2cbc07a43fc40cac0b54df43138697d40a4b9e49ab84573de96fe5bceabec"
+      "sha256": "7c0c67f7a017acc4888469fba274073e1e8fcbeaffbfcd35d8e6ba4387c5524f"
     },
     {
-      "bytes": 3676,
+      "bytes": 3668,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "e2aa7f9e43484d18b67d185649dc60e11f6c3996dc0610227e060b902f49ecbb"
+      "sha256": "ee15555a3c934fa1e57225e7b1fd1e0ec5a0ef68ca718b95fe799f0fc281eefe"
     },
     {
-      "bytes": 7548,
+      "bytes": 7492,
       "path": "endpoint-summary.json.xz",
       "role": "summary",
-      "sha256": "c259a2fa029b3452ea0ddff60a004c4e761c7564bc8622a6a414f30d6af05583"
+      "sha256": "607e4cc0b510f34da28b089b7c5f522576bb1e73ba944ad631abdb5c7d4cdc8f"
+    },
+    {
+      "bytes": 7088,
+      "path": "primitive-trials.json.xz",
+      "role": "reproduction",
+      "sha256": "23b515b29e0708d3e12fa732c584b5e0b909f6b059d42f963d84f4bdaaf52676"
     },
     {
       "bytes": 1717,
@@ -73,10 +79,10 @@
       "sha256": "e8dc2063e41e7646a24d54e691c7e824891f9a89c6e7ad4bff84f4fab2b41097"
     },
     {
-      "bytes": 7449,
+      "bytes": 8429,
       "path": "README.md",
       "role": "summary",
-      "sha256": "8302f5052e665f3e8b17e9e4a09162a9832a2d8c6d07ee6b29c7de1716a5abed"
+      "sha256": "7a55e6feefb3e9b8f4e4d2f603c8135758f743790e63a4f07637b898a08fde56"
     }
   ],
   "reproduction": {
@@ -100,6 +106,6 @@
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "4bdffe3ceaa57e7a201f76a5687ad2d1933e6f1e"
+    "revision": "00fced59f8d083839e4bc0761f91a1e94e8ccc0b"
   }
 }
