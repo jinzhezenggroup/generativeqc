@@ -166,7 +166,7 @@ Set `GENERATIVEQC_HESSIAN_AOT_INVENTORY` to that file's absolute path alongside
 the CUDA, CLI and Hessian-AOT build options. Smaller explicit development
 packages can lower the angular
 bounds. Enumeration alone is not numerical or performance qualification; see
-the [AOT package contract](../developer/dft_hessian.md#native-aot-development-package)
+the [AOT package contract](../developer/dft_hessian.md#native-aot-package-selection)
 for compiler ownership, physical selectors and independent gates. All generation
 and compilation happen at build time; the executable never expands the inventory
 on demand. The public Python CUDA Hessian frontend uses the same linked native
