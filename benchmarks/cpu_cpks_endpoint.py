@@ -15,8 +15,12 @@ import os
 import platform
 import statistics
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 try:
     from _retention import raw_output_path
@@ -138,7 +142,7 @@ def main() -> None:
     if not set(args.methods) <= {"lda-rks", "pbe-rks", "lda-uks", "pbe-uks"}:
         parser.error("unsupported CPU CPKS method")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("x", encoding="utf-8") as stream:
+    with _owned_receipt(args.output) as stream:
         publication: dict[str, Any] = {
             "source_sha": args.source_sha,
             "status": "running",
@@ -162,6 +166,22 @@ def main() -> None:
             except BaseException as journal_error:
                 raise error from journal_error
             raise
+
+
+@contextmanager
+def _owned_receipt(path: Path) -> Iterator[TextIO]:
+    """Reserve a destination and never replace an active error during close."""
+    stream = path.open("x", encoding="utf-8")
+    try:
+        yield stream
+    except BaseException as error:
+        try:
+            stream.close()
+        except BaseException as close_error:
+            raise error from close_error
+        raise
+    else:
+        stream.close()
 
 
 def _write_receipt(stream: TextIO, publication: dict[str, Any]) -> None:
