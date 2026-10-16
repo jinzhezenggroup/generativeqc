@@ -383,7 +383,7 @@ def _item_host_inventory(
     }
 
 
-def _cuda_item_inventory(
+def _cuda_leaf_inventory(
     library: typing.Any,
     item: typing.Any,
     *,
@@ -393,6 +393,7 @@ def _cuda_item_inventory(
     requires_tau: bool,
     tile: typing.Any,
 ) -> typing.Any:
+    """Query the existing allocator-owned leaves without composing lifetimes."""
     query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
     selector = functional_code
     if query is None:
@@ -430,18 +431,6 @@ def _cuda_item_inventory(
         raise NotImplementedError(
             "KS CUDA inventory requires a CUDA build and valid launch/DIIS dimensions"
         )
-    n, a, s, p = (
-        orbital["cartesian_nbf"],
-        item["atoms"],
-        orbital["shells"],
-        orbital["primitives"],
-    )
-    pairs = s * (s + 1) // 2
-    # The existing one-electron exporter uploads Cartesian metadata, shell/AO
-    # pair indices and S/H/nuclear output, then frees them before preparing J.
-    # This bound includes every explicit device buffer of that value-only path.
-    setup = byte_product(64, 1 + a + s + p + n + pairs + n * n)
-    setup = max(setup, _ecp_workspace(item, cuda=True, library=library))
     quadrature_query = getattr(
         library, "generativeqc_resource_quadrature_cuda_v1", None
     )
@@ -456,14 +445,13 @@ def _cuda_item_inventory(
     ]
     quadrature_query.restype = ctypes.c_int
     quadrature = ctypes.c_uint64()
-    if quadrature_query(a, item["grid_points"], ctypes.byref(quadrature)):
+    if quadrature_query(item["atoms"], item["grid_points"], ctypes.byref(quadrature)):
         raise NotImplementedError("invalid CUDA quadrature resource shape/build")
     # Quadrature is built after the Coulomb provider. The native v1 query
     # includes bounded generation scratch plus the resident full-grid buffer.
     # The XC slot is the borrowed private arena plus the full shared grid owner,
     # including atomic weights retained for force consumers. Charge that combined
     # lifetime once per item; only setup excess is serialized across the fleet.
-    setup = max(setup, checked_bytes(int(output[2]) + quadrature.value))
     provider_query = getattr(
         library, "generativeqc_resource_ks_matrix_provider_cuda_v1", None
     )
@@ -480,10 +468,161 @@ def _cuda_item_inventory(
         "state": checked_bytes(int(output[0])),
         "xc": checked_bytes(int(output[1])),
         "coulomb": checked_bytes(int(output[2])),
-        "setup": checked_bytes(setup),
         "quadrature_setup": checked_bytes(quadrature.value),
         "matrix_provider": checked_bytes(matrix_provider.value),
+        "ecp_workspace": checked_bytes(
+            _ecp_workspace(item, cuda=True, library=library)
+        ),
     }
+
+
+def _cuda_item_inventory(
+    library: typing.Any, item: typing.Any, **options: typing.Any
+) -> typing.Any:
+    """Retain explicit per-item compatibility for libraries without composition."""
+    leaf = _cuda_leaf_inventory(library, item, **options)
+    orbital = item["orbital"]
+    cartesian_aos, shells = orbital["cartesian_nbf"], orbital["shells"]
+    one_electron = byte_product(
+        64,
+        1
+        + item["atoms"]
+        + shells
+        + orbital["primitives"]
+        + cartesian_aos
+        + shells * (shells + 1) // 2
+        + cartesian_aos * cartesian_aos,
+    )
+    return {
+        "state": leaf["state"],
+        "xc": leaf["xc"],
+        "coulomb": leaf["coulomb"],
+        "setup": max(
+            one_electron,
+            leaf["ecp_workspace"],
+            checked_bytes(leaf["coulomb"] + leaf["quadrature_setup"]),
+        ),
+        "quadrature_setup": leaf["quadrature_setup"],
+        "matrix_provider": leaf["matrix_provider"],
+    }
+
+
+def _native_cuda_fleet_inventory(
+    library: typing.Any,
+    items: typing.Sequence[typing.Any],
+    stationary: typing.Sequence[typing.Any],
+    *,
+    device_fused_xc: bool,
+    **options: typing.Any,
+) -> tuple[list[dict[str, int]], dict[str, int]] | None:
+    """Compose native leaves without Python setup/peak/candidate arithmetic.
+
+    Only absence permits the legacy per-item route. Rejection or an incoherent
+    wire publication is authoritative and never retries portable sizing. The
+    query itself is shape-only, including in CPU-only builds; leaf availability
+    remains the selected CUDA library's separate contract.
+    """
+    query = getattr(library, "generativeqc_resource_ks_cuda_fleet_v1", None)
+    if query is None:
+        return None
+    if len(items) != len(stationary):
+        raise ValueError("CUDA KS fleet and stationary inventory lengths differ")
+    native_stationary = all(consumer is not None for consumer in stationary)
+    leaves = [_cuda_leaf_inventory(library, item, **options) for item in items]
+    dimensions = []
+    for item, leaf, consumer in zip(items, leaves, stationary, strict=True):
+        orbital = item["orbital"]
+        dimensions.extend(
+            checked_bytes(value, "CUDA KS fleet shape")
+            for value in (
+                orbital["cartesian_nbf"],
+                item["atoms"],
+                orbital["shells"],
+                orbital["primitives"],
+                leaf["state"],
+                leaf["xc"],
+                leaf["coulomb"],
+                leaf["quadrature_setup"],
+                leaf["matrix_provider"],
+                leaf["ecp_workspace"],
+                int(device_fused_xc),
+                consumer["minimum"] if native_stationary else 0,
+                consumer["cached"] if native_stationary else 0,
+            )
+        )
+    shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    values = (ctypes.c_uint64 * (9 + 6 * len(items)))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shapes, len(shapes), values, len(values)):
+        raise ValueError("native CUDA KS fleet inventory rejected shape or capacity")
+    capacities = [checked_bytes(value, "CUDA KS fleet capacity") for value in values]
+    aggregate = capacities[:9]
+    if (
+        aggregate[7] != sum(aggregate[:5]) + aggregate[5]
+        or aggregate[8] != sum(aggregate[:5]) + aggregate[6]
+    ):
+        raise ValueError("native CUDA KS fleet inventory returned inconsistent peaks")
+    keys = ("state", "xc", "coulomb", "setup", "quadrature_setup", "matrix_provider")
+    device = [
+        dict(zip(keys, capacities[9 + 6 * index : 15 + 6 * index], strict=True))
+        for index in range(len(items))
+    ]
+    for inventory, leaf in zip(device, leaves, strict=True):
+        for key in ("state", "xc", "coulomb", "quadrature_setup", "matrix_provider"):
+            expected = 0 if key == "xc" and not device_fused_xc else leaf[key]
+            if inventory[key] != expected:
+                raise ValueError("native CUDA KS fleet changed allocator-owned leaves")
+        if inventory["setup"] < max(
+            leaf["ecp_workspace"], leaf["coulomb"] + leaf["quadrature_setup"]
+        ):
+            raise ValueError("native CUDA KS fleet omitted a declared setup owner")
+    for index, key in enumerate(("state", "xc", "coulomb", "matrix_provider")):
+        if aggregate[index] != sum(inventory[key] for inventory in device):
+            raise ValueError(
+                "native CUDA KS fleet returned inconsistent retained totals"
+            )
+    expected_setup_extra = max(
+        (
+            max(
+                0,
+                inventory["setup"]
+                - sum(inventory[key] for key in ("state", "xc", "coulomb")),
+            )
+            for inventory in device
+        ),
+        default=0,
+    )
+    if aggregate[4] != expected_setup_extra:
+        raise ValueError("native CUDA KS fleet returned inconsistent setup excess")
+    for index, mode in ((5, "minimum"), (6, "cached")):
+        expected = (
+            sum(consumer[mode] for consumer in stationary) if native_stationary else 0
+        )
+        if aggregate[index] != expected:
+            raise ValueError("native CUDA KS fleet changed stationary consumer totals")
+    return device, dict(
+        zip(
+            (
+                "state",
+                "xc",
+                "coulomb",
+                "matrix_provider",
+                "setup_extra",
+                "minimum",
+                "cached",
+                "minimum_peak",
+                "cached_peak",
+            ),
+            aggregate,
+            strict=True,
+        )
+    )
 
 
 def _cuda_stationary_descriptor(
@@ -974,6 +1113,7 @@ def ks_resource_request(
         )
     )
     device = []
+    device_totals = None
     native_stationary = False
     try:
         if backend == "cuda" and library is None:
@@ -1036,28 +1176,39 @@ def ks_resource_request(
                     {**controls, **_cuda_library_identity(library)}, sort_keys=True
                 ),
             )
-            device = [
-                _cuda_item_inventory(
-                    library,
-                    item,
-                    diis_history=diis_history,
-                    requires_first_ao_derivatives=requires_first_ao_derivatives,
-                    functional_code=_native_semilocal_code(model.method_ir),
-                    requires_tau=requires_tau,
-                    tile=model.tile_points,
-                )
-                for item in items
-            ]
+            device_options = {
+                "diis_history": diis_history,
+                "requires_first_ao_derivatives": requires_first_ao_derivatives,
+                "functional_code": _native_semilocal_code(model.method_ir),
+                "requires_tau": requires_tau,
+                "tile": model.tile_points,
+            }
+            native_device = _native_cuda_fleet_inventory(
+                library,
+                items,
+                stationary,
+                device_fused_xc=model.xc_schedule != "host_unfused",
+                **device_options,
+            )
+            if native_device is None:
+                device = [
+                    _cuda_item_inventory(library, item, **device_options)
+                    for item in items
+                ]
+                if model.xc_schedule == "host_unfused":
+                    for item in device:
+                        item["xc"] = 0
+            else:
+                device, device_totals = native_device
             for inventory, consumer in zip(device, stationary, strict=True):
                 inventory["stationary"] = consumer
-            if model.xc_schedule == "host_unfused":
-                for item in device:
-                    item["xc"] = 0
             for key in ("state", "xc", "coulomb"):
                 estimates.append(
                     ResourceEstimate(
                         f"all KS device {key}",
-                        checked_bytes(sum(x[key] for x in device)),
+                        device_totals[key]
+                        if device_totals is not None
+                        else checked_bytes(sum(x[key] for x in device)),
                         f"device:{device_id}",
                         first_phase,
                         last_phase,
@@ -1070,7 +1221,9 @@ def ks_resource_request(
             estimates.append(
                 ResourceEstimate(
                     "all KS matrix-provider retention allowance",
-                    checked_bytes(sum(x["matrix_provider"] for x in device)),
+                    device_totals["matrix_provider"]
+                    if device_totals is not None
+                    else checked_bytes(sum(x["matrix_provider"] for x in device)),
                     f"device:{device_id}",
                     first_phase,
                     last_phase,
@@ -1081,9 +1234,13 @@ def ks_resource_request(
             # At most one owner is rebuilt at a time. Its retired allocation
             # need not coexist with its setup temporary. Quadrature setup
             # already includes the new owner's live Coulomb allocation.
-            extra = max(
-                max(0, x["setup"] - sum(x[k] for k in ("state", "xc", "coulomb")))
-                for x in device
+            extra = (
+                device_totals["setup_extra"]
+                if device_totals is not None
+                else max(
+                    max(0, x["setup"] - sum(x[k] for k in ("state", "xc", "coulomb")))
+                    for x in device
+                )
             )
             # The prepared force arena remains live during a later SCF replay.
             # Keep its reservation persistent and add only actual setup excess
@@ -1112,6 +1269,16 @@ def ks_resource_request(
         return ResourceRequest(
             name, identity, (), exclusions, unsupported_reason=str(error)
         )
+    cuda_composition_decisions = ()
+    if backend == "cuda":
+        cuda_composition_decisions = (
+            (
+                "cuda_fleet_composition",
+                "native-declared-capacity"
+                if device_totals is not None
+                else "legacy-leaf-compatibility",
+            ),
+        )
     candidate = ResourceCandidate(
         f"{backend}-ks-resident",
         "resident",
@@ -1121,6 +1288,7 @@ def ks_resource_request(
             ("cpu_worker_limit", "1"),
             ("item_host_inventory", json.dumps(host, sort_keys=True)),
             ("item_device_inventory", json.dumps(device, sort_keys=True)),
+            *cuda_composition_decisions,
             (
                 "xc_ao_selection",
                 "dense under the public device ledger; no optional map allowance"
@@ -1149,7 +1317,9 @@ def ks_resource_request(
     for mode, cost in (("cached", 0), ("minimum", 1)):
         consumer = ResourceEstimate(
             "all native KS stationary CUDA consumers",
-            checked_bytes(sum(item[mode] for item in stationary)),
+            device_totals[mode]
+            if device_totals is not None
+            else checked_bytes(sum(item[mode] for item in stationary)),
             f"device:{device_id}",
             first_phase,
             last_phase,

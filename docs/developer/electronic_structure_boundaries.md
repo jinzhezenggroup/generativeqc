@@ -146,6 +146,33 @@ responsible for identifying an additional or fundamentally different duplicate
 algorithm. The debt baseline is a ceiling, not a target: removing the remaining
 CUDA owner does not require a synchronized baseline update to keep CI green.
 
+## CUDA KS declared-capacity composition
+
+When the selected library exposes the additive CUDA KS fleet query,
+`scf::CudaKsDeviceFleetResources` composes the existing allocator-owned leaf
+inventories. It owns the value-only one-electron setup bound, alternative ECP
+scratch, quadrature/Coulomb overlap, retained state/XC/J and matrix-provider
+totals, serialized rebuild excess, and minimum/cached stationary candidate peaks.
+Successful composition is allocation-free and shape-only, including in a CPU-only build;
+obtaining CUDA leaf inventories still requires their independently supported
+native queries. Composition is not CUDA scientific execution or admission.
+The native CLI uses the same typed fleet owner for its independently supported
+ordinary energy dry runs; this does not expand CLI force/model admission.
+
+Python marshals compact topology and native leaf capacities, validates the wire
+publication and presents the existing resource labels. Only a missing fleet
+symbol permits explicit legacy per-item composition. An actual native refusal
+or inconsistent publication never retries Python sizing. The candidate decision
+`cuda_fleet_composition` records which route actually supplied the capacities.
+
+The shared resource-plan engine retains global lifetime composition, ranking and
+declared-budget admission. Scientific consumer eligibility, host force
+allowances, provider allocation receipts and complete simultaneously-live
+physical/RSS accounting remain separate contracts. No all-domain CUDA force or
+response/HVP capability follows from a capacity query. Native ABI transaction,
+overflow, aliasing and exact declared-budget tests protect this boundary; GPU
+execution and full endpoint performance require separate qualification.
+
 ## Regression inventory
 
 The report carries stable, method-specific test-file pointers for the required

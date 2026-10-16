@@ -13,6 +13,7 @@
 #include "runtime/resource_planning.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
+#include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 
 extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t, std::size_t, std::size_t,
@@ -669,21 +670,25 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     retained = inventory["retained"].get<Bytes>();
     workspace = std::max(inventory["setup_workspace"].get<Bytes>(),
                          inventory["scf_workspace"].get<Bytes>());
-    const Bytes live = sum({capacities[0], capacities[1], capacities[2]});
-    const Bytes pairs = orbital.shells * (orbital.shells + 1) / 2;
-    const Bytes setup =
-        std::max({product({64, sum({1, atoms.size(), orbital.shells, orbital.primitives,
-                                    orbital.cartesian_nbf, pairs,
-                                    product({orbital.cartesian_nbf, orbital.cartesian_nbf})})}),
-                  sum({capacities[2], quadrature}), ecp_workspace});
-    device = sum(
-        {product({options.batch, sum({live, matrix_provider})}), setup > live ? setup - live : 0});
+    scf::CudaKsDeviceFleetResources fleet;
+    std::array<Bytes, 6> device_item{};
+    try {
+      device_item = fleet.append(
+          {orbital.cartesian_nbf, atoms.size(), orbital.shells, orbital.primitives, capacities[0],
+           capacities[1], capacities[2], quadrature, matrix_provider, ecp_workspace, true, 0, 0},
+          options.batch);
+    } catch (const std::exception& error) {
+      throw UsageError(error.what());
+    }
+    const auto device_fleet = fleet.inventory();
+    device = device_fleet[7];
     plan["resident_bytes"]["device:" + std::to_string(options.device_id)] =
-        product({options.batch, sum({live, matrix_provider})});
+        device_fleet[7] - device_fleet[4];
+    plan["device_fleet_composition"] = "native-declared-capacity";
     plan["device_inventory"] = {{"state", capacities[0]},
                                 {"xc_and_grid", capacities[1]},
                                 {"coulomb", capacities[2]},
-                                {"setup", setup},
+                                {"setup", device_item[3]},
                                 {"matrix_provider", matrix_provider}};
   } else if (hf && !fitted) {
     std::array<Bytes, 2> values{};

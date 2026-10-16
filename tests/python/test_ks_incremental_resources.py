@@ -30,12 +30,24 @@ def ordinary_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _inventory_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """Only the ordinary shape query is stubbed; no CUDA execution is claimed."""
+    """Stub allocator leaves, not native composition; no CUDA execution is claimed."""
     library = SimpleNamespace(
         generativeqc_ks_resource_inventory_version_v1=lambda: 1,
         generativeqc_ks_options_version=lambda: 1,
     )
     monkeypatch.setattr(resources_ks, "_cuda_library_identity", lambda _: {})
+    monkeypatch.setattr(
+        resources_ks,
+        "_cuda_leaf_inventory",
+        lambda *args, **kwargs: {
+            "state": 8,
+            "xc": 8,
+            "coulomb": 8,
+            "quadrature_setup": 24,
+            "matrix_provider": 8,
+            "ecp_workspace": 0,
+        },
+    )
     monkeypatch.setattr(
         resources_ks,
         "_cuda_item_inventory",
