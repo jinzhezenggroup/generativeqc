@@ -1,0 +1,334 @@
+{
+  "source_commit": "1593d3b2fea9ed3e9232efc49eedede1beb1787b",
+  "source_tree": "f158f1c1b69700df6d74b0ebe42c68d370be09f3",
+  "prerequisites": {
+    "2531": "ba0dadbdcdef7af18715b72a2366595719df4bde",
+    "2532": "27d3b8558b7db2ae4b7d4051ae9122522379a809"
+  },
+  "native_build": {
+    "library_path": "/data/jzzeng/gqc-readme-2531-2532-20261015-1593d3b2f/runtime/libgenerativeqc.so",
+    "library_sha256": "be4adb3a296d072a9f18be227336439660166681afef99188b220e7b2d739d17",
+    "probe": {
+      "source_identity": "176e6b9c1b3a8757880e0c7b07739979b69ddf9a0745eee98abb4127fab603ca",
+      "native_abi": 0,
+      "schema": 1,
+      "policy": {
+        "precision": "fp64",
+        "spin": [
+          "rhf",
+          "uhf"
+        ],
+        "consumers": [
+          "fock",
+          "force"
+        ]
+      },
+      "host": {
+        "system": "Linux",
+        "machine": "x86_64",
+        "libc": [
+          "glibc",
+          "2.39"
+        ]
+      },
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      }
+    }
+  },
+  "cmake_cache": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CUDA_COMPILER": "/group/software/cuda-12.9.1/bin/nvcc",
+    "CMAKE_CUDA_COMPILER_LAUNCHER": "/home/jzzeng/.local/bin/ccache",
+    "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+    "CMAKE_CXX_COMPILER_AR": "/usr/bin/gcc-ar-11",
+    "CMAKE_CXX_COMPILER_LAUNCHER": "/home/jzzeng/.local/bin/ccache",
+    "CMAKE_CXX_COMPILER_RANLIB": "/usr/bin/gcc-ranlib-11",
+    "CMAKE_CXX_FLAGS": "",
+    "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+    "GENERATIVEQC_AOT_COMPILE_JOBS": "",
+    "GENERATIVEQC_AOT_PROFILE": "sm_120",
+    "GENERATIVEQC_AOT_PROFILES": "",
+    "GENERATIVEQC_AOT_SHARDS": "8",
+    "GENERATIVEQC_AOT_SHELL_MANIFEST": "/home/jzzeng/.codex/worktrees/27de/qc-external-basis/python/generativeqc_compiler/integral/production_shell_classes.json",
+    "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "1",
+    "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+    "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS": "",
+    "GENERATIVEQC_BUILD_CLI": "OFF",
+    "GENERATIVEQC_BUILD_TESTS": "OFF",
+    "GENERATIVEQC_BUNDLE_XTB_OPENBLAS": "OFF",
+    "GENERATIVEQC_COMPILER_CACHE": "auto",
+    "GENERATIVEQC_CPU_LINALG_PROVIDER": "auto",
+    "GENERATIVEQC_CUDA_AO_RADIAL_REUSE": "ON",
+    "GENERATIVEQC_CUDA_ARCHITECTURES": "",
+    "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED": "OFF",
+    "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
+    "GENERATIVEQC_CUDA_COMPILE_JOBS": "",
+    "GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK": "ON",
+    "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+    "GENERATIVEQC_CUDA_PROVIDER": "nvidia",
+    "GENERATIVEQC_CUDA_SEPARABLE_COMPILATION": "OFF",
+    "GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS": "1",
+    "GENERATIVEQC_CUDA_XC_MATRIX_TILE": "16",
+    "GENERATIVEQC_CUTENSOR_ROOT": "",
+    "GENERATIVEQC_CUTLASS_ROOT": "",
+    "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER": "/home/jzzeng/.local/bin/ccache",
+    "GENERATIVEQC_ENABLE_AOT_SHELLS": "ON",
+    "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT": "OFF",
+    "GENERATIVEQC_ENABLE_CUBLASLT": "OFF",
+    "GENERATIVEQC_ENABLE_CUDA": "ON",
+    "GENERATIVEQC_ENABLE_CUTENSOR": "OFF",
+    "GENERATIVEQC_ENABLE_CUTLASS": "OFF",
+    "GENERATIVEQC_ENABLE_CXX_PCH": "OFF",
+    "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA": "ON",
+    "GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT": "ON",
+    "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT": "ON",
+    "GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS": "OFF",
+    "GENERATIVEQC_MONOLITHIC_CLI": "OFF",
+    "GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA": "ON",
+    "GENERATIVEQC_PYTHON_WHEEL": "OFF",
+    "GENERATIVEQC_RESOLVED_COMPILER_CACHE": "/home/jzzeng/.local/bin/ccache",
+    "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER": "",
+    "GENERATIVEQC_STATIONARY_AOT_PROFILES": "auto",
+    "CMAKE_CUDA_COMPILER-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_AR-ADVANCED": "1",
+    "CMAKE_CXX_COMPILER_RANLIB-ADVANCED": "1",
+    "GENERATIVEQC_AOT_UNIT_MODE-STRINGS": "stable-shards;class",
+    "GENERATIVEQC_CPU_LINALG_PROVIDER-STRINGS": "auto;scalar;openblas",
+    "GENERATIVEQC_CUDA_PROVIDER-STRINGS": "nvidia;cumetal",
+    "GENERATIVEQC_CUDA_XC_MATRIX_TILE-STRINGS": "8;16;32",
+    "GENERATIVEQC_RESOLVED_COMPILER_CACHE-ADVANCED": "1",
+    "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER-ADVANCED": "1"
+  },
+  "compiler_cache": {
+    "version": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+    "before": "Summary:\n  Hits:            100301 / 300321 (33.40 %)\n    Direct:         84170 / 301679 (27.90 %)\n    Preprocessed:   16131 / 217431 (7.42 %)\n  Misses:          200020\n    Direct:        217509\n    Preprocessed:  201300\n  Errors:             927\n  Uncacheable:      12697\nPrimary storage:\n  Hits:            209657 / 603285 (34.75 %)\n  Misses:          393628\n  Cache size (GB):  10.75 /  12.00 (89.59 %)\n  Cleanups:           651\n\nUse the -v/--verbose option for more details.\n",
+    "after": "Summary:\n  Hits:            100535 / 300583 (33.45 %)\n    Direct:         84403 / 301941 (27.95 %)\n    Preprocessed:   16132 / 217460 (7.42 %)\n  Misses:          200048\n    Direct:        217538\n    Preprocessed:  201328\n  Errors:             927\n  Uncacheable:      12697\nPrimary storage:\n  Hits:            210134 / 603809 (34.80 %)\n  Misses:          393675\n  Cache size (GB):  10.76 /  12.00 (89.69 %)\n  Cleanups:           651\n\nUse the -v/--verbose option for more details.\n"
+  },
+  "build_command": "CCACHE_BASEDIR=$PWD cmake --build build/readme-wb97mv --parallel 12 --verbose",
+  "build_log_sha256": "5dff82bf14ccbe98519c816576b333ec0b6a25cf776c697d214cf0e4783c614b",
+  "runtime_package": {
+    "generativeqc_stationary_b3lyp_rks.json": {
+      "bytes": 1540,
+      "sha256": "6fb1eaed4953f701af5f5bf97a083fcc60415eca0c75f66cce18acc9e188a894"
+    },
+    "generativeqc_stationary_b3lyp_rks_spd.json": {
+      "bytes": 3304,
+      "sha256": "feae053fc9b0fb9215d05b213276664c6761277e4be635efb8a7cec565926710"
+    },
+    "generativeqc_stationary_b3lyp_uks.json": {
+      "bytes": 1538,
+      "sha256": "e46d7cba906a9d59491de00396b3085036b5a352c068ad1928925d3523a12cfc"
+    },
+    "generativeqc_stationary_b3lyp_uks_spd.json": {
+      "bytes": 3302,
+      "sha256": "7b499901f81a5d766d74a2dd450687d7d861ed671882a741e3f9ce243391118c"
+    },
+    "generativeqc_stationary_lda_rks.json": {
+      "bytes": 1448,
+      "sha256": "9ba5cadcfab95c6bac848d7fc403d008ec756fe1444158d01848200cabdd9347"
+    },
+    "generativeqc_stationary_lda_rks_spd.json": {
+      "bytes": 3212,
+      "sha256": "0151fa76f38e0270bf9be981b025fc2cb00d322a30f3af032bd56fb6758d668e"
+    },
+    "generativeqc_stationary_lda_uks.json": {
+      "bytes": 1446,
+      "sha256": "6ccf45651814d172cb06eac9739f7cad53f57eb7d203278571678567e30751fd"
+    },
+    "generativeqc_stationary_lda_uks_spd.json": {
+      "bytes": 3210,
+      "sha256": "3089bb1894394688d3f5cc37b7c1d1ae7f0b4b13cd3816c4a878cd483691f38c"
+    },
+    "generativeqc_stationary_m06_2x_rks.json": {
+      "bytes": 1546,
+      "sha256": "a388c0910b5b45f64431afef999bca578d58bc94d643ce386a508f5d8d10e5ed"
+    },
+    "generativeqc_stationary_m06_2x_rks_spd.json": {
+      "bytes": 3310,
+      "sha256": "b2493df3759d661667bc1cdc685606d7d172be0d14cc0fdd124564530c8c2dd9"
+    },
+    "generativeqc_stationary_m06_2x_uks.json": {
+      "bytes": 1544,
+      "sha256": "5285a7356b99f3135da2618ee84543953a15d5828000351104c55c4102f2d39b"
+    },
+    "generativeqc_stationary_m06_2x_uks_spd.json": {
+      "bytes": 3308,
+      "sha256": "cc8fa4219bae72ee533826234d388a08dd9ed3cf44cc45cac91c7437f3c4b7bc"
+    },
+    "generativeqc_stationary_pbe0_rks.json": {
+      "bytes": 1539,
+      "sha256": "e1f2279f9a05b31d94d991b5a308c80d1e3b86aee3d667e808fe479d924c9bb9"
+    },
+    "generativeqc_stationary_pbe0_rks_spd.json": {
+      "bytes": 3303,
+      "sha256": "1a91d0e56b998d29302486bdc5f535f21945c1d8fb0d7095f4101d9e5ebbcd48"
+    },
+    "generativeqc_stationary_pbe0_uks.json": {
+      "bytes": 1537,
+      "sha256": "3fc303c47d92b6c5ded85e3526a5e457c22d398742c9844d634f812b76851337"
+    },
+    "generativeqc_stationary_pbe0_uks_spd.json": {
+      "bytes": 3301,
+      "sha256": "f35946161e68b56e506de6d456cd08978b31020af830d023f94f76254fa50fd7"
+    },
+    "generativeqc_stationary_pbe_rks.json": {
+      "bytes": 1448,
+      "sha256": "e2b617e4deb1278d4718fd78bdf26db6e2092e09abc296f8ab012850e557bd30"
+    },
+    "generativeqc_stationary_pbe_rks_spd.json": {
+      "bytes": 3212,
+      "sha256": "862e928d80d97db0709cc2d985e9466702b949fc0135f70837f2c8a0a36918bf"
+    },
+    "generativeqc_stationary_pbe_uks.json": {
+      "bytes": 1446,
+      "sha256": "1d09363f6b2782e7300048eaa3f6f05e47f9250748157495c8ebc69d0a96951f"
+    },
+    "generativeqc_stationary_pbe_uks_spd.json": {
+      "bytes": 3210,
+      "sha256": "30bd5f66b8ee540aaf75fa0163f823a7d8d0d3c3ab91a92c9ce07455dd0fb11d"
+    },
+    "generativeqc_stationary_r2scan_rks.json": {
+      "bytes": 1451,
+      "sha256": "c2ba10e0614e4e735bfb147e5f8fe99fd32c014ceb90afa20b738c118a160e9a"
+    },
+    "generativeqc_stationary_r2scan_rks_spd.json": {
+      "bytes": 3215,
+      "sha256": "d575841fffeeaeffd950b25bc140e06c2486e1637a7f9bf294796f3a062a3d33"
+    },
+    "generativeqc_stationary_r2scan_uks.json": {
+      "bytes": 1449,
+      "sha256": "82109afc177f4b77b7c0edbfc377999ef7c3443fd573cf375f395294c3d8cb9b"
+    },
+    "generativeqc_stationary_r2scan_uks_spd.json": {
+      "bytes": 3213,
+      "sha256": "c523624bece734f1693df8cd36d76975b30a3f53b0fdb7b4ae308557d656c74f"
+    },
+    "libgenerativeqc.so": {
+      "bytes": 969900328,
+      "sha256": "be4adb3a296d072a9f18be227336439660166681afef99188b220e7b2d739d17"
+    },
+    "libgenerativeqc_stationary_b3lyp_rks.so": {
+      "bytes": 11433992,
+      "sha256": "32d604c28498624b2d243d3f728e7824bc5543e4ba29ce53293e2cc7eceb7a6c"
+    },
+    "libgenerativeqc_stationary_b3lyp_rks_spd.so": {
+      "bytes": 35239992,
+      "sha256": "2628e9a35f7aa75442f66a5de836d2bc65ed8e34d7bed093983861096b3ad338"
+    },
+    "libgenerativeqc_stationary_b3lyp_uks.so": {
+      "bytes": 10897272,
+      "sha256": "bf7f5b538019469072ae6ca8763af10c4a6a53114fc56de7df67227f29217521"
+    },
+    "libgenerativeqc_stationary_b3lyp_uks_spd.so": {
+      "bytes": 34707368,
+      "sha256": "8c1e0395ed47da9d7fd571ecb18a43d9657b97264b6c6cd6a2ba119ea6e6da4b"
+    },
+    "libgenerativeqc_stationary_lda_rks.so": {
+      "bytes": 11171840,
+      "sha256": "8bc5341b4ec0ff1f2dfffa820dc535d9210bff8dfc1b2eefa8263558c4327475"
+    },
+    "libgenerativeqc_stationary_lda_rks_spd.so": {
+      "bytes": 34977832,
+      "sha256": "51ab16734a1b22487618162bc8fab1ea88552debc0f8cbd51c54887416ea99d8"
+    },
+    "libgenerativeqc_stationary_lda_uks.so": {
+      "bytes": 10897256,
+      "sha256": "ad5c0def2bc0cd9a652554d075d4eb2ae67fbae1cd9d099c210234463a1730a6"
+    },
+    "libgenerativeqc_stationary_lda_uks_spd.so": {
+      "bytes": 34711448,
+      "sha256": "577874b57eba92c0a3bcd6a6d65cd71807b483ef99ed8ffc2505bfcb54d0672f"
+    },
+    "libgenerativeqc_stationary_m06_2x_rks.so": {
+      "bytes": 12879888,
+      "sha256": "361af0c978e10f4306f3995831b69eb564c076bc0a39055e4e72160d669322cc"
+    },
+    "libgenerativeqc_stationary_m06_2x_rks_spd.so": {
+      "bytes": 36685888,
+      "sha256": "7b74df70f1f5b0638ac21be80b187e879b9bb51b64d47d5919e264097238ce94"
+    },
+    "libgenerativeqc_stationary_m06_2x_uks.so": {
+      "bytes": 12158848,
+      "sha256": "05443bf3733966faf58599449399498aaba4218f10d52d1e39a79ecbf6912e80"
+    },
+    "libgenerativeqc_stationary_m06_2x_uks_spd.so": {
+      "bytes": 35973032,
+      "sha256": "f33d947d8d999d83aa48f3994b20d807d800934fc8a3f7f3accfda58bf75b7b5"
+    },
+    "libgenerativeqc_stationary_pbe0_rks.so": {
+      "bytes": 12511240,
+      "sha256": "f47096d7914919d36d072abd8ba5868d7d102937587e1f9f86c1579f6fc9f78f"
+    },
+    "libgenerativeqc_stationary_pbe0_rks_spd.so": {
+      "bytes": 36321328,
+      "sha256": "65965e4cde248cf29576d9e5d53ea266fba7e3f70123efbdc19866c20fe772c4"
+    },
+    "libgenerativeqc_stationary_pbe0_uks.so": {
+      "bytes": 11888496,
+      "sha256": "9a600c8926c26b773eccb380c2dc17a7389e520b85e1819a9ef39ebc6c6325f6"
+    },
+    "libgenerativeqc_stationary_pbe0_uks_spd.so": {
+      "bytes": 35698592,
+      "sha256": "fcdbd9a34885e9096b1d993d116f78f1108752ad43fae25fb56052d5e2419dd9"
+    },
+    "libgenerativeqc_stationary_pbe_rks.so": {
+      "bytes": 12511232,
+      "sha256": "aa567f7f2859124cb9b901ab3e8c839b65916b0dd01ec1c1a6f8d2d205e2f498"
+    },
+    "libgenerativeqc_stationary_pbe_rks_spd.so": {
+      "bytes": 36317224,
+      "sha256": "283393363e116ec6986ffb04da3b18843031f3d4524a00467fe3ff0c0839d92d"
+    },
+    "libgenerativeqc_stationary_pbe_uks.so": {
+      "bytes": 11876200,
+      "sha256": "0f8e010a9829b14ca2b03ede1b80b3c0f9e4815767402febecfcedb059d062d3"
+    },
+    "libgenerativeqc_stationary_pbe_uks_spd.so": {
+      "bytes": 35690392,
+      "sha256": "026e25fd1c30d5473d9bcbae0c50e9715d8348fb3c87b21fe19ee0d3429edfd9"
+    },
+    "libgenerativeqc_stationary_r2scan_rks.so": {
+      "bytes": 12945424,
+      "sha256": "681eea5c20277f1a124355ba07932b8a9991f50c8aa1699db8389f007975fe35"
+    },
+    "libgenerativeqc_stationary_r2scan_rks_spd.so": {
+      "bytes": 36751424,
+      "sha256": "7e72b1f750477e6c39eb8587ae7b8899243545584b24aab1e1d8d3348cd9fd9e"
+    },
+    "libgenerativeqc_stationary_r2scan_uks.so": {
+      "bytes": 12007296,
+      "sha256": "f1c550aa9869d9964833f885fbe2b38d4c04007e6dbbd4d30f5e4f372c5202ed"
+    },
+    "libgenerativeqc_stationary_r2scan_uks_spd.so": {
+      "bytes": 35821480,
+      "sha256": "e1cebcf57480aadbe4a4880e927b5b791b75ae5652bd3625f45e5d8d9332132e"
+    }
+  },
+  "toolchain": {
+    "cmake": "cmake version 4.2.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+    "cxx": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "cuda": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+    "python": "Python 3.13.9"
+  }
+}
