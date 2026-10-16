@@ -94,6 +94,7 @@ def test_prepared_admission_retains_graph_and_capacity(
     source = tmp_path / "graph_admission.cpp"
     source.write_text(
         '#include "scf/types.hpp"\n'
+        '#include "scf/fock_precision.hpp"\n'
         '#include "dft/grid.hpp"\n'
         '#include "dft/application_precision.hpp"\n'
         '#include "dft/semilocal_family.hpp"\n'
@@ -159,6 +160,7 @@ int main() {
     options.resolved_fock_build.emplace();
     auto& provider = *options.resolved_fock_build;
     provider.backend = scf::FockBackend::Cuda;
+    provider.schedule = scf::FockSchedule::CudaIndependent;
     provider.spec.derivative_order = 0;
     provider.spec.spin = spin == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
     provider.spec.exchange.coefficient = spin == 1 ? -0.125 : -0.25;
@@ -204,6 +206,18 @@ int main() {
     options.application_precision_budget = {1e-5, 1e-4, 3e-5};
     if (bool(select()) != (spin == 1)) return 12;
     if (bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) != (spin == 1)) return 16;
+    options.energy_tolerance = 1e-6;
+    options.density_tolerance = 1e-4;
+    options.screening_tolerance = 1e-10;
+    if (bool(select()) != (spin == 1)) return 23;
+    provider.schedule = scf::FockSchedule::CpuReference;
+    if (select()) return 24;
+    provider.schedule = scf::FockSchedule::CudaIndependent;
+    options.energy_tolerance = 1.01e-6;
+    if (select()) return 25;
+    options.energy_tolerance = 1e-10;
+    options.density_tolerance = 1e-8;
+    options.screening_tolerance = 1e-12;
     options.precision_mode = GENERATIVEQC_PRECISION_FP64;
     if (select() != expected) return 17;
     options.precision_mode = GENERATIVEQC_PRECISION_AUTO;

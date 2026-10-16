@@ -1769,6 +1769,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!precision_schedule.any_lower_precision() || budget_fock) && !incremental_direct_jk &&
         !use_warm && options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    if (budget_fock && budget_stationarity) {
+      // Finish one bounded mixed proposal before paying for the strict anchor.
+      // Application budgets reject explicit warmup overrides at preparation;
+      // ordinary AUTO and explicitly strict callers retain their own policy.
+      mixed_warmup.max_iterations =
+          nonlocal_outer_active ? nonlocal_mixed_proposal_limit(options.max_iterations) : 12;
+      mixed_warmup.switch_residual =
+          nonlocal_outer_active ? nonlocal_confirmation_tolerance(true, options.density_tolerance)
+                                : 1e-4;
+    }
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
@@ -3028,6 +3038,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.density_change < options.density_tolerance &&
         physical.residual < nonlocal_confirmation &&
         physical.maximum_residual < nonlocal_confirmation;
+    const bool confirm_direct_stationary_density =
+        spins == 1 && !has_exchange && !fitted_coulomb && !fitted_exchange &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk && !budget_fock &&
+        !precision_schedule.any_lower_precision() && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        detail::stationary_density_needs_energy_confirmation(
+            has_energy_history, output.energy_change, physical.density_change, physical.residual,
+            physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
+            physical_stationarity_tolerance());
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     // Budget Fock already requires consecutive fresh FP64 physical Focks and
@@ -3039,9 +3059,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                       incremental_direct_jk || spins == 2 ||
                                       !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
-    const bool enter_strict_refinement = mixed_warmup.enter_refinement(
-        mixed_stage, converged, output.iterations, options.max_iterations,
-        physical.maximum_residual, pending_nonlocal_seed || pending_nonlocal_frozen);
     // Inner residuals only control how soon to refresh the expensive operator;
     // they are never publication gates. Early fixed-point problems need not be
     // oversolved below their changing VV10-anchor error. The ordinary strict
@@ -3049,12 +3066,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const double nonlocal_stage_tolerance = pending_nonlocal_seed
                                                 ? (nonlocal_outer_active ? 1e-5 : 1e-9)
                                                 : nonlocal_inner_residual_tolerance;
+    const unsigned nonlocal_stage_limit =
+        pending_nonlocal_seed && mixed_stage && budget_fock && budget_stationarity
+            ? nonlocal_seed_iteration_limit
+            : nonlocal_proposal_iteration_limit;
     const bool enter_nonlocal_target =
         (pending_nonlocal_seed || pending_nonlocal_frozen) &&
         (physical.maximum_residual < nonlocal_stage_tolerance ||
          mixed_warmup.target_refresh_due(mixed_stage, output.iterations, options.max_iterations) ||
-         (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
+         (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >=
+             nonlocal_stage_limit ||
          output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
+    // A completed mixed frozen-potential proposal needs a strict target next,
+    // not another mixed pair sweep immediately discarded at precision handoff.
+    // Neither its residual nor its energy can authorize publication. A stalled
+    // inner solve also hands off within the same finite proposal budget.
+    const bool handoff_nonlocal_proposal = budget_fock && budget_stationarity && mixed_stage &&
+                                           nonlocal_outer_active && pending_nonlocal_frozen &&
+                                           enter_nonlocal_target;
+    const bool enter_strict_refinement =
+        handoff_nonlocal_proposal ||
+        mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
+                                      options.max_iterations, physical.maximum_residual,
+                                      pending_nonlocal_seed || pending_nonlocal_frozen);
     if (enter_strict_refinement) {
       // FP32 is only a proposal accelerator. The bounded point-only history
       // exception cannot certify a physical iterate; ordinary AUTO still
@@ -3151,7 +3185,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         warm_energy = physical.electronic_energy;
         warm_energy_correction = physical.electronic_energy_correction;
         occupied_fitted_factor_ready = false;
-      } else if (is_active && confirm_nonlocal_stationary_density) {
+      } else if (is_active &&
+                 (confirm_nonlocal_stationary_density || confirm_direct_stationary_density)) {
         // tmp2 belongs to the unaccepted proposal, not the held density. Do
         // not expose that orbital frame as an occupied-factor identity.
         occupied_fitted_factor_ready = false;
@@ -3445,7 +3480,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
          final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
     const bool default_device_validation = device_final_validation_default_eligible(
         n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(),
-        full_range_coulomb_only, fitted_coulomb);
+        full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&

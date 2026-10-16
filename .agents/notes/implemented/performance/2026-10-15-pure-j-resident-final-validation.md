@@ -8,6 +8,10 @@ The exact-direct pure-J default scope below is superseded by the
 The original measurements and rationale remain historical; changed SCF work
 does not waive the retained failed complete-endpoint nonregression gate.
 
+The hold is subsequently superseded by the
+[stationary-energy repair](../numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
+and a separate source-qualified campaign, not by reclassifying these observations.
+
 ## Problem
 
 The defining r²SCAN-3c def2-mTZVPP basis increases the AO count relative to

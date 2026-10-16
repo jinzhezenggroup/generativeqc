@@ -62,6 +62,8 @@ DRIVER = r"""
 
 extern "C" {
 void* generativeqc_resource_ledger_create_v1(std::size_t, int);
+int generativeqc_resource_ledger_create_from_buffers_v1(const std::uint64_t*, std::size_t,
+                                                       void**, std::uint64_t*, std::size_t);
 void generativeqc_resource_ledger_destroy_v1(void*);
 int generativeqc_resource_ledger_bind_v1(void*);
 int generativeqc_resource_ledger_read_v1(void*, std::uint64_t*);
@@ -81,8 +83,23 @@ void require(bool condition, const char* message) {
 }
 
 struct Observation {
-  void* handle = generativeqc_resource_ledger_create_v1(128, 0);
-  Observation() { require(handle != nullptr, "create"); bind(); }
+  void* handle{};
+  explicit Observation(bool planned = false) {
+    if (planned) {
+      const std::array<std::uint64_t, 18> rows{128, 4, 0, 0, 0, 0,
+                                               16, 4, 0, 1, 1, 0,
+                                             1024, 4, 0, 1, 1, 1};
+      std::array<std::uint64_t, 3> receipt{};
+      require(generativeqc_resource_ledger_create_from_buffers_v1(
+                  rows.data(), rows.size(), &handle, receipt.data(), receipt.size()) == 0 &&
+                  receipt == std::array<std::uint64_t, 3>{0, 128, 1040},
+              "selected inventory admission");
+    } else {
+      handle = generativeqc_resource_ledger_create_v1(128, 0);
+    }
+    require(handle != nullptr, "create");
+    bind();
+  }
   ~Observation() { end(); generativeqc_resource_ledger_destroy_v1(handle); }
   void bind() {
     require(generativeqc_resource_tracking_begin_v1(0) == 0, "begin");
@@ -199,8 +216,8 @@ void journal_reused_address() {
   generativeqc_resource_journal_destroy_v1(capture);
 }
 
-void lifecycle() {
-  Observation observation;
+void lifecycle(bool planned = false) {
+  Observation observation(planned);
   void* pointer{};
   require(resource_cuda_malloc(&pointer, 24) == cudaSuccess, "first allocation");
   observation.check({24, 24, 1, 0, 24});
@@ -222,8 +239,8 @@ void lifecycle() {
   observation.check({0, 64, 0, 0, 0});
 }
 
-void failures() {
-  Observation observation;
+void failures(bool planned = false) {
+  Observation observation(planned);
   void* pointer{};
   bool host_oom = true;
   require(resource_cuda_allocate(&pointer, 8, [] { return cudaErrorMemoryAllocation; },
@@ -278,7 +295,9 @@ int main(int argc, char** argv) {
     require(argc == 2, "scenario missing");
     const std::string scenario = argv[1];
     if (scenario == "lifecycle") lifecycle();
+    else if (scenario == "planned-lifecycle") lifecycle(true);
     else if (scenario == "failures") failures();
+    else if (scenario == "planned-failures") failures(true);
     else if (scenario == "overflow") overflow();
     else if (scenario == "journal-lifetime") journal_lifetime();
     else if (scenario == "journal-loss") journal_loss();
@@ -335,7 +354,13 @@ def ledger_probe(
     source = folder / "probe.cpp"
     source.write_text(DRIVER)
     return required_native_cxx.build_executable(
-        [ROOT / "src/api/c_api_resources.cpp", source],
+        [
+            ROOT / "src/api/c_api_resources.cpp",
+            ROOT / "src/api/c_api_resource_ledger_plan.cpp",
+            ROOT / "src/runtime/resource_ledger_plan.cpp",
+            ROOT / "src/runtime/resource_planning.cpp",
+            source,
+        ],
         folder / "probe",
         compile_args=(
             "-std=c++20",
@@ -358,7 +383,9 @@ def ledger_probe(
     "scenario",
     (
         "lifecycle",
+        "planned-lifecycle",
         "failures",
+        "planned-failures",
         "overflow",
         "journal-lifetime",
         "journal-loss",

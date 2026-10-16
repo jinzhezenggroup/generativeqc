@@ -105,6 +105,33 @@ iteration-branch histograms, source identity and the library checksum. A changed
 numerical/work signature invalidates a pooled timing comparison. This scoped
 procedure does not establish GPU performance or complete physical receipts.
 
+## Native device ledger binding
+
+An already-loaded library exposing
+`generativeqc_resource_ledger_create_from_buffers_v1` derives a prepared owner's
+numeric ledger limit and visible device from its selected capacity records.
+The same native sparse-lifetime accounting used for global composition sweeps
+the full inventory and the subset excluding `runtime_allowance`. Allowances
+are withheld independently; they cannot fund tracked numeric allocations.
+Subtracting independently measured peaks is not equivalent when lifetimes differ.
+
+The metadata-only query creates a handle compatible with existing ledger
+binding, observation, retained-provider reservations, journals and destruction.
+It performs no CUDA operation or device selection by availability. Missing or
+multiple visible devices are unsupported for this single-device owner; ordinals
+outside the native signed-device domain are rejected rather than narrowed.
+Invalid/overflowing/aliased records leave both handle and receipt unchanged.
+
+`device_ledger.capacity_admission` identifies this native owner and reports the
+full declared device peak separately from `limit_bytes`, the explicit numeric
+admission cap. Neither is a physical allocation/RSS measurement. The Python
+adapter publishes the handle only after receipt validation, releases unpublished
+metadata on validation failure, and never retries native rejection with portable
+accounting. Older libraries retain explicit portable capacity derivation; an
+allowance-only inventory has a zero numeric limit, not a fabricated allocation.
+Retained native buffers/reservations continue to outlive observation scopes and
+closed frontend handles until their actual owners release them.
+
 ## CUDA KS to force handoff
 
 CUDA KS keeps its admitted optional ERI value cache throughout SCF and after

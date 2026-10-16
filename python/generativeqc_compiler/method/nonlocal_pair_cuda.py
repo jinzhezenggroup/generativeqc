@@ -178,7 +178,7 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
 // This coalesces partner loads/stores and replaces a warp reduction per partner
 // with register exchange. All lanes, including padded partners, must rotate;
 // only scientific pair evaluation and publication may be predicated.
-template <bool Geometry>
+template <bool Geometry, bool RetainScaleProofs = false>
 __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPairOutputs output) {
   if (*input.rejected != 0) return;
   constexpr unsigned rows_per_lane = 4, tile = 32 * rows_per_lane;
@@ -196,6 +196,7 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
     while (outer * (outer + 1) / 2 > ordinal) --outer;
     const size_t inner = ordinal - outer * (outer + 1) / 2;
     double sum[rows_per_lane][fields]{};
+    int row_state[rows_per_lane];
     bool row_live[rows_per_lane];
     double row_factor[rows_per_lane], row_omega[rows_per_lane], row_kappa[rows_per_lane];
     double row_x[rows_per_lane], row_y[rows_per_lane], row_z[rows_per_lane];
@@ -204,10 +205,17 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
       const size_t slot = tile * outer + 32 * row + lane;
       const size_t index = slot < active_count ? input.indices[slot] : 0;
       row_factor[row] = input.weighted_density[index];
-      row_live[row] = slot < active_count &&
-                      !(row_factor[row] == 0.0 && signbit(row_factor[row]));
       row_omega[row] = input.omega[index];
       row_kappa[row] = input.kappa[index];
+      // Partner bit zero owns the live row; bit one retains its FP32 scale proof.
+      // Rotation carries both flags in the existing partner-state shuffle,
+      // avoiding eight immutable scale comparisons for every physical pair.
+      row_live[row] = slot < active_count &&
+                      !(row_factor[row] == 0.0 && signbit(row_factor[row]));
+      if constexpr (RetainScaleProofs) {
+        row_state[row] = input.mixed_pair_arithmetic &&
+            fp32_pair_scale_domain(row_omega[row], row_kappa[row]) ? 2 : 0;
+      }
       row_x[row] = input.points[3 * index];
       row_y[row] = input.points[3 * index + 1];
       row_z[row] = input.points[3 * index + 2];
@@ -220,21 +228,33 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
       double point_x = input.points[3 * index], point_y = input.points[3 * index + 1];
       double point_z = input.points[3 * index + 2];
       int live = slot < active_count && !(factor == 0.0 && signbit(factor));
+      if constexpr (RetainScaleProofs)
+        if (input.mixed_pair_arithmetic && fp32_pair_scale_domain(omega, kappa)) live |= 2;
       double partner[fields]{};
 #pragma unroll 1
       for (unsigned step = 0; step < 32; ++step) {
 #pragma unroll
         for (unsigned row = 0; row < rows_per_lane; ++row) {
-          if (live && row_live[row]) {
+          const bool partner_live = RetainScaleProofs ? (live & 1) != 0 : live != 0;
+          if (partner_live && row_live[row]) {
             const double dx = point_x - row_x[row], dy = point_y - row_y[row];
             const double dz = point_z - row_z[row];
             const double r2 = dx * dx + dy * dy + dz * dz;
             BilateralPairValues pair{};
-            // Packet rotation changes ownership, not the arithmetic domain or fallback.
-            if (input.mixed_pair_arithmetic && try_pair_values_vv10_bilateral_fp32<Geometry>(
-                    r2, row_omega[row], omega, row_kappa[row], kappa, pair))
+            // Scale proofs travel with their own rows; only distance varies.
+            bool mixed_pair = false;
+            if constexpr (RetainScaleProofs) {
+              mixed_pair = ((live & row_state[row]) & 2) && fp32_pair_radius_domain(r2);
+              if (mixed_pair)
+                pair = pair_values_vv10_bilateral_fp32<Geometry>(
+                    r2, row_omega[row], omega, row_kappa[row], kappa);
+            } else {
+              mixed_pair = input.mixed_pair_arithmetic && try_pair_values_vv10_bilateral_fp32<Geometry>(
+                  r2, row_omega[row], omega, row_kappa[row], kappa, pair);
+            }
+            if (mixed_pair) {
               ++mixed_pairs;
-            else {
+            } else {
               pair = pair_values_vv10_bilateral<Geometry>(
                   r2, row_omega[row], omega, row_kappa[row], kappa);
               ++strict_pairs;
@@ -272,7 +292,8 @@ __global__ void parallel_pair_packet_kernel(ParallelPairInputs input, ParallelPa
           partner[field] = __shfl_sync(0xffffffffU, partner[field], next);
       }
       // Diagonal tiles already evaluated both ordered legs in the row sums.
-      if (outer != inner && live) {
+      const bool partner_live = RetainScaleProofs ? (live & 1) != 0 : live != 0;
+      if (outer != inner && partner_live) {
 #pragma unroll
         for (unsigned field = 0; field < fields; ++field)
           atomicAdd(parallel_pair_partial(output, index, field), partner[field]);

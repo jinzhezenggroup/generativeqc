@@ -119,13 +119,12 @@ for these strict-FP64 restricted producers:
 - Full-range exact-direct global hybrids with at least 384 AOs. The signed
   exchange coefficient and Direct J/K operators, not a functional name such as
   PBE0 or B3LYP, determine eligibility.
-- All-electron full-range Coulomb-only models using exact-direct J with
-  **544 ≤ AOs < 1088**, or density-fitted J with at least **544 AOs**.
+- All-electron full-range Coulomb-only models using exact-direct or
+  density-fitted J with at least **544 AOs**.
   This includes eligible r²SCAN-3c owners; their separate D4/gCP corrections
-  remain part of the complete endpoint. Exact-direct pure-J owners at 1088 AOs
-  and above retain the host proof because the measured Direct/96 moved endpoint
-  failed complete-endpoint nonregression. This hold does not apply to the
-  separately qualified DF or global-hybrid defaults.
+  remain part of the complete endpoint. The stationary-energy repair and its
+  source-matched complete-endpoint qualification replace the temporary
+  1088-AO exact-direct hold; the historical failed cohort remains rejected.
 
 Resource and live-generation checks still require the matrix-library handle,
 charged packets and no previously published stationary W/total-D lease. Smaller
@@ -139,8 +138,14 @@ automatic policy; other values are errors. This changes only execution of the
 shared strict proof: scientific acceptance gates, dense host exports and the
 orbital-energy expression for KS weighted density remain unchanged.
 
+Ordinary strict-FP64 all-electron exact-direct pure-J CUDA KS can hold an
+already stationary density while rebuilding the complete physical F[D] to
+confirm a failed energy gate. Density change and both physical residual norms
+must already pass their original thresholds. The fresh energy must still pass;
+this neither replays a cached energy nor changes convergence or iteration limits.
+
 See the [default-selection decision](../../.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md)
-and [bounded pure-J policy](../../.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md)
+and [stationary pure-J energy confirmation](../../.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
 for their evidence and limits.
 
 ### Experimental incremental Direct-J/K and resource budgets

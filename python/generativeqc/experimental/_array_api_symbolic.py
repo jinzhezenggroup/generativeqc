@@ -733,6 +733,8 @@ def asarray(
             return value
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
+        if copy is False:
+            raise ValueError("asarray dtype conversion requires a copy")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
     if "unknown-nested" in source_kinds:

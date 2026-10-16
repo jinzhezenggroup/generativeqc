@@ -1084,8 +1084,8 @@
     },
     {
       "path": "reproduction/manifest.json",
-      "bytes": 3723,
-      "sha256": "fb281fc5f612ce61e1a096ab10dcd3dd4c5d1d8d02c9fe186b8bfece541fbe66",
+      "bytes": 3939,
+      "sha256": "ea96c0280f69e271550ebec8470444e1ec1f7e94748379cad63091df9ec5ca8c",
       "original_path": "/home/jzzeng/codes/vibeqc-issue409-packed/.artifacts/issue409/stage2/frozen/manifest.json",
       "original_bytes": 3723,
       "original_sha256": "fb281fc5f612ce61e1a096ab10dcd3dd4c5d1d8d02c9fe186b8bfece541fbe66"
@@ -1107,9 +1107,10 @@
       "original_sha256": "735b6a1236d59d3024712b02c1b169cba774b8216692f71731f5f0d291d4a75e"
     },
     {
-      "path": "reproduction/source.patch",
-      "bytes": 246001,
-      "sha256": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474",
+      "path": "reproduction/source.patch.xz",
+      "encoding": "xz",
+      "bytes": 54212,
+      "sha256": "78cfe3098a1217bbd829b1a92cb5d808ef83ba786c034d89c530ca9b064bd4d1",
       "original_path": "/home/jzzeng/codes/vibeqc-issue409-packed/.artifacts/issue409/stage2/frozen/source.patch",
       "original_bytes": 246001,
       "original_sha256": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474"

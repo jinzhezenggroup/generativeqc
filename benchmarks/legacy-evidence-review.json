@@ -459,28 +459,12 @@
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
     },
     {
-      "bytes": 219056,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue394-deferred",
-      "path": "benchmarks/results/issue394-deferred/prototype.patch",
-      "role": "source-provenance",
-      "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
       "path": "benchmarks/results/issue404-combined-rys/summary.json",
       "role": "decision-or-audit-record",
       "sha256": "c584f057cea4a1b5e4ac898ed3c9af5d03ee90131ad73551f5d1bb49948a99a8"
-    },
-    {
-      "bytes": 246001,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue409-packed-values",
-      "path": "benchmarks/results/issue409-packed-values/reproduction/source.patch",
-      "role": "source-provenance",
-      "sha256": "2f6a66c2df15c8f8f3bbd543b9e6281bcc22840d87ccbe13ab26d06fef077474"
     },
     {
       "bytes": 135548,

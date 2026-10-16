@@ -118,6 +118,7 @@ struct Owner {
   bool warm_factor_replay_enabled() const { return false; }
   // This orbital-lifetime probe does not run the nonlocal initializer.
   bool confirm_nonlocal_stationary_density = false;
+  bool confirm_direct_stationary_density = false;
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
@@ -203,6 +204,10 @@ int main(int argc, char** argv) {
   if (scenario == "density") fail_copy = 1;
   if (scenario == "orbitals") fail_copy = 2;
   if (scenario == "converged") { owner.is_active = false; owner.output.converged = true; }
+  if (scenario == "stationary-confirmation") {
+    owner.confirm_direct_stationary_density = true;
+    owner.occupied_fitted_factor_ready = true;
+  }
   const bool resident = scenario.find("resident-") == 0;
   if (resident) {
     owner.phase_source = std::make_unique<Owner::Source>();
@@ -288,6 +293,12 @@ int main(int argc, char** argv) {
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(copies == 0 && owner.density[0] == 10.0);
     assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
+  } else if (scenario == "stationary-confirmation") {
+    assert(owner.is_active && !owner.output.converged && !owner.final_state_ready);
+    assert(!owner.occupied_fitted_factor_ready && !owner.warm_orbitals_ready);
+    assert(copies == 0 && owner.density[0] == 10.0);
+    assert(owner.warm_ready && owner.warm[0] == 42.0);
+    assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
   } else if (scenario == "converged") {
     assert(owner.warm_ready && owner.warm[0] == 10.0);
     assert(owner.warm_energy == owner.physical.electronic_energy);
@@ -348,6 +359,7 @@ int main(int argc, char** argv) {
         "success",
         "retry",
         "converged",
+        "stationary-confirmation",
         "resident-converged",
         "resident-frozen",
         "resident-unconverged",
