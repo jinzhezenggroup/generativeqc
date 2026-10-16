@@ -88,3 +88,16 @@ No numerical evidence or acceptance gate is removed.
 The installed reference/adapter has an independently verified analytic/primal
 consistency fix. Repeat the unchanged full-matrix gate and complete endpoint
 measurements rather than substituting kernel timings or weakening tolerances.
+
+## Diagnostic output-lifecycle repair
+
+The retained self-check JSON identifies original script SHA256
+`088a19abd7cb5fda7e17503a1bad4c7cbe3d8cdcbaaa24e1334118b91dcda399`;
+its exact bytes remain at commit `33c0fa9482a55943e942758a41fc9b89ae474cbf`.
+The maintained script now creates the output directory and exclusively reserves
+a new journal before numerical work. Existing files, symlinks and retained-result
+aliases are rejected; updates retain the owned descriptor, and journal/close
+errors cannot replace an earlier failure. Host lifecycle regressions cover this
+repair. Scientific settings and loops, historical diagnostic JSON, failed matrix
+gates and null ratios are unchanged. The repaired script has not been rerun on
+GPU and its current hash must not relabel the original measurements.
