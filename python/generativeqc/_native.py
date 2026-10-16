@@ -1093,6 +1093,98 @@ class InactiveEigensolverProfileEntry(ctypes.Structure):
     ]
 
 
+class ResponseRecycleDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("max_vectors", ctypes.c_uint64),
+        ("max_retained_bytes", ctypes.c_uint64),
+    ]
+
+
+class ResponseColumns(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("storage", ctypes.POINTER(ctypes.c_double)),
+        ("element_count", ctypes.c_uint64),
+        ("rows", ctypes.c_uint64),
+        ("columns", ctypes.c_uint64),
+        ("origin", ctypes.c_uint64),
+        ("row_stride", ctypes.c_int64),
+        ("column_stride", ctypes.c_int64),
+    ]
+
+
+class ResponseRecycleCapacity(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("vector_capacity", ctypes.c_uint64),
+        ("retained_capacity_bytes", ctypes.c_uint64),
+        ("projection_workspace_bytes", ctypes.c_uint64),
+        ("update_workspace_bytes", ctypes.c_uint64),
+    ]
+
+
+class ResponseRecycleState(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("vector_count", ctypes.c_uint64),
+        ("generation", ctypes.c_uint64),
+        ("storage_bytes", ctypes.c_uint64),
+        ("measured_live_bytes", ctypes.c_uint64),
+        ("measured_peak_bytes", ctypes.c_uint64),
+        ("allocation_count", ctypes.c_uint64),
+    ]
+
+
+def optional_response_recycle_library() -> ctypes.CDLL | None:
+    """Discover an additive CPU protocol, never suppress a selected-library load error."""
+    selected = next((path for path in _candidate_paths() if path.is_file()), None)
+    if selected is None:
+        return None
+    library = ctypes.CDLL(str(selected.resolve()))
+    names = (
+        "generativeqc_response_recycle_capacity_v1_get",
+        "generativeqc_response_recycle_create_v1",
+        "generativeqc_response_recycle_state_v1_get",
+        "generativeqc_response_recycle_project_v1",
+        "generativeqc_response_recycle_update_v1",
+        "generativeqc_response_recycle_copy_v1",
+        "generativeqc_response_recycle_destroy",
+    )
+    if any(not hasattr(library, name) for name in names):
+        return None
+    library.generativeqc_status_message.argtypes = [ctypes.c_int32]
+    library.generativeqc_status_message.restype = ctypes.c_char_p
+    handle = ctypes.c_void_p
+    count = ctypes.c_uint64
+    vector = ctypes.POINTER(ctypes.c_double)
+    columns = ctypes.POINTER(ResponseColumns)
+    signatures = (
+        [
+            ctypes.POINTER(ResponseRecycleDescriptor),
+            ctypes.POINTER(ResponseRecycleCapacity),
+        ],
+        [ctypes.POINTER(ResponseRecycleDescriptor), ctypes.POINTER(handle)],
+        [handle, ctypes.POINTER(ResponseRecycleState)],
+        [handle, count, columns, vector, count, count],
+        [handle, count, columns, columns, count, count, count],
+        [handle, count, count, count, vector, count],
+        [handle],
+    )
+    for name, arguments in zip(names, signatures, strict=True):
+        function = getattr(library, name)
+        function.argtypes = arguments
+        function.restype = None if name.endswith("destroy") else ctypes.c_int32
+    return library
+
+
 def _installed_package_library() -> Path | None:
     """Return the native library bundled beside the installed Python package."""
     candidates: list[Path] = []

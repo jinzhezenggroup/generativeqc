@@ -362,6 +362,112 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_response_recycle_capacity_v1_get": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "a4121c476cc5898f4e895d2973cfbf8fc5b0a70a41307ad31fd749468014c996",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_create_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "9bfd2e39cb08c2b977a105af4958226e352929de520b37f5b8ca03bf45976b63",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_state_v1_get": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "f0459108e4e82ff07ede1cd4304b8edd85e044e752c7bdefbe6cc3c4fee0ca73",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_project_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "d12d819d2de0381ee58c2fd4ceeb9aa1f96283a8a0cf65be1e1023cc7d5d5cd0",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_update_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "4c2f4343886584137c6a98cdda01efe41b0c3b1f8b41e121a0250f5a85fb1b23",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_copy_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "34861acc9cb2d06ce8d6373e0edc3ec393327d529ebdcdcc1851c59e0a746988",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_response_recycle_destroy": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "3e8a60925fe0aff061e8537ea78ab5c7af228009df74c0170b51a14aa06e8e3b",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_status_message": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

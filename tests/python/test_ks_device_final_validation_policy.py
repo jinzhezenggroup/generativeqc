@@ -12,11 +12,11 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_large_exact_pure_j_requires_explicit_opt_in(
+def test_large_exact_pure_j_preserves_default_and_opt_out(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    """The failed 1088-AO endpoint cannot qualify this or larger Direct owners."""
-    source = tmp_path / "held_direct.cpp"
+    """The stationary-density repair retains pure-J admission at large sizes."""
+    source = tmp_path / "large_direct.cpp"
     source.write_text(
         r"""
 #include <cassert>
@@ -30,8 +30,8 @@ int main() {
   for (std::size_t aos : {std::size_t{1088}, std::size_t{1089}, std::size_t{2176},
                           std::numeric_limits<std::size_t>::max()}) {
     const bool eligible = device_final_validation_default_eligible(aos, 1, false, true, true);
-    assert(!eligible);
-    assert(!device_final_validation_requested(nullptr, eligible));
+    assert(eligible);
+    assert(device_final_validation_requested(nullptr, eligible));
     assert(!device_final_validation_requested("0", eligible));
     assert(device_final_validation_requested("1", eligible));
   }
@@ -43,7 +43,7 @@ int main() {
     )
     executable = required_native_cxx.build_executable(
         [source],
-        tmp_path / "held_direct",
+        tmp_path / "large_direct",
         compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
     )
     completed = subprocess.run(
@@ -86,24 +86,20 @@ int main() {
                                                           full_precision) ==
                  (aos >= 384 && spins == 1 && direct_global_hybrid && full_precision));
           for (bool full_range_coulomb_only : {false, true}) {
-            for (bool density_fitted_coulomb : {false, true}) {
-              const bool expected = spins == 1 && full_precision &&
-                  ((aos >= 384 && direct_global_hybrid) ||
-                   (aos >= 544 && full_range_coulomb_only &&
-                    (density_fitted_coulomb || aos < 1088)));
-              const bool eligible = device_final_validation_default_eligible(
-                  aos, spins, direct_global_hybrid, full_precision, full_range_coulomb_only,
-                  density_fitted_coulomb);
-              assert(eligible == expected);
-              assert(device_final_validation_requested(nullptr, eligible) == expected);
-              assert(!device_final_validation_requested("0", eligible));
-              assert(device_final_validation_requested("1", eligible));
-              for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
-                bool rejected = false;
-                try { device_final_validation_requested(invalid, eligible); }
-                catch (const std::invalid_argument&) { rejected = true; }
-                assert(rejected);
-              }
+            const bool expected = spins == 1 && full_precision &&
+                ((aos >= 384 && direct_global_hybrid) ||
+                 (aos >= 544 && full_range_coulomb_only));
+            const bool eligible = device_final_validation_default_eligible(
+                aos, spins, direct_global_hybrid, full_precision, full_range_coulomb_only);
+            assert(eligible == expected);
+            assert(device_final_validation_requested(nullptr, eligible) == expected);
+            assert(!device_final_validation_requested("0", eligible));
+            assert(device_final_validation_requested("1", eligible));
+            for (const char* invalid : {"", "auto", "2", "01", " 1", "true"}) {
+              bool rejected = false;
+              try { device_final_validation_requested(invalid, eligible); }
+              catch (const std::invalid_argument&) { rejected = true; }
+              assert(rejected);
             }
           }
         }
@@ -113,7 +109,7 @@ int main() {
   assert(device_final_validation_default_eligible(
       std::numeric_limits<std::size_t>::max(), 1, true, true));
   assert(device_final_validation_default_eligible(
-      std::numeric_limits<std::size_t>::max(), 1, false, true, true, true));
+      std::numeric_limits<std::size_t>::max(), 1, false, true, true));
 }
 """,
         encoding="utf-8",
