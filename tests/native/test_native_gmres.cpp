@@ -12,6 +12,7 @@
 
 #include "response/native_gmres.hpp"
 #include "response/resident_krylov.hpp"
+#include "response/sequence.hpp"
 #include "response/solve.hpp"
 
 namespace {
@@ -1037,6 +1038,112 @@ void response_batch_diagnostic_storage() {
   }
 }
 
+void response_sequence_contract() {
+  for (const bool column_major : {false, true}) {
+    DenseOperator matrix{3, {4, 1, -1, 0, 3, 2, 1, 0, 2}};
+    generativeqc::response::LinearResponseProblem problem(
+        3, [&](auto input, auto output) { matrix(input, output); });
+    GmresOptions options;
+    options.restart = 3;
+    options.max_iterations = 16;
+    options.relative_tolerance = 1e-12;
+    options.collect_history = options.collect_basis = true;
+    const std::array<double, 9> storage =
+        column_major ? std::array<double, 9>{1.5, -5, 2, 3, -10, 4, 0, 0, 0}
+                     : std::array<double, 9>{1.5, 3, 0, -5, -10, 0, 2, 4, 0};
+    const auto make_plan = [&](std::size_t budget) {
+      return generativeqc::response::prepare_response_sequence(
+          3, options, 3, column_major ? 1 : 3, column_major ? 3 : 1, storage.size(), budget);
+    };
+    const auto probe = make_plan(std::numeric_limits<std::size_t>::max());
+    std::vector<GmresStatus> reasons;
+    std::vector<std::vector<double>> solutions;
+    std::size_t published_actions = 0;
+    const auto publish = [&](std::size_t index, const auto& response) {
+      require(index == reasons.size(), "response sequence publication order changed");
+      reasons.push_back(response.status);
+      solutions.emplace_back(response.solution.begin(), response.solution.end());
+      published_actions += response.operator_actions;
+    };
+    const auto exact = make_plan(probe.complete_workspace_bytes);
+    const auto result =
+        generativeqc::response::solve_response_sequence(exact, problem, storage, publish);
+    require(!result.workspace_limited && result.published_count == 3 &&
+                result.converged_count == 3 && matrix.actions == result.operator_actions &&
+                result.peak_workspace_bytes <= exact.complete_workspace_bytes &&
+                result.staging_peak_bytes == (column_major ? 0 : 3 * sizeof(double)),
+            "native sequence lost its numerical/work/strided-staging contract");
+    for (std::size_t column = 0; column < 3; ++column) {
+      const auto factor = column == 0 ? 1.0 : column == 1 ? 2.0 : 0.0;
+      require(std::abs(solutions[column][0] - factor) < 1e-12 &&
+                  std::abs(solutions[column][1] + 2 * factor) < 1e-12 &&
+                  std::abs(solutions[column][2] - 0.5 * factor) < 1e-12,
+              "sequence differs from independently solved nonsymmetric equations");
+    }
+    reasons.clear();
+    solutions.clear();
+    matrix.actions = published_actions = 0;
+    const auto prefix = generativeqc::response::solve_response_sequence(
+        make_plan(probe.first_workspace_bytes), problem, storage, publish);
+    require(prefix.workspace_limited && prefix.converged_count == 1 &&
+                reasons[0] == GmresStatus::converged &&
+                reasons[1] == GmresStatus::workspace_limit &&
+                reasons[2] == GmresStatus::workspace_limit && solutions[1].empty() &&
+                solutions[2].empty() && matrix.actions == published_actions,
+            "resource refusal lost its admitted prefix or executed tail operators");
+    reasons.clear();
+    solutions.clear();
+    matrix.actions = published_actions = 0;
+    const auto refused = generativeqc::response::solve_response_sequence(
+        make_plan(probe.first_workspace_bytes - 1), problem, storage, publish);
+    require(refused.workspace_limited && refused.converged_count == 0 &&
+                refused.staging_peak_bytes == 0 && matrix.actions == 0 &&
+                std::all_of(solutions.begin(), solutions.end(),
+                            [](const auto& data) { return data.empty(); }),
+            "first-request refusal allocated dimension-sized staging or solutions");
+    reasons.clear();
+    solutions.clear();
+    auto forged = exact;
+    --forged.first_workspace_bytes;
+    bool rejected = false;
+    try {
+      (void)generativeqc::response::solve_response_sequence(forged, problem, storage, publish);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected && reasons.empty() && matrix.actions == 0,
+            "forged sequence capacity reached publication or the physical operator");
+    bool lease_valid = true;
+    std::shared_ptr<generativeqc::runtime::AllocationCounter> retained_counter;
+    rejected = false;
+    try {
+      (void)generativeqc::response::solve_response_sequence(
+          exact, problem, storage,
+          [&](std::size_t index, const auto& response) {
+            publish(index, response);
+            retained_counter = response.solution.get_allocator().counter();
+            lease_valid = false;
+          },
+          {},
+          [&] {
+            if (!lease_valid) throw std::runtime_error("stale sequence lease");
+          });
+    } catch (const std::runtime_error&) {
+      rejected = true;
+    }
+    require(rejected && reasons.size() == 1 && matrix.actions == published_actions &&
+                retained_counter && retained_counter->snapshot().live_bytes == 0,
+            "stale publication continued the sequence or retained native result storage");
+    bool validated_empty = false;
+    const auto empty_plan =
+        generativeqc::response::prepare_response_sequence(3, options, 0, 0, 0, 0, 0);
+    const auto empty = generativeqc::response::solve_response_sequence(
+        empty_plan, problem, {}, {}, {}, [&] { validated_empty = true; });
+    require(validated_empty && empty.published_count == 0 && empty.peak_workspace_bytes == 0,
+            "empty sequence skipped its lease or reserved numeric workspace");
+  }
+}
+
 void amortized_true_residuals() {
   constexpr std::size_t n = 24;
   DenseOperator matrix{n, std::vector<double>(n * n)};
@@ -1128,6 +1235,7 @@ int main() {
     options_and_workspace_boundaries();
     response_batch_contract();
     response_batch_diagnostic_storage();
+    response_sequence_contract();
     amortized_true_residuals();
     stable_norm_extremes();
     measured_workspace_owns_returned_storage();

@@ -1902,6 +1902,104 @@ GENERATIVEQC_API generativeqc_status generativeqc_response_result_view_v1_get(
  */
 GENERATIVEQC_API void generativeqc_response_result_destroy(generativeqc_response_result* result);
 
+/** @native-contract generativeqc_response_validate_v1
+ * @behavior Validate a method/provider lease at sequential response boundaries.
+ * @inputs user_data is caller-owned scientific state; this callback performs no linear action.
+ * @outputs SUCCESS certifies that the current lease still permits the request.
+ * @errors A failing status aborts the sequence; do not unwind foreign exceptions through C.
+ * @lifetime Borrowed synchronously, including zero-RHS and resource-refused requests.
+ * @execution Optional synchronous CPU callback, not a convergence certificate.
+ */
+typedef generativeqc_status (*generativeqc_response_validate_v1)(void* user_data);
+
+/** @native-contract generativeqc_response_publish_v1
+ * @behavior Consume one borrowed sequential response publication, in RHS order.
+ * @inputs index is zero-based; view has the same layout as an owned result view. A workspace
+ * refusal has no solution allocation. SUCCESS does not imply the individual solve converged.
+ * @outputs Copy or consume arrays synchronously; callback side effects are not rolled back.
+ * @lifetime The view and every native array expire when this callback returns; retaining them
+ * is invalid. Caller-owned copied solution/basis arrays are charged by the sequence.
+ * @errors Failing status aborts without publishing the summary; no foreign exception may unwind.
+ * @execution Synchronous CPU callback. History copies, publisher object bookkeeping and
+ * physical provider allocations have separate budgets, not complete endpoint accounting.
+ */
+typedef generativeqc_status (*generativeqc_response_publish_v1)(
+    void* user_data, size_t index, const generativeqc_response_result_view_v1* view);
+
+/** Independent RHS sequence; initialize both complete ABI headers.
+ * gmres supplies common controls/actions; gmres.rhs points to borrowed FP64 matrix storage
+ * and gmres.initial_guess must be NULL. Strides/count are in double elements and describe
+ * nonnegative offsets within rhs_element_count. row_stride is positive for nonempty input;
+ * column_stride may be zero to repeat a column. No input may change during execution.
+ * max_numeric_bytes bounds active solver/staging plus earlier published solution/basis
+ * arrays. gmres.max_workspace_bytes separately limits each solve. This is a streamed
+ * prefix controller, not an atomic all-or-nothing retaining batch or block/recycled solver.
+ */
+typedef struct generativeqc_response_sequence_descriptor_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  generativeqc_response_gmres_descriptor_v1 gmres;
+  uint64_t rhs_count;
+  uint64_t row_stride;
+  uint64_t column_stride;
+  uint64_t rhs_element_count;
+  uint64_t max_numeric_bytes;
+  generativeqc_response_validate_v1 validate;
+  void* validate_data;
+  generativeqc_response_publish_v1 publish;
+  void* publish_data;
+} generativeqc_response_sequence_descriptor_v1;
+
+/** Caller-owned summary, valid only after API success. Peak workspace is a conservative
+ * numeric bound including refused requests' required bytes, not measured physical endpoint
+ * memory. Retention covers copied solution/basis arrays, not publisher-owned history or
+ * bookkeeping. staging_peak_bytes measures the one native strided-input staging allocation.
+ */
+typedef struct generativeqc_response_sequence_summary_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  int32_t workspace_limited;
+  uint64_t published_count;
+  uint64_t converged_count;
+  uint64_t operator_actions;
+  uint64_t preconditioner_actions;
+  uint64_t peak_workspace_bytes;
+  uint64_t retained_solution_basis_bytes;
+  uint64_t staging_peak_bytes;
+} generativeqc_response_sequence_summary_v1;
+
+/** @native-contract generativeqc_response_sequence_workspace_v1
+ * @behavior Query first-request working storage and a conservative complete-sequence bound.
+ * @inputs Full-size current-ABI sequence/nested GMRES descriptors and two nonnull outputs.
+ * Only shape/control metadata is read; vector/callback pointers are ignored.
+ * @outputs Writes both byte bounds on success only; empty sequences require zero numeric bytes.
+ * @errors ABI_MISMATCH for headers; INVALID_ARGUMENT for invalid/overflowing controls,
+ * strides or storage extents. No dimension-sized allocation or callback occurs.
+ * @execution Synchronous context-free CPU metadata query; no Python/compiler/device required.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_response_sequence_workspace_v1(
+    const generativeqc_response_sequence_descriptor_v1* descriptor, uint64_t* first_workspace_bytes,
+    uint64_t* complete_workspace_bytes);
+
+/** @native-contract generativeqc_response_sequence_solve_v1
+ * @behavior Execute independent RHS requests through the existing bound native response owner.
+ * @inputs Valid sequence and initialized summary header. Nonempty requests require readable
+ * gmres.rhs, gmres.apply and publish; initial guesses are unsupported. validate is optional.
+ * @outputs Publishes each result in order, then writes summary on API success only. Budget
+ * exhaustion preserves an admitted prefix and publishes allocation-free WORKSPACE_LIMIT
+ * diagnostics for the tail. Scientific nonconvergence remains a per-request result reason.
+ * @lifetime Borrows inputs/callbacks for this call; each published view expires at callback
+ * return. No native owner survives the call. Earlier callback side effects are not rolled back.
+ * @errors Header/control errors precede callbacks; callback status propagates; allocation
+ * failure returns OUT_OF_MEMORY. Never retries another solver on error.
+ * @execution Synchronous CPU-only streaming; no method equations/symmetry are inferred.
+ * @units FP64 vector units belong to the method; storage bounds are numeric bytes, not a
+ * complete callback/provider/publisher physical allocation receipt.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_response_sequence_solve_v1(
+    const generativeqc_response_sequence_descriptor_v1* descriptor,
+    generativeqc_response_sequence_summary_v1* summary);
+
 /** Query whether a method is currently executable. */
 /** @native-contract generativeqc_method_available
  * @behavior Query the method registry availability bit, without preparing a calculation.
