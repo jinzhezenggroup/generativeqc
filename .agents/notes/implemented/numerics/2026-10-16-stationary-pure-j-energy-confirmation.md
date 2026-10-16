@@ -131,7 +131,7 @@ All 1753 native inputs are retained against the pinned historical inventory and
 checked against this committed head; all 610 upstream inputs are identified.
 The preceding `c300...` campaign is not acceptance of this integrated image.
 
-The [integrated evidence packet](../../../benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
+The [integrated evidence packet](../../../../benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
 retains all eight passing complete phase comparisons: 48 comparison calls plus
 24 candidate-only 3/12-atom calls. Actual energies and full force arrays for all
 72 calls permit independent error recomputation, including the small systems.
