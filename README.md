@@ -130,9 +130,13 @@ independent references are historical, not rerun. Cold includes setup and the
 first E+F call; warm reuses converged density. The water clusters have
 3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
 
-This frozen snapshot predates #2532's bounded default: exact-Direct pure-J
-owners at 1088+ AOs use the host proof. The separate earlier Direct/96 moved
-regression remains held; see the [bounded-default decision](.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md).
+The figures describe a frozen snapshot, not a timing claim for the current
+checkout. The earlier Direct/96 moved regression remains rejected (+15.985%).
+The [stationary-energy repair](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
+and [integrated-head Direct/48/96 requalification](benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
+are retained separately, without relabeling either historical cohort.
+Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
+[repair decision](.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md).
 
 **Direct J/K**
 

@@ -2,6 +2,12 @@
   "status": "deferred; no performance promotion",
   "source_patch_base": "1c3f2ab8d6df6f06bee526b89a807511ef726301",
   "prototype.patch": {"bytes": 219056, "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"},
+  "source_patch_storage": {
+    "path": "prototype.patch.xz",
+    "encoding": "xz",
+    "bytes": 49864,
+    "sha256": "9694d892b5fe1545e70f28ac236a6c93f57081193560fd5cecfc31c2f717eecd"
+  },
   "implemented_rys_classes": ["000"],
   "automatic_rys_mask": 0,
   "ownership": "one shell triple per subgroup; identity response folding",
