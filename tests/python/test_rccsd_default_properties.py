@@ -7,8 +7,9 @@ import typing
 from types import SimpleNamespace
 
 import pytest
-from generativeqc import Calculator, MethodCapabilities, _native
-from generativeqc import calculator as calculator_module
+from generativeqc import Calculator, _native
+
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
 SUPPORTED = frozenset({"energy", "forces"})
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
@@ -62,13 +63,7 @@ def selector(
         generativeqc_batch_get_system_count=lambda owner: 1,
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
-    monkeypatch.setattr(
-        calculator_module,
-        "method_capabilities",
-        lambda method: MethodCapabilities(
-            method, "post_hartree_fock", True, True, SUPPORTED
-        ),
-    )
+    install_registry_stub(library, SUPPORTED)
     # Basis/system construction is outside this selection contract. The real
     # facade still validates requests and builds the native output descriptors.
     monkeypatch.setattr(
