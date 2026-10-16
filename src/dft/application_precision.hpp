@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -9,6 +10,29 @@
 #include "generativeqc/generativeqc.h"
 
 namespace generativeqc::dft {
+
+/** Stop proposing sub-tolerance density changes before a fresh energy check.
+ * This selects a proposal, not convergence or an observable-error certificate.
+ * Budget-Fock confirmation uses a residual one order below its 1e-4 physical
+ * publication limit; strict callers retain 1e-9. Both the normalized and AO
+ * maximum residual must pass, so the normalized diagnostic alone cannot select
+ * confirmation. The caller
+ * supplies an already-validated density tolerance, which is never weakened. */
+inline double nonlocal_confirmation_tolerance(bool budget_stationarity,
+                                              double density_tolerance) noexcept {
+  return std::min(budget_stationarity ? 1e-5 : 1e-9, density_tolerance);
+}
+
+/** Frozen operators propose densities, never accepted physical states.
+ * Oversolving that changing fixed-point problem below budget confirmation
+ * accuracy adds strict J/K work without certifying the target operator.
+ * Explicit strict solves retain their incumbent adaptive inner tolerance. */
+inline double nonlocal_inner_tolerance(bool budget_stationarity, double maximum_residual,
+                                       double density_tolerance) noexcept {
+  if (budget_stationarity) return nonlocal_confirmation_tolerance(true, density_tolerance);
+  const double target_gate = std::min(1e-9, density_tolerance);
+  return std::clamp(maximum_residual * 1e-3, std::min(1e-12, target_gate * 0.1), 1e-7);
+}
 
 /** Private size-tagged Python transport. The original public KS descriptor
  * remains the prefix and retains its ABI/version. Only callers that verified
