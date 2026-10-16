@@ -26,6 +26,26 @@ Candidate library SHA256:
 Scientific and test inputs match the frozen `candidate-current/source` snapshot.
 Full binary/configuration/scheduler receipts are retained with this evidence.
 
+## Retained working view and immutable full archive
+
+The current pooled files preserve the 96 native E/F calls and eight geometry
+oracles used by the offline summary. They are a working view, not a replacement
+for every original envelope, repeat, diagnostic history, negative trial or log.
+[recovery.json](recovery.json) identifies **all 44 original tracked members** at
+[immutable ef02ef322e809a905cca09e7d2b3323b9d1972ae](https://github.com/jinzhezenggroup/generativeqc/tree/ef02ef322e809a905cca09e7d2b3323b9d1972ae/benchmarks/results/md-j-sparse-support-20261016),
+with exact byte counts, SHA256 and Git blob identities, including the original
+43-member SHA256SUMS. Use its raw URL template or Git blob API template and
+verify the stored bytes before decompression. No private filesystem is needed
+to recover those tracked records. Large untracked profiler artifacts were
+never in that archive; their manifests do not imply public byte availability.
+
+Two pooled provenance labels, validation/receipts.json.xz and
+validation/resident-md-work.json.xz, describe compression receipts rather than
+historical Git paths. The recovery map binds each to its actual historical
+.json path and exact decoded hash. Neither pooled bytes nor measured identities
+are rewritten. Original reproduction scripts remain recoverable as measured;
+their output-overwrite behavior is not recommended for new runs.
+
 ## Why the default 96-atom endpoint changes
 
 The README `Calculator` does not supply a `resource_budget` or `resource_plan`.
@@ -237,23 +257,37 @@ compilation. Runtime caches are retained, not reset to manufacture cold wins.
 
 ## Reproduction
 
-The retained `run-endpoint.sh`/`run-probe.sh` scripts document exact environments,
-native-library selection, canonical inputs, reference handling, 1800-second
-population bound and Slurm receipts. Export their exact source with:
+The maintained [reproduce/](reproduce/) tools are a **post-measurement safety
+repair**, not scripts used for the recorded timings. The seven original script
+texts remain unchanged in evidence.json.xz and the immutable archive. Export
+the maintained scripts and their shared output_safety.py helper with:
 
 ```bash
 python benchmarks/results/md-j-sparse-support-20261016/summarize.py \
-  --export-reproducers .artifacts/md-j-reproducers
+  --output .artifacts/md-j-summary-new.json \
+  --export-reproducers .artifacts/md-j-reproducers-new
 ```
 
-The script texts are stored under `evidence.json.xz` → `reproducers`; full
-receipts, selected material logs, transient identities and raw envelope hashes
-are pooled in the same bundle. Paths point to the retained frozen source
-exports under `/data/jzzeng/gqc-direct-md-20261016/`; adapt filesystem roots,
-not scientific parameters. CUDA 12.9.1, GNU 11.4, Release sm120, shell/native and
-stationary CUDA AOT enabled (`r2scan_rks;pbe0_rks`), CPU stationary AOT disabled.
-Existing compiler caches are reused, with `CCACHE_BASEDIR` set to each checkout
-root. No release, tag or merge is performed.
+Both output destinations must be fresh. All destinations are checked before
+writes; existing files, directories, symlinks, traversal paths and retained
+benchmarks/results destinations are rejected. Keep the helper beside the
+exported scripts. The exporter resolves it relative to its own file, not CWD.
+Use a new trial label for every rerun; endpoint and probe directories, guard
+receipts and oracle outputs are reserved exclusively before workload commands.
+Failures retain partial outputs and exit/exception context; cleanup failures
+must not replace the original workload failure. The diagnostic wrapper exports
+DIAGNOSTIC_ARM and a trial-specific DIAGNOSTIC_LABEL before launching its child.
+
+GQC_MD_REPRO_ROOT must be absolute and can adapt the original /data/jzzeng/gqc-direct-md-20261016
+filesystem root. run-probe.sh accepts arm, operation and trial; diagnostic
+arrays are under results/<arm>/diagnostic/<trial>/raw/arrays. run-oracle.sh
+accepts a new output trial; GQC_MD_DIAGNOSTIC_LABEL selects the corresponding
+input label (default diagnostic/first/raw). Other historical environment paths
+still require the recorded installation; adapt paths, not scientific parameters.
+CUDA 12.9.1, GNU 11.4, Release sm120, shell/native and stationary CUDA AOT enabled
+(r2scan_rks;pbe0_rks), CPU stationary AOT disabled. Existing compiler caches are
+reused, with CCACHE_BASEDIR set to each checkout root. No release, tag or merge
+is performed.
 
 The archived guard records are from successful uninterrupted replacement jobs.
 If canceling a run on these Slurm controllers, verify owned timeout/profiler

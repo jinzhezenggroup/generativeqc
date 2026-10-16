@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import json
 import lzma
+import runpy
+from contextlib import ExitStack
 import statistics
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,8 @@ from typing import Any
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent
+SAFETY = runpy.run_path(str(ROOT / "reproduce/output_safety.py"))
+REPRODUCERS = ('output_safety.py', 'run-endpoint.sh', 'run-probe.sh', 'run-guarded.sh', 'run-oracle.sh', 'resident-diagnostic.py', 'selected-j-oracle.py', 'summarize-calls.py')
 CASES = (("r2scan-3c", 96), ("r2scan-3c", 48), ("pbe0", 48), ("hf", 48))
 PHASES = ["cold", *["warm"] * 5, "moved", *["moved-warm"] * 5]
 with lzma.open(ROOT / "evidence.json.xz", "rt") as stream:
@@ -136,22 +140,8 @@ def force_work(census: list[dict[str, Any]]) -> dict[str, Any]:
     return output
 
 
-def main() -> None:
-    """Write a checked summary, keeping host and device accounting separate."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=ROOT.parents[2]
-        / ".artifacts/md-j-sparse-support-20261016-summary.json",
-    )
-    parser.add_argument("--export-reproducers", type=Path)
-    arguments = parser.parse_args()
-    if arguments.export_reproducers:
-        arguments.export_reproducers.mkdir(parents=True, exist_ok=True)
-        for name, source in EVIDENCE["reproducers"].items():
-            assert Path(name).name == name
-            (arguments.export_reproducers / name).write_text(source)
+def summarize() -> dict[str, Any]:
+    """Recompute the unchanged scientific gates and populations."""
     output: dict[str, Any] = {"endpoint_cases": {}, "diagnostic_profiles": {}}
     for method, atoms in CASES:
         name = f"{method}-{atoms}"
@@ -194,8 +184,36 @@ def main() -> None:
             },
             "force_work": force_work(load(f"profile/{arm}-census.json.xz")),
         }
-    arguments.output.parent.mkdir(parents=True, exist_ok=True)
-    arguments.output.write_text(json.dumps(output, indent=2, allow_nan=False) + "\n")
+    return output
+
+def main() -> None:
+    """Write checked results to exclusively reserved, fresh destinations."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output", type=Path,
+        default=ROOT.parents[2] / ".artifacts/md-j-sparse-support-20261016-summary.json",
+    )
+    parser.add_argument("--export-reproducers", type=Path)
+    arguments = parser.parse_args()
+    # Check every destination and read every export source before any write.
+    SAFETY["check_outputs"](arguments.output, arguments.export_reproducers)
+    sources = {
+        name: (ROOT / "reproduce" / name).read_text()
+        for name in REPRODUCERS
+    } if arguments.export_reproducers is not None else {}
+    exported = (
+        SAFETY["claim_directory"](arguments.export_reproducers)
+        if arguments.export_reproducers is not None else None
+    )
+    with ExitStack() as stack:
+        publish = stack.enter_context(SAFETY["json_output"](arguments.output))
+        if exported is not None:
+            stack.enter_context(SAFETY["run_receipt"](exported, "export"))
+            for name, source in sources.items():
+                with SAFETY["claim_file"](exported / name) as stream:
+                    stream.write(source)
+        output = summarize()
+        publish(output)
     for name, result in output["endpoint_cases"].items():
         print(name, result["candidate_change_percent"])
 
