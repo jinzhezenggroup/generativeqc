@@ -17,6 +17,7 @@ _NATIVE_CPU_CASES = {
     "multiply": lambda x: xp.multiply(x, x),
     "divide": lambda x: xp.divide(x, 2),
     "negative": xp.negative,
+    "positive": xp.positive,
     "pow": lambda x: xp.pow(x, 2),
     "exp": xp.exp,
     "log": xp.log,

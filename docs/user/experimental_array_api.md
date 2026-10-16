@@ -168,6 +168,9 @@ at most 52 distinct contraction labels; scientific index domains require explici
 `einsum`. The frontend also supports static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
+Captured `positive(x)` and unary `+x` preserve float32/float64 values, signed
+zeros and scientific index metadata. Both reject Boolean arrays and integer
+control tensors; unary plus does not turn them into numeric data.
 `sum` and `mean` accept static axes, and generic arrays may use
 `keepdims=True` to retain reduced singleton axes. Shape utilities also include
 `broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,

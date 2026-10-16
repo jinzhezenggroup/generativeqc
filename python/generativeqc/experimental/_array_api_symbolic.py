@@ -252,6 +252,13 @@ def less_equal(x1: object, x2: object) -> typing.Any:
     return _compare("less_equal", x1, x2)
 
 
+def positive(x: object) -> typing.Any:
+    """Preserve a real array under eager or symbolic unary plus."""
+    if isinstance(x, VibeArray):
+        return _namespace.positive(x)
+    return _eager_compute(np.positive, _eager_array(x))
+
+
 def negative(x: object) -> typing.Any:
     """Negate each element of a host or symbolic array."""
     if isinstance(x, VibeArray):

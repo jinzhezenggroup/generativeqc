@@ -460,6 +460,14 @@ def divide(x1: object, x2: object) -> VibeArray:
     raise TypeError("divide requires at least one symbolic VibeArray")
 
 
+def positive(x: object) -> VibeArray:
+    """Preserve a real symbolic array and its scientific index metadata."""
+    value = _array(x)
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("positive supports only float32 and float64")
+    return value
+
+
 def negative(x: object) -> VibeArray:
     value = _array(x)
     return VibeArray(tensor_ir.add(value.node, coefficients=(-1,)))
