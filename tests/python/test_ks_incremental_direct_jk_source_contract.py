@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import pytest
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -47,10 +50,27 @@ def test_cuda_ks_incremental_direct_jk_only_changes_linear_fock_inputs() -> None
 
     # XC/nonlocal correlation remain nonlinear full-density functionals and
     # must never consume the anchor-relative delta.
-    assert "xc->enqueue(density, elements, next_generation, phase);" in ks
+    assert re.search(
+        r"xc->enqueue\(density,\s*elements,\s*next_generation,\s*phase"
+        r"(?:,\s*[A-Za-z_]\w*)?\);",
+        ks,
+    )
     assert "xc->enqueue_density_features(density, elements, next_generation" in ks
     assert "xc->enqueue(incremental_delta_density" not in ks
     assert "xc->enqueue_density_features(incremental_delta_density" not in ks
+
+
+@pytest.mark.parametrize("dispatch", ("enqueue", "enqueue_density_features"))
+def test_cuda_ks_incremental_xc_contract_rejects_delta_density(
+    monkeypatch: pytest.MonkeyPatch, dispatch: str
+) -> None:
+    source = _source("src/dft/cuda_ks.cpp")
+    original = f"xc->{dispatch}(density,"
+    assert original in source
+    mutant = source.replace(original, f"xc->{dispatch}(incremental_delta_density,")
+    monkeypatch.setitem(globals(), "_source", lambda _path: mutant)
+    with pytest.raises(AssertionError):
+        test_cuda_ks_incremental_direct_jk_only_changes_linear_fock_inputs()
 
 
 def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:

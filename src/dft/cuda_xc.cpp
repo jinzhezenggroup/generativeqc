@@ -734,9 +734,9 @@ const double* CudaXcPlan::packed_basis() const {
 }
 
 void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint64_t generation,
-                         PrecisionPhase phase) {
+                         PrecisionPhase phase, CudaXcOccupiedDensity occupied) {
   if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");
-  enqueue_impl(density, nullptr, elements, generation, phase);
+  enqueue_impl(density, nullptr, elements, generation, phase, nullptr, nullptr, true, occupied);
 }
 
 void CudaXcPlan::enqueue_density_features(const double* density, std::size_t elements,
@@ -881,16 +881,30 @@ void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool 
 
 void CudaXcPlan::enqueue_impl(const double* density, const double* direction, std::size_t elements,
                               std::uint64_t generation, PrecisionPhase phase, double* total_density,
-                              double* total_gradient, bool publish_generation) {
+                              double* total_gradient, bool publish_generation,
+                              CudaXcOccupiedDensity occupied) {
   check_device();
   const auto matrix = size_mul(layout_.nao, layout_.nao, "CUDA XC density size overflow");
   const auto count = size_mul(layout_.spins, matrix, "CUDA XC density size overflow");
   if (elements != count) throw std::invalid_argument("CUDA XC density size is invalid");
   density_binding(phase);  // Validate before any submission.
+  if (!publish_generation || layout_.response || layout_.jets != 4 || layout_.work_jets != 4 ||
+      layout_.feature_terms != 5 || layout_.ao_precision != CudaXcAoPrecision::Fp64 ||
+      !density_binding(phase).precision.arithmetic.is_strict_fp64() ||
+      !occupied.matches(density, layout_.nao, layout_.spins, generation))
+    occupied = {};
   if (publish_generation && (!generation || generation <= generations_.submitted()))
     throw std::invalid_argument("CUDA XC density generation is stale");
   device_pointer(density, device_);
   const auto input_bytes = size_mul(count, sizeof(double), "CUDA XC density size overflow");
+  if (occupied.coefficients) {
+    device_pointer(occupied.coefficients, device_);
+    if (generativeqc::runtime::ranges_overlap(occupied.coefficients, input_bytes, arena_,
+                                              layout_.device_bytes) ||
+        generativeqc::runtime::ranges_overlap(occupied.coefficients, input_bytes, density,
+                                              input_bytes))
+      throw std::invalid_argument("CUDA XC occupied frame aliases density or scratch");
+  }
   if (generativeqc::runtime::ranges_overlap(density, input_bytes, arena_, layout_.device_bytes))
     throw std::invalid_argument("CUDA XC density aliases its workspace");
   if ((total_density == nullptr) != (total_gradient == nullptr))
@@ -947,7 +961,7 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
         ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get(),
         point_batch_plan_,
         mixed_point ? cuda_xc_detail::mixed_pbe_point_batch_launcher() : point_batch_launcher_,
-        point_batch_arena_);
+        point_batch_arena_, occupied);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.
