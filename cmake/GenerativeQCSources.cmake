@@ -22,6 +22,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_resource_planning.cpp
     src/api/c_api_resource_ledger_plan.cpp
     src/api/c_api_scf_effort.cpp
+    src/api/c_api_response_recycle.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
     src/api/error.cpp

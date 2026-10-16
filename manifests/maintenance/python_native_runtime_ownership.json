@@ -567,6 +567,11 @@
           "classification": "scientific-runtime"
         },
         {
+          "path": "python/generativeqc/_response_recycle_native.py",
+          "symbol": "NativeRecycle",
+          "classification": "wrapper"
+        },
+        {
           "path": "python/generativeqc/response_xc.py",
           "symbol": "FixedDensityXCDerivativeKernel",
           "classification": "scientific-runtime"
@@ -575,15 +580,20 @@
       "native_scientific_sources": [
         "src/response/native_gmres.cpp",
         "src/response/resident_gmres.cpp",
-        "src/response/linear_problem.hpp"
+        "src/response/linear_problem.hpp",
+        "src/response/recycle.hpp"
       ],
-      "native_callers": [],
+      "native_callers": [
+        "src/api/c_api_response_recycle.cpp"
+      ],
       "remaining_python_runtime": [
-        "Native vector/Krylov owners coexist with Python method-specific operator callbacks, RHS/block/recycle schedules and XC tiles. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
+        "Eligible CPU FP64 recycle-vector retention, projection and old-first MGS replacement use the native owner without normal per-solve vector publication. Python retains method-specific operators, GMRES/RHS/block/recycled schedules, rank SVD, explicit seed/transport/foreign compatibility and XC tiles. This does not complete molecular HVP or cross-backend resource authority. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
       ],
       "tests": [
         "tests/python/test_stationary_nuclear_batch_host.py",
-        "tests/python/test_posthf_low_rank_blas_ownership.py"
+        "tests/python/test_posthf_low_rank_blas_ownership.py",
+        "tests/python/test_native_response_recycle.py",
+        "tests/native/test_response_recycle_sdk.cpp"
       ],
       "trackers": [
         "#932",
