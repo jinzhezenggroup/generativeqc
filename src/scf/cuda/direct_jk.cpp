@@ -17,6 +17,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
+#include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -1596,6 +1597,20 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
       auto* exchange_correction = correction ? correction + correction_elements / 2 : nullptr;
       direct_jk_canonical_density(plan, unrestricted, density, beta, 0,
                                   plan->diagnostic.batch_size);
+      // Rebuild bounds from this call's Cartesian density, not a previous J/K
+      // traversal. Borrow the geometry owner's charged scratch on its stream;
+      // missing optional storage retains the original geometry-only schedule.
+      const bool mixed_shell_screening =
+          mixed_j && !fixed && !correction && plan->materialized_pair_order && generated_coulomb;
+      if (mixed_shell_screening) {
+        constexpr unsigned threads = 128;
+        launch_reduce_shell_pair_density_bounds_kernel(
+            unrestricted, static_cast<unsigned>(plan->materialized_batch.total_shell_pairs),
+            threads, 3U * threads * sizeof(double), plan->stream, plan->materialized_batch,
+            plan->canonical_density, plan->canonical_active,
+            generated_coulomb->shell_pair_density_bounds);
+        direct_jk_check(cudaGetLastError());
+      }
       if (dispatch.canonical_coulomb)
         direct_jk_check(cudaMemsetAsync(plan->canonical_coulomb, 0, scratch_bytes, plan->stream));
       if (dispatch.canonical_exchange)
@@ -1624,7 +1639,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                     mixed_exchange ? plan->canonical_exchange : nullptr,
                     mixed_exchange ? direct_exchange_range(spec.exchange)
                                    : DirectCoulombRange::Full,
-                    mixed_exchange ? spec.exchange.omega : 0.0);
+                    mixed_exchange ? spec.exchange.omega : 0.0,
+                    mixed_shell_screening ? generated_coulomb->shell_bounds : nullptr,
+                    mixed_shell_screening ? generated_coulomb->shell_pair_density_bounds : nullptr);
               } else
                 launch_canonical_mixed_j_kernel(
                     plan->stream, plan->canonical_batch, plan->canonical_cartesian,

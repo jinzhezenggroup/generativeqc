@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from functools import cache
 from typing import Any
 
@@ -67,6 +68,7 @@ def test_fast_range_source_composes_with_strict_refinement(
         result = calculator.singlepoint(case.atoms, properties=("energy", "forces"))
     finally:
         calculator.clear_cache()
+
     assert (
         result.converged
         and result.precision_validation.status == "qualified_budget_fock"
@@ -96,14 +98,19 @@ def test_fast_range_source_composes_with_strict_refinement(
 
 
 @pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
+@pytest.mark.parametrize("strict_tolerances", (False, True))
 def test_fast_nonlocal_refinement_refreshes_then_reuses_strict_anchor(
-    monkeypatch: pytest.MonkeyPatch, case_name: str, record_property: Any
+    monkeypatch: pytest.MonkeyPatch,
+    case_name: str,
+    strict_tolerances: bool,
+    record_property: Any,
 ) -> None:
     """Reuse a fresh strict anchor without publishing a provisional inner state.
 
     The production mixed budget must retain the shared outer solver for both
-    molecular sizes. The first strict Fock replaces the mixed anchor; only later
-    strict inner steps may freeze that potential. Independent moving-grid
+    molecular sizes. Budget proposals finish their frozen inner stage in FP32;
+    explicitly strict tolerances retain the strict inner solver. The first
+    strict Fock always replaces the mixed anchor. Independent moving-grid
     energy/force gates still apply to the complete returned endpoint.
     """
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
@@ -117,6 +124,15 @@ def test_fast_nonlocal_refinement_refreshes_then_reuses_strict_anchor(
         initial_guess=None,
         max_iterations=180,
         policy="fast",
+        **(
+            {
+                "energy_tolerance": 1e-10,
+                "density_tolerance": 1e-8,
+                "screening_tolerance": 1e-12,
+            }
+            if strict_tolerances
+            else {}
+        ),
     )
     try:
         result = calculator.singlepoint(case.atoms, properties=("energy", "forces"))
@@ -135,10 +151,17 @@ def test_fast_nonlocal_refinement_refreshes_then_reuses_strict_anchor(
         if event["kind"] == "strict_fock"
     ]
     assert strict_iterations and scopes[strict_iterations[0]] == "full-target"
-    assert any(
-        scopes[iteration] == "provisional-frozen-vv10"
-        for iteration in strict_iterations
-    )
+    if strict_tolerances:
+        assert any(
+            scopes[iteration] == "provisional-frozen-vv10"
+            for iteration in strict_iterations
+        )
+    else:
+        assert any(
+            event["kind"] == "mixed_fock"
+            and scopes[event["iteration"]] == "provisional-frozen-vv10"
+            for event in result.precision["scf_fock_timeline"]
+        )
     assert all(row["operator_scope"] == "full-target" for row in history[-2:])
     for name, count in result.ks_diagnostic.nonlocal_work.items():
         record_property(name, count)
@@ -239,5 +262,84 @@ def test_shared_fast_fock_complete_endpoint(
         assert energy_error <= report.budget.energy_abs
         assert force_error <= report.budget.force_max_abs
         assert force_rms <= report.budget.force_rms
+    finally:
+        calculator.clear_cache()
+
+
+@pytest.mark.parametrize("case_name", (CASE, "water-tetramer-def2-svp-spherical"))
+@pytest.mark.parametrize(
+    ("method", "functional"),
+    (
+        ("pbe-rks", "PBE"),
+        ("pbe0-rks", "PBE0"),
+        ("b3lyp-rks", "B3LYP"),
+        ("r2scan-rks", "R2SCAN"),
+        ("m06-2x-rks", "M06-2X"),
+    ),
+)
+def test_budget_fock_keeps_native_fp64_force_owner(
+    case_name: str, method: str, functional: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Relaxed Focks must not lose an already qualified native FP64 force body.
+
+    The native prepared capability remains the authority. Forbid compatibility
+    orchestration only for these independently gated, admitted complete graphs;
+    unsupported graphs must retain their bounded compatibility consumer.
+    """
+    from generativeqc.batch import PreparedBatch
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("budget Fock lost the prepared native FP64 force consumer")
+
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cuda_force", forbidden)
+    case = benchmark_cases()[case_name]
+    calculator = PrecisionCalculator(
+        method=method,
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        initial_guess=None,
+        max_iterations=180,
+        policy="fast",
+    )
+    try:
+        moved = replace(
+            case,
+            atoms=tuple(
+                (element, (position[0] + (0.01 if index == 1 else 0.0), *position[1:]))
+                for index, (element, position) in enumerate(case.atoms)
+            ),
+        )
+        for phase, current in (("cold", case), ("warm", case), ("moved", moved)):
+            result = calculator.singlepoint(
+                current.atoms, properties=("energy", "forces")
+            )
+            assert result.precision_validation.status == "qualified_budget_fock", phase
+            assert result.precision_validation.solve_count == 1
+            work = result.precision
+            assert work["mixed_stage_fock_builds"] > 0
+            assert (
+                work["strict_stage_fock_builds"] >= 2 and work["execution_retries"] == 0
+            )
+            gradient = work.get("gradient") or {}
+            assert not gradient.get("attempted_fp32_geometry_points", 0)
+            assert not gradient.get("attempted_fp32_primitive_sources", 0)
+            oracle = (
+                reference(
+                    case_name,
+                    GRID,
+                    4,
+                    functional=functional,
+                    backend="gpu4pyscf",
+                    case_snapshot=current,
+                )
+                if phase == "moved"
+                else _oracle(functional, case_name)
+            )
+            delta = np.asarray(result.forces) - np.asarray(oracle["forces"])
+            assert abs(result.energy - oracle["energy"]) <= 1e-5
+            assert np.max(np.abs(delta)) <= 1e-4
+            assert np.sqrt(np.mean(delta * delta)) <= 3e-5
     finally:
         calculator.clear_cache()
