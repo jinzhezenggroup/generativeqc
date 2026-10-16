@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <vector>
 
 #include "dft/cuda_wb97mv_nuclear_jk.hpp"
@@ -20,6 +21,8 @@ struct DeviceGroup {
   long long atoms[4];
   std::size_t components{}, quartets{};
   maps::Kernel kernel;
+  std::size_t cache_strides[4]{};
+  unsigned cache_slots[4]{0, 1, 2, 3};
 };
 struct DeviceTile {
   unsigned components[16]{};
@@ -31,12 +34,12 @@ struct Tile {
 };
 struct Group {
   DeviceGroup device;
-  std::size_t radials{}, closure{};
+  std::size_t radials{}, closure{}, resident_offset{}, resident_source{};
 };
 struct Layout {
   std::size_t bytes{}, matrix{}, panels{}, basis_elements{}, groups{}, tiles{}, shells{}, records{},
       raw{}, cache{}, projected{}, candidates{}, status{}, max_components{}, max_quartets{},
-      radial_records{}, candidate_count{};
+      radial_records{}, candidate_count{}, resident{}, resident_direction{}, resident_bytes{};
   std::uint64_t components{}, projections{}, reductions{};
 };
 struct Schedule {
@@ -193,6 +196,11 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
               return cudaErrorInvalidValue;
             plan.max_components = std::max(plan.max_components, group.device.components);
             plan.max_quartets = std::max(plan.max_quartets, group.device.quartets);
+            std::size_t stride = 1;
+            for (unsigned slot = 4; slot-- > 0;) {
+              group.device.cache_strides[slot] = stride;
+              stride *= cartesian_count(group.device.shells[slot].angular);
+            }
             result.groups.push_back(group);
           }
   plan.candidate_count = 1;
@@ -206,8 +214,84 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
       !append(plan, plan.max_components * 25, sizeof(double), plan.cache) ||
       !append(plan, plan.max_quartets * 41, sizeof(double), plan.projected) ||
       !append(plan, plan.candidate_count, sizeof(double), plan.candidates) ||
-      !append(plan, 1, sizeof(int), plan.status) || plan.bytes > options.max_workspace_bytes)
+      !append(plan, 2, sizeof(int), plan.status) || plan.bytes > options.max_workspace_bytes)
     return cudaErrorInvalidValue;
+  // Optional residency never changes minimum admission or the streaming bound.
+  // Jets contain a right-direction HVP, so a basis identity alone is not a key.
+  if (!options.max_resident_integral_bytes) return cudaSuccess;
+  auto resident_plan = plan;
+  std::size_t fields{};
+  bool representable = true;
+  constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
+                                                                 {{1, 0, 2, 3}},
+                                                                 {{0, 1, 3, 2}},
+                                                                 {{1, 0, 3, 2}},
+                                                                 {{2, 3, 0, 1}},
+                                                                 {{3, 2, 0, 1}},
+                                                                 {{2, 3, 1, 0}},
+                                                                 {{3, 2, 1, 0}}}};
+  std::map<std::array<std::size_t, 5>, std::size_t> sources;
+  for (std::size_t index = 0; index < result.groups.size(); ++index) {
+    auto& group = result.groups[index];
+    std::array<std::size_t, 5> key;
+    for (unsigned slot = 0; slot < 4; ++slot) key[slot] = group.device.shells[slot].primitive_begin;
+    key[4] = static_cast<std::size_t>(group.device.kernel);
+    auto selected = permutations.front();
+    for (const auto& permutation : permutations) {
+      auto candidate = key;
+      for (unsigned slot = 0; slot < 4; ++slot)
+        candidate[slot] = group.device.shells[permutation[slot]].primitive_begin;
+      if (candidate < key) {
+        key = candidate;
+        selected = permutation;
+      }
+    }
+    const auto [position, inserted] = sources.try_emplace(key, index);
+    group.resident_source = position->second;
+    if (inserted) {
+      group.resident_offset = fields;
+      representable =
+          representable && multiply(group.device.components, 25, count) && add(fields, count);
+    } else {
+      group.resident_offset = result.groups[group.resident_source].resident_offset;
+    }
+    // Canonical shell order is lexicographically first, hence already built on
+    // the same stream. Permute Cartesian strides AND both derivative field legs.
+    std::size_t stride = 1;
+    for (unsigned slot = 4; slot-- > 0;) {
+      const auto original = selected[slot];
+      group.device.cache_slots[original] = slot;
+      group.device.cache_strides[original] = stride;
+      stride *= cartesian_count(group.device.shells[original].angular);
+    }
+  }
+  if (representable && options.max_resident_integral_bytes &&
+      append(resident_plan, fields, sizeof(double), resident_plan.resident) &&
+      append(resident_plan, 3 * shape.atoms, sizeof(double), resident_plan.resident_direction) &&
+      resident_plan.bytes <= options.max_workspace_bytes &&
+      resident_plan.bytes - plan.bytes <= options.max_resident_integral_bytes) {
+    resident_plan.resident_bytes = resident_plan.bytes - plan.bytes;
+    plan = resident_plan;
+    plan.components = plan.radial_records = plan.reductions = 0;
+    for (std::size_t index = 0; index < result.groups.size(); ++index) {
+      const auto& group = result.groups[index];
+      plan.reductions += group.device.quartets * (25 + 8 * shape.spins);
+      if (group.resident_source != index) continue;
+      plan.components += group.radials * group.device.components;
+      plan.radial_records += group.radials * result.closure[group.closure].size();
+      plan.reductions +=
+          25 * group.device.components * ((group.radials - 1) / options.radial_tile + 1);
+    }
+  } else {
+    for (auto& group : result.groups) {
+      std::size_t stride = 1;
+      for (unsigned slot = 4; slot-- > 0;) {
+        group.device.cache_slots[slot] = slot;
+        group.device.cache_strides[slot] = stride;
+        stride *= cartesian_count(group.device.shells[slot].angular);
+      }
+    }
+  }
   return cudaSuccess;
 }
 
@@ -232,11 +316,18 @@ cudaError_t drain(cudaError_t error, cudaStream_t stream) {
   const auto completed = cudaStreamSynchronize(stream);
   return error == cudaSuccess ? completed : error;
 }
-cudaError_t gate(int* status, cudaStream_t stream) {
-  int failed{};
-  auto error = cudaMemcpyAsync(&failed, status, sizeof(failed), cudaMemcpyDeviceToHost, stream);
+cudaError_t gate(int* status, cudaStream_t stream, bool* same_direction = nullptr) {
+  std::array<int, 2> flags{};
+  auto error = cudaMemcpyAsync(flags.data(), status, same_direction ? sizeof(flags) : sizeof(int),
+                               cudaMemcpyDeviceToHost, stream);
   error = drain(error, stream);
-  return error == cudaSuccess && failed ? cudaErrorInvalidValue : error;
+  if (same_direction) *same_direction = flags[1] == 0;
+  return error == cudaSuccess && flags[0] ? cudaErrorInvalidValue : error;
+}
+__global__ void compare_direction(const double* current, const double* saved, std::size_t count,
+                                  int* different) {
+  for (std::size_t index = threadIdx.x; index < count; index += blockDim.x)
+    if (current[index] != saved[index]) atomicExch(different, 1);
 }
 __global__ void finite_values(const double* values, std::size_t count, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
@@ -362,12 +453,17 @@ __global__ void project(CudaWb97mvJkShape shape, const DeviceGroup* group, const
             for (unsigned slot = 0; slot < 4; ++slot) {
               const auto angular = static_cast<unsigned>(group->shells[slot].angular);
               const auto* term = records[slot] + 4 + 4 * terms[slot];
-              component =
-                  component * ((angular + 1) * (angular + 2) / 2) + cartesian_index(term, angular);
+              component += group->cache_strides[slot] * cartesian_index(term, angular);
               coefficient *= term[3];
             }
-            for (unsigned field = 0; field < 25; ++field)
-              integral[field] += coefficient * cache[field * group->components + component];
+            integral[0] += coefficient * cache[component];
+            for (unsigned coordinate = 0; coordinate < 12; ++coordinate) {
+              const auto source = 3 * group->cache_slots[coordinate / 3] + coordinate % 3;
+              integral[1 + coordinate] +=
+                  coefficient * cache[(1 + source) * group->components + component];
+              integral[13 + coordinate] +=
+                  coefficient * cache[(13 + source) * group->components + component];
+            }
           }
     double motion{};
     for (unsigned coordinate = 0; coordinate < 12; ++coordinate)
@@ -394,7 +490,7 @@ __global__ void project(CudaWb97mvJkShape shape, const DeviceGroup* group, const
     }
   }
 }
-__global__ void reduce_fock(CudaWb97mvJkShape shape, const DeviceGroup* group, unsigned incidence,
+__device__ void reduce_fock(CudaWb97mvJkShape shape, const DeviceGroup* group, unsigned incidence,
                             const double* projected, double* candidate, int* status) {
   if (atomicAdd(status, 0)) return;
   const unsigned pairs[4][2] = {{0, 1}, {2, 3}, {0, 2}, {1, 3}};
@@ -424,7 +520,7 @@ __global__ void reduce_fock(CudaWb97mvJkShape shape, const DeviceGroup* group, u
     candidate[1 + shape.spins * shape.nao * shape.nao + target] += motion;
   }
 }
-__global__ void reduce_vectors(CudaWb97mvJkShape shape, const DeviceGroup* group,
+__device__ void reduce_vectors(CudaWb97mvJkShape shape, const DeviceGroup* group,
                                const double* projected, double* candidate, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto coordinate = threadIdx.x;
@@ -445,13 +541,24 @@ __global__ void reduce_vectors(CudaWb97mvJkShape shape, const DeviceGroup* group
   candidate[base + 3 * group->atoms[center] + axis] += gradient;
   candidate[base + 3 * shape.atoms + 3 * group->atoms[center] + axis] += hvp;
 }
-__global__ void reduce_energy(const DeviceGroup* group, const double* projected, double* candidate,
+__device__ void reduce_energy(const DeviceGroup* group, const double* projected, double* candidate,
                               int* status) {
   if (atomicAdd(status, 0)) return;
   double value{};
   for (std::size_t quartet = 0; quartet < group->quartets; ++quartet)
     value += projected[41 * quartet];
   candidate[0] += value;
+}
+__global__ void reduce_group(CudaWb97mvJkShape shape, const DeviceGroup* group,
+                             const double* projected, double* candidate, int* status) {
+  // One CTA preserves the old incidence order and its inter-incidence barriers.
+  // Energy and nuclear vectors own disjoint outputs; no floating atomics enter.
+  for (unsigned incidence = 0; incidence < 4; ++incidence) {
+    reduce_fock(shape, group, incidence, projected, candidate, status);
+    __syncthreads();
+  }
+  reduce_vectors(shape, group, projected, candidate, status);
+  if (threadIdx.x == 0) reduce_energy(group, projected, candidate, status);
 }
 }  // namespace
 
@@ -462,7 +569,7 @@ struct CudaWb97mvNuclearJk::Impl {
   CudaWb97mvJkWork work;
   Schedule schedule;
   void* workspace{};
-  bool ready{};
+  bool ready{}, resident_valid{};
   cudaError_t authenticate(cudaStream_t stream) noexcept {
     if (!ready || stream != reference.stream) return cudaErrorInvalidResourceHandle;
     int device{-1};
@@ -502,6 +609,7 @@ cudaError_t CudaWb97mvNuclearJk::prepare(const CudaWb97mvJkShape& shape,
                                          const CudaWb97mvJkReference& reference, void* workspace,
                                          std::size_t workspace_bytes) noexcept {
   impl_->ready = false;
+  impl_->resident_valid = false;
   int device{-1};
   auto error = cudaGetDevice(&device);
   if (error != cudaSuccess) return error;
@@ -567,6 +675,7 @@ cudaError_t CudaWb97mvNuclearJk::prepare(const CudaWb97mvJkShape& shape,
     if (state.ready)
       state.work = {layout.bytes,      state.schedule.groups.size(), layout.radial_records,
                     layout.components, layout.projections,           layout.reductions};
+    if (state.ready) state.work.resident_integral_bytes = layout.resident_bytes;
     return error;
   } catch (...) {
     impl_->ready = false;
@@ -620,12 +729,12 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
   auto* status = reinterpret_cast<int*>(base + plan.status);
   auto* records = reinterpret_cast<double*>(base + plan.records);
   auto* raw = reinterpret_cast<double*>(base + plan.raw);
-  auto* cache = reinterpret_cast<double*>(base + plan.cache);
+  auto* streaming_cache = reinterpret_cast<double*>(base + plan.cache);
   auto* projected = reinterpret_cast<double*>(base + plan.projected);
   auto* candidate = reinterpret_cast<double*>(base + plan.candidates);
   const auto* groups = reinterpret_cast<DeviceGroup*>(base + plan.groups);
   const auto* tiles = reinterpret_cast<DeviceTile*>(base + plan.tiles);
-  error = cudaMemsetAsync(status, 0, sizeof(int), stream);
+  error = cudaMemsetAsync(status, 0, 2 * sizeof(int), stream);
   if (error == cudaSuccess) {
     finite_values<<<blocks(3 * shape.atoms), 128, 0, stream>>>(direction, 3 * shape.atoms, status);
     error = cudaGetLastError();
@@ -637,14 +746,33 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
           state.options.symmetry_relative_tolerance, status);
       error = cudaGetLastError();
     }
-  error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
+  bool reuse{};
+  if (error == cudaSuccess && state.resident_valid) {
+    compare_direction<<<1, 128, 0, stream>>>(
+        direction, reinterpret_cast<const double*>(base + plan.resident_direction), 3 * shape.atoms,
+        status + 1);
+    error = cudaGetLastError();
+  }
+  error = error == cudaSuccess ? gate(status, stream, &reuse) : drain(error, stream);
   if (error != cudaSuccess) return error;
+  reuse = reuse && state.resident_valid;
+  state.resident_valid = false;
+  if (reuse)
+    ++state.work.resident_integral_hits;
+  else
+    ++state.work.integral_source_builds;
   error = cudaMemsetAsync(candidate, 0, plan.candidate_count * sizeof(double), stream);
   for (std::size_t index = 0; index < state.schedule.groups.size() && error == cudaSuccess;
        ++index) {
     const auto& group = state.schedule.groups[index];
-    error = cudaMemsetAsync(cache, 0, group.device.components * 25 * sizeof(double), stream);
+    auto* cache = plan.resident_bytes
+                      ? reinterpret_cast<double*>(base + plan.resident) + group.resident_offset
+                      : streaming_cache;
+    const bool build = !reuse && (!plan.resident_bytes || group.resident_source == index);
+    if (build)
+      error = cudaMemsetAsync(cache, 0, group.device.components * 25 * sizeof(double), stream);
     for (const auto tile_index : state.schedule.closure[group.closure]) {
+      if (!build) break;
       const auto& tile = state.schedule.tiles[tile_index];
       for (std::size_t begin = 0; begin < group.radials && error == cudaSuccess;) {
         const auto count = std::min(state.options.radial_tile, group.radials - begin);
@@ -670,17 +798,8 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
       error = cudaGetLastError();
       state.work.projection_terms_bound += 81 * group.device.quartets;
     }
-    for (unsigned incidence = 0; incidence < 4 && error == cudaSuccess; ++incidence) {
-      reduce_fock<<<blocks(shape.spins * 100), 128, 0, stream>>>(shape, groups + index, incidence,
-                                                                 projected, candidate, status);
-      error = cudaGetLastError();
-    }
     if (error == cudaSuccess) {
-      reduce_vectors<<<1, 32, 0, stream>>>(shape, groups + index, projected, candidate, status);
-      error = cudaGetLastError();
-    }
-    if (error == cudaSuccess) {
-      reduce_energy<<<1, 1, 0, stream>>>(groups + index, projected, candidate, status);
+      reduce_group<<<1, 128, 0, stream>>>(shape, groups + index, projected, candidate, status);
       error = cudaGetLastError();
       state.work.reduction_terms += group.device.quartets * (25 + 8 * shape.spins);
     }
@@ -698,8 +817,11 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
     error = cudaGetLastError();
   }
   error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
+  if (error == cudaSuccess && plan.resident_bytes)
+    error = cudaMemcpyAsync(base + plan.resident_direction, direction,
+                            3 * shape.atoms * sizeof(double), cudaMemcpyDeviceToDevice, stream);
   if (error == cudaSuccess) error = state.authenticate(stream);
-  if (error != cudaSuccess) return error;
+  if (error != cudaSuccess) return drain(error, stream);
   std::size_t offset{};
   for (unsigned index = 0; index < 5 && error == cudaSuccess; ++index) {
     error =
@@ -708,7 +830,10 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
     offset += output_counts[index];
   }
   error = drain(error, stream);
-  if (error == cudaSuccess) ++state.work.completed_actions;
+  if (error == cudaSuccess) {
+    ++state.work.completed_actions;
+    state.resident_valid = plan.resident_bytes != 0;
+  }
   return error;
 }
 }  // namespace generativeqc::dft
