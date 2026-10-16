@@ -116,20 +116,20 @@ void test_ecp_shape_preflight() {
       try {
         if (expand)
           (void)generativeqc::molecule::expand_basis_template(source.descriptor(), atoms,
-                                                            representation);
+                                                              representation);
         else
           (void)generativeqc::molecule::basis_template_capacity(source.descriptor(), atoms,
-                                                              representation);
+                                                                representation);
       } catch (const std::invalid_argument&) {
         rejected = true;
       }
       require(rejected != accepted, "capacity and expansion must agree on selected ECP shapes");
     }
     if (accepted) {
-      const auto capacity = generativeqc::molecule::basis_template_capacity(
-          source.descriptor(), atoms, representation);
-      const auto expanded = generativeqc::molecule::expand_basis_template(
-          source.descriptor(), atoms, representation);
+      const auto capacity = generativeqc::molecule::basis_template_capacity(source.descriptor(),
+                                                                            atoms, representation);
+      const auto expanded =
+          generativeqc::molecule::expand_basis_template(source.descriptor(), atoms, representation);
       require(capacity.shell_count == expanded.shells.size() &&
                   capacity.primitive_count == expanded.primitives.size() &&
                   capacity.ecp_term_count == expanded.ecp_terms.size(),
@@ -139,8 +139,8 @@ void test_ecp_shape_preflight() {
 
   for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
     for (const bool ecp_first : {false, true}) {
-      const std::array<generativeqc_atom, 2> atoms{{
-          {ecp_first ? 3 : 1, 0, 0, 0}, {ecp_first ? 1 : 3, 0, 0, 1.4}}};
+      const std::array<generativeqc_atom, 2> atoms{
+          {{ecp_first ? 3 : 1, 0, 0, 0}, {ecp_first ? 1 : 3, 0, 0, 1.4}}};
       check(fixture(), atoms, representation, true);
       for (int invalid = 0; invalid < 4; ++invalid) {
         auto source = fixture();
