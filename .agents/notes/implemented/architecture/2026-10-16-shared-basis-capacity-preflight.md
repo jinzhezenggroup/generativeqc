@@ -1,6 +1,6 @@
 # Decision: share basis capacity with general-template expansion preflight
 
-Status: implemented core foundation; versioned facade consolidation is pending
+Status: implemented shared owner and versioned adapters; endpoint qualification separate
 Date: 2026-10-16
 
 ## Problem
@@ -29,12 +29,21 @@ otherwise exceed native AO dimensions despite individually representable raw
 buffer counts. On 32-bit hosts, check both byte products and their sum before
 publishing detached-buffer capacity.
 
-This branch does not yet deliver the #2547 installed versioned C facade or its
-Python cutover on the shared owner. Those adapters, public contracts, allocation
-failure/alias controls, exact-source integration tests and complete numerical
-endpoints remain required before the catalog consolidation is review-ready.
+The versioned byte-counted C facade is adapted as `c_api_basis_builtin.cpp` on
+this shared owner, without importing #2547's flat generator or expansion loop.
+Python prefers that query/constructor for exact bundled snapshots, reusing the
+existing full-record provenance recognizer. Missing versioned symbols retain
+the older catalog, element-template and explicit descriptor contracts; a selected
+native query/constructor refusal never authorizes another ABI or Python retry.
+Native-free immutable metadata loading remains separate from materialization.
+
+The retained legacy-constructor tests explicitly hide the new symbols so that
+the new default cannot accidentally bypass their real rejection/fallback coverage.
+Versioned public contracts, alias/extension/admission controls, exact-source
+integration tests and complete numerical endpoints are separate acceptance gates.
 The existing PRs and their recorded qualification heads are not rewritten by
-this local foundation.
+this consolidation, and new source is not ready merely because an older flat
+implementation passed its own qualification.
 
 ## Invariants
 

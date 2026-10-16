@@ -1871,6 +1871,17 @@ class Calculator:
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
+        from . import _basis_builtin
+
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        if not correlation_auxiliary and _basis_builtin.eligible(
+            self._library, selected_basis
+        ):
+            return _basis_builtin.create_system(
+                self._library, context, selected_basis, atoms, charge, multiplicity
+            )
         atom_array = (_native.AtomDescriptor * len(atoms))(
             *(
                 _native.AtomDescriptor(atom.atomic_number, *atom.position)
@@ -1879,9 +1890,6 @@ class Calculator:
         )
         bundled_create = getattr(
             self._library, "generativeqc_system_create_bundled", None
-        )
-        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
-            "df_metric"
         )
         bundled_name = (
             _model_resolution._bundled_basis_name(selected_basis)

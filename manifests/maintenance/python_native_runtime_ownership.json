@@ -914,6 +914,11 @@
           "path": "python/generativeqc/_method_native.py",
           "symbol": "capabilities",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_basis_builtin.py",
+          "symbol": "create_system",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
@@ -922,23 +927,27 @@
         "src/molecule/basis_catalog.cpp",
         "src/molecule/basis_template.cpp",
         "src/api/c_api_basis_catalog.cpp",
+        "src/api/c_api_basis_builtin.cpp",
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
         "src/cli/main.cpp",
         "src/api/c_api_basis_catalog.cpp",
+        "src/api/c_api_basis_builtin.cpp",
         "src/api/c_api_common.cpp"
       ],
       "remaining_python_runtime": [
-        "Exact bundled snapshots use the checksum-bound native catalog constructor. Other admitted BasisSet inputs use element-local FP64 templates; Python, CLI and SDK share native atom/general-contraction expansion and scalar ECP channel mapping. Typed arrays do not authenticate canonical provenance. Python retains native-free preflight/provenance metadata and explicit old-library, Shell and correlation-auxiliary descriptor adapters. Built-in Calculator construction still imports compiler MethodIR/model resolution; native method-name/capability lookup stays on the already-selected Calculator library rather than public cached/default-library discovery. Custom MethodIR remains explicit compiler work."
+        "Exact bundled snapshots prefer the byte-counted, checksum-bound native catalog query/constructor; selected native refusals never retry an older ABI or Python. Capacity and expansion use the same general-template owner, not a second flat catalog. Other admitted BasisSet inputs use element-local FP64 templates; Python, CLI and SDK share native atom/general-contraction expansion and scalar ECP channel mapping. Typed arrays do not authenticate canonical provenance. Python retains native-free preflight/provenance metadata and explicit old-library, Shell and correlation-auxiliary descriptor adapters. Built-in Calculator construction still imports compiler MethodIR/model resolution; native method-name/capability lookup stays on the already-selected Calculator library rather than public cached/default-library discovery. Custom MethodIR remains explicit compiler work."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
         "tests/python/test_native_basis_catalog.py",
         "tests/python/test_native_basis_template.py",
+        "tests/python/test_native_basis_builtin.py",
         "tests/native/test_basis_catalog.cpp",
         "tests/native/test_basis_template.cpp",
         "tests/native/test_basis_catalog_sdk.cpp",
+        "tests/native/test_builtin_basis_sdk.cpp",
         "tests/python/test_selected_native_method_capabilities.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],

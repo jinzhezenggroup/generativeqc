@@ -129,7 +129,7 @@ def test_only_exact_snapshots_are_recognized_without_loading_native(
 
 
 class CatalogLibrary:
-    """Exercise old-symbol compatibility or an actual native provenance rejection."""
+    """Select the legacy catalog ABI to test its compatibility and rejection rules."""
 
     def __init__(
         self, library: Any, *, legacy: bool = False, mismatched: bool = False
@@ -139,6 +139,11 @@ class CatalogLibrary:
         self.mismatched = mismatched
 
     def __getattr__(self, name: str) -> Any:
+        if name in {
+            "generativeqc_builtin_basis_query_v1",
+            "generativeqc_system_create_builtin_basis_v1",
+        }:
+            raise AttributeError(name)
         if self.legacy and name in {
             "generativeqc_system_create_bundled",
             "generativeqc_system_create_basis_template_v1",

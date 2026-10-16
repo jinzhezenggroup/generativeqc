@@ -8,13 +8,20 @@ cover H–Ar. Existing bundled defaults remain Cartesian.
 
 Bundled execution uses the same compiled C++ catalog for the Python API, native
 CLI and installed SDK. Python still creates native-free immutable metadata for
-preflight and provenance; only an exact bundled snapshot uses native expansion,
+preflight and provenance; only an exact bundled snapshot selects the compiled catalog,
 and its source-pack checksum must match the installed catalog. A catalog mismatch
-is an error, not permission to retry with different Python data. Older libraries
-without the additive constructor retain the portable descriptor path. Custom
-records, ECP expansion and the correlation-only auxiliary-through-g path retain
-their explicit descriptor adapters; a same-name custom record is never replaced
-by bundled data.
+is an error, not permission to retry with different Python data or an older ABI.
+The versioned C SDK provides byte-counted discovery, a shape/provenance query,
+and transactional construction through the same general-template expansion owner.
+Its optional expansion limit covers detached raw shell/primitive buffers only,
+not normalized systems, provider storage or total host memory.
+
+Older libraries retain the explicit older-constructor/descriptor routes. Custom
+`BasisSet` records marshal element-local FP64 templates for the shared native
+general-contraction and scalar-ECP owner; explicit `Shell` records and the
+correlation-only auxiliary-through-g path retain their descriptor adapters.
+A same-name custom record is never replaced by bundled data, and metadata-only
+basis loading never requires a native library or an accelerator.
 
 ## Import and use
 
