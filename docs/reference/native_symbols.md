@@ -32,6 +32,11 @@ capability authorities, serialization, and status handling.
 - [generativeqc_response_recycle_copy_v1](#native-c-generativeqc-response-recycle-copy-v1)
 - [generativeqc_response_recycle_destroy](#native-c-generativeqc-response-recycle-destroy)
 - [generativeqc_status_message](#native-c-generativeqc-status-message)
+- [generativeqc_response_action_v1](#native-c-generativeqc-response-action-v1)
+- [generativeqc_response_gmres_workspace_v1](#native-c-generativeqc-response-gmres-workspace-v1)
+- [generativeqc_response_solve_v1](#native-c-generativeqc-response-solve-v1)
+- [generativeqc_response_result_view_v1_get](#native-c-generativeqc-response-result-view-v1-get)
+- [generativeqc_response_result_destroy](#native-c-generativeqc-response-result-destroy)
 - [generativeqc_method_available](#native-c-generativeqc-method-available)
 - [generativeqc_method_from_name](#native-c-generativeqc-method-from-name)
 - [generativeqc_method_get_name](#native-c-generativeqc-method-get-name)
@@ -120,6 +125,14 @@ capability authorities, serialization, and status handling.
 - [generativeqc::method_capabilities](#native-cpp-generativeqc-method-capabilities)
 - [generativeqc::resolve_method](#native-cpp-generativeqc-resolve-method)
 - [generativeqc::default_method_descriptor](#native-cpp-generativeqc-default-method-descriptor)
+- [generativeqc::ResponseResult](#native-cpp-generativeqc-responseresult)
+- [generativeqc::ResponseResult::ResponseResult](#native-cpp-generativeqc-responseresult-responseresult)
+- [generativeqc::ResponseResult::~ResponseResult](#native-cpp-generativeqc-responseresult-destructor-responseresult)
+- [generativeqc::ResponseResult::ResponseResult-copy](#native-cpp-generativeqc-responseresult-responseresult-copy)
+- [generativeqc::ResponseResult::operator=-copy](#native-cpp-generativeqc-responseresult-copy-assignment-copy)
+- [generativeqc::ResponseResult::operator=-move](#native-cpp-generativeqc-responseresult-copy-assignment-move)
+- [generativeqc::ResponseResult::ResponseResult-move](#native-cpp-generativeqc-responseresult-responseresult-move)
+- [generativeqc::ResponseResult::data](#native-cpp-generativeqc-responseresult-data)
 - [generativeqc::Context](#native-cpp-generativeqc-context)
 - [generativeqc::Context::Context](#native-cpp-generativeqc-context-context)
 - [generativeqc::Context::~Context](#native-cpp-generativeqc-context-destructor-context)
@@ -692,6 +705,130 @@ Return a stable, process-lifetime error string for a status code.
 **Lifetime.** Borrowed immutable process-lifetime storage; never modify or free it.
 
 **Execution.** Synchronous, context-free read; no allocation or execution.
+
+(native-c-generativeqc-response-action-v1)=
+## generativeqc_response_action_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+typedef generativeqc_status ( * generativeqc_response_action_v1 ) ( void * user_data , const double * input , double * output , size_t dimension ) ;
+```
+
+**Behavior.** Apply one caller-owned real-FP64 linear action without assuming symmetry.
+
+**Inputs.** user_data belongs to the caller; input and output have dimension entries and
+never alias. Input is read-only; overwrite every output entry.
+
+**Outputs.** SUCCESS promises finite output. The physical operator and optional linear right
+preconditioner remain distinct scientific actions; this callback does not infer a transpose.
+
+**Lifetime.** The solver borrows callback/data/vector pointers only for the synchronous call;
+retaining a temporary vector pointer is invalid. The caller owns scientific state/leases.
+
+**Errors.** A failing native status aborts without publishing a solve result. Callbacks must
+not unwind a foreign-language exception through the C boundary.
+
+**Execution.** Synchronous CPU caller action; its allocations/providers have independent budgets.
+
+**Units.** Response-vector and operator units are declared by the scientific method adapter.
+
+(native-c-generativeqc-response-gmres-workspace-v1)=
+## generativeqc_response_gmres_workspace_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_gmres_workspace_v1 ( const generativeqc_response_gmres_descriptor_v1 * descriptor , uint64_t * output ) ;
+```
+
+**Behavior.** Query the existing shared CPU GMRES owner's conservative numeric workspace.
+
+**Inputs.** A full-size current-ABI request with valid dimension/options, and nonnull output.
+Array/callback pointers are ignored and may be NULL; no input vectors are read.
+
+**Outputs.** Writes required bytes on success only, even when the request's budget is smaller.
+
+**Lifetime.** Borrows descriptors synchronously; retains no caller memory or context.
+
+**Errors.** INVALID_ARGUMENT for invalid/overflowing options, ABI_MISMATCH for bad headers.
+
+**Execution.** Allocation-free, callback-free CPU metadata query; no device or compiler work.
+
+**Units.** Workspace and budget are bytes; dimensions and iteration controls are counts.
+
+(native-c-generativeqc-response-solve-v1)=
+## generativeqc_response_solve_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_solve_v1 ( const generativeqc_response_gmres_descriptor_v1 * descriptor , generativeqc_response_result * * result ) ;
+```
+
+**Behavior.** Execute the shared bounded CPU GMRES controller, preserving the physical
+operator and optional linear preconditioner supplied by the caller.
+
+**Inputs.** A full-size current-ABI request obeying its array/options/callback contracts and
+a nonnull result slot. No execution context or Python/compiler runtime is required.
+
+**Outputs.** Clears the slot after required nonnull checks, then publishes an owning result.
+SUCCESS means a valid diagnostic result, not convergence: inspect its converged/reason.
+Workspace shortage returns a WORKSPACE_LIMIT result without invoking callbacks or making
+dimension-sized allocations. Callback failure aborts without publishing a result.
+
+**Lifetime.** Copies required results; borrows inputs/callbacks only during this call. Destroy
+the returned handle with generativeqc_response_result_destroy. Independent solves are
+independent.
+
+**Errors.** ABI_MISMATCH for bad headers; invalid/overflowing options return INVALID_ARGUMENT;
+callback status propagates, allocation failure returns OUT_OF_MEMORY. Iteration exhaustion,
+breakdown and nonfinite action data are explicit result reasons, never false convergence.
+
+**Execution.** Synchronous CPU-only solve. This is a controller, not an installed molecular HVP
+endpoint; caller callbacks retain all method-specific equations and lifetime validation.
+
+**Units.** FP64 response-vector units belong to the declared operator; tolerances apply to its
+unpreconditioned residual norm. Workspace quantities are bytes.
+
+(native-c-generativeqc-response-result-view-v1-get)=
+## generativeqc_response_result_view_v1_get
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_response_result_view_v1_get ( const generativeqc_response_result * result , generativeqc_response_result_view_v1 * output ) ;
+```
+
+**Behavior.** Borrow immutable diagnostics and arrays from a completed response result.
+
+**Inputs.** A live result and full-size current-ABI output view with initialized header.
+
+**Outputs.** Writes a complete view on success only; consult reason/converged independently
+of the API status. Optional arrays and refusal output obey the view's contracts.
+
+**Lifetime.** The handle owns all referenced arrays; copy any data needed after destruction.
+
+**Errors.** INVALID_ARGUMENT for NULL inputs, ABI_MISMATCH for invalid view headers.
+
+**Execution.** Synchronous context-free read; no allocation, callbacks or numerical execution.
+
+(native-c-generativeqc-response-result-destroy)=
+## generativeqc_response_result_destroy
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_response_result_destroy ( generativeqc_response_result * result ) ;
+```
+
+**Behavior.** Release a response result and its solver-owned diagnostics.
+
+**Inputs.** An owned result handle or NULL; NULL is a no-op.
+
+**Lifetime.** Invalidates all borrowed views; double destruction or later use is invalid.
+
+**Execution.** Synchronous context-free cleanup; no scientific callback or device operation.
 
 (native-c-generativeqc-method-available)=
 ## generativeqc_method_available
@@ -3348,6 +3485,145 @@ retain their method-specific native default meaning.
 validates the completed descriptor, backend, system, and requested properties.
 
 **Execution.** Synchronous registry query; no calculation is prepared or executed.
+
+(native-cpp-generativeqc-responseresult)=
+## generativeqc::ResponseResult
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+class ResponseResult
+```
+
+**Behavior.** Move-only owner of a completed shared CPU GMRES result, including failures
+such as workspace refusal and iteration exhaustion; convergence must be inspected.
+
+**Lifetime.** Owns the C result independently of input callbacks, arrays and contexts.
+Borrowed data() views expire on destruction. Copying and move assignment are deleted;
+after move construction only destruction is supported on the source.
+
+**Errors.** Construction/query errors throw Error. Destruction/move construction do not throw.
+
+**Execution.** Synchronous CPU controller; this class does not supply molecular equations,
+assert symmetry, or establish a complete native Hessian/HVP endpoint.
+
+(native-cpp-generativeqc-responseresult-responseresult)=
+## generativeqc::ResponseResult::ResponseResult
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+explicit ResponseResult ( const generativeqc_response_gmres_descriptor_v1 & descriptor )
+```
+
+**Behavior.** Execute the shared CPU GMRES owner and retain its immutable result.
+
+**Inputs.** A complete current-ABI descriptor obeying the C action/options contracts.
+
+**Lifetime.** Borrows inputs only for this call; result arrays are owned by this object.
+
+**Errors.** Throws Error on API/callback failure; nonconvergence is a result, not an exception.
+
+**Execution.** Synchronous CPU work; no Python, compiler, device or execution context required.
+
+(native-cpp-generativeqc-responseresult-destructor-responseresult)=
+## generativeqc::ResponseResult::~ResponseResult
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+~ ResponseResult ( )
+```
+
+**Behavior.** Release owned solve output; a moved-from object is a no-op.
+
+**Lifetime.** Invalidates every borrowed result view; never throws.
+
+**Execution.** Synchronous CPU cleanup without numerical callbacks.
+
+(native-cpp-generativeqc-responseresult-responseresult-copy)=
+## generativeqc::ResponseResult::ResponseResult-copy
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+ResponseResult ( const ResponseResult & ) = delete
+```
+
+**Behavior.** Copy construction is deleted; result handles have one owner.
+
+**Errors.** Copy construction fails at compile time.
+
+**Execution.** No executable operation or scientific work exists.
+
+(native-cpp-generativeqc-responseresult-copy-assignment-copy)=
+## generativeqc::ResponseResult::operator=-copy
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+ResponseResult & operator = ( const ResponseResult & ) = delete
+```
+
+**Behavior.** Copy assignment is deleted; result ownership cannot be duplicated.
+
+**Errors.** Copy assignment fails at compile time.
+
+**Execution.** No executable operation or scientific work exists.
+
+(native-cpp-generativeqc-responseresult-copy-assignment-move)=
+## generativeqc::ResponseResult::operator=-move
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+ResponseResult & operator = ( ResponseResult && ) = delete
+```
+
+**Behavior.** Move assignment is deleted; transfer ownership by move construction.
+
+**Errors.** Move assignment fails at compile time.
+
+**Execution.** No executable operation or scientific work exists.
+
+(native-cpp-generativeqc-responseresult-responseresult-move)=
+## generativeqc::ResponseResult::ResponseResult-move
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+ResponseResult ( ResponseResult && other ) noexcept
+```
+
+**Behavior.** Transfer the result owner without executing a solve or copying arrays.
+
+**Inputs.** A distinct live or moved-from source wrapper.
+
+**Lifetime.** Destination takes ownership; source becomes null and supports destruction only.
+
+**Errors.** Nonthrowing.
+
+**Execution.** CPU handle transfer; no callbacks, allocations or scientific execution.
+
+(native-cpp-generativeqc-responseresult-data)=
+## generativeqc::ResponseResult::data
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_response_result_view_v1 data ( ) const
+```
+
+**Behavior.** Borrow the completed solution, convergence/work and optional trace diagnostics.
+
+**Outputs.** Returns a view value; its arrays remain owned by this result. Inspect converged
+and reason independently of successful API completion, including workspace refusal.
+
+**Lifetime.** The result must remain live; copy arrays needed after destruction.
+
+**Errors.** Throws Error for an invalid handle or failed C view query.
+
+**Execution.** Synchronous CPU read without allocation or numerical execution.
 
 (native-cpp-generativeqc-context)=
 ## generativeqc::Context

@@ -34,6 +34,12 @@ struct GmresOptions {
   std::size_t true_residual_every{1};
   std::size_t stagnation_window{25};
   double stagnation_tolerance{1e-14};
+  /** Optional owned diagnostics; conservative workspace already reserves these.
+   * Disabled for existing native consumers unless explicitly requested.
+   */
+  bool collect_history{};
+  bool collect_basis{};
+  bool collect_timing{};
 };
 
 struct GmresPlan {
@@ -60,6 +66,14 @@ struct GmresResult {
    */
   std::size_t measured_workspace_peak_bytes{};
   std::size_t workspace_allocation_count{};
+  /** True-residual checkpoints, and column-major Arnoldi vectors associated
+   * with the published best iterate. Empty when collection is disabled.
+   */
+  runtime::TrackedVector<double> history;
+  runtime::TrackedVector<double> basis;
+  std::size_t basis_columns{};
+  double orthogonalization_seconds{};
+  double operator_seconds{};
 
   [[nodiscard]] bool converged() const noexcept {
     return status == GmresStatus::initial_residual || status == GmresStatus::converged;
