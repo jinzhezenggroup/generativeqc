@@ -94,6 +94,37 @@ HF shortage/recovery fixture, while the KS fixture already declared its own ABI.
 The repair belongs to fault injection, not a production fallback or a numerical
 change; retain the crashing run and source-bind its corrected replay separately.
 
+### Hash-dominated endpoint qualification (2026-10-16)
+
+An allocated-CPU-pinned, complete eight-endpoint ABBA run still failed the
+unchanged 5% gate for RHF DF: candidate/baseline 1.074495, with baseline block
+medians 0.754470 and 0.651443 seconds. Matching actual ledger limits, allocations,
+requested bytes and provider reservations does not erase this timing failure.
+
+A separate diagnostic-only cProfile run on the unchanged baseline/candidate
+artifacts found about 0.622/0.629 seconds in binary identity hashing within
+0.666/0.674-second complete RHF DF endpoints. The approximately 933-MiB SDK is
+hashed once per newly loaded Calculator library object, not once per process;
+this work belongs inside construction/admission timing. The three profiled
+`batch.execute` calls totaled about 0.035 seconds for both sources. These observations
+identify the dominant measured phase, but do not establish the cause of the
+earlier failed gate or turn instrumented diagnostics into acceptance evidence.
+
+The separate full-matrix qualification keeps the exact endpoint and SDKs,
+including hashing, but predeclares three shorter ABBA rounds per endpoint,
+three warmups plus seven measured samples per block. Pool all 42 measured
+samples per source and endpoint; retain every block and use the same 5% gate.
+Never select a passing round, retry only the failed endpoint, discard outliers,
+or treat an allocation-only microbenchmark as the complete-endpoint result.
+Retain the original failure alongside the new independently source-bound run.
+
+Do not introduce a process-global binary identity cache merely to make this
+admission migration pass. Such a cache needs its own artifact replacement and
+library-object lifetime policy and independently qualified complete endpoints.
+Likewise, a documentation/test-only follow-up may prove production equivalence,
+but must retain the actual compiled and tested source SHAs rather than relabel
+old scientific, sanitizer or timing receipts as new measurements.
+
 ## Revisit when
 
 Global native plans gain authenticated prepared leases and complete allocation
