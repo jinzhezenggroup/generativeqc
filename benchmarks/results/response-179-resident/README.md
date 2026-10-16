@@ -7,10 +7,15 @@ CUDA J/K, identical converged fixture references, four identical RHS columns
 `collect_basis=False`. No CPU-vs-DF ratio is used.
 
 The original measured source is `cda824e2389ae2a44b4822029d56e0f790ba708d` (clean). The loaded native
-binary SHA-256 is `bdb5ebdc583371c4b7e7575630d03597921443ea9af16b88f9b26077f84d47a1`. `evidence.json` records the
+binary SHA-256 is `bdb5ebdc583371c4b7e7575630d03597921443ea9af16b88f9b26077f84d47a1`. `evidence.json.xz` records the
 compiled native source identity, actual selected generic CUDA profile, device,
 driver/toolkit, thread settings, all individual samples and memory/counter scopes.
 The build uses Release, CUDA 12.9.1, sm_120 and AOT shells disabled.
+
+The historical JSON is losslessly compressed to retain evidence within the
+repository's storage budget. `xz -dc evidence.json.xz` restores the exact original
+bytes, SHA-256 `777adb4267c4a956ad3e7af094a5166e124679f7db986ee108e8a5dfa5327800`.
+No historical measurements or acceptance decisions change.
 
 ## Numerical acceptance
 
@@ -109,7 +114,7 @@ assembly check remains a separate 1e-9 parity gate.
 
 `test_hessian_block_resident_cuda.py` checks all three resident strategies
 against both references and forbids the native Hessian/shared solver while
-constructing the external oracle. The original `evidence.json` is retained
+constructing the external oracle. The original `evidence.json.xz` is retained
 unchanged: its consumer `maximum_error` and historical scope text refer to
 native parity. New schema v2 records explicitly identify the external oracle
 and its version, retain directions and actual/reference HVPs, and report native

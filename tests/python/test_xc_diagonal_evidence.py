@@ -79,3 +79,14 @@ def test_evidence_recompression_preserves_exact_json() -> None:
     assert hashlib.sha256(decoded).hexdigest() == (
         "4c6e19d0812c08a4030f0918f4f25f6c0540b3f2ea07fe3181c8957225f3b737"
     )
+
+
+def test_shared_historical_response_archive_is_lossless() -> None:
+    path = (
+        xc_diagonal_evidence.ROOT.parent / "response-179-resident" / "evidence.json.xz"
+    )
+    decoded = lzma.decompress(path.read_bytes())
+    assert len(decoded) == 123027
+    assert hashlib.sha256(decoded).hexdigest() == (
+        "777adb4267c4a956ad3e7af094a5166e124679f7db986ee108e8a5dfa5327800"
+    )
