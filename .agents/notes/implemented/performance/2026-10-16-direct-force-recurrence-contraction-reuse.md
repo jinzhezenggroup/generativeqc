@@ -191,3 +191,8 @@ preparation work; neither is enabled. The separately tracked response-factoring
 continuation is PR #2549. This two-arm packet does not claim its results.
 The existing aggregate storage cap is respected by superseding only this PR's
 own packet while retaining its full earlier version in existing Git history.
+
+The subsequent PR #2558 shares order-seven/eight relative-pair responses across
+nuclear centers. Its independent endpoint qualification and limits are recorded
+in `2026-10-16-direct-relative-response-contraction.md`; this note's historical
+measurements and order-six arithmetic remain unchanged.
