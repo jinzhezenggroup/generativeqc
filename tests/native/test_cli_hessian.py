@@ -1,491 +1,129 @@
-"""C++ CLI transport/failure gates and complete compiler-AD CPU endpoints.
+"""Host-only native CLI admission: never start a worker or initialize a GPU.
 
-Fake interpreters test transport only, including synthetic CUDA metadata; they
-never execute a GPU. Real CUDA qualification is separately opt-in under Slurm.
+Independent molecular and real CUDA publication/lifetime gates live in the
+Slurm-only stationary probe and compiled CLI tests, not fake worker replies.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
 CLI = Path(sys.argv.pop(1)).resolve()
-MONOLITHIC = os.environ.get("GENERATIVEQC_TEST_MONOLITHIC") == "1"
 
 
 class HessianCli(unittest.TestCase):
-    """Exercise the actual C++ parser, worker process and publication boundary."""
-
     def setUp(self) -> None:
-        self.directory = tempfile.TemporaryDirectory(prefix="gqc-hessian-cli-")
-        self.addCleanup(self.directory.cleanup)
-        self.root = Path(self.directory.name)
+        directory = tempfile.TemporaryDirectory(prefix="gqc-native-hessian-")
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
         self.xyz = self.root / "Input With Spaces.xyz"
         self.xyz.write_text("2\nBohr\nH 0.03 -0.02 0.01\nH 0.15 0.13 1.5\n")
-        self.direction = [[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]]
-        self.direction_file = self.root / "Direction With Spaces.json"
-        self.direction_file.write_text(json.dumps(self.direction))
-        self.interpreter = self.root / "Interpreter With Spaces"
-        self.interpreter.write_text(
-            f"#!{sys.executable}\n"
-            "import json,sys\n"
-            "request=json.load(sys.stdin)\n"
-            "operation=request['operation']\n"
-            "count=len(request['atoms_bohr'])\n"
-            "diagnostics={'derivative_method':'compiler-automatic-differentiation',"
-            "'displaced_scf_evaluations':0,'execution_residency':'device-resident',"
-            "'numerical_host_fallbacks':0,'intermediate_panel_downloads':0}\n"
-            "diagnostics.update({key:'cuda' for key in ('first_integral_backend',"
-            "'second_integral_backend','grid_ad_backend','response_backend')})\n"
-            "result={key:request[key] for key in "
-            "('operation','native_source_identity','charge','multiplicity')}\n"
-            "result.update(schema='generativeqc.compiler-hessian-result/v1',"
-            "method=request['calculator']['method'],backend=request['calculator']['device'],"
-            "atom_count=count,units='hartree/bohr^2',identity='a'*64,native_library_path=sys.argv[-1],"
-            "diagnostics=diagnostics,request_echo=request)\n"
-            "result['value' if operation=='hvp' else 'matrix']="
-            "[[0.]*(3 if operation=='hvp' else 3*count) "
-            "for row in range(count if operation=='hvp' else 3*count)]\n"
-            "json.dump(result,sys.stdout)\n"
-        )
-        self.interpreter.chmod(0o700)
+        self.direction = self.root / "Direction With Spaces.json"
+        self.direction.write_text(json.dumps([[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]]))
 
     def call(
-        self,
-        *arguments: str,
-        interpreter: Path | None = None,
-        operation: str = "hvp",
-        **kwargs: object,
+        self, *arguments: str, operation: str = "hvp"
     ) -> subprocess.CompletedProcess:
-        command = [
-            str(CLI),
-            operation,
-            str(self.xyz),
-            "--units",
-            "bohr",
-            "--json",
-            "--compiler-python",
-            str(interpreter or self.interpreter),
-        ]
+        command = [str(CLI), operation, str(self.xyz), "--units", "bohr", "--json"]
         if operation == "hvp":
-            command += ["--direction", str(self.direction_file)]
-        if MONOLITHIC:
-            command += ["--compiler-library", str(self.interpreter)]
+            command += ["--direction", str(self.direction)]
         return subprocess.run(
             [*command, *arguments],
             capture_output=True,
             text=True,
             check=False,
-            timeout=180,
-            **kwargs,
+            timeout=30,
+            env=dict(
+                os.environ,
+                PATH="/nonexistent",
+                PYTHONHOME="/nonexistent",
+                PYTHONPATH="/nonexistent",
+            ),
         )
 
-    def test_native_help_documents_explicit_optional_runtime(self) -> None:
+    def rejected(self, result: subprocess.CompletedProcess, message: str) -> None:
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn(message, result.stderr)
+
+    def test_help_documents_linked_native_execution(self) -> None:
         result = subprocess.run(
             [str(CLI), "hessian", "--help"],
             capture_output=True,
             text=True,
             check=False,
             timeout=30,
-            env={"PATH": ""},
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--compiler-python", result.stdout)
-        self.assertIn("requires Python", result.stdout)
+        self.assertIn("no Python/JIT", result.stdout)
+        self.assertIn("--device-budget-bytes", result.stdout)
+        self.assertNotIn("--compiler-python", result.stdout)
 
-    def test_synthetic_cuda_transport_preserves_every_control(self) -> None:
-        result = self.call(
-            "--backend",
-            "cuda",
-            "--method",
-            "wb97m-v-uks",
-            "--charge",
-            "1",
-            "--multiplicity",
-            "2",
-            "--representation",
-            "spherical",
-            "--density-fitting",
-            "cuda",
-            "--auxiliary-basis",
-            "def2-svp",
-            "--max-iterations",
-            "240",
-            "--energy-tolerance",
-            "1e-13",
-            "--grid-radial-points",
-            "8",
-            "--grid-polar-points",
-            "4",
-            "--grid-azimuth-points",
-            "8",
-            "--response-atol",
-            "1e-12",
-            "--response-rtol",
-            "1e-11",
-            "--response-restart",
-            "17",
-            "--response-max-iterations",
-            "130",
-            "--integral-budget-bytes",
-            "12345",
-            "--grid-budget-bytes",
-            "67890",
-            "--response-budget-bytes",
-            "54321",
-            "--max-nonlocal-pairs",
-            "65536",
+    def test_no_cpu_or_implicit_python_fallback(self) -> None:
+        self.rejected(self.call(), "requires --backend cuda")
+
+    def test_obsolete_worker_controls_cannot_execute_any_interpreter(self) -> None:
+        worker = self.root / "Fake Worker"
+        marker = self.root / "was-run"
+        worker.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+        worker.chmod(0o700)
+        for option in (
+            "--compiler-python",
+            "--compiler-library",
             "--cache",
-            str(self.root / "Cache With Spaces"),
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        request = json.loads(result.stdout)["request_echo"]
-        self.assertEqual(request["atoms_bohr"][0], [1, [0.03, -0.02, 0.01]])
-        self.assertEqual(request["direction"], self.direction)
-        self.assertEqual(request["calculator"]["basis_representation"], "spherical")
-        self.assertEqual(request["calculator"]["density_fitting"], "cuda")
-        self.assertEqual(request["calculator"]["auxiliary_basis"], "def2-svp")
-        self.assertIsNone(request["calculator"]["initial_guess"])
-        self.assertEqual(request["calculator"]["max_iterations"], 240)
-        self.assertEqual(
-            request["grid"],
-            {"radial_points": 8, "angular_polar": 4, "angular_azimuth": 8},
-        )
-        self.assertEqual(
-            request["solver"],
-            {
-                "atol": 1e-12,
-                "rtol": 1e-11,
-                "restart": 17,
-                "max_iterations": 130,
-                "max_workspace_bytes": 54321,
-            },
-        )
-        self.assertEqual(request["controls"]["integral_budget_bytes"], 12345)
-        self.assertEqual(request["controls"]["grid_budget_bytes"], 67890)
-        self.assertEqual(request["controls"]["max_nonlocal_pairs"], 65536)
-        self.assertEqual(
-            request["controls"]["cache"], str(self.root / "Cache With Spaces")
-        )
+            "--timeout-seconds",
+        ):
+            with self.subTest(option=option):
+                self.rejected(
+                    self.call(option, str(worker)),
+                    "no Python worker or runtime compilation",
+                )
+                self.assertFalse(marker.exists())
 
-    def test_native_only_invocation_never_selects_implicit_python(self) -> None:
-        result = subprocess.run(
-            [str(CLI), "hessian", str(self.xyz)],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout, "")
-        self.assertIn("--compiler-python", result.stderr)
-
-    @unittest.skipIf(
-        MONOLITHIC, "monolithic builds explicitly select a separate shared library"
-    )
-    def test_explicit_library_cannot_change_the_linked_native_owner(self) -> None:
-        result = self.call()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        library = json.loads(result.stdout)["native_library_path"]
-        matching = self.call("--compiler-library", library)
-        self.assertEqual(matching.returncode, 0, matching.stderr)
-        different = self.call("--compiler-library", str(self.xyz))
-        self.assertNotEqual(different.returncode, 0)
-        self.assertEqual(different.stdout, "")
-        self.assertIn("already-linked native library", different.stderr)
-
-    @unittest.skipUnless(
-        MONOLITHIC, "only monolithic builds need an explicit shared library"
-    )
-    def test_monolithic_extension_requires_explicit_shared_library(self) -> None:
-        result = subprocess.run(
-            [
-                str(CLI),
-                "hessian",
-                str(self.xyz),
-                "--compiler-python",
-                str(self.interpreter),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout, "")
-        self.assertIn("requires --compiler-library", result.stderr)
-
-    def test_invalid_options_never_start_worker(self) -> None:
-        for arguments in (
-            ("--method", "pbe-rks"),
-            ("--precision", "auto"),
-            ("--backend", "cuda", "--density-fitting", "cpu"),
-            ("--response-rtol", "nan"),
+    def test_invalid_response_and_resource_controls(self) -> None:
+        for option, value in (
             ("--response-rtol", "1"),
-            ("--response-atol", "-1"),
-            ("--response-budget-bytes", "0"),
-            ("--timeout-seconds", "0"),
-            ("--forces", "yes"),
-            ("--compiler-python", "python"),
-            ("--compiler-python", "/no/such/python"),
-            ("--compiler-library", "relative-library.so"),
+            ("--response-atol", "nan"),
+            ("--response-restart", "0"),
+            ("--response-max-iterations", "-1"),
+            ("--device-budget-bytes", "0"),
+            ("--max-nonlocal-pairs", "18446744073709551616"),
         ):
-            with self.subTest(arguments=arguments):
-                result = self.call(*arguments)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
+            with self.subTest(option=option):
+                self.rejected(self.call(option, value), option)
 
-    def test_direction_and_full_publication_budget_gates(self) -> None:
-        for direction in ([1, 2, 3], [[0, 0, 0]], [[True, 0, 0], [0, 0, 0]]):
-            with self.subTest(direction=direction):
-                self.direction_file.write_text(json.dumps(direction))
-                result = self.call()
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-        result = self.call("--output-budget-bytes", "575", operation="hessian")
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout, "")
-        result = self.call("--direction", str(self.direction_file), operation="hessian")
-        self.assertEqual(result.returncode, 2, result.stderr)
-
-    def test_worker_failure_and_timeout_publish_nothing(self) -> None:
-        for program in (
-            "import sys; print('{}'); sys.exit(7)",
-            "import time; print('{}',flush=True); time.sleep(30)",
-        ):
-            with self.subTest(program=program):
-                self.interpreter.write_text(f"#!{sys.executable}\n{program}\n")
-                result = self.call("--timeout-seconds", "1")
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-                self.assertIn("no result published", result.stderr)
-
-    def test_worker_exit_reclaims_descendants_with_detached_output(self) -> None:
-        source = self.interpreter.read_text()
-        pid_file = self.root / "descendant.pid"
-
-        def running(pid: int) -> bool:
-            # Linux may briefly retain an orphaned grandchild as a zombie.
-            try:
-                if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
-                    return False
-            except (FileNotFoundError, ProcessLookupError):
-                pass
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return False
-            return True
-
-        for code in (0, 7):
-            with self.subTest(code=code):
-                self.interpreter.write_text(
-                    source.replace(
-                        "json.dump(result,sys.stdout)",
-                        "import pathlib,subprocess\n"
-                        "child=subprocess.Popen([sys.executable,'-c',"
-                        "'import time; time.sleep(60)'],stdin=subprocess.DEVNULL,"
-                        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
-                        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
-                        "json.dump(result,sys.stdout)\n"
-                        f"raise SystemExit({code})\n",
-                    )
-                )
-                result = self.call()
-                pid = int(pid_file.read_text())
-                try:
-                    self.assertEqual(result.returncode == 0, code == 0, result.stderr)
-                    if code == 0:
-                        self.assertEqual(json.loads(result.stdout)["operation"], "hvp")
-                    else:
-                        self.assertEqual(result.stdout, "")
-                    deadline = time.monotonic() + 2
-                    while running(pid) and time.monotonic() < deadline:
-                        time.sleep(0.01)
-                    self.assertFalse(running(pid), "worker descendant survived exit")
-                finally:
-                    if running(pid):
-                        os.kill(pid, signal.SIGKILL)
-
-    def test_compiler_sessions_stop_on_timeout_and_worker_crash(self) -> None:
-        compiler_source = Path(__file__).resolve().parents[2] / "python"
-        compiler_pid = self.root / "compiler.pid"
-        compiler_script = (
-            "import os,pathlib,time; "
-            f"pathlib.Path({str(compiler_pid)!r}).write_text(str(os.getpid())); "
-            "time.sleep(60)"
-        )
-        sentinel = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        self.addCleanup(sentinel.wait)
-        self.addCleanup(sentinel.kill)
-        for mode in ("timeout", "native-block", "crash"):
-            with self.subTest(mode=mode):
-                compiler_pid.unlink(missing_ok=True)
-                self.interpreter.write_text(
-                    f"#!{sys.executable}\n"
-                    "import ctypes,os,pathlib,signal,sys,threading,time\n"
-                    f"sys.path.insert(0,{str(compiler_source)!r})\n"
-                    "from generativeqc_compiler.common.compiler_process import run_compiler\n"
-                    "def compile():\n"
-                    f" run_compiler([sys.executable,'-c',{compiler_script!r}],"
-                    "30,label='CLI lifetime probe')\n"
-                    "threading.Thread(target=compile,daemon=True).start()\n"
-                    f"while not pathlib.Path({str(compiler_pid)!r}).exists(): time.sleep(0.01)\n"
-                    + (
-                        "os.kill(os.getpid(),signal.SIGKILL)\n"
-                        if mode == "crash"
-                        else "ctypes.CDLL(None).pause()\n"
-                        if mode == "native-block"
-                        else "time.sleep(60)\n"
-                    )
-                )
-                result = self.call("--timeout-seconds", "1")
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-                pid = int(compiler_pid.read_text())
-
-                def running(pid: int = pid) -> bool:
-                    try:
-                        if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
-                            return False
-                    except (FileNotFoundError, ProcessLookupError):
-                        pass
-                    try:
-                        os.kill(pid, 0)
-                    except ProcessLookupError:
-                        return False
-                    return True
-
-                try:
-                    deadline = time.monotonic() + 2
-                    while running() and time.monotonic() < deadline:
-                        time.sleep(0.01)
-                    self.assertFalse(
-                        running(), "isolated compiler survived worker death"
-                    )
-                    self.assertIsNone(sentinel.poll(), "unrelated process was killed")
-                finally:
-                    if running():
-                        os.killpg(pid, signal.SIGKILL)
-
-    def test_malformed_or_unqualified_result_is_not_published(self) -> None:
-        source = self.interpreter.read_text()
-        for mutation in (
-            "result['matrix']=[[0.]]",
-            "result['native_source_identity']='wrong'",
-            "result['units']='angstrom'",
-            "result['diagnostics']['displaced_scf_evaluations']=2",
-            "result['diagnostics']['numerical_host_fallbacks']=1",
-            "result['diagnostics']['execution_residency']='host'",
-            "result['diagnostics']['first_integral_backend']='cpu'",
-        ):
-            with self.subTest(mutation=mutation):
-                self.interpreter.write_text(
-                    source.replace(
-                        "json.dump(result,sys.stdout)",
-                        mutation + "\njson.dump(result,sys.stdout)",
-                    )
-                )
-                result = self.call("--backend", "cuda", operation="hessian")
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
-
-    @unittest.skipIf(
-        MONOLITHIC, "requires a separately built source-matched shared library"
-    )
-    def test_complete_cpu_matrix_hvp_and_independent_native_force_oracle(self) -> None:
-        common = [
-            "--basis",
-            "sto-3g",
-            "--representation",
-            "spherical",
-            "--grid-radial-points",
-            "8",
-            "--grid-polar-points",
-            "4",
-            "--grid-azimuth-points",
-            "8",
-            "--energy-tolerance",
-            "1e-13",
-            "--density-tolerance",
-            "1e-11",
-            "--max-iterations",
-            "240",
-        ]
-        result = self.call(
-            *common,
-            "--cache",
-            str(self.root / "artifacts"),
-            interpreter=Path(sys.executable),
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        hvp = json.loads(result.stdout)
-        matrix = self.call(
-            *common,
-            "--cache",
-            str(self.root / "artifacts"),
-            interpreter=Path(sys.executable),
-            operation="hessian",
-        )
-        self.assertEqual(matrix.returncode, 0, matrix.stderr)
-        matrix = json.loads(matrix.stdout)
-        self.assertFalse(matrix["diagnostics"]["posthoc_symmetrization"])
-        motion = [item for row in self.direction for item in row]
-        values = [item for row in hvp["value"] for item in row]
-        for row, expected in zip(matrix["matrix"], values, strict=True):
-            self.assertAlmostEqual(
-                sum(left * right for left, right in zip(row, motion, strict=True)),
-                expected,
-                delta=2e-8,
-            )
-        forces = []
-        os.environ["GENERATIVEQC_LIBRARY"] = hvp["native_library_path"]
-        from generativeqc import Calculator, GridSpec, KsOptions
-
-        calculator = Calculator(
-            method="wb97m-v",
-            device="cpu",
-            basis_representation="spherical",
-            energy_tolerance=1e-13,
-            density_tolerance=1e-11,
-            max_iterations=240,
-            initial_guess=None,
-            ks_options=KsOptions(
-                grid=GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
+    def test_full_output_budget_fails_before_device_initialization(self) -> None:
+        self.rejected(
+            self.call(
+                "--backend", "cuda", "--output-budget-bytes", "1", operation="hessian"
             ),
+            "--output-budget-bytes",
         )
-        for sign in (-1, 1):
-            positions = [[0.03, -0.02, 0.01], [0.15, 0.13, 1.5]]
-            atoms = [
-                (
-                    "H",
-                    [
-                        value + sign * 3e-4 * delta
-                        for value, delta in zip(row, direction, strict=True)
-                    ],
-                )
-                for row, direction in zip(positions, self.direction, strict=True)
-            ]
-            singlepoint = calculator.singlepoint(atoms, properties=("energy", "forces"))
-            self.assertTrue(singlepoint.converged)
-            forces.append(singlepoint.forces.tolist())
-        calculator.clear_cache()
-        flat_forces = [[item for row in force for item in row] for force in forces]
-        for left, right, expected in zip(*flat_forces, values, strict=True):
-            self.assertAlmostEqual(-(right - left) / 6e-4, expected, delta=3e-6)
+
+    def test_direction_validation_fails_before_device_initialization(self) -> None:
+        for value in ([[1, 2, 3]], [[1, 2], [3, 4]], [["nan", 0, 0], [0, 0, 0]]):
+            self.direction.write_text(json.dumps(value))
+            self.rejected(self.call("--backend", "cuda"), "finite natoms-by-3")
+
+    def test_only_hvp_accepts_direction(self) -> None:
+        self.rejected(
+            self.call("--direction", str(self.direction), operation="hessian"),
+            "only hvp",
+        )
+
+    def test_wrong_method_precision_and_provider_never_touch_cuda(self) -> None:
+        self.rejected(self.call("--method", "pbe-rks"), "only WB97M-V")
+        self.rejected(self.call("--backend", "cuda", "--precision", "mixed"), "fp64")
+        self.rejected(
+            self.call("--backend", "cuda", "--density-fitting", "cpu"),
+            "CPU density-fitting",
+        )
 
 
 if __name__ == "__main__":

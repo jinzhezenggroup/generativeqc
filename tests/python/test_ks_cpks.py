@@ -321,6 +321,7 @@ def _native(
     iterations: int = 200,
     budget: int = 512 << 20,
     env: dict | None = None,
+    reference_only: bool = False,
 ) -> dict:
     assert os.environ.get("SLURM_JOB_ID"), "real-GPU tests must run through srun"
     coefficients = model["coefficients"]
@@ -342,7 +343,7 @@ def _native(
     result = subprocess.run(
         [
             str(cpks_probe),
-            "solve",
+            "reference" if reference_only else "solve",
             str(model["nao"]),
             str(len(counts)),
             str(counts[0]),
@@ -448,3 +449,77 @@ def test_native_preserves_cross_spin_response(cpks_probe: Path) -> None:
     actual = np.array(result["density"]).reshape(2, 4, 4)
     assert np.linalg.norm(actual[1]) > 1e-6
     np.testing.assert_allclose(actual, _oracle(model, 1e-4)[0], atol=3e-8, rtol=3e-7)
+
+
+@pytest.mark.parametrize("nao,counts", CASES)
+def test_reference_weights_reuse_cpks_primal(nao: int, counts: tuple[int, ...]) -> None:
+    model = _model(nao, counts)
+    for spin, count in enumerate(counts):
+        occupied = model["coefficients"][spin, :, :count]
+        energies = np.diag(model["energies"][spin, :count])
+        actual = execute(
+            build_ks_cpks_maps(nao, count, occupation=model["occupation"])[
+                "reference_weights"
+            ],
+            {"occupied": occupied, "occupied_energy_matrix": energies},
+        ).outputs["weights"]
+        np.testing.assert_allclose(
+            actual, model["occupation"] * occupied @ energies @ occupied.T, atol=3e-15
+        )
+
+
+@pytest.mark.parametrize("nao,counts", CASES)
+@pytest.mark.parametrize("layout", ("row", "column"))
+def test_native_reference_weights_without_python(
+    cpks_probe: Path, nao: int, counts: tuple[int, ...], layout: str
+) -> None:
+    model = _model(nao, counts)
+    result = _native(
+        cpks_probe,
+        model,
+        layout=layout,
+        reference_only=True,
+        env={
+            **os.environ,
+            "PATH": "/nonexistent",
+            "PYTHONHOME": "/nonexistent",
+            "PYTHONPATH": "/nonexistent",
+        },
+    )
+    assert result["cuda_error"] == 0 and result["actions"] == 0
+    assert result["authentications"] == 2
+    assert np.all(np.array(result["density"]) == 9817)
+    actual = np.array(result["weights"]).reshape(len(counts), nao, nao)
+    for spin, count in enumerate(counts):
+        occupied = model["coefficients"][spin, :, :count]
+        expected = (
+            model["occupation"]
+            * (occupied * model["energies"][spin, :count])
+            @ occupied.T
+        )
+        np.testing.assert_allclose(actual[spin], expected, atol=3e-15, rtol=3e-15)
+
+
+@pytest.mark.parametrize(
+    "mode",
+    (
+        "nan-input",
+        "nan-energy",
+        "capture",
+        "wrong-stream",
+        "stale-entry",
+        "stale-publish",
+        "short-workspace",
+        "misaligned-workspace",
+        "alias-workspace",
+        "alias-output",
+    ),
+)
+def test_native_reference_weights_failure_preserves_output(
+    cpks_probe: Path, mode: str
+) -> None:
+    result = _native(cpks_probe, _model(4, (2, 1)), mode=mode, reference_only=True)
+    assert result["cuda_error"] != 0
+    assert result["actions"] == 0
+    assert np.all(np.array(result["density"]) == 9817)
+    assert np.all(np.array(result["weights"]) == -3277)

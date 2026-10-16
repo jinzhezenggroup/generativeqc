@@ -15,9 +15,8 @@ The launcher locates the matching packaged binary within its own installation
 prefix and replaces its process using `execv`. Ordinary native commands never
 launch or import Python. A missing or ambiguous packaged binary fails closed.
 Python APIs remain available but do not supply any runtime console-script
-fallback. The explicitly selected `hessian`/`hvp` compiler-runtime extension
-described below requires a separately named interpreter; it is not a Python-free
-numerical endpoint.
+fallback. The opt-in `hessian`/`hvp` CUDA endpoint also executes linked native
+code only; its compiler AD runs during the build, not during a calculation.
 
 ## Install a native runtime
 
@@ -138,24 +137,18 @@ production numerical fallbacks are retained.
 
 ## Compiler-AD WB97M-V Hessian and HVP
 
-These existing commands are **Python-backed, not a standalone native Hessian**.
-The experimental [native AOT leaf package](../developer/dft_hessian.md#native-aot-development-package)
-does not yet replace their interpreter, response solver or stationary driver.
-Precompiling leaves alone must not be presented as a Python-free endpoint.
-
-The C++ executable exposes `hessian` and `hvp` commands for canonical
-`wb97m-v-rks` (the default) and `wb97m-v-uks`. These commands explicitly invoke
-the existing compiler-AD runtime in the interpreter named by
-`--compiler-python /absolute/path/to/python`. Install `generativeqc` in that
-interpreter, including `generativeqc[cuda-hessian]` for CUDA. There is no PATH
-search, inferred interpreter, missing-package fallback, or change to ordinary
-Python-free `run`/`resources`/discovery commands.
-
-A monolithic/static CLI has no loadable native library to share with Python.
-For that build, also pass `--compiler-library /absolute/libgenerativeqc.so` from
-the same source build. The returned native source identity must match the CLI;
-an arbitrary installed wheel library is not substituted. A shared-library CLI
-pins its linked library automatically and rejects a different explicit library.
+The C++ executable exposes native `hessian` and `hvp` commands for canonical
+`wb97m-v-rks` (the default) and `wb97m-v-uks`, in strict FP64 on CUDA. Build with
+`GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON` and an explicit inventory containing
+the complete integral-component closure for the requested orbital and auxiliary
+bases. The bundled development inventory is partial: it does **not** promise
+arbitrary through-f orbital / through-g auxiliary shell products. Missing linked
+closure is an explicit error, never a request to compile or fall back at runtime.
+This opt-in path replaces the old Python/CuPy CLI worker, including the response
+solver and stationary assembly, rather than merely precompiling isolated leaves.
+`--compiler-python`, `--compiler-library`, `--cache` and `--timeout-seconds` are
+obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
+the separate Python API retains its existing CPU contract.
 
 For example, the following **small-grid smoke test is not a grid-converged
 scientific calculation**:
@@ -163,13 +156,12 @@ scientific calculation**:
 ```bash
 generativeqc hessian h2.xyz --method wb97m-v-rks --basis sto-3g \
   --representation spherical --backend cuda --units bohr \
-  --compiler-python /opt/gqc-env/bin/python \
   --grid-radial-points 8 --grid-polar-points 4 --grid-azimuth-points 8 --json
 
 generativeqc hvp h2.xyz --method wb97m-v-uks --charge 1 --multiplicity 2 \
   --basis sto-3g --representation spherical --backend cuda \
   --density-fitting cuda --auxiliary-basis auxiliary.json --units bohr \
-  --compiler-python /opt/gqc-env/bin/python --direction direction.json \
+  --direction direction.json \
   --grid-radial-points 8 --grid-polar-points 4 --grid-azimuth-points 8 --json
 ```
 
@@ -182,30 +174,30 @@ not rescaled with the XYZ input. Results use `hartree/bohr^2`, with `matrix` or
 post-hoc symmetrized. Canonical local orbital/ECP and independent auxiliary
 records use the same offline basis schema as `run`.
 
-The C++ frontend validates common inputs, launches one isolated worker without a
-shell, pins the native library already linked into the CLI, and checks the
-returned source identity, operation, units, shape, finiteness and CUDA residency
-before printing any result. The worker performs one native SCF and the existing
-analytic endpoint, never displaced SCFs or a second numerical implementation.
-CUDA Hessian/response numerical arrays remain device-resident; host preparation,
-protocol serialization and final publication are not claimed to be GPU work.
+The C++ frontend prepares one native SCF state and binds its actual immutable
+grid, canonical orbital frame and exact/fitted Hamiltonian sources. Generated
+CUDA computes reference W, nuclear RHS, coupled CPKS and all moving-density
+stationary contractions. A complete matrix is privately staged and checked for
+raw symmetry before publication; it is never repaired. No displaced SCF,
+interpreter, runtime compiler or reference engine executes in this path.
+Numerical intermediates remain device-resident; native input handling, bounded
+status receipts and final publication are not claimed to be GPU work.
 See [the Hessian contract](../developer/dft_hessian.md) for admitted basis,
 full-rank DF, ECP quadrature and response gates.
 
-Controls are `--integral-budget-bytes` (64 MiB), `--grid-budget-bytes` (128 MiB),
+Controls include `--device-budget-bytes` (2 GiB aggregate independently owned
+response arenas plus CLI output/direction storage; borrowed SCF storage is
+separate), `--integral-budget-bytes` (64 MiB per source), `--grid-budget-bytes` (128 MiB per grid owner),
 `--output-budget-bytes` (64 MiB for the full matrix),
 `--response-budget-bytes` (64 MiB), and `--max-nonlocal-pairs` (16,777,216 ordered
 pairs per action). The pair cap is independent of memory; raise it explicitly
 when qualifying a larger grid. Response controls are `--response-rtol` (`1e-10`),
 `--response-atol` (`0`), `--response-restart` (`30`) and
-`--response-max-iterations` (`200`). `--cache` defaults to `.artifacts` and
-`--timeout-seconds` defaults to 1200. The CLI reclaims its worker group on every
-exit. An invocation-owned lifetime channel also cancels its separately isolated
-compiler and private cache-server groups on timeout or worker death, including a
-worker blocked in native code. Unrelated compiler/cache groups are untouched.
-The isolated JSON protocol has a separate
-64 MiB request/result limit. Missing dependencies, failed solves, native/source
-mismatch, exceeded limits and nonfinite output fail with no partial publication.
+`--response-max-iterations` (`200`). Use a finite scheduler time limit for real
+GPU runs. Missing closure, failed solves, exceeded limits and nonfinite output
+fail with no partial JSON result. Diagnostics distinguish native execution time
+from an external complete-process wall measurement and expose source/response
+work counts; these are not GPU4PySCF speed-comparison evidence.
 
 The extension admits FP64 only and rejects CUDA with an explicitly CPU DF
 provider. Native SCF convergence, screening, fitting and explicit grid controls

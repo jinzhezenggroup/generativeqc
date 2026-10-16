@@ -168,14 +168,16 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
- * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
+ * into a prepared calculation. Native callers supply an already decoded System
+ * without an opaque C ABI handle; that explicit source must take precedence.
+ * Only omission of both forms requests the orbital basis as the fit basis. */
 std::optional<core::System> ks_auxiliary_template(const generativeqc_method_descriptor& descriptor,
                                                   const core::System* native_auxiliary) {
-  if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
-  if (native_auxiliary == nullptr)
+  if (native_auxiliary != nullptr) return *native_auxiliary;
+  if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "auxiliary basis must be resolved at the API boundary");
-  return *native_auxiliary;
+  return std::nullopt;
 }
 
 void validate_ks_auxiliary_geometry(const core::System& system,

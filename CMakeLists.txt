@@ -56,7 +56,7 @@ option(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
        "Link graph-qualified native CUDA stationary force profiles into the C++ core"
        ${GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT})
 option(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES
-       "Build experimental native compiler-AD leaves (not a complete Hessian endpoint)" OFF)
+       "Build opt-in native compiler-AD Hessian consumers with explicitly selected closure" OFF)
 set(GENERATIVEQC_HESSIAN_AOT_INVENTORY
     "${CMAKE_CURRENT_SOURCE_DIR}/manifests/hessian_aot_development.json" CACHE FILEPATH
     "Explicit development Hessian AOT leaf inventory; missing entries never use runtime JIT")
@@ -516,6 +516,12 @@ if(GENERATIVEQC_BUILD_CLI)
     ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
     COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
   generativeqc_link_cli_core(generativeqc_cli)
+  if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
+    target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)
+    target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=1)
+  else()
+    target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=0)
+  endif()
   target_link_libraries(generativeqc_cli PRIVATE nlohmann_json::nlohmann_json
                         OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE

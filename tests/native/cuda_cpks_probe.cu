@@ -135,6 +135,7 @@ void solve(int argc, char** argv) {
                                 static_cast<unsigned>(std::stoul(argv[3])),
                                 {std::stoull(argv[4]), std::stoull(argv[5])}};
   const bool column_major = std::string(argv[6]) == "column";
+  const bool reference_only = std::string(argv[1]) == "reference";
   Owner owner{nullptr, argv[7]};
   response::CudaCpksOptions options;
   options.gmres.max_iterations = std::stoull(argv[8]);
@@ -151,6 +152,7 @@ void solve(int argc, char** argv) {
   auto overlap = read(matrix);
   auto operation = read(matrices * matrices);
   if (owner.mode == "nan-input") coefficients[0] = std::numeric_limits<double>::quiet_NaN();
+  if (owner.mode == "nan-energy") energies[0] = std::numeric_limits<double>::quiet_NaN();
   if (owner.mode == "asymmetric-input") frozen[1] += 0.3;
   if (owner.mode == "zero-gap") energies[shape.occupied[0]] = energies[0];
   DeviceStorage storage;
@@ -176,11 +178,17 @@ void solve(int argc, char** argv) {
   response::CudaCpksResult result;
   auto* selected_workspace = owner.mode == "alias-workspace" ? density : workspace;
   auto* selected_weights = owner.mode == "alias-output" ? density : weights;
+  if (reference_only && owner.mode == "alias-workspace") selected_workspace = device_coefficients;
+  if (reference_only && owner.mode == "alias-output") selected_weights = device_coefficients;
   if (owner.mode == "misaligned-workspace")
     selected_workspace = reinterpret_cast<double*>(reinterpret_cast<char*>(workspace) + 1);
   if (owner.mode == "capture") require(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
-  const auto error = admitted != cudaSuccess
-                         ? admitted
+  const auto error = admitted != cudaSuccess ? admitted
+                     : reference_only
+                         ? response::cuda_cpks_reference_weights(
+                               shape, options, reference, selected_weights, selected_workspace,
+                               owner.mode == "short-workspace" ? required - 1 : required,
+                               owner.mode == "wrong-stream" ? nullptr : stream)
                          : response::solve_cuda_cpks(
                                shape, options, reference, device_frozen, device_overlap, induced,
                                &owner, density, selected_weights, selected_workspace,
@@ -219,10 +227,10 @@ int main(int argc, char** argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "contract")
       contract();
-    else if (argc > 1 && std::string(argv[1]) == "solve")
+    else if (argc > 1 && (std::string(argv[1]) == "solve" || std::string(argv[1]) == "reference"))
       solve(argc, argv);
     else
-      throw std::runtime_error("expected contract or solve");
+      throw std::runtime_error("expected contract, solve or reference");
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

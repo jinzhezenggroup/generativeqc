@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_hessian.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Native accepted-state WB97M-V stationary HVP/Hessian composition API with aggregate resource bounds, complete semantic-work receipts, response convergence separate from CUDA status, exclusive batch lifetime and transactional complete-output contracts. Does not register or qualify a public CLI capability by itself.",
+  "regions": []
+}

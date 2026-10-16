@@ -1,7 +1,8 @@
 """Compare complete C++ CLI and GPU4PySCF WB97M-V Hessian endpoints.
 
-This driver measures the existing Python/CuPy CLI bridge. It is not a benchmark
-of the unfinished Python-free native Hessian runtime or its AOT leaf package.
+The GenerativeQC child is the linked Python-free native CUDA CLI, with Python
+and compiler discovery unavailable. Python drives the independent comparator
+only. Partial linked closure can fail a case; no runtime compilation is allowed.
 
 Run under a finite Slurm GPU allocation. Both engines start in fresh processes,
 perform a fresh direct SCF, include moving-grid/VV10/orbital response, and return
@@ -141,12 +142,12 @@ def _reference_worker(arguments: argparse.Namespace) -> dict[str, Any]:
 
 
 def _kill_child(process: subprocess.Popen) -> None:
-    """Kill the CLI's separately grouped worker before its supervising process.
+    """Stop this endpoint's children before its private process group.
 
     Some Slurm installations track process groups rather than cgroups. Killing
-    only the timed CLI session can otherwise leave its Python CUDA worker alive
+    only the session can leave a comparator's separately grouped child alive
     after allocation cancellation. Direct children of this private session are
-    owned endpoints, never a pre-existing shared compiler-cache server.
+    owned processes, never a pre-existing shared compiler-cache server.
     """
     children = Path(f"/proc/{process.pid}/task/{process.pid}/children")
     try:
@@ -196,6 +197,16 @@ def _run_child(command: list[str], prefix: Path, timeout: float) -> dict[str, An
             text=True,
             start_new_session=True,
             cwd=Path(__file__).resolve().parents[1],
+            env=(
+                dict(
+                    os.environ,
+                    PATH="/nonexistent",
+                    PYTHONHOME="/nonexistent",
+                    PYTHONPATH="/nonexistent",
+                )
+                if len(command) > 1 and command[1] == "hessian"
+                else None
+            ),
         )
 
         def interrupted(signum: int, frame: Any) -> None:
@@ -254,8 +265,6 @@ def _command(
         str(arguments.cli),
         "hessian",
         str(xyz),
-        "--compiler-python",
-        str(arguments.compiler_python),
         "--method",
         "wb97m-v-uks" if spin else "wb97m-v-rks",
         "--basis",
@@ -286,10 +295,6 @@ def _command(
         "1e-12",
         "--response-rtol",
         "1e-11",
-        "--cache",
-        str(arguments.cache),
-        "--timeout-seconds",
-        str(arguments.timeout_seconds),
         "--json",
     ]
 
@@ -370,7 +375,13 @@ def main() -> None:
     parser.add_argument("--timeout-seconds", type=int, default=1200)
     parser.add_argument("--hessian-atol", type=float, default=3e-6)
     parser.add_argument("--cli", type=Path)
-    parser.add_argument("--compiler-python", type=Path)
+    parser.add_argument(
+        "--reference-python",
+        "--compiler-python",
+        dest="compiler_python",
+        type=Path,
+        help="Python for the GPU4PySCF comparator only; never passed to native CLI",
+    )
     parser.add_argument("--cache", type=Path, default=Path(".artifacts"))
     parser.add_argument("--source-commit")
     parser.add_argument(
@@ -511,7 +522,7 @@ def _measure(
                 "vv10_density_threshold": 1e-8,
                 "units": "hartree/bohr^2",
                 "timing_boundary": "fresh process, fresh SCF, full host Hessian and JSON",
-                "runtime_contract": "explicit C++ CLI Python/CuPy bridge; not Python-free",
+                "runtime_contract": "linked C++ CUDA compiler-AD endpoint; no Python/JIT in native child",
                 "cache_policy": "reuse persistent caches; no empty-cache cold claim",
                 "warm_repeats": arguments.repeats,
                 "scientific_grid_convergence_claim": False,

@@ -63,6 +63,21 @@ struct CudaCpksResult {
 cudaError_t cuda_cpks_workspace(const CudaCpksShape& shape, const CudaCpksOptions& options,
                                 std::size_t& bytes) noexcept;
 
+/** Compiler-owned reference W for the same accepted canonical frame as CPKS.
+ * Reuses the primal underlying the weighted-density JVP, with physical RKS/UKS
+ * occupations and empty/full spin populations. Output is positive-convention
+ * W, not the negative total overlap cotangent used by stationary assembly.
+ * The existing cuda_cpks_workspace arena is reused exclusively before/after a
+ * solve; no second persistent allocation, induced Fock action or GMRES runs.
+ * Numerical, capture, alias, stream and revocation failures preserve output;
+ * a CUDA publication fault may leave a partial copy. All numerical work stays
+ * on the original CUDA stream, with no Python/JIT/host contraction.
+ */
+cudaError_t cuda_cpks_reference_weights(const CudaCpksShape& shape, const CudaCpksOptions& options,
+                                        const CudaCpksReference& reference, double* output,
+                                        void* workspace, std::size_t workspace_bytes,
+                                        cudaStream_t stream) noexcept;
+
 /** Native RKS/UKS CPKS plus compiler-AD density and weighted-density response.
  * References must be complete S-orthonormal canonical frames with integer
  * occupations and separated occupied/virtual gaps. Authentication of this

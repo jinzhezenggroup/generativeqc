@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
-# Build an explicit leaf package only. This target does not register a native
-# method/Hessian capability until a complete stationary owner consumes it.
+# Explicit selected closure and native stationary consumers. The partial default
+# inventory grants no general method/basis capability and never falls back to JIT.
 function(generativeqc_add_hessian_aot target inventory)
   if(NOT Python3_EXECUTABLE)
     message(FATAL_ERROR "Hessian AOT generation requires build-time Python")
@@ -91,6 +91,13 @@ function(generativeqc_add_hessian_aot target inventory)
     ARGS --output "${_df}"
     COMMENT "Generating compiler-AD native WB97M-V fitted-primary response")
   set(_ecp "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_response.cuh")
+  set(_stationary "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_stationary_assembly.cuh")
+  set(_stationary_model "${CMAKE_CURRENT_BINARY_DIR}/generated/response/wb97mv_stationary_model.hpp")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_stationary}" "${_stationary_model}" GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_wb97mv_stationary_assembly.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_hessian.hpp"
+    ARGS --output "${_stationary}" --model-output "${_stationary_model}"
+    COMMENT "Generating compiler-owned native stationary WB97M-V assembly")
   set(_ecp_quadrature "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_quadrature.hpp")
   set(_ecp_density "${CMAKE_CURRENT_BINARY_DIR}/generated/response/ecp_density.cuh")
   generativeqc_register_generated_sources(
@@ -99,6 +106,7 @@ function(generativeqc_add_hessian_aot target inventory)
     ARGS --output "${_ecp}" --quadrature "${_ecp_quadrature}" --density-output "${_ecp_density}"
     COMMENT "Generating compiler-AD residual ECP response and fixed quadrature")
   add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}" "${_ecp}" "${_ecp_quadrature}" "${_ecp_density}"
+    "${_stationary}" "${_stationary_model}" "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_hessian.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu"
@@ -148,6 +156,9 @@ function(generativeqc_add_hessian_aot target inventory)
     add_executable(generativeqc_ks_wb97mv_grid_probe
       "${PROJECT_SOURCE_DIR}/tests/native/ks_wb97mv_grid_probe.cpp")
     target_link_libraries(generativeqc_ks_wb97mv_grid_probe PRIVATE ${target} generativeqc)
+    add_executable(generativeqc_ks_wb97mv_hessian_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/ks_wb97mv_hessian_probe.cpp")
+    target_link_libraries(generativeqc_ks_wb97mv_hessian_probe PRIVATE ${target} generativeqc)
     add_executable(generativeqc_cuda_grid_geometry_probe
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_grid_geometry_probe.cpp")
     target_link_libraries(generativeqc_cuda_grid_geometry_probe PRIVATE ${target})

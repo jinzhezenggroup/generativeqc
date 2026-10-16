@@ -138,6 +138,7 @@ def build_ks_cpks_maps(
     metric_density = density_motion(metric)
     final_density = density_motion(moving)
     return {
+        "reference_weights": weights,
         "metric": Program(
             {
                 "gap": gap,

@@ -9,15 +9,12 @@
 
 namespace generativeqc::cli {
 
-// This explicit compiler-runtime endpoint does not change Python-free `run`.
+// Build-time compiler AD; production Hessian execution never starts Python/JIT.
 struct HessianInvocation {
   std::vector<std::string> run_arguments;
   std::string operation;
-  std::string interpreter;
-  std::string library;
   std::string direction_file;
-  std::string cache{".artifacts"};
-  std::uint32_t timeout_seconds{1200};
+  std::uint64_t device_bytes{2ULL << 30};
   std::uint64_t integral_bytes{64ULL << 20};
   std::uint64_t grid_bytes{128ULL << 20};
   std::uint64_t output_bytes{64ULL << 20};
@@ -32,8 +29,7 @@ struct HessianInvocation {
 // Split endpoint-only controls from the ordinary, centrally validated run flags.
 HessianInvocation parse_hessian_invocation(int argc, char** argv);
 
-// Invoke the explicitly selected interpreter, pin the linked native library,
-// and publish only a complete, finite, identity-checked compiler AD result.
+// Execute linked CUDA compiler AD and publish a complete accepted result only.
 int hessian_command(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
                     const HessianInvocation& invocation);
 

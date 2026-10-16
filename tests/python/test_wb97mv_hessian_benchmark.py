@@ -19,6 +19,32 @@ import pytest
 from benchmarks.compare_wb97mv_hessian_gpu4pyscf import _run_child, _summarize
 
 
+def test_native_benchmark_command_has_no_worker_or_compilation_controls() -> None:
+    from argparse import Namespace
+
+    from benchmarks.compare_wb97mv_hessian_gpu4pyscf import _command
+
+    command = _command(
+        Namespace(
+            cli=Path("/native/generativeqc"),
+            compiler_python=Path("/oracle/python"),
+            basis="sto-3g",
+            grid=(8, 4, 8),
+        ),
+        "generativeqc",
+        "h2",
+        Path("/input/h2.xyz"),
+    )
+    assert command[:2] == ["/native/generativeqc", "hessian"]
+    assert "/oracle/python" not in command
+    assert not {
+        "--compiler-python",
+        "--compiler-library",
+        "--cache",
+        "--timeout-seconds",
+    }.intersection(command)
+
+
 def _sample(engine: str, seconds: float, matrix_value: float = 1.0) -> dict:
     return {
         "engine": engine,

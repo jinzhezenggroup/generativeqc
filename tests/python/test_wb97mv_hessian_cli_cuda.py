@@ -54,8 +54,6 @@ def invoke_cli(
         "--representation",
         "spherical",
         "--json",
-        "--compiler-python",
-        os.environ["GENERATIVEQC_WB97MV_COMPILER_PYTHON"],
         "--grid-radial-points",
         "8",
         "--grid-polar-points",
@@ -72,18 +70,27 @@ def invoke_cli(
         "1e-12",
         "--response-rtol",
         "1e-11",
-        "--cache",
-        str(tmp_path / "cache"),
     ]
     if direction is not None:
         source = tmp_path / "Direction With Spaces.json"
         source.write_text(json.dumps(direction.tolist()))
         command += ["--direction", str(source)]
     result = subprocess.run(
-        [*command, *extra], capture_output=True, text=True, check=False, timeout=600
+        [*command, *extra],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=600,
+        env=dict(
+            os.environ,
+            PATH="/nonexistent",
+            PYTHONHOME="/nonexistent",
+            PYTHONPATH="/nonexistent",
+        ),
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
+    (tmp_path / f"{operation}-result.json").write_text(result.stdout)
     assert payload["operation"] == operation
     assert payload["units"] == "hartree/bohr^2"
     assert payload["backend"] == "cuda"
@@ -92,6 +99,8 @@ def invoke_cli(
     assert diagnostics["numerical_host_fallbacks"] == 0
     assert diagnostics["intermediate_panel_downloads"] == 0
     assert diagnostics["displaced_scf_evaluations"] == 0
+    assert diagnostics["runtime_python"] is False
+    assert diagnostics["runtime_compilation"] is False
     for name in (
         "first_integral_backend",
         "second_integral_backend",
@@ -128,6 +137,8 @@ def test_cpp_cli_cuda_direct_rks_hessian_and_hvp(tmp_path: Path) -> None:
             grid=GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
         ),
     )
+    energy = cpu.singlepoint(atoms, properties=("energy",)).energy
+    np.testing.assert_allclose(hvp["energy_hartree"], energy, atol=5e-9, rtol=0)
     expected = cpu.hessian_vector_product(
         atoms,
         direction,
@@ -207,6 +218,8 @@ def test_cpp_cli_cuda_uks_df_ecp_with_spherical_d_auxiliary(tmp_path: Path) -> N
             grid=GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
         ),
     )
+    energy = cpu.singlepoint(atoms, multiplicity=2, properties=("energy",)).energy
+    np.testing.assert_allclose(result["energy_hartree"], energy, atol=5e-9, rtol=0)
     expected = cpu.hessian_vector_product(
         atoms,
         direction,

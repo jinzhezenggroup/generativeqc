@@ -131,7 +131,8 @@ that passing the smaller benchmark fixes that cold-compile blocker.
 
 The complete molecular consumers in this section still use Python orchestration
 (and CuPy for CUDA execution). They are not a Python-free native endpoint.
-The separate native AOT development package below supplies compiled leaves only.
+The separate opt-in native AOT owner below now composes a Python-free CUDA
+endpoint and replaces the C++ CLI worker; these Python APIs have not migrated.
 
 `generativeqc.composite_rks_hessian` binds the complete twelve-source WB97M-V
 RKS/UKS plan to one converged native CPU or CUDA state. It reuses
@@ -576,10 +577,40 @@ Direct/DF s/p owner fixtures. Nonconvergent quadrature must fail without
 publication. These are source/component gates, not complete stationary molecular
 Hessians or complete-endpoint speed measurements.
 
-Complete ERI/DF numerical shell coverage and stationary molecular assembly
-still require integration.
-Production CLI Hessian/HVP commands still
-use the explicit Python/CuPy bridge; the Python-free endpoint is not delivered.
+### Native stationary composition and CLI
+
+`CudaKsWb97mvHessian` binds the actual accepted native state and composes H/S,
+exact or fitted-primary plus exact LR J/K, residual ECP, moving XC/VV10/Becke
+and nuclear-repulsion sources around one native coupled-spin CPKS solve per
+right direction. Reference W reuses the primal of `method.ks_cpks`'s existing W
+JVP. Compiler TensorIR owns physical D/W spin totals, negative overlap weights,
+frozen nuclear Fock assembly, pair-incidence signs/reductions and final sums.
+Native code owns only resource/lifetime/traversal and finite/publication gates.
+
+The frozen pass uses zero density/weight motion. After converged CPKS, the
+second source pass includes solved dD/dW. DF retains dA/dV across that boundary,
+reruns the full inverse/source-weight AD with dD, then contracts the raw source.
+It never substitutes Direct J/K for a fitted primary. Nuclear grid preparation
+traverses VV10 pairs once per right density direction; left-coordinate mixed
+contractions reuse its retained JVP and cached spatial AO jets. Pair incidence
+gathering uses O(atoms squared) work rather than scanning all pairs per atom.
+
+All independent owners, generated scratch, staged values and complete Hessian
+storage share an aggregate response-byte bound. Actions allocate nothing. CUDA
+success and CPKS convergence are checked separately; one failed column prevents
+whole-matrix publication. Raw Hessian symmetry is checked, not repaired.
+CLI commands require CUDA FP64 and linked closure, and never start Python/JIT.
+Their complete model is serialized from MethodIR at build time. Obsolete worker
+options are rejected, as is CPU CLI execution rather than silently retaining a
+Python fallback. Python APIs remain separate consumers.
+
+`test_native_wb97mv_stationary.py` uses independently reconverged libcint/Libxc
+and direct-space VV10 values at two displacement steps. The native child has
+interpreter/compiler discovery paths unavailable; other tests exercise actual
+compiled CLI input/publication. These small-grid gates are not grid convergence,
+complete high-angular shell coverage or GPU4PySCF endpoint-speed evidence.
+Practical complete high-angular ERI/DF AOT closure and broad molecular/benchmark
+qualification remain required before claiming the full migration complete.
 
 For a source build with a verified compiler-cache launcher configured:
 

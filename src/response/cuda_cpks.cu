@@ -12,17 +12,19 @@ namespace {
 namespace maps = generativeqc_ks_cpks_maps;
 
 struct MapDispatch {
+  decltype(&maps::launch_rks_reference_weights) reference_weights;
   decltype(&maps::launch_rks_metric) metric;
   decltype(&maps::launch_rks_rotation) rotation;
   decltype(&maps::launch_rks_action) action;
   decltype(&maps::launch_rks_rhs) rhs;
   decltype(&maps::launch_rks_density) density;
   decltype(&maps::launch_rks_weights) weights;
-  std::array<cudaError_t (*)(maps::Extents, std::size_t&), 6> workspaces;
+  std::array<cudaError_t (*)(maps::Extents, std::size_t&), 7> workspaces;
 };
 
 const MapDispatch& dispatch(unsigned spins) noexcept {
   static const MapDispatch rks{
+      maps::launch_rks_reference_weights,
       maps::launch_rks_metric,
       maps::launch_rks_rotation,
       maps::launch_rks_action,
@@ -30,8 +32,10 @@ const MapDispatch& dispatch(unsigned spins) noexcept {
       maps::launch_rks_density,
       maps::launch_rks_weights,
       {maps::workspace_rks_metric, maps::workspace_rks_rotation, maps::workspace_rks_action,
-       maps::workspace_rks_rhs, maps::workspace_rks_density, maps::workspace_rks_weights}};
+       maps::workspace_rks_rhs, maps::workspace_rks_density, maps::workspace_rks_weights,
+       maps::workspace_rks_reference_weights}};
   static const MapDispatch uks{
+      maps::launch_uks_reference_weights,
       maps::launch_uks_metric,
       maps::launch_uks_rotation,
       maps::launch_uks_action,
@@ -39,7 +43,8 @@ const MapDispatch& dispatch(unsigned spins) noexcept {
       maps::launch_uks_density,
       maps::launch_uks_weights,
       {maps::workspace_uks_metric, maps::workspace_uks_rotation, maps::workspace_uks_action,
-       maps::workspace_uks_rhs, maps::workspace_uks_density, maps::workspace_uks_weights}};
+       maps::workspace_uks_rhs, maps::workspace_uks_density, maps::workspace_uks_weights,
+       maps::workspace_uks_reference_weights}};
   return spins == 1 ? rks : uks;
 }
 
@@ -280,6 +285,79 @@ cudaError_t cuda_cpks_workspace(const CudaCpksShape& shape, const CudaCpksOption
   if (!plan_workspace(shape, options, plan)) return cudaErrorInvalidValue;
   bytes = plan.bytes;
   return cudaSuccess;
+}
+
+cudaError_t cuda_cpks_reference_weights(const CudaCpksShape& shape, const CudaCpksOptions& options,
+                                        const CudaCpksReference& reference, double* output,
+                                        void* workspace, std::size_t workspace_bytes,
+                                        cudaStream_t stream) noexcept {
+  Plan plan;
+  if (!plan_workspace(shape, options, plan) || workspace_bytes < plan.bytes ||
+      !reference.authenticate || reference.stream != stream ||
+      (reference.coefficient_layout != CudaCpksLayout::column_major &&
+       reference.coefficient_layout != CudaCpksLayout::row_major))
+    return cudaErrorInvalidValue;
+  std::size_t matrices_bytes{}, energy_bytes{}, end{};
+  if (!multiply_size(plan.matrices, sizeof(double), matrices_bytes) ||
+      !multiply_size(shape.nao, shape.spins * sizeof(double), energy_bytes))
+    return cudaErrorInvalidValue;
+  const std::array<std::pair<const void*, std::size_t>, 2> inputs{
+      {{reference.coefficients, matrices_bytes}, {reference.orbital_energies, energy_bytes}}};
+  const std::array<std::pair<const void*, std::size_t>, 2> writes{
+      {{workspace, workspace_bytes}, {output, matrices_bytes}}};
+  for (const auto [pointer, bytes] : inputs)
+    if (!interval(pointer, bytes, end)) return cudaErrorInvalidValue;
+  for (std::size_t index = 0; index < writes.size(); ++index) {
+    const auto [pointer, bytes] = writes[index];
+    if (!interval(pointer, bytes, end)) return cudaErrorInvalidValue;
+    for (const auto [input, input_bytes] : inputs)
+      if (overlaps(pointer, bytes, input, input_bytes)) return cudaErrorInvalidValue;
+    for (std::size_t other = 0; other < index; ++other)
+      if (overlaps(pointer, bytes, writes[other].first, writes[other].second))
+        return cudaErrorInvalidValue;
+  }
+  auto error = reference.authenticate(reference.owner);
+  if (error != cudaSuccess) return error;
+  cudaStreamCaptureStatus capture{};
+  error = cudaStreamIsCapturing(stream, &capture);
+  if (error != cudaSuccess) return error;
+  if (capture != cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
+  DrainOnFailure drain{stream};
+  error = cudaMemsetAsync(workspace, 0, plan.bytes, stream);
+  if (error != cudaSuccess) return error;
+  CudaCpksResult receipt;
+  auto* base = static_cast<double*>(workspace);
+  Execution execution{shape, options, plan, dispatch(shape.spins), base, nullptr, nullptr, receipt};
+  for (unsigned spin = 0; spin < shape.spins; ++spin) {
+    const auto& block = plan.spin[spin];
+    pack_frame<<<maps::blocks(plan.matrix), 128, 0, stream>>>(
+        shape.nao, shape.occupied[spin],
+        reference.coefficient_layout == CudaCpksLayout::column_major,
+        reference.coefficients + spin * plan.matrix, reference.orbital_energies + spin * shape.nao,
+        base + block.coefficients, base + block.occupied, base + block.virtuals,
+        base + block.occupied_energies, base + block.virtual_energies, base + block.energy_matrix,
+        execution.status());
+    if ((error = cudaGetLastError()) != cudaSuccess) return error;
+    error = execution.maps.reference_weights(
+        block.extents, base + block.occupied, base + block.energy_matrix,
+        base + plan.weights + spin * plan.matrix, execution.scratch(), plan.tensor_bytes,
+        execution.status(), stream);
+    if (error != cudaSuccess) return error;
+  }
+  error = execution.check(base + plan.weights, plan.matrices, stream);
+  if (error != cudaSuccess) return error;
+  bool failed{};
+  error = checkpoint(execution, stream, failed);
+  if (error != cudaSuccess) return error;
+  if (failed) return cudaErrorInvalidValue;
+  error = reference.authenticate(reference.owner);
+  if (error != cudaSuccess) return error;
+  error = cudaMemcpyAsync(output, base + plan.weights, matrices_bytes, cudaMemcpyDeviceToDevice,
+                          stream);
+  if (error != cudaSuccess) return error;
+  error = cudaStreamSynchronize(stream);
+  drain.active = false;
+  return error;
 }
 
 cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& options,

@@ -213,7 +213,7 @@ void print_usage(std::ostream& out) {
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc optimize INPUT.xyz [run and geometry options]\n"
-         "  generativeqc hessian|hvp INPUT.xyz --compiler-python /absolute/python [options]\n"
+         "  generativeqc hessian|hvp INPUT.xyz --backend cuda [options]\n"
          "  generativeqc profile show|clear\n"
          "  generativeqc resources INPUT.xyz [run and budget options]\n"
          "  generativeqc profile install ARCHIVE.zip\n"
@@ -260,11 +260,9 @@ void print_usage(std::ostream& out) {
          "  --opt-max-step F         Max per-atom displacement (Bohr; default: 0.35)\n"
          "  --plan-only              Print selected stages; do not initialize a device\n"
          "  --output FILE.xyz        Write final Angstrom XYZ, refusing to overwrite\n";
-  out << "Explicit compiler AD Hessian/HVP options (requires Python; CUDA also requires CuPy):\n"
-         "  --compiler-python PATH  Absolute interpreter path; no implicit Python fallback\n"
-         "  --compiler-library PATH Matching shared library; required for a monolithic CLI\n"
+  out << "Native compiler AD Hessian/HVP options (linked CUDA AOT; no Python/JIT):\n"
          "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
-         "  --cache DIRECTORY --timeout-seconds N (default: .artifacts, 1200 seconds)\n"
+         "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
          "  --response-budget-bytes N --max-nonlocal-pairs N\n"
          "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
