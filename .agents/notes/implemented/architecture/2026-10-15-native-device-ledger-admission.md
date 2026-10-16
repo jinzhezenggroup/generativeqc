@@ -82,6 +82,18 @@ comparison, with identical warmup/sample counts and unchanged per-endpoint
 acceptance gates, is a separate qualification, not proof that placement caused
 an earlier timing failure or a causal speedup claim.
 
+### Fault-injection FFI boundary (2026-10-16)
+
+Inventory admission intentionally does not configure the inactive legacy
+constructor. A test that directly creates replacement legacy handles must bind
+that symbol's arguments and `c_void_p` return itself. The default ctypes `c_int`
+result truncates high-address handles before a later native bind. Low-address
+allocations can accidentally hide this error; their successful runs are not a
+pointer-width guarantee. A portable-runtime qualification exposed this in the
+HF shortage/recovery fixture, while the KS fixture already declared its own ABI.
+The repair belongs to fault injection, not a production fallback or a numerical
+change; retain the crashing run and source-bind its corrected replay separately.
+
 ## Revisit when
 
 Global native plans gain authenticated prepared leases and complete allocation

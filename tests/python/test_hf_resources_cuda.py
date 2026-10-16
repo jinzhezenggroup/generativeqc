@@ -1,5 +1,6 @@
 """Direct-HF budget evidence; run only in a scheduler-assigned GPU job."""
 
+import ctypes
 import json
 import os
 import typing
@@ -224,19 +225,22 @@ def test_native_ledger_rejects_unplanned_arena_and_releases_failed_state(
         density_fitting="cuda" if fitted else "none",
         resource_budget=ResourceBudget(),
     )
+    create = calculator._library.generativeqc_resource_ledger_create_v1
+    # Native inventory admission does not bind this inactive legacy symbol.
+    # Fault injection must declare its own pointer-width return contract.
+    create.argtypes = [ctypes.c_size_t, ctypes.c_int]
+    create.restype = ctypes.c_void_p
     with calculator.prepare_batch([H2]) as batch:
         ledger = batch._resource_ledger
         ledger.close()
-        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(1, 0)
+        ledger.handle = create(1, 0)
         failed = batch.execute()
         assert not failed.items[0].succeeded
         observation = batch.resource_diagnostics["observation"]["device_ledger"]
         assert observation["rejected_allocations"] >= 1
         assert observation["live_bytes"] == 0
         ledger.close()
-        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(
-            ledger.limit, 0
-        )
+        ledger.handle = create(ledger.limit, 0)
         result = batch.execute(strict=True)
         assert result.items[0].executed_backend == "cuda"
         # Keep the metadata handle alive while closing the native cache, so
