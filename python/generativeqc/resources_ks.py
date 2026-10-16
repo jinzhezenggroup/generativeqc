@@ -770,6 +770,7 @@ def ks_resource_request(
             multiplicity,
             "orbital",
             derivative_order=0,
+            library=library,
         )
         if (
             not electrons.nalpha
