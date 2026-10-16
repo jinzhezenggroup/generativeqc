@@ -28,7 +28,7 @@ from tools.cuda_schedule_trials import (
 @pytest.fixture
 def sources() -> dict[str, str]:
     return {
-        RESOURCE_PATH: '''"""Unicode 惟 fixture: byte offsets must remain correct."""
+        RESOURCE_PATH: '''"""Unicode Ω fixture: byte offsets must remain correct."""
 GEOMETRY_THREADS = 32
 BECKE_COOPERATIVE_THREADS = 32
 BECKE_PAIR_TILE_ROWS = 4
@@ -55,7 +55,7 @@ auto d = stationary_becke_threads;
 """,
         BATCH_PATH: '''class PreparedBatch:
     def _public_dft_cuda_force(self, index, atoms):
-        """Unicode 尾 before the edited expression."""
+        """Unicode β before the edited expression."""
         composite_force = bool(index)
         if composite_force:
             max_device_bytes, max_host_bytes = 1 << 30, 2 << 30
@@ -172,6 +172,67 @@ def test_existing_tile_binding_is_updated_without_duplicate(
         namespace["PreparedBatch"]()._public_dft_cuda_force(0, None)[1]["tile_points"]
         == 512
     )
+
+
+@pytest.mark.parametrize("shared_request", (False, True))
+@pytest.mark.parametrize(
+    "duplicate_key",
+    ('"tile_points"', '"tile_" "points"', '"tile_\\x70oints"', '("tile_points")'),
+)
+def test_duplicate_execution_tile_binding_rejected(
+    sources: dict[str, str], shared_request: bool, duplicate_key: str
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace(
+        "kwargs = {", f'kwargs = {{"tile_points": 256, {duplicate_key}: 768,'
+    )
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="duplicate force kwargs"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
+
+
+@pytest.mark.parametrize("shared_request", (False, True))
+@pytest.mark.parametrize(
+    "unknown_key",
+    (
+        '"tile_" + "points"',
+        'f"tile_points"',
+        'str("tile_points")',
+        "768",
+        "None",
+        'b"tile_points"',
+    ),
+)
+def test_unknown_execution_key_rejected(
+    sources: dict[str, str], shared_request: bool, unknown_key: str
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace(
+        "kwargs = {", f'kwargs = {{"tile_points": 256, {unknown_key}: 768,'
+    )
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="literal string keys"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
+
+
+@pytest.mark.parametrize("shared_request", (False, True))
+def test_duplicate_execution_budget_binding_rejected(
+    sources: dict[str, str], shared_request: bool
+) -> None:
+    source = sources[BATCH_PATH]
+    if shared_request:
+        source = shared_request_source(source)
+    source = source.replace("kwargs = {", 'kwargs = {"max_host_bytes": 1,')
+    sources[BATCH_PATH] = source
+    with pytest.raises(ValueError, match="duplicate force kwargs"):
+        render_trial(sources, CudaScheduleTrial(grid_tile_points=512))
+    assert sources[BATCH_PATH] == source
 
 
 def test_budget_only_trial_does_not_change_tile_policy(sources: dict[str, str]) -> None:

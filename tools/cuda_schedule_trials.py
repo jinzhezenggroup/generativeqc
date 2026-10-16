@@ -337,10 +337,14 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
             raise ValueError("ordinary force kwargs is not a dictionary")
         if any(key is None for key in kwargs.value.keys):
             raise ValueError("cannot authenticate expanded force kwargs")
-        keys = [
-            key.value if isinstance(key, ast.Constant) else None
+        if any(
+            not isinstance(key, ast.Constant) or not isinstance(key.value, str)
             for key in kwargs.value.keys
-        ]
+        ):
+            raise ValueError("force kwargs require literal string keys")
+        keys = [key.value for key in kwargs.value.keys]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate force kwargs keys")
         if "tile_points" in keys:
             index = keys.index("tile_points")
             edits.append((kwargs.value.values[index], "policy_tile_points"))
