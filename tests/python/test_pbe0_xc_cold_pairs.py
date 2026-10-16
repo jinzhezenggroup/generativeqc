@@ -1,17 +1,21 @@
 """Host orchestration and parser fixtures; these are not cold GPU measurements."""
 
 import hashlib
+import io
+import json
 import os
 import subprocess
 import sys
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.performance import assess_comparison
 
+from benchmarks import pbe0_xc_cold_pairs as collector
 from benchmarks.pbe0_xc_cold_pairs import digest, observe_process
 from tools.generativeqc_validation.pbe0_xc_cold import verify_observation, verify_pairs
 from tools.generativeqc_validation.record import load_publication_record
@@ -60,6 +64,74 @@ def fixture_record() -> tuple[dict[str, Any], dict[str, Any]]:
                 "complete": True,
                 "coulomb_applications": worker["fock_builds"],
                 "exchange_applications": worker["fock_builds"],
+            }
+            # The vectors are immutable fixtures. These process/solve receipts
+            # are explicitly synthetic cold observations, not relabelled runs.
+            worker["iterations"] = worker["fock_builds"] = 2
+            worker["initial_guess"] = None
+            worker["restart_origin"] = "cold"
+            ks = worker["native_ks_diagnostic"]
+            ks["initial_density_used"] = False
+            ks["fock_builds"] = 2
+            first = deepcopy(ks["history"][0])
+            first.update(iteration=1, energy_change=None)
+            last = deepcopy(first)
+            last.update(iteration=2, energy_change=1e-13)
+            ks["history"] = [first, last]
+            ks["coulomb_exchange_work"].update(
+                coulomb_applications=2, exchange_applications=2
+            )
+            worker["native_scf_ao_work"]["xc_evaluations"] = 2
+            state = f"cuda-ks:{len(observations) + 1}:1:2"
+            worker["precision"] = {
+                "requested_mode": "fp64",
+                "effective_bits": 64,
+                "strict_refinement_applied": False,
+                "complete": True,
+                "operator_inventory_complete": True,
+                "operator_work_counters_valid": True,
+                "refinement_iterations": 0,
+                "mixed_stage_fock_builds": 0,
+                "execution_retries": 0,
+                "conversion_count": 0,
+                "fallback_count": 0,
+                "strict_stage_fock_builds": 2,
+                "post_scf_fock_builds": 0,
+                "final_residual_audits": 1,
+                "returned_state_identity": state,
+                "scf_fock_timeline": [
+                    {
+                        "kind": "strict_fock",
+                        "sequence": i - 1,
+                        "iteration": i,
+                        "state": state,
+                        "phase": "scf",
+                        "count": 1,
+                    }
+                    for i in (1, 2)
+                ]
+                + [
+                    {
+                        "kind": "final_audit",
+                        "sequence": 2,
+                        "iteration": 2,
+                        "state": state,
+                        "phase": "finalization",
+                        "count": 1,
+                    }
+                ],
+                "operators": [
+                    {
+                        "name": name,
+                        "storage": "fp64",
+                        "compute": "fp64",
+                        "accumulation": "fp64",
+                        "reduction": "fp64",
+                        "arithmetic_mode": "strict",
+                        "count": 2,
+                    }
+                    for name in ("coulomb_j", "exchange_k", "xc")
+                ],
             }
             worker.update(
                 status="complete",
@@ -337,3 +409,566 @@ c=m.load_consumer();assert Path(c.__file__)==Path(root)/'tools/generativeqc_vali
     subprocess.run(
         [sys.executable, "-c", script, str(sdk), str(ROOT)], check=True, timeout=15
     )
+
+
+def collector_args(tmp_path: Path, output: Path) -> list[str]:
+    _, reference = fixture_record()
+    (tmp_path / "reference.json").write_text(json.dumps(reference))
+    (tmp_path / "basis.json").write_text("synthetic basis")
+    (tmp_path / "library.so").write_text("synthetic library")
+    return [
+        "collector",
+        "--atoms",
+        "48",
+        "--basis-file",
+        str(tmp_path / "basis.json"),
+        "--reference",
+        str(tmp_path / "reference.json"),
+        "--sdk-source",
+        str(ROOT),
+        "--library",
+        str(tmp_path / "library.so"),
+        "--expected-native-identity",
+        "synthetic-native",
+        "--output",
+        str(output),
+        "--feasibility",
+        "--repeats",
+        "1",
+    ]
+
+
+def host_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SLURM_JOB_ID", "host-fixture")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "host-fixture")
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ("existing", "basis", "reference", "library", "symlink", "dangling", "hardlink"),
+)
+def test_output_reservation_preserves_existing_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, alias: str
+) -> None:
+    output = tmp_path / "output.json"
+    argv = collector_args(tmp_path, output)
+    targets = {
+        "basis": tmp_path / "basis.json",
+        "reference": tmp_path / "reference.json",
+        "library": tmp_path / "library.so",
+    }
+    if alias in targets:
+        argv[argv.index("--output") + 1] = str(targets[alias])
+    elif alias == "symlink":
+        output.symlink_to(tmp_path / "basis.json")
+    elif alias == "dangling":
+        output.symlink_to(tmp_path / "missing")
+    elif alias == "hardlink":
+        os.link(tmp_path / "basis.json", output)
+    else:
+        output.write_text("prior receipt")
+    before = {p: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
+    host_allocation(monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
+
+    def unexpected(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("output must be reserved before provenance or worker execution")
+
+    monkeypatch.setattr(collector, "native_inventory", unexpected)
+    monkeypatch.setattr(collector.subprocess, "check_output", unexpected)
+    monkeypatch.setattr(collector, "observe_process", unexpected)
+    with pytest.raises(SystemExit):
+        collector.main()
+    assert all(p.read_bytes() == content for p, content in before.items())
+    assert not (tmp_path / "missing").exists()
+
+
+def test_separate_collector_results_tree_is_protected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "collector"
+    output = source / "benchmarks/results/new-receipt.json"
+    argv = collector_args(tmp_path, output)
+    host_allocation(monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
+    consumer = collector.load_consumer()
+    monkeypatch.setattr(collector, "load_consumer", lambda: consumer)
+    monkeypatch.setattr(
+        collector, "__file__", str(source / "benchmarks/pbe0_xc_cold_pairs.py")
+    )
+    with pytest.raises(ValueError, match="benchmarks/results"):
+        collector.main()
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("optimization", ("-O", "-OO"))
+@pytest.mark.parametrize(
+    "module",
+    ("benchmarks.pbe0_xc_cold_pairs", "tools.generativeqc_validation.pbe0_xc_cold"),
+)
+def test_optimized_python_cannot_collect_or_validate(
+    module: str, optimization: str
+) -> None:
+    result = subprocess.run(
+        [sys.executable, optimization, "-c", f"import {module}"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "requires Python without -O/-OO" in result.stderr
+
+
+def test_consumer_exception_retains_observation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "receipt.json"
+    argv = collector_args(tmp_path, output)
+    host_allocation(monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(
+        collector, "native_inventory", lambda _: (1, "synthetic-native")
+    )
+    monkeypatch.setattr(
+        collector.subprocess,
+        "check_output",
+        lambda command, **kwargs: "synthetic-head" if command[-1] == "HEAD" else "",
+    )
+    row = {"endpoint": None, "worker": None, "exit_code": 1, "synchronized": False}
+    monkeypatch.setattr(collector, "observe_process", lambda *args, **kwargs: dict(row))
+    consumer = collector.load_consumer()
+
+    def reject(*args: Any) -> None:
+        raise StopIteration("missing independent geometry")
+
+    monkeypatch.setattr(consumer, "verify_observation", reject)
+    monkeypatch.setattr(collector, "load_consumer", lambda: consumer)
+    with pytest.raises(StopIteration, match="missing independent geometry"):
+        collector.main()
+    retained = json.loads(output.read_text())
+    assert retained["stage"] == "incomplete"
+    assert retained["failure_type"] == "StopIteration"
+    assert len(retained["observations"]) == 1
+    assert retained["observations"][0]["exit_code"] == 1
+
+
+def test_close_error_does_not_replace_collection_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    argv = collector_args(tmp_path, tmp_path / "receipt.json")
+    host_allocation(monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
+
+    class BrokenClose(io.StringIO):
+        def close(self) -> None:
+            super().close()
+            raise OSError("close failed")
+
+    stream = BrokenClose()
+    monkeypatch.setattr(Path, "open", lambda *args, **kwargs: stream)
+
+    def fail(*args: Any) -> None:
+        raise RuntimeError("collection failed")
+
+    monkeypatch.setattr(collector, "collect", fail)
+    with pytest.raises(RuntimeError, match="collection failed") as captured:
+        collector.main()
+    assert isinstance(captured.value.__cause__, OSError)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-precision",
+        "unknown-precision",
+        "mode",
+        "bits",
+        "refinement",
+        "mixed",
+        "retry",
+        "conversion",
+        "fallback",
+        "incomplete",
+        "inventory",
+        "counters",
+        "strict-count",
+        "post-count",
+        "audit-count",
+        "state",
+        "other-solve",
+        "mixed-event",
+        "refinement-event",
+        "missing-event",
+        "operator-fp32",
+        "operator-count",
+        "missing-xc",
+        "warm-density",
+        "diagnostic-count",
+        "provisional-history",
+        "cold-baseline",
+        "final-energy",
+        "final-density",
+        "final-residual",
+        "exit-bool",
+    ),
+)
+def test_cold_precision_and_history_receipts_fail_closed(mutation: str) -> None:
+    record, reference = fixture_record()
+    row = record["observations"][0]
+    worker, precision = row["worker"], row["worker"]["precision"]
+    ks = worker["native_ks_diagnostic"]
+    changes = {
+        "mode": ("requested_mode", "auto"),
+        "bits": ("effective_bits", 32),
+        "refinement": ("strict_refinement_applied", True),
+        "mixed": ("mixed_stage_fock_builds", 1),
+        "retry": ("execution_retries", 1),
+        "conversion": ("conversion_count", 1),
+        "fallback": ("fallback_count", 1),
+        "incomplete": ("complete", False),
+        "inventory": ("operator_inventory_complete", False),
+        "counters": ("operator_work_counters_valid", False),
+        "strict-count": ("strict_stage_fock_builds", 3),
+        "post-count": ("post_scf_fock_builds", 1),
+        "audit-count": ("final_residual_audits", 0),
+        "state": ("returned_state_identity", None),
+    }
+    if mutation in changes:
+        key, value = changes[mutation]
+        precision[key] = value
+    elif mutation == "missing-precision":
+        del worker["precision"]
+    elif mutation == "unknown-precision":
+        worker["precision"] = None
+    elif mutation == "other-solve":
+        precision["scf_fock_timeline"][0]["state"] = "cuda-ks:999:999:1"
+    elif mutation == "mixed-event":
+        precision["scf_fock_timeline"][0]["kind"] = "mixed_fock"
+    elif mutation == "refinement-event":
+        precision["scf_fock_timeline"][0]["phase"] = "refinement"
+    elif mutation == "missing-event":
+        precision["scf_fock_timeline"].pop()
+    elif mutation == "operator-fp32":
+        precision["operators"][0]["compute"] = "fp32"
+    elif mutation == "operator-count":
+        precision["operators"][0]["count"] += 1
+    elif mutation == "missing-xc":
+        precision["operators"].pop()
+    elif mutation == "warm-density":
+        ks["initial_density_used"] = True
+    elif mutation == "diagnostic-count":
+        ks["fock_builds"] += 1
+    elif mutation == "provisional-history":
+        ks["history"][0]["operator_scope"] = "provisional-semilocal-rsh"
+    elif mutation == "cold-baseline":
+        ks["history"][0]["energy_change"] = 0.0
+    elif mutation == "final-energy":
+        ks["history"][-1]["energy_change"] = 1.0
+    elif mutation == "final-density":
+        ks["density_change_max"] = 1.0
+    elif mutation == "final-residual":
+        ks["physical_residual_max"] = 1.0
+    elif mutation == "exit-bool":
+        row["exit_code"] = False
+    with pytest.raises((AssertionError, KeyError, TypeError)):
+        verify_observation(row, reference, record["manifest"])
+
+
+def test_equal_precision_work_ignores_only_process_owned_state() -> None:
+    record, reference = fixture_record()
+    verify_pairs(record, reference, allow_feasibility=True)
+    record["observations"][1]["worker"]["precision"]["operators"][2]["count"] += 1
+    with pytest.raises(AssertionError):
+        verify_pairs(record, reference, allow_feasibility=True)
+
+
+def test_finalization_work_is_retained_without_inventing_an_scf_stage() -> None:
+    record, reference = fixture_record()
+    for row in record["observations"]:
+        worker, precision = row["worker"], row["worker"]["precision"]
+        worker["fock_builds"] = 3
+        worker["native_ks_diagnostic"]["fock_builds"] = 3
+        worker["native_ks_diagnostic"]["coulomb_exchange_work"].update(
+            coulomb_applications=3, exchange_applications=3
+        )
+        precision["post_scf_fock_builds"] = 1
+        for operator in precision["operators"][:2]:
+            operator["count"] = 3
+        precision["scf_fock_timeline"].append(
+            {
+                "kind": "post_scf_fock",
+                "sequence": 3,
+                "iteration": 2,
+                "state": precision["returned_state_identity"],
+                "phase": "finalization",
+                "count": 1,
+            }
+        )
+    verify_pairs(record, reference, allow_feasibility=True)
+
+
+def test_worker_retains_actual_precision_and_closes_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record, reference = fixture_record()
+    receipt = record["observations"][0]["worker"]
+    precision = deepcopy(receipt["precision"])
+    item = SimpleNamespace(
+        status=0,
+        converged=True,
+        status_message="success",
+        energy=receipt["endpoint"]["energy"],
+        forces=SimpleNamespace(tolist=lambda: receipt["endpoint"]["forces"]),
+        warm_start_used=False,
+        warm_start_fallback=False,
+        iterations=2,
+        fock_builds=2,
+        precision=precision,
+        initial_guess=None,
+        restart_origin="cold",
+        ks_diagnostic=SimpleNamespace(
+            to_payload=lambda: receipt["native_ks_diagnostic"]
+        ),
+    )
+
+    class Owner:
+        closed = False
+
+        def _public_dft_cuda_force(self, *args: Any, **kwargs: Any) -> Any:
+            assert kwargs["tile_points"] == 256
+            return None, receipt["native_force_work_raw"]
+
+        def execute(self, **kwargs: Any) -> Any:
+            self._public_dft_cuda_force()
+            return SimpleNamespace(items=[item])
+
+        def close(self) -> None:
+            self.closed = True
+
+    owner = Owner()
+
+    class Calculator:
+        def __init__(self, **kwargs: Any) -> None:
+            assert kwargs["precision"] == "fp64"
+
+        def prepare_batch(self, *args: Any, **kwargs: Any) -> Any:
+            assert kwargs["warm_start"] is False
+            return owner
+
+    modules = {
+        "cupy": SimpleNamespace(
+            cuda=SimpleNamespace(
+                Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+            )
+        ),
+        "generativeqc": SimpleNamespace(
+            Calculator=Calculator,
+            GridSpec=lambda **kwargs: kwargs,
+            KsOptions=lambda **kwargs: kwargs,
+        ),
+        "benchmarks._support": SimpleNamespace(
+            cuda_accelerator_metadata=lambda _: {},
+            environment_metadata=lambda **kwargs: {},
+        ),
+        "benchmarks.compare_gpu4pyscf_batch": SimpleNamespace(
+            native_build_metadata=lambda _: receipt["native_build"]
+        ),
+        "benchmarks.dft_force_components": SimpleNamespace(
+            normalize_force_work=lambda _: receipt["native_force_components"]
+        ),
+        "benchmarks.ks_preliminary_density": SimpleNamespace(
+            read_ao_work=lambda _: receipt["native_scf_ao_work"]
+        ),
+        "benchmarks.readme_hf_scaling": SimpleNamespace(
+            scaling_cases=lambda: {"water-48": object()}
+        ),
+        "benchmarks.readme_omol25": SimpleNamespace(
+            load_comparison_basis=lambda *args, **kwargs: (object(), None),
+            protocol=lambda *args, **kwargs: reference["protocol"],
+        ),
+        "benchmarks.readme_pbe0": SimpleNamespace(PBE0=object()),
+    }
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(
+        collector.subprocess, "check_output", lambda *args, **kwargs: "synthetic-head"
+    )
+    path = tmp_path / "reference.json"
+    path.write_text(json.dumps(reference))
+    args = SimpleNamespace(
+        sdk_source=ROOT,
+        library=tmp_path / "library.so",
+        selection="baseline",
+        atoms=48,
+        basis_file=tmp_path / "basis.json",
+        reference=path,
+        geometry=0,
+        nonce="synthetic-worker",
+    )
+    observed = collector.worker(args)
+    assert observed["precision"] is precision
+    assert observed["native_ks_diagnostic"] is receipt["native_ks_diagnostic"]
+    assert observed["initial_guess"] is None and observed["restart_origin"] == "cold"
+    assert owner.closed is True
+
+
+@pytest.mark.parametrize("kind", ("minao", "huckel"))
+def test_fresh_native_guess_is_admitted_and_its_work_is_compared(kind: str) -> None:
+    record, reference = fixture_record()
+    for index, row in enumerate(record["observations"]):
+        worker = row["worker"]
+        worker["native_ks_diagnostic"]["initial_density_used"] = True
+        worker["initial_guess"] = {
+            "kind": kind,
+            "outcome": "used",
+            "work_counters_complete": True,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preliminary_iterations": 4,
+            "preliminary_fock_builds": 4,
+            "preparation_numeric_capacity": 1024,
+            "preparation_seconds": index / 10,
+        }
+    verify_pairs(record, reference, allow_feasibility=True)
+    record["observations"][1]["worker"]["initial_guess"]["preliminary_fock_builds"] += 1
+    with pytest.raises(AssertionError):
+        verify_pairs(record, reference, allow_feasibility=True)
+
+
+@pytest.mark.parametrize(
+    "mutation", ("origin", "retained", "retry", "incomplete", "attempts", "discarded")
+)
+def test_retained_or_incomplete_initial_guesses_are_rejected(mutation: str) -> None:
+    record, reference = fixture_record()
+    worker = record["observations"][0]["worker"]
+    worker["native_ks_diagnostic"]["initial_density_used"] = True
+    guess = {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": True,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preliminary_iterations": 4,
+        "preliminary_fock_builds": 4,
+        "preparation_numeric_capacity": 1024,
+        "preparation_seconds": 0.1,
+    }
+    worker["initial_guess"] = guess
+    if mutation == "origin":
+        worker["restart_origin"] = "persistent_restart"
+    elif mutation == "retained":
+        guess["outcome"] = "existing_density"
+    elif mutation == "retry":
+        guess["outcome"] = "target_retried"
+    elif mutation == "incomplete":
+        guess["work_counters_complete"] = False
+    elif mutation == "attempts":
+        guess["target_attempts"] = 2
+    else:
+        guess["discarded_target_fock_builds"] = 1
+    with pytest.raises(AssertionError):
+        verify_pairs(record, reference, allow_feasibility=True)
+
+
+@pytest.mark.parametrize("token", ("NaN", "Infinity", "-Infinity", "1e999"))
+def test_nonfinite_worker_json_retains_serializable_failure(token: str) -> None:
+    script = (
+        "import time;print('PBE_COLD_ENDPOINT={\"bad\":' + "
+        + repr(token)
+        + " + '}',flush=True);time.sleep(30)"
+    )
+    row = observe_process([sys.executable, "-c", script], nonce="bad", timeout=5)
+    assert row["parse_error"] == "malformed endpoint"
+    assert row["synchronized"] is False and row["exit_code"] is not None
+    json.dumps(row, allow_nan=False)
+
+
+def test_journal_failure_does_not_replace_consumer_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    collector_args(tmp_path, tmp_path / "unused.json")
+    args = SimpleNamespace(
+        atoms=48,
+        basis_file=tmp_path / "basis.json",
+        reference=tmp_path / "reference.json",
+        sdk_source=ROOT,
+        library=tmp_path / "library.so",
+        expected_native_identity="synthetic-native",
+        feasibility=True,
+        repeats=1,
+        timeout=1,
+    )
+    monkeypatch.setattr(
+        collector, "native_inventory", lambda _: (1, "synthetic-native")
+    )
+    monkeypatch.setattr(
+        collector.subprocess,
+        "check_output",
+        lambda command, **kwargs: "synthetic-head" if command[-1] == "HEAD" else "",
+    )
+    monkeypatch.setattr(
+        collector, "observe_process", lambda *args, **kwargs: {"exit_code": 1}
+    )
+    consumer = collector.load_consumer()
+
+    def reject(*args: Any) -> None:
+        raise StopIteration("missing independent geometry")
+
+    monkeypatch.setattr(consumer, "verify_observation", reject)
+
+    class BrokenJournal(io.StringIO):
+        writes = 0
+
+        def write(self, value: str) -> int:
+            self.writes += 1
+            if self.writes > 1:
+                raise OSError("journal unavailable")
+            return super().write(value)
+
+    with pytest.raises(StopIteration, match="missing independent geometry") as captured:
+        collector.collect(args, BrokenJournal(), consumer)
+    assert isinstance(captured.value.__cause__, OSError)
+
+
+def test_full_synthetic_pairs_require_complete_profitable_cold_windows() -> None:
+    record, reference = fixture_record()
+    originals = record["observations"]
+    record.update(repeats=5, feasibility=False, observations=[])
+    for geometry in (0, 1):
+        for pair in range(5):
+            arms = (
+                ("baseline", "candidate")
+                if pair % 2 == 0
+                else ("candidate", "baseline")
+            )
+            for arm in arms:
+                row = deepcopy(
+                    next(
+                        x
+                        for x in originals
+                        if x["geometry"] == geometry and x["selection"] == arm
+                    )
+                )
+                row["nonce"] = row["endpoint"]["nonce"] = (
+                    f"full-synthetic-{geometry}-{pair}-{arm}"
+                )
+                row["pair"] = pair
+                row["seconds"] = row["process_seconds"] = (
+                    2.0 if arm == "baseline" else 1.5
+                )
+                row["process_completed"] = row["launch_started"] + row["seconds"]
+                record["observations"].append(row)
+    record["assessments"] = {
+        str(g): assess_comparison(
+            [r for r in record["observations"] if r["geometry"] == g]
+        )
+        for g in (0, 1)
+    }
+    verify_pairs(record, reference, require_improvement=True)
+    record["observations"][0]["seconds"] = record["observations"][0]["delivery_seconds"]
+    with pytest.raises(AssertionError):
+        verify_pairs(record, reference, require_improvement=True)

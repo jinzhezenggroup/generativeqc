@@ -1,10 +1,14 @@
 """Independent checks of process-cold PBE-family endpoint observations."""
 
 import math
+import re
 from typing import Any
 
 from generativeqc_compiler.common.evidence import block_error, canonical_hash
 from generativeqc_compiler.common.performance import assess_comparison
+
+if not __debug__:
+    raise RuntimeError("cold evidence validation requires Python without -O/-OO")
 
 
 def finite_number(value: Any) -> float:
@@ -12,11 +16,133 @@ def finite_number(value: Any) -> float:
     return float(value)
 
 
+def precision_work(worker: dict[str, Any]) -> dict[str, Any]:
+    """Validate executed full-FP64 single-solve work, retaining final audits."""
+    precision = worker["precision"]
+    assert precision["requested_mode"] == "fp64"
+    assert (
+        type(precision["effective_bits"]) is int and precision["effective_bits"] == 64
+    )
+    assert precision["strict_refinement_applied"] is False
+    assert precision["complete"] is True
+    assert precision["operator_inventory_complete"] is True
+    assert precision["operator_work_counters_valid"] is True
+    for key in (
+        "refinement_iterations",
+        "mixed_stage_fock_builds",
+        "execution_retries",
+        "conversion_count",
+        "fallback_count",
+    ):
+        assert type(precision[key]) is int and precision[key] == 0
+    for key in (
+        "strict_stage_fock_builds",
+        "post_scf_fock_builds",
+        "final_residual_audits",
+    ):
+        assert type(precision[key]) is int and precision[key] >= 0
+    assert precision["strict_stage_fock_builds"] == worker["iterations"]
+    assert precision["final_residual_audits"] > 0
+    assert (
+        precision["strict_stage_fock_builds"] + precision["post_scf_fock_builds"]
+        == worker["fock_builds"]
+    )
+    state = precision["returned_state_identity"]
+    assert isinstance(state, str) and re.fullmatch(
+        r"cuda-ks:[1-9]\d*:[1-9]\d*:[1-9]\d*", state
+    )
+    solve = state.rsplit(":", 1)[0]
+    events = precision["scf_fock_timeline"]
+    counts = {"strict_fock": 0, "post_scf_fock": 0, "final_audit": 0}
+    semantic_events = []
+    for sequence, event in enumerate(events):
+        assert type(event["sequence"]) is int and event["sequence"] == sequence
+        assert type(event["count"]) is int and event["count"] == 1
+        assert (
+            type(event["iteration"]) is int
+            and 1 <= event["iteration"] <= worker["iterations"]
+        )
+        assert isinstance(event["state"], str) and re.fullmatch(
+            r"cuda-ks:[1-9]\d*:[1-9]\d*:[1-9]\d*", event["state"]
+        )
+        assert event["state"].rsplit(":", 1)[0] == solve
+        kind = event["kind"]
+        assert kind in counts
+        counts[kind] += 1
+        assert event["phase"] == ("scf" if kind == "strict_fock" else "finalization")
+        if kind == "strict_fock":
+            assert event["iteration"] == counts[kind]
+        elif kind == "final_audit":
+            assert event["state"] == state
+        semantic_events.append({k: v for k, v in event.items() if k != "state"})
+    assert counts == {
+        "strict_fock": precision["strict_stage_fock_builds"],
+        "post_scf_fock": precision["post_scf_fock_builds"],
+        "final_audit": precision["final_residual_audits"],
+    }
+    operators = precision["operators"]
+    assert operators
+    for operator in operators:
+        assert type(operator["count"]) is int and operator["count"] > 0
+        assert operator["arithmetic_mode"] == "strict"
+        assert all(
+            operator[k] == "fp64"
+            for k in ("storage", "compute", "accumulation", "reduction")
+        )
+        assert isinstance(operator["name"], str) and not operator["name"].startswith(
+            "unknown:"
+        )
+    assert {"coulomb_j", "exchange_k", "xc"} <= {x["name"] for x in operators}
+    jk = worker["native_ks_diagnostic"]["coulomb_exchange_work"]
+    for name, key in (
+        ("coulomb_j", "coulomb_applications"),
+        ("exchange_k", "exchange_applications"),
+    ):
+        assert sum(x["count"] for x in operators if x["name"] == name) == jk[key]
+    # Owner/state identifiers differ in fresh processes; execution work must not.
+    return {
+        "events": semantic_events,
+        "operators": operators,
+        "strict_stage_fock_builds": precision["strict_stage_fock_builds"],
+        "post_scf_fock_builds": precision["post_scf_fock_builds"],
+        "final_residual_audits": precision["final_residual_audits"],
+    }
+
+
+def initial_guess_work(worker: dict[str, Any]) -> dict[str, Any] | None:
+    """Separate a newly computed native cold guess from a retained density."""
+    assert worker["restart_origin"] == "cold"
+    used = worker["native_ks_diagnostic"]["initial_density_used"]
+    assert type(used) is bool
+    guess = worker["initial_guess"]
+    if guess is None:
+        assert used is False
+        return None
+    assert used is True
+    assert guess["kind"] in ("minao", "huckel") and guess["outcome"] == "used"
+    assert guess["work_counters_complete"] is True
+    assert type(guess["target_attempts"]) is int and guess["target_attempts"] == 1
+    for key in ("discarded_target_iterations", "discarded_target_fock_builds"):
+        assert type(guess[key]) is int and guess[key] == 0
+    for key in (
+        "preliminary_iterations",
+        "preliminary_fock_builds",
+        "preparation_numeric_capacity",
+    ):
+        assert type(guess[key]) is int and guess[key] >= 0
+    assert finite_number(guess["preparation_seconds"]) >= 0
+    return {k: v for k, v in guess.items() if k != "preparation_seconds"}
+
+
 def verify_observation(
     row: dict[str, Any], reference: dict[str, Any], manifest: dict[str, Any]
 ) -> None:
     """Check actual process/result boundaries, independent vectors and work."""
-    assert row["exit_code"] == 0 and row["timeout"] is False
+    assert type(row["exit_code"]) is int and row["exit_code"] == 0
+    assert row["timeout"] is False
+    assert type(row["geometry"]) is int and row["geometry"] in (0, 1)
+    assert row["selection"] in ("baseline", "candidate")
+    assert row["workload"] == "energy-plus-force"
     assert row["synchronized"] is True
     assert (
         not row.get("reader_error")
@@ -77,10 +203,14 @@ def verify_observation(
     for key in ("iterations", "fock_builds"):
         assert type(worker[key]) is int and worker[key] > 0
     ks = worker["native_ks_diagnostic"]
+    initial_guess_work(worker)
+    assert type(ks["fock_builds"]) is int and ks["fock_builds"] == worker["fock_builds"]
     assert ks["tile_points"] == 256 and ks["grid_points"] == points
+    assert worker["iterations"] >= 2
     assert len(ks["history"]) == worker["iterations"]
     for index, step in enumerate(ks["history"]):
         assert type(step["iteration"]) is int and step["iteration"] == index + 1
+        assert step.get("operator_scope", "full-target") == "full-target"
         for key in ("nuclear", "one_electron", "hartree", "xc"):
             finite_number(step["components"][key])
         for key in ("density_change_max", "physical_residual_max"):
@@ -92,10 +222,23 @@ def verify_observation(
         assert step["electrons"]
         assert all(finite_number(x) >= 0 for x in step["electrons"])
         assert type(step["occupation_stabilized"]) is bool
+    assert ks["history"][0]["energy_change"] is None
+    assert (
+        finite_number(ks["history"][-1]["energy_change"])
+        < reference["protocol"]["energy_tolerance"]
+    )
+    for key in ("density_change_max", "physical_residual_max"):
+        assert 0 <= finite_number(ks[key]) < reference["protocol"]["density_tolerance"]
+        assert (
+            0
+            <= finite_number(ks["history"][-1][key])
+            < reference["protocol"]["density_tolerance"]
+        )
     jk = ks["coulomb_exchange_work"]
     assert jk["complete"] is True
     for key in ("coulomb_applications", "exchange_applications"):
         assert type(jk[key]) is int and jk[key] > 0
+    precision_work(worker)
     raw = worker["native_force_work_raw"]
     assert type(raw["grid_tile_points_requested"]) is int
     assert raw["grid_tile_points_requested"] == 256
@@ -145,6 +288,7 @@ def verify_pairs(
     assert record["schema"] == "generativeqc.pbe0-xc-point-family-cold.v1"
     assert record["stage"] == "complete"
     assert record["protocol"] == reference["protocol"]
+    assert record["expected_native_identity"] == record["manifest"]["native_identity"]
     repeats = record["repeats"]
     assert type(repeats) is int
     assert type(record["feasibility"]) is bool
@@ -188,6 +332,8 @@ def verify_pairs(
             assert left["native_build"] == right["native_build"]
             for key in ("iterations", "fock_builds"):
                 assert left[key] == right[key]
+            assert precision_work(left) == precision_work(right)
+            assert initial_guess_work(left) == initial_guess_work(right)
             assert (
                 left["native_ks_diagnostic"]["coulomb_exchange_work"]
                 == right["native_ks_diagnostic"]["coulomb_exchange_work"]

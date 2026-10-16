@@ -244,11 +244,18 @@ The explicit `--sdk-source`, loaded library, complete native identity, worker,
 consumer, basis and independent reference are frozen for the campaign. The
 collector may be newer than the SDK; its independent consumer is loaded from
 the collector tree, while production modules come from the frozen SDK.
+Output must be a new file; existing files and input aliases are rejected before
+collection. Collector and consumer refuse Python's `-O`/`-OO` modes so required
+validation cannot be optimized away. Journal errors preserve the primary failure.
 
 The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
 `1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
 full FP64 single-stage PBE0 histories, observed J/K work and equal semantic work
-between arms. Unknown J/K work is incomplete evidence. Five complete pairs per
+between arms. Actual precision, operator timeline and cold restart provenance
+are checked. A newly generated native MINAO/Hückel density is a supported cold
+guess; `initial_density_used` alone does not identify warm replay. Retained,
+retried or provisional solves are rejected. Unknown J/K work is incomplete
+evidence. Five complete pairs per
 geometry are required; `--feasibility --repeats 1` only audits readiness and
 cannot establish cold profitability. Both geometries start fresh owners; a
 fresh solve at moved coordinates is distinct from the retained-owner moved

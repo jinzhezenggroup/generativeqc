@@ -21,7 +21,10 @@ import threading
 import uuid
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, TextIO
+
+if not __debug__:
+    raise RuntimeError("cold evidence collection requires Python without -O/-OO")
 
 ENDPOINT = "PBE_COLD_ENDPOINT="
 RESULT = "PBE_COLD_RESULT="
@@ -125,8 +128,12 @@ def observe_process(
                 if row[key] is not None:
                     row["duplicate_" + key] = True
                 try:
-                    row[key] = json.loads(line.removeprefix(prefix))
-                except ValueError:
+                    payload = json.loads(line.removeprefix(prefix))
+                    # Reject nonfinite/overflowed JSON before it can poison a
+                    # failed-observation journal with unserializable values.
+                    json.dumps(payload, allow_nan=False)
+                    row[key] = payload
+                except (ValueError, RecursionError):
                     row["parse_error"] = "malformed " + key
                     failed = True
                     break
@@ -249,6 +256,7 @@ def worker(args: argparse.Namespace) -> dict[str, Any]:
             density_tolerance=1e-10,
             screening_tolerance=1e-12,
             max_iterations=100,
+            precision="fp64",
         )
         construct_end = perf_counter()
         owner = calculator.prepare_batch(
@@ -312,6 +320,9 @@ def worker(args: argparse.Namespace) -> dict[str, Any]:
             "warm_start_fallback": item.warm_start_fallback,
             "iterations": item.iterations,
             "fock_builds": item.fock_builds,
+            "precision": item.precision,
+            "initial_guess": item.initial_guess,
+            "restart_origin": item.restart_origin,
             "native_ks_diagnostic": item.ks_diagnostic.to_payload(),
             "native_scf_ao_work": read_ao_work(owner),
             "native_force_work_raw": raw,
@@ -387,9 +398,6 @@ def main() -> None:
             "output and five pairs (or one explicit feasibility pair) required"
         )
     sys.path[:0] = [str(args.sdk_source / "python"), str(args.sdk_source)]
-    from generativeqc_compiler.common.evidence import canonical_hash
-    from generativeqc_compiler.common.performance import assess_comparison
-
     from benchmarks._retention import raw_output_path
 
     # The collector/consumer version may be newer than a frozen SDK with an
@@ -398,6 +406,35 @@ def main() -> None:
     consumer = load_consumer()
 
     output = raw_output_path(str(args.output))
+    output = raw_output_path(
+        output, repository_root=Path(__file__).resolve().parents[1]
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Windows' exclusive CRT open can follow a dangling symlink and create its
+    # target. Reject that existing directory entry before reserving a new file.
+    if output.is_symlink():
+        parser.error("output must be new, including symlinks")
+    try:
+        journal = output.open("x+", encoding="utf-8")
+    except FileExistsError:
+        parser.error("output must be new, including symlinks")
+    try:
+        collect(args, journal, consumer)
+    except BaseException as error:
+        try:
+            journal.close()
+        except Exception as close_error:
+            raise error from close_error
+        raise
+    else:
+        journal.close()
+
+
+def collect(args: argparse.Namespace, output: TextIO, consumer: Any) -> None:
+    """Keep campaign updates on one exclusively reserved evidence file."""
+    from generativeqc_compiler.common.evidence import canonical_hash
+    from generativeqc_compiler.common.performance import assess_comparison
+
     reference = json.loads(args.reference.read_text(encoding="utf-8"))
     source_head = subprocess.check_output(
         ["git", "-C", str(args.sdk_source), "rev-parse", "HEAD"], text=True
@@ -450,10 +487,22 @@ def main() -> None:
     }
 
     def save() -> None:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(
-            json.dumps(record, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+        serialized = json.dumps(record, indent=2, allow_nan=False) + "\n"
+        output.seek(0)
+        output.write(serialized)
+        output.truncate()
+        output.flush()
+
+    def retain_failure(error: Exception) -> None:
+        record.update(
+            stage="incomplete",
+            failure_type=type(error).__name__,
+            failure=str(error)[:1000],
         )
+        try:
+            save()
+        except Exception as journal_error:
+            raise error from journal_error
 
     save()
     for geometry in (0, 1):
@@ -499,9 +548,8 @@ def main() -> None:
                 record["observations"].append(row)
                 try:
                     consumer.verify_observation(row, reference, manifest)
-                except (AssertionError, KeyError, TypeError, ValueError) as error:
-                    record.update(stage="incomplete", failure=str(error)[:1000])
-                    save()
+                except Exception as error:
+                    retain_failure(error)
                     raise
                 save()
     record["assessments"] = {
@@ -536,9 +584,8 @@ def main() -> None:
             text=True,
         ).strip()
         consumer.verify_pairs(record, reference, allow_feasibility=args.feasibility)
-    except (AssertionError, KeyError, TypeError, ValueError) as error:
-        record.update(stage="incomplete", failure=str(error)[:1000])
-        save()
+    except Exception as error:
+        retain_failure(error)
         raise
     record["qualification"] = (
         "numerical-work-feasibility" if args.feasibility else "numerical-work-complete"

@@ -42,5 +42,22 @@ and independent consumer negative cases. Immutable published vectors appear
 only in explicitly synthetic parser fixtures, never as new cold observations.
 No GPU run or performance promotion is implied by this tooling.
 
+## Review correction
+
+The initial host tests did not cover an existing output file, Python optimization
+or actual precision/origin metadata. Review controls reproduced truncation of
+existing evidence/input aliases and acceptance of invalid evidence under `-O`.
+Reserve a new output exclusively, keep its descriptor for journal updates and
+preserve the primary error when journal writing or closing also fails. Explicitly
+reject optimized Python in both collector and consumer.
+
+Retain and validate native precision, operator timeline, initial guess and restart
+origin. A fresh MINAO/Hückel guess can legitimately set `initial_density_used`;
+requiring that flag to be false would change the intended default cold protocol.
+Require a cold origin with complete guess work and no discarded target attempt,
+retry, refinement or provisional operator. Compare actual Fock/timeline/operator
+counts, including finalization work. Synthetic fixtures remain explicitly
+synthetic and do not relabel the retained vector population as a cold measurement.
+
 Refs #2072 and PR #2250; current usage is described in
 `docs/developer/xc_native_cuda.md`.
