@@ -1,76 +1,52 @@
 {
   "archives": [],
   "decision": {
-    "reason": "Both generic compiler changes pass independent scientific, resource and complete-endpoint gates; scoped performance observations and all negative trials are explicit. Not a formal global performance promotion.",
+    "reason": "Independent arrays and scoped exact Direct endpoint qualification; all three source revisions explicit. Not universal interleaved performance promotion.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 47272,
+      "bytes": 47844,
       "path": "numeric-arrays.npy.xz",
       "role": "samples",
-      "sha256": "352ceb7348b1bedab381b435719360f560152a91967aafce8e5d1ee58da0453d"
+      "sha256": "70ca4ade73b709a149bfc99a1e7a91e8fad4dc17e7dbdb4dab6dde38c25e0d00"
     },
     {
-      "bytes": 10592,
+      "bytes": 10436,
       "path": "numeric-index.json.xz",
       "role": "summary",
-      "sha256": "98168f208f1a539c3761dd67612f2b80c39856ba9df8355acf0accf8278d99bc"
+      "sha256": "2eeb604ddf281d59af73c0b89e11df7636ac841473429d8485a2b6b88000b86c"
     },
     {
-      "bytes": 6848,
-      "path": "endpoint-summary.json.xz",
-      "role": "summary",
-      "sha256": "d8a87dd883d475693420694520531923c929e658ef8b5c9c2c88e6cf769b2e46"
-    },
-    {
-      "bytes": 744,
-      "path": "work-counts.json.xz",
-      "role": "summary",
-      "sha256": "af39eee123833fad329562134e831c3d543224e2d9b822fe20b61dd8cb605b6f"
-    },
-    {
-      "bytes": 4440,
-      "path": "provenance.json.xz",
-      "role": "summary",
-      "sha256": "ff19867077f204c3bed7436585deff7d5c9255e018cb78ce0db157a32bfda415"
-    },
-    {
-      "bytes": 660,
-      "path": "hardware-counter-status.json.xz",
-      "role": "summary",
-      "sha256": "08a138efd7737b1237a343dee709486c8c11d6498ab692c0140ab08c53432e27"
-    },
-    {
-      "bytes": 3624,
+      "bytes": 3692,
       "path": "profile-summary.json.xz",
       "role": "summary",
-      "sha256": "61a705c8c8a9772d37f46f832672c04f647f32fb9a0dfce3af06bf0760e5c9c8"
+      "sha256": "78910b986fa119368dd9f23be5f9a82cb8c85bd1c4abf737ba8c59928d338955"
     },
     {
-      "bytes": 4072,
+      "bytes": 3828,
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "sha256": "a1e2cbc07a43fc40cac0b54df43138697d40a4b9e49ab84573de96fe5bceabec"
+    },
+    {
+      "bytes": 3676,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "7bb93afe674c8a296ee2c0032c7854f120e78e64a27013bb9678025aa3b8088e"
+      "sha256": "e2aa7f9e43484d18b67d185649dc60e11f6c3996dc0610227e060b902f49ecbb"
     },
     {
-      "bytes": 1096,
-      "path": "supplemental-original-baseline-r2scan-48.json.xz",
+      "bytes": 7548,
+      "path": "endpoint-summary.json.xz",
       "role": "summary",
-      "sha256": "b2312fc06f8b7e5939ddef011be5158b99faaac6946d7f72f090c1199a2135e2"
+      "sha256": "c259a2fa029b3452ea0ddff60a004c4e761c7564bc8622a6a414f30d6af05583"
     },
     {
-      "bytes": 1055,
-      "path": "build.sh",
-      "role": "reproduction",
-      "sha256": "bec51fa29d594654e5f08f79ccefca81acc3a29f4f37b8c3f017f5bd6f9dd8e7"
-    },
-    {
-      "bytes": 1631,
+      "bytes": 1717,
       "path": "run-gpu.sh.gz",
       "role": "reproduction",
-      "sha256": "4cc8cc48281ae29f39f76ee4b1137bba465246ae06d78a4858ef8a8088d615fd"
+      "sha256": "66377a8de9e2a39061bedba66d87a93cb27cffa80f1c351bee4806cd36ef1d14"
     },
     {
       "bytes": 503,
@@ -79,46 +55,16 @@
       "sha256": "781adc8c720b9a28cca12a236078be0aa7888cdbe3c4797ce5172401b4d46a05"
     },
     {
-      "bytes": 274,
-      "path": "python-n4.sh.gz",
-      "role": "reproduction",
-      "sha256": "3c809c81fba8e33959085b151c1cb9586881f57ce69b8a72ead4dd0d9869e359"
-    },
-    {
-      "bytes": 324,
-      "path": "python-n1-n5.sh.gz",
-      "role": "reproduction",
-      "sha256": "7e73b27afbb74e5ced09085221d42caa5c58d6c4b2b0fc2f9c2cdecf9a978d99"
-    },
-    {
-      "bytes": 1938,
-      "path": "count-spatial.py.gz",
-      "role": "reproduction",
-      "sha256": "8e96ca7de15acf9102ad0663e1bae326392cf8f239e0b4ab765faa50f7dd0685"
-    },
-    {
-      "bytes": 773,
-      "path": "count-contraction.cpp.gz",
-      "role": "reproduction",
-      "sha256": "1f0cca570f238f609ab80019fe7785789f2031480ebe7c58cc7923ff085cf0af"
-    },
-    {
-      "bytes": 2657,
-      "path": "rejected-order6-cse.patch.gz",
-      "role": "source-patch",
-      "sha256": "fce45b0781db284b1b6392b2b1cac7a28553602082a43c10a56ee0429032fa94"
-    },
-    {
       "bytes": 850,
       "path": "def2-svp.json.gz",
       "role": "reproduction",
       "sha256": "cc379e1c76528fb956979ffb9848b24694562bdd56a5ba9e1df33e81d3acf828"
     },
     {
-      "bytes": 6337,
-      "path": "README.md",
-      "role": "summary",
-      "sha256": "7a36147f80f64e8a4d3f065d884831ca2984b269d830bf5eefc8513010e8c3a3"
+      "bytes": 1055,
+      "path": "build.sh",
+      "role": "reproduction",
+      "sha256": "bec51fa29d594654e5f08f79ccefca81acc3a29f4f37b8c3f017f5bd6f9dd8e7"
     },
     {
       "bytes": 2433,
@@ -127,10 +73,10 @@
       "sha256": "e8dc2063e41e7646a24d54e691c7e824891f9a89c6e7ad4bff84f4fab2b41097"
     },
     {
-      "bytes": 1624,
-      "path": "qualification-receipts.txt.xz",
+      "bytes": 7449,
+      "path": "README.md",
       "role": "summary",
-      "sha256": "04ac4f79ae8304ef5496a0875329e852cda582ab1505a97ff6987449e80ef479"
+      "sha256": "8302f5052e665f3e8b17e9e4a09162a9832a2d8c6d07ee6b29c7de1716a5abed"
     }
   ],
   "reproduction": {
@@ -145,7 +91,7 @@
       "--time=00:35:00",
       "bash",
       "run-gpu.sh",
-      "candidate",
+      "incumbent",
       "r2scan-3c",
       "96",
       "endpoint"
@@ -154,6 +100,6 @@
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "028249106afe0d2c4ed4431c3f678cc5b996d692"
+    "revision": "4bdffe3ceaa57e7a201f76a5687ad2d1933e6f1e"
   }
 }
