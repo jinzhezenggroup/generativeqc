@@ -6,6 +6,30 @@ methods. This document records the top-level dependency direction protected by
 
 ## Shared native owners
 
+### Compiled named KS programs
+
+`src/methods/named_ks_catalog.*` owns the build-time MethodIR catalog once in the
+native library. The native CLI borrows its listing and component/exchange arrays;
+it no longer instantiates a separate CLI-only table. Python `native_ks_options`
+queries the already-selected library for a matching complete MethodIR identity
+and numerical domain, preserving caller grid, tiling, schedule and precision
+controls. Components and spin-resolved Fock coefficients come from the existing
+compiler, not a second native scientific algebra implementation.
+
+A missing optional query retains explicit old-library metadata lowering. A
+successful zero selection declares a custom/noncatalog or unrepresented-domain
+compiler route; it does not replace a same-name custom model with a catalog
+default. Invalid arguments, native refusal and inconsistent publication never
+retry compiler lowering or discover another library. Selected pointers borrow
+immutable library storage until ordinary native preparation copies them.
+
+Catalog backend flags describe representability only. Existing prepared owners
+still admit basis, provider, backend, precision and requested properties. This
+does not qualify every catalog entry, retire custom MethodIR compilation or
+establish complete method/basis/CLI parity.
+
+### Method-neutral infrastructure
+
 The following directories are method-neutral owners:
 
 - `src/core/`

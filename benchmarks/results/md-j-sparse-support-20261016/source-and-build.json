@@ -1,0 +1,56 @@
+{
+  "baseline_commit": "b84ea05eb230addcc8599aab913a5c13f997dbe7",
+  "master_observed": "2881f8346d1236d5e0b168504623bd4eb334de06",
+  "candidate_arm": "candidate-current",
+  "candidate_files": {
+    "src/scf/cuda/direct_jk.cpp": "cd2d120f8dfe6a580c36096999f02391765e95a5ac1aaf8ab6f8214b2740624d",
+    "src/scf/cuda/direct_md_j.cu": "c724660f1e973f7d6cc9a2ab2906c693958b1f6025b2d0a154373f6e6f3cba60",
+    "src/scf/cuda/direct_md_j.hpp": "2ae659762128c3664119dcca51325bbd65da4bcfd9c7e1511a3e438dfa9e0bc5",
+    "src/scf/cuda/direct_md_jk.cu": "3bf1369c4920fe3fede3d3a98251388c3b3320168bb8eb4613576c3f87faf21b",
+    "src/scf/md_transform_layout.hpp": "e0e297c325261d05cb1a46e1ea7bdf8caab96c1cbe13ffecfec780e96a96e4bb",
+    "tests/python/test_md_j_resources.py": "9058e299252673c0350bbaf947b68707b3468daf10ced38ed6f5304fa4d6fff0",
+    "tests/python/test_md_transform_layout.py": "a3f9418d69ba4b52a21ce5c1cc89abb20b4ad32ae86756e942172c0ad81e72db",
+    "tools/check_scf_structure.py": "c7c7d25542b2bbc13622ed55899caf61921c73261642b1443fc47fad5289cdca"
+  },
+  "libraries": {
+    "baseline-current": {
+      "libgenerativeqc.so.0.1.0": "eb3570c74d80f78c211f7844ecfc18ed2463b3d0a049f38617f6a71e598d50dc",
+      "libgenerativeqc_stationary_pbe0_rks_spd.so": "fcbb9f369d5e26e31ff5c565d188fc81303850ffc8de5ba3ee7eedd553e572ef",
+      "libgenerativeqc_stationary_r2scan_rks.so": "777f0d2d32bc9cb6ea4b8c9deb9cd314f6b818a6bb40366b68c5b8e4562f3663",
+      "libgenerativeqc_stationary_pbe0_rks.so": "40d8433200e8abcc2bcfcdb621b8d50e284953c2253da4b2e2c53f2ab5abb68e",
+      "libgenerativeqc_stationary_r2scan_rks_spd.so": "f9e9106f04dbd2f03d371383066c729cb49e797d715d39882ada28960fc68f5b",
+      "generativeqc_stationary_r2scan_rks.json": "44744ecdc53d67ef00fe13b20c635ba276ea6cd77c7937f0ad92c8312bbea81f",
+      "generativeqc_stationary_pbe0_rks.json": "33cdaff24fecb8af14bd7d2ec3ccdbf1cba2fe4110ce38ca366836a0de53c509",
+      "generativeqc_stationary_r2scan_rks_spd.json": "f8bc2b1e72a36ea555e9110ca15d9f72f29d1463f0755b050fdf711bb47c6720",
+      "generativeqc_stationary_pbe0_rks_spd.json": "c85c58fedd099b5fdbfc1c5adb3e892a1768b391a10d2298b8ee3c7bf749e088"
+    },
+    "candidate-current": {
+      "libgenerativeqc.so.0.1.0": "4949afdcaa8b41893db1032f7d7d689777e9031c10b150b1ab7c9ee6e642414d",
+      "libgenerativeqc_stationary_pbe0_rks_spd.so": "fcbb9f369d5e26e31ff5c565d188fc81303850ffc8de5ba3ee7eedd553e572ef",
+      "libgenerativeqc_stationary_r2scan_rks.so": "777f0d2d32bc9cb6ea4b8c9deb9cd314f6b818a6bb40366b68c5b8e4562f3663",
+      "libgenerativeqc_stationary_pbe0_rks.so": "40d8433200e8abcc2bcfcdb621b8d50e284953c2253da4b2e2c53f2ab5abb68e",
+      "libgenerativeqc_stationary_r2scan_rks_spd.so": "f9e9106f04dbd2f03d371383066c729cb49e797d715d39882ada28960fc68f5b",
+      "generativeqc_stationary_r2scan_rks.json": "44744ecdc53d67ef00fe13b20c635ba276ea6cd77c7937f0ad92c8312bbea81f",
+      "generativeqc_stationary_pbe0_rks.json": "33cdaff24fecb8af14bd7d2ec3ccdbf1cba2fe4110ce38ca366836a0de53c509",
+      "generativeqc_stationary_r2scan_rks_spd.json": "f8bc2b1e72a36ea555e9110ca15d9f72f29d1463f0755b050fdf711bb47c6720",
+      "generativeqc_stationary_pbe0_rks_spd.json": "c85c58fedd099b5fdbfc1c5adb3e892a1768b391a10d2298b8ee3c7bf749e088"
+    }
+  },
+  "compiler_cache": "ccache 4.5.1",
+  "cache_base_directory": "each source checkout root",
+  "build": {
+    "build_type": "Release",
+    "cuda_architecture": "120",
+    "cuda_toolkit": "12.9.1 / nvcc 12.9.86",
+    "host_compiler": "GNU 11.4.0",
+    "AOT_shells": true,
+    "native_stationary_cuda": true,
+    "stationary_force_AOT": true,
+    "stationary_profiles": [
+      "r2scan_rks",
+      "pbe0_rks"
+    ],
+    "stationary_CPU_AOT": false
+  },
+  "provenance_scope": "One-off evidence, not a permanent required-CI source-fingerprint test."
+}

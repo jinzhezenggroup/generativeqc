@@ -829,6 +829,9 @@ def test_cost_ledger_does_not_count_operator_time_as_orthogonalization(
     operator = _synthetic_operator(size=6)
     apply = operator.apply
     norm = krylov._HostKrylovEngine.norm
+    # The injected Python clock belongs to this explicit vector-engine contract.
+    # Native GMRES uses its own monotonic clock, not a Python timer override.
+    operator._krylov_engine = krylov._HostKrylovEngine(operator.dimension)
 
     def action(value: typing.Any) -> typing.Any:
         clock[0] += 1.0

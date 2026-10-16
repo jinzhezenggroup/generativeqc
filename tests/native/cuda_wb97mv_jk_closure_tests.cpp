@@ -50,9 +50,20 @@ int main() {
     constexpr std::array<integrals::CudaOneElectronShell, 1> shells{{{0, 3, 0, 2, 0, 10}}};
     CudaWb97mvJkOptions options;
     std::size_t bytes{};
-    require(cuda_wb97mv_jk_workspace(shape, shells, options, bytes) == cudaSuccess &&
+    auto streamed = options;
+    streamed.max_resident_integral_bytes = 0;
+    require(cuda_wb97mv_jk_workspace(shape, shells, streamed, bytes) == cudaSuccess &&
                 bytes > 5'000'000 && bytes < 6'000'000,
             "complete nameless through-f closure failed admission");
+    const auto minimum = bytes;
+    require(cuda_wb97mv_jk_workspace(shape, shells, options, bytes) == cudaSuccess &&
+                bytes > minimum && bytes - minimum <= options.max_resident_integral_bytes,
+            "resident storage exceeded its explicit cap");
+    auto budgeted = options;
+    budgeted.max_workspace_bytes = minimum;
+    require(
+        cuda_wb97mv_jk_workspace(shape, shells, budgeted, bytes) == cudaSuccess && bytes == minimum,
+        "optional residency changed minimum arena admission");
     for (unsigned kind = 0; kind < 10; ++kind) {
       selected = complete;
       if (kind == 0) selected.pop_back();

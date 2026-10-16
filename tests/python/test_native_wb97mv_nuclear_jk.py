@@ -21,20 +21,21 @@ import pytest
 PARTS = ("exact", "primary", "correction", "coulomb", "short", "long")
 
 
-def _fixture(spins: int = 2, spherical: bool = False) -> dict:
+def _fixture(spins: int = 2, spherical: bool = False, angular: int = 1) -> dict:
     random = np.random.default_rng(1729)
     shells = [
         (0, 0, [[0.8, 0.7], [0.23, -0.15], [0.09, 0.3]]),
-        (1, 1, [[0.9, 0.6], [0.31, 0.25]]),
+        (1, angular, [[0.9, 0.6], [0.31, 0.25]]),
     ]
-    panels = random.normal(scale=0.17, size=(2, spins, 4, 4))
+    nao = 1 + (2 * angular + 1 if spherical else (angular + 1) * (angular + 2) // 2)
+    panels = random.normal(scale=0.17, size=(2, spins, nao, nao))
     panels += panels.transpose(0, 1, 3, 2)
     return {
         "centers": np.array([[0.1, -0.2, 0.3], [1.2, 0.7, -0.4]]),
         "numbers": np.array([8, 6]),
         "shells": shells,
         "spherical": spherical,
-        "nao": 4,
+        "nao": nao,
         "spins": spins,
         "panels": panels,
         "direction": random.normal(scale=0.15, size=(2, 3)),
@@ -68,7 +69,13 @@ def _write_fixture(
 
 
 def _native(
-    fixture: dict, path: Path, *, part: str = "exact", tile: int = 64, reject: int = 0
+    fixture: dict,
+    path: Path,
+    *,
+    part: str = "exact",
+    tile: int = 64,
+    reject: int = 0,
+    cache_mode: str = "resident",
 ) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_WB97MV_NUCLEAR_JK_PROBE")
     if not executable:
@@ -78,7 +85,7 @@ def _native(
     result.unlink(missing_ok=True)
     _write_fixture(fixture, source, part=part, tile=tile, reject=reject)
     completed = subprocess.run(
-        [executable, str(source), str(result)],
+        [executable, str(source), str(result), cache_mode],
         capture_output=True,
         text=True,
         check=True,
@@ -186,7 +193,15 @@ def test_native_jk_against_independent_displaced_integrals(
     spins: int, part: str, spherical: bool, tmp_path: Path
 ) -> None:
     fixture = _fixture(spins, spherical)
-    (energy, fock, vectors), receipt = _native(fixture, tmp_path, part=part)
+    values, receipt = _native(fixture, tmp_path, part=part)
+    _qualify(fixture, values, part)
+    assert receipt["groups"] == (32 if part == "exact" else 16)
+    assert 0 < receipt["components"] <= (13122 if part == "exact" else 6561)
+
+
+def _qualify(fixture: dict, values: tuple, part: str) -> None:
+    """Retain the independent libcint value and displacement acceptance gates."""
+    energy, fock, vectors = values
     primal, objective = _oracle(fixture, part)
     expected_energy, expected_fock = primal(fixture["centers"], fixture["panels"][0])
     assert energy == pytest.approx(expected_energy, abs=3e-12, rel=3e-12)
@@ -210,8 +225,47 @@ def test_native_jk_against_independent_displaced_integrals(
     np.testing.assert_allclose(vectors[1], second[1], atol=3e-8, rtol=2e-7)
     np.testing.assert_allclose(first, second, atol=1e-7, rtol=3e-7)
     np.testing.assert_allclose(vectors.sum(axis=1), 0, atol=2e-12, rtol=0)
-    assert receipt["groups"] == (32 if part == "exact" else 16)
-    assert receipt["components"] == (13122 if part == "exact" else 6561)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("spherical", (False, True))
+@pytest.mark.parametrize("cache_mode", ("resident", "streamed", "budgeted"))
+def test_native_jk_residency_and_budget_fallback_against_d_integrals(
+    spins: int, spherical: bool, cache_mode: str, tmp_path: Path
+) -> None:
+    """Exercise larger Cartesian/spherical closure and the exact-budget fallback."""
+    fixture = _fixture(spins, spherical, angular=2)
+    values, receipt = _native(fixture, tmp_path, cache_mode=cache_mode)
+    assert bool(receipt["resident_bytes"]) == (cache_mode == "resident")
+    _qualify(fixture, values, "exact")
+
+
+@pytest.mark.parametrize("spins,spherical", ((1, False), (2, True)))
+def test_native_jk_four_distinct_centers_against_independent_integrals(
+    spins: int, spherical: bool, tmp_path: Path
+) -> None:
+    """Symmetry reuse must permute Cartesian components and all derivative legs."""
+    fixture = _fixture(spins, spherical, angular=2)
+    fixture.update(
+        labels=("O0", "C1", "N2", "H3"),
+        numbers=np.array([8, 6, 7, 1]),
+        centers=np.array(
+            [[0.1, -0.2, 0.3], [1.2, 0.7, -0.4], [-0.3, 1.1, 0.8], [0.7, -0.8, 1.3]]
+        ),
+        shells=[
+            (0, 0, [[0.8, 1.0]]),
+            (1, 1, [[0.7, 1.0]]),
+            (2, 2, [[0.6, 1.0]]),
+            (3, 0, [[0.9, 1.0]]),
+        ],
+        nao=10 if spherical else 11,
+    )
+    random = np.random.default_rng(2718)
+    panels = random.normal(scale=0.17, size=(2, spins, fixture["nao"], fixture["nao"]))
+    fixture["panels"] = panels + panels.transpose(0, 1, 3, 2)
+    fixture["direction"] = random.normal(scale=0.15, size=(4, 3))
+    values, _ = _native(fixture, tmp_path)
+    _qualify(fixture, values, "exact")
 
 
 @pytest.mark.parametrize("spins", (1, 2))

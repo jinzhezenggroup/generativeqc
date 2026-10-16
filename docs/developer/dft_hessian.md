@@ -541,6 +541,30 @@ and HVP jointly after finite/symmetry/live-owner gates. Separate primitive,
 projection-term, reduction-term and arena budgets fail before execution; actions
 allocate nothing, execute no Python and perform no CPU numerical contractions.
 
+The native source additionally admits an optional last-direction resident jet
+pool, bounded by `CudaWb97mvJkOptions.max_resident_integral_bytes` (64 MiB by
+default) and the existing arena/aggregate device budgets. Zero disables it;
+insufficient capacity retains the original bounded shell-quartet streaming path.
+All mandatory DF/ECP storage is reserved before this optional pool. Reuse requires
+an authenticated immutable basis lease and an exact device comparison of every
+right-direction coordinate. Pointer equality is insufficient: jets include the
+right-direction HVP. Current D/dD are always reprojected, so frozen-density RHS
+and relaxed contractions can share jets without sharing density-dependent
+results. The pool stores one source per ERI eightfold shell-symmetry class;
+projection permutes both Cartesian component strides and gradient/HVP center
+slots back to each ordered group. Streaming retains the fully ordered source.
+Work admission remains conservative against the ordered upper bound, while
+receipts count the actually selected builds. Reprepare or a failed cache rebuild
+invalidates reuse. One CTA performs
+the ordered incidence reductions with barriers; physical-atom and energy outputs
+are disjoint, with no floating-point atomics or changed public reduction order.
+Symmetry-related primitive accumulation can differ at FP64 roundoff and remains
+subject to the same independent scientific acceptance gates.
+CLI work receipts expose `exact_integral_source_builds`,
+`exact_resident_integral_hits` and `exact_resident_integral_bytes` alongside actual
+primitive-component evaluations. Residency is not a multi-RHS solver or a
+guarantee of endpoint speedup.
+
 `src/dft/cuda_ks_wb97mv_nuclear_jk.hpp` binds actual accepted D and normalized
 basis/topology from live KS grid/Fock owners. It shares complete WB97M-V model
 admission with the induced-Fock provider. **DF owners admit only the exact LR
@@ -550,7 +574,8 @@ components must already be linked. Build-time closure can be selected with
 `tools/complete_hessian_aot_inventory.py --families eri --max-angular <0..3>
 --radials full_range long_range short_range`; generation/admission alone is not
 numerical angular qualification. `tests/python/test_native_wb97mv_nuclear_jk.py`
-qualifies s/p numerical components and actual RKS/UKS Direct/DF owner lifetimes;
+qualifies s/p/d numerical components, resident/streaming/budget fallback parity
+and actual RKS/UKS Direct/DF owner lifetimes;
 injected CUDA-free closure tests additionally check largest through-f storage
 and work admission, not through-f integral numerics.
 

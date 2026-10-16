@@ -185,6 +185,17 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
+CPU HF/KS plans with an already-loaded `generativeqc_resource_basis_shape_v1`
+query obtain public/Cartesian AO, shell, primitive and maximum-angular counts
+from native compact expanded-contraction rows. The AO rule is shared with
+normalized native systems. Count overflow or native refusal never retries
+Python arithmetic; failed queries leave native outputs unchanged. The query
+does not read coordinates or coefficients, allocate scientific arrays, load a
+provider, or qualify an otherwise unsupported method/basis. Missing-symbol,
+library-free and CUDA planning retain explicit portable shape arithmetic.
+Python still owns basis expansion and mathematical provenance in this planner;
+these counts are not complete allocation, provider, lease or RSS authority.
+
 CPU RHF/UHF calculator plans with a discovered
 `generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
 summed fleet retained capacity and maximum serialized workspace from the same

@@ -14,6 +14,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
+    src/api/c_api_response.cpp
     src/api/c_api_df_gradient.cpp
     src/api/c_api_d3.cpp
     src/api/c_api_d4.cpp
@@ -32,6 +33,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_ecp.cpp
     src/api/error.cpp
     src/methods/registry.cpp
+    src/methods/named_ks_catalog.cpp
     src/methods/prepared_execution.cpp)
 endfunction()
 

@@ -132,6 +132,81 @@ inline generativeqc_method_descriptor default_method_descriptor(std::string_view
   return descriptor;
 }
 
+/** @native-contract generativeqc::ResponseResult
+ * @behavior Move-only owner of a completed shared CPU GMRES result, including failures
+ * such as workspace refusal and iteration exhaustion; convergence must be inspected.
+ * @lifetime Owns the C result independently of input callbacks, arrays and contexts.
+ * Borrowed data() views expire on destruction. Copying and move assignment are deleted;
+ * after move construction only destruction is supported on the source.
+ * @errors Construction/query errors throw Error. Destruction/move construction do not throw.
+ * @execution Synchronous CPU controller; this class does not supply molecular equations,
+ * assert symmetry, or establish a complete native Hessian/HVP endpoint.
+ */
+class ResponseResult {
+ public:
+  /** @native-contract generativeqc::ResponseResult::ResponseResult
+   * @behavior Execute the shared CPU GMRES owner and retain its immutable result.
+   * @inputs A complete current-ABI descriptor obeying the C action/options contracts.
+   * @lifetime Borrows inputs only for this call; result arrays are owned by this object.
+   * @errors Throws Error on API/callback failure; nonconvergence is a result, not an exception.
+   * @execution Synchronous CPU work; no Python, compiler, device or execution context required.
+   */
+  explicit ResponseResult(const generativeqc_response_gmres_descriptor_v1& descriptor) {
+    check(generativeqc_response_solve_v1(&descriptor, &handle_));
+  }
+  /** @native-contract generativeqc::ResponseResult::~ResponseResult
+   * @behavior Release owned solve output; a moved-from object is a no-op.
+   * @lifetime Invalidates every borrowed result view; never throws.
+   * @execution Synchronous CPU cleanup without numerical callbacks.
+   */
+  ~ResponseResult() { generativeqc_response_result_destroy(handle_); }
+  /** @native-contract generativeqc::ResponseResult::ResponseResult-copy
+   * @behavior Copy construction is deleted; result handles have one owner.
+   * @errors Copy construction fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult(const ResponseResult&) = delete;
+  /** @native-contract generativeqc::ResponseResult::operator=-copy
+   * @behavior Copy assignment is deleted; result ownership cannot be duplicated.
+   * @errors Copy assignment fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult& operator=(const ResponseResult&) = delete;
+  /** @native-contract generativeqc::ResponseResult::operator=-move
+   * @behavior Move assignment is deleted; transfer ownership by move construction.
+   * @errors Move assignment fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult& operator=(ResponseResult&&) = delete;
+  /** @native-contract generativeqc::ResponseResult::ResponseResult-move
+   * @behavior Transfer the result owner without executing a solve or copying arrays.
+   * @inputs A distinct live or moved-from source wrapper.
+   * @lifetime Destination takes ownership; source becomes null and supports destruction only.
+   * @errors Nonthrowing.
+   * @execution CPU handle transfer; no callbacks, allocations or scientific execution.
+   */
+  ResponseResult(ResponseResult&& other) noexcept
+      : handle_(std::exchange(other.handle_, nullptr)) {}
+  /** @native-contract generativeqc::ResponseResult::data
+   * @behavior Borrow the completed solution, convergence/work and optional trace diagnostics.
+   * @outputs Returns a view value; its arrays remain owned by this result. Inspect converged
+   * and reason independently of successful API completion, including workspace refusal.
+   * @lifetime The result must remain live; copy arrays needed after destruction.
+   * @errors Throws Error for an invalid handle or failed C view query.
+   * @execution Synchronous CPU read without allocation or numerical execution.
+   */
+  generativeqc_response_result_view_v1 data() const {
+    generativeqc_response_result_view_v1 view{};
+    view.struct_size = sizeof(view);
+    view.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_response_result_view_v1_get(handle_, &view));
+    return view;
+  }
+
+ private:
+  generativeqc_response_result* handle_{};
+};
+
 /** Move-only context owner; dependent native objects must be destroyed first. */
 /** @native-contract generativeqc::Context
  * @behavior Move-constructible RAII context owner; copying is deleted.

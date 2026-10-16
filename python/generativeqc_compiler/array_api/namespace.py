@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
-from math import copysign, isfinite
+from math import copysign, isfinite, prod
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
@@ -660,6 +660,36 @@ def roll(
                 axis=position,
             )
     return result
+
+
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
+    """Repeat generic elements with static reshape/broadcast metadata."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError(
+            "repeat scientific arrays require explicit TensorIR index maps"
+        )
+    if type(repeats) is not int:
+        raise TypeError("repeat requires a static integer repetition count")
+    if repeats < 0:
+        raise ValueError("repeat count must be nonnegative")
+    if axis is None:
+        value = reshape(value, (value.size,))
+        position = 0
+    else:
+        position = _axis(axis, value.ndim, "repeat")
+    if repeats == 1:
+        return value
+    shape = value.shape
+    # Collapse the leading and trailing groups so a valid rank-64 input
+    # does not need a rank-65 intermediate. Empty inputs use a harmless
+    # unit trailing group without multiplying possibly huge empty extents.
+    inner = prod(shape[position + 1 :]) if value.size else 1
+    outer = value.size // inner
+    expanded = (outer, 1, inner)
+    repeated = (outer, repeats, inner)
+    output = shape[:position] + (shape[position] * repeats,) + shape[position + 1 :]
+    return reshape(broadcast_to(reshape(value, expanded), repeated), output)
 
 
 def reshape(

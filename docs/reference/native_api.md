@@ -10,7 +10,7 @@ Internal `src/` headers are not public API declarations.
 
 The [complete symbol reference](native_symbols.md) contains stable targets and
 source-owned contracts for every exported C function, every explicitly declared
-public C++ operation, and all eleven public C++ owner/record types. Record fields
+public C++ operation, and all public C++ owner/record types. Record fields
 are described with their owning type. Generated method identifiers are covered
 by the [capability authorities](capabilities.md), rather than a second copied
 support matrix.
@@ -147,6 +147,39 @@ accepted solves. Additional workspace excludes existing retained payload and
 object/provider overhead; telemetry is not a complete physical endpoint receipt.
 See the [response architecture](../developer/response.md#native-cpu-recycle-vectors)
 and each function's [source-owned contract](native_symbols.md).
+
+## Response controller
+
+`generativeqc_response_gmres_workspace_v1` and
+`generativeqc_response_solve_v1` expose the same CPU FP64 restarted GMRES owner
+used by native method consumers. They require no context, Python interpreter,
+compiler or device. The descriptor supplies a synchronous physical linear
+action and an optional, separate linear right-preconditioner callback. These
+callbacks do not define or infer CPHF, CPKS, Lambda or CC equations or symmetry.
+
+The shape-only workspace query validates controls without reading vector or
+callback pointers. Insufficient workspace publishes a diagnostic result without
+dimension-sized solver allocations or callback work. API success means a result
+was published, **not** that the solve converged: inspect `converged`, `reason`
+and the true unpreconditioned residual. The host triangular backsolve rejects
+zero/nonfinite pivots, nonfinite coefficients and nonfinite solution candidates;
+small nonzero pivots alone do not reject a solution. A nonfinite candidate returns
+breakdown with the best finite iterate, without invoking the operator on that
+candidate. The existing absolute Arnoldi/Givens `breakdown_tolerance` checks remain,
+so general operator-scale invariance is not guaranteed. Callback failure propagates
+its status and leaves the result slot null. See the [symbol contracts](native_symbols.md)
+for exact flags, layouts and failure behavior.
+
+`generativeqc_response_result_view_v1_get` borrows immutable solution/history
+arrays and a column-major Arnoldi basis until
+`generativeqc_response_result_destroy`. The basis belongs to the reported best
+iterate; diagnostic collection is opt-in. The move-only C++
+`generativeqc::ResponseResult` wrapper owns the same publication. Inputs and
+callbacks need survive only the synchronous solve, not result inspection.
+Workspace bounds and measured peaks describe solver-owned numeric storage,
+excluding callback/provider allocations and complete-endpoint resource use.
+The [response guide](../developer/response.md#installed-solver-policies) defines
+Python dispatch and the remaining compatibility domains.
 
 ## Native basis projection
 

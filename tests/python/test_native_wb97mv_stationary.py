@@ -36,6 +36,7 @@ def _native(
     benchmark_h2: bool = False,
     benchmark_water: bool = False,
     orbital_angular: int = 0,
+    streamed: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -49,6 +50,7 @@ def _native(
     mode += "-benchmark-h2" if benchmark_h2 else ""
     mode += "-benchmark-water" if benchmark_water else ""
     mode += "-orbd" if orbital_angular == 2 else "-orbf" if orbital_angular == 3 else ""
+    mode += "-streamed" if streamed else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -71,6 +73,22 @@ def _native(
             result.stdout
         )
     return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("fitted", (False, True))
+def test_stationary_resident_and_streamed_hessians_agree(
+    spins: int, fitted: bool
+) -> None:
+    """Optional integral storage must not change the coupled molecular endpoint."""
+    resident = _native(spins, fitted, True, fitted, True)
+    streamed = _native(spins, fitted, True, fitted, True, streamed=True)
+    assert resident["resident_integral_bytes"] > 0
+    assert streamed["resident_integral_bytes"] == 0
+    for field in ("energy", "hvp", "hessian", "response_residual"):
+        np.testing.assert_allclose(
+            resident[field], streamed[field], atol=3e-12, rtol=3e-12
+        )
 
 
 class MolecularEnergy:

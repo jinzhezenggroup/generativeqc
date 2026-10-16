@@ -358,6 +358,7 @@ def native_sample(
         "iterations": result.iterations,
         "executed_backend": result.executed_backend,
         "converged": result.converged,
+        "force_work": (result.resource_diagnostics or {}).get("generated_force"),
         "precision": result.precision,
         "precision_evidence_error": evidence_error,
         "precision_census_scope": "native SCF census; not a gradient instruction census",

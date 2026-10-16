@@ -469,41 +469,6 @@ if(GENERATIVEQC_BUILD_CLI)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
                  src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp
                  src/cli/resources.cpp src/cli/hessian.cpp)
-  set(GENERATIVEQC_CLI_METHOD_HEADER
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_method_catalog.hpp")
-  # Bulk MethodIR provenance hashes these families, including modules the
-  # generator never imports. Import-only depfiles cannot invalidate those rows.
-  file(GLOB_RECURSE _generativeqc_cli_capability_inputs CONFIGURE_DEPENDS
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
-       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json")
-  generativeqc_register_generated_sources(
-    NAME generativeqc_cli_method_codegen
-    TARGET generativeqc_cli
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
-    OUTPUTS "${GENERATIVEQC_CLI_METHOD_HEADER}"
-    DEPENDS
-      ${_generativeqc_cli_capability_inputs}
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/bulk_ks.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/spec.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_work.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_capabilities.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_blacklist.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_libxc_methods.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
-    ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
-    COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
   generativeqc_link_cli_core(generativeqc_cli)
   if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
     target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)

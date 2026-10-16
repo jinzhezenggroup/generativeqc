@@ -1766,6 +1766,168 @@ GENERATIVEQC_API void generativeqc_response_recycle_destroy(generativeqc_respons
  */
 GENERATIVEQC_API const char* generativeqc_status_message(generativeqc_status status);
 
+/** @native-contract generativeqc_response_action_v1
+ * @behavior Apply one caller-owned real-FP64 linear action without assuming symmetry.
+ * @inputs user_data belongs to the caller; input and output have dimension entries and
+ * never alias. Input is read-only; overwrite every output entry.
+ * @outputs SUCCESS promises finite output. The physical operator and optional linear right
+ * preconditioner remain distinct scientific actions; this callback does not infer a transpose.
+ * @lifetime The solver borrows callback/data/vector pointers only for the synchronous call;
+ * retaining a temporary vector pointer is invalid. The caller owns scientific state/leases.
+ * @errors A failing native status aborts without publishing a solve result. Callbacks must
+ * not unwind a foreign-language exception through the C boundary.
+ * @execution Synchronous CPU caller action; its allocations/providers have independent budgets.
+ * @units Response-vector and operator units are declared by the scientific method adapter.
+ */
+typedef generativeqc_status (*generativeqc_response_action_v1)(void* user_data, const double* input,
+                                                               double* output, size_t dimension);
+
+enum {
+  GENERATIVEQC_RESPONSE_COLLECT_HISTORY = 1u,
+  GENERATIVEQC_RESPONSE_COLLECT_BASIS = 2u,
+  GENERATIVEQC_RESPONSE_COLLECT_TIMING = 4u
+};
+
+/** One bounded CPU restarted right-preconditioned GMRES request.
+ * Initialize the complete ABI header and every field. dimension, restart,
+ * max_iterations, max_workspace_bytes, reorthogonalize, true_residual_every and
+ * stagnation_window are positive; rtol is in [0,1), other tolerances are finite
+ * and nonnegative. Only the collection bits declared above are accepted.
+ * rhs is a finite dimension-vector; initial_guess is NULL or the same shape.
+ * apply is required for execution; precondition is an optional linear right
+ * preconditioner, not a second physical operator. Both callbacks overwrite their
+ * output. GMRES accepts only a fresh unpreconditioned physical residual against
+ * max(atol, rtol*norm(rhs)). This does not turn CPHF/CPKS/Lambda/CC into the same
+ * scientific equation or infer a transpose from a nonsymmetric primal action.
+ */
+typedef struct generativeqc_response_gmres_descriptor_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint64_t dimension;
+  const double* rhs;
+  const double* initial_guess;
+  generativeqc_response_action_v1 apply;
+  void* apply_data;
+  generativeqc_response_action_v1 precondition;
+  void* precondition_data;
+  double rtol;
+  double atol;
+  uint64_t restart;
+  uint64_t max_iterations;
+  uint64_t max_workspace_bytes;
+  uint32_t reorthogonalize;
+  uint32_t flags;
+  double breakdown_tolerance;
+  uint64_t true_residual_every;
+  uint64_t stagnation_window;
+  double stagnation_tolerance;
+} generativeqc_response_gmres_descriptor_v1;
+
+enum {
+  GENERATIVEQC_RESPONSE_INITIAL_RESIDUAL = 1,
+  GENERATIVEQC_RESPONSE_CONVERGED = 2,
+  GENERATIVEQC_RESPONSE_WORKSPACE_LIMIT = 3,
+  GENERATIVEQC_RESPONSE_MAX_ITERATIONS = 4,
+  GENERATIVEQC_RESPONSE_BREAKDOWN = 5,
+  GENERATIVEQC_RESPONSE_STAGNATION = 6,
+  GENERATIVEQC_RESPONSE_NONFINITE_INPUT = 7,
+  GENERATIVEQC_RESPONSE_NONFINITE_OPERATOR = 8,
+  GENERATIVEQC_RESPONSE_NONFINITE_PRECONDITIONER = 9
+};
+
+typedef struct generativeqc_response_result generativeqc_response_result;
+
+/** Immutable borrowed response diagnostics; initialize struct_size/abi_version.
+ * Every array belongs to the result handle and expires at destruction. basis is
+ * column-major (dimension, basis_columns), with Arnoldi vectors corresponding
+ * to the published best iterate. Optional arrays are NULL with zero counts when
+ * not collected. Workspace refusal has no dimension-sized solution allocation.
+ * measured_workspace_peak_bytes covers solver-owned numeric arrays only:
+ * input spans, callback/provider allocations, allocator/object overhead and
+ * caller-made publication copies are excluded, not a complete endpoint receipt.
+ */
+typedef struct generativeqc_response_result_view_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  int32_t reason;
+  int32_t converged;
+  uint64_t dimension;
+  const double* solution;
+  uint64_t solution_count;
+  const double* history;
+  uint64_t history_count;
+  const double* basis;
+  uint64_t basis_columns;
+  double residual_norm;
+  double relative_residual;
+  uint64_t iterations;
+  uint64_t restarts;
+  uint64_t operator_actions;
+  uint64_t preconditioner_actions;
+  uint64_t workspace_bytes;
+  uint64_t measured_workspace_peak_bytes;
+  uint64_t workspace_allocation_count;
+  double orthogonalization_seconds;
+  double operator_seconds;
+} generativeqc_response_result_view_v1;
+
+/** @native-contract generativeqc_response_gmres_workspace_v1
+ * @behavior Query the existing shared CPU GMRES owner's conservative numeric workspace.
+ * @inputs A full-size current-ABI request with valid dimension/options, and nonnull output.
+ * Array/callback pointers are ignored and may be NULL; no input vectors are read.
+ * @outputs Writes required bytes on success only, even when the request's budget is smaller.
+ * @lifetime Borrows descriptors synchronously; retains no caller memory or context.
+ * @errors INVALID_ARGUMENT for invalid/overflowing options, ABI_MISMATCH for bad headers.
+ * @execution Allocation-free, callback-free CPU metadata query; no device or compiler work.
+ * @units Workspace and budget are bytes; dimensions and iteration controls are counts.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_response_gmres_workspace_v1(
+    const generativeqc_response_gmres_descriptor_v1* descriptor, uint64_t* output);
+
+/** @native-contract generativeqc_response_solve_v1
+ * @behavior Execute the shared bounded CPU GMRES controller, preserving the physical
+ * operator and optional linear preconditioner supplied by the caller.
+ * @inputs A full-size current-ABI request obeying its array/options/callback contracts and
+ * a nonnull result slot. No execution context or Python/compiler runtime is required.
+ * @outputs Clears the slot after required nonnull checks, then publishes an owning result.
+ * SUCCESS means a valid diagnostic result, not convergence: inspect its converged/reason.
+ * Workspace shortage returns a WORKSPACE_LIMIT result without invoking callbacks or making
+ * dimension-sized allocations. Callback failure aborts without publishing a result.
+ * @lifetime Copies required results; borrows inputs/callbacks only during this call. Destroy
+ * the returned handle with generativeqc_response_result_destroy. Independent solves are
+ * independent.
+ * @errors ABI_MISMATCH for bad headers; invalid/overflowing options return INVALID_ARGUMENT;
+ * callback status propagates, allocation failure returns OUT_OF_MEMORY. Iteration exhaustion,
+ * breakdown and nonfinite action data are explicit result reasons, never false convergence.
+ * @execution Synchronous CPU-only solve. This is a controller, not an installed molecular HVP
+ * endpoint; caller callbacks retain all method-specific equations and lifetime validation.
+ * @units FP64 response-vector units belong to the declared operator; tolerances apply to its
+ * unpreconditioned residual norm. Workspace quantities are bytes.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_response_solve_v1(const generativeqc_response_gmres_descriptor_v1* descriptor,
+                               generativeqc_response_result** result);
+
+/** @native-contract generativeqc_response_result_view_v1_get
+ * @behavior Borrow immutable diagnostics and arrays from a completed response result.
+ * @inputs A live result and full-size current-ABI output view with initialized header.
+ * @outputs Writes a complete view on success only; consult reason/converged independently
+ * of the API status. Optional arrays and refusal output obey the view's contracts.
+ * @lifetime The handle owns all referenced arrays; copy any data needed after destruction.
+ * @errors INVALID_ARGUMENT for NULL inputs, ABI_MISMATCH for invalid view headers.
+ * @execution Synchronous context-free read; no allocation, callbacks or numerical execution.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_response_result_view_v1_get(
+    const generativeqc_response_result* result, generativeqc_response_result_view_v1* output);
+
+/** @native-contract generativeqc_response_result_destroy
+ * @behavior Release a response result and its solver-owned diagnostics.
+ * @inputs An owned result handle or NULL; NULL is a no-op.
+ * @lifetime Invalidates all borrowed views; double destruction or later use is invalid.
+ * @execution Synchronous context-free cleanup; no scientific callback or device operation.
+ */
+GENERATIVEQC_API void generativeqc_response_result_destroy(generativeqc_response_result* result);
+
 /** Query whether a method is currently executable. */
 /** @native-contract generativeqc_method_available
  * @behavior Query the method registry availability bit, without preparing a calculation.
