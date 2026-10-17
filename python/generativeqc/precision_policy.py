@@ -917,30 +917,34 @@ class PrecisionCalculator:
             # Keep the candidate, then compare complete E+F with fresh FP64.
             gradient_admission = qualification
             route_reasons.append("mixed_gradient_requires_independent_fp64_audit")
-        qualified_gradient = not gradient_requires_audit and gradient.get("complete") is True and (
-            (
-                gradient.get("schema_version") in (1, 2, 3)
-                and qualification
-                in (
-                    "pbe0-rks-budget-fp32-v1",
-                    "pbe-rks-budget-fp32-v1",
-                    "b3lyp-rks-budget-fp32-v1",
-                    "r2scan-rks-budget-fp32-v1",
-                    "rhf-budget-fp32-v1",
-                    "rhf-df-shell-budget-fp32-v1",
-                    "m06-2x-rks-budget-fp32-v1",
-                )
-            )
-            or (
-                gradient.get("schema_version") == 4
-                and (
-                    (
-                        gradient.get("owner") == "python-stationary-cuda"
-                        and qualification in DF_GRADIENT_QUALIFICATIONS
+        qualified_gradient = (
+            not gradient_requires_audit
+            and gradient.get("complete") is True
+            and (
+                (
+                    gradient.get("schema_version") in (1, 2, 3)
+                    and qualification
+                    in (
+                        "pbe0-rks-budget-fp32-v1",
+                        "pbe-rks-budget-fp32-v1",
+                        "b3lyp-rks-budget-fp32-v1",
+                        "r2scan-rks-budget-fp32-v1",
+                        "rhf-budget-fp32-v1",
+                        "rhf-df-shell-budget-fp32-v1",
+                        "m06-2x-rks-budget-fp32-v1",
                     )
-                    or (
-                        gradient.get("owner") == "python-composite-stationary-cuda"
-                        and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
+                )
+                or (
+                    gradient.get("schema_version") == 4
+                    and (
+                        (
+                            gradient.get("owner") == "python-stationary-cuda"
+                            and qualification in DF_GRADIENT_QUALIFICATIONS
+                        )
+                        or (
+                            gradient.get("owner") == "python-composite-stationary-cuda"
+                            and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
+                        )
                     )
                 )
             )

@@ -17,7 +17,7 @@ inline bool admit_application_hf_gradient_shape(std::size_t aos, std::size_t ato
 /** Historical independent HF-gradient qualification, not an execution cap.
  * Out-of-cohort shape candidates carry an audit-required provenance code. */
 inline constexpr bool independently_qualified_hf_gradient(std::size_t aos,
-                                                           std::size_t atoms) noexcept {
+                                                          std::size_t atoms) noexcept {
   return aos <= 96 && atoms <= 48;
 }
 
@@ -40,8 +40,8 @@ inline bool admit_application_hf_gradient(const std::array<double, 3>& allowance
  * Old one-endpoint evidence includes <=96 orbital AOs, <=512 auxiliaries and
  * <=12 atoms; expanded shapes require an independent FP64 E+F audit. */
 inline constexpr bool independently_qualified_df_hf_gradient(std::size_t aos,
-                                                              std::size_t auxiliary_aos,
-                                                              std::size_t atoms) noexcept {
+                                                             std::size_t auxiliary_aos,
+                                                             std::size_t atoms) noexcept {
   return independently_qualified_hf_gradient(aos, atoms) && auxiliary_aos <= 512 && atoms <= 12;
 }
 

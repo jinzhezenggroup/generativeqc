@@ -386,7 +386,8 @@ def test_expanded_mixed_gradient_forces_fp64_audit_even_with_fast_fock(
     assert report.solve_count == (3 if bad_force else 2)
     assert report.gradient_admission == (
         "fp64-after-observable-budget-rejection"
-        if bad_force else "pbe0-rks-budget-fp32-v1-audit-required"
+        if bad_force
+        else "pbe0-rks-budget-fp32-v1-audit-required"
     )
     assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
     assert "budget_or_domain_requires_fp64_audit" in report.fallback_reasons
@@ -415,9 +416,11 @@ def test_unqualified_gradient_not_promoted_by_native_v2_transport(
         ),
         result(executed_backend="cuda"),
     ]
-    report = PrecisionCalculator(
-        method="pbe0-rks", device="cuda", policy="fast"
-    ).singlepoint(ATOMS).precision_validation
+    report = (
+        PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+        .singlepoint(ATOMS)
+        .precision_validation
+    )
     assert report.status == "observed_met"
     assert report.solve_count == 2
     assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
@@ -433,9 +436,11 @@ def test_native_gradient_capacity_failure_falls_back_without_false_qualification
         result(executed_backend="cuda"),
         result(executed_backend="cuda"),
     ]
-    report = PrecisionCalculator(
-        method="pbe0-rks", device="cuda", policy="fast"
-    ).singlepoint(ATOMS).precision_validation
+    report = (
+        PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+        .singlepoint(ATOMS)
+        .precision_validation
+    )
     assert report.status == "observed_met"
     assert report.solve_count == 3
     assert "mixed_gradient_failed_fp64_fallback" in report.fallback_reasons

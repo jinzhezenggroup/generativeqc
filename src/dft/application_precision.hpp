@@ -114,10 +114,10 @@ inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t 
  * Larger supported shapes may execute FP32, but require a real FP64 audit
  * before Fast can publish their energy and forces. */
 inline constexpr std::uint64_t kGradientAuditRequiredOffset = 100;
-inline constexpr bool stationary_gradient_independently_qualified(
-    std::uint64_t model, std::size_t aos, std::size_t atoms) noexcept {
-  return model != 0 && aos <= (model == 1 ? 384U : 96U) &&
-         atoms <= (model == 6 ? 32U : 48U);
+inline constexpr bool stationary_gradient_independently_qualified(std::uint64_t model,
+                                                                  std::size_t aos,
+                                                                  std::size_t atoms) noexcept {
+  return model != 0 && aos <= (model == 1 ? 384U : 96U) && atoms <= (model == 6 ? 32U : 48U);
 }
 
 /** Budget-Fock candidate domain, independent of mixed-gradient capacity.

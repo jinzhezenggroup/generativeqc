@@ -74,9 +74,7 @@ def test_gradient_v2_does_not_infer_a_model_from_scf(
         (107, "rhf-df-shell-budget-fp32-v1"),
     ),
 )
-def test_expanded_gradient_records_required_audit(
-    code: int, model: str
-) -> None:
+def test_expanded_gradient_records_required_audit(code: int, model: str) -> None:
     def getter(handle: object, output: Any, count: int) -> int:
         assert count == 10
         output[:] = [1, 2, 100, 100, 0, code, 1, 12, 96, 0]
@@ -89,7 +87,9 @@ def test_expanded_gradient_records_required_audit(
     assert record["requires_independent_audit"] is True
     assert record["returned_mode"] == "mixed"
     assert record["weighted_fp32_orders"] == ([] if code == 107 else [0, 1, 2, 3, 4, 5])
-    assert ("df_metric_and_response_weights" in record["fp64_components"]) == (code == 107)
+    assert ("df_metric_and_response_weights" in record["fp64_components"]) == (
+        code == 107
+    )
 
 
 @pytest.mark.parametrize("collected,retries", ((False, 0), (True, 2), (True, 12)))

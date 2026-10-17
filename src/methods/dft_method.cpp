@@ -320,9 +320,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
           scf::cuda_fock_precision_capabilities(*options.resolved_fock_build).coulomb) &&
       dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
                                                   execution_plan.spin_channels == 1);
-  const bool strict_gradient =
-      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
-                                           options.screening_tolerance, false);
+  const bool strict_gradient = dft::admit_stationary_force_controls(
+      options.energy_tolerance, options.density_tolerance, options.screening_tolerance, false);
   const bool application =
       (strict_gradient || budget_force) &&
       dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
@@ -330,10 +329,9 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   // Above the retained-pair regime, the incumbent phased strict consumer is
   // faster than native inline cooperative FP64. Do not slow the comparator
   // merely to make both precision modes use an identical execution schedule.
-  const bool native_shape =
-      atoms <= 32 && aos <= 384 && atoms <= 48 &&
-      dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
-                                                  execution_plan.spin_channels == 1);
+  const bool native_shape = atoms <= 32 && aos <= 384 && atoms <= 48 &&
+                            dft::admit_native_stationary_gradient_shape(
+                                aos, atoms, maximum_angular, execution_plan.spin_channels == 1);
   if (!all_electron ||
       maximum_angular > ((qualify_through_d || native_shape || application) ? 2U : 1U) ||
       grid.partition_iterations != 3 ||
@@ -381,7 +379,7 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     // no typed gradient is available. Do not drop that qualified path merely
     // because its FP32 candidate lacks a linked operator or model match.
     if (!dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                  aos, atoms, maximum_angular, strict_gradient) &&
+                                                 aos, atoms, maximum_angular, strict_gradient) &&
         !budget_force)
       return {};
   } else if ((maximum_angular > 1 && !qualify_through_d) &&
@@ -1830,9 +1828,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Both capacity planning and execution consume the same budget/model gate.
    * In particular, strict SCF does not imply strict derivative arithmetic. */
   std::uint64_t application_gradient_qualification() const noexcept {
-    const bool strict_density =
-        dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
-                                             options_.screening_tolerance, false);
+    const bool strict_density = dft::admit_stationary_force_controls(
+        options_.energy_tolerance, options_.density_tolerance, options_.screening_tolerance, false);
     const bool budget_density =
         options_.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
         dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
