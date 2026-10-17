@@ -47,6 +47,7 @@
 #include "scf/cuda/direct_bounded_tasks.hpp"
 #include "scf/cuda/direct_cached_tensor_kernels.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_coulomb.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_generated_tasks.hpp"
@@ -1911,6 +1912,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_exponents,
                            primitive_coefficients,
                            occupied};
+  configure_direct_weighted_force_response(device_batch);
   if (quartet_direct && geometry_changed) {
     launch_build_shell_primitive_pair_cache_kernel(
         static_cast<unsigned>(total_shell_pairs), detail::kDirectQuartetThreads, 0,

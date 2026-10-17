@@ -91,6 +91,62 @@ def scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, "fixture")
 
 
+def test_weighted_response_comparison_isolates_its_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scheduler: None
+) -> None:
+    """Inherited rollbacks must not leak into either automatic comparison arm."""
+    import json
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-scheduler-assigned")
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", "spatial-reuse")
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES", "0")
+    launches = []
+
+    class Child:
+        pid = 123456
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            target = Path(command[3])
+            assert not list(target.iterdir())
+            launches.append(kwargs)
+
+        def wait(self, timeout: float | None = None) -> int:
+            assert timeout in (1800, 10)
+            return 0
+
+    monkeypatch.setattr(direct_force_reuse.subprocess, "Popen", Child)
+    monkeypatch.setattr(direct_force_reuse.os, "killpg", lambda *args: None)
+    output = tmp_path / "weighted"
+    direct_force_reuse.main([str(output), "--weighted-responses"])
+    assert len(launches) == 2
+    selector = "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
+    assert launches[0]["env"][selector] == "0"
+    assert selector not in launches[1]["env"]
+    for options in launches:
+        assert "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS" not in options["env"]
+        assert options["env"]["CUDA_VISIBLE_DEVICES"] == "GPU-scheduler-assigned"
+        assert options["start_new_session"]
+    assert json.loads((output / "comparison.json").read_text()) == {
+        "selector": selector,
+        "baseline": "0",
+        "candidate": None,
+        "population_limit_seconds": 1800,
+    }
+
+
+@pytest.mark.parametrize("flag", ["--baseline", "--candidate"])
+def test_weighted_response_comparison_rejects_mixed_axes(
+    tmp_path: Path, scheduler: None, flag: str
+) -> None:
+    """Reject an ambiguous comparison before starting or claiming output."""
+    output = tmp_path / "not-started"
+    with pytest.raises(SystemExit, match="2"):
+        direct_force_reuse.main(
+            [str(output), "--weighted-responses", flag, "automatic"]
+        )
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("primary", ["timeout", "interrupt", "error", "nonzero"])
 @pytest.mark.parametrize("cleanup", ["gone", "permission", "timeout"])
 def test_primary_failure_and_receipt_survive_cleanup(

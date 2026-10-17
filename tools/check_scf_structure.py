@@ -678,6 +678,9 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/direct_bounded_pages.hpp",
     "scf/cuda/direct_bounded_tasks.hpp",
     "scf/cuda/direct_constants.hpp",
+    # The host driver captures shared weighted-force arithmetic at preparation;
+    # this declaration surface does not expose recurrence implementations.
+    "scf/cuda/direct_coulomb.hpp",
     "scf/cuda/direct_angular_fock.hpp",
     "scf/cuda/direct_angular_force.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",

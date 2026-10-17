@@ -854,6 +854,33 @@
       ]
     },
     {
+      "id": "hf.weighted-relative-force-responses",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
+      ],
+      "owner_issues": [
+        1117,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/weighted_eri.py",
+        "src/scf/cuda/direct_coulomb.cpp",
+        "src/scf/cuda/direct_force_low_order_sources.cuh"
+      ],
+      "rationale": "Unset/empty/1/relative selects generated relative-coordinate FP64 AD for full-range weighted Direct force orders one through five. The shared fixed-weight scalar reuses pair-separation and Coulomb responses; ssss, FP32 and long-range roots remain unchanged. Every source reduction must be finite before atom scatter, otherwise the original nuclear FP64 graph retries once. Prepared HF/DFT owners capture the independent arithmetic selector; zero/unknown retains nuclear roots. Source-matched complete 48/96-atom, PBE0/HF, reverse-order and original-image comparisons independently qualify the default, preserving actual trajectories, scientific/resource guards and explicit small regressions.",
+      "revisit_condition": "Qualify new consumer/resource domains with independent finite E/F gates and full cold/warm/moved endpoints. Preserve bounded nuclear fallback and record actual SCF/Fock counts; do not infer endpoint gains from static DAG counts or relabel an incremental component as GPU4PySCF parity.",
+      "evidence": [
+        "note:.agents/notes/implemented/performance/2026-10-17-weighted-relative-force-responses.md",
+        "docs:docs/developer/weighted_eri.md",
+        "tests:tests/python/test_direct_force_reuse_benchmark.py",
+        "tests:tests/python/test_weighted_eri.py",
+        "tests:tests/python/test_direct_order4_sources.py",
+        "tests:tests/python/test_direct_order5_sources.py"
+      ]
+    },
+    {
       "id": "dft.xc-compact-batches",
       "classification": "already-default",
       "controls": [

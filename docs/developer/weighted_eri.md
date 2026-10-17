@@ -98,6 +98,31 @@ psss's combined weighted PA/PQ sums instead of differentiating and cloning
 three component recurrences. A lowering accepts at most 64 explicitly selected
 Cartesian components; larger classes must be partitioned without truncation.
 
+### Relative-coordinate force responses
+
+`build_weighted_eri_kernel(..., derivative_basis="relative")` differentiates
+the same fixed-weight scalar in `A-B`, `C-D` and `P-Q`, where `P` and `Q` are
+the exponent-weighted product centers. Only the `P-Q` response differentiates
+the Coulomb/Boys ladder. A constant exponent-fraction Jacobian recovers the
+independent nuclear responses; translation recovers the dependent center.
+The public builder default remains `"nuclear"` for arbitrary-leaf consumers.
+
+Native full-range Direct FP64 low-order force workers use the generated
+relative roots for angular orders one through five by default, including
+separate and combined J/K sources. `ssss`, FP32 and long-range workers retain
+their original roots. Component partitions, primitive-pair preparation,
+screening and source/atom accumulation semantics are unchanged. Every source's
+primitive reduction must be finite before any atom scatter; a declined
+relative attempt retries the original nuclear FP64 worker once.
+
+`GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0` selects the nuclear rollback;
+unknown nonempty values also select it. Unset, empty, `1` and `relative` select
+relative responses. The prepared owner captures this arithmetic preference
+independently of the order-six/seven schedule, method and Fock policy. Changing
+the selector requires a new owner.
+
+### Native streaming boundary
+
 `prepare_weighted_eri_stream` consumes a `BlockRequest` and a bounded weight
 provider callback. Full, padded and partial public layouts are supported. For
 spherical shells, callers supply `(ncart,npublic)` projection matrices; weights
