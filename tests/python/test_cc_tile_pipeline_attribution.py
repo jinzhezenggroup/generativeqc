@@ -3,8 +3,11 @@
 import gzip
 import hashlib
 import json
+import math
 import random
 import sqlite3
+import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +15,7 @@ from typing import Any
 
 import pytest
 
+import benchmarks.cc_tile_pipeline_campaign as campaign_module
 from benchmarks.cc_tile_pipeline_attribution import (
     KINDS,
     SCHEMA,
@@ -721,3 +725,267 @@ def test_campaign_report_recomputes_even_identical_forged_passes(
         (directory / "receipt.json").write_text(json.dumps(receipt))
     with pytest.raises(ValueError):
         compare_runs(runs)
+
+
+def _campaign_failure_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[dict[str, Path], Path, bytes]:
+    baseline = campaign_run(tmp_path, "fixture", diagnostic=False)
+    paths = {"oracle": baseline / "oracle.json"}
+    for name in ("input", "library", "executable"):
+        paths[name] = tmp_path / name
+        paths[name].write_bytes(name.encode())
+    environment = {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "CUDA_VISIBLE_DEVICES": "FAKE-NO-GPU",
+        "LD_LIBRARY_PATH": str(tmp_path),
+    }
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    identity = json.loads((baseline / "receipt.json").read_text())["identity"]
+    for name, path in paths.items():
+        identity[name + "_sha256"] = checksum(path)
+    identity["oracle_input_sha256"] = identity["input_sha256"]
+    identity["environment_sha256"] = hashlib.sha256(
+        json.dumps(environment, sort_keys=True).encode()
+    ).hexdigest()
+    identity_path = tmp_path / "identity.json"
+    identity_path.write_text(json.dumps(identity))
+    output = tmp_path / "run"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "campaign.py",
+            *(item for key, path in paths.items() for item in ("--" + key, str(path))),
+            "--identity",
+            str(identity_path),
+            "--output",
+            str(output),
+        ],
+    )
+    monkeypatch.setattr(
+        campaign_module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout=f"libgenerativeqc.so.0 => {paths['library'].resolve()} (0x0)\n"
+        ),
+    )
+    return paths, output, (baseline / "endpoint.json").read_bytes()
+
+
+@pytest.mark.parametrize(
+    "fault", [KeyboardInterrupt, RuntimeError, SystemExit, subprocess.TimeoutExpired]
+)
+@pytest.mark.parametrize("unavailable", [None, "library", "artifact"])
+def test_campaign_reaps_its_real_child_and_preserves_wait_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fault: type[BaseException],
+    unavailable: str | None,
+) -> None:
+    paths, output, _ = _campaign_failure_inputs(tmp_path, monkeypatch)
+    original_popen = subprocess.Popen
+    original_checksum = campaign_module.checksum
+    children = []
+    timeouts = []
+    failed = False
+    injected = (
+        subprocess.TimeoutExpired("owned-child", 0.01)
+        if fault is subprocess.TimeoutExpired
+        else fault("owned-child-wait-fault")
+    )
+
+    def evidence_checksum(path: Path) -> str:
+        if failed and unavailable == "artifact" and path == output / "native.log":
+            raise OSError("owned log unavailable")
+        return original_checksum(path)
+
+    class Native:
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            self.child = original_popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                stdin=subprocess.DEVNULL,
+                stdout=kwargs["stdout"],
+                stderr=kwargs["stderr"],
+            )
+            children.append(self.child)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.child, name)
+
+        def wait(self, timeout: float | None = None) -> int:
+            nonlocal failed
+            timeouts.append(timeout)
+            if not failed:
+                failed = True
+                if unavailable == "library":
+                    paths["library"].unlink()
+                raise injected
+            return self.child.wait(timeout=timeout)
+
+    monkeypatch.setattr(campaign_module, "checksum", evidence_checksum)
+    monkeypatch.setattr(campaign_module.subprocess, "Popen", Native)
+    try:
+        with pytest.raises(fault) as observed:
+            campaign_main()
+        assert observed.value is injected
+        assert children and all(child.returncode is not None for child in children)
+        assert all(
+            isinstance(timeout, (int, float)) and math.isfinite(timeout) and timeout > 0
+            for timeout in timeouts
+        )
+        receipt = json.loads((output / "receipt.json").read_text())
+        assert receipt["outcome"] == (
+            "TIMEOUT" if fault is subprocess.TimeoutExpired else "FAIL"
+        )
+        assert receipt["execution_error"]["type"] == fault.__name__
+        assert receipt["child_cleanup"]["reaped"] is True
+        assert receipt["elapsed_wall_ns"] > 0
+        assert receipt["artifacts"]["oracle.json"]["sha256"] == original_checksum(
+            output / "oracle.json"
+        )
+        if unavailable == "library":
+            assert receipt["binary_identity_unchanged"] is None
+            assert (
+                receipt["identity_observations"]["library"]["status"] == "UNAVAILABLE"
+            )
+            assert receipt["finalization_errors"]
+        elif unavailable == "artifact":
+            assert receipt["artifacts"]["native.log"]["status"] == "UNAVAILABLE"
+            assert receipt["artifacts"]["native.log"]["sha256"] is None
+            assert receipt["finalization_errors"]
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=5)
+
+
+def test_campaign_owns_child_before_pid_receipt_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, output, _ = _campaign_failure_inputs(tmp_path, monkeypatch)
+    original_popen = subprocess.Popen
+    original_open = Path.open
+    children = []
+    injected = OSError("owned post-spawn receipt publication fault")
+    raised = False
+
+    def spawn(command: list[str], **kwargs: Any) -> subprocess.Popen:
+        child = original_popen(
+            [sys.executable, "-c", "import time; time.sleep(0.25)"],
+            stdin=subprocess.DEVNULL,
+            stdout=kwargs["stdout"],
+            stderr=kwargs["stderr"],
+        )
+        children.append(child)
+        return child
+
+    def receipt_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        nonlocal raised
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if path == output / "receipt.json" and children and not raised and "w" in mode:
+            raised = True
+            raise injected
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(campaign_module.subprocess, "Popen", spawn)
+    monkeypatch.setattr(Path, "open", receipt_open)
+    try:
+        with pytest.raises(OSError) as observed:
+            campaign_main()
+        assert observed.value is injected
+        assert children and all(child.returncode is not None for child in children)
+        receipt = json.loads((output / "receipt.json").read_text())
+        assert receipt["outcome"] == "FAIL"
+        assert receipt["child_cleanup"]["reaped"] is True
+        assert receipt["elapsed_wall_ns"] > 0
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=5)
+
+
+def test_campaign_unreadable_identity_cannot_publish_pass_without_primary_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths, output, endpoint = _campaign_failure_inputs(tmp_path, monkeypatch)
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            Path(command[2]).write_bytes(endpoint)
+
+        def wait(self, timeout: int) -> int:
+            paths["library"].unlink()
+            return 0
+
+    monkeypatch.setattr(campaign_module.subprocess, "Popen", Native)
+    with pytest.raises(FileNotFoundError):
+        campaign_main()
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["outcome"] == "FAIL"
+    assert receipt["binary_identity_unchanged"] is None
+    assert receipt["identity_observations"]["library"]["status"] == "UNAVAILABLE"
+    assert receipt["elapsed_wall_ns"] > 0
+    assert {"endpoint.json", "oracle.json", "native.log"} <= receipt["artifacts"].keys()
+    assert receipt["finalization_errors"]
+
+
+def test_campaign_receipt_write_failure_keeps_primary_and_reaped_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, output, _ = _campaign_failure_inputs(tmp_path, monkeypatch)
+    original_popen = subprocess.Popen
+    original_open = Path.open
+    children = []
+    failed = False
+    injected = RuntimeError("owned-child-primary-fault")
+
+    class Native:
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            self.child = original_popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                stdin=subprocess.DEVNULL,
+                stdout=kwargs["stdout"],
+                stderr=kwargs["stderr"],
+            )
+            children.append(self.child)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.child, name)
+
+        def wait(self, timeout: float | None = None) -> int:
+            nonlocal failed
+            if not failed:
+                failed = True
+                raise injected
+            return self.child.wait(timeout=timeout)
+
+    def unwritable_receipt(path: Path, *args: Any, **kwargs: Any) -> Any:
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if failed and path.parent == output and any(flag in mode for flag in "wxa"):
+            raise OSError("owned receipt output unavailable")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(campaign_module.subprocess, "Popen", Native)
+    monkeypatch.setattr(Path, "open", unwritable_receipt)
+    try:
+        with pytest.raises(RuntimeError) as observed:
+            campaign_main()
+        assert observed.value is injected
+        assert children and all(child.returncode is not None for child in children)
+        assert any(
+            "receipt_write" in note and "OSError" in note for note in injected.__notes__
+        )
+        assert json.loads((output / "receipt.json").read_text())["outcome"] != "PASS"
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=5)
