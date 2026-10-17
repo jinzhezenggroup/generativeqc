@@ -300,18 +300,14 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 /** One immutable CUDA admission rule for metadata and complete force consumers.
  * Availability is deliberately context-specific, not a method-global force bit.
  * Optional compiled bindings, precise Fock coefficients, representation and
- * FP64 final states are prerequisites. Strict-density AUTO may narrow the
- * gradient; budget-Fock AUTO reuses only the FP64 force body. Neither route
- * weakens the final token checks; other contexts retain their consumer. */
+ * FP64 final-state tokens are prerequisites. Strict-density routes retain
+ * one-endpoint qualification; admitted budget-Fock densities can propose mixed
+ * forces only behind an independent FP64 observable audit. Neither changes
+ * the physical state, capacity checks or non-admitted consumers. */
 const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
-  const bool application =
-      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
-                                           options.screening_tolerance, false) &&
-      dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
-                                      maximum_angular, execution_plan.spin_channels == 1);
   const bool budget_force =
       options.precision_mode == GENERATIVEQC_PRECISION_AUTO && options.resolved_fock_build &&
       dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
@@ -324,12 +320,20 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
           scf::cuda_fock_precision_capabilities(*options.resolved_fock_build).coulomb) &&
       dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
                                                   execution_plan.spin_channels == 1);
+  const bool strict_gradient =
+      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                           options.screening_tolerance, false);
+  const bool application =
+      (strict_gradient || budget_force) &&
+      dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
+                                      maximum_angular, execution_plan.spin_channels == 1);
   // Above the retained-pair regime, the incumbent phased strict consumer is
   // faster than native inline cooperative FP64. Do not slow the comparator
   // merely to make both precision modes use an identical execution schedule.
   const bool native_shape =
-      atoms <= 32 && dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
-                                                                 execution_plan.spin_channels == 1);
+      atoms <= 32 && aos <= 384 && atoms <= 48 &&
+      dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
+                                                  execution_plan.spin_channels == 1);
   if (!all_electron ||
       maximum_angular > ((qualify_through_d || native_shape || application) ? 2U : 1U) ||
       grid.partition_iterations != 3 ||
@@ -372,7 +376,7 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   if (application) {
     if (!binding ||
         !dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                 aos, atoms, maximum_angular))
+                                                 aos, atoms, maximum_angular, strict_gradient))
       return {};
   } else if ((maximum_angular > 1 && !qualify_through_d) &&
              (!binding || !dft::stationary_gradient_model_qualification(*binding, aos)))
@@ -1820,16 +1824,22 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Both capacity planning and execution consume the same budget/model gate.
    * In particular, strict SCF does not imply strict derivative arithmetic. */
   std::uint64_t application_gradient_qualification() const noexcept {
-    if (!dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
-                                              options_.screening_tolerance, false))
-      return 0;
+    const bool strict_density =
+        dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
+                                             options_.screening_tolerance, false);
+    const bool budget_density =
+        options_.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+        dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
+                                             options_.screening_tolerance, true);
+    if (!strict_density && !budget_density) return 0;
     const auto* binding = admitted_cuda_stationary_binding();
     if (!binding) return 0;
     std::size_t maximum_angular = 0;
     for (const auto& shell : system_.shells)
       maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
     return dft::application_gradient_qualification(*binding, options_.application_precision_budget,
-                                                   basis_.nao, basis_.natom, maximum_angular);
+                                                   basis_.nao, basis_.natom, maximum_angular,
+                                                   strict_density);
   }
 
   generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
