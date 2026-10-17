@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -13,6 +14,7 @@ PREFIX = r"""
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
+@OCCUPIED_DENSITY@
 enum class PrecisionPhase : std::uint8_t { StrictAudit, Admitted };
 struct CudaXcView {
  std::uint64_t generation;
@@ -34,14 +36,16 @@ struct CudaXcPlan {
  const double* seen_density=nullptr;
  double *seen_rho=nullptr,*seen_gradient=nullptr;
  void enqueue(const double*,std::size_t,std::uint64_t,
-              PrecisionPhase phase=PrecisionPhase::StrictAudit);
+              PrecisionPhase phase=PrecisionPhase::StrictAudit, CudaXcOccupiedDensity occupied={});
  void enqueue_density_features(const double*,std::size_t,std::uint64_t,double*,double*,
                                PrecisionPhase phase=PrecisionPhase::StrictAudit);
  CudaXcView enqueue_replay_density_features(const double*,std::size_t,double*,double*,
                                            PrecisionPhase phase=PrecisionPhase::StrictAudit);
  void enqueue_impl(const double* d,const double*,std::size_t,std::uint64_t generation,
                    PrecisionPhase phase,double* rho=nullptr,double* gradient=nullptr,
-                   bool publish_generation=true) {
+                   bool publish_generation=true, CudaXcOccupiedDensity occupied={}) {
+  (void)phase;
+  if(occupied.coefficients) throw std::invalid_argument("unexpected occupied source");
   // Ordinary physical enqueue intentionally allows both optional outputs absent.
   if((rho==nullptr)!=(gradient==nullptr)) throw std::invalid_argument("partial output");
   ++submissions;seen_density=d;seen_rho=rho;seen_gradient=gradient;
@@ -101,7 +105,12 @@ def capture_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     folder = tmp_path_factory.mktemp("xc-capture-dispatch")
     unit, binary = folder / "probe.cpp", folder / "probe"
-    unit.write_text(PREFIX + body + DRIVER)
+    occupied = cpp_record_definition(
+        (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
+    )
+    unit.write_text(
+        PREFIX.replace("@OCCUPIED_DENSITY@", occupied + ";") + body + DRIVER
+    )
     subprocess.run(
         [compiler, "-std=c++20", "-O0", str(unit), "-o", str(binary)],
         check=True,

@@ -15,6 +15,7 @@ from generativeqc_compiler.dft.ao_cuda import _NATIVE_XC_CONTRACTION_KERNELS
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 from generativeqc_compiler.dft.xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
+    _emit_occupied_features,
     _emit_panels,
     _emit_tiled,
 )
@@ -46,7 +47,11 @@ def compact_types() -> str:
     source = (ROOT / "src/dft/cuda_xc.hpp").read_text()
     return "\n".join(
         definition(source, f"struct {name} {{") + ";"
-        for name in ("CudaXcCompactTile", "CudaXcPointBatchPlan")
+        for name in (
+            "CudaXcCompactTile",
+            "CudaXcPointBatchPlan",
+            "CudaXcOccupiedDensity",
+        )
     )
 
 
@@ -89,9 +94,17 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         + potential_step
         + "}",
     )
-    batch = emit_native_xc_tile_batches().split(
-        "template <class Arithmetic>\ninline void launch_batch_density_typed"
+    batch = emit_native_xc_tile_batches()
+    batch = batch[: batch.index("inline void launch_batch_density_typed")].rsplit(
+        "template ", 1
     )[0]
+    occupied = _emit_occupied_features(DEFAULT_XC_MATRIX_SCHEDULE)
+    occupied_bodies = definition(
+        occupied, "__device__ void tiled_occupied_product_body"
+    ) + definition(
+        occupied,
+        "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+    )
     source = tmp_path / "compact-numerics.cpp"
     source.write_text(
         _SIMULATOR
@@ -104,6 +117,7 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         + _emit_panels()
         + _emit_panels(diagonal_one_sided=True)
         + matrices
+        + occupied_bodies
         + "}}\n"
         + batch
         + "}}\n"
@@ -122,6 +136,7 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
 _PLAN_HEADER = r"""
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -354,7 +369,7 @@ int main() {
   int error=0;
   launch({3,4,32},{16,16,1},[&] {
     batch_density_products(tiles.data(),density.data(),ao.data(),work.data(),full_n,spins,
-                            work_jets,ids.data(),&error);
+                            work_jets,ids.data(),&error,{});
   });
   // Dense scalar D*AO is an independent reference for every selected row/jet.
   for (const auto& tile : tiles)
@@ -370,7 +385,7 @@ int main() {
           }
   launch({32,4,1},{128,1,1},[&] {
     batch_density_features(tiles.data(),ao.data(),work.data(),features.data(),0,spins,jets,
-                            work_jets,terms,2,&error);
+                            work_jets,terms,2,&error,{});
   });
   for (const auto& tile : tiles)
     for (I spin=0;spin<spins;++spin)
