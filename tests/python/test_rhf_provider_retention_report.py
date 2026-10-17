@@ -141,6 +141,44 @@ def test_after_above_before_yields_zero_without_underflow() -> None:
     assert result["measurement"]["exceeds_allowance"] is False
 
 
+@pytest.mark.parametrize("query_index", [0, 2, 14])
+@pytest.mark.parametrize(
+    "invalid_values",
+    [
+        {"free_bytes": 2001},
+        {"free_bytes": 0, "total_bytes": 0},
+        {"total_bytes": 2**64},
+        {"status": 1},
+    ],
+)
+def test_successful_observation_requires_valid_memory_domain(
+    query_index: int, invalid_values: dict
+) -> None:
+    records = ordered_records()
+    records[query_index].update(invalid_values)
+    with pytest.raises(ValueError, match="memory query"):
+        summarize(records, POLICY, IDENTITY)
+
+
+def test_unobserved_failed_vendor_query_does_not_invent_memory_values() -> None:
+    records = ordered_records()
+    records[2].update(status=1, observed=False, free_bytes=0, total_bytes=0)
+    result = summarize(records, POLICY, IDENTITY)
+    assert result["status"] == "COMPLETE"
+    assert result["measurement"]["retained_delta_bytes"] == 300
+
+
+def test_uint64_maximum_memory_value_is_in_domain() -> None:
+    maximum = 2**64 - 1
+    records = ordered_records(before=maximum, after=maximum)
+    for row in (records[0], records[14]):
+        row["total_bytes"] = maximum
+    result = summarize(records, POLICY, IDENTITY)
+    assert result["status"] == "COMPLETE"
+    assert result["measurement"]["total_bytes"] == maximum
+    assert result["measurement"]["retained_delta_bytes"] == 0
+
+
 def test_missing_terminal_is_incomplete() -> None:
     result = summarize(ordered_records()[:-1], POLICY, IDENTITY)
     assert result["status"] == "INCOMPLETE"

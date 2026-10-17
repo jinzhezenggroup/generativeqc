@@ -104,6 +104,19 @@ def _ordered(records: list[dict]) -> list[dict]:
                 raise ValueError("memory query origin is invalid")
             if type(record.get("observed")) is not bool:
                 raise ValueError("memory query observed flag must be Boolean")
+            if record["observed"]:
+                if record["status"] != 0:
+                    raise ValueError("observed memory query must have success status")
+                free_bytes = _integer(
+                    record.get("free_bytes"), "memory query free bytes"
+                )
+                total_bytes = _integer(
+                    record.get("total_bytes"), "memory query total bytes"
+                )
+                if not 0 < total_bytes < 2**64 or free_bytes > total_bytes:
+                    raise ValueError(
+                        "memory query requires 0 <= free <= positive uint64 total"
+                    )
         result.append(record)
     result.sort(key=lambda item: item["sequence"])
     return result
