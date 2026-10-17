@@ -752,23 +752,28 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> VibeArray:
     return _canonical_generic(result)
 
 
+def _take_axis(axis: object, rank: int) -> int:
+    if axis is None:
+        if rank != 1:
+            raise ValueError("take requires a one-dimensional input when axis is None")
+        return 0
+    return _axis(axis, rank, "take")
+
+
 def take(
     x: object,
     indices: tuple[int, ...],
     *,
-    axis: int,
+    axis: int | None = None,
 ) -> VibeArray:
-    """Static gather along one axis."""
+    """Static gather; omitted axis selects the sole axis of a vector."""
     value = _array(x)
-    if type(axis) is not int:
-        raise TypeError("take axis must be an integer")
+    position = _take_axis(axis, value.ndim)
     if not isinstance(indices, tuple) or any(
         type(index) is not int for index in indices
     ):
         raise TypeError("take indices must be a static tuple of integers")
-    result = VibeArray(
-        tensor_ir.gather(value.node, _axis(axis, value.ndim, "take"), indices)
-    )
+    result = VibeArray(tensor_ir.gather(value.node, position, indices))
     return _canonical_generic(result)
 
 

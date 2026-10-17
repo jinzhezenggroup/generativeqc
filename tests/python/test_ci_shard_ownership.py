@@ -219,6 +219,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
+        "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
@@ -266,11 +267,19 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("insertions", ((), ("test_000.py", "test_lambda_shift.py")))
+@pytest.mark.parametrize(
+    "insertions",
+    (
+        (),
+        ("test_000.py", "test_lambda_shift.py"),
+        ("test_000.py", "test_array_api_take_default_axis.py", "test_lambda_shift.py"),
+    ),
+)
 def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
+        "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
@@ -285,6 +294,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         for name in (
             "test_aaa.py",
             "test_cc_triples_tiles_next.py",
+            "test_ccsdt_cbs_aaa.py",
+            "test_ccsdt_cbs_zzz.py",
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_df_lambda_mixed_precision_next.py",
@@ -312,6 +323,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             (tmp_path / relative).unlink()
     selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     assert selections["runtime-heavy"][0] == "loadfile"
+    assert selections["posthf"][0] == "loadfile"
     for path, owner in owners.items():
         actual = [
             shard for shard, (_, targets, _) in selections.items() if path in targets
@@ -1039,6 +1051,12 @@ def test_measured_file_priority_only_changes_routine_posthf_scheduling(
             "tests/python/test_uccsd_t_owner.py",
             "tests/python/test_uccsd_physical_response.py",
             "tests/python/test_dft_complete_cpu.py",
+        ]
+        complete_cc = selected.index("tests/python/test_cc_complete_gradient.py")
+        assert selected[complete_cc : complete_cc + 3] == [
+            "tests/python/test_cc_complete_gradient.py",
+            "tests/python/test_ccsdt_cbs_native.py",
+            "tests/python/test_ecp_heavy.py",
         ]
         # The shared collection adapter must not undo the measured file order.
         targets, arguments = _split_collection(
