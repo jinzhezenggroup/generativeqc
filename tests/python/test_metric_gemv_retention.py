@@ -92,3 +92,42 @@ def test_metric_gemv_energy_record_restores_its_hash_bound_original() -> None:
     assert value["workload"]["ao_count"] == 384
     assert value["workload"]["batch_size"] == 4
     assert value["workload"]["properties"] == ["energy"]
+
+
+def test_metric_gemv_direct_gate_restores_its_hash_bound_original() -> None:
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "benchmarks/results/issue206-metric-gemv/direct-gate"
+    name = "water-octamer-s4-def2-svp-spherical-b4-none"
+    metadata = json.loads((directory / f"{name}.storage.json").read_text())
+    stored_path = directory / f"{name}.json.gz"
+    original_path = directory / f"{name}.json"
+    assert metadata["stored_path"] == stored_path.relative_to(root).as_posix()
+    assert metadata["original_path"] == original_path.relative_to(root).as_posix()
+    stored = stored_path.read_bytes()
+    original = gzip.decompress(stored)
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert len(original) == metadata["original_bytes"] == 142797
+    expected_sha256 = "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
+    assert hashlib.sha256(original).hexdigest() == expected_sha256
+    assert metadata["original_sha256"] == expected_sha256
+    expected_blob = "5bdd0708d3948dd40cd985c88965859d47e76db7"
+    assert metadata["original_git_blob"] == expected_blob
+    assert hashlib.sha1(b"blob 142797\0" + original).hexdigest() == expected_blob
+    value = json.loads(original)
+    assert load_record(stored_path) == value
+    assert value["workload"]["ao_count"] == 192
+    assert value["workload"]["batch_size"] == 4
+    assert value["workload"]["density_fitting"] == "none"
+    assert (
+        value["accuracy"]["gate_selection"]["selection"]
+        == "final_pair_unmatched_labeled"
+    )
+    pairs = value["accuracy"]["paired_warm_repeats"]
+    assert len(pairs) == 5
+    assert all(pair["iteration_branches_match"] is False for pair in pairs)
+    assert value["timing_summary"]["iteration_matched"] is None
+    assert value["timing_summary"]["speed_claim_uses"] == "unmatched_labeled"
+    assert all(
+        len(value[engine]["warm_samples"]) == 5 for engine in ("vibeqc", "gpu4pyscf")
+    )

@@ -131,3 +131,11 @@ are restored by `gzip -dc` or read by the shared `load_record` reader. Historica
 summary paths and decoded-file hashes remain unchanged. This storage-only change
 makes room for the pending Direct-force evidence without changing its measured
 source, samples, qualification gates or the aggregate evidence budget.
+
+The historical 192-AO batch-four direct-gate record is retained losslessly in
+`direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json.gz`. The adjacent
+`.storage.json` pins all 142,797 original bytes, their Git blob and both SHA-256
+identities. Use `gzip -dc` or the shared `load_record` reader. All five unmatched
+iteration-pair labels, complete timings and E/F vectors remain intact; the
+separate strict-gate failures and historical summary paths are unchanged.
+The stored member is below the unchanged 128 KiB large-record review threshold.
