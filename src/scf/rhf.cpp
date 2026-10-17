@@ -25,6 +25,7 @@
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/application_precision.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
