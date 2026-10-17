@@ -324,6 +324,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
+  bool occupied_xc_frame_ready{};
+  const bool occupied_xc_requested =
+      cuda_ks_occupied_xc_requested(std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC"));
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};
@@ -1739,6 +1742,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     final_generation = 0;
     occupied_fitted_factor_ready = false;
     pending_fitted_occupied = false;
+    occupied_xc_frame_ready = false;
     // Arbitrary imported/changed-geometry seeds never borrow a previous frame.
     // A same-owner factor-backed warm seed can restore its own exact AO C below.
     invalidate_warm_orbitals();
@@ -2473,8 +2477,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::TraceOperation trace("cuda_ks_xc_shared", stream, {1, n, 0, false, false});
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
+      CudaXcOccupiedDensity occupied_frame;
+      if (occupied_xc_requested && occupied_xc_frame_ready && !device_chunk_mode &&
+          !device_nonlocal && !precision_schedule.any_lower_precision()) {
+        occupied_frame = {
+            density,        tmp1, n, spins, {occupations[0], spins == 2 ? occupations[1] : 0},
+            next_generation};
+      }
+      // The lease ends before residual/DIIS scratch reuses tmp1 on this stream.
+      // Only accepting a new structured proposal can publish another frame.
+      occupied_xc_frame_ready = false;
+      runtime::cuda_trace::trace_counter("occupied_xc_frame_generation",
+                                         occupied_frame.coefficients ? next_generation : 0);
       if (!device_nonlocal || nonlocal_seed_stage) {
-        xc->enqueue(density, elements, next_generation, phase);
+        xc->enqueue(density, elements, next_generation, phase, occupied_frame);
         return xc->view(next_generation);
       }
       // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
@@ -3225,6 +3241,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         warm_orbitals_are_ao = retain_ao;
         ++movement.warm_orbital_frames_retained;
         occupied_fitted_factor_ready = fitted_exchange;
+        occupied_xc_frame_ready = !device_chunk_mode;
       } else {
         occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();

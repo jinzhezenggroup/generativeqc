@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from _cpp_source_support import cpp_function_definition
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -43,7 +43,13 @@ def retry_probe(
     folder = tmp_path_factory.mktemp("ks-mixed-retry")
     cpp, binary = folder / "retry.cpp", folder / "retry"
     cpp.write_text(
-        PREFIX
+        PREFIX.replace(
+            "@OCCUPIED_DENSITY@",
+            cpp_record_definition(
+                (ROOT / "src/dft/cuda_xc.hpp").read_text(), "CudaXcOccupiedDensity"
+            )
+            + ";",
+        )
         + "bool retry() {\n"
         + retry
         + "\nreturn false;\n}\n"
@@ -76,6 +82,7 @@ def test_failed_mixed_operator_retries_fresh_strict_target(
 
 PREFIX = r"""
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -83,6 +90,7 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 #include <string>
+@OCCUPIED_DENSITY@
 void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 int cudaMemsetAsync(void* p, int value, std::size_t n, void*) {
   std::memset(p, value, n); return 0;
@@ -92,6 +100,7 @@ namespace generativeqc::runtime { enum class PrecisionPhase { Admitted, StrictAu
 using Phase = generativeqc::runtime::PrecisionPhase;
 namespace runtime::cuda_trace {
 struct TraceRegion { TraceRegion(const char*, void*) {} void finish() {} };
+void trace_counter(const char*, std::uint64_t) {}
 template<class F> void trace_call(const char*, void*, F work) { work(); }
 }
 namespace scf { struct ScfOptions { enum class XcExecutionSchedule { DeviceFused }; }; }
@@ -121,6 +130,10 @@ struct Owner {
   bool pending_fitted_occupied = true, final_fitted_projection_ready = true;
   bool nonlocal_seed_stage{}, nonlocal_frozen_stage{}, nonlocal_outer_active = true;
   bool device_nonlocal = true;
+  bool occupied_xc_requested{}, occupied_xc_frame_ready{}, device_chunk_mode{};
+  struct { bool any_lower_precision() const { return false; } } precision_schedule;
+  double* tmp1{};
+  std::size_t n{1}, spins{1}, occupations[2]{1, 0};
   unsigned final_corrections = 2, nonlocal_exact_epoch_iterations = 7;
   int history_count_data = 4, history_head_data = 2;
   int *history_count = &history_count_data, *history_head = &history_head_data;

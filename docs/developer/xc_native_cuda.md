@@ -158,6 +158,40 @@ precision. The filtered schedule preserves region names, surviving arithmetic
 directives and qualification metadata. Strict refinement restores every region
 to FP64; the requested schedule remains reusable for subsequent iterations.
 
+### Occupied-frame density features
+
+For physical four-jet density/gradient/tau evaluation, the native KS owner can
+lend the AO coefficient frame that generated its accepted density. The lease
+binds the density pointer, coefficient storage, AO/spin shape, occupations and
+generation. It expires before residual/DIIS work reuses the coefficient scratch;
+only another accepted structured proposal can publish a new lease. Imported,
+held or mixed densities must not inherit an unrelated proposal's frame.
+Response, nonlocal, chunk and lower-precision consumers retain their matrix
+route. The [user selector](../user/ks_options.md#cuda-occupied-frame-xc-features)
+requests reuse but cannot bypass these checks.
+
+The compiler projects the original four AO jets through occupied coefficients,
+then uses the existing feature bilinears. Reuse is admitted independently per
+tile only when occupied rank is smaller than the active AO width. Projection
+shares the bounded matrix-product panels; potential construction retains the
+original AO jets and differentiated legs. No additional full-grid or quartic
+storage is introduced. RKS applies its occupation factor exactly once; UKS
+retains separate, possibly unequal or empty, occupied spin spans.
+
+Floating-point storage is part of the contract. A nonzero coefficient outside
+the conservative IEEE exponent interval `2^-256..2^256`, or a nonfinite projected
+panel, declines occupied arithmetic. A warp vote in the existing feature kernel
+recomputes the affected point from the still-live original stored density and
+AO jets using the shared `symmetric_density_element` graph and feature
+bilinears. This register-only fallback must not overwrite compact occupied
+panels, whose strides differ from dense AO panels. It adds no allocation,
+kernel launch, host synchronization or CTA barrier. A temporary refusal
+sentinel is not a numerical error; invalid matrix results retain the original
+finite-error behavior. Matrix fallback must not receive RKS occupation scaling
+a second time. See the [representability rationale and independent edge cases](../../.agents/notes/implemented/numerics/2026-10-17-occupied-xc-representability.md).
+
+### Matrix density providers
+
 The density portfolio also contains a strict-FP64 materialized matrix-panel
 candidate. It emits `0.5*D + 0.5*D.T` from the shared scalar graph once per
 physical evaluation, then reuses that factor across all point/jet panels.
