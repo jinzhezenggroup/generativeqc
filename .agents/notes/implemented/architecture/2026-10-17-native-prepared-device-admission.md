@@ -126,6 +126,13 @@ grid compile/link test. These tests compare behavior after a dependency edit,
 not a permanent expected source fingerprint. Existing immutable source builds
 and qualification inputs remain attached to their original revisions.
 
+The stationary post-link AOT manifest has a separate CMake dependency filter.
+It must include the same observation header as the compiler's compatibility
+identity; otherwise changing that header leaves an incrementally built manifest
+stale even though a clean build hashes it correctly. The real CMake regeneration
+control mutates this header, verifies that the manifest identity changes, and
+checks that unrelated edits and subsequent no-op builds do not regenerate it.
+
 ## Consequences and revisit conditions
 
 This removes a frontend lifetime authority without pretending to finish #2227
