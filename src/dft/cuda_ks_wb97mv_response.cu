@@ -217,6 +217,15 @@ struct CudaKsWb97mvResponse::Impl {
         source.device_id, {source.primary->system()}, 0, remaining, stream, &range_direct,
         diagnostic, detail);
     if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
+    // Canonical metadata is optional inside Direct preparation for through-d
+    // bases. A recovered allocation refusal may therefore publish a valid
+    // replay-only plan that cannot retain values. Keep the original owner.
+    if (!scf::cuda_direct_jk_linear_available(range_direct)) {
+      scf::destroy_cuda_direct_jk_plan(range_direct);
+      range_direct = nullptr;
+      detail.clear();
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
     const auto allowance =
         std::min(options.max_resident_integral_bytes - receipt.resident_integral_bytes,
                  remaining - diagnostic.device_bytes);

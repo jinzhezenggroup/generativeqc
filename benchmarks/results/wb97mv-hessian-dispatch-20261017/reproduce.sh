@@ -7,6 +7,9 @@ set -euo pipefail
 : "${REFERENCE_PYTHON:?set the recorded reference interpreter}"
 bundle=$(cd -- "$(dirname -- "$0")" && pwd)
 native=$(cd -- "$NATIVE_ROOT" && pwd)
+output=${OUTPUT:-.artifacts/benchmarks/wb97mv-hessian-dispatch-$SLURM_JOB_ID.json}
+# Preserve successful and failed receipts outside the disposable source overlay.
+[[ $output = /* ]] || output=$PWD/$output
 printf '%s  %s\n' \
   aa8b7480532767d2aa6de9a36a0fc70b3ff95b3606540e28388295fdd141d805 "$native/generativeqc" \
   4d06fe6a2182810670f49db5de3c0328415a722b109b210bdb152e4ff55ba0b4 "$native/libgenerativeqc.so.0.1.0" | sha256sum --check
@@ -23,4 +26,4 @@ cd "$work"
   --cases water-dimer formaldehyde water h2 --repeats 3 --timeout-seconds 180 \
   --gpu-memory-limit-mib 24576 --cli "$native/generativeqc" \
   --reference-python "$REFERENCE_PYTHON" --source-commit 4dae97170434d4fb697f721c2f1009666786ff47+working-tree \
-  --output "${OUTPUT:-$bundle/replay-$SLURM_JOB_ID.json}"
+  --output "$output"

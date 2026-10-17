@@ -37,7 +37,8 @@ GPU4PySCF. Native preparation is separately reported and included in endpoint
 wall time; native Hessian time includes response execution and host matrix copy.
 
 The unchanged pre-optimization native deployment is also run on the same node
-and GPU class after the candidate campaign: first 94.075937 s, primed 94.050333 s for water dimer. There
+and GPU class after the full-projection intermediate campaign and before the
+final tiled campaign: first 94.075937 s, primed 94.050333 s for water dimer. There
 are only two baseline samples and this old/new order is not randomized. All
 old/new native matrices pass 3e-12 absolute/relative gates; semantic SCF cycles,
 CPKS actions, exact primitive components, directions and mixed contractions
@@ -121,6 +122,18 @@ Measured source is base `4dae97170434d4fb697f721c2f1009666786ff47` plus
 `candidate-source.patch.xz`; the manifest's dirty flag refers to this production
 and qualification overlay. Intermediate patches are preserved as exact strings
 inside authenticated `provenance.json.xz`, not substituted for the final source.
+
+Subsequent review repairs an optional LR-source metadata allocation failure so
+the existing bounded GPU replay remains available. That admission guard is
+host fault-injection tested; it has no fresh GPU qualification or timing campaign.
+The archived source patch, matrices, qualification and provenance remain the
+original measured `f4015ae9ae545ef5361083a5a38715acd588e4a7bdddfd22001ddb23222760df`
+source, rather than evidence for the later repaired native source. The replay
+below intentionally reconstructs that measured overlay. Its output-lifetime
+repair writes default receipts under the caller's `.artifacts/benchmarks/` and
+resolves relative `OUTPUT` paths before entering temporary source storage, so
+both successful and failed receipts survive cleanup.
+
 `samples.json.xz` preserves raw reports, full matrices, child stdout/stderr,
 geometries, memory samples and coupled parity receipts. `qualification.json.xz`
 contains recomputable explicit matrix gates. `provenance.json.xz` retains
