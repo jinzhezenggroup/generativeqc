@@ -117,6 +117,7 @@ struct CudaKsWb97mvResponse::Impl {
   CudaKsResidentOrbitalFrameBinding frame{};
   scf::CudaDfReadonlySource fitted{};
   scf::CudaDirectJkPlan* direct{};
+  scf::CudaDirectJkPlan* range_direct{};
   CudaWb97mvGridResponse grid;
   CudaKsWb97mvResponseOptions options;
   CudaKsWb97mvResponseWork receipt{};
@@ -142,6 +143,7 @@ struct CudaKsWb97mvResponse::Impl {
         options(controls) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
+    scf::destroy_cuda_direct_jk_plan(range_direct);
     scf::destroy_cuda_direct_jk_plan(direct);
     if (arena) (void)cudaFree(arena);
   }
@@ -181,6 +183,58 @@ struct CudaKsWb97mvResponse::Impl {
     return failed[0] || failed[1] ? cudaErrorInvalidValue : cudaSuccess;
   }
 
+  generativeqc_status prepare_resident(std::string& detail) {
+    const auto base_bytes = scf::cuda_direct_jk_plan_diagnostic(direct).device_bytes;
+    auto remaining = std::min(options.max_resident_integral_bytes,
+                              options.max_device_bytes - receipt.device_bytes);
+    const auto required = scf::cuda_direct_jk_resident_value_bytes(direct);
+    if (!required || required > remaining) return GENERATIVEQC_STATUS_SUCCESS;
+    const auto optional = [&](generativeqc_status result) -> generativeqc_status {
+      if (result != GENERATIVEQC_STATUS_OUT_OF_MEMORY) return result;
+      // Optional allocation refusal is not a numerical fallback. Retire only
+      // OOM; a real stream/device failure must still fail the response owner.
+      const auto pending = cudaGetLastError();
+      check(pending == cudaErrorMemoryAllocation ? cudaSuccess : pending);
+      check(cudaStreamSynchronize(stream));
+      detail.clear();
+      return GENERATIVEQC_STATUS_SUCCESS;
+    };
+    auto result = fitted ? scf::prepare_cuda_direct_jk_range_resident_values(
+                               direct, remaining, (1U << 28) - 1, scf::FockOperator::LongRange,
+                               source.correction->spec.exchange.omega, detail)
+                         : scf::prepare_cuda_direct_jk_resident_values(direct, remaining, detail);
+    if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
+    auto diagnostic = scf::cuda_direct_jk_plan_diagnostic(direct);
+    receipt.resident_integral_bytes = diagnostic.resident_value_bytes;
+    receipt.resident_source_evaluations = diagnostic.resident_values_completed;
+    receipt.device_bytes = arena_bytes + diagnostic.device_bytes;
+    if (fitted || !receipt.resident_integral_bytes) return GENERATIVEQC_STATUS_SUCCESS;
+    remaining = options.max_device_bytes - receipt.device_bytes;
+    if (required > options.max_resident_integral_bytes - receipt.resident_integral_bytes ||
+        base_bytes > remaining || required > remaining - base_bytes)
+      return GENERATIVEQC_STATUS_SUCCESS;
+    result = scf::create_cuda_direct_jk_resident_plan_on_stream(
+        source.device_id, {source.primary->system()}, 0, remaining, stream, &range_direct,
+        diagnostic, detail);
+    if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
+    const auto allowance =
+        std::min(options.max_resident_integral_bytes - receipt.resident_integral_bytes,
+                 remaining - diagnostic.device_bytes);
+    result = scf::prepare_cuda_direct_jk_range_resident_values(
+        range_direct, allowance, (1U << 28) - 1, scf::FockOperator::LongRange,
+        source.correction->spec.exchange.omega, detail);
+    if (result != GENERATIVEQC_STATUS_SUCCESS) {
+      scf::destroy_cuda_direct_jk_plan(range_direct);
+      range_direct = nullptr;
+      return optional(result);
+    }
+    diagnostic = scf::cuda_direct_jk_plan_diagnostic(range_direct);
+    receipt.resident_integral_bytes += diagnostic.resident_value_bytes;
+    receipt.resident_source_evaluations += diagnostic.resident_values_completed;
+    receipt.device_bytes += diagnostic.device_bytes;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
   cudaError_t evaluate(const double* density, const double* grid_potential, const double* hcore,
                        bool response) {
     check(cudaMemsetAsync(status, 0, 2 * sizeof(int), stream));
@@ -196,7 +250,7 @@ struct CudaKsWb97mvResponse::Impl {
     } else {
       const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
           direct, source.primary->strategy().spec, density, matrix, coulomb, exchange, compensation,
-          compensation_elements, direct_status, 0, census, detail, false, beta, beta_exchange,
+          compensation_elements, direct_status, 0, census, detail, true, beta, beta_exchange,
           false);
       if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
       check(source.spins == 1 ? maps::launch_rks_exact(shape, coulomb, exchange, primary,
@@ -206,9 +260,9 @@ struct CudaKsWb97mvResponse::Impl {
       check(gate());
     }
     const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
-        direct, source.correction->spec, density, matrix, nullptr, long_range, compensation,
-        compensation_elements, direct_status, 0, range_census, detail, false, beta,
-        source.spins == 2 ? long_range + matrix : nullptr, false);
+        range_direct ? range_direct : direct, source.correction->spec, density, matrix, nullptr,
+        long_range, compensation, compensation_elements, direct_status, 0, range_census, detail,
+        true, beta, source.spins == 2 ? long_range + matrix : nullptr, false);
     if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
     check(source.spins == 1
               ? maps::launch_rks_assemble(shape, grid_potential, hcore, long_range, primary,
@@ -392,6 +446,10 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     }
     check(owner->grid.prepare(grid_shape, options.grid, lease, owner->grid_workspace,
                               owner->grid_bytes));
+    if (!options.defer_resident_integrals) {
+      result = owner->prepare_resident(detail);
+      if (result != GENERATIVEQC_STATUS_SUCCESS) return result;
+    }
     const double* reference_potential{};
     check(owner->grid.reference_potential(reference_potential));
     check(owner->evaluate(lease.density, reference_potential, owner->source.hcore, false));
@@ -471,6 +529,33 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
     return cudaSuccess;
   } catch (...) {
     return cudaErrorInvalidValue;
+  }
+}
+
+generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_additional_bytes,
+                                                           std::string& detail) {
+  if (!impl_ || !impl_->ready || impl_->receipt.actions || impl_->receipt.resident_integral_bytes) {
+    detail = "optional integral admission requires an unused prepared response owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto& owner = *impl_;
+  try {
+    check(owner.authenticate(owner.stream));
+    const auto remaining = owner.options.max_device_bytes - owner.receipt.device_bytes;
+    owner.options.max_device_bytes =
+        owner.receipt.device_bytes + std::min(remaining, maximum_additional_bytes);
+    const auto result = owner.prepare_resident(detail);
+    if (result != GENERATIVEQC_STATUS_SUCCESS) {
+      owner.ready = false;
+      return result;
+    }
+    check(owner.authenticate(owner.stream));
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::exception& error) {
+    owner.ready = false;
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
 

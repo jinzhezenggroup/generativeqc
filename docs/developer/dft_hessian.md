@@ -823,6 +823,43 @@ The C++ executable provides native `hessian`/`hvp` commands. Their Python-free
 runtime, linked AOT build selection, controls and examples are
 owned by [the native CLI guide](../user/native_cli.md#compiler-ad-wb97m-v-hessian-and-hvp).
 
+The linked native owner amortizes fixed-geometry induced Fock actions with
+optional, independently owned strict FP64 full-range/LR integral sources. Radial
+operators have distinct immutable leases; DF retains its fitted primary source
+and caches only the exact LR correction. Composite preparation reserves every
+mandatory consumer before admitting these optional sources. Their values and
+provider metadata are charged to the aggregate response budget; disabling
+residency or insufficient capacity retains the compensated exact replay.
+
+For small public shell products, the optional nuclear-integral schedule batches
+independent primitive chunks sharing a linked compiler selector. Compact records
+retain exponents and radial scale while borrowing immutable molecular positions.
+The compiler-emitted adapter reconstructs the ordinary primitive record, without
+changing its AD expression. Projection runs across independent shell groups;
+sparse single-owner reductions retain the original group/incidence summation
+order, including coincident centers. Projected public quartets reuse an ordered
+shell-group tile, capped by `max_batch_projection_bytes` (16 MiB by default) and
+the remaining arena. They do not require a full public-quartet tensor to fit.
+CSR lists are group ordered, permitting binary searches for each tile's interval;
+each output carries its existing FP64 sum across tiles without reassociation.
+Large public shell products, missing batch
+bindings and insufficient workspace retain the ordered streaming schedule.
+All optional storage remains inside the existing integral and aggregate budgets;
+batching does not relax component, group, projection or reduction work limits.
+
+Moving Becke geometry uses a 1024-point tile cap to expose independent points
+across several CTAs rather than repeatedly running a partially occupied CTA.
+The complete per-tile distance/product/exponent scratch is included in checked
+workspace admission. Explicit smaller `CudaGridGeometryOptions::point_tile`
+values retain the same pointwise AD and summation order.
+
+Native VV10 response uses a 256-point pair-tile cap (clamped to the grid extent
+for storage). Smaller explicit `CudaWb97mvGridOptions::pair_tile_points` values
+retain the low-memory schedule. Both schedules evaluate the same complete
+reference-screened ordered-pair domain. CLI diagnostics distinguish native SCF,
+response preparation and Hessian execution through the final host matrix copy;
+owner-accounted bytes are not total device-memory usage.
+
 `generativeqc.ecp_hessian` differentiates the actual residual local potential
 and nonlocal harmonic projectors with TensorIR mixed AO/density JVPs. Both
 AO-center and ECP-center motion are included. One radial layer is streamed,

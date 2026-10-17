@@ -577,6 +577,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     check(owner->grid.prepare(shape, owner->options.grid, lease, owner->at(owner->grid_offset),
                               owner->grid_bytes));
     auto induced_options = options.induced;
+    induced_options.defer_resident_integrals = true;
     induced_options.max_device_bytes = std::min(induced_options.max_device_bytes, owner->remaining);
     status = owner->induced.prepare(batch, item, expected, induced_options, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -614,6 +615,10 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     status = owner->exact.prepare(batch, item, expected, exact_options, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     owner->charge(owner->exact.work().workspace_bytes);
+    const auto induced_bytes = owner->induced.work().device_bytes;
+    status = owner->induced.retain_integrals(owner->remaining, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    owner->charge(owner->induced.work().device_bytes - induced_bytes);
     check(response::cuda_cpks_reference_weights(
         owner->cpks_reference.shape(), owner->options.cpks, owner->cpks_reference.reference(),
         owner->at(owner->weights), owner->at(owner->cpks_offset), owner->cpks_bytes,

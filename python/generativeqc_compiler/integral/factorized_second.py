@@ -427,7 +427,13 @@ struct FactorizedSelection {
 };
 __global__ void factorized_integral_kernel(FactorizedSelection selection, const double* records,
     size_t count, const long long* atoms, const double* molecular_direction,
-    double* output, int* status) {
+    double* output, int* status, const FactorizedIntegralBatch* batches) {
+  const double* coordinates=nullptr;
+  if (batches) {
+    const auto& batch=batches[blockIdx.y];
+    records=batch.records; count=batch.count; atoms=batch.atoms; output=batch.output;
+    coordinates=batch.coordinates;
+  }
   const unsigned packed=blockIdx.x;
   if (packed>=selection.component_count) return;
   __shared__ double terms[25][64];
@@ -439,7 +445,17 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
     const size_t active=count-begin<64 ? count-begin : 64;
     bool valid=true;
     if (threadIdx.x<active) {
-      const double* record=records+(begin+threadIdx.x)*selection.stride;
+      double expanded[17];
+      const double* record=records+(begin+threadIdx.x)*(coordinates ? selection.centers+1 : selection.stride);
+      if (coordinates) {
+        for (unsigned center=0; center<selection.centers; ++center) {
+          expanded[center]=record[center];
+          for (unsigned axis=0; axis<3; ++axis)
+            expanded[selection.centers+3*center+axis]=coordinates[3*atoms[center]+axis];
+        }
+        expanded[selection.stride-1]=record[selection.centers];
+        record=expanded;
+      }
       double values[25]{};
       valid=generativeqc::scf::factorized_second::primitive(selection.family,selection.radial,
           selection.angular,selection.components[packed],record,direction,values);
@@ -467,10 +483,11 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
 int launch_factorized_integral(unsigned family, unsigned radial, const unsigned* angular,
     const std::uint32_t* components, size_t component_count, const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status,
-    cudaStream_t stream) noexcept {
+    cudaStream_t stream, const FactorizedIntegralBatch* batches, size_t batch_count) noexcept {
   if (family>2 || radial>2 || (family && radial) || !angular || !components ||
-      !component_count || component_count>16 || !records || !count || !atoms ||
-      !direction || !output || !status) return static_cast<int>(cudaErrorInvalidValue);
+      !component_count || component_count>16 || !batch_count || batch_count>65535 ||
+      (!batches && (!records || !count || !atoms || !output || batch_count!=1)) ||
+      !direction || !status) return static_cast<int>(cudaErrorInvalidValue);
   FactorizedSelection selection{};
   selection.family=family; selection.radial=radial;
   selection.centers=family==0 ? 4 : family==1 ? 3 : 2;
@@ -490,7 +507,7 @@ int launch_factorized_integral(unsigned family, unsigned radial, const unsigned*
       return static_cast<int>(cudaErrorInvalidValue);
     selection.components[index]=components[index];
   }
-  factorized_integral_kernel<<<selection.component_count,64,0,stream>>>(selection,records,count,atoms,direction,output,status);
+  factorized_integral_kernel<<<dim3(selection.component_count,batch_count),64,0,stream>>>(selection,records,count,atoms,direction,output,status,batches);
   return static_cast<int>(cudaGetLastError());
 }
 }  // namespace generativeqc::dft::hessian_aot
