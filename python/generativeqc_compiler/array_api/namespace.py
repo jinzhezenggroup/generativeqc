@@ -9,7 +9,12 @@ from math import copysign, isfinite, prod
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
-from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
+from generativeqc_compiler.tensor.types import (
+    Index,
+    IndexSpace,
+    TensorSpec,
+    checked_shape,
+)
 
 from .array import ExactScalar, VibeArray
 
@@ -692,6 +697,44 @@ def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
     return reshape(broadcast_to(reshape(value, expanded), repeated), output)
 
 
+def tile(x: object, repetitions: tuple[int, ...]) -> VibeArray:
+    """Tile generic arrays with static block repeats, without explicit index maps."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("tile scientific arrays require explicit TensorIR index maps")
+    if not isinstance(repetitions, tuple) or any(
+        type(count) is not int for count in repetitions
+    ):
+        raise TypeError("tile repetitions must be a static tuple of integers")
+    if any(count < 0 for count in repetitions):
+        raise ValueError("tile repetitions must be nonnegative")
+    rank = max(value.ndim, len(repetitions))
+    shape = (1,) * (rank - value.ndim) + value.shape
+    counts = (1,) * (rank - len(repetitions)) + repetitions
+    output = tuple(extent * count for extent, count in zip(shape, counts, strict=True))
+    checked_shape(output, value.node.spec.itemsize)
+    if value.size == 0:
+        return reshape(value, output)
+    if 0 in output:
+        # Empty results must not materialize any earlier nonzero repetitions.
+        empty = broadcast_to(reshape(value, (1, value.size)), (0, value.size))
+        return reshape(empty, output)
+    result = reshape(value, shape) if value.shape != shape else value
+    for axis, count in enumerate(counts):
+        if count == 1:
+            continue
+        shape = result.shape
+        outer = prod(shape[:axis])
+        inner = result.size // outer
+        # Split into three groups so rank-64 arrays do not require a
+        # rank-65 intermediate. Repeat whole axis blocks, not elements.
+        blocks = broadcast_to(reshape(result, (outer, 1, inner)), (outer, count, inner))
+        result = reshape(
+            blocks, shape[:axis] + (shape[axis] * count,) + shape[axis + 1 :]
+        )
+    return result
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],
@@ -760,6 +803,16 @@ def _take_axis(axis: object, rank: int) -> int:
     return _axis(axis, rank, "take")
 
 
+def _take_indices(indices: object, extent: int) -> tuple[int, ...]:
+    if not isinstance(indices, tuple) or any(
+        type(index) is not int for index in indices
+    ):
+        raise TypeError("take indices must be a static tuple of integers")
+    if any(not -extent <= index < extent for index in indices):
+        raise ValueError("gather position is outside its input axis")
+    return tuple(index + extent if index < 0 else index for index in indices)
+
+
 def take(
     x: object,
     indices: tuple[int, ...],
@@ -769,11 +822,8 @@ def take(
     """Static gather; omitted axis selects the sole axis of a vector."""
     value = _array(x)
     position = _take_axis(axis, value.ndim)
-    if not isinstance(indices, tuple) or any(
-        type(index) is not int for index in indices
-    ):
-        raise TypeError("take indices must be a static tuple of integers")
-    result = VibeArray(tensor_ir.gather(value.node, position, indices))
+    positions = _take_indices(indices, value.shape[position])
+    result = VibeArray(tensor_ir.gather(value.node, position, positions))
     return _canonical_generic(result)
 
 

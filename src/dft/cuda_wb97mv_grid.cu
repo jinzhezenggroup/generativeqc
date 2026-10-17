@@ -66,7 +66,8 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
   std::size_t features{}, potential{}, pair_elements{};
   if (maps::workspace_features(plan.extents, features) != cudaSuccess ||
       maps::workspace_potential(plan.extents, potential) != cudaSuccess ||
-      !product(options.pair_tile_points, options.pair_tile_points, pair_elements) ||
+      !product(std::min(shape.points, options.pair_tile_points),
+               std::min(shape.points, options.pair_tile_points), pair_elements) ||
       !product(pair_elements, options.nuclear_response ? 10 : 4, pair_elements))
     return false;
   plan.tensor_bytes = std::max(features, potential);
