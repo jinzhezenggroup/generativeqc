@@ -86,6 +86,27 @@ work/profile accounting and target RTX 5090 qualification are still required.
 
 ## Revisit and reproduction
 
+The final named, seed-inclusive generated fixture also passes on an assigned
+RTX 5090 in Slurm node5 job 1718, including memcheck, synccheck and racecheck
+with zero errors or hazards. The full native density-consumer Libcint suite
+passes all sixteen spin, representation and enable/disable cases on node2.
+These operator gates are distinct from complete endpoint qualification.
+
+The initial pure-PBE UKS charged-water-dimer fixture failed SCF before any
+derivative execution in both an enabled and a disabled case (14/16 tests
+passed). Retain that negative receipt; do not relabel it as a derivative
+failure or a successful endpoint. The operator test uses its stable doublet
+monomer instead, retaining strict SCF and numerical assertions and nonzero
+order-six/seven responses. Arbitrary four-center UKS contraction coverage
+remains in the independent raw-AD/host-orbit fixture. No benchmark geometry,
+grid, convergence threshold, tolerance or population limit changes.
+
+The unfiltered linked-dispatch racecheck exceeded its finite 420-second
+instrumentation budget. Full linked memcheck/synccheck pass, and a separately
+declared two-launch class-domain racecheck passes with zero hazards. Do not
+describe that limited linked check as an unlimited full-dispatch racecheck;
+the separate generated-fixture racecheck has its own broader scientific scope.
+
 Do not promote a default or claim GPU4PySCF parity from these probes. Retain a
 candidate only after the complete endpoint and independent 1e-8 Eh / 1e-7
 Eh/Bohr gates pass with original population/time limits and all twelve calls.

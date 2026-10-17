@@ -290,6 +290,20 @@ separates the generated low-order and order-six spatial consumers for event
 attribution. This diagnostic repeats candidate enumeration; its measured
 intervals cannot replace the ordinary combined kernel's clean endpoint time.
 
+`GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=relative-reuse` opts into a separate
+order-six consumer that shares primitive, Hermite and Coulomb/Boys preparation
+across AO components and nuclear responses. `relative-density` additionally
+projects density weights into Hermite coefficients before the order-six/seven
+Coulomb contraction. Factorization requires exact full-range pure J and a
+complete AO-Schwarz mask; exchange, bilinear seeds, partial masks, unsupported
+domains and nonfinite reordered intermediates retain the component fallback
+before any force scatter. These selectors are captured during preparation;
+the automatic policy is unchanged, and `spatial-reuse` or `0` selects the
+retained spatial or incumbent route. The census's `density_contraction`
+subrecord counts density terms and Hermite products separately from component
+contractions, including preparation performed by declined attempts. None of
+these invocation counts is a hardware FLOP count.
+
 Two preparation-time experimental controls retain the incumbent defaults:
 `GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE=8|16|32` changes only the admitted
 dd×dp page width (default 32); `GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR=1`
