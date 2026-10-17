@@ -68,3 +68,27 @@ def test_metric_gemv_force_record_restores_its_hash_bound_original(
     assert load_record(root / metadata["stored_path"]) == value
     assert value["workload"]["ao_count"] == aos
     assert value["workload"]["batch_size"] == 4
+
+
+def test_metric_gemv_energy_record_restores_its_hash_bound_original() -> None:
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "benchmarks/results/issue206-metric-gemv/measurements"
+    metadata = json.loads((directory / "384ao-b4-energy-blas.storage.json").read_text())
+    stored_path = directory / "384ao-b4-energy-blas.json.gz"
+    original_path = directory / "384ao-b4-energy-blas.json"
+    assert metadata["stored_path"] == stored_path.relative_to(root).as_posix()
+    assert metadata["original_path"] == original_path.relative_to(root).as_posix()
+    stored = stored_path.read_bytes()
+    original = gzip.decompress(stored)
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert len(original) == metadata["original_bytes"] == 99289
+    expected_sha256 = "84dd083b991d8539fa2f8b0ff8dfa6bb89c5cf32e55f9869d594f28a0cbba9ff"
+    assert hashlib.sha256(original).hexdigest() == expected_sha256
+    assert metadata["original_sha256"] == expected_sha256
+    assert metadata["original_git_blob"] == "85eab5969287b529d7526a58fcb4170c31846561"
+    value = json.loads(original)
+    assert load_record(stored_path) == value
+    assert value["workload"]["ao_count"] == 384
+    assert value["workload"]["batch_size"] == 4
+    assert value["workload"]["properties"] == ["energy"]

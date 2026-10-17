@@ -123,3 +123,11 @@ The 2026-10-17 storage-only compaction applies the same representation to the
 receipts pin the original Git blobs and both byte identities. Every historical
 sample and decoded-file hash is preserved; this makes room for new Hessian
 evidence without increasing the repository's 64 MiB evidence budget.
+
+The 384-AO batch-four BLAS energy comparison is likewise retained losslessly in
+`measurements/384ao-b4-energy-blas.json.gz`, with its original Git blob and both
+byte identities in the adjacent `.storage.json`. All 99,289 original JSON bytes
+are restored by `gzip -dc` or read by the shared `load_record` reader. Historical
+summary paths and decoded-file hashes remain unchanged. This storage-only change
+makes room for the pending Direct-force evidence without changing its measured
+source, samples, qualification gates or the aggregate evidence budget.
