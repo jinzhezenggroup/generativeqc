@@ -372,9 +372,8 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
       binding ? dft::stationary_gradient_model_qualification(*binding, aos) : 0;
   if (execution_plan.generated_split_hybrid && !qualify_through_d &&
       (!binding || !matched_model ||
-       (!application &&
-        (!native_shape ||
-         !dft::stationary_gradient_independently_qualified(matched_model, aos, atoms)))))
+       (!application && (!native_shape || !dft::stationary_gradient_independently_qualified(
+                                              matched_model, aos, atoms)))))
     return {};
   if (application) {
     if (!binding) return {};
@@ -2959,7 +2958,8 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
         (strict_density || budget_density) &&
             dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                    shape[1], shape[0], shape[4], strict_density) != 0);
+                                                    shape[1], shape[0], shape[4],
+                                                    strict_density) != 0);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -3089,4 +3089,3 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
 }
 
 }  // namespace generativeqc::methods::detail
-
