@@ -331,7 +331,10 @@ def _independent_potential(
     return _assemble(fixture["jets"], coefficients)
 
 
-@pytest.mark.parametrize("spins,points,tile", ((1, 9, 3), (2, 9, 5), (2, 133, 32)))
+@pytest.mark.parametrize(
+    "spins,points,tile",
+    ((1, 9, 3), (2, 9, 5), (2, 133, 32), (1, 263, 256), (2, 263, 256)),
+)
 def test_native_against_independent_libxc_and_vv10(
     probe: Path, spins: int, points: int, tile: int
 ) -> None:

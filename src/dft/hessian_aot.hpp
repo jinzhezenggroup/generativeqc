@@ -25,6 +25,9 @@ using AoLaunch = int (*)(const double*, std::size_t, std::size_t, std::size_t, c
                          std::size_t, std::size_t, double*, int*, cudaStream_t);
 using IntegralLaunch = int (*)(const double*, std::size_t, const long long*, const double*, double*,
                                int*, cudaStream_t);
+struct FactorizedIntegralBatch;
+using IntegralBatchLaunch = int (*)(const FactorizedIntegralBatch*, std::size_t, const double*,
+                                    int*, cudaStream_t);
 
 /** Scientific selectors for integral closure, independent of program names.
  * Components use the flattened CCA Cartesian product of these shell orders.
@@ -50,6 +53,7 @@ struct Program {
   AoLaunch ao{};
   IntegralLaunch integral{};
   IntegralSignature signature{};
+  IntegralBatchLaunch integral_batch{};
 };
 
 /** Immutable, explicitly selected build inventory; no runtime discovery. */

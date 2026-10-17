@@ -528,7 +528,7 @@ def test_moving_fock_and_stationary_mixed_contraction_against_independent_values
 
 @pytest.mark.parametrize("spins", [1, 2])
 @pytest.mark.parametrize("case", ["full", "frozen", "zero", "empty-screen"])
-@pytest.mark.parametrize("tile", [1, 3, 64])
+@pytest.mark.parametrize("tile", [1, 3, 64, 256])
 def test_native_moving_grid_matches_ad_and_retains_bounded_right_cache(
     spins: int,
     case: str,

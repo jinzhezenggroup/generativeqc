@@ -116,3 +116,10 @@ The 192-AO batch-four serial-dot comparison is likewise retained losslessly in
 `.storage.json`. The stored payload restores all 166,398 original JSON bytes;
 historical command paths and decoded-file hashes remain unchanged. Read the
 record with the shared `load_record` reader or `gzip -dc`.
+
+The 2026-10-17 storage-only compaction applies the same representation to the
+96-AO batch-four serial-dot and BLAS force comparisons in
+`measurements/96ao-b4-forces-{serial,blas}.json.gz`. Adjacent `.storage.json`
+receipts pin the original Git blobs and both byte identities. Every historical
+sample and decoded-file hash is preserved; this makes room for new Hessian
+evidence without increasing the repository's 64 MiB evidence budget.

@@ -110,13 +110,24 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   CudaWb97mvJkOptions options;
   options.part = static_cast<CudaWb97mvJkPart>(header[4]);
   options.radial_tile = header[5];
-  if (cache_mode != "resident") {
+  if (cache_mode == "batch-chunked") options.max_batch_projection_bytes = 32ULL << 10;
+  if (cache_mode == "projection-budgeted") options.max_batch_projection_bytes = 1;
+  if (cache_mode == "streamed" || cache_mode == "budgeted") {
     options.max_resident_integral_bytes = 0;
     if (cache_mode == "budgeted") {
       std::size_t minimum{};
       check(cuda_wb97mv_jk_workspace(shape, shells, options, minimum));
       options.max_workspace_bytes = minimum;
       options.max_resident_integral_bytes = 64ULL << 20;
+    }
+  }
+  if (cache_mode == "unbatched" || cache_mode == "batch-budgeted") {
+    options.max_batch_workspace_bytes = 0;
+    if (cache_mode == "batch-budgeted") {
+      std::size_t minimum{};
+      check(cuda_wb97mv_jk_workspace(shape, shells, options, minimum));
+      options.max_workspace_bytes = minimum;
+      options.max_batch_workspace_bytes = 128ULL << 20;
     }
   }
   std::size_t bytes{};
@@ -334,6 +345,10 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
             << ",\"records\":" << receipt.primitive_records_per_action
             << ",\"components\":" << receipt.component_evaluations
             << ",\"resident_bytes\":" << receipt.resident_integral_bytes
+            << ",\"batch_bytes\":" << receipt.batched_workspace_bytes
+            << ",\"integral_launches\":" << receipt.integral_launches
+            << ",\"projection_launches\":" << receipt.projection_launches
+            << ",\"reduction_launches\":" << receipt.reduction_launches
             << ",\"projections\":" << receipt.projection_terms_bound
             << ",\"reductions\":" << receipt.reduction_terms << "}\n";
 }
@@ -343,7 +358,10 @@ int main(int argc, char** argv) {
     require(argc == 3 || argc == 4,
             "usage: jk-probe source.bin output.bin [resident|streamed|budgeted]");
     const std::string mode = argc == 4 ? argv[3] : "resident";
-    require(mode == "resident" || mode == "streamed" || mode == "budgeted", "invalid cache mode");
+    require(mode == "resident" || mode == "streamed" || mode == "budgeted" || mode == "unbatched" ||
+                mode == "batch-budgeted" || mode == "batch-chunked" ||
+                mode == "projection-budgeted",
+            "invalid cache mode");
     run(argv[1], argv[2], mode);
     return 0;
   } catch (const std::exception& error) {
