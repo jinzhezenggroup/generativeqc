@@ -49,6 +49,9 @@ from codegen_test_support import (
     write_production_bundle,
 )
 
+if typing.TYPE_CHECKING:
+    from conftest import NativeCxx
+
 
 @pytest.mark.parametrize("name", ("psps", "ppss"))
 def test_low_order_production_force_is_generated_by_common_rys2_pipeline(
@@ -977,7 +980,7 @@ def test_psss_force_math_is_unconditionally_generated() -> None:
 
 
 def test_ssss_force_codegen_emits_only_independent_gradient_roots(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
     """Execute the three-center adapter with unused geometry poisoned, not suffix text."""
     import subprocess
