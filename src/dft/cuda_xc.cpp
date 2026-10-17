@@ -404,7 +404,8 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
                                                              device_budget, compact, ragged);
   if (plan.tiles == 1) return;
-  const auto launcher = cuda_xc_detail::resolve_point_batch_launcher(layout_.functional);
+  const auto launcher =
+      cuda_xc_detail::resolve_point_batch_launcher(layout_.functional, point_launcher_);
   double* arena = nullptr;
   bool host_oom = false;
   const auto status = generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&arena),
