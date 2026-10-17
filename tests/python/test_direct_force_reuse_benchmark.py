@@ -162,7 +162,7 @@ def test_worker_reuse_preserves_all_evidence(
     (output / existing).write_text("original evidence")
     with pytest.raises(FileExistsError):
         direct_force_reuse.main([str(output), "--worker"])
-    assert {p.name: p.read_text() for p in output.iterdir()} == {
+    assert {path.name: path.read_text() for path in output.iterdir()} == {
         existing: "original evidence"
     }
 
@@ -218,8 +218,8 @@ def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None
     leader = (
         "import subprocess,sys,time,pathlib;"
         f"subprocess.Popen([sys.executable,'-c',{descendant!r}]);"
-        f"p=pathlib.Path({str(marker)!r});\n"
-        "while not p.exists():time.sleep(.01)\n"
+        f"ready_path=pathlib.Path({str(marker)!r});\n"
+        "while not ready_path.exists():time.sleep(.01)\n"
         + ("" if leader_exits else "time.sleep(15)")
     )
     child = subprocess.Popen([sys.executable, "-c", leader], start_new_session=True)
@@ -357,7 +357,9 @@ def test_parent_rejects_existing_output(tmp_path: Path, scheduler: None) -> None
     (output / "sentinel").write_text("preserve")
     with pytest.raises(FileExistsError):
         direct_force_reuse.main([str(output)])
-    assert {p.name: p.read_text() for p in output.iterdir()} == {"sentinel": "preserve"}
+    assert {path.name: path.read_text() for path in output.iterdir()} == {
+        "sentinel": "preserve"
+    }
 
 
 @pytest.mark.parametrize("primary", ["error", "timeout", "nonzero"])
