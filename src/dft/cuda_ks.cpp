@@ -2655,6 +2655,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else {
       incremental_delta_updates = 0;
     }
+    // Retaining a screened delta as the next anchor accumulates omissions and
+    // previously forced full/delta alternation. Keep the full anchor instead.
+    if (pending_incremental_delta && incremental_direct_jk_policy.fixed_full_density_anchor) return;
     launch_copy_matrix_kernel(element_blocks, 128, 0, stream, elements, density,
                               incremental_anchor_density);
     launch_copy_matrix_kernel(matrix_blocks, 128, 0, stream, matrix, j, incremental_anchor_j);
@@ -2990,7 +2993,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
     for (unsigned s = 0; s < 2; ++s)
       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
-    if (!is_failed && incremental_direct_jk && pending_incremental_delta)
+    if (!is_failed && incremental_direct_jk && pending_incremental_delta &&
+        !incremental_direct_jk_policy.fixed_full_density_anchor)
       ++output.incremental_direct_jk.anchor_updates;
     if (is_failed) {
       pending_incremental_delta = false;

@@ -295,8 +295,9 @@ void incremental_direct_jk_policy_resolution() {
           "exact-linear lower unexpectedly inherited the screened RMS gate");
 
   const auto density_screened = resolve_incremental_direct_jk_policy(options, {true, true, false});
-  require(density_screened.active && density_screened.effective_rebuild_interval == 1,
-          "density-screened lower did not bound the delta anchor chain");
+  require(density_screened.active && density_screened.effective_rebuild_interval == 8 &&
+              density_screened.fixed_full_density_anchor,
+          "density-screened lower did not retain a full anchor across the requested cadence");
   require(density_screened.density_rms_threshold == 2.0e-3,
           "density-screened lower lost the late-SCF RMS gate");
 
@@ -304,6 +305,8 @@ void incremental_direct_jk_policy_resolution() {
   const auto unscreened = resolve_incremental_direct_jk_policy(options, {true, true, false});
   require(unscreened.active && unscreened.effective_rebuild_interval == 8,
           "disabled screening did not restore exact-linear refresh cadence");
+  require(!unscreened.fixed_full_density_anchor && !exact_linear.fixed_full_density_anchor,
+          "exact-linear lower unexpectedly retained a fixed screened anchor");
   require(unscreened.density_rms_threshold == 0.0,
           "disabled screening retained an adaptive RMS gate");
 

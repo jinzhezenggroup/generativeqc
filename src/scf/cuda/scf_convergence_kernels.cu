@@ -61,7 +61,9 @@ __global__ void update_convergence_kernel(
     bool guard_energy_roundoff, const double* energy, double* previous_energy,
     const double* next_density, double* density, std::uint8_t* active, std::uint8_t* converged,
     std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    std::uint32_t* incremental_delta_updates,
+    const unsigned long long* incremental_delta_build_count) {
   // A warp owns one system.  This is intentionally a one-warp block because
   // all scalar state transitions are performed by lane zero after the warp
   // reduction; the matrix walk itself is spread over the 32 lanes.
@@ -94,14 +96,19 @@ __global__ void update_convergence_kernel(
     iterations[system] = iteration;
     energy_change[system] = change;
     density_rms[system] = rms;
+    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, incremental_delta_updates,
+        incremental_delta_build_count);
     const bool did_converge =
+        !enter_full_energy_refinement &&
         hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
                                density_tolerance, rms, physical_maximum, guard_energy_roundoff);
     if (did_converge) {
       converged[system] = 1;
       active[system] = 0;
     } else {
-      previous_energy[system] = energy[system];
+      previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
       copy_next_density = 1;
     }
   }
@@ -124,7 +131,9 @@ __global__ void update_uhf_convergence_kernel(
     bool guard_energy_roundoff, const double* energy, double* previous_energy,
     const double* next_density, double* density, std::uint8_t* active, std::uint8_t* converged,
     std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    std::uint32_t* incremental_delta_updates,
+    const unsigned long long* incremental_delta_build_count) {
   // Keep UHF's two spin matrices under one warp so the convergence reduction
   // and scalar state transition have the same ordering as RHF.
   const std::int32_t system = static_cast<std::int32_t>(blockIdx.x);
@@ -156,11 +165,16 @@ __global__ void update_uhf_convergence_kernel(
     // Preserve the existing UHF baseline update semantics, including the
     // converged iteration, because it is observable by the next warm replay.
     const double baseline = previous_energy[system];
-    previous_energy[system] = energy[system];
     energy_change[system] = change;
     density_rms[system] = rms;
     ++iterations[system];
+    const bool enter_full_energy_refinement = begin_hf_full_energy_refinement(
+        system, energy[system], density_tolerance, rms, physical_maximum,
+        target_operator && physical_residual != nullptr, incremental_delta_updates,
+        incremental_delta_build_count);
+    previous_energy[system] = enter_full_energy_refinement ? CUDART_INF : energy[system];
     const bool did_converge =
+        !enter_full_energy_refinement &&
         hf_iteration_converged(energy[system], baseline, energy_tolerance, density_tolerance, rms,
                                physical_maximum, guard_energy_roundoff);
     if (did_converge) {
@@ -311,17 +325,21 @@ void launch_update_convergence_kernel(
     double density_tolerance, bool guard_energy_roundoff, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    std::uint32_t* incremental_delta_updates,
+    const unsigned long long* incremental_delta_build_count) {
   if (retain_converged_density) {
     update_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, incremental_delta_updates,
+        incremental_delta_build_count);
   } else {
     update_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, incremental_delta_updates,
+        incremental_delta_build_count);
   }
 }
 
@@ -331,17 +349,21 @@ void launch_update_uhf_convergence_kernel(
     double density_tolerance, bool guard_energy_roundoff, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    std::uint32_t* incremental_delta_updates,
+    const unsigned long long* incremental_delta_build_count) {
   if (retain_converged_density) {
     update_uhf_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, incremental_delta_updates,
+        incremental_delta_build_count);
   } else {
     update_uhf_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, incremental_delta_updates,
+        incremental_delta_build_count);
   }
 }
 

@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iomanip>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -49,13 +51,14 @@ generativeqc::core::System asymmetric_two_center(bool unrestricted) {
 generativeqc::scf::RhfBucketItem run_cached(generativeqc::scf::CudaRhfBucketPlan** plan,
                                             const generativeqc::core::System& system,
                                             const generativeqc::scf::ScfOptions& options,
-                                            bool unrestricted) {
+                                            bool unrestricted,
+                                            const std::vector<double>* initial_density = nullptr) {
   const std::vector<generativeqc::core::System> systems{system};
-  const std::vector<const std::vector<double>*> cold{nullptr};
-  const auto rows =
-      unrestricted
-          ? generativeqc::scf::run_uhf_cuda_bucket_cached(plan, systems, options, cold, 0, false)
-          : generativeqc::scf::run_rhf_cuda_bucket_cached(plan, systems, options, cold, 0, false);
+  const std::vector<const std::vector<double>*> initial_densities{initial_density};
+  const auto rows = unrestricted ? generativeqc::scf::run_uhf_cuda_bucket_cached(
+                                       plan, systems, options, initial_densities, 0, false)
+                                 : generativeqc::scf::run_rhf_cuda_bucket_cached(
+                                       plan, systems, options, initial_densities, 0, false);
   require(rows.size() == 1, "incremental Direct-J/K CUDA bucket returned wrong size");
   return rows.front();
 }
@@ -72,6 +75,23 @@ void compare_final_state(const generativeqc::scf::ScfResult& baseline,
     require(std::abs(baseline.forces[i] - incremental.forces[i]) < 10.0 * tolerance,
             "incremental Direct-J/K changed final forces");
   }
+}
+
+/** Independent PySCF 2.14.0 STO-3G/Bohr energy-and-force fixtures, not a native
+ * full/delta self-comparison. Both spin populations and moved geometries must
+ * pass the ordinary endpoint gates without changing convergence tolerances. */
+void compare_pyscf(const generativeqc::scf::ScfResult& result, bool unrestricted, bool moved) {
+  const double energy = unrestricted ? (moved ? -3.0238944398316963 : -3.0089750919335954)
+                                     : (moved ? -2.843497533600211 : -2.840418791231528);
+  const double force = unrestricted ? (moved ? 0.4815583993190885 : 0.5134714730999471)
+                                    : (moved ? 0.09425952363345647 : 0.1112894685854584);
+  require(result.converged && std::abs(result.energy - energy) < 1e-8,
+          "CUDA incremental endpoint failed the independent PySCF energy gate");
+  const std::vector<double> expected{0.0, 0.0, -force, 0.0, 0.0, force};
+  require(result.forces.size() == expected.size(), "PySCF force fixture shape mismatch");
+  for (std::size_t element = 0; element < expected.size(); ++element)
+    require(std::abs(result.forces[element] - expected[element]) < 1e-7,
+            "CUDA incremental endpoint failed the independent PySCF force gate");
 }
 
 void verify_case(bool unrestricted, double screening_tolerance, unsigned requested_interval) {
@@ -96,6 +116,8 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   require(incremental.status == GENERATIVEQC_STATUS_SUCCESS && incremental.scf.converged,
           "incremental CUDA Direct-J/K fixture failed");
   compare_final_state(baseline.scf, incremental.scf, screening_tolerance == 0.0 ? 5.0e-10 : 5.0e-8);
+  compare_pyscf(baseline.scf, unrestricted, false);
+  compare_pyscf(incremental.scf, unrestricted, false);
 
   const auto& diagnostic = incremental.scf.incremental_direct_jk;
   require(diagnostic.requested && diagnostic.active,
@@ -103,12 +125,17 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   const std::uint64_t builds = diagnostic.anchor_full_builds + diagnostic.delta_builds;
   require(builds == incremental.scf.iterations && diagnostic.delta_builds != 0U,
           "native CUDA incremental build counters do not match SCF iterations");
-  require(diagnostic.anchor_updates == diagnostic.delta_builds,
+  require(diagnostic.anchor_updates == (screening_tolerance == 0.0 ? diagnostic.delta_builds : 0U),
           "native CUDA incremental anchor-update semantics changed");
   require(diagnostic.max_abs_delta_density > 0.0,
           "native CUDA incremental path did not observe a density delta");
   require(diagnostic.post_scf_full_builds != 0U,
           "native CUDA incremental path skipped strict final full rebuilds");
+  std::cout << (unrestricted ? "UHF" : "RHF") << " screening=" << screening_tolerance
+            << " interval=" << requested_interval << " iterations=" << incremental.scf.iterations
+            << " full=" << diagnostic.anchor_full_builds << " delta=" << diagnostic.delta_builds
+            << " promoted=" << diagnostic.anchor_updates
+            << " final_full=" << diagnostic.post_scf_full_builds << '\n';
   require(diagnostic.quartet_work_counters_valid,
           "fixed-topology incremental Direct-J/K work counters are not valid");
   require(diagnostic.full_admitted_shell_quartets <= diagnostic.full_candidate_shell_quartets &&
@@ -131,9 +158,10 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
                 diagnostic.delta_rejected_shell_quartets == 0U,
             "unscreened incremental Direct-J/K rejected shell quartets");
   } else {
-    const std::uint64_t expected_full = (builds + 1U) / 2U;
-    require(diagnostic.anchor_full_builds == expected_full,
-            "screened incremental mode accumulated more than one delta update");
+    const std::uint64_t expected_full =
+        requested_interval == 0U ? 1U : (builds + requested_interval) / (requested_interval + 1U);
+    require(diagnostic.anchor_full_builds >= expected_full && diagnostic.anchor_full_builds >= 3U,
+            "screened incremental mode omitted cadence refreshes or full-energy closure");
     require(diagnostic.periodic_rebuilds + 1U == diagnostic.anchor_full_builds,
             "screened incremental periodic rebuild counters disagree");
   }
@@ -154,6 +182,8 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
           "changed-geometry CUDA incremental replay failed");
   compare_final_state(changed_baseline.scf, changed_incremental.scf,
                       screening_tolerance == 0.0 ? 5.0e-10 : 5.0e-8);
+  compare_pyscf(changed_baseline.scf, unrestricted, true);
+  compare_pyscf(changed_incremental.scf, unrestricted, true);
   require(changed_incremental.scf.incremental_direct_jk.anchor_full_builds != 0U,
           "changed geometry reused a stale incremental Direct-J/K anchor");
   if (screening_tolerance == 0.0 && requested_interval == 0U) {
@@ -217,18 +247,123 @@ void verify_density_rms_gate() {
   generativeqc::scf::destroy_rhf_cuda_bucket_plan(plan);
 }
 
+/** No-delta reuse must preserve the independently checked force determinant,
+ * including repeated resident replays; an arbitrary external seed is not proof. */
+void verify_warm_full_only(bool unrestricted, bool expect_reuse = true) {
+  using namespace generativeqc::scf;
+  const auto system = asymmetric_two_center(unrestricted);
+  ScfOptions options;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.screening_tolerance = 1e-12;
+  options.compute_forces = true;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.incremental_direct_jk = true;
+  options.incremental_direct_jk_rebuild_interval = 8;
+
+  CudaRhfBucketPlan* plan = nullptr;
+  const auto report_phase = [&](const char* phase, const RhfBucketItem& point) {
+    std::cout << (unrestricted ? "UHF" : "RHF") << " warm-test=" << phase
+              << " reuse=" << expect_reuse << " iterations=" << point.scf.iterations
+              << " energy=" << std::setprecision(17) << point.scf.energy
+              << " full=" << point.scf.incremental_direct_jk.anchor_full_builds
+              << " delta=" << point.scf.incremental_direct_jk.delta_builds
+              << " final_full=" << point.scf.precision.post_scf_fock_builds << std::endl;
+  };
+  const auto cold = run_cached(&plan, system, options, unrestricted);
+  report_phase("cold", cold);
+  require(cold.status == GENERATIVEQC_STATUS_SUCCESS, "incremental warm seed failed");
+  compare_pyscf(cold.scf, unrestricted, false);
+  const auto retained_density = cold.scf.density;
+  for (unsigned repeat = 0; repeat < (expect_reuse ? 3U : 1U); ++repeat) {
+    const auto warm = run_cached(&plan, system, options, unrestricted, &retained_density);
+    report_phase("resident", warm);
+    require(warm.status == GENERATIVEQC_STATUS_SUCCESS && warm.scf.initial_density_used,
+            "resident incremental warm replay failed");
+    compare_pyscf(warm.scf, unrestricted, false);
+    compare_final_state(cold.scf, warm.scf, 1e-9);
+    if (!expect_reuse) {
+      CudaDirectFinalStateAudit audit;
+      require(warm.scf.incremental_direct_jk.delta_builds == 0 &&
+                  warm.scf.precision.post_scf_fock_builds > 0 &&
+                  get_rhf_cuda_final_state_audit(plan, audit) &&
+                  audit.route == CudaDirectFinalStateRoute::canonical_fallback &&
+                  audit.fallback_reason ==
+                      CudaDirectFinalStateFallbackReason::explicit_final_fock_rebuild,
+              "full-only warm reuse ignored the explicit final rebuild diagnostic");
+      destroy_rhf_cuda_bucket_plan(plan);
+      return;
+    }
+    require(warm.scf.density == retained_density,
+            "no-delta reuse advanced the certified density generation");
+    require(warm.scf.incremental_direct_jk.active &&
+                warm.scf.incremental_direct_jk.delta_builds == 0 &&
+                warm.scf.incremental_direct_jk.post_scf_full_builds == 0 &&
+                warm.scf.precision.post_scf_fock_builds == 0,
+            "full-only resident warm solve performed unnecessary final Fock builds");
+    CudaDirectFinalStateAudit audit;
+    require(get_rhf_cuda_final_state_audit(plan, audit) &&
+                audit.route == CudaDirectFinalStateRoute::scf_force_ready &&
+                audit.seed_provenance && audit.physical_residual_validated &&
+                audit.orbital_frame_bound && audit.restart_same_density_generation &&
+                audit.additional_physical_fock_builds == 0,
+            "no-delta warm publication lost its physical-state proof");
+  }
+
+  CudaRhfBucketPlan* external_plan = nullptr;
+  const auto external =
+      run_cached(&external_plan, system, options, unrestricted, &retained_density);
+  report_phase("external", external);
+  require(external.status == GENERATIVEQC_STATUS_SUCCESS,
+          "external warm density failed its bounded finalization");
+  compare_pyscf(external.scf, unrestricted, false);
+  CudaDirectFinalStateAudit external_audit;
+  require(get_rhf_cuda_final_state_audit(external_plan, external_audit) &&
+              external_audit.route == CudaDirectFinalStateRoute::canonical_fallback &&
+              !external_audit.seed_provenance && external.scf.precision.post_scf_fock_builds > 0,
+          "external warm seed bypassed the required physical rebuild");
+  destroy_rhf_cuda_bucket_plan(external_plan);
+
+  auto moved_system = system;
+  moved_system.atoms[1].position[2] += 0.03;
+  const auto moved = run_cached(&plan, moved_system, options, unrestricted, &retained_density);
+  report_phase("moved", moved);
+  require(moved.status == GENERATIVEQC_STATUS_SUCCESS,
+          "moved warm density failed its bounded finalization");
+  compare_pyscf(moved.scf, unrestricted, true);
+  CudaDirectFinalStateAudit moved_audit;
+  require(get_rhf_cuda_final_state_audit(plan, moved_audit) &&
+              moved_audit.route == CudaDirectFinalStateRoute::canonical_fallback &&
+              !moved_audit.seed_provenance && moved.scf.precision.post_scf_fock_builds > 0,
+          "changed geometry reused an unproven force determinant");
+  destroy_rhf_cuda_bucket_plan(plan);
+}
+
 }  // namespace
 
 int main() {
   if (!cuda_device_available()) return 77;
   try {
+    require(::setenv("GENERATIVEQC_FINAL_FOCK_REBUILD", "0", 1) == 0,
+            "could not select retained final-state qualification");
     verify_case(false, 0.0, 0U);
     verify_case(true, 0.0, 0U);
     verify_case(false, 1.0e-12, 8U);
     verify_case(true, 1.0e-12, 8U);
+    verify_case(false, 1.0e-12, 0U);
+    verify_case(true, 1.0e-12, 0U);
+    verify_case(false, 1.0e-12, 1U);
+    verify_case(true, 1.0e-12, 1U);
     verify_density_rms_gate();
+    verify_warm_full_only(false);
+    verify_warm_full_only(true);
+    require(::setenv("GENERATIVEQC_FINAL_FOCK_REBUILD", "1", 1) == 0,
+            "could not select explicit final rebuild qualification");
+    verify_warm_full_only(false, false);
+    verify_warm_full_only(true, false);
     return EXIT_SUCCESS;
-  } catch (const std::exception&) {
+  } catch (const std::exception& error) {
+    std::cerr << error.what() << '\n';
     return EXIT_FAILURE;
   }
 }
