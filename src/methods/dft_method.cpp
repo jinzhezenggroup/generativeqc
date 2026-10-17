@@ -376,9 +376,13 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
       (!binding || !matched_model || (!native_shape && !application)))
     return {};
   if (application) {
-    if (!binding ||
-        !dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                 aos, atoms, maximum_angular, strict_gradient))
+    if (!binding) return {};
+    // A budget-Fock SCF may still use the incumbent native FP64 force when
+    // no typed gradient is available. Do not drop that qualified path merely
+    // because its FP32 candidate lacks a linked operator or model match.
+    if (!dft::application_gradient_qualification(*binding, options.application_precision_budget,
+                                                  aos, atoms, maximum_angular, strict_gradient) &&
+        !budget_force)
       return {};
   } else if ((maximum_angular > 1 && !qualify_through_d) &&
              !dft::stationary_gradient_independently_qualified(matched_model, aos, atoms))
