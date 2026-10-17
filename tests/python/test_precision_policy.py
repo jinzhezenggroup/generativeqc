@@ -1300,8 +1300,8 @@ def test_hf_v3_needs_actual_weighted_work_not_a_fictitious_xc_census(
 @pytest.mark.parametrize("transport", (False, True))
 @pytest.mark.parametrize("bad_force", (False, True))
 def test_audit_required_gradient_cannot_use_xc_warmup_qualification(
-    backend, transport, bad_force
-):
+    backend: SimpleNamespace, transport: bool, bad_force: bool
+) -> None:
     backend.transport_v2 = transport
     work = {
         "complete": True,
@@ -1349,7 +1349,9 @@ def test_audit_required_gradient_cannot_use_xc_warmup_qualification(
 
 
 @pytest.mark.parametrize("failure", (RuntimeError, NotImplementedError))
-def test_mixed_gradient_fallback_retains_failed_attempt(backend, failure):
+def test_mixed_gradient_fallback_retains_failed_attempt(
+    backend: SimpleNamespace, failure: type[Exception]
+) -> None:
     backend.transport_v2 = True
     backend.block_auto = True
     backend.outputs = [
