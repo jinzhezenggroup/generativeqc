@@ -15,6 +15,12 @@ the six exact-force compiler files from #2558
 PR #2577 is merged. The composition does not enable occupied XC or guarded FP32.
 Do not relabel its measurements as master or as the older 43-second source cohort.
 
+The shared compiler prerequisite also changes the already-admitted generated
+order-seven/eight consumers; the order-six title describes the additional drain,
+not the entire source delta from master. Same-image selector measurements isolate
+the added reuse schedule and do not qualify every prerequisite change against
+unmodified master. Preserve this distinction when composing or promoting it.
+
 The older cooperative-six trial was rejected with approximately 55% regression
 at 48 atoms. Its per-atom AD contraction and mixed low/order-six private frame
 are not restored. This trial borrows the subsequently generated shared

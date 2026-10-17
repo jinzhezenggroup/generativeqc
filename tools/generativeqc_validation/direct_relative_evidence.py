@@ -27,7 +27,7 @@ PACKET_SHA256 = "b8ec7d7031d50f9fa0a0cafbc3b39ab9931133439d2303bb377628f9fe21b7a
 
 
 def load_packet(path: Path | None = None) -> dict[str, Any]:
-    """Read an explicit packet or authenticate the previously published object.
+    """Authenticate the historical packet from an explicit path or local Git.
 
     Missing historical objects are an actionable error, never permission to
     download evidence, replace observations, or silently skip validation.
@@ -48,8 +48,8 @@ def load_packet(path: Path | None = None) -> dict[str, Any]:
                 "fetch that existing commit or use --packet /path/to/measurements.json.xz"
             ) from error
         payload = result.stdout
-        if hashlib.sha256(payload).hexdigest() != PACKET_SHA256:
-            raise ValueError("Retained evidence object failed its integrity check")
+    if hashlib.sha256(payload).hexdigest() != PACKET_SHA256:
+        raise ValueError("Retained evidence object failed its integrity check")
     return json.loads(lzma.decompress(payload))
 
 
@@ -172,7 +172,7 @@ def summarize(packet: dict[str, Any]) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Validate historical observations or an explicitly selected local packet."""
+    """Validate authenticated historical observations from local Git or a file."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path)
     arguments = parser.parse_args(argv)
