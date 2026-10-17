@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import typing
+from collections import Counter
 from fractions import Fraction
 
 if typing.TYPE_CHECKING:
@@ -73,7 +74,14 @@ def emit_affine_work(
 
 
 def emit_affine_cuda(
-    programs: Mapping[str, Program], *, namespace: str, extents: Mapping[str, str]
+    programs: Mapping[str, Program],
+    *,
+    namespace: str,
+    extents: Mapping[str, str],
+    fuse_elementwise: bool = False,
+    fuse_contraction_epilogues: bool = False,
+    parallel_scalar_reduction: bool = False,
+    parallel_output_reduction: bool = False,
 ) -> str:
     """Emit checked borrowed-arena launchers, binding spaces by identity/name.
 
@@ -81,6 +89,13 @@ def emit_affine_cuda(
     broadcast are admitted. Slices, selections, nonuniform witness literals and
     other operations fail at generation time. Empty contractions sum to zero.
     All device arithmetic and finite checks run on the caller's CUDA stream.
+    Optional single-consumer elementwise fusion preserves each intermediate
+    finite check and arithmetic order. Optional scalar reductions use a fixed
+    128-lane FP64 tree: this deliberately changes summation order, never dtype,
+    and requires consumer-specific independent numerical qualification.
+    Single-consumer contraction epilogues may share the consumer's output
+    coordinates, retaining the original inner loops and finite checks without
+    recomputing any contraction or changing its reduction order.
     """
     identifiers = (namespace, *programs, *extents.values())
     if not programs or any(
@@ -180,13 +195,147 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
             ):
                 raise ValueError(f"unqualified affine CUDA primitive/dtype: {node.op}")
             dims(node)
+        uses = Counter(source for node in nodes for source in node.inputs)
+        outputs = set(program.outputs.values())
+        cooperative = {}
+        for node in nodes:
+            if (
+                (
+                    parallel_output_reduction
+                    if node.spec.indices
+                    else parallel_scalar_reduction
+                )
+                and node.op in ("einsum", "reduce")
+                and 0 < len(node.inputs) <= 4
+            ):
+                labels = (
+                    (tuple(range(len(node.inputs[0].spec.indices))),)
+                    if node.op == "reduce"
+                    else node.attrs["labels"]
+                )
+                output_labels = (
+                    tuple(axis for axis in labels[0] if axis not in node.attrs["axes"])
+                    if node.op == "reduce"
+                    else node.attrs["output"]
+                )
+                dimensions_by_label = {
+                    label: extent
+                    for source, source_labels in zip(node.inputs, labels, strict=True)
+                    for label, extent in zip(source_labels, dims(source), strict=True)
+                }
+                reduced = dimensions_by_label.keys() - set(output_labels)
+                if len(reduced) == 1:
+                    cooperative[node] = (
+                        labels,
+                        output_labels,
+                        dimensions_by_label,
+                        next(iter(reduced)),
+                    )
+        absorbed = {
+            source
+            for node in nodes
+            for source in node.inputs
+            if fuse_elementwise
+            and node.op in ("add", "multiply")
+            and (
+                source.op in ("constant", "add", "multiply")
+                or (
+                    fuse_contraction_epilogues
+                    and source.op in ("einsum", "reduce")
+                    and source not in cooperative
+                )
+            )
+            and source not in outputs
+            and uses[source] == 1
+            and dims(source) == dims(node)
+        }
+
+        def leaves(node: Node, absorbed: set[Node]) -> list[Node]:
+            return (
+                [leaf for source in node.inputs for leaf in leaves(source, absorbed)]
+                if node in absorbed
+                else [node]
+            )
+
+        kernel_inputs = {
+            node: (
+                tuple(
+                    dict.fromkeys(
+                        leaf
+                        for source in node.inputs
+                        for leaf in leaves(source, absorbed)
+                    )
+                )
+                if any(source in absorbed for source in node.inputs)
+                else node.inputs
+            )
+            for node in nodes
+        }
+
         for index, node in enumerate(nodes):
-            if node.op == "input":
+            if node.op == "input" or node in absorbed:
                 continue
             operands = ", ".join(
-                f"const double* operand_{number}" for number in range(len(node.inputs))
+                f"const double* operand_{number}"
+                for number in range(len(kernel_inputs[node]))
             )
             parameters = f", {operands}" if operands else ""
+            if node in cooperative:
+                labels, output_labels, dimensions_by_label, reduced = cooperative[node]
+                extent = dimensions_by_label[reduced]
+                text.extend(
+                    [
+                        f"__global__ void {name}_node_{index}(Extents shape, std::size_t size{parameters}, double* output, int* status) {{",
+                        " __shared__ int failed;",
+                        " __shared__ double partials[128];",
+                        " if (!threadIdx.x) failed = atomicAdd(status, 0);",
+                        " __syncthreads(); if (failed) return;",
+                        " for (std::size_t position = blockIdx.x; position < size; position += gridDim.x) {",
+                    ]
+                )
+                dimensions = dims(node)
+                coordinates = [f"coordinate_{axis}" for axis in range(len(dimensions))]
+                for axis, dimension in enumerate(dimensions):
+                    text.append(
+                        f" const auto {coordinates[axis]} = (position / ({product(dimensions[axis + 1 :])})) % {dimension};"
+                    )
+                label_coordinates = dict(zip(output_labels, coordinates, strict=True))
+                label_coordinates[reduced] = "radial"
+                text.extend(
+                    [
+                        " double sum = 0.0;",
+                        f" for (std::size_t radial = threadIdx.x; radial < {extent}; radial += 128) {{",
+                    ]
+                )
+                term = " * ".join(
+                    [
+                        factor(
+                            (1, 1) if node.op == "reduce" else node.attrs["coefficient"]
+                        ),
+                        *(
+                            f"operand_{operand}[{address([label_coordinates[label] for label in source_labels], dims(source))}]"
+                            for operand, (source, source_labels) in enumerate(
+                                zip(node.inputs, labels, strict=True)
+                            )
+                        ),
+                    ]
+                )
+                text.extend(
+                    [
+                        f"  sum += {term};",
+                        " }",
+                        " if (!isfinite(sum)) atomicExch(status, 1);",
+                        " partials[threadIdx.x] = sum; __syncthreads();",
+                        " for (unsigned stride = 64; stride; stride /= 2) {",
+                        "  if (threadIdx.x < stride) partials[threadIdx.x] += partials[threadIdx.x + stride];",
+                        "  __syncthreads();",
+                        " }",
+                        " if (!threadIdx.x) { output[position] = partials[0]; if (!isfinite(partials[0])) atomicExch(status, 1); }",
+                        " __syncthreads(); }",
+                        "}",
+                    ]
+                )
+                continue
             text.append(
                 f"__global__ void {name}_node_{index}(Extents shape, std::size_t size"
                 f"{parameters}, double* output, int* status) {{\n"
@@ -199,6 +348,7 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
             indexed_dimensions = (
                 dimensions
                 if node.op in ("einsum", "reduce", "transpose", "broadcast")
+                or fuse_contraction_epilogues
                 else []
             )
             for axis, extent in enumerate(indexed_dimensions):
@@ -206,22 +356,122 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
                     f"    [[maybe_unused]] const std::size_t {coordinates[axis]} = "
                     f"(position / ({product(dimensions[axis + 1 :])})) % {extent};"
                 )
-            if node.op == "constant":
-                values = node.attrs["values"]
-                if not values or len(set(values)) != 1:
-                    raise ValueError(
-                        "affine CUDA requires a uniform, nonempty witness literal"
+            if node.op in ("constant", "add", "multiply"):
+                local_values = {
+                    source: f"operand_{operand}[position]"
+                    for operand, source in enumerate(kernel_inputs[node])
+                }
+
+                def elementwise(
+                    source: Node,
+                    root: Node,
+                    values: dict[Node, str],
+                    positions: dict[Node, int],
+                    pointers: dict[Node, str],
+                    coordinates: list[str],
+                ) -> str:
+                    if source in values:
+                        return values[source]
+                    identifier = f"fused_{positions[source]}"
+                    if source.op in ("einsum", "reduce"):
+                        if source.op == "reduce":
+                            labels = (tuple(range(len(source.inputs[0].spec.indices))),)
+                            output_labels = tuple(
+                                axis
+                                for axis in labels[0]
+                                if axis not in source.attrs["axes"]
+                            )
+                        else:
+                            labels, output_labels = (
+                                source.attrs["labels"],
+                                source.attrs["output"],
+                            )
+                        dimensions_by_label = {
+                            label: extent
+                            for operand, source_labels in zip(
+                                source.inputs, labels, strict=True
+                            )
+                            for label, extent in zip(
+                                source_labels, dims(operand), strict=True
+                            )
+                        }
+                        label_coordinates = dict(
+                            zip(output_labels, coordinates, strict=True)
+                        )
+                        reduced = sorted(
+                            dimensions_by_label.keys() - label_coordinates.keys()
+                        )
+                        text.append(f"    double {identifier} = 0.0;")
+                        for label in reduced:
+                            coordinate = f"{identifier}_reduction_{label}"
+                            label_coordinates[label] = coordinate
+                            text.append(
+                                f"    for (std::size_t {coordinate} = 0; {coordinate} < {dimensions_by_label[label]}; ++{coordinate}) {{"
+                            )
+                        terms = [
+                            factor(
+                                (1, 1)
+                                if source.op == "reduce"
+                                else source.attrs["coefficient"]
+                            )
+                        ]
+                        for operand, source_labels in zip(
+                            source.inputs, labels, strict=True
+                        ):
+                            offset = address(
+                                [label_coordinates[label] for label in source_labels],
+                                dims(operand),
+                            )
+                            terms.append(f"{pointers[operand]}[{offset}]")
+                        text.append(f"      {identifier} += " + " * ".join(terms) + ";")
+                        text.extend("    }" for _ in reduced)
+                        text.append(
+                            f"    if (!isfinite({identifier})) atomicExch(status, 1);"
+                        )
+                        values[source] = identifier
+                        return identifier
+                    arguments = [
+                        elementwise(
+                            value, root, values, positions, pointers, coordinates
+                        )
+                        for value in source.inputs
+                    ]
+                    if source.op == "constant":
+                        literals = source.attrs["values"]
+                        if not literals or len(set(literals)) != 1:
+                            raise ValueError(
+                                "affine CUDA requires a uniform, nonempty witness literal"
+                            )
+                        value = factor(literals[0])
+                    elif source.op == "multiply":
+                        value = " * ".join(arguments)
+                    else:
+                        value = "0.0 + " + " + ".join(
+                            f"{factor(coefficient)} * {argument}"
+                            for coefficient, argument in zip(
+                                source.attrs["coefficients"], arguments, strict=True
+                            )
+                        )
+                    if source is root:
+                        return value
+                    text.append(f"    const double {identifier} = {value};")
+                    text.append(
+                        f"    if (!isfinite({identifier})) atomicExch(status, 1);"
                     )
-                expression = factor(values[0])
-            elif node.op == "add":
-                # Match TensorIR's positive-zero accumulator even when the
-                # first scaled operand is negative zero or underflows to it.
-                expression = "0.0 + " + " + ".join(
-                    f"{factor(coefficient)} * operand_{operand}[position]"
-                    for operand, coefficient in enumerate(node.attrs["coefficients"])
+                    values[source] = identifier
+                    return identifier
+
+                expression = elementwise(
+                    node,
+                    node,
+                    local_values,
+                    positions,
+                    {
+                        source: f"operand_{operand}"
+                        for operand, source in enumerate(kernel_inputs[node])
+                    },
+                    coordinates,
                 )
-            elif node.op == "multiply":
-                expression = "operand_0[position] * operand_1[position]"
             elif node.op == "transpose":
                 input_coordinates = [""] * len(coordinates)
                 for axis, source in enumerate(node.attrs["axes"]):
@@ -330,9 +580,16 @@ __global__ void publish(const double* input, double* output, std::size_t size, i
             if node.op == "input":
                 continue
             pointers[node] = f"base + offsets[{index}]"
-            operands = ", ".join(pointers[source] for source in node.inputs)
+            if node in absorbed:
+                continue
+            operands = ", ".join(pointers[source] for source in kernel_inputs[node])
+            grid = (
+                f"static_cast<unsigned>(sizes[{index}] < 65535 ? sizes[{index}] : 65535)"
+                if node in cooperative
+                else f"blocks(sizes[{index}])"
+            )
             text.append(
-                f"  if (sizes[{index}]) {name}_node_{index}<<<blocks(sizes[{index}]), 128, 0, stream>>>"
+                f"  if (sizes[{index}]) {name}_node_{index}<<<{grid}, 128, 0, stream>>>"
                 f"(shape, sizes[{index}], {operands + ', ' if operands else ''}{pointers[node]}, status);\n"
                 "  if ((error = cudaGetLastError()) != cudaSuccess) return error;"
             )

@@ -48,6 +48,10 @@ def generate() -> str:
             programs,
             namespace="generativeqc_wb97mv_nuclear_maps",
             extents=extents,
+            fuse_elementwise=True,
+            fuse_contraction_epilogues=True,
+            parallel_scalar_reduction=True,
+            parallel_output_reduction=True,
         ),
         emit_affine_work(
             programs, namespace="generativeqc_wb97mv_nuclear_maps", extents=extents

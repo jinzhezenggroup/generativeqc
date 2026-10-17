@@ -119,6 +119,7 @@ struct CudaKsWb97mvHessian::Impl {
   CudaKsWb97mvHessianOptions options;
   CudaKsGridReference grid_reference;
   response::CudaKsCpksReference cpks_reference;
+  response::CudaCpksOperatorCache cpks_operator;
   CudaKsResidentFockBinding fock;
   CudaKsResidentOrbitalFrameBinding frame;
   CudaKsWb97mvResponse induced;
@@ -133,6 +134,7 @@ struct CudaKsWb97mvHessian::Impl {
   bool has_df{}, has_ecp{};
   cudaStream_t stream{};
   void* arena{};
+  double* operator_matrix{};
   std::size_t bytes{}, remaining{}, matrix{}, panels{}, coordinates{}, pairs{}, raw{}, metric{};
   std::size_t map_offset{}, map_bytes{}, cpks_offset{}, cpks_bytes{}, geometry_offset{},
       geometry_bytes{}, grid_offset{}, grid_bytes{}, status_offset{};
@@ -154,6 +156,7 @@ struct CudaKsWb97mvHessian::Impl {
         remaining(policy.max_device_bytes) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
+    if (operator_matrix) (void)cudaFree(operator_matrix);
     if (arena) (void)cudaFree(arena);
   }
   template <class Value = double>
@@ -300,7 +303,7 @@ struct CudaKsWb97mvHessian::Impl {
     }
     return cudaSuccess;
   }
-  cudaError_t compute(CudaKsWb97mvHessianResult& result) {
+  cudaError_t compute(CudaKsWb97mvHessianResult& result, bool repeated_rhs = false) {
     ++receipt.attempted_directions;
     auto error = authenticate();
     if (error != cudaSuccess) return error;
@@ -355,7 +358,8 @@ struct CudaKsWb97mvHessian::Impl {
     error = response::solve_cuda_cpks(
         cpks_reference.shape(), options.cpks, cpks_reference.reference(), at(rhs),
         at(overlap_direction), CudaKsWb97mvResponse::induced_fock, &induced, at(delta_density),
-        at(delta_weights), at(cpks_offset), cpks_bytes, stream, result.response);
+        at(delta_weights), at(cpks_offset), cpks_bytes, stream, result.response,
+        repeated_rhs && operator_matrix ? &cpks_operator : nullptr);
     if (error != cudaSuccess) return error;
     if (!result.response.converged()) {
       result.status = CudaKsWb97mvHessianStatus::response_not_converged;
@@ -615,6 +619,24 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     status = owner->exact.prepare(batch, item, expected, exact_options, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     owner->charge(owner->exact.work().workspace_bytes);
+    std::size_t operator_bytes{};
+    check(response::cuda_cpks_operator_workspace(owner->cpks_reference.shape(), owner->options.cpks,
+                                                 operator_bytes));
+    if (operator_bytes && operator_bytes <= options.max_resident_cpks_bytes &&
+        operator_bytes <= owner->remaining &&
+        operator_bytes <= owner->options.cpks.max_workspace_bytes - owner->cpks_bytes) {
+      const auto allocation =
+          cudaMalloc(reinterpret_cast<void**>(&owner->operator_matrix), operator_bytes);
+      if (allocation == cudaErrorMemoryAllocation) {
+        (void)cudaGetLastError();
+        owner->operator_matrix = nullptr;
+      } else {
+        check(allocation);
+        owner->charge(operator_bytes);
+        owner->receipt.cpks_operator_bytes = operator_bytes;
+        owner->cpks_operator.reset(owner->operator_matrix, operator_bytes);
+      }
+    }
     const auto induced_bytes = owner->induced.work().device_bytes;
     status = owner->induced.retain_integrals(owner->remaining, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -681,7 +703,7 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
       unit<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(owner.at(owner.direction),
                                                                 owner.coordinates, coordinate);
       if ((error = cudaGetLastError()) != cudaSuccess ||
-          (error = owner.compute(result)) != cudaSuccess || !result.converged())
+          (error = owner.compute(result, true)) != cudaSuccess || !result.converged())
         return error;
       result.status = CudaKsWb97mvHessianStatus::failed;
       store_column<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(
@@ -714,6 +736,9 @@ CudaKsWb97mvHessianWork CudaKsWb97mvHessian::work() const noexcept {
   if (!impl_) return {};
   auto receipt = impl_->receipt;
   receipt.induced = impl_->induced.work();
+  receipt.cpks_operator_columns = impl_->cpks_operator.columns();
+  receipt.cpks_cached_actions = impl_->cpks_operator.actions();
+  receipt.cpks_physical_checks = impl_->cpks_operator.physical_checks();
   receipt.geometry = impl_->geometry.work();
   receipt.grid = impl_->grid.work();
   receipt.one_electron = impl_->one_electron.work();

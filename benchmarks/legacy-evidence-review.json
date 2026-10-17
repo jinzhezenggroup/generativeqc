@@ -272,6 +272,11 @@
       "reason": "Lossless complete paired matrices, fresh-process phase timings, semantic work, sampled-device memory, old/new controls, larger native-only runs, and canceled/failed harness attempts are retained. Numerical acceptance only: dimer Hessian-only latency remains slower than GPU4PySCF, grids are not chemically converged, and mixed GPU placements are explicit. Historical evidence is compressed without changing decoded bytes; no storage-budget increase or broad performance promotion.",
       "review_document": "benchmarks/results/wb97mv-hessian-dispatch-20261017/README.md"
     },
+    "wb97mv-hessian-response-reuse-20261017": {
+      "owner": "bounded CPKS reuse and compiler-AD grid reduction qualification",
+      "reason": "Lossless records retain all 32 final fresh-process paired endpoints, native-only larger controls, complete matrices, independent oracles, semantic work, sampled memory, bounded fallback and sanitizer receipts, and failed/interrupted intermediate attempts. Observed preparation-plus-Hessian wins apply only to coarse diagnostic grids; larger reference SCF failures remain explicit. Source/binary/cache/profile provenance is separate. No broad performance promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/wb97mv-hessian-response-reuse-20261017/README.md"
+    },
     "readme-refresh-20261015": {
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
       "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
@@ -598,6 +603,14 @@
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
+    },
+    {
+      "path": "benchmarks/results/wb97mv-hessian-response-reuse-20261017/samples.json.xz",
+      "family": "wb97mv-hessian-response-reuse-20261017",
+      "bytes": 201812,
+      "sha256": "222b07389f63eccb2808c0bb5f95dce97ea482ca1c1c8ae90fd9a53c3189659e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete paired matrices, preparation-plus-Hessian and endpoint samples, work/memory, independent oracles, full fallback parity and retained negative attempts"
     },
     {
       "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",

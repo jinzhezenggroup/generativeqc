@@ -308,6 +308,35 @@ dynamic lowering binds full index-space identities, not witness sizes, checks
 all retained primal/AD definitions and refuses unqualified primitives. It is a
 materializing correctness schedule, not an optimized GEMM performance claim.
 
+The WB97M-V grid generators additionally select checked single-consumer map
+and contraction-epilogue fusion. A contraction is never duplicated by fusion.
+Single-axis grid reductions use a deterministic 128-lane FP64 tree, including
+one cooperative block per output element for AO-potential reductions. This
+changes summation order, not precision; independent grid and complete-matrix
+acceptance gates still apply. Other affine-lowering consumers retain the
+materializing/ordered schedule unless they explicitly select these options.
+
+Full native CUDA Hessians may retain a bounded CPKS operator in occupied–virtual
+space. Columns are physical native CUDA actions on unit rotations; subsequent
+columns still use GMRES with the requested controls. The final physical Fock
+is used to recompute the compiler-generated stationarity residual, which must
+pass the original unpreconditioned tolerance before D/W publication. A cached
+matvec residual alone cannot qualify a solution. The cache borrows the exact
+live frame/provider/device/stream and must be reset before replacing them.
+`max_resident_cpks_bytes` defaults to 128 KiB and remains subordinate to the
+existing response and aggregate budgets. Zero, insufficient capacity or an
+optional allocation failure retains ordinary physical GMRES. Standalone HVPs
+do not build this repeated-RHS cache.
+
+The one-electron owner can replay independent precompiled primitive chains on
+bounded internal CUDA streams, then fold their results in the original order.
+The moving-grid owner can replay its immutable mixed affine schedule. Both
+stage caller inputs into owned arena slots and retain the original numerical
+and live-source publication gates. Graph resources are prepared in advance;
+actions neither compile nor allocate. Explicit disables, insufficient arena
+capacity and unavailable optional graph resources retain scalar CUDA launches.
+These are bounded CUDA schedules, not CPU or reference-engine fallbacks.
+
 The caller supplies a live-reference authenticator, coupled **native CUDA**
 Fock provider, borrowed stream and exact bounded arena. Inputs and induced
 Focks must be finite/symmetric; they are checked rather than silently repaired.

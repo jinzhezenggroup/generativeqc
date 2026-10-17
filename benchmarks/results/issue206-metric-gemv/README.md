@@ -123,3 +123,9 @@ The 2026-10-17 storage-only compaction applies the same representation to the
 receipts pin the original Git blobs and both byte identities. Every historical
 sample and decoded-file hash is preserved; this makes room for new Hessian
 evidence without increasing the repository's 64 MiB evidence budget.
+
+The same exact-byte representation also retains the batch-four BLAS energy
+records for 96/192/384 AOs and the 19-AO batch-four BLAS force record as
+`measurements/*.json.gz`, with adjacent original-blob/decoded/stored receipts.
+No historical result or acceptance gate changes; use the shared `load_record`
+reader or `gzip -dc` to recover the original bytes.

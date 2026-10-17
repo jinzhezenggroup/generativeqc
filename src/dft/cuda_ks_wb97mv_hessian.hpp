@@ -23,6 +23,9 @@ struct CudaKsWb97mvHessianOptions {
   std::size_t max_device_bytes{2ULL << 30};
   std::size_t max_assembly_terms{1ULL << 30};
   std::uint64_t max_nuclear_pairs{16'777'216};
+  /** Optional repeated-RHS CPKS representation, additionally constrained by
+   * the existing response/aggregate budgets. Zero retains physical GMRES. */
+  std::size_t max_resident_cpks_bytes{128ULL << 10};
   double symmetry_absolute_tolerance{2e-7};
   double symmetry_relative_tolerance{2e-7};
   response::CudaCpksOptions cpks{};
@@ -47,6 +50,8 @@ struct CudaKsWb97mvHessianResult {
 
 struct CudaKsWb97mvHessianWork {
   std::size_t device_bytes{}, assembly_terms_per_direction{}, nuclear_pairs{};
+  std::size_t cpks_operator_bytes{}, cpks_operator_columns{}, cpks_cached_actions{},
+      cpks_physical_checks{};
   std::uint64_t attempted_directions{}, completed_directions{}, published_hvps{},
       published_hessians{};
   CudaKsWb97mvResponseWork induced{};
