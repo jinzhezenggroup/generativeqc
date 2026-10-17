@@ -423,6 +423,25 @@ def test_unqualified_gradient_not_promoted_by_native_v2_transport(
     assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
 
 
+def test_native_gradient_capacity_failure_falls_back_without_false_qualification(
+    backend: SimpleNamespace,
+) -> None:
+    backend.transport_v2 = True
+    backend.block_auto = True
+    backend.outputs = [
+        NotImplementedError("extrapolated gradient capacity exceeds resources"),
+        result(executed_backend="cuda"),
+        result(executed_backend="cuda"),
+    ]
+    report = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", policy="fast"
+    ).singlepoint(ATOMS).precision_validation
+    assert report.status == "observed_met"
+    assert report.solve_count == 3
+    assert "mixed_gradient_failed_fp64_fallback" in report.fallback_reasons
+    assert report.solves[0].error is not None
+
+
 def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
     backend: SimpleNamespace,
 ) -> None:
