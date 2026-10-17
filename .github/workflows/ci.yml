@@ -1467,7 +1467,9 @@ jobs:
             )
           fi
           .venv/bin/python -m pytest "${collection_targets[@]}" -v \
-            -o faulthandler_timeout=900 \
+            -o faulthandler_timeout=0 \
+            -p tools.pytest_safe_diagnostics --diagnostic-timeout=900 \
+            --diagnostics-dir="$PWD/.artifacts/python-diagnostics" \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${collection_args[@]}" \

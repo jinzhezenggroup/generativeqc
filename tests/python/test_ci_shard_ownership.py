@@ -371,7 +371,60 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert 'pytest "${collection_targets[@]}" -v' in source
     assert "source .github/scripts/ci_collect_python_shard.sh" in source
     assert '"${collection_args[@]}"' in source
-    assert "-o faulthandler_timeout=900" in source
+    _assert_timed_diagnostics_contract(source)
+
+
+def _assert_timed_diagnostics_contract(source: str) -> None:
+    step = source.split("      - name: Run Python tests with coverage\n", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    command = step.split('.venv/bin/python -m pytest "${collection_targets[@]}"', 1)[1]
+    command = command.replace("\\\n", " ").splitlines()[0]
+    arguments = shlex.split(command)
+    assert arguments.count("-o") == 1 and arguments.count("-p") == 1
+    assert arguments[arguments.index("-o") + 1] == "faulthandler_timeout=0"
+    assert arguments[arguments.index("-p") + 1] == "tools.pytest_safe_diagnostics"
+    assert "--diagnostic-timeout=900" in arguments
+    assert "--diagnostics-dir=$PWD/.artifacts/python-diagnostics" in arguments
+    assert "${diagnostic_args[@]}" in arguments
+    assert "-p tools.pytest_native_diagnostics" in step
+    assert (
+        '--native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"' in step
+    )
+    preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
+        1
+    ].split("\n      - name:", 1)[0]
+    assert (
+        'tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"'
+        in preparation
+    )
+    assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
+    assert "&& 90 || 30" in step
+    assert "&& 100 || 40" in source
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("-p tools.pytest_safe_diagnostics", ""),
+        ("-p tools.pytest_safe_diagnostics", "-p no:tools.pytest_safe_diagnostics"),
+        ("--diagnostic-timeout=900", "--diagnostic-timeout=0"),
+        ("--diagnostic-timeout=900", "--diagnostic-timeout=901"),
+        ("-o faulthandler_timeout=0", "-o faulthandler_timeout=900"),
+        ('"${diagnostic_args[@]}"', '""'),
+        ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
+        ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
+        ("&& 90 || 30", "&& 90 || 31"),
+        ("&& 100 || 40", "&& 100 || 41"),
+    ],
+)
+def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
+    before: str, after: str
+) -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert before in source
+    with pytest.raises(AssertionError):
+        _assert_timed_diagnostics_contract(source.replace(before, after))
 
 
 @pytest.mark.parametrize(
