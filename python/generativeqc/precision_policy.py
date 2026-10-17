@@ -906,7 +906,14 @@ class PrecisionCalculator:
             if gradient.get("schema_version") == 1
             else "unknown",
         )
-        qualified_gradient = gradient.get("complete") is True and (
+        gradient_requires_audit = gradient.get("requires_independent_audit") is True
+        if gradient_requires_audit:
+            # Beyond the frozen acceptance cohort and after a budget-Fock SCF,
+            # a converged/finite FP32 gradient is not a measured force budget.
+            # Keep the candidate, then compare complete E+F with fresh FP64.
+            gradient_admission = qualification
+            route_reasons.append("mixed_gradient_requires_independent_fp64_audit")
+        qualified_gradient = not gradient_requires_audit and gradient.get("complete") is True and (
             (
                 gradient.get("schema_version") in (1, 2, 3)
                 and qualification
@@ -951,6 +958,7 @@ class PrecisionCalculator:
             if (
                 fast_native
                 and self._fast_fock
+                and not gradient_requires_audit
                 and _budget_fock_work_admitted(candidate_calculator, work)
             ):
                 validation = PrecisionValidation(
