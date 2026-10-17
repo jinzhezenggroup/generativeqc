@@ -221,7 +221,11 @@ def test_mixed_df_lr_weights_use_the_shared_exchange_algebra(spin: str) -> None:
 
 
 def _mixed_pyscf_energy(
-    calc: Calculator, raw_atoms: list[tuple[str, tuple[float, ...]]], spin: int
+    calc: Calculator,
+    raw_atoms: list[tuple[str, tuple[float, ...]]],
+    spin: int,
+    *,
+    fitted_range: bool = False,
 ) -> float:
     """Rebuild both auxiliary centers and both moving quadratures for each call."""
     pyscf = pytest.importorskip("pyscf")
@@ -258,6 +262,32 @@ def _mixed_pyscf_energy(
     fitted = df.DF(mol, auxbasis=basis_dict(calc._auxiliary_basis)).build()
     mean_field = dft.UKS(mol) if spin else dft.RKS(mol)
     mean_field.xc = "WB97M_V"
+    range_providers: dict[float, Any] = {}
+
+    def fitted_range_provider(omega: float) -> Any:
+        """Match the declared relative cutoff in normalized auxiliary coordinates.
+
+        PySCF's default Cholesky keeps tiny Cartesian LR metric modes that the
+        native relative-eigenvalue contract discards. Build the reference from
+        libcint and NumPy, not native factors or a relaxed comparison tolerance.
+        """
+        if omega not in range_providers:
+            auxiliary = fitted.auxmol
+            scales = 1 / np.sqrt(np.diag(auxiliary.intor("int1e_ovlp")))
+            with mol.with_range_coulomb(omega), auxiliary.with_range_coulomb(omega):
+                metric = auxiliary.intor("int2c2e") * scales[:, None] * scales[None, :]
+                three_center = df.incore.aux_e2(mol, auxiliary, aosym="s2ij")
+            eigenvalues, eigenvectors = np.linalg.eigh(metric)
+            retained = eigenvalues > (
+                eigenvalues[-1] * calc._density_fitting_relative_threshold
+            )
+            whitening = (eigenvectors[:, retained] / np.sqrt(eigenvalues[retained])).T
+            provider = df.DF(mol)
+            provider._cderi = np.ascontiguousarray(
+                whitening @ (three_center * scales).T
+            )
+            range_providers[omega] = provider
+        return range_providers[omega]
 
     def get_jk(
         molecule: Any,
@@ -268,6 +298,10 @@ def _mixed_pyscf_energy(
         omega: float | None = None,
     ) -> Any:
         if omega is not None and omega != 0:
+            if fitted_range:
+                return fitted_range_provider(omega).get_jk(
+                    density, hermi, with_j, with_k
+                )
             return scf.hf.get_jk(
                 molecule, density, hermi, with_j=with_j, with_k=with_k, omega=omega
             )
@@ -286,6 +320,12 @@ def _mixed_pyscf_energy(
     energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
     assert mean_field.converged
     return float(energy)
+
+
+@pytest.fixture(autouse=True)
+def explicit_legacy_mixed_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep qualifying the retained Direct-LR mode independently of full RI-K."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
 
 
 def test_cpu_mixed_snapshot_is_revoked_by_warm_replay() -> None:

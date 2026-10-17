@@ -117,6 +117,8 @@ class PreparedFockPlan {
   CudaDensityFittingJkPlan* cuda_fitted_source() const noexcept;
   /** Exact normalized scientific identity, independent of execution budget. */
   bool matches_system(const core::System& system) const noexcept;
+  /** Borrow the immutable fitting basis; null for an exact provider. */
+  const core::System* auxiliary_system() const noexcept;
   DirectJkMatrices build(const std::vector<double>& density,
                          const std::vector<double>& beta = {}) const;
   std::vector<double> energy_derivative(const std::vector<double>& density,

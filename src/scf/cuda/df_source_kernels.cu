@@ -54,6 +54,19 @@ __device__ auto contracted_df(const DeviceBatch& batch, std::int32_t system, std
     factors[1] = {basis, base + second};
     factors[2] = {basis, base + auxiliary};
   }
+  if (batch.df_range_omega > 0.0) {
+    if constexpr (Derivative) {
+      const auto result =
+          products::contract<generated_df_policy::LongRangeDerivative, kMaximumAoExpansionTerms>(
+              factors, batch.positions, lane, lanes, {batch.df_range_omega});
+      return products::coordinate(factors, result, coordinate);
+    } else {
+      const auto value =
+          products::contract<generated_df_policy::LongRangeValue, kMaximumAoExpansionTerms>(
+              factors, batch.positions, lane, lanes, {batch.df_range_omega});
+      return typename ValuePolicy::Accumulator(value);
+    }
+  }
   if constexpr (Derivative) {
     bool affected = false;
     for (unsigned slot = 0; slot < rank; ++slot)

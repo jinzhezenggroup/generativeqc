@@ -46,8 +46,12 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
     return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
   }
 
-  const bool fitted =
-      fitted_full_range(strategy.spec.coulomb) && fitted_full_range(strategy.spec.exchange);
+  const bool fitted = fitted_full_range(strategy.spec.coulomb) &&
+                      (fitted_full_range(strategy.spec.exchange) ||
+                       (!strategy.spec.coulomb.present &&
+                        strategy.spec.exchange.approximation == FockApproximation::DensityFitted &&
+                        strategy.spec.exchange.op == FockOperator::LongRange &&
+                        strategy.spec.exchange.omega > 0.0));
   if (!fitted) return {};
   auto* source = plan.cuda_fitted_source();
   if (!source || !plan.diagnostic().nbf) return {};

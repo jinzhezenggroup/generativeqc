@@ -137,6 +137,19 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
   return 0;
 }
 
+/** An explicit DF envelope covers both independent radial owners. Zero keeps
+ * automatic admission; never turn a small explicit half into that sentinel. */
+std::size_t ks_fitted_provider_budget(const scf::ScfOptions& options,
+                                      const NativeKsExecutionPlan& plan, bool long_range) {
+  const auto bytes = options.density_fitting_memory_budget_bytes;
+  if (!plan.density_fitted_range_exchange || !bytes ||
+      options.resolved_fock_build->backend != scf::FockBackend::Cuda)
+    return bytes;
+  if (bytes < 2U) throw std::bad_alloc();
+  const auto primary = bytes / 2U;
+  return long_range ? bytes - primary : primary;
+}
+
 #if GENERATIVEQC_HAS_CUDA
 KsTransportDiagnostic adapt_transfers(const dft::CudaKsTransfers& value) {
   return {value.setup_h2d_bytes,
@@ -232,7 +245,7 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
   // A range-separated composition may still reserve the ordinary full-range
-  // fitted primary. Its independent long-range Direct correction neither consumes
+  // fitted primary. Its independent long-range correction neither consumes
   // nor mutates this occupied projection, so range_exchange is not itself a veto.
   if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
       spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
@@ -260,7 +273,10 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
       correction.backend == scf::FockBackend::Cuda && correction_spec.spin == primary_spec.spin &&
       correction_spec.derivative_order == 0 && !correction_spec.coulomb.present &&
       correction_spec.exchange.present &&
-      correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+      (correction_spec.exchange.approximation == scf::FockApproximation::Exact ||
+       (correction_spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+        primary_spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        correction.metric_relative_threshold == primary.metric_relative_threshold)) &&
       correction_spec.exchange.op == scf::FockOperator::LongRange &&
       std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
       std::isfinite(correction_spec.exchange.coefficient) &&
@@ -398,7 +414,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   ? ks_provider_bytes(
                         system_, backend,
                         ks_direct_derivative_order(*options_.resolved_fock_build, backend))
-                  : options_.density_fitting_memory_budget_bytes,
+                  : ks_fitted_provider_budget(options_, execution_plan_, false),
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U,
@@ -1266,7 +1282,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
       // Keep cold and warm admission identical: this is the same conservative
       // capacity used before constructing the separate first-order LR owner.
-      bytes = ks_provider_bytes(system_, backend_, 1U);
+      bytes = execution_plan_.density_fitted_range_exchange
+                  ? 0U
+                  : ks_provider_bytes(system_, backend_, 1U);
     }
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1277,12 +1295,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   }
 
-  /** Stationary bridge for a mixed full-range DF primary and an independent
-   * exact LR correction. Public admission separately qualifies the complete
-   * semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
+  /** Stationary bridge for a full-range DF primary and an independent LR
+   * owner (exact by default, fitted only by explicit opt-in). Admission separately qualifies the
+   * complete semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
    *
-   * The first-derivative LR source is prepared on demand: energy-only solves
-   * never pay its angular workspace or compilation costs. */
+   * Only legacy Direct LR needs a separate lazy derivative owner. Fitted LR
+   * retains its own bounded response capability with its forward metric. */
   generativeqc_status mixed_rsh_df_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
@@ -1320,7 +1338,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
          (p.exchange.op == scf::FockOperator::FullRange &&
           p.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
         !c.coulomb.present && c.exchange.present &&
-        c.exchange.approximation == scf::FockApproximation::Exact &&
+        (c.exchange.approximation == scf::FockApproximation::Exact ||
+         (execution_plan_.density_fitted_range_exchange &&
+          c.exchange.approximation == scf::FockApproximation::DensityFitted &&
+          correction.metric_relative_threshold == primary.metric_relative_threshold)) &&
         c.exchange.op == scf::FockOperator::LongRange &&
         c.exchange.omega == execution_plan_.range_omega && c.exchange.omega > 0.0 &&
         full_coefficient == spin_factor * execution_plan_.short_range_exchange &&
@@ -1349,6 +1370,33 @@ class KsPreparedState final : public KsSingleOwnerPort {
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       cached_density = &exported.density;
       cached_weighted_density = &exported.weighted_density;
+    }
+    if (execution_plan_.density_fitted_range_exchange) {
+      if (!cpu_lr_correction.empty()) {
+        detail = "full RI-K response must not consume a Direct LR correction";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      std::vector<double> fitted_four;
+      auto status =
+          density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
+                                           fitted_four, maximum_bytes, work, detail, true);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      const auto& alpha = cached_density->at(0);
+      const scf::reference::Matrix beta =
+          cached_density->size() == 2 ? cached_density->at(1) : scf::reference::Matrix{};
+      const auto fitted_lr = range_correction_->retained_energy_derivative(alpha, beta);
+      status = dft::compose_mixed_rsh_df_integral_sources(
+          fitted_four, fitted_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      work[3] = std::max<std::uint64_t>(work[3], 10U * nc * sizeof(double));
+      dft::CudaKsFinalStateToken current;
+      status = final_state_token(current, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS || current != expected) {
+        output.clear();
+        detail = "RI-K source token changed during response";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     if (backend_ == GENERATIVEQC_BACKEND_CPU_REFERENCE) {
       // CPU executes the compiler-owned ordered LR contraction in bounded
@@ -2129,17 +2177,25 @@ class KsPreparedState final : public KsSingleOwnerPort {
     const auto fock_backend =
         backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     range_strategy_ = scf::resolve_fock_build(
-        scf::make_rsh_correction_fock_spec(spin, execution_plan_.short_range_exchange,
-                                           execution_plan_.long_range_exchange,
-                                           execution_plan_.range_omega),
-        fock_backend, options_.screening_tolerance);
+        scf::make_rsh_correction_fock_spec(
+            spin, execution_plan_.short_range_exchange, execution_plan_.long_range_exchange,
+            execution_plan_.range_omega,
+            execution_plan_.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                          : scf::FockApproximation::Exact),
+        fock_backend, options_.screening_tolerance, options_.density_fitting_relative_threshold);
     const bool fitted_primary =
         fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
-      const auto budget =
-          fock_backend == scf::FockBackend::Cuda ? ks_provider_bytes(system_, backend_, 0U) : 0U;
-      range_correction_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr,
-                                                                  *range_strategy_, device, budget);
+      const auto budget = execution_plan_.density_fitted_range_exchange
+                              ? ks_fitted_provider_budget(options_, execution_plan_, true)
+                          : fock_backend == scf::FockBackend::Cuda
+                              ? ks_provider_bytes(system_, backend_, 0U)
+                              : 0U;
+      const auto* auxiliary =
+          execution_plan_.density_fitted_range_exchange ? fock_.auxiliary_system() : nullptr;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
+          system_, auxiliary, *range_strategy_, device, budget, 0U,
+          execution_plan_.density_fitted_range_exchange ? 1U : 0U);
     }
   }
 

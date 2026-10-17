@@ -439,6 +439,23 @@ generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_range_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* approximation) {
+  if (!batch || !snapshot || !approximation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto& range = snapshot->token.identity.model.range_correction;
+    *approximation = range ? static_cast<std::uint32_t>(range->spec.exchange.approximation)
+                           : std::numeric_limits<std::uint32_t>::max();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count) {

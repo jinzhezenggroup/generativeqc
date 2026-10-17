@@ -37,6 +37,7 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView orbital,
                                       const double* weights, unsigned schedule, double* gradient,
                                       cudaStream_t stream, std::size_t begin = 0,
                                       std::size_t gradient_stride = 0, unsigned gradient_copies = 1,
-                                      bool skip_sp_shells = false, unsigned expansion_terms = 0);
+                                      bool skip_sp_shells = false, unsigned expansion_terms = 0,
+                                      double range_omega = 0.0);
 }  // namespace generativeqc::scf
 #endif

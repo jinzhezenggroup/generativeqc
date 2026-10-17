@@ -420,8 +420,10 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
+# LR approximation now contributes to both model and provider identities from
+# the checked native owner proof; executable decode controls cover both modes.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
+    "2f39c7848eac3d2fc9120450c5361679fa44120da8670b0682e1e1d09f790ff8"
 )
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (

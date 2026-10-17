@@ -61,6 +61,59 @@ def test_provider_proof_uses_native_approximation(coulomb: int, exchange: int) -
     assert checks == ["current", "native", "current"]
 
 
+@pytest.mark.parametrize("approximation", (0, 1, 2**32 - 1, 2, 99))
+def test_range_provider_proof_uses_checked_native_approximation(
+    approximation: int,
+) -> None:
+    snapshot, checks = _snapshot()
+
+    def binding(batch: object, handle: object, result: typing.Any) -> int:
+        checks.append("native")
+        ct.cast(result, ct.POINTER(ct.c_uint32))[0] = approximation
+        return 0
+
+    snapshot._library.generativeqc_ks_snapshot_range_provider_v1 = binding
+    if approximation in (0, 1, 2**32 - 1):
+        assert NativeKsSnapshot.range_density_fitted.fget(snapshot) == (
+            approximation == 1
+        )
+    else:
+        with pytest.raises(ValueError, match="unknown native LR approximation"):
+            NativeKsSnapshot.range_density_fitted.fget(snapshot)
+    assert checks[0] == checks[-1] == "current"
+    assert "native" in checks
+
+
+@pytest.mark.parametrize("stale_before_read", (False, True))
+def test_range_provider_proof_rejects_token_changes(stale_before_read: bool) -> None:
+    snapshot, checks = _snapshot()
+    native_read = False
+
+    def current() -> None:
+        if stale_before_read or native_read:
+            raise RuntimeError("stale token")
+
+    def binding(batch: object, handle: object, result: typing.Any) -> int:
+        nonlocal native_read
+        native_read = True
+        checks.append("native")
+        ct.cast(result, ct.POINTER(ct.c_uint32))[0] = 1
+        return 0
+
+    snapshot.check_current = current
+    snapshot._library.generativeqc_ks_snapshot_range_provider_v1 = binding
+    with pytest.raises(RuntimeError, match="stale token"):
+        NativeKsSnapshot.range_density_fitted.fget(snapshot)
+    assert native_read == (not stale_before_read)
+
+
+def test_missing_range_provider_proof_never_assumes_direct() -> None:
+    snapshot, checks = _snapshot()
+    with pytest.raises(NotImplementedError, match="LR approximation proof"):
+        NativeKsSnapshot.range_density_fitted.fget(snapshot)
+    assert "current" in checks
+
+
 @pytest.mark.parametrize("field", ("coulomb", "exchange"))
 def test_provider_proof_rejects_unknown_approximation(field: str) -> None:
     snapshot, _ = _snapshot(**{field: 99})
