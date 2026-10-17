@@ -136,6 +136,12 @@ class DeviceResourceScope {
     if (!ledger_) return;
     if (native_device_resource_scope_depth == std::numeric_limits<std::size_t>::max())
       throw std::overflow_error("native device resource scope depth overflow");
+    std::uint64_t observation_generation{};
+    if (!native_device_resource_scope_depth && !cpu_resource_observation.active) {
+      observation_generation = next_cpu_resource_observation_generation();
+      if (!observation_generation)
+        throw std::overflow_error("CPU resource observation generation exhausted");
+    }
     if (active_device_resource_ledger != ledger_) {
       if (!bind_device_resource_ledger(ledger_))
         throw std::invalid_argument("native device resource owner is already bound");
@@ -147,10 +153,11 @@ class DeviceResourceScope {
         ledger_->native_host_peak = ledger_->native_host_samples = 0;
         ledger_->native_cuda_arena_peak = ledger_->native_cuda_arena_samples = 0;
       }
-      if (!cpu_resource_observation.active) {
+      if (observation_generation) {
         previous_observation_ = cpu_resource_observation;
         cpu_resource_observation = {true, 0, 0, 1};
-        owns_observation_ = true;
+        cpu_resource_observation.generation = observation_generation;
+        observation_generation_ = observation_generation;
       }
     }
     ++native_device_resource_scope_depth;
@@ -159,7 +166,7 @@ class DeviceResourceScope {
   DeviceResourceScope& operator=(const DeviceResourceScope&) = delete;
   ~DeviceResourceScope() {
     if (!ledger_) return;
-    if (owns_observation_) {
+    if (observation_generation_ && cpu_resource_observation.generation == observation_generation_) {
       {
         std::lock_guard<std::mutex> lock(device_resource_mutex);
         ledger_->native_host_peak = cpu_resource_observation.peak_bytes;
@@ -177,7 +184,7 @@ class DeviceResourceScope {
  private:
   std::shared_ptr<DeviceResourceLedger> ledger_;
   bool owns_binding_{};
-  bool owns_observation_{};
+  std::uint64_t observation_generation_{};
   CpuResourceObservation previous_observation_{};
 };
 

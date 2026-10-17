@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -8,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "runtime/residency_boundaries.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_ledger_plan.hpp"
 
@@ -19,6 +21,9 @@ int generativeqc_resource_ledger_bind_v1(void*);
 int generativeqc_resource_ledger_read_v3(void*, std::uint64_t*, std::size_t);
 int generativeqc_resource_tracking_begin_v1(unsigned);
 int generativeqc_resource_tracking_end_v1(std::uint64_t*, std::uint64_t*);
+int generativeqc_residency_observer_bind_v1(generativeqc::runtime::ResidencyObserver, void*);
+int generativeqc_residency_observer_unbind_v1(generativeqc::runtime::ResidencyObserver, void*,
+                                              std::uint64_t*);
 }
 
 namespace {
@@ -267,6 +272,140 @@ void test_native_scope_without_observation() {
   release.join();
   require(lifetime.expired(), "cross-thread release retained the closed native owner");
 }
+
+struct ObservationReplacement {
+  bool replaced{};
+  unsigned worker_limit{};
+};
+
+void replace_cpu_observation(const std::uint64_t*, std::size_t, void* context) {
+  auto& state = *static_cast<ObservationReplacement*>(context);
+  if (state.replaced) return;
+  sample_cpu_capacity(31);
+  std::uint64_t peak{}, samples{};
+  require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 && peak == 31 && samples == 1,
+          "could not end the first observation inside native execution");
+  require(generativeqc_resource_tracking_begin_v1(state.worker_limit) == 0,
+          "replacement observation was rejected after a successful end");
+  sample_cpu_capacity(73);
+  sample_cuda_arena_capacity(19);
+  state.replaced = true;
+}
+
+/** A later successful begin owns its samples through native return/unwind,
+ * including a synchronous source callback. Observer activity alone cannot
+ * identify the native scope's original sampling instance. */
+void test_native_scope_preserves_replacement_observation() {
+  for (const bool observer_first : {false, true}) {
+    for (const bool callback : {false, true}) {
+      for (const bool unwind : {false, true}) {
+        for (const unsigned worker_limit : {0u, 1u}) {
+          auto ledger = std::make_shared<DeviceResourceLedger>();
+          ledger->limit = 64;
+          ledger->device = 7;
+          if (observer_first)
+            require(generativeqc_resource_tracking_begin_v1(1) == 0 &&
+                        bind_device_resource_ledger(ledger),
+                    "observer-first replacement setup failed");
+          ObservationReplacement state{false, worker_limit};
+          if (callback)
+            require(generativeqc_residency_observer_bind_v1(replace_cpu_observation, &state) == 0,
+                    "replacement residency callback was rejected");
+          struct ExpectedFailure {};
+          try {
+            DeviceResourceScope outer(ledger);
+            {
+              DeviceResourceScope inner(ledger);
+              if (callback) {
+                const ResidencyExecution execution(ResidencyOwner::device_resource_ledger);
+              } else {
+                replace_cpu_observation(nullptr, 0, &state);
+              }
+              require(state.replaced && cpu_resource_observation.active &&
+                          cpu_resource_observation.peak_bytes == 73 &&
+                          resource_cpu_worker_limit() == 1,
+                      "replacement changed native admission or lost its samples before return");
+            }
+            require(ledger->active && active_device_resource_ledger == ledger,
+                    "inner return prematurely detached a still-running native owner");
+            if (unwind) throw ExpectedFailure{};
+          } catch (const ExpectedFailure&) {
+          }
+          if (callback) {
+            std::uint64_t errors{};
+            require(generativeqc_residency_observer_unbind_v1(replace_cpu_observation, &state,
+                                                              &errors) == 0 &&
+                        errors == 0,
+                    "replacement callback reported an error or lost its binding");
+          }
+          require(cpu_resource_observation.active &&
+                      cpu_resource_observation.cpu_worker_limit == worker_limit &&
+                      cpu_resource_observation.peak_bytes == 73 &&
+                      cpu_resource_observation.cuda_arena_peak_bytes == 19,
+                  "native return overwrote a later successful observation begin");
+          require(!ledger->active && !active_device_resource_ledger &&
+                      native_device_resource_scope_depth == 0 && !device_resource_unbind_pending &&
+                      resource_cpu_worker_limit() == worker_limit,
+                  "observation replacement leaked a native binding or serialized worker policy");
+          require(ledger->native_host_samples == 0 && ledger->native_cuda_arena_samples == 0,
+                  "native diagnostics claimed another observation's sampling interval");
+          std::uint64_t peak{}, samples{};
+          require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 && peak == 73 &&
+                      samples == 1,
+                  "later observation could not finish with its own samples");
+        }
+      }
+    }
+  }
+}
+
+void test_retained_capacity_preserves_replacement_observation() {
+  require(generativeqc_resource_tracking_begin_v1(0) == 0, "retained replacement setup failed");
+  std::unique_ptr<CpuRetainedCapacity> replacement;
+  {
+    CpuRetainedCapacity previous(5);
+    std::uint64_t peak{}, samples{};
+    require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 &&
+                generativeqc_resource_tracking_begin_v1(1) == 0,
+            "could not replace an observation inside a retained-capacity scope");
+    replacement = std::make_unique<CpuRetainedCapacity>(19);
+    sample_cpu_capacity(54);
+  }
+  require(cpu_resource_observation.outer_host_bytes == 19,
+          "an old retained-capacity scope overwrote its replacement's retained bytes");
+  sample_cpu_capacity(55);
+  replacement.reset();
+  require(cpu_resource_observation.outer_host_bytes == 0,
+          "replacement retained capacity did not restore its own predecessor");
+  std::uint64_t peak{}, samples{};
+  require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 && peak == 74 && samples == 2,
+          "retained replacement sampled the wrong ownership interval");
+}
+
+void test_observation_generation_exhaustion() {
+  std::exception_ptr failure;
+  std::thread isolated([&] {
+    try {
+      cpu_resource_observation_generation = std::numeric_limits<std::uint64_t>::max();
+      require(generativeqc_resource_tracking_begin_v1(0) == 1 && !cpu_resource_observation.active,
+              "exhausted observation identity wrapped into a new begin");
+      auto ledger = std::make_shared<DeviceResourceLedger>();
+      bool refused = false;
+      try {
+        DeviceResourceScope operation(ledger);
+      } catch (const std::overflow_error&) {
+        refused = true;
+      }
+      require(refused && !ledger->active && !active_device_resource_ledger &&
+                  native_device_resource_scope_depth == 0 && !cpu_resource_observation.active,
+              "identity exhaustion changed ownership before refusing native scope entry");
+    } catch (...) {
+      failure = std::current_exception();
+    }
+  });
+  isolated.join();
+  if (failure) std::rethrow_exception(failure);
+}
 }  // namespace
 
 int main() {
@@ -274,6 +413,9 @@ int main() {
     test_sparse_allowance_accounting();
     test_transactional_wire_and_lifecycle();
     test_native_scope_without_observation();
+    test_native_scope_preserves_replacement_observation();
+    test_retained_capacity_preserves_replacement_observation();
+    test_observation_generation_exhaustion();
     std::cout << "Native device-ledger admission, rollback and retained lifecycle passed\n";
     return 0;
   } catch (const std::exception& error) {

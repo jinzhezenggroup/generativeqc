@@ -79,6 +79,33 @@ header therefore uses a sibling-relative include. A standalone C++17/C++20 probe
 without `-I src` protects this boundary; a full CMake build alone hid the failure
 later exposed by the independent XC CUDA compile job.
 
+## Observation replacement during native execution
+
+Fixing deferred device unbinding alone does not establish CPU sampling ownership.
+A synchronous callback may successfully end a native-first CPU observation and
+begin a replacement before returning to the same native scope. Restoring a saved
+snapshot solely because the scope originally created an observation erases the
+replacement, attributes its samples to the wrong native interval, and makes its
+later private-bridge end fail. Rejecting such a replacement would change the
+existing active/inactive observation contract rather than preserve ownership.
+
+CPU observation begins therefore reserve nonzero thread-local generations from
+a counter that is independent of restored snapshots. Native scopes publish and
+restore only their own generation. A replacement remains live with its own CPU
+and CUDA-arena samples; native diagnostics leave that replaced interval
+unavailable instead of claiming the replacement's work. Retained-host-capacity
+scopes obey the same generation boundary when restoring their predecessor's
+bytes. Generation exhaustion refuses entry before binding a native owner and
+never wraps into an old interval. This changes neither public ABI signatures nor
+scientific equations, and the native serialized workspace policy continues to
+depend on native depth rather than optional observer activity.
+
+`test_resource_ledger_plan.cpp` exercises native-first/observer-first,
+direct/synchronous-callback, return/unwind and both replacement worker policies,
+plus retained-capacity replacement and isolated generation exhaustion. These
+host lifecycle controls do not transfer any prior source's real-GPU acceptance
+to the changed runtime; immutable older qualification inputs remain historical.
+
 ## Consequences and revisit conditions
 
 This removes a frontend lifetime authority without pretending to finish #2227

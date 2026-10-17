@@ -504,7 +504,10 @@ int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::siz
 int generativeqc_resource_tracking_begin_v1(unsigned cpu_worker_limit) {
   auto& observation = generativeqc::runtime::cpu_resource_observation;
   if (observation.active || cpu_worker_limit > 1) return 1;
+  const auto generation = generativeqc::runtime::next_cpu_resource_observation_generation();
+  if (!generation) return 1;
   observation = {true, 0, 0, cpu_worker_limit};
+  observation.generation = generation;
   return 0;
 }
 
