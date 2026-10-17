@@ -123,22 +123,33 @@ def query_gradient_precision(
     if status in (_native.STATUS_PRECISION_UNAVAILABLE, _native.STATUS_NOT_IMPLEMENTED):
         return None
     _native.check(library, status)
-    qualification = int(values[5]) if version >= 2 else 1
+    raw_qualification = int(values[5]) if version >= 2 else 1
+    # 100+model identifies an executable candidate outside the independently
+    # qualified one-endpoint population (or a relaxed-budget Fock density).
+    # It MUST be compared with a separate FP64 E+F endpoint before publication.
+    requires_independent_audit = 100 < raw_qualification < 200
+    qualification = (
+        raw_qualification - 100 if requires_independent_audit else raw_qualification
+    )
     collected = version == 3 and bool(values[6])
     all_weighted_retried = (
         collected and values[7] > 0 and values[7] == values[9] and values[2] == 0
     )
     return {
         "schema_version": version,
-        "qualification": {
-            1: "pbe0-rks-budget-fp32-v1",
-            2: "pbe-rks-budget-fp32-v1",
-            3: "b3lyp-rks-budget-fp32-v1",
-            4: "r2scan-rks-budget-fp32-v1",
-            5: "rhf-budget-fp32-v1",
-            6: "m06-2x-rks-budget-fp32-v1",
-            7: "rhf-df-shell-budget-fp32-v1",
-        }.get(qualification, "unknown"),
+        "qualification": (
+            {
+                1: "pbe0-rks-budget-fp32-v1",
+                2: "pbe-rks-budget-fp32-v1",
+                3: "b3lyp-rks-budget-fp32-v1",
+                4: "r2scan-rks-budget-fp32-v1",
+                5: "rhf-budget-fp32-v1",
+                6: "m06-2x-rks-budget-fp32-v1",
+                7: "rhf-df-shell-budget-fp32-v1",
+            }.get(qualification, "unknown")
+            + ("-audit-required" if requires_independent_audit else "")
+        ),
+        "requires_independent_audit": requires_independent_audit,
         "complete": bool(values[0]),
         "weighted_fp32_orders": (
             [0, 1, 2, 3, 4, 5] if values[1] and qualification != 7 else []
