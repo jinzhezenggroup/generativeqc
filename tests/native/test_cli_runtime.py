@@ -452,6 +452,101 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(diagnostic["status"], "infeasible")
             self.assertEqual(diagnostic["selection"], least_excess.name)
 
+    def test_cuda_df_shared_source_owner_and_byte_caps_without_gpu(self) -> None:
+        """Actual CLI/DF composition; only the CUDA availability gate is synthetic."""
+        if sys.platform != "linux":
+            self.skipTest("host-only interposition fixture requires Linux")
+        sys.path.insert(0, str(SOURCE / "python"))
+        try:
+            from generativeqc.resources_hf_df import cuda_df_candidates
+        except ImportError:
+            self.skipTest("optional Python inventory dependencies are unavailable")
+        from unittest.mock import patch
+
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        orbital = {"nbf": 2, "cartesian_nbf": 2, "shells": 2, "primitives": 6}
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        for storage in ("auto", "dense", "packed", "packed-single"):
+            for exchange in ("auto", "occupied"):
+                controls = {
+                    "GENERATIVEQC_DF_VALUE_STORAGE": storage,
+                    "GENERATIVEQC_DF_EXCHANGE": exchange,
+                }
+                self.env.update(controls)
+                for method, spins in (("rhf", 1), ("uhf", 2)):
+                    item = {
+                        "atoms": 2,
+                        "orbital": orbital,
+                        "auxiliary": orbital,
+                        "electrons": {"nalpha": 1, "nbeta": 1},
+                        "spins": spins,
+                    }
+                    for batch in (1, 3):
+                        with self.subTest(
+                            storage=storage,
+                            exchange=exchange,
+                            method=method,
+                            batch=batch,
+                        ):
+                            with patch.dict(os.environ, controls):
+                                reference = cuda_df_candidates(
+                                    library,
+                                    [item] * batch,
+                                    diis_history=8,
+                                    device=0,
+                                    first_phase=0,
+                                    last_phase=0,
+                                    requested_budget=64 << 20,
+                                )
+                            arguments = (
+                                "--backend",
+                                "cuda",
+                                "--density-fitting",
+                                "cuda",
+                                "--method",
+                                method,
+                                "--batch",
+                                str(batch),
+                                "--density-fitting-memory-bytes",
+                                str(64 << 20),
+                            )
+                            result = self.resources(*arguments)
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            plan = json.loads(result.stdout)
+                            self.assertEqual(len(reference), 1)
+                            self.assertEqual(len(plan["candidates"]), 1)
+                            actual, expected = plan["candidates"][0], reference[0]
+                            self.assertEqual(actual["name"], expected.name)
+                            for key, estimate in zip(
+                                (
+                                    "retained_device",
+                                    "workspace_device",
+                                    "retained_host",
+                                    "workspace_host",
+                                    "runtime_allowance_device",
+                                ),
+                                expected.estimates,
+                                strict=True,
+                            ):
+                                self.assertEqual(actual[key], estimate.bytes)
+                            for space in ("host", "device"):
+                                peak = plan["peak_bytes"][space]
+                                for difference in (-1, 0):
+                                    checked = self.resources(
+                                        *arguments,
+                                        f"--{space}-bytes",
+                                        str(peak + difference),
+                                    )
+                                    self.assertEqual(
+                                        checked.returncode,
+                                        0 if difference == 0 else 2,
+                                        checked.stderr,
+                                    )
+                                    self.assertEqual(
+                                        json.loads(checked.stdout)["peak_bytes"],
+                                        plan["peak_bytes"],
+                                    )
+
     def test_df_and_ks_have_real_inventories(self) -> None:
         fitted = self.resources(
             "--density-fitting", "cpu", "--auxiliary-basis", "def2-svp"

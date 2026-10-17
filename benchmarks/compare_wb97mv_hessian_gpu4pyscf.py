@@ -18,6 +18,11 @@ The default coarse grid is a latency/implementation diagnostic, not a chemically
 grid-converged benchmark. DF is deliberately not enabled: the engines' default
 range-separated DF approximations differ. No reference scientific kernel is
 replaced. Ratios are published only after every Hessian passes the common gate.
+Larger cases are opt-in via --cases; defaults retain the tiny qualification set.
+--gpu-memory-limit-mib samples total-device usage, including comparator contexts.
+It is a conservative watchdog, not allocator enforcement or an exact peak;
+shorter-than-polling allocation spikes can be missed. Use an unshared GPU for
+attributable memory observations and retain failed/time-limited attempts.
 """
 
 from __future__ import annotations
@@ -63,6 +68,50 @@ CASES = {
     "oh": {
         "atoms": [("O", (0.02, -0.03, 0.04)), ("H", (0.21, 0.31, 1.78))],
         "spin": 1,
+    },
+    "formaldehyde": {
+        "atoms": [
+            ("C", (0.0, 0.0, 0.0)),
+            ("O", (0.0, 0.0, 2.286)),
+            ("H", (1.765, 0.0, -1.1)),
+            ("H", (-1.765, 0.0, -1.1)),
+        ],
+        "spin": 0,
+    },
+    "methanol": {
+        "atoms": [
+            ("C", (0.0, 0.0, 0.0)),
+            ("O", (2.69, 0.0, 0.0)),
+            ("H", (3.333, 1.696, 0.0)),
+            ("H", (-0.673, 1.903, 0.0)),
+            ("H", (-0.673, -0.9515, 1.648)),
+            ("H", (-0.673, -0.9515, -1.648)),
+        ],
+        "spin": 0,
+    },
+    "ethane": {
+        "atoms": [
+            ("C", (-1.455, 0.0, 0.0)),
+            ("C", (1.455, 0.0, 0.0)),
+            ("H", (-2.142, 1.943, 0.0)),
+            ("H", (-2.142, -0.9715, 1.682687)),
+            ("H", (-2.142, -0.9715, -1.682687)),
+            ("H", (2.142, -1.943, 0.0)),
+            ("H", (2.142, 0.9715, 1.682687)),
+            ("H", (2.142, 0.9715, -1.682687)),
+        ],
+        "spin": 0,
+    },
+    "water-dimer": {
+        "atoms": [
+            ("O", (0.0, 0.0, 0.0)),
+            ("H", (1.43233673, 0.0, 1.10715266)),
+            ("H", (-1.43233673, 0.0, 1.10715266)),
+            ("O", (6.5, 0.0, 0.4)),
+            ("H", (7.93233673, 0.0, 1.50715266)),
+            ("H", (5.06766327, 0.0, 1.50715266)),
+        ],
+        "spin": 0,
     },
 }
 
@@ -185,7 +234,13 @@ def _kill_child(process: subprocess.Popen) -> None:
         pass
 
 
-def _run_child(command: list[str], prefix: Path, timeout: float) -> dict[str, Any]:
+def _run_child(
+    command: list[str],
+    prefix: Path,
+    timeout: float,
+    *,
+    resource_check: Callable[[], None] | None = None,
+) -> dict[str, Any]:
     """Time process lifetime, with owned nested-worker cleanup on cancellation."""
     # Reserve both logs before launch; never truncate a previous run or follow a
     # pre-existing symlink. Children write directly to these owned descriptors,
@@ -219,7 +274,21 @@ def _run_child(command: list[str], prefix: Path, timeout: float) -> dict[str, An
 
         previous_handler = signal.signal(signal.SIGTERM, interrupted)
         try:
-            process.wait(timeout=timeout)
+            if resource_check is None:
+                process.wait(timeout=timeout)
+            else:
+                deadline = started + timeout
+                while True:
+                    resource_check()
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    try:
+                        process.wait(timeout=min(0.05, remaining))
+                    except subprocess.TimeoutExpired:
+                        continue
+                    resource_check()
+                    break
         except subprocess.TimeoutExpired:
             _kill_child(process)
             process.wait(timeout=5)
@@ -367,7 +436,9 @@ def main() -> None:
     """Execute synchronized, matched-science comparisons on an allocated GPU."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker", choices=CASES, help=argparse.SUPPRESS)
-    parser.add_argument("--cases", nargs="+", choices=CASES, default=list(CASES))
+    parser.add_argument(
+        "--cases", nargs="+", choices=CASES, default=["h2", "water", "oh"]
+    )
     parser.add_argument(
         "--engines",
         nargs="+",
@@ -378,6 +449,11 @@ def main() -> None:
     parser.add_argument("--grid", type=int, nargs=3, default=(8, 4, 8))
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
+    parser.add_argument(
+        "--gpu-memory-limit-mib",
+        type=int,
+        help="Abort above sampled total-device usage; includes parent/other contexts, not a hard allocation cap",
+    )
     parser.add_argument("--hessian-atol", type=float, default=3e-6)
     parser.add_argument("--cli", type=Path)
     parser.add_argument(
@@ -410,6 +486,11 @@ def main() -> None:
         return
     if arguments.repeats < 0 or arguments.timeout_seconds <= 0:
         parser.error("repeats must be nonnegative and timeout must be positive")
+    if (
+        arguments.gpu_memory_limit_mib is not None
+        and arguments.gpu_memory_limit_mib <= 0
+    ):
+        parser.error("GPU memory limit must be positive")
     for name in ("cli", "compiler_python"):
         path = getattr(arguments, name)
         if path is None or not path.is_absolute() or not os.access(path, os.X_OK):
@@ -538,6 +619,9 @@ def _measure(
                 "cache_policy": "reuse persistent caches; no empty-cache cold claim",
                 "warm_repeats": arguments.repeats,
                 "scientific_grid_convergence_claim": False,
+                "gpu_memory_limit_mib": getattr(
+                    arguments, "gpu_memory_limit_mib", None
+                ),
             },
         }
     )
@@ -578,17 +662,64 @@ def _measure(
                 # A prior subset cannot qualify this case while another required
                 # sample is running or has failed. Keep every raw sample.
                 record.pop("summary", None)
+                attempt = {
+                    "command": command,
+                    "status": "running",
+                    "endpoint_deadline_seconds": arguments.timeout_seconds,
+                }
+                record.setdefault("attempts", {})[label] = attempt
                 save()
+                resource_options: dict[str, Any] = {}
+                memory_limit = getattr(arguments, "gpu_memory_limit_mib", None)
+                if memory_limit is not None:
+                    memory = {
+                        "sampling_policy": "total-device used bytes at approximately 50 ms intervals; not an exact peak",
+                        "limit_bytes": memory_limit * 1024**2,
+                        "samples": 0,
+                        "sampled_peak_bytes": 0,
+                    }
+                    record.setdefault("gpu_memory_observations", {})[label] = memory
+
+                    def check_memory(memory: dict[str, Any] = memory) -> None:
+                        """Use device-wide accounting conservatively, including parent contexts."""
+                        free, total = cp.cuda.runtime.memGetInfo()
+                        used = total - free
+                        memory.setdefault("before_bytes", used)
+                        memory["device_total_bytes"] = total
+                        memory["sampled_peak_bytes"] = max(
+                            memory["sampled_peak_bytes"], used
+                        )
+                        memory["samples"] += 1
+                        if used > memory["limit_bytes"]:
+                            raise RuntimeError(
+                                f"sampled total-device GPU memory {used} bytes exceeds "
+                                f"limit {memory['limit_bytes']} bytes"
+                            )
+
+                    resource_options["resource_check"] = check_memory
+                attempt_started = time.perf_counter()
                 try:
+                    if resource_options:
+                        check_memory()
                     row = _run_child(
                         command,
                         logs / label,
                         arguments.timeout_seconds,
+                        **resource_options,
                     )
-                except Exception as error:
+                except BaseException as error:
+                    attempt.update(
+                        status="failed",
+                        comparator_elapsed_seconds=time.perf_counter()
+                        - attempt_started,
+                    )
                     record["failure"] = str(error)
                     save()
                     raise
+                attempt.update(
+                    status="completed",
+                    comparator_elapsed_seconds=time.perf_counter() - attempt_started,
+                )
                 row.update(engine=engine, repeat=repeat)
                 rows.append(row)
                 save()
