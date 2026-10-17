@@ -27,6 +27,10 @@ def generate() -> str:
             grid_maps(),
             namespace="generativeqc_wb97mv_grid_maps",
             extents={"point": "points", "ao": "nao"},
+            fuse_elementwise=True,
+            fuse_contraction_epilogues=True,
+            parallel_scalar_reduction=True,
+            parallel_output_reduction=True,
         ),
         emit_affine_work(
             grid_maps(),

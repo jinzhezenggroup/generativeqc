@@ -7,7 +7,16 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.tensor import Program, TensorSpec, add, input_tensor
+from generativeqc_compiler.tensor import (
+    Index,
+    IndexSpace,
+    Program,
+    TensorSpec,
+    add,
+    einsum,
+    input_tensor,
+    multiply,
+)
 from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda
 
 
@@ -97,3 +106,86 @@ def test_affine_cuda_add_preserves_seeded_accumulation(
     signbit, actual = result.stdout.split()
     assert float(actual) == pytest.approx(expected)
     assert signbit == "0"
+
+
+@pytest.mark.parametrize("vector", (False, True))
+def test_affine_cuda_fusion_preserves_checks_outputs_and_duplicate_operands(
+    tmp_path: Path,
+    vector: bool,
+) -> None:
+    """Execute nested fused maps and a repeated-operand contraction unchanged."""
+    compiler = shutil.which("c++")
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if not compiler or not launcher:
+        pytest.skip("C++ compiler and verified compiler cache are required")
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
+    indices = (Index("sample", IndexSpace("sample", "batch", 3)),) if vector else ()
+    first = input_tensor("first", TensorSpec(indices, role="input"))
+    second = input_tensor("second", TensorSpec(indices, role="input"))
+    retained = add(first, second, coefficients=(Fraction(-2, 3), Fraction(5, 7)))
+    nested = multiply(add(first, second), add(retained, coefficients=(Fraction(1, 3),)))
+    contracted = einsum("p,p->p" if vector else ",->", nested, nested)
+    program = Program({"retained": retained, "square": add(contracted, first)})
+    for fused in (False, True):
+        generated = emit_affine_cuda(
+            {"evaluate": program},
+            namespace=f"affine_{int(fused)}",
+            extents={"sample": "samples"} if vector else {},
+            fuse_elementwise=fused,
+            fuse_contraction_epilogues=fused,
+        )
+        (tmp_path / f"generated_{int(fused)}.hpp").write_text(
+            re.sub(r"<<<.*?>>>", "", generated)
+        )
+    (tmp_path / "cuda_runtime.h").write_text(
+        "#pragma once\n#include <cmath>\nusing std::isfinite;\n#define __global__\n"
+        "struct Dim { unsigned x; };\n"
+        "static Dim blockIdx{0}, threadIdx{0}, blockDim{1}, gridDim{1};\n"
+        "using cudaError_t = int; using cudaStream_t = void*;\n"
+        "constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1;\n"
+        "inline int cudaGetLastError() { return 0; }\n"
+        "inline int atomicAdd(int* pointer, int value) { auto old = *pointer; *pointer += value; return old; }\n"
+        "inline int atomicExch(int* pointer, int value) { auto old = *pointer; *pointer = value; return old; }\n"
+    )
+    source, executable = tmp_path / "fusion.cpp", tmp_path / "fusion"
+    source.write_text(
+        '#include "generated_0.hpp"\n#include "generated_1.hpp"\n'
+        "#include <array>\n#include <limits>\n#include <vector>\n"
+        "int main() {\n"
+        "for (double first : {0.0, -0.0, 21.0, -1e-310, std::numeric_limits<double>::max()}) {\n"
+        " const double second = first;\n"
+        " std::array<double, 3> first_input{first, first, first}, second_input{second, second, second};\n"
+        " std::array<std::array<double, 6>, 2> result;\n"
+        " for (auto& values : result) values.fill(77.);\n"
+        " int status[2]{};\n"
+        " for (int fused = 0; fused < 2; ++fused) {\n"
+        "  std::size_t bytes = 0;\n"
+        "  if (fused ? affine_1::workspace_evaluate(SHAPE, bytes) : affine_0::workspace_evaluate(SHAPE, bytes)) return 2;\n"
+        "  std::vector<double> workspace(bytes / sizeof(double));\n"
+        "  auto error = fused\n"
+        "   ? affine_1::launch_evaluate(SHAPE, first_input.data(), second_input.data(), &result[fused][0], &result[fused][3], workspace.data(), bytes, &status[fused], nullptr)\n"
+        "   : affine_0::launch_evaluate(SHAPE, first_input.data(), second_input.data(), &result[fused][0], &result[fused][3], workspace.data(), bytes, &status[fused], nullptr);\n"
+        "  if (error) return 3;\n"
+        " }\n"
+        " if (status[0] != status[1]) return 4;\n"
+        " for (int output = 0; output < 6; ++output)\n"
+        "  if (result[0][output] != result[1][output] || std::signbit(result[0][output]) != std::signbit(result[1][output])) return 5;\n"
+        " if (first == std::numeric_limits<double>::max() && (!status[1] || result[1][0] != 77. || result[1][3] != 77.)) return 6;\n"
+        "}\n}\n".replace("SHAPE", "{3}" if vector else "{}")
+    )
+    subprocess.run(
+        [
+            launcher,
+            compiler,
+            "-std=c++17",
+            "-ffp-contract=off",
+            "-I",
+            str(tmp_path),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        timeout=60,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

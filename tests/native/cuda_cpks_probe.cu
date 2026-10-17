@@ -59,6 +59,7 @@ __global__ void linear_fock(const double* operation, const double* density, doub
     if (failure == 1 && row == 0) value = nan("");
     if (failure == 2 && row == 1) value += 0.3;
     if (failure == 3 && row == 0) continue;
+    if (failure == 4) value += 0.01 * density[row] * density[row];
     fock[row] = value;
   }
 }
@@ -87,6 +88,7 @@ cudaError_t induced(void* context, const double* density, double* fock,
   const int failure = owner.mode == "nan-provider"          ? 1
                       : owner.mode == "asymmetric-provider" ? 2
                       : owner.mode == "partial-provider"    ? 3
+                      : owner.mode == "cached-nonlinear"    ? 4
                                                             : 0;
   linear_fock<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
       owner.operation, density, fock, dimension, failure);
@@ -176,6 +178,15 @@ void solve(int argc, char** argv) {
       authenticate,
       &owner};
   response::CudaCpksResult result;
+  response::CudaCpksOperatorCache cache;
+  std::size_t cache_bytes{};
+  const bool cached = owner.mode.starts_with("cached");
+  if (cached && admitted == cudaSuccess) {
+    require(response::cuda_cpks_operator_workspace(shape, options, cache_bytes));
+    cache.reset(owner.mode == "cached-alias" ? workspace
+                                             : storage.allocate(cache_bytes / sizeof(double) + 1),
+                owner.mode == "cached-short" && cache_bytes ? cache_bytes - 1 : cache_bytes);
+  }
   auto* selected_workspace = owner.mode == "alias-workspace" ? density : workspace;
   auto* selected_weights = owner.mode == "alias-output" ? density : weights;
   if (reference_only && owner.mode == "alias-workspace") selected_workspace = device_coefficients;
@@ -183,17 +194,36 @@ void solve(int argc, char** argv) {
   if (owner.mode == "misaligned-workspace")
     selected_workspace = reinterpret_cast<double*>(reinterpret_cast<char*>(workspace) + 1);
   if (owner.mode == "capture") require(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
-  const auto error = admitted != cudaSuccess ? admitted
-                     : reference_only
-                         ? response::cuda_cpks_reference_weights(
-                               shape, options, reference, selected_weights, selected_workspace,
-                               owner.mode == "short-workspace" ? required - 1 : required,
-                               owner.mode == "wrong-stream" ? nullptr : stream)
-                         : response::solve_cuda_cpks(
-                               shape, options, reference, device_frozen, device_overlap, induced,
-                               &owner, density, selected_weights, selected_workspace,
-                               owner.mode == "short-workspace" ? required - 1 : required,
-                               owner.mode == "wrong-stream" ? nullptr : stream, result);
+  auto error =
+      admitted != cudaSuccess ? admitted
+      : reference_only
+          ? response::cuda_cpks_reference_weights(
+                shape, options, reference, selected_weights, selected_workspace,
+                owner.mode == "short-workspace" ? required - 1 : required,
+                owner.mode == "wrong-stream" ? nullptr : stream)
+          : response::solve_cuda_cpks(
+                shape, options, reference, device_frozen, device_overlap, induced, &owner, density,
+                selected_weights, selected_workspace,
+                owner.mode == "short-workspace" ? required - 1 : required,
+                owner.mode == "wrong-stream" ? nullptr : stream, result, cached ? &cache : nullptr);
+  if (owner.mode == "cached-reuse" && error == cudaSuccess && result.converged())
+    error = response::solve_cuda_cpks(shape, options, reference, device_frozen, device_overlap,
+                                      induced, &owner, density, weights, workspace, required,
+                                      stream, result, &cache);
+  if (owner.mode == "cached-stale" && error == cudaSuccess && result.converged()) {
+    auto replaced = reference;
+    replaced.orbital_energies = storage.upload(energies);
+    const std::vector<double> density_sentinel(matrices, 9817.0),
+        weights_sentinel(matrices, -3277.0);
+    require(cudaMemcpyAsync(density, density_sentinel.data(), matrices * sizeof(double),
+                            cudaMemcpyHostToDevice, stream));
+    require(cudaMemcpyAsync(weights, weights_sentinel.data(), matrices * sizeof(double),
+                            cudaMemcpyHostToDevice, stream));
+    require(cudaStreamSynchronize(stream));
+    error = response::solve_cuda_cpks(shape, options, replaced, device_frozen, device_overlap,
+                                      induced, &owner, density, weights, workspace, required,
+                                      stream, result, &cache);
+  }
   if (owner.mode == "capture") {
     cudaGraph_t captured{};
     require(cudaStreamEndCapture(stream, &captured));
@@ -214,6 +244,9 @@ void solve(int argc, char** argv) {
             << ",\"tolerance\":" << result.gmres.tolerance
             << ",\"gmres_status\":" << static_cast<int>(result.gmres.status)
             << ",\"workspace_bytes\":" << result.workspace_bytes
+            << ",\"cached_columns\":" << cache.columns()
+            << ",\"cached_actions\":" << cache.actions()
+            << ",\"physical_checks\":" << cache.physical_checks()
             << ",\"authentications\":" << owner.authentications << ",\"actions\":" << owner.actions
             << ",\"density\":";
   array(output_density);
