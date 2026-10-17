@@ -448,6 +448,13 @@ def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
     return np.repeat(_eager_data_array(x), repeats, axis=axis)
 
 
+def tile(x: object, repetitions: tuple[int, ...]) -> typing.Any:
+    """Tile whole blocks using static repetition metadata during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.tile(x, repetitions)
+    return np.tile(_eager_data_array(x), repetitions)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
