@@ -1101,6 +1101,8 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_relative_response_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_density_gradient_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")

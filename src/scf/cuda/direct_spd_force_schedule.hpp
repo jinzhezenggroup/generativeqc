@@ -11,7 +11,8 @@ enum class DirectSpdForceSchedule : unsigned char {
   Incumbent,
   Automatic,
   SpatialReuse,
-  RelativeReuse
+  RelativeReuse,
+  DensityReuse
 };
 
 /** Bounded experimental queue sizes; unknown requests retain the incumbent.
@@ -28,6 +29,7 @@ inline constexpr DirectSpdForceSchedule select_direct_spd_force_schedule(
   if (selector.empty()) return DirectSpdForceSchedule::Automatic;
   if (selector == "1" || selector == "spatial-reuse") return DirectSpdForceSchedule::SpatialReuse;
   if (selector == "relative-reuse") return DirectSpdForceSchedule::RelativeReuse;
+  if (selector == "relative-density") return DirectSpdForceSchedule::DensityReuse;
   return DirectSpdForceSchedule::Incumbent;
 }
 

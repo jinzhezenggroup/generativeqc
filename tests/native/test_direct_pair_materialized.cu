@@ -808,8 +808,182 @@ void qualify_shared_responses() {
   std::cout << "orders 7..11 shared scalar responses and exact primitive work PASS\n";
 }
 
+template <bool Unrestricted, DirectForceOutputMode Mode>
+__global__ void density_contracted_force(DeviceBatch batch, ActiveShellQuartetTile task,
+                                         const double* schwarz, double threshold,
+                                         const double* density, const std::uint8_t* active,
+                                         double* forces, unsigned channel, double coulomb,
+                                         DirectForceWork* work) {
+  __shared__ CooperativeDensityForceRecurrence shared;
+  batch.direct_force_work = work;
+  contract_shared_direct_pair_force<Unrestricted, Mode, true>(
+      batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : coulomb,
+      channel == 1 ? 0.0 : (channel == 3 ? -0.29 : 0.29), &shared);
+}
+
+template <bool Unrestricted, DirectForceOutputMode Mode>
+void qualify_density_contraction(std::array<unsigned, 4> momenta, unsigned layout, bool same_pair,
+                                 double threshold, bool extreme = false, bool seeded = false) {
+  Fixture fixture(momenta, Unrestricted, layout == 2);
+  const std::vector<std::int32_t> atoms = layout == 0   ? std::vector<std::int32_t>{0, 1, 2, 3}
+                                          : layout == 1 ? std::vector<std::int32_t>{0, 0, 1, 1}
+                                                        : std::vector<std::int32_t>{0, 0, 0, 0};
+  fixture.batch.shell_atoms = fixture.upload(atoms);
+  build_shell_primitive_pair_cache_kernel<<<10, 32>>>(
+      fixture.batch, const_cast<PrimitivePairData*>(fixture.batch.shell_primitive_pairs));
+  const ActiveShellQuartetTile task{8U, same_pair ? 8U : 1U, 0U};
+  const auto pair_count = [&](std::size_t pair) {
+    const auto first = fixture.first_shells[pair], second = fixture.second_shells[pair];
+    const auto first_count = fixture.ao_offsets[first + 1] - fixture.ao_offsets[first];
+    const auto second_count = fixture.ao_offsets[second + 1] - fixture.ao_offsets[second];
+    return std::size_t(first == second ? first_count * (first_count + 1) / 2
+                                       : first_count * second_count);
+  };
+  const auto first_count = pair_count(task.first_pair), second_count = pair_count(task.second_pair);
+  const auto count = same_pair ? first_count * (first_count + 1) / 2 : first_count * second_count;
+  const auto dimension = std::size_t(fixture.batch.direct_nbf), matrix = dimension * dimension;
+  const std::array<std::int32_t, 4> centers{atoms[3], atoms[2],
+                                            atoms[fixture.first_shells[task.second_pair]],
+                                            atoms[fixture.second_shells[task.second_pair]]};
+  std::vector<std::int32_t> unique;
+  for (const auto atom : centers)
+    if (std::find(unique.begin(), unique.end(), atom) == unique.end()) unique.push_back(atom);
+  if (extreme) std::fill(fixture.host_density.begin(), fixture.host_density.end(), 1e308);
+  std::vector<double> seed(fixture.host_density.size());
+  if (seeded) {
+    if constexpr (Unrestricted) throw std::runtime_error("bilinear seed is restricted-only");
+    for (std::size_t component = 0; component < seed.size(); ++component)
+      seed[component] = std::sin(0.37 * component) / dimension;
+    fixture.batch.direct_force_seed = fixture.upload(seed);
+  }
+  const double coulomb = extreme ? 1e-320 : 0.73;
+  Device<double> density(fixture.host_density), schwarz(fixture.host_schwarz),
+      raw_values(count * 12);
+  Device<double> forces(24);
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1});
+  Device<DirectForceWork> work(1);
+  retained_derivatives<<<(count + 255) / 256, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                     raw_values.data);
+  check(cudaGetLastError());
+  check(cudaDeviceSynchronize());
+  const auto raw = raw_values.read();
+  for (unsigned channel = 0; channel < 4; ++channel) {
+    if (extreme && channel != 1U) continue;
+    forces.clear();
+    work.clear();
+    density_contracted_force<Unrestricted, Mode>
+        <<<1, 256>>>(fixture.batch, task, schwarz.data, threshold, density.data, active.data,
+                     forces.data, channel, coulomb, work.data);
+    check(cudaGetLastError());
+    check(cudaDeviceSynchronize());
+    std::vector<double> expected(24);
+    std::size_t admitted_count = 0;
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+      const auto first = same_pair ? triangle_row(ordinal) : ordinal / second_count;
+      const auto second = same_pair ? ordinal - first * (first + 1) / 2 : ordinal % second_count;
+      const auto bra = host_pair(fixture, task.first_pair, first);
+      const auto ket = host_pair(fixture, task.second_pair, second);
+      const auto bra_first = bra[0], bra_second = bra[1], ket_first = ket[0], ket_second = ket[1];
+      if (unique.size() <= 1 || fixture.host_schwarz[bra_first + dimension * bra_second] *
+                                        fixture.host_schwarz[ket_first + dimension * ket_second] <
+                                    threshold)
+        continue;
+      ++admitted_count;
+      const std::set<std::array<std::size_t, 4>> orbit{
+          {bra_first, bra_second, ket_first, ket_second},
+          {bra_second, bra_first, ket_first, ket_second},
+          {bra_first, bra_second, ket_second, ket_first},
+          {bra_second, bra_first, ket_second, ket_first},
+          {ket_first, ket_second, bra_first, bra_second},
+          {ket_second, ket_first, bra_first, bra_second},
+          {ket_first, ket_second, bra_second, bra_first},
+          {ket_second, ket_first, bra_second, bra_first}};
+      double weights[2]{};
+      for (const auto& entry : orbit) {
+        const auto orbit_first = entry[0], orbit_second = entry[1], orbit_third = entry[2],
+                   orbit_fourth = entry[3];
+        const auto total = [&](std::size_t row, std::size_t column) {
+          return fixture.host_density[row + dimension * column] +
+                 (Unrestricted ? fixture.host_density[matrix + row + dimension * column] : 0.0);
+        };
+        if (channel != 2) {
+          if (seeded)
+            weights[0] += 0.5 * coulomb * total(orbit_first, orbit_second) *
+                              seed[orbit_third + dimension * orbit_fourth] +
+                          0.5 * coulomb * seed[orbit_first + dimension * orbit_second] *
+                              total(orbit_third, orbit_fourth);
+          else
+            weights[0] +=
+                0.5 * coulomb * total(orbit_first, orbit_second) * total(orbit_third, orbit_fourth);
+        }
+        if (channel != 1)
+          for (unsigned spin = 0; spin < (Unrestricted ? 2U : 1U); ++spin) {
+            const double scale = 0.5 * (channel == 3 ? -0.29 : 0.29);
+            const double first =
+                fixture.host_density[spin * matrix + orbit_first + dimension * orbit_third];
+            const double second =
+                fixture.host_density[spin * matrix + orbit_second + dimension * orbit_fourth];
+            weights[1] += seeded ? scale * first * seed[orbit_second + dimension * orbit_fourth] +
+                                       scale * seed[orbit_first + dimension * orbit_third] * second
+                                 : scale * first * second;
+          }
+      }
+      for (unsigned center = 0; center < unique.size(); ++center)
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          const auto derivative = raw[(ordinal * 4 + center) * 3 + axis];
+          if constexpr (Mode == DirectForceOutputMode::Combined)
+            expected[unique[center] * 3 + axis] -= (weights[0] + weights[1]) * derivative;
+          else
+            for (unsigned source = 0; source < 2; ++source)
+              expected[source * 12 + unique[center] * 3 + axis] -= weights[source] * derivative;
+        }
+    }
+    const auto actual = forces.read();
+    for (std::size_t component = 0; component < actual.size(); ++component)
+      close(actual[component], expected[component], "density projection differs from raw AD/orbit");
+    unsigned long long accepted = 0, masks = 0, numerical = 0;
+    const auto census = work.read().front();
+    for (const auto& entry : census.classes) {
+      accepted += entry.density.accepted_shells;
+      masks += entry.density.mask_rejections;
+      numerical += entry.density.numerical_rejections;
+    }
+    const bool full = admitted_count == count;
+    if (channel == 1U && unique.size() > 1U && !seeded) {
+      if (extreme ? accepted || !numerical : full ? !accepted : accepted || !masks)
+        throw std::runtime_error("density projection admission/fallback mismatch");
+    } else if (accepted) {
+      throw std::runtime_error("density projection bypassed exchange/center fallback");
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--density-contraction") == 0) {
+      for (auto momenta :
+           {std::array<unsigned, 4>{0, 2, 2, 2}, std::array<unsigned, 4>{1, 1, 2, 2},
+            std::array<unsigned, 4>{1, 2, 1, 2}, std::array<unsigned, 4>{1, 2, 2, 2}}) {
+        qualify_density_contraction<false, DirectForceOutputMode::Combined>(momenta, 0, false, 0.0);
+        qualify_density_contraction<true, DirectForceOutputMode::Combined>(momenta, 1, false, 0.8);
+        qualify_density_contraction<false, DirectForceOutputMode::Separate>(momenta, 1, false, 0.0);
+        qualify_density_contraction<true, DirectForceOutputMode::Separate>(momenta, 0, false, 0.0);
+        qualify_density_contraction<true, DirectForceOutputMode::Separate>(momenta, 2, false, 0.0);
+        qualify_density_contraction<false, DirectForceOutputMode::Combined>(momenta, 0, false, 2.0);
+      }
+      qualify_density_contraction<false, DirectForceOutputMode::Separate>({1, 2, 1, 2}, 0, true,
+                                                                          0.0);
+      qualify_density_contraction<true, DirectForceOutputMode::Combined>({1, 2, 1, 2}, 0, true,
+                                                                         0.0);
+      qualify_density_contraction<false, DirectForceOutputMode::Combined>({1, 2, 1, 2}, 0, false,
+                                                                          0.0, true);
+      qualify_density_contraction<false, DirectForceOutputMode::Combined>({1, 2, 1, 2}, 0, false,
+                                                                          0.0, false, true);
+      qualify_density_contraction<false, DirectForceOutputMode::Separate>({1, 2, 1, 2}, 0, true,
+                                                                          0.8, false, true);
+      std::cout << "density-projected J', screened/JK/numerical fallbacks and raw AD orbits PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--mixed-jk") == 0) {
       qualify_mixed_canonical<1>();
       qualify_mixed_canonical<2>();
