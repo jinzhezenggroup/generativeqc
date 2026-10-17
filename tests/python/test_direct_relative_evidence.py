@@ -20,7 +20,9 @@ def test_explicit_packet_does_not_require_git(
     """An exported source tree can validate a separately retained local packet."""
     packet = {"fixture": [1, 2, 3]}
     path = tmp_path / "observations.json.xz"
-    path.write_bytes(lzma.compress(json.dumps(packet).encode()))
+    payload = lzma.compress(json.dumps(packet).encode())
+    monkeypatch.setattr(evidence, "PACKET_SHA256", hashlib.sha256(payload).hexdigest())
+    path.write_bytes(payload)
 
     def unexpected_git(*args: Any, **kwargs: Any) -> None:
         pytest.fail("Explicit evidence must not access Git or the network")
@@ -165,6 +167,38 @@ def packet(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 def test_original_historical_scalar_packet() -> None:
     """Keep real retained-data replay explicit in shallow or exported checkouts."""
     evidence.summarize(evidence.load_packet())
+
+
+@pytest.mark.parametrize("tamper", [False, True])
+def test_explicit_packet_authenticates_timings_before_validation(
+    packet: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tamper: bool,
+) -> None:
+    """Source exports must not label altered, internally valid timings as history."""
+    payload = lzma.compress(json.dumps(packet).encode())
+    monkeypatch.setattr(evidence, "PACKET_SHA256", hashlib.sha256(payload).hexdigest())
+    if tamper:
+        row = packet["populations"][PRIMARY]
+        for phase, values in zip(evidence.PHASES, row["rows"], strict=True):
+            if phase == "warm":
+                values[0] *= 0.5
+        row["complete_seconds"]["warm"] *= 0.5
+        evidence.summarize(packet)
+        payload = lzma.compress(json.dumps(packet).encode())
+    path = tmp_path / "historical.json.xz"
+    path.write_bytes(payload)
+
+    def unexpected_git(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("Explicit historical recovery must not require Git or network")
+
+    monkeypatch.setattr(evidence.subprocess, "run", unexpected_git)
+    if tamper:
+        with pytest.raises(ValueError, match="integrity"):
+            evidence.main(["--packet", str(path)])
+    else:
+        evidence.main(["--packet", str(path)])
 
 
 def _run(packet: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
