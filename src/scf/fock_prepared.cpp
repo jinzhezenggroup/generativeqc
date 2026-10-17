@@ -626,7 +626,4 @@ bool PreparedFockPlan::matches(
   return !impl_->auxiliary || same_system(*impl_->auxiliary, auxiliary ? *auxiliary : orbital);
 }
 
-const core::System* PreparedFockPlan::auxiliary_system() const noexcept {
-  return impl_->auxiliary ? &*impl_->auxiliary : nullptr;
-}
 }  // namespace generativeqc::scf
