@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <type_traits>
 
 using I = std::int64_t;
 
@@ -67,11 +68,20 @@ extern "C" int mixed_contractions(const double* density, const double* ao, const
     const dim3 density_grid((active + 15) / 16, (count + 15) / 16, spins * jets);
     const I columns = (active + 15) / 16;
     const dim3 potential_grid(columns * (columns + 1) / 2, 1, spins);
-    if (mixed == 1) {
+    if (mixed == 1 || mixed == 4 || mixed == 5) {
       density_probe<float><<<density_grid, dim3(16, 16)>>>(
           allocation, device_ao, device_products, count, active, full, jets, device_ids, error);
-      potential_probe<float><<<potential_grid, dim3(16, 16)>>>(
-          device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
+      if (mixed == 4)
+        potential_probe<float, true><<<potential_grid, dim3(16, 16)>>>(
+            device_ao, device_work, device_potential, count, active, full, jets, device_ids, error,
+            device_weights);
+      else if (mixed == 5)
+        tiled_diagonal_potential<float><<<potential_grid, dim3(16, 16)>>>(
+            device_ao, device_work, active, count, jets, nullptr, device_potential, nullptr, true,
+            error, device_ids, full, device_weights);
+      else
+        potential_probe<float><<<potential_grid, dim3(16, 16)>>>(
+            device_ao, device_work, device_potential, count, active, full, jets, device_ids, error);
     } else {
       density_probe<double><<<density_grid, dim3(16, 16)>>>(
           allocation, device_ao, device_products, count, active, full, jets, device_ids, error);

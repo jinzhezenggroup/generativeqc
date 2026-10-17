@@ -57,7 +57,7 @@ def retry_probe(
 
 
 @pytest.mark.parametrize(
-    "component", range(6), ids=["j", "density", "xc", "range", "nlc", "all"]
+    "component", range(7), ids=["j", "density", "xc", "range", "nlc", "all", "matrix"]
 )
 @pytest.mark.parametrize("stage", range(3), ids=["seed", "frozen", "target"])
 @pytest.mark.parametrize("source", range(3), ids=["absent", "mixed", "strict"])
@@ -114,6 +114,7 @@ struct Source { bool mixed; bool mixed_recurrence() const { return mixed; } };
 struct Owner {
   bool is_failed = true, pending_incremental_delta = true;
   bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
+  bool pending_mixed_contractions{};
   bool pending_mixed_range_exchange{}, pending_mixed_nonlocal{};
   bool strict_refinement{}, phase_source_cold = true, stabilize_occupations = true;
   bool final_closure = true, is_active{}, occupied_fitted_factor_ready = true;
@@ -168,6 +169,7 @@ int main(int argc, char** argv) {
   p.pending_mixed_point = component == 2 || component == 5;
   p.pending_mixed_range_exchange = component == 3 || component == 5;
   p.pending_mixed_nonlocal = component == 4 || component == 5;
+  p.pending_mixed_contractions = component == 5 || component == 6;
   p.nonlocal_seed_stage = stage == 0; p.nonlocal_frozen_stage = stage == 1;
   if (source) p.phase_source = std::make_unique<Source>(Source{source == 1});
   require(p.retry() && p.is_active && !p.is_failed && p.strict_refinement, "strict retry was not selected");

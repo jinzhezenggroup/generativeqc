@@ -19,17 +19,27 @@ PUBLICATION = ROOT / "benchmarks/results/readme-refresh-20261015"
 
 def receipt(path: Path) -> dict:
     payload = path.read_bytes()
-    return {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+    identity = {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+    if path.suffix == ".xz":
+        expanded = lzma.decompress(payload)
+        identity["uncompressed"] = {
+            "bytes": len(expanded),
+            "sha256": hashlib.sha256(expanded).hexdigest(),
+        }
+    return identity
 
 
 def main() -> None:
     """Keep historical engines only in their existing publications, never rerun."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path, required=True)
-    raw = parser.parse_args().raw.resolve()
+    parser.add_argument("--df96-raw", type=Path)
+    args = parser.parse_args()
+    raw = args.raw.resolve()
     previous = runpy.run_path(
         str(PUBLICATION.parent / "readme-wb97mv-20261014/refresh.py")
     )
+    refresh = runpy.run_path(str(PUBLICATION / "refresh.py"))
     campaign = {
         "schema": "generativeqc.readme-native-refresh.v1",
         "source_commit": SOURCE,
@@ -44,13 +54,22 @@ def main() -> None:
     for mode, name in (("none", "summary.json.xz"), ("cuda", "df-summary.json.xz")):
         campaign["populations"][mode] = {}
         baseline = previous["combined_summary"](name)
+        if mode == "cuda":
+            baseline["methods"]["wb97m-v"].append(
+                {"atoms": 96, "protocol": refresh["df96_protocol"]()}
+            )
         for method, points in baseline["methods"].items():
             updates = []
             for historical in points:
                 atoms = historical["atoms"]
                 directory = raw / "measurements" / mode / method
-                if mode == "cuda" and method == "wb97m-v" and atoms == 96:
-                    continue
+                if (
+                    mode == "cuda"
+                    and method == "wb97m-v"
+                    and atoms == 96
+                    and args.df96_raw
+                ):
+                    directory = args.df96_raw / "measurements/cuda/wb97m-v"
                 if not all(
                     (directory / str(atoms) / filename).exists()
                     for filename in ("native.json", "native.outcome")

@@ -247,7 +247,7 @@ int cudaMemsetAsync(void* destination, int value, std::size_t bytes, void*) {
   std::memset(destination, value, bytes); return 0;
 }
 void cuda_check(int status) { assert(status == 0); }
-struct Layout { bool fp32_contractions, local_ao; };
+struct Layout { bool fp32_contractions, fp32_point_totals, local_ao; };
 struct Batch { bool compact; };
 struct Binding {
   struct Diagnostic { bool provider_allowance; };
@@ -267,6 +267,7 @@ void initialize(Layout l, Batch point_batch_plan, const void* density_provider,
 int main() {
   const Binding binding;
   for (bool fp32 : {false, true})
+    for (bool mixed_totals : {false, true})
     for (bool local : {false, true})
       for (bool compact : {false, true})
         for (bool density_bound : {false, true})
@@ -275,13 +276,13 @@ int main() {
             std::array<double, 7> totals;
             for (double poison : {123.0, -987.0}) {
               potential.fill(poison); totals.fill(poison);
-              initialize({fp32, local}, {compact}, density_bound ? &binding : nullptr,
+              initialize({fp32, mixed_totals, local}, {compact}, density_bound ? &binding : nullptr,
                          potential_bound ? &binding : nullptr, potential.data(), totals.data());
               const bool sparse = local || (compact && !density_bound && !potential_bound);
               for (int index = 0; index < 8; ++index)
                 assert(potential[index] == (sparse ? 0.0 : poison));
               for (int index = 0; index < 6; ++index)
-                assert(totals[index] == (!fp32 || (sparse && index < 3) ? 0.0 : poison));
+                assert(totals[index] == (!mixed_totals || (sparse && index < 3) ? 0.0 : poison));
               assert(potential[8] == poison && totals[6] == poison);
             }
           }

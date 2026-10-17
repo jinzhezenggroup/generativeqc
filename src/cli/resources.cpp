@@ -11,6 +11,7 @@
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
 #include "runtime/resource_planning.hpp"
+#include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
 #include "scf/ks_device_resources.hpp"
@@ -26,18 +27,6 @@ extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::s
                                                 std::size_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t, std::uint64_t*);
 extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t, std::uint64_t*);
-extern "C" int generativeqc_resource_df_source_bytes_v1(std::size_t, std::size_t, std::size_t,
-                                                        std::size_t, std::size_t, std::size_t,
-                                                        std::uint64_t*);
-extern "C" int generativeqc_resource_df_diis_bytes_v1(std::size_t, std::size_t, unsigned,
-                                                      std::uint64_t*);
-extern "C" int generativeqc_resource_df_tiles_v3(std::size_t, std::size_t, std::size_t, std::size_t,
-                                                 std::size_t, std::size_t, unsigned, std::size_t,
-                                                 std::uint64_t*, std::size_t, char*, std::size_t);
-extern "C" int generativeqc_resource_df_packed_tiles_v2(std::size_t, std::size_t, std::size_t,
-                                                        std::size_t, std::size_t, std::size_t,
-                                                        std::size_t, std::uint64_t*, std::size_t,
-                                                        char*, std::size_t);
 extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, std::size_t, int,
                                                       std::uint64_t*);
@@ -178,177 +167,52 @@ Json ks_inventory(const std::array<Bytes, 16>& inventory) {
   return result;
 }
 
-struct DfTiles {
-  Bytes pairs, auxiliary, peak, automatic_rank, factor, scratch;
-  bool full;
-};
-
-DfTiles df_tiles(Bytes batch, Bytes nbf, Bytes naux, Bytes occupied, Bytes budget, Bytes fixed,
-                 bool generated, bool packed, Bytes rhf_rank) {
-  std::array<Bytes, 11> values{};
-  std::array<char, 512> error{};
-  const auto status = packed ? generativeqc_resource_df_packed_tiles_v2(
-                                   batch, nbf, naux, occupied, budget, fixed, rhf_rank,
-                                   values.data(), values.size(), error.data(), error.size())
-                             : generativeqc_resource_df_tiles_v3(
-                                   batch, nbf, naux, occupied, budget, fixed, generated, rhf_rank,
-                                   values.data(), 7, error.data(), error.size());
-  if (status) throw std::runtime_error(error[0] ? error.data() : "native DF tile query failed");
-  return {values[1],
-          values[2],
-          values[4],
-          packed ? values[10] : values[6],
-          packed ? values[6] : 0,
-          packed ? values[7] : 0,
-          values[5] != 0};
-}
-
-// A CLI fleet repeats one topology and therefore forms one native DF bucket.
-// Retained factors, spectral/solver allowances and the detached singleton cold
-// retry coexist. Source/packed policies must never be charged as dense only.
+// The CLI repeats topology metadata; the native owner performs the same full
+// bucket, retained-fleet and detached-retry composition as the Python API.
 Json cuda_df_candidates(const Topology& orbital, const Topology& auxiliary, Bytes atoms,
-                        Bytes spins, Bytes occupied, const RunOptions& options) {
-  const Bytes batch = options.batch, orbital_aos = orbital.nbf,
-              cartesian_aos = orbital.cartesian_nbf;
-  const Bytes aux = auxiliary.nbf, ac = auxiliary.cartesian_nbf, derivatives = 3 * atoms;
-  if (orbital_aos > 16 || aux > 128)
-    throw std::runtime_error("CUDA DF inventory requires <=16 orbital and <=128 auxiliary AOs");
-  const char* storage_env = std::getenv("GENERATIVEQC_DF_VALUE_STORAGE");
-  const std::string storage = storage_env ? storage_env : "auto";
-  if (storage != "auto" && storage != "dense" && storage != "packed" && storage != "packed-single")
-    throw UsageError("GENERATIVEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single");
-  const bool packed = storage == "packed" || storage == "packed-single";
-  const char* exchange_env = std::getenv("GENERATIVEQC_DF_EXCHANGE");
-  const bool occupied_exchange = exchange_env && std::string_view(exchange_env) == "occupied";
-  const Bytes rhf_rank = spins == 1 ? occupied : 0;
-  Bytes source_bytes = 0, diis = 0, retry_diis = 0;
-  if (generativeqc_resource_df_source_bytes_v1(
-          batch, product({batch, atoms}),
-          product({batch, sum({orbital.shells, auxiliary.shells, 1})}),
-          product({batch, sum({cartesian_aos, ac, 1})}),
-          product({batch, sum({orbital.primitives, auxiliary.primitives, 1})}),
-          product({batch, sum({orbital_aos * cartesian_aos, aux * ac})}), &source_bytes) ||
-      generativeqc_resource_df_diis_bytes_v1(batch, orbital_aos, options.diis_history, &diis) ||
-      generativeqc_resource_df_diis_bytes_v1(1, orbital_aos, options.diis_history, &retry_diis))
-    throw std::runtime_error("invalid native DF source/DIIS capacity");
-  const auto default_tile = df_tiles(batch, orbital_aos, aux, occupied, 0,
-                                     sum({source_bytes, diis}), true, packed, rhf_rank);
-  const Bytes shell_pairs = orbital.shells * (orbital.shells + 1) / 2;
-  const Bytes item_packed =
-      product({512, sum({1, atoms, orbital.shells, orbital.primitives, cartesian_aos, orbital_aos,
-                         shell_pairs, auxiliary.shells, auxiliary.primitives})});
-  const Bytes preparation_retained = product(
-      {batch, sum({item_packed, product({8, sum({2 * orbital_aos * orbital_aos, derivatives})})})});
-  const Bytes preparation_temporary =
-      sum({item_packed, product({8, sum({6 * cartesian_aos * cartesian_aos, derivatives, 1})})});
-  const Bytes preparation_minimum =
-      sum({product({batch, item_packed}), preparation_retained, preparation_temporary});
-  const Bytes combined_shells = sum({orbital.shells, auxiliary.shells, 1});
-  const Bytes combined_pairs = combined_shells * (combined_shells + 1) / 2;
-  const Bytes metadata = product(
-      {batch, 2048,
-       sum({1, atoms, combined_shells, orbital.primitives, auxiliary.primitives, cartesian_aos, ac,
-            combined_pairs, product({combined_pairs, combined_pairs})})});
-  const Bytes response_metadata =
-      product({256, sum({1, atoms, orbital_aos, aux, orbital.primitives, auxiliary.primitives})});
-  const Bytes response_minimum =
-      sum({response_metadata,
-           product({8, sum({4 * aux * aux, 9 * orbital_aos * orbital_aos, 6 * aux})})});
-  const Bytes resident_response =
-      sum({response_metadata,
-           std::max(product({8, sum({12 * aux * aux, 10 * aux, orbital_aos * orbital_aos})}),
-                    sum({product({8, sum({3 * aux * aux, 6 * aux, 4 * orbital_aos * orbital_aos})}),
-                         product({16, orbital_aos, orbital_aos, aux})}))});
-  const Bytes response =
-      sum({response_metadata,
-           product({8, sum({4 * aux * aux, (7 + 2 * aux) * orbital_aos * orbital_aos, 6 * aux})})});
-  const Bytes response_host = sum({response_metadata, product({8, orbital_aos, orbital_aos})});
-  const Bytes source_budget = options.density_fitting_memory_bytes
-                                  ? options.density_fitting_memory_bytes
-                                  : std::max({preparation_minimum, product({2, default_tile.peak}),
-                                              product({2, response_minimum})});
+                        Bytes spins, Bytes nalpha, Bytes nbeta, const RunOptions& options) {
+  const scf::CudaDfResourceItem item{atoms,
+                                     orbital.nbf,
+                                     orbital.cartesian_nbf,
+                                     orbital.shells,
+                                     orbital.primitives,
+                                     auxiliary.nbf,
+                                     auxiliary.cartesian_nbf,
+                                     auxiliary.shells,
+                                     auxiliary.primitives,
+                                     nalpha,
+                                     nbeta,
+                                     spins,
+                                     options.batch};
+  if (options.diis_history > std::numeric_limits<unsigned>::max())
+    throw UsageError("DF DIIS history exceeds the native unsigned domain");
+  const char* exchange = std::getenv("GENERATIVEQC_DF_EXCHANGE");
+  scf::DfPairStorageRequest storage;
+  try {
+    storage = scf::requested_df_pair_storage_request();
+  } catch (const std::invalid_argument& error) {
+    throw UsageError(error.what());
+  }
+  const auto native =
+      scf::cuda_df_fleet_resources(std::span(&item, 1), static_cast<unsigned>(options.diis_history),
+                                   options.density_fitting_memory_bytes, storage,
+                                   exchange && std::string_view(exchange) == "occupied");
   Json candidates = Json::array();
-  for (const bool source : {false, true}) {
-    if ((!source && options.density_fitting_memory_bytes) || (packed && !source)) continue;
-    const Bytes budget = source ? source_budget : 0;
-    if (source && (budget < preparation_minimum || budget / 2 < response_minimum))
-      throw std::runtime_error("DF sub-budget cannot hold preparation/generated response minimum");
-    const auto tile = df_tiles(batch, orbital_aos, aux, occupied, budget,
-                               sum({source ? source_bytes : 0, diis}), source, packed, rhf_rank);
-    if (source)
-      (void)df_tiles(batch, orbital_aos, aux, occupied, std::max<Bytes>(1, budget / 2),
-                     sum({source_bytes, diis}), true, packed, rhf_rank);
-    const Bytes pairs =
-        source ? std::min(orbital_aos * orbital_aos,
-                          std::max(orbital_aos, tile.pairs / orbital_aos * orbital_aos))
-               : orbital_aos * orbital_aos;
-    const Bytes tile_bytes = product({8, pairs, source ? tile.auxiliary : aux});
-    const Bytes matrix = product({8, batch, orbital_aos, orbital_aos}),
-                metric = product({8, batch, aux, aux});
-    const Bytes tensor = product({8, batch, orbital_aos, orbital_aos, aux});
-    const Bytes solver = sum({64 * 1024 * 1024, 16 * matrix, 128 * aux * aux});
-    const bool factors = occupied_exchange || tile.automatic_rank;
-    const Bytes eigen_host = sum({1024 * 1024, 128 * orbital_aos * orbital_aos});
-    const Bytes eigen_device =
-        sum({eigen_host, 8 * (3 * orbital_aos * orbital_aos + orbital_aos), 5});
-    Bytes device = sum({(factors ? 34u : 32u) * matrix, product({16, batch, aux}), solver,
-                        1024 * batch, eigen_device,
-                        product({batch, sum({16 * (orbital_aos * orbital_aos + orbital_aos), 24})}),
-                        diis, 2 * metric, product({8, batch, aux})});
-    device = sum(
-        {device,
-         packed   ? sum({2 * tile.factor, tile.scratch, source_bytes})
-         : source ? sum({tile.full ? sum({tensor, 3 * tile_bytes}) : 4 * tile_bytes, source_bytes})
-                  : sum({tensor, 3 * tile_bytes})});
-    const Bytes setup = sum({metric, product({8, batch, aux}), solver, 4 * batch});
-    const Bytes force =
-        source ? std::min(response, budget / 2)
-               : std::max(resident_response, std::min<Bytes>(response, 128 * 1024 * 1024));
-    const Bytes generation =
-        sum({source_bytes,
-             product({8, batch,
-                      sum({2 * cartesian_aos * cartesian_aos,
-                           source ? 0 : ac * ac + cartesian_aos * cartesian_aos * ac})})});
-    const Bytes one_electron =
-        product({8, batch, sum({2 * orbital_aos * orbital_aos, derivatives})});
-    const Bytes raw = product({8, batch, sum({aux * aux, orbital_aos * orbital_aos * aux})});
-    Bytes host =
-        sum({metadata, product({8, batch, sum({32 * orbital_aos * orbital_aos, 16 * derivatives})}),
-             2 * matrix, product({8, batch, derivatives}), eigen_host, 64 * batch, one_electron});
-    if (!source) host = sum({host, raw, tensor});
-    const Bytes scf =
-        product({8, batch,
-                 sum({129 * orbital_aos * orbital_aos,
-                      4 * (options.diis_history + 1) * orbital_aos * orbital_aos,
-                      product({4, options.diis_history + 1, options.diis_history + 1})})});
-    Bytes host_work = sum(
-        {64 * 1024 * 1024, scf, one_electron, 64 * (metric / batch), 8 * (tensor / batch),
-         2 * metadata,
-         source ? 2 * tile_bytes
-                : sum({2 * raw,
-                       product({8, batch, sum({ac * ac, cartesian_aos * cartesian_aos * ac})})}),
-         8 * (32 * orbital_aos * orbital_aos + 8 * orbital_aos)});
-    host_work = sum(
-        {std::max(host_work, preparation_temporary), source ? response_host : resident_response});
-    const auto retry =
-        df_tiles(1, orbital_aos, aux, occupied, budget,
-                 sum({source ? source_bytes / batch : 0, retry_diis}), source, packed, rhf_rank);
-    const Bytes device_work =
-        sum({std::max({setup, force, generation}), (device - eigen_device) / batch, eigen_device,
-             solver, retry.automatic_rank && !factors ? 2 * matrix / batch : 0});
-    candidates.push_back({{"name", packed   ? "cuda-df-packed"
-                                   : source ? "cuda-df-source"
-                                            : "cuda-df-resident"},
-                          {"retained_host", host},
-                          {"workspace_host", host_work},
-                          {"retained_device", device},
-                          {"workspace_device", device_work},
-                          {"runtime_allowance_device", 512 * 1024 * 1024},
-                          {"sub_budget", budget},
-                          {"tile_pairs", tile.pairs},
-                          {"tile_auxiliary", tile.auxiliary},
-                          {"automatic_rhf_rank", tile.automatic_rank},
-                          {"stores_full_three_center", tile.full}});
+  for (const auto& candidate : native) {
+    const auto& tile = candidate.buckets.front().energy_tiles;
+    candidates.push_back({{"name", candidate.kind == 0   ? "cuda-df-resident"
+                                   : candidate.kind == 1 ? "cuda-df-source"
+                                                         : "cuda-df-packed"},
+                          {"retained_host", candidate.retained_host},
+                          {"workspace_host", candidate.workspace_host},
+                          {"retained_device", candidate.retained_device},
+                          {"workspace_device", candidate.workspace_device},
+                          {"runtime_allowance_device", candidate.runtime_allowance_device},
+                          {"sub_budget", candidate.sub_budget},
+                          {"tile_pairs", tile[1]},
+                          {"tile_auxiliary", tile[2]},
+                          {"automatic_rhf_rank", tile[15]},
+                          {"stores_full_three_center", tile[5] != 0}});
   }
   return candidates;
 }
@@ -574,8 +438,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     }
     try {
       const auto candidates = cuda_df_candidates(
-          orbital, *auxiliary, atoms.size(), spins,
-          std::max<Bytes>(1, static_cast<Bytes>((electrons + unpaired) / 2)), options);
+          orbital, *auxiliary, atoms.size(), spins, static_cast<Bytes>((electrons + unpaired) / 2),
+          static_cast<Bytes>((electrons - unpaired) / 2), options);
       plan["candidates"] = candidates;
       std::vector<std::string> names;
       for (const auto& candidate : candidates)

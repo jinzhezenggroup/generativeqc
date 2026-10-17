@@ -86,11 +86,11 @@ CudaXcPointBatchLauncher expected_batch_launcher{};
 double* expected_batch_arena{};
 enum class CudaXcAoPrecision { Fp64, Fp32ComputeFp64Storage };
 int expected_point_launcher{};
-bool expected_fp32_contractions{};
+bool expected_fp32_contractions{}, expected_fp32_point_totals{};
 CudaXcAoPrecision expected_ao_precision{CudaXcAoPrecision::Fp64};
 struct Layout {
   std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
-  bool local_ao{}, response{}, fp32_contractions{};
+  bool local_ao{}, response{}, fp32_contractions{}, fp32_point_totals{};
   CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};
   std::size_t feature_terms{5}, device_bytes{};
 };
@@ -102,6 +102,7 @@ CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher() { return &mixed_batch_
 template <class... T> void enqueue(T... args) {
   auto values = std::tie(args...);
   assert(std::get<0>(values).fp32_contractions == expected_fp32_contractions);
+  assert(std::get<0>(values).fp32_point_totals == expected_fp32_point_totals);
   assert(std::get<0>(values).ao_precision == expected_ao_precision);
   assert(std::get<1>(values) == expected_point_launcher);
   assert(std::get<sizeof...(T)-5>(values) == expected_density_provider);
@@ -119,7 +120,7 @@ struct CudaXcPlan {
   cudaStream_t stream_{7};
   int device_{2}, point_launcher_{};
   bool evaluation_started_{};
-  bool mixed_pbe_points_{}, mixed_pbe_ao_{}, mixed_pbe_contractions_{};
+  bool mixed_pbe_points_{}, mixed_pbe_ao_{}, mixed_matrix_contractions_{};
   CudaXcPointBatchPlan point_batch_plan_;
   CudaXcPointBatchLauncher point_batch_launcher_{};
   double* point_batch_arena_{};
@@ -149,16 +150,19 @@ int main(int argc, char** argv) {
   const bool replay = std::atoi(argv[1]), local = std::atoi(argv[2]);
   const int mode = std::atoi(argv[3]);
   CudaXcPlan plan;
-  // Disabled/admitted, enabled/strict, points-only and full mixed layouts must
-  // all retain the same publication transaction and physical work accounting.
+  // Matrix-only arithmetic must leave point totals strict. Both mixed-points
+  // and matrix-only preparations remain disabled in StrictAudit; all modes
+  // retain the same publication transaction and physical work accounting.
   const auto arithmetic = std::atoi(argv[7]);
-  const auto phase = arithmetic == 0 || arithmetic == 2
+  const auto phase = arithmetic == 0 || arithmetic == 2 || arithmetic == 6
                          ? PrecisionPhase::StrictAudit : PrecisionPhase::Admitted;
-  plan.mixed_pbe_points_ = arithmetic >= 2;
-  plan.mixed_pbe_ao_ = plan.mixed_pbe_contractions_ = arithmetic == 2 || arithmetic == 4;
-  const bool mixed = arithmetic >= 3;
+  plan.mixed_pbe_points_ = arithmetic >= 2 && arithmetic <= 4;
+  plan.mixed_pbe_ao_ = arithmetic == 2 || arithmetic == 4;
+  plan.mixed_matrix_contractions_ = arithmetic == 2 || arithmetic >= 4;
+  const bool mixed = arithmetic == 3 || arithmetic == 4;
   expected_point_launcher = mixed ? 19 : plan.point_launcher_;
-  expected_fp32_contractions = arithmetic == 4;
+  expected_fp32_contractions = arithmetic == 4 || arithmetic == 5;
+  expected_fp32_point_totals = arithmetic == 4;
   expected_ao_precision = arithmetic == 4 ? CudaXcAoPrecision::Fp32ComputeFp64Storage
                                         : CudaXcAoPrecision::Fp64;
   double retained_panel{};
@@ -199,6 +203,7 @@ int main(int argc, char** argv) {
   assert(rejected == (mode == 1 || mode == 2));
   assert(bodies == (replay ? 0 : 1));
   assert(!plan.layout_.fp32_contractions);
+  assert(!plan.layout_.fp32_point_totals);
   assert(plan.layout_.ao_precision == CudaXcAoPrecision::Fp64);
   if (rejected) {
     assert(plan.generations_.published() == 0);
@@ -226,13 +231,15 @@ int main(int argc, char** argv) {
 
 @pytest.mark.parametrize(
     "arithmetic",
-    range(5),
+    range(7),
     ids=(
         "strict",
         "admitted-strict",
         "strict-mixed-disabled",
         "mixed-points",
         "mixed-full",
+        "mixed-matrix-only",
+        "strict-matrix-disabled",
     ),
 )
 @pytest.mark.parametrize("batched", (False, True))

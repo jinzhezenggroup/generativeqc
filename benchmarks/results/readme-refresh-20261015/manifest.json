@@ -9,9 +9,37 @@
   "native_source_identity": "176e6b9c1b3a8757880e0c7b07739979b69ddf9a0745eee98abb4127fab603ca",
   "reference_policy": "historical timing/work/geometry observations unchanged; no reference execution",
   "files": {
-    "job-receipts.json.xz": {
-      "bytes": 2988,
-      "sha256": "8ece67acc72796429c3f6c892f142593f7fef50145eb21d82b9f761d86bab8bd"
+    "README.md": {
+      "bytes": 8552,
+      "sha256": "7a119368243f80995a950e2e8f2809bed590ee74d67dadae256d740baf7da0fa"
+    },
+    "build-settings.json": {
+      "bytes": 15352,
+      "sha256": "48952a66b60e11d05ac8bf13eda722939ff1da52e44fbf73d2b4914122d6581f"
+    },
+    "df-cold-warm.svg": {
+      "bytes": 86368,
+      "sha256": "de825991c360f71937a33ce90efcfb381348a062fc3ba9ae0079fd52711221d6"
+    },
+    "df-timings.md": {
+      "bytes": 4805,
+      "sha256": "b8f3c77d45e6698a4a6f647a334dbe8fee02972cb79191faf9cfb1a3a593afd2"
+    },
+    "df96-benchmark-consumer.py.xz": {
+      "bytes": 12024,
+      "sha256": "4e8ab9145a25911b5f24f173371fe8740b4ce751d858d108c05883b99c0d84df",
+      "uncompressed": {
+        "bytes": 49951,
+        "sha256": "3ffe595b9eafd164dec18156e47182269e01a0662773c385d7e218ba899861f2"
+      }
+    },
+    "df96-default-force-failure.json.xz": {
+      "bytes": 10520,
+      "sha256": "5153df1af37e166718ab03367a8cc45d9bf98a7509dc947864e80e8b86f11bbf",
+      "uncompressed": {
+        "bytes": 78358,
+        "sha256": "67580d604fcda7b2702cad02fb88babc44254ac5cff9aa2ed661a0185b1c5820"
+      }
     },
     "dft-cold-warm.svg.xz": {
       "bytes": 8372,
@@ -21,49 +49,41 @@
         "sha256": "5f545c356a16b6c6a89d6f899a2be47290170e5b7c2548b533bada2c93ad46f2"
       }
     },
-    "build-settings.json": {
-      "bytes": 15352,
-      "sha256": "48952a66b60e11d05ac8bf13eda722939ff1da52e44fbf73d2b4914122d6581f"
+    "job-receipts.json.xz": {
+      "bytes": 4324,
+      "sha256": "0e86a91988ecbc702d4e851d6234da76ce5eaf762ed3078195dcf9e2c72f9a44"
     },
-    "restore_references.py": {
-      "bytes": 2583,
-      "sha256": "92c165cecbbb62cd7943f7a01f7fdc4478b8154ff487b05614036bf32488b56f"
+    "native-summary.json.xz": {
+      "bytes": 176084,
+      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48"
     },
-    "README.md": {
-      "bytes": 5216,
-      "sha256": "822bf635cb1bff2ee7574b48191a8cae9fd82ed8c3c07f5df97cbc7093d69ed5"
+    "reduce.py": {
+      "bytes": 6903,
+      "sha256": "3ea452dbfc536ef50da60d453df205838783825bf8967dfb687e2c9d373b4253"
     },
-    "df-cold-warm.svg": {
-      "bytes": 84881,
-      "sha256": "6e247dc25bd666a08899588fbf2c4d865c322d819a112bfe822678f4f62b4299"
+    "refresh.py": {
+      "bytes": 16612,
+      "sha256": "67257618bb335045b5bad434374f02d10f2bad567b2eceda132bd700fa056b85"
     },
-    "df-timings.md": {
-      "bytes": 4664,
-      "sha256": "e56751d41a8aa72e724d9f0838912fb36b87843b245d3930a599f69090818cd2"
+    "reproduce-df96.sh": {
+      "bytes": 4166,
+      "sha256": "f9b2e31d24ab6ee025a981e17c752009a1b96bdbfb2e8afbcd29c6e02dbcef90"
     },
     "reproduce.sh": {
       "bytes": 2512,
       "sha256": "c9d6ec0dafe0ee193ed10212accad98bbb4149c7d692de7e507163e9ad5ff726"
     },
-    "timings.md": {
-      "bytes": 4737,
-      "sha256": "6687b7c42c5886ff5f6fa398c61403194d5c4ba1ed35bec89a08a83764832cec"
-    },
-    "reduce.py": {
-      "bytes": 6209,
-      "sha256": "e04e0492977038f1b52b158cf9c2372a29012e951473a4e19e51f4bed684e9a9"
-    },
-    "native-summary.json.xz": {
-      "bytes": 174628,
-      "sha256": "14db1bdfcd47efd3209805413fb07755b05dcd9a3519ca5e7a5371b95f3b6fc9"
+    "restore_references.py": {
+      "bytes": 2583,
+      "sha256": "92c165cecbbb62cd7943f7a01f7fdc4478b8154ff487b05614036bf32488b56f"
     },
     "source-input-audit.json": {
       "bytes": 1057,
       "sha256": "1633c4a5f6a45582acf60b6e42df11656fee70416d59345e840c627d5aef4754"
     },
-    "refresh.py": {
-      "bytes": 10695,
-      "sha256": "b01f9d8b8bd8c36bf574e8c0155c22209bf8c3edc7f57b9685e2d4dd0ae79086"
+    "timings.md": {
+      "bytes": 4737,
+      "sha256": "6687b7c42c5886ff5f6fa398c61403194d5c4ba1ed35bec89a08a83764832cec"
     }
   },
   "baseline_files": {

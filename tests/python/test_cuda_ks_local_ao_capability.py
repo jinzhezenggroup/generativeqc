@@ -156,6 +156,11 @@ std::size_t product(std::size_t left, std::size_t right) {
 }
 struct Layout { bool mixed_density_contraction; std::size_t work_jets = 1; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
+namespace cuda_xc_detail {
+bool mixed_matrix_contractions_supported(const Layout&) {
+  throw std::logic_error("AUTO/FP64 must not query Fast-only matrix admission");
+}
+}
 // Ordinary AUTO/FP64 must leave nonlocal arithmetic and its counters strict.
 std::uint64_t* mixed_coulomb_work_counter() {
   throw std::logic_error("ordinary precision must not borrow mixed nonlocal counters");
@@ -182,6 +187,9 @@ struct Xc {
     batch.tiles = batch.device_bytes ? tiles : 1;
   }
   const BatchPlan& point_batch_plan() const { return batch; }
+  void prepare_mixed_matrix_contractions() {
+    throw std::logic_error("AUTO/FP64 must not prepare Fast-only matrix arithmetic");
+  }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
                        std::size_t budget) {
     assert(replays == 50);
@@ -273,6 +281,8 @@ int main() {
       bool pending_mixed_range_exchange = true, pending_mixed_nonlocal = true;
       bool pending_mixed_coulomb{}, pending_mixed_exchange{};
       bool pending_mixed_density{}, pending_mixed_point{};
+      bool pending_mixed_contractions{};
+      struct { std::size_t point_ao_visits = 1; } prepared_ao_work;
 """
         + block
         + r"""
@@ -281,6 +291,7 @@ int main() {
       assert(!pending_mixed_range_exchange && !pending_mixed_nonlocal);
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
       assert(!pending_mixed_point);
+      assert(!pending_mixed_contractions);
     }
   }
   }

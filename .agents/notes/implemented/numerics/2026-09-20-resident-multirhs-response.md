@@ -109,6 +109,6 @@ independent and are unchanged.
 The supplemental clean-source campaign at `b3265686` (Slurm 1136, PySCF 2.14.0)
 passes all six external consumer gates with maximum error `7.993606e-15`,
 plus 103/103 integration/consumer/Krylov tests and 78/78 CUDA point directions.
-`benchmarks/results/response-179-resident/consumer-oracle-evidence.json` retains
+`benchmarks/results/response-179-resident/consumer-oracle-evidence.json.xz` retains
 every consumer, matching binary SHA and complete diagnostics; the README states
 which evidence uses the independent oracle and which records native parity.

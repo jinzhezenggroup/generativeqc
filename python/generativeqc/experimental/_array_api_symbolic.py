@@ -473,12 +473,12 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     return array[tuple(builtins.slice(start, stop) for start, stop in ranges)]
 
 
-def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
+def take(x: object, indices: tuple[int, ...], *, axis: int | None = None) -> typing.Any:
     """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
     array = _eager_data_array(x)
-    normalized_axis = _namespace._axis(axis, array.ndim, "take")
+    normalized_axis = _namespace._take_axis(axis, array.ndim)
     if not isinstance(indices, tuple) or builtins.any(
         type(index) is not int for index in indices
     ):

@@ -33,13 +33,15 @@
 | ωB97M-V | 3 (24) | 7.721 | 18.880 | 0.377 | 1.665 |
 | ωB97M-V | 12 (96) | 28.409 | 98.457 | 1.395 | 7.824 |
 | ωB97M-V | 48 (384) | 330.504‡ | not run | 14.499‡ | not run |
+| ωB97M-V | 96 (768) | 4717.471‡ | not run | timeout | not run |
 
 Warm cells show the median of all five complete endpoints. † marks differing
 SCF work and includes the full range; timings are never normalized by iterations.
 ‡ marks completed native calls without an independent accuracy check for that geometry.
 A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
-ωB97M-V: Native DF/96: no complete E+F.
+ωB97M-V: DF/48,96: accuracy unchecked
+96: DF 12 GiB; forces 4/4 GiB.
 
 ## Observed SCF work
 
@@ -81,6 +83,7 @@ between engines; complete endpoint time includes analytic forces as well.
 | ωB97M-V | 3 | 23/23 | 32/33 | 1/1 | 1/2 |
 | ωB97M-V | 12 | 36/36 | 45/46 | 1/1 | 1/2 |
 | ωB97M-V | 48 | 36/36 | — | 1/1 | — |
+| ωB97M-V | 96 | 37/37 | — | — | — |
 
 The [measurement report](README.md) describes the protocol and unsuccessful
 points; [df-summary.json.xz](df-summary.json.xz) retains all scalar observations,
