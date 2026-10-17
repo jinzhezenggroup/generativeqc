@@ -370,8 +370,10 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   // Newly packaged split-hybrid graphs are diagnostic candidates until their
   // complete shape is qualified. Merely linking one must not promote the
   // historical s/p strict consumer or an unqualified unrestricted peer.
+  const auto matched_model =
+      binding ? dft::stationary_gradient_model_qualification(*binding, aos) : 0;
   if (execution_plan.generated_split_hybrid && !qualify_through_d &&
-      (!native_shape || !binding || !dft::stationary_gradient_model_qualification(*binding, aos)))
+      (!binding || !matched_model || (!native_shape && !application)))
     return {};
   if (application) {
     if (!binding ||
@@ -379,7 +381,7 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
                                                  aos, atoms, maximum_angular, strict_gradient))
       return {};
   } else if ((maximum_angular > 1 && !qualify_through_d) &&
-             (!binding || !dft::stationary_gradient_model_qualification(*binding, aos)))
+             !dft::stationary_gradient_independently_qualified(matched_model, aos, atoms))
     return {};
   return binding;
 }
