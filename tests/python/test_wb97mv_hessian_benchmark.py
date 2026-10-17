@@ -143,6 +143,64 @@ def _sample(engine: str, seconds: float, matrix_value: float = 1.0) -> dict:
     }
 
 
+def test_resource_guard_keeps_complete_endpoint_output(tmp_path: Path) -> None:
+    """Resource sampling must not replace or truncate the endpoint result."""
+    observations = []
+    command = [
+        sys.executable,
+        "-c",
+        'import time; time.sleep(0.1); print(\'{"matrix":[[1.0]],"units":"hartree/bohr^2"}\')',
+    ]
+    row = _run_child(
+        command,
+        tmp_path / "guarded",
+        5,
+        resource_check=lambda: observations.append(time.monotonic()),
+    )
+    assert observations
+    assert row["wall_seconds"] >= 0.1
+    assert row["result"]["matrix"] == [[1.0]]
+
+
+def test_resource_guard_failure_reaps_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sampled-memory rejection uses the same cleanup contract as timeouts."""
+    original = subprocess.Popen
+    processes = []
+
+    def launch(*args: object, **kwargs: object) -> subprocess.Popen:
+        process = original(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def reject() -> None:
+        raise RuntimeError("sampled GPU memory exceeds limit")
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    with pytest.raises(RuntimeError, match="memory exceeds limit"):
+        _run_child(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            tmp_path / "rejected",
+            5,
+            resource_check=reject,
+        )
+    assert processes and all(process.poll() is not None for process in processes)
+
+
+def test_resource_guard_preserves_endpoint_deadline(tmp_path: Path) -> None:
+    """Repeated successful resource checks cannot extend the finite deadline."""
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="timed out"):
+        _run_child(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            tmp_path / "guarded-timeout",
+            0.1,
+            resource_check=lambda: None,
+        )
+    assert time.monotonic() - started < 5
+
+
 def test_primed_medians_exclude_first_observed_sample() -> None:
     rows = [
         _sample("generativeqc", 100.0),
@@ -589,6 +647,72 @@ def test_complete_host_injected_run_retains_samples_and_shape_failure(
     else:
         assert case["summary"]["accepted"]
         assert case["summary"]["generativeqc_over_gpu4pyscf_wall_ratio"] == 1
+
+
+@pytest.mark.parametrize("exceeded", [False, True])
+def test_memory_observations_survive_success_and_rejection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exceeded: bool
+) -> None:
+    """Retain conservative device usage, including the sample rejecting launch."""
+    from types import SimpleNamespace
+
+    from benchmarks import compare_wb97mv_hessian_gpu4pyscf as runner
+
+    output = tmp_path / "memory.json"
+    _runner_arguments(monkeypatch, output, "--gpu-memory-limit-mib", "1")
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", sys.executable)
+    used = 2 * 1024**2 if exceeded else 512 * 1024
+    total = 8 * 1024**2
+    runtime = SimpleNamespace(
+        getDeviceCount=lambda: 1, memGetInfo=lambda: (total - used, total)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "cupy",
+        SimpleNamespace(
+            cuda=SimpleNamespace(
+                runtime=runtime,
+                Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None)),
+            )
+        ),
+    )
+    monkeypatch.setattr(runner, "cuda_accelerator_metadata", lambda _: {})
+    monkeypatch.setattr(runner, "environment_metadata", lambda **kwargs: {})
+    monkeypatch.setattr(runner, "_grid", lambda _: None)
+    monkeypatch.setattr(runner, "asdict", lambda _: {})
+
+    def sample(*args: object, resource_check: Callable[[], None]) -> dict:
+        resource_check()
+        return {
+            "wall_seconds": 1.0,
+            "result": {
+                "matrix": [[1.0] * 6 for _ in range(6)],
+                "diagnostics": {"numerical_host_fallbacks": 0},
+            },
+        }
+
+    monkeypatch.setattr(runner, "_run_child", sample)
+    if exceeded:
+        with pytest.raises(RuntimeError, match="GPU memory"):
+            runner.main()
+    else:
+        runner.main()
+    retained = json.loads(output.read_text())
+    assert retained["status"] == ("failed" if exceeded else "completed")
+    case = retained["cases"]["h2"]
+    for observation in case["gpu_memory_observations"].values():
+        assert observation["before_bytes"] == used
+        assert observation["sampled_peak_bytes"] == used
+        assert observation["device_total_bytes"] == total
+        assert observation["limit_bytes"] == 1024**2
+        assert observation["samples"] > 0
+    if exceeded:
+        assert "summary" not in case
+        assert not case["samples"]
+        assert all(
+            attempt["status"] == "failed" and attempt["comparator_elapsed_seconds"] >= 0
+            for attempt in case["attempts"].values()
+        )
 
 
 def test_missing_gpu_dependency_retains_a_failed_attempt(
