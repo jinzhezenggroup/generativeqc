@@ -307,10 +307,14 @@ __device__ inline void contract_cooperative_direct_pair_force(
               batch.direct_ao_coefficients[ao_begin + l[slot]];
           const double weight = coefficient * recurrence.coefficients[0] * recurrence.coefficients[1] *
                                 recurrence.coefficients[2] * recurrence.coefficients[3];
-          const auto component = weight * consume_cartesian_coulomb_states<8, Dual3>(
+          // Convolve each Hermite axis before the three-axis root contraction.
+          // The shared Coulomb state depends only on summed pair degrees, so
+          // expanding all six pair indices repeats the same weighted roots.
+          const auto component = weight * contract_prepared_cartesian_coulomb<8, Dual3>(
               recurrence.p, recurrence.q, direct_ao_angular(batch, ao_begin + i[slot]),
               direct_ao_angular(batch, ao_begin + j[slot]), direct_ao_angular(batch, ao_begin + k[slot]),
-              direct_ao_angular(batch, ao_begin + l[slot]), recurrence.bra[center], recurrence.ket, response);
+              direct_ao_angular(batch, ao_begin + l[slot]), recurrence.bra[center], recurrence.ket,
+              response, true);
           const double derivative[3] = {component.derivative_x, component.derivative_y,
                                         component.derivative_z};
           for (unsigned axis = 0; axis < 3U; ++axis) {

@@ -224,6 +224,16 @@ struct GradientSpatialCoulombValues {
       const unsigned maximum_z = first.z + second.z + third.z + fourth.z;
       extent_y = maximum_y + 2U;
       extent_z = maximum_z + 2U;
+      // A primitive's scaled Boys roots are common to every Cartesian state.
+      // Keep orders four/five and the nonspatial fallback byte-for-byte in their
+      // original arithmetic; only the admitted order-six box borrows these roots.
+      double preweighted_boys[AngularOrder == 6U ? AngularOrder + 2U : 1U];
+      const double* recurrence_boys = boys;
+      if constexpr (AngularOrder == 6U) {
+        for (unsigned order = 0; order <= AngularOrder + 1U; ++order)
+          preweighted_boys[order] = workspace.negative_two_rho_powers[order] * boys[order];
+        recurrence_boys = preweighted_boys;
+      }
       for (unsigned axis_x = 0; axis_x <= maximum_x + 1U; ++axis_x) {
         for (unsigned axis_y = 0; axis_y < extent_y; ++axis_y) {
           for (unsigned axis_z = 0; axis_z < extent_z; ++axis_z) {
@@ -232,7 +242,8 @@ struct GradientSpatialCoulombValues {
             if (faces > 1U) continue;
             const unsigned state = axis_x + (axis_y << 3U) + (axis_z << 6U);
             values[(axis_x * extent_y + axis_y) * extent_z + axis_z] =
-                high_order_coulomb<AngularOrder + 1U>(state, rho, workspace, boys);
+                high_order_coulomb<AngularOrder + 1U, AngularOrder == 6U>(
+                    state, rho, workspace, recurrence_boys);
           }
         }
       }
