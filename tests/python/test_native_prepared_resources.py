@@ -247,3 +247,75 @@ def test_public_creation_needs_no_private_owner_abi_and_never_retries(
         ledger.close()
         ledger.close()
     assert released == ([] if failure == "missing-handle" else [17])
+
+
+@pytest.mark.parametrize("admission", ("public_native", "native_inventory", "legacy"))
+def test_fault_injection_changes_the_selected_constructor_input(
+    monkeypatch: typing.Any, admission: str
+) -> None:
+    """Keep fault injection on the admission ABI, not detached Python metadata."""
+    from _resource_admission_test_support import limit_device_admission
+
+    handle = 1 << 40
+    seen = []
+
+    @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+    def public_create(descriptor: typing.Any, output: typing.Any) -> int:
+        selected = ctypes.cast(
+            descriptor, ctypes.POINTER(_native.DeviceResourceDescriptor)
+        ).contents
+        row = selected.buffers[0]
+        seen.append((selected.buffer_count, row.bytes, row.space, row.device))
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = handle
+        return 0
+
+    @ctypes.CFUNCTYPE(
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    )
+    def inventory_create(
+        buffers: typing.Any,
+        count: int,
+        output: typing.Any,
+        receipt: typing.Any,
+        receipt_count: int,
+    ) -> int:
+        seen.append((count, *buffers[:count]))
+        output[0] = handle
+        return 0
+
+    @ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
+    def legacy_create(capacity: int, device: int) -> int:
+        seen.append((capacity, device))
+        return handle
+
+    library = SimpleNamespace(
+        generativeqc_device_resources_create=public_create,
+        generativeqc_resource_ledger_create_from_buffers_v1=inventory_create,
+        generativeqc_resource_ledger_create_v1=legacy_create,
+    )
+    limit_device_admission(monkeypatch, library, 1, admission)
+    output = ctypes.c_void_p()
+    if admission == "public_native":
+        assert (
+            library.generativeqc_device_resources_create(None, ctypes.byref(output))
+            == 0
+        )
+        assert seen == [(1, 1, 4, 0)]
+    elif admission == "native_inventory":
+        assert (
+            library.generativeqc_resource_ledger_create_from_buffers_v1(
+                None, 0, ctypes.byref(output), None, 0
+            )
+            == 0
+        )
+        assert seen == [(6, 1, 4, 0, 0, 0, 0)]
+    else:
+        output.value = library.generativeqc_resource_ledger_create_v1(4096, 3)
+        assert seen == [(1, 3)]
+        assert library.generativeqc_resource_ledger_create_from_buffers_v1 is None
+    assert output.value == handle

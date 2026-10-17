@@ -65,6 +65,14 @@ in `tests/native/test_cli_runtime.py`. Host metadata and synthetic observation
 tests do not establish real-GPU numerical or endpoint performance acceptance;
 source-matched scheduled CUDA qualification remains a separate gate.
 
+Failure injection must constrain the selected constructor before native
+preparation retains its owner. Replacing only the Python metadata handle after
+preparation intentionally cannot alter that retained authority. Public-native,
+private inventory and legacy constructor tests therefore select their paths
+explicitly; compatibility injections must first disable the public prepared
+entry point. This preserves old-library coverage without mistaking an inactive
+private symbol for a tested public admission boundary.
+
 Offline generated CUDA providers also reach the ledger through relative tensor
 headers, without CMake's source-root include directory. The ledger's observation
 header therefore uses a sibling-relative include. A standalone C++17/C++20 probe
