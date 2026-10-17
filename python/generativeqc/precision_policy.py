@@ -888,9 +888,13 @@ class PrecisionCalculator:
         try:
             candidate = solve(candidate_calculator, "candidate", candidate_precision)
         except (RuntimeError, NotImplementedError):
-            if not self._fast_fock:
+            if self.policy.profile != "fast" or not self._fast_native:
                 raise
-            route_reasons.append("budget_fock_failed_fp64_fallback")
+            route_reasons.append(
+                "budget_fock_failed_fp64_fallback"
+                if self._fast_fock
+                else "mixed_gradient_failed_fp64_fallback"
+            )
             candidate_calculator = reference_factory()
             candidate_precision = "fp64"
             fast_native = False
