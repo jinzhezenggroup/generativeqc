@@ -64,6 +64,34 @@ def test_gradient_v2_does_not_infer_a_model_from_scf(
     )
 
 
+@pytest.mark.parametrize(
+    "code,model",
+    (
+        (101, "pbe0-rks-budget-fp32-v1"),
+        (102, "pbe-rks-budget-fp32-v1"),
+        (106, "m06-2x-rks-budget-fp32-v1"),
+        (105, "rhf-budget-fp32-v1"),
+        (107, "rhf-df-shell-budget-fp32-v1"),
+    ),
+)
+def test_expanded_gradient_records_required_audit(
+    code: int, model: str
+) -> None:
+    def getter(handle: object, output: Any, count: int) -> int:
+        assert count == 10
+        output[:] = [1, 2, 100, 100, 0, code, 1, 12, 96, 0]
+        return _native.STATUS_SUCCESS
+
+    record = query_gradient_precision(
+        SimpleNamespace(generativeqc_calculation_gradient_precision_v3=getter), None
+    )
+    assert record["qualification"] == model + "-audit-required"
+    assert record["requires_independent_audit"] is True
+    assert record["returned_mode"] == "mixed"
+    assert record["weighted_fp32_orders"] == ([] if code == 107 else [0, 1, 2, 3, 4, 5])
+    assert ("df_metric_and_response_weights" in record["fp64_components"]) == (code == 107)
+
+
 @pytest.mark.parametrize("collected,retries", ((False, 0), (True, 2), (True, 12)))
 def test_gradient_v3_distinguishes_per_item_counts_from_unavailable(
     collected: bool, retries: int
