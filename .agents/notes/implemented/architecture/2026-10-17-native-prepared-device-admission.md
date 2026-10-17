@@ -106,6 +106,26 @@ plus retained-capacity replacement and isolated generation exhaustion. These
 host lifecycle controls do not transfer any prior source's real-GPU acceptance
 to the changed runtime; immutable older qualification inputs remain historical.
 
+## Installed compiler dependency closure
+
+The independent current-head Python CI exposed a second packaging boundary:
+the ledger's new sibling-relative observation header was absent from the wheel
+payload. Restoring a source-root include would merely hide the missing installed
+input and break standalone consumers again. Package the canonical native header
+and include it in every tensor, AO/grid, XC, integral-derivative and stationary
+consumer's explicit compiler dependency inventory instead. This changes compiler
+artifact provenance, not the
+scientific IR or equations; old cache entries must not survive an observation
+header edit.
+
+The wheel-only local-include test reproduces the missing-header failure. After
+only adding the payload, executable tensor/XC controls still reproduce stale
+artifact identities when that installed header changes. The complete fix must
+pass both controls, as well as the compiler structure checks and wheel-only
+grid compile/link test. These tests compare behavior after a dependency edit,
+not a permanent expected source fingerprint. Existing immutable source builds
+and qualification inputs remain attached to their original revisions.
+
 ## Consequences and revisit conditions
 
 This removes a frontend lifetime authority without pretending to finish #2227

@@ -266,6 +266,29 @@ def test_wheel_compiler_templates_include_local_dependencies(
                 ), (source, name)
 
 
+@pytest.mark.parametrize("consumer", ("tensor", "xc"))
+def test_wheel_resource_observation_edits_invalidate_jit_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, consumer: str
+) -> None:
+    """Installed JIT artifacts must not reuse a stale transitive ledger input."""
+    from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
+    from generativeqc_compiler.xc import build_program, functional
+    from generativeqc_compiler.xc.cuda_emit import emit_cuda
+
+    assets = _compiler_wheel_payload(tmp_path, monkeypatch)
+    program = build_program(functional("PBE"), order=0)
+
+    def identity() -> str:
+        if consumer == "tensor":
+            return tensor_source_identity()
+        return emit_cuda(program)[1]["identity"]
+
+    original = identity()
+    dependency = assets / "src/runtime/resource_usage.hpp"
+    dependency.write_text(dependency.read_text() + "\n// Changed observation input.\n")
+    assert identity() != original
+
+
 def test_wheel_grid_compiler_links_without_checkout_or_device(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
