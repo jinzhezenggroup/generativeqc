@@ -198,21 +198,25 @@ __global__ void mixed_canonical_components(DeviceBatch batch, ActiveShellQuartet
 std::array<std::size_t, 2> host_pair(const Fixture& fixture, unsigned pair, std::size_t ordinal);
 
 /** Retained FP64 ERIs and a host orbit qualify dense and exchange-only inputs. */
-template <unsigned Angular>
+template <unsigned FirstAngular, unsigned SecondAngular = FirstAngular,
+          unsigned ThirdAngular = FirstAngular, unsigned FourthAngular = FirstAngular>
 void qualify_mixed_canonical() {
-  Fixture fixture({Angular, Angular, Angular, Angular}, false, false);
+  constexpr unsigned order = FirstAngular + SecondAngular + ThirdAngular + FourthAngular;
+  Fixture fixture({FourthAngular, ThirdAngular, SecondAngular, FirstAngular}, false, false);
   const auto dimension = std::size_t(fixture.batch.direct_nbf);
   const auto matrix = dimension * dimension;
-  const auto pair_components = (Angular + 1) * (Angular + 2) / 2;
-  const auto pair_count = pair_components * pair_components;
-  const auto count = pair_count * pair_count;
+  const auto first_count =
+      (FirstAngular + 1) * (FirstAngular + 2) * (SecondAngular + 1) * (SecondAngular + 2) / 4;
+  const auto second_count =
+      (ThirdAngular + 1) * (ThirdAngular + 2) * (FourthAngular + 1) * (FourthAngular + 2) / 4;
+  const auto count = first_count * second_count;
   std::vector<ActiveShellQuartetTile> tasks;
   for (unsigned tile = 0; tile * 256 < count; ++tile) tasks.push_back({8, 1, tile});
   Device<ActiveShellQuartetTile> device_tasks(tasks);
   Device<double> schwarz(fixture.host_schwarz), retained(count), coulomb(matrix), exchange(matrix);
   Device<std::uint8_t> active(std::vector<std::uint8_t>{1});
   Device<std::uint64_t> mixed_work(1);
-  retained_components<Angular, Angular, Angular, Angular>
+  retained_components<FirstAngular, SecondAngular, ThirdAngular, FourthAngular>
       <<<tasks.size(), 256>>>(fixture.batch, device_tasks.data, schwarz.data, 0.0, retained.data);
   check(cudaGetLastError());
   const auto values = retained.read();
@@ -226,16 +230,15 @@ void qualify_mixed_canonical() {
     coulomb.clear();
     exchange.clear();
     mixed_work.clear();
-    mixed_canonical_components<4 * Angular>
-        <<<1, canonical_materialized_component_lanes(4 * Angular)>>>(
-            fixture.batch, tasks[0], schwarz.data, density.data, active.data, coulomb.data,
-            exchange.data, mixed_work.data);
+    mixed_canonical_components<order><<<1, canonical_materialized_component_lanes(order)>>>(
+        fixture.batch, tasks[0], schwarz.data, density.data, active.data, coulomb.data,
+        exchange.data, mixed_work.data);
     check(cudaGetLastError());
     const auto actual_j = coulomb.read(), actual_k = exchange.read();
     std::vector<double> expected_j(matrix), expected_k(matrix);
     for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
-      const auto bra = host_pair(fixture, 8, ordinal / pair_count);
-      const auto ket = host_pair(fixture, 1, ordinal % pair_count);
+      const auto bra = host_pair(fixture, 8, ordinal / second_count);
+      const auto ket = host_pair(fixture, 1, ordinal % second_count);
       const auto first = bra[0], second = bra[1], third = ket[0], fourth = ket[1];
       const std::set<std::array<std::size_t, 4>> orbit{
           {first, second, third, fourth}, {second, first, third, fourth},
@@ -263,6 +266,23 @@ void qualify_mixed_canonical() {
     if (!nonempty_exchange || !mixed_work.read()[0])
       throw std::runtime_error("mixed canonical exchange lost active work");
   }
+}
+
+/** Exercise every shared recurrence order, including sparse exchange-only work. */
+void qualify_mixed_canonical_orders() {
+  qualify_mixed_canonical<0>();
+  qualify_mixed_canonical<1, 0, 0, 0>();
+  qualify_mixed_canonical<1, 1, 0, 0>();
+  qualify_mixed_canonical<1, 1, 1, 0>();
+  qualify_mixed_canonical<1>();
+  qualify_mixed_canonical<2, 1, 1, 1>();
+  qualify_mixed_canonical<2, 2, 1, 1>();
+  qualify_mixed_canonical<2, 2, 2, 1>();
+  qualify_mixed_canonical<2>();
+  qualify_mixed_canonical<3, 2, 2, 2>();
+  qualify_mixed_canonical<3, 3, 2, 2>();
+  qualify_mixed_canonical<3, 3, 3, 2>();
+  qualify_mixed_canonical<3>();
 }
 
 /** Independent retained Dual3 component traversal, without shared preparation. */
@@ -811,8 +831,7 @@ void qualify_shared_responses() {
 int main(int argc, char** argv) {
   try {
     if (argc == 2 && std::strcmp(argv[1], "--mixed-jk") == 0) {
-      qualify_mixed_canonical<1>();
-      qualify_mixed_canonical<2>();
+      qualify_mixed_canonical_orders();
       std::cout << "FP32 canonical J/K and exchange-only density PASS\n";
       return 0;
     }
@@ -907,8 +926,7 @@ int main(int argc, char** argv) {
     qualify<2, 2, 2, 2, false, true>(false, false, 2.0);
     qualify<3, 3, 3, 3, true, true>(false, false, 0.8);
     std::cout << "pair-materialized whole-shell admission and exact work PASS\n";
-    qualify_mixed_canonical<1>();
-    qualify_mixed_canonical<2>();
+    qualify_mixed_canonical_orders();
     std::cout << "FP32 canonical J/K and exchange-only density PASS\n";
 #ifdef GENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_TEST
     qualify_dft_stream<false>();
