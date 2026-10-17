@@ -124,8 +124,6 @@ static_assert(sizeof(CooperativeDirectPairDerivativeRecurrence) <= (44U << 10));
     )
 
 
-
-
 def emit_cooperative_primitive_traversal(
     contraction: str, *, bra_projection: str = "", ket_projection: str = ""
 ) -> str:

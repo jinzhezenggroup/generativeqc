@@ -141,6 +141,8 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
         timeout=360,
         check=False,
     )
-    (tmp_path / "density-contraction-gpu.log").write_text(density.stdout + density.stderr)
+    (tmp_path / "density-contraction-gpu.log").write_text(
+        density.stdout + density.stderr
+    )
     assert density.returncode == 0, density.stdout + density.stderr
     assert "raw AD orbits PASS" in density.stdout

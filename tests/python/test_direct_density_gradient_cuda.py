@@ -38,9 +38,7 @@ def test_density_projection_matches_independent_sources(
     # Its doublet monomer still exercises nonzero order-six/seven responses;
     # independent raw-AD tests retain arbitrary four-center UKS contractions.
     two_oxygens = method != "pbe-uks"
-    check_derivatives(
-        method, representation, "1", two_oxygens, "bounded", monkeypatch
-    )
+    check_derivatives(method, representation, "1", two_oxygens, "bounded", monkeypatch)
     rows = [json.loads(line) for line in census.read_text().splitlines()]
     assert rows and all(row["valid"] for row in rows)
     density = [
