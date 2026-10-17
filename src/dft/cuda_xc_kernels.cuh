@@ -245,7 +245,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       if (occupied_tile) {
         launch_occupied_density(stream, occupied, ao, active, count, work, features,
                                 l.feature_terms, error, ids);
-      } else if (l.fp32_contractions && fp32_tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
+      } else if (l.fp32_contractions &&
+                 fp32_tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
         launch_density_product<false, true, float>(stream, density, ao, active, count, l.spins,
                                                    l.work_jets, work, error, ids, l.nao);
       } else if (density_provider && active) {
