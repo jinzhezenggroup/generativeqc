@@ -151,9 +151,12 @@ Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
 
 ![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
 
-Native ωB97M-V DF/48 lacks an independent accuracy reference; DF/96 is omitted
-(no complete E+F call). Small-system compilation-cache priming is recorded
-separately, never subtracted from cold. See the
+Native ωB97M-V DF/48 and DF/96 lack independent accuracy references. DF/96 now
+includes a complete **4717.471 s cold E+F** call with explicit resource budgets:
+12 GiB DF workspace, 4 GiB device/host force allowances each, and a 2 GiB LR
+cache ceiling. The four-hour run completed only four of five warm repeats, so
+no DF/96 warm median is plotted. Small-system compilation-cache priming is
+recorded separately, never subtracted from cold. See the
 [updated r²SCAN-3c Direct timings](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update),
 [other Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
 [DF timings](benchmarks/results/readme-refresh-20261015/df-timings.md), and
