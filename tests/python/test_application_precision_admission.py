@@ -144,28 +144,33 @@ int main() {
     }
   }
   using generativeqc::scf::admit_application_hf_gradient;
-  for (const auto aos : {24u, 96u})
+  for (const auto aos : {24u, 96u, 97u, 384u, 1024u})
     assert(admit_application_hf_gradient(loose, aos, 24, 2, true, true));
-  for (const auto aos : {0u, 23u, 97u})
+  for (const auto aos : {0u, 23u})
     assert(!admit_application_hf_gradient(loose, aos, 24, 2, true, true));
+  assert(generativeqc::scf::independently_qualified_hf_gradient(96, 48));
+  assert(!generativeqc::scf::independently_qualified_hf_gradient(97, 48));
   assert(!admit_application_hf_gradient(loose, 96, 24, 3, true, true));
   assert(!admit_application_hf_gradient(loose, 96, 24, 2, false, true));
   assert(!admit_application_hf_gradient(loose, 96, 24, 2, true, false));
-  assert(!admit_application_hf_gradient(loose, 96, 49, 2, true, true));
+  assert(admit_application_hf_gradient(loose, 96, 49, 2, true, true));
   assert(!admit_application_hf_gradient({1e-5, 0, 0}, 96, 24, 2, true, true));
   using generativeqc::scf::admit_application_df_hf_gradient;
   assert(admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, true, true));
-  assert(!admit_application_df_hf_gradient(loose, 96, 513, 12, 2, 3, true, true));
+  assert(admit_application_df_hf_gradient(loose, 96, 513, 12, 2, 3, true, true));
   assert(!admit_application_df_hf_gradient(loose, 96, 0, 12, 2, 3, true, true));
   assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 4, true, true));
-  assert(!admit_application_df_hf_gradient(loose, 96, 464, 13, 2, 3, true, true));
+  assert(admit_application_df_hf_gradient(loose, 96, 464, 13, 2, 3, true, true));
+  assert(generativeqc::scf::independently_qualified_df_hf_gradient(96, 512, 12));
+  assert(!generativeqc::scf::independently_qualified_df_hf_gradient(96, 513, 12));
+  assert(!generativeqc::scf::independently_qualified_df_hf_gradient(96, 512, 13));
   assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, false, true));
   assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, true, false));
-  for (const auto aos : {24u, 96u, 192u, 384u})
+  for (const auto aos : {24u, 96u, 192u, 384u, 385u, 768u, 2048u})
     assert(admit_application_gradient(loose, aos, 24, 2, true));
-  for (const auto aos : {0u, 23u, 385u})
+  for (const auto aos : {0u, 23u})
     assert(!admit_application_gradient(loose, aos, 24, 2, true));
-  assert(!admit_application_gradient(loose, 96, 49, 2, true));
+  assert(admit_application_gradient(loose, 96, 49, 2, true));
   assert(!admit_application_gradient(loose, 96, 1, 2, true));
   assert(!admit_application_gradient(loose, 96, 24, 3, true));
   assert(!admit_application_gradient(loose, 96, 24, 2, false));
@@ -226,8 +231,11 @@ int main() {
   };
   binding.model = {1, 4, 1, 3, 0.75, 1.0, 0.25};
   assert(qualify(384) == 1);
+  assert(qualify(385) == 101);
+  assert(application_gradient_qualification(binding, loose, 384, 12, 2, false) == 101);
+  assert(application_gradient_qualification(binding, loose, 384, 49, 2) == 101);
   binding.model = {1, 4, 1, 3, 1.0, 1.0, 0.0};
-  assert(qualify(24) == 2 && qualify(96) == 2 && qualify(97) == 0);
+  assert(qualify(24) == 2 && qualify(96) == 2 && qualify(97) == 102);
   binding.model = {3, 1, 1, 3, 1.0, 1.0, 0.2};
   assert(qualify(96) == 3);
   binding.model.full_range_exchange = 0.25;
@@ -238,7 +246,8 @@ int main() {
   assert(qualify(96) == 0);
   binding.model.spin_blocks = 1;
   binding.model = {0x201c2, 4, 1, 3, 1.0, 1.0, 0.54};
-  assert(qualify(24) == 6 && qualify(96) == 6 && qualify(97) == 0);
+  assert(qualify(24) == 6 && qualify(96) == 6 && qualify(97) == 106);
+  assert(application_gradient_qualification(binding, loose, 96, 33, 2) == 106);
   binding.model.domain_version = 1;
   assert(qualify(96) == 0);
   binding.model.domain_version = 4;
@@ -248,6 +257,8 @@ int main() {
   binding.geometry_fp32 = nullptr;
   assert(qualify(96) == 0);
   assert(generativeqc::dft::stationary_gradient_model_qualification(binding, 96) == 4);
+  assert(generativeqc::dft::stationary_gradient_independently_qualified(4, 96, 48));
+  assert(!generativeqc::dft::stationary_gradient_independently_qualified(4, 97, 48));
 }
 """)
     executable = tmp_path / "admission"

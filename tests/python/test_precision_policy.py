@@ -331,6 +331,122 @@ def test_budget_fock_requires_actual_fp32_exchange_work(
     assert report.solve_count == (2 if missing else 1)
 
 
+@pytest.mark.parametrize("bad_force", (False, True))
+def test_expanded_mixed_gradient_forces_fp64_audit_even_with_fast_fock(
+    backend: SimpleNamespace, bad_force: bool
+) -> None:
+    # The Fock census alone must not bypass an independent audit after
+    # either shape expansion or relaxed-budget SCF plus FP32 derivatives.
+    from generativeqc.ks import resolve_ks_options
+
+    fock = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": True,
+        "strict_stage_fock_builds": 2,
+        "mixed_stage_fock_builds": 5,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": name,
+                "compute": "fp32",
+                "accumulation": "fp64",
+                "arithmetic_mode": "mixed",
+                "count": 5,
+            }
+            for name in ("coulomb_j", "coulomb_recurrence", "exchange_k")
+        ],
+        "gradient": {
+            "schema_version": 3,
+            "complete": True,
+            "qualification": "pbe0-rks-budget-fp32-v1-audit-required",
+            "requires_independent_audit": True,
+            "attempted_fp32_geometry_points": 1234,
+            "attempted_fp32_grid_points": 1234,
+            "returned_mode": "mixed",
+            "fp64_gradient_retries": 0,
+        },
+    }
+    force = 2e-4 if bad_force else 2e-6
+    backend.outputs = [
+        result(force=force, executed_backend="cuda", precision=fock),
+        result(executed_backend="cuda"),
+    ]
+    if bad_force:
+        backend.outputs.append(result(executed_backend="cuda"))
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._fast_fock = True
+    calculator._candidate._ks_options = resolve_ks_options(
+        "pbe0-rks", KsOptions(grid=GridSpec(48, 16, 32))
+    )
+    observed = calculator.singlepoint(ATOMS)
+    report = observed.precision_validation
+    assert report.status == "observed_met"
+    assert report.solve_count == (3 if bad_force else 2)
+    assert report.gradient_admission == (
+        "fp64-after-observable-budget-rejection"
+        if bad_force
+        else "pbe0-rks-budget-fp32-v1-audit-required"
+    )
+    assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
+    assert "budget_or_domain_requires_fp64_audit" in report.fallback_reasons
+    assert bool(report.rejected_errors) is bad_force
+    assert observed.forces[0, 0] == (0 if bad_force else force)
+
+
+def test_unqualified_gradient_not_promoted_by_native_v2_transport(
+    backend: SimpleNamespace,
+) -> None:
+    backend.transport_v2 = True
+    backend.outputs = [
+        result(
+            executed_backend="cuda",
+            precision={
+                "gradient": {
+                    "schema_version": 2,
+                    "complete": True,
+                    "qualification": "pbe-rks-budget-fp32-v1-audit-required",
+                    "requires_independent_audit": True,
+                    "returned_mode": "mixed",
+                    "attempted_fp32_geometry_points": 120,
+                    "attempted_fp32_grid_points": 120,
+                }
+            },
+        ),
+        result(executed_backend="cuda"),
+    ]
+    report = (
+        PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+        .singlepoint(ATOMS)
+        .precision_validation
+    )
+    assert report.status == "observed_met"
+    assert report.solve_count == 2
+    assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
+
+
+def test_native_gradient_capacity_failure_falls_back_without_false_qualification(
+    backend: SimpleNamespace,
+) -> None:
+    backend.transport_v2 = True
+    backend.block_auto = True
+    backend.outputs = [
+        NotImplementedError("extrapolated gradient capacity exceeds resources"),
+        result(executed_backend="cuda"),
+        result(executed_backend="cuda"),
+    ]
+    report = (
+        PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+        .singlepoint(ATOMS)
+        .precision_validation
+    )
+    assert report.status == "observed_met"
+    assert report.solve_count == 3
+    assert "mixed_gradient_failed_fp64_fallback" in report.fallback_reasons
+    assert report.solves[0].error is not None
+
+
 def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
     backend: SimpleNamespace,
 ) -> None:
@@ -1179,3 +1295,84 @@ def test_hf_v3_needs_actual_weighted_work_not_a_fictitious_xc_census(
         "fp32_grid_storage_unavailable"
         not in output.precision_validation.fallback_reasons
     )
+
+
+@pytest.mark.parametrize("transport", (False, True))
+@pytest.mark.parametrize("bad_force", (False, True))
+def test_audit_required_gradient_cannot_use_xc_warmup_qualification(
+    backend: SimpleNamespace, transport: bool, bad_force: bool
+) -> None:
+    backend.transport_v2 = transport
+    work = {
+        "complete": True,
+        "operator_inventory_complete": True,
+        "operator_work_counters_valid": True,
+        "mixed_stage_fock_builds": 2,
+        "strict_stage_fock_builds": 2,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": "xc",
+                "compute": "fp32",
+                "accumulation": "fp32",
+                "arithmetic_mode": "mixed",
+                "count": 2,
+            }
+        ],
+        "gradient": {
+            "schema_version": 3,
+            "complete": True,
+            "qualification": "pbe-rks-budget-fp32-v1-audit-required",
+            "requires_independent_audit": True,
+            "returned_mode": "mixed",
+            "attempted_fp32_geometry_points": 1000,
+            "attempted_fp32_grid_points": 1000,
+        },
+    }
+    force = 2e-4 if bad_force else 2e-6
+    backend.outputs = [
+        result(force=force, executed_backend="cuda", precision=work),
+        result(executed_backend="cuda"),
+    ]
+    if bad_force:
+        backend.outputs.append(result(executed_backend="cuda"))
+    observed = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    report = observed.precision_validation
+    assert report.status == "observed_met"
+    assert report.solve_count == len(backend.calls) == (3 if bad_force else 2)
+    assert bool(report.rejected_errors) is bad_force
+    assert observed.forces[0, 0] == (0 if bad_force else force)
+    assert "mixed_gradient_requires_independent_fp64_audit" in report.fallback_reasons
+
+
+@pytest.mark.parametrize("failure", (RuntimeError, NotImplementedError))
+def test_mixed_gradient_fallback_retains_failed_attempt(
+    backend: SimpleNamespace, failure: type[Exception]
+) -> None:
+    backend.transport_v2 = True
+    backend.block_auto = True
+    backend.outputs = [
+        failure("candidate failed"),
+        result(executed_backend="cuda"),
+        result(executed_backend="cuda"),
+    ]
+    observed = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    report = observed.precision_validation
+    assert report.status == "observed_met"
+    assert report.solve_count == len(backend.calls) == 3
+    assert [solve.role for solve in report.solves] == [
+        "candidate",
+        "fp64_fallback",
+        "fp64_audit",
+    ]
+    assert report.solves[0].error == failure.__name__ + ": candidate failed"
+    assert report.solves[0].iterations is None
+    assert report.solves[0].force_evaluations is None
+    assert report.solves[0].seconds >= 0
+    assert all(solve.error is None for solve in report.solves[1:])
+    assert backend.live is None

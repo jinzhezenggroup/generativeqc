@@ -91,6 +91,9 @@ def test_prepared_admission_retains_graph_and_capacity(
 
     production = (ROOT / "src/methods/dft_method.cpp").read_text()
     admission = cpp_function_definition(production, "native_cuda_stationary_binding")
+    descriptor_capacity = cpp_function_definition(
+        production, "dft_cuda_stationary_capacity"
+    )
     source = tmp_path / "graph_admission.cpp"
     source.write_text(
         '#include "scf/types.hpp"\n'
@@ -146,6 +149,27 @@ unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.
 unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }
 """
         + admission
+        + r"""
+// Descriptor parsing is outside this host-only test. Both front doors consume
+// the same resolved scientific options, but execute their production gates.
+scf::ScfOptions capacity_options;
+NativeKsExecutionPlan capacity_plan;
+dft::GridSpec capacity_grid;
+scf::ScfOptions dft_options(const generativeqc_method_descriptor&,
+                            generativeqc_backend, NativeKsExecutionPlan& plan) {
+  plan = capacity_plan;
+  return capacity_options;
+}
+dft::GridSpec ks_grid_options(const generativeqc_method_descriptor&,
+                              const scf::ScfOptions&, const NativeKsExecutionPlan&) {
+  return capacity_grid;
+}
+struct MethodError : std::runtime_error {
+  using std::runtime_error::runtime_error;
+  generativeqc_status status() const { return GENERATIVEQC_STATUS_INVALID_ARGUMENT; }
+};
+"""
+        + descriptor_capacity
         + r"""
 }
 int main() {
@@ -254,6 +278,60 @@ int main() {
   if (select(24, 3, 2)) return 21;
   options.application_precision_budget = {1e-5, 1e-4, 3e-5};
   if (select(24, 3, 2) != expected) return 22;
+  // Expanded AUTO candidates are allowed without changing the strict-FP64
+  // comparator assertions above. They must retain audit-required provenance.
+  for (const auto aos : {97U, 384U, 385U, 2048U}) {
+    if (select(aos, 12, 1) != expected || select(aos, 12, 2) != expected) return 26;
+    if (dft::application_gradient_qualification(
+            *expected, options.application_precision_budget, aos, 12, 2) != 106) return 27;
+  }
+  for (const auto atoms : {33U, 49U, 96U})
+    if (select(96, atoms, 2) != expected) return 28;
+
+  capacity_options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  capacity_options.semilocal_exchange_scale = 0.75;
+  capacity_options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+  capacity_options.xc_tile_points = 32;
+  capacity_options.resolved_fock_build.emplace();
+  auto& capacity_provider = *capacity_options.resolved_fock_build;
+  capacity_provider.backend = scf::FockBackend::Cuda;
+  capacity_provider.schedule = scf::FockSchedule::CudaIndependent;
+  capacity_provider.spec.derivative_order = 0;
+  capacity_provider.spec.spin = scf::FockSpin::Restricted;
+  capacity_provider.spec.exchange.coefficient = -0.125;
+  capacity_grid.radial_points = 4;
+  capacity_grid.angular_polar = 2;
+  capacity_grid.angular_azimuth = 4;
+  const std::array<std::uint64_t, 7> shape{12, 96, 96, 384, 2, 0, 0};
+  const auto& capacity_binding = dft::native_stationary_profile_pbe_rks();
+  const auto prepared_mixed = dft::cuda_stationary_capacity(
+      capacity_binding, shape[0], shape[1], shape[2], shape[3], 32, true);
+  const auto prepared_strict = dft::cuda_stationary_capacity(
+      capacity_binding, shape[0], shape[1], shape[2], shape[3], 32, false);
+  if (!prepared_mixed.cached_grid_extra_bytes || prepared_strict.cached_grid_extra_bytes) return 29;
+  generativeqc_method_descriptor descriptor{};
+  for (const auto relaxed : {false, true}) {
+    capacity_options.energy_tolerance = relaxed ? 1e-6 : 1e-10;
+    capacity_options.density_tolerance = relaxed ? 1e-4 : 1e-8;
+    capacity_options.screening_tolerance = relaxed ? 1e-10 : 1e-12;
+    dft::CudaStationaryCapacity capacity;
+    std::string detail;
+    if (dft_cuda_stationary_capacity(descriptor, shape, capacity, detail) !=
+        GENERATIVEQC_STATUS_SUCCESS) return 30;
+    if (dft::cuda_stationary_capacity_values(capacity) !=
+        dft::cuda_stationary_capacity_values(prepared_mixed)) return 31;
+  }
+  capacity_options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  capacity_options.application_precision_budget = {};
+  capacity_options.energy_tolerance = 1e-10;
+  capacity_options.density_tolerance = 1e-8;
+  capacity_options.screening_tolerance = 1e-12;
+  dft::CudaStationaryCapacity strict_capacity;
+  std::string detail;
+  if (dft_cuda_stationary_capacity(descriptor, shape, strict_capacity, detail) !=
+      GENERATIVEQC_STATUS_SUCCESS) return 32;
+  if (dft::cuda_stationary_capacity_values(strict_capacity) !=
+      dft::cuda_stationary_capacity_values(prepared_strict)) return 33;
 }
 """
     )

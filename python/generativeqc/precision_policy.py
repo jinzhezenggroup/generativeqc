@@ -811,7 +811,11 @@ class PrecisionCalculator:
                     )
                 except BaseException as error:
                     calculator.clear_cache()
-                    if self._fast_fock and calculator is self._candidate:
+                    if (
+                        self.policy.profile == "fast"
+                        and self._fast_native
+                        and role == "candidate"
+                    ):
                         solves.append(
                             PrecisionSolve(
                                 role,
@@ -888,9 +892,13 @@ class PrecisionCalculator:
         try:
             candidate = solve(candidate_calculator, "candidate", candidate_precision)
         except (RuntimeError, NotImplementedError):
-            if not self._fast_fock:
+            if self.policy.profile != "fast" or not self._fast_native:
                 raise
-            route_reasons.append("budget_fock_failed_fp64_fallback")
+            route_reasons.append(
+                "budget_fock_failed_fp64_fallback"
+                if self._fast_fock
+                else "mixed_gradient_failed_fp64_fallback"
+            )
             candidate_calculator = reference_factory()
             candidate_precision = "fp64"
             fast_native = False
@@ -906,30 +914,41 @@ class PrecisionCalculator:
             if gradient.get("schema_version") == 1
             else "unknown",
         )
-        qualified_gradient = gradient.get("complete") is True and (
-            (
-                gradient.get("schema_version") in (1, 2, 3)
-                and qualification
-                in (
-                    "pbe0-rks-budget-fp32-v1",
-                    "pbe-rks-budget-fp32-v1",
-                    "b3lyp-rks-budget-fp32-v1",
-                    "r2scan-rks-budget-fp32-v1",
-                    "rhf-budget-fp32-v1",
-                    "rhf-df-shell-budget-fp32-v1",
-                    "m06-2x-rks-budget-fp32-v1",
-                )
-            )
-            or (
-                gradient.get("schema_version") == 4
-                and (
-                    (
-                        gradient.get("owner") == "python-stationary-cuda"
-                        and qualification in DF_GRADIENT_QUALIFICATIONS
+        gradient_requires_audit = gradient.get("requires_independent_audit") is True
+        if gradient_requires_audit:
+            # Beyond the frozen acceptance cohort and after a budget-Fock SCF,
+            # a converged/finite FP32 gradient is not a measured force budget.
+            # Keep the candidate, then compare complete E+F with fresh FP64.
+            gradient_admission = qualification
+            route_reasons.append("mixed_gradient_requires_independent_fp64_audit")
+        qualified_gradient = (
+            not gradient_requires_audit
+            and gradient.get("complete") is True
+            and (
+                (
+                    gradient.get("schema_version") in (1, 2, 3)
+                    and qualification
+                    in (
+                        "pbe0-rks-budget-fp32-v1",
+                        "pbe-rks-budget-fp32-v1",
+                        "b3lyp-rks-budget-fp32-v1",
+                        "r2scan-rks-budget-fp32-v1",
+                        "rhf-budget-fp32-v1",
+                        "rhf-df-shell-budget-fp32-v1",
+                        "m06-2x-rks-budget-fp32-v1",
                     )
-                    or (
-                        gradient.get("owner") == "python-composite-stationary-cuda"
-                        and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
+                )
+                or (
+                    gradient.get("schema_version") == 4
+                    and (
+                        (
+                            gradient.get("owner") == "python-stationary-cuda"
+                            and qualification in DF_GRADIENT_QUALIFICATIONS
+                        )
+                        or (
+                            gradient.get("owner") == "python-composite-stationary-cuda"
+                            and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
+                        )
                     )
                 )
             )
@@ -951,6 +970,7 @@ class PrecisionCalculator:
             if (
                 fast_native
                 and self._fast_fock
+                and not gradient_requires_audit
                 and _budget_fock_work_admitted(candidate_calculator, work)
             ):
                 validation = PrecisionValidation(
@@ -1030,6 +1050,7 @@ class PrecisionCalculator:
             if (
                 fast_native
                 and not self._fast_fock
+                and not gradient_requires_audit
                 and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
                 and work.get("operator_work_counters_valid") is True
                 and work.get("complete") is True

@@ -5640,7 +5640,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       // The ordinary SCF census stays incomplete. Only the synchronized,
       // physical-state-bound gradient and this item's actual work are certified.
       result.precision_work.gradient = {1, 1, 0, 0, 0};
-      result.precision_work.gradient_qualification = 5;
+      result.precision_work.gradient_qualification =
+          independently_qualified_hf_gradient(nbf, systems[system].atoms.size()) ? 5 : 105;
       result.precision_work.gradient_weighted_work_collected = true;
       std::copy_n(host_gradient_precision_work.begin() + 3 * system, 3,
                   result.precision_work.gradient_weighted_work.begin());

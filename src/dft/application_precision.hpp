@@ -101,12 +101,23 @@ inline bool admit_application_xc_warmup(const std::array<double, 3>& allowances,
          (allowances[2] == 0.0 || allowances[2] >= 3e-6);
 }
 
-/** Shared public native-gradient shape domain, for strict and mixed execution.
- * The method owner separately authenticates the complete scientific model. */
+/** Executable native gradient shape; no empirical AO/atom upper bound here.
+ * The linked profile, charged capacity, and physical final state gate execution.
+ * The independently qualified no-audit population is tracked separately. */
 inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t atoms,
                                                    std::size_t maximum_angular,
                                                    bool restricted) noexcept {
-  return restricted && aos >= 24 && aos <= 384 && atoms >= 2 && atoms <= 48 && maximum_angular <= 2;
+  return restricted && aos >= 24 && atoms >= 2 && maximum_angular <= 2;
+}
+
+/** Historical one-endpoint qualification, NOT a kernel or memory limit.
+ * Larger supported shapes may execute FP32, but require a real FP64 audit
+ * before Fast can publish their energy and forces. */
+inline constexpr std::uint64_t kGradientAuditRequiredOffset = 100;
+inline constexpr bool stationary_gradient_independently_qualified(std::uint64_t model,
+                                                                  std::size_t aos,
+                                                                  std::size_t atoms) noexcept {
+  return model != 0 && aos <= (model == 1 ? 384U : 96U) && atoms <= (model == 6 ? 32U : 48U);
 }
 
 /** Budget-Fock candidate domain, independent of mixed-gradient capacity.
@@ -138,14 +149,11 @@ inline bool admit_application_gradient(const std::array<double, 3>& allowances, 
          (allowances[2] == 0.0 || allowances[2] >= 3e-6);
 }
 
-/** Qualification identity for an already authenticated static binding.
- * These are complete full-range electronic models, not ingredient matches.
- * The new semilocal candidates retain their measured 24--96 AO domain until
- * larger complete endpoints are independently qualified. PBE0 keeps its
- * existing broader domain. The same native scheduling must be available to
- * ordinary FP64; a model identity alone never authorizes narrowed arithmetic. */
+/** Exact model match for an already authenticated compiled binding.
+ * Shape-independent: numerical qualification is decided only at publication.
+ * The shared native schedule and capacity must exist for either precision. */
 inline std::uint64_t stationary_gradient_model_qualification(const CudaStationaryBinding& binding,
-                                                             std::size_t aos) noexcept {
+                                                             std::size_t /*aos*/) noexcept {
   const auto& model = binding.model;
   if (model.spin_blocks != 1 || model.partition_iterations != 3 ||
       model.semilocal_correlation_scale != 1.0)
@@ -153,7 +161,7 @@ inline std::uint64_t stationary_gradient_model_qualification(const CudaStationar
   if (model.functional == static_cast<std::uint32_t>(SemilocalFamily::Pbe) &&
       model.semilocal_exchange_scale == 0.75 && model.full_range_exchange == 0.25)
     return 1;
-  if (aos > 96 || model.semilocal_exchange_scale != 1.0) return 0;
+  if (model.semilocal_exchange_scale != 1.0) return 0;
   if (model.functional == static_cast<std::uint32_t>(SemilocalFamily::Pbe) &&
       model.full_range_exchange == 0.0)
     return 2;
@@ -171,16 +179,24 @@ inline std::uint64_t stationary_gradient_model_qualification(const CudaStationar
   return 0;
 }
 
-/** Narrow derivative arithmetic only after independent budget/shape admission.
- * A linked typed entry point is necessary, but never sufficient, evidence. */
+/** Select typed arithmetic only with complete model/budget/capability admission.
+ * Distinguish historically qualified one-endpoint shapes from extrapolations
+ * (including a relaxed-budget Fock density). Consumers MUST audit IDs >= 100
+ * against a separate FP64 endpoint; neither shape nor finite values certify
+ * an unmeasured gradient error. */
 inline std::uint64_t application_gradient_qualification(const CudaStationaryBinding& binding,
                                                         const std::array<double, 3>& allowances,
                                                         std::size_t aos, std::size_t atoms,
-                                                        std::size_t maximum_angular) noexcept {
+                                                        std::size_t maximum_angular,
+                                                        bool strict_density = true) noexcept {
   if (!binding.geometry_fp32 || !admit_application_gradient(allowances, aos, atoms, maximum_angular,
                                                             binding.model.spin_blocks == 1))
     return 0;
-  return stationary_gradient_model_qualification(binding, aos);
+  const auto model = stationary_gradient_model_qualification(binding, aos);
+  if (!model) return 0;
+  return strict_density && stationary_gradient_independently_qualified(model, aos, atoms)
+             ? model
+             : model + kGradientAuditRequiredOffset;
 }
 
 }  // namespace generativeqc::dft

@@ -12,8 +12,10 @@ all-electron Direct consumer admits **FP32 J and full-range K recurrence** with
 24–768 AOs, 2–96 atoms and shells through d. It uses the requested supported
 quadrature unchanged; the J/K precision decision does not require a particular grid.
 Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
-`3e-5` Eh/bohr RMS force when requested. This domain is independent of the
-384-AO mixed-gradient limit; neither is a hardware AO limit.
+`3e-5` Eh/bohr RMS force when requested. This budget-Fock domain is independent of the historically tested 384-AO
+PBE0 mixed-gradient cohort; neither is a hardware AO limit. Beyond the
+one-endpoint gradient cohort, supported native candidates must be compared
+with a fresh complete FP64 E+F result before Fast can publish them.
 
 Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
@@ -53,8 +55,12 @@ the current physical-Fock projector and checks its density defect against the
 selected allowance. Stricter density controls retain corrective closure.
 Final physical checks run in FP64 against the selected relaxed tolerances;
 electron trace, idempotency and canonical diagonalization checks stay strict.
-Relaxed candidates retain FP64 force arithmetic, not the independent
-strict-density mixed-gradient qualification described next.
+Relaxed candidates normally retain FP64 force arithmetic. When the complete
+Direct stationary graph and resource plan also admit FP32 derivatives, the
+budget-Fock and mixed-gradient arithmetic can run together as a *candidate*.
+Its relaxed density invalidates the separate strict-density gradient
+qualification: Fast requires a complete FP64 E+F audit, including the cost of
+the extra solve, before publishing any combined result.
 Where the complete generated graph and molecular shape already qualify a native
 prepared force consumer, budget-selected Focks reuse that consumer in FP64 rather
 than repeating Python derivative preparation. Admission also checks the actual
@@ -115,18 +121,29 @@ calls, alternating repeats, executed J/K work and independent observable gates.
 
 ## Strict-Density Gradient Routes
 
-All-electron CUDA
-RHF and RKS with exact full-range J/K admit mixed stationary gradients at the
-FP64-converged density in the following bounded domains (through d shells,
-2–48 atoms):
+All-electron CUDA RHF and RKS with exact full-range J/K support mixed
+stationary gradients at an authenticated FP64-converged density. The table
+records the **historically independently qualified one-endpoint populations**,
+not maximum representable AO/atom counts (shells through d):
 
-| Complete electronic model | AO domain |
+| Complete electronic model | Existing one-endpoint AO cohort |
 | --- | ---: |
 | PBE0 | 24–384 |
 | PBE, B3LYP, r2SCAN | 24–96 |
 | RHF | 24–96 |
 | M06-2X (2–32 atoms) | 24–96 |
 | Canonical r2SCAN-3c, defining def2-mTZVPP basis | 24–96 |
+
+The cohorts above have 2–48 atoms unless further restricted in the table.
+Outside these sizes, **the Direct native and direct-HF dispatch no longer uses
+the frozen AO/atom counts as a veto**. It still requires a linked complete
+model, s/p/d support, a valid final-state token, and an actually affordable
+resource/force owner. The candidate is tagged `requires_independent_audit`
+and is compared against a separate FP64 complete E+F endpoint, with a bounded
+verified FP64 fallback on a failed budget. It is not reported as
+`qualified_mixed_gradient` merely because its kernels returned finite
+numbers. Numerical success beyond the historical cohort is not a universal
+error bound, and a full audit can erase any speed benefit.
 
 Canonical r2SCAN-3c retains its existing FP64 D4 and native CPU gCP corrections;
 only its electronic derivative work is narrowed. Both corrections are included
@@ -152,9 +169,11 @@ system or complete singlepoint.
 DF energy-only requests have no admitted mixed operator and still use the
 observable-audit fallback; they are not accelerated.
 
-CUDA DF RHF has a separate native shell-derivative candidate: 24–96 orbital
-AOs, up to 512 auxiliary AOs, 2–12 atoms, orbital shells through d and auxiliary
-shells through f. It requires the full-rank metric at the default `1e-10`
+CUDA DF RHF has a separate native shell-derivative candidate. Its historical
+one-endpoint cohort is 24–96 orbital AOs, up to 512 auxiliary AOs and 2–12
+atoms. The Direct-HF and DF-HF admission now accepts larger supported sizes,
+requiring a separate complete FP64 E+F audit for expanded shapes, while
+retaining orbital shells through d and auxiliary shells through f. It requires the full-rank metric at the default `1e-10`
 threshold and a verified strict final density. Only the ordinary shell schedule
 narrows; the policy does not replace a faster generic schedule merely to report
 FP32 work. Small generic-only, rank-reduced and tighter-budget cases retain the
@@ -514,11 +533,14 @@ Inspect execution-owned operator records rather than interpreting the AUTO
 name or effective-bits summary as a uniform arithmetic type. The native SCF
 census is not an instruction-level census of the analytic gradient.
 
-Only the bounded complete models in the table above currently admit
-application-selected FP32 gradients. `gradient_admission` and native work
-records distinguish them from warmup-only and audited FP64 paths. Unqualified DF models, WB97M-V,
-larger bases and other spin domains do not acquire a gradient route merely
-from a looser allowance.
+Only complete authenticated models with actual native FP32 support admit
+application-selected mixed gradients. `gradient_admission` and execution
+records distinguish historically qualified single-solve gradients, expanded
+FP32 candidates requiring a measured FP64 audit, and strict fallback.
+Noncanonical DF models, unsupported shell classes, WB97M-V compositions and
+other spin domains do not acquire a native gradient route merely from a looser
+allowance. The separately implemented Python semilocal DF and WB97M-V
+gradient consumers retain their own independent resource/domain gates.
 
 The facade does not expose correlated methods, ECP, Hessians,
 response or an optimizer/MD driver. A successful single-point audit does not
