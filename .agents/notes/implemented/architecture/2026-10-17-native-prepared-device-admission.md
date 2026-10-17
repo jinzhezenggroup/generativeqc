@@ -65,6 +65,12 @@ in `tests/native/test_cli_runtime.py`. Host metadata and synthetic observation
 tests do not establish real-GPU numerical or endpoint performance acceptance;
 source-matched scheduled CUDA qualification remains a separate gate.
 
+Offline generated CUDA providers also reach the ledger through relative tensor
+headers, without CMake's source-root include directory. The ledger's observation
+header therefore uses a sibling-relative include. A standalone C++17/C++20 probe
+without `-I src` protects this boundary; a full CMake build alone hid the failure
+later exposed by the independent XC CUDA compile job.
+
 ## Consequences and revisit conditions
 
 This removes a frontend lifetime authority without pretending to finish #2227

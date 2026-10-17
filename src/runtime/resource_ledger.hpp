@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "runtime/resource_usage.hpp"
+#include "resource_usage.hpp"
 
 namespace generativeqc::runtime {
 
