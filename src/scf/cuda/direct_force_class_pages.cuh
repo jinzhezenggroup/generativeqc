@@ -63,7 +63,7 @@ __host__ __device__ inline constexpr std::uint64_t direct_force_triangle_page_pr
  * Rectangles visit each cross-class product once; triangles include their
  * diagonal once. Empty systems/classes consume no pages. No resident domain,
  * host inventory readback or extra full shell-pair scan is introduced. */
-template <DirectForceClassDomain Domain>
+template <DirectForceClassDomain Domain, unsigned AngularOrder = 0U>
 __host__ __device__ inline bool direct_force_class_pair_page(const std::uint32_t* offsets,
                                                              std::uint32_t batch_size,
                                                              std::uint64_t ordinal,
@@ -72,7 +72,11 @@ __host__ __device__ inline bool direct_force_class_pair_page(const std::uint32_t
   constexpr auto page_size = direct_force_class_page_size(Domain);
   const auto stride = static_cast<std::size_t>(batch_size) + 1U;
   while (position.system < batch_size) {
-    if (direct_force_class_domain(position.first_class, position.second_class) == Domain) {
+    constexpr unsigned orders[]{0U, 1U, 2U, 2U, 3U, 4U};
+    if (direct_force_class_domain(position.first_class, position.second_class) == Domain &&
+        (AngularOrder == 0U ||
+         (position.first_class < 6U && position.second_class < 6U &&
+          orders[position.first_class] + orders[position.second_class] == AngularOrder))) {
       const auto bra_index = position.first_class * stride + position.system;
       const auto ket_index = position.second_class * stride + position.system;
       const std::uint64_t bra_count = offsets[bra_index + 1U] - offsets[bra_index];

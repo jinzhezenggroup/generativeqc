@@ -35,6 +35,7 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
             "cudaError_t launch_direct_order_seven_force(",
             "cudaError_t launch_direct_force_materialized_class(",
             "cudaError_t launch_direct_force_class_domains(",
+            "cudaError_t launch_direct_force_relative_six(",
             "cudaError_t launch_direct_force_spatial_spd_low(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
@@ -193,7 +194,8 @@ void direct_order_seven_force_kernel(
   last_error = record({Launch,7,false,false,256,bytes,true});
   cursor = 999;
 }
-template<bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain>
+template<bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain,
+         unsigned AngularOrder = 0U>
 void direct_force_class_domain_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     const GeneratedShellPairStream* force_topology, double screening, const double* shell,
@@ -240,7 +242,7 @@ void direct_force_spatial_spd_low_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
-  last_error = record({Launch,-5,false,false,128,bytes,false,true});
+  last_error = record({Launch,Partition == 5U ? -6 : -5,false,false,128,bytes,false,true});
   cursor = 999;
 }
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
@@ -290,7 +292,9 @@ int main() {
           for (unsigned state_bits = 0; state_bits < 128; ++state_bits)
             for (dim3 block : {dim3{256}, dim3{128}, dim3{64}, dim3{256,2}, dim3{256,1,2}})
               for (std::size_t requested_bytes : {0U, 1024U, 4096U})
-                for (auto schedule : {DirectSpdForceSchedule::Incumbent, DirectSpdForceSchedule::SpatialReuse})
+                for (auto schedule : {DirectSpdForceSchedule::Incumbent,
+                                      DirectSpdForceSchedule::SpatialReuse,
+                                      DirectSpdForceSchedule::RelativeReuse})
                   for (bool have_prefix : {false, true})
                     for (bool dddd : {false, true}) {
                 domain.prefix = have_prefix ? prefix_storage : nullptr;
@@ -308,6 +312,7 @@ int main() {
                 const bool split = pair && purpose == DirectScreeningPurpose::Force && maximum == 2 && block == dim3{256};
                 const bool cooperative = split && expected_batch.direct_pair_cooperative_derivatives && expected_topology;
                 const bool spatial = cooperative && have_prefix && schedule == DirectSpdForceSchedule::SpatialReuse;
+                const bool relative = cooperative && have_prefix && schedule == DirectSpdForceSchedule::RelativeReuse;
                 const bool class_domains = pair && purpose == DirectScreeningPurpose::Force && maximum == 3 &&
                     expected_batch.direct_pair_cooperative_derivatives && expected_topology && block == dim3{256};
                 const auto workspace = pair ? std::max(requested_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence)) : requested_bytes;
@@ -320,6 +325,11 @@ int main() {
                               {Reset},{Launch,5,false,false,128,requested_bytes,false,false,true},{Peek},
                               {Reset},{Launch,6,false,false,256,cooperative_workspace,true,false,true},{Peek},
                               {Reset},{Launch,8,true,true,256,workspace,false,false,true},{Peek}};
+                else if (relative)
+                  expected = {{Launch,-6,false,false,128,requested_bytes,false,true},{Peek},{Reset},
+                              {Launch,6,false,false,256,cooperative_workspace,true,false,true},{Peek},{Reset},
+                              {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
+                              {Launch,8,true,true,256,workspace},{Peek}};
                 else if (spatial)
                   expected = {{Launch,-5,false,false,128,requested_bytes,false,true},{Peek},{Reset},
                               {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
