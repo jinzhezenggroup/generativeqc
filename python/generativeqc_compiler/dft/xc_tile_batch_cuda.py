@@ -53,13 +53,14 @@ __global__ void batch_density_products(const CudaXcCompactTile* tiles, const dou
 template <bool Occupied = false>
 __global__ void batch_density_features(const CudaXcCompactTile* tiles, const double* ao,
     const double* work, double* features, I batch_begin, I spins, I jets, I work_jets,
-    I terms, I functional, int* error, CudaXcOccupiedDensity occupied) {
+    I terms, I functional, int* error, CudaXcOccupiedDensity occupied, const size_t* ids) {
   const auto& tile = tiles[blockIdx.y];
   auto* target = features + (tile.begin - batch_begin) * spins * terms;
   if constexpr (Occupied) {
     if (occupied.rank() < tile.active) {
       occupied_density_features_body(work + tile.work_offset, occupied.rank(), tile.count,
-          spins, terms, target, error);
+          spins, terms, target, error, occupied.density, ao + tile.ao_offset, tile.active,
+          occupied.nao, compact_tile_ids(tile, ids, occupied.nao));
       return;
     }
   }
@@ -204,7 +205,7 @@ inline void launch_batch_density_typed(cudaStream_t stream, const CudaXcLayout& 
   generativeqc_tensor::cuda_check(cudaGetLastError());
   batch_density_features<Occupied><<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * 32,
       128), tile_count), 128, 0, stream>>>(tiles, ao, work, features, batch_begin, layout.spins,
-      layout.jets, layout.work_jets, layout.feature_terms, layout.functional, error, occupied);
+      layout.jets, layout.work_jets, layout.feature_terms, layout.functional, error, occupied, ids);
 }
 
 inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout,

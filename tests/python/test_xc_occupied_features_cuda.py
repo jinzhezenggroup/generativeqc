@@ -54,15 +54,16 @@ def occupied_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     assert result.returncode == 0, result.stderr
     native = ct.CDLL(str(library))
     function = native.occupied_probe
-    function.argtypes = [ct.c_void_p] * 3 + [ct.c_size_t] * 7 + [ct.c_void_p]
+    function.argtypes = [ct.c_void_p] * 4 + [ct.c_size_t] * 7 + [ct.c_void_p]
     function.restype = ct.c_int
     return native
 
 
 @pytest.mark.parametrize("occupations", [(1,), (5,), (33,), (5, 3), (0, 7)])
 @pytest.mark.parametrize("mapped", [False, True])
+@pytest.mark.parametrize("scale", [1.0, 1e-308, 1e-155, 1e90])
 def test_projection_and_features_match_independent_density(
-    occupied_probe: ct.CDLL, occupations: tuple[int, ...], mapped: bool
+    occupied_probe: ct.CDLL, occupations: tuple[int, ...], mapped: bool, scale: float
 ) -> None:
     rng = np.random.default_rng(20261017)
     active, points, spins = 41, 19, len(occupations)
@@ -73,12 +74,25 @@ def test_projection_and_features_match_independent_density(
         else None
     )
     selected = ids if mapped else np.arange(active)
-    frames = rng.normal(size=(spins, nao, nao)) * 0.1
+    frames = rng.normal(size=(spins, nao, nao)) * 0.1 * scale
     ao = np.ascontiguousarray(rng.normal(size=(4, points, active)) * 0.1)
+    if scale == 1e-308:
+        ao[1:] *= 1e307
+    elif scale != 1.0:
+        ao /= scale
     reference = np.zeros((spins, 5, points))
+    matrices = np.zeros((spins, nao, nao))
     for spin, count in enumerate(occupations):
-        frame = frames[spin, selected, :count]
-        density = frame @ frame.T * (2.0 if spins == 1 else 1.0)
+        matrices[spin] = (
+            frames[spin, :, :count]
+            @ frames[spin, :, :count].T
+            * (2.0 if spins == 1 else 1.0)
+        )
+        density = matrices[spin][np.ix_(selected, selected)]
+        # The matrix consumer symmetrizes each triangle after FP64 storage.
+        # Halving subnormals before addition is observably different from
+        # either an unrounded C*C.T oracle or halving their sum afterwards.
+        density = 0.5 * density + 0.5 * density.T
         work = ao @ density
         reference[spin, 0] = np.sum(ao[0] * work[0], axis=-1)
         reference[spin, 1:4] = 2.0 * np.sum(ao[1:4] * work[0], axis=-1)
@@ -87,6 +101,7 @@ def test_projection_and_features_match_independent_density(
     coefficients = np.ascontiguousarray(frames.transpose(0, 2, 1))
     actual = np.zeros_like(reference)
     status = occupied_probe.occupied_probe(
+        matrices.ctypes.data,
         coefficients.ctypes.data,
         ao.ctypes.data,
         None if ids is None else ids.ctypes.data,
@@ -135,25 +150,28 @@ struct Stream {
   Stream() { generativeqc_tensor::cuda_check(cudaStreamCreate(&value)); }
   ~Stream() { if (value) cudaStreamDestroy(value); }
 };
-extern "C" int occupied_probe(const double* coefficients, const double* ao,
+extern "C" int occupied_probe(const double* density, const double* coefficients, const double* ao,
     const size_t* ids, size_t nao, size_t active, size_t points, size_t spins,
     size_t alpha, size_t beta, size_t rank, double* output) {
   try {
     using generativeqc_tensor::cuda_check;
     Stream stream;
     DeviceBuffer<double> frame(spins * nao * nao), orbitals(4 * points * active);
+    DeviceBuffer<double> matrix(spins * nao * nao);
     DeviceBuffer<double> work(spins * 4 * points * rank), features(spins * 5 * points);
     DeviceBuffer<size_t> map(ids ? active : 1);
     DeviceBuffer<int> error(1);
     cuda_check(cudaMemsetAsync(error.value, 0, sizeof(int), stream.value));
     cuda_check(cudaMemcpyAsync(frame.value, coefficients, spins * nao * nao * sizeof(double),
                                cudaMemcpyHostToDevice, stream.value));
+    cuda_check(cudaMemcpyAsync(matrix.value, density, spins * nao * nao * sizeof(double),
+                               cudaMemcpyHostToDevice, stream.value));
     cuda_check(cudaMemcpyAsync(orbitals.value, ao, 4 * points * active * sizeof(double),
                                cudaMemcpyHostToDevice, stream.value));
     if (ids)
       cuda_check(cudaMemcpyAsync(map.value, ids, active * sizeof(size_t),
                                  cudaMemcpyHostToDevice, stream.value));
-    CudaXcOccupiedDensity witness{nullptr, frame.value, nao, spins, {alpha, beta}, 1};
+    CudaXcOccupiedDensity witness{matrix.value, frame.value, nao, spins, {alpha, beta}, 1};
     launch_occupied_density(stream.value, witness, orbitals.value, active, points,
                             work.value, features.value, 5, error.value, ids ? map.value : nullptr);
     int failure = 0;

@@ -104,6 +104,34 @@
       ]
     },
     {
+      "id": "ks.occupied-xc-features",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+      ],
+      "owner_issues": [
+        1117
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_precision.hpp"
+      ],
+      "rationale": "Unset, empty or 1 requests strict-FP64 occupied-frame density/gradient/tau features only for an authenticated accepted-density lease and tiles with rank below active AO width. Explicit 0 and other nonempty values select the matrix route. Response, nonlocal, chunk, mixed or stale frames retain bounded matrix evaluation. Exponent-unsafe or nonfinite projections recompute from the original stored density inside the existing feature kernel; potential assembly and exact Direct J/K are unchanged.",
+      "revisit_condition": "Require independent stored-density edge cases, native owner/sanitizer/resource checks and source-matched complete cold, five-warm, moved and five-moved-warm E+F populations before extending precision, feature or lifetime admission. Retain original-library controls for preparation/module-loading costs; do not infer universal warm gains from cold contraction improvements.",
+      "evidence": [
+        "docs/user/ks_options.md",
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/implemented/numerics/2026-10-17-occupied-xc-representability.md",
+        "tests/python/test_xc_occupied_selection.py",
+        "tests/python/test_xc_occupied_features.py",
+        "tests/python/test_xc_occupied_features_cuda.py",
+        "tests/python/test_xc_occupied_plan_cuda.py",
+        "tests/python/test_xc_occupied_resources.py",
+        "benchmarks/direct_force_reuse.py",
+        "issue:#1117"
+      ]
+    },
+    {
       "id": "ks.df-warm-factor-matrix-audit",
       "classification": "diagnostic-test-only",
       "controls": [

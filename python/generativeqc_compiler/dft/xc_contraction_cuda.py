@@ -319,10 +319,16 @@ __device__ void tiled_density_product_body(const double* density, const double* 
                     ? static_cast<double>(__double2float_rn(source[point*n+col]))
                     : 0.0;
     } else {
-      if (occupied_frame)
+      if (occupied_frame) {
         d[y][x] = row < occupied_count && col < n
             ? matrix[row*full_n+global_col] : 0.0;
-      else
+        // A factor can survive projection after its stored AO density has
+        // underflowed. Reject extreme exponents before reassociating that
+        // product; a NaN panel requests the original matrix feature path.
+        const double magnitude = fabs(static_cast<double>(d[y][x]));
+        if (magnitude != 0.0 && (magnitude < 0x1p-256 || magnitude > 0x1p256))
+          d[y][x] = NAN;
+      } else
         d[y][x] = row < n && col < n ? 0.5*matrix[global_row*full_n+global_col]+0.5*matrix[global_col*full_n+global_row] : 0.0;
       if constexpr (std::is_same_v<Arithmetic, float>)
         a[y][x] = point < count && col < n
@@ -350,7 +356,8 @@ __device__ void tiled_density_product_body(const double* density, const double* 
     if constexpr (std::is_same_v<Arithmetic, float>)
       work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] = finite(scalbn(static_cast<double>(value), ao_exponent), error, 1);
     else
-      work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] = finite(value, error, 1);
+      work[(spin*work_jets+jet)*count*output_n+point*output_n+mu] =
+          occupied_frame ? value : finite(value, error, 1);
   }
 }
 
@@ -658,8 +665,20 @@ def _emit_occupied_features(schedule: XcMatrixSchedule) -> str:
     All four orbital jets are required. Potential construction retains the
     original four AO jets; the native owner checks density and FP64 provenance.
     """
-    return _OCCUPIED_TEMPLATE.replace("@TILE@", str(schedule.tile)).replace(
-        "@PAD@", str(schedule.tile + 1)
+    graph, root = symmetric_density_element()
+    emitter = CudaEmitter(
+        graph,
+        {
+            "left": "matrix[global_row*full_n+global_col]",
+            "right": "matrix[global_col*full_n+global_row]",
+        },
+    )
+    emitter.emit((root,))
+    return (
+        _OCCUPIED_TEMPLATE.replace("@TILE@", str(schedule.tile))
+        .replace("@PAD@", str(schedule.tile + 1))
+        .replace("@DENSITY_FACTOR@", "\n".join(emitter.lines))
+        .replace("@DENSITY_FACTOR_VALUE@", emitter.reference(root))
     )
 
 
@@ -681,7 +700,8 @@ __global__ void occupied_density_products(CudaXcOccupiedDensity occupied,
 
 template<bool Cooperative = true>
 __device__ void occupied_density_features_body(const double* work, I rank, I count,
-    I spins, I terms, double* features, int* error) {
+    I spins, I terms, double* features, int* error, const double* density = nullptr,
+    const double* ao = nullptr, I active = 0, I full_n = 0, const size_t* ids = nullptr) {
   constexpr I width = Cooperative ? 32 : 1;
   const I lane = threadIdx.x % width, stride = count * rank;
   for (I item = (I(blockIdx.x) * blockDim.x + threadIdx.x) / width;
@@ -689,12 +709,39 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
     const I spin = item / count, point = item % count;
     const auto* source = work + spin * 4 * stride;
     double accum[5]{};
+    bool unsafe = false;
     for (I orbital = lane; orbital < rank; orbital += width) {
       const I index = point * rank + orbital;
       double panel[4]{source[index], source[stride + index],
                       source[2 * stride + index], source[3 * stride + index]};
       double derivatives[3]{panel[1], panel[2], panel[3]};
+      for (I jet = 0; jet < 4; ++jet) unsafe = unsafe || !isfinite(panel[jet]);
       generativeqc_grid_policy::add_features(panel[0], derivatives, panel, accum, 15U);
+    }
+    if constexpr (Cooperative) unsafe = __any_sync(0xffffffffu, unsafe);
+    const bool fallback = unsafe && density && ao && active && full_n;
+    if (fallback) {
+      // The original matrix and AO jets are still live. Recompute this point
+      // directly into registers: rewriting the compact projection panels here
+      // would race other points with a different AO/occupied stride.
+      for (I term = 0; term < 5; ++term) accum[term] = 0.0;
+      const auto* matrix = density + spin*full_n*full_n;
+      const I ao_stride = count*active;
+      for (I row = lane; row < active; row += width) {
+        const I global_row = ids ? ids[row] : row;
+        double products[4]{};
+        for (I col = 0; col < active; ++col) {
+          const I global_col = ids ? ids[col] : col;
+          @DENSITY_FACTOR@
+          const double factor = @DENSITY_FACTOR_VALUE@;
+          for (I jet = 0; jet < 4; ++jet)
+            products[jet] += factor*ao[jet*ao_stride+point*active+col];
+        }
+        const I index = point*active+row;
+        const double derivatives[3]{ao[ao_stride+index], ao[2*ao_stride+index],
+                                    ao[3*ao_stride+index]};
+        generativeqc_grid_policy::add_features(ao[index], derivatives, products, accum, 15U);
+      }
     }
     for (I term = 0; term < terms; ++term) {
       if constexpr (Cooperative)
@@ -702,14 +749,16 @@ __device__ void occupied_density_features_body(const double* work, I rank, I cou
           accum[term] += __shfl_down_sync(0xffffffffu, accum[term], offset);
       if (lane == 0)
         features[(spin * terms + term) * count + point] =
-            finite((spins == 1 ? 2.0 : 1.0) * accum[term], error, 1);
+            finite((!fallback && spins == 1 ? 2.0 : 1.0) * accum[term], error, 1);
     }
   }
 }
 
 __global__ void occupied_density_features(const double* work, I rank, I count,
-    I spins, I terms, double* features, int* error) {
-  occupied_density_features_body(work, rank, count, spins, terms, features, error);
+    I spins, I terms, double* features, int* error, const double* density,
+    const double* ao, I active, I full_n, const size_t* ids) {
+  occupied_density_features_body(work, rank, count, spins, terms, features, error,
+                                 density, ao, active, full_n, ids);
 }
 
 inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity occupied,
@@ -720,7 +769,8 @@ inline void launch_occupied_density(cudaStream_t stream, CudaXcOccupiedDensity o
       occupied, ao, active, count, work, error, ids);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   occupied_density_features<<<generativeqc_tensor::blocks(occupied.spins * count * 32, 128),
-      128, 0, stream>>>(work, occupied.rank(), count, occupied.spins, terms, features, error);
+      128, 0, stream>>>(work, occupied.rank(), count, occupied.spins, terms, features, error,
+                        occupied.density, ao, active, occupied.nao, ids);
   generativeqc_tensor::cuda_check(cudaGetLastError());
 }
 """

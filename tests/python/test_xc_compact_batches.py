@@ -228,12 +228,14 @@ _SIMULATOR = r"""
 #include <thread>
 #include <vector>
 using I=std::int64_t;
+using std::isfinite;
 struct Dim { unsigned x{1},y{1},z{1}; };
 thread_local Dim threadIdx,blockIdx;
 Dim blockDim,gridDim;
 std::barrier<>* block_barrier;
 std::array<std::unique_ptr<std::barrier<>>,8> warp_barriers;
 std::array<double,256> shuffle_values;
+std::array<int,256> warp_votes;
 std::atomic<std::size_t> density_terms{},potential_terms{};
 #define __global__
 #define __device__
@@ -252,6 +254,15 @@ double __shfl_down_sync(unsigned,double value,int offset) {
   shuffle_values[lane]=value;
   warp_barriers[warp]->arrive_and_wait();
   const double result=lane%32+offset<32 ? shuffle_values[lane+offset] : value;
+  warp_barriers[warp]->arrive_and_wait();
+  return result;
+}
+int __any_sync(unsigned,int predicate) {
+  const unsigned lane=threadIdx.x,warp=lane/32;
+  warp_votes[lane]=predicate;
+  warp_barriers[warp]->arrive_and_wait();
+  const int result=std::any_of(warp_votes.begin()+warp*32,warp_votes.begin()+(warp+1)*32,
+                               [](int value){return value;});
   warp_barriers[warp]->arrive_and_wait();
   return result;
 }
@@ -385,7 +396,7 @@ int main() {
           }
   launch({32,4,1},{128,1,1},[&] {
     batch_density_features(tiles.data(),ao.data(),work.data(),features.data(),0,spins,jets,
-                            work_jets,terms,2,&error,{});
+                            work_jets,terms,2,&error,{},ids.data());
   });
   for (const auto& tile : tiles)
     for (I spin=0;spin<spins;++spin)

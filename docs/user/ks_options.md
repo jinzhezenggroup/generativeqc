@@ -121,6 +121,27 @@ See the [order-six/seven default decision](../../.agents/notes/implemented/perfo
 and [low-order default decision](../../.agents/notes/implemented/performance/2026-10-17-weighted-relative-force-responses.md)
 for qualification boundaries and retained alternatives.
 
+### CUDA occupied-frame XC features
+
+Strict-FP64 native CUDA KS prefers an authenticated occupied orbital frame when
+evaluating physical four-jet density/gradient/tau features. This reuses the
+accepted density's factorization; it does not change the functional, grid,
+potential assembly, Direct J/K operators or convergence gates. Both RKS and UKS
+retain their original occupations and spin conventions.
+
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=0` selects the matrix contraction. Unset,
+empty or `1` requests occupied reuse; other nonempty values also select the
+matrix route. The preference is captured when preparing the native owner:
+recreate the prepared owner after changing it. Admission still requires the
+live accepted density/frame identity, strict FP64 and a smaller occupied rank
+than the tile's active AO span. Imported, held or mixed densities, response,
+nonlocal and chunk paths retain matrix evaluation when no valid lease exists.
+Unrepresentable projected panels fall back to the original stored-density
+calculation, rather than changing density storage semantics.
+
+See the [generated arithmetic and lifetime contract](../developer/xc_native_cuda.md#occupied-frame-density-features)
+and [independent representability decision](../../.agents/notes/implemented/numerics/2026-10-17-occupied-xc-representability.md).
+
 ### CUDA final-state validation
 
 Native CUDA KS automatically requests resident final-state matrix products

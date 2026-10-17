@@ -325,10 +325,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
   bool occupied_xc_frame_ready{};
-  const bool occupied_xc_requested = [] {
-    const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
-    return value && value[0] == '1' && value[1] == '\0';
-  }();
+  const bool occupied_xc_requested =
+      cuda_ks_occupied_xc_requested(std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC"));
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};

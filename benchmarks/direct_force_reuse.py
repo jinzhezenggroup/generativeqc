@@ -6,6 +6,8 @@ five moved-warm calls and the original 1800-second population limit. Independent
 oracles are reconstructed from the existing pinned benchmark evidence.
 Use --weighted-responses to isolate the low-order relative-response default
 against its nuclear rollback while keeping the qualified order-6/7 defaults.
+Use --occupied-xc to isolate accepted-frame XC reuse against its matrix rollback,
+while retaining all qualified Direct force defaults in both arms.
 """
 
 from __future__ import annotations
@@ -106,7 +108,7 @@ def _stop(child: subprocess.Popen) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Isolate one force selector without changing device visibility or limits."""
+    """Isolate one arithmetic selector without changing visibility or limits."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=raw_output_path)
     parser.add_argument("--atoms", type=int, choices=(48, 96), default=96)
@@ -120,16 +122,24 @@ def main(argv: Sequence[str] | None = None) -> None:
         choices=("relative-reuse", "relative-density", "automatic"),
         default=None,
     )
-    parser.add_argument(
+    arithmetic_axis = parser.add_mutually_exclusive_group()
+    arithmetic_axis.add_argument(
         "--weighted-responses",
         action="store_true",
         help="compare nuclear/automatic low-order responses; retain order-6/7 defaults",
     )
+    arithmetic_axis.add_argument(
+        "--occupied-xc",
+        action="store_true",
+        help="compare matrix/automatic occupied-frame XC; retain force defaults",
+    )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    if args.weighted_responses and (args.baseline or args.candidate):
+    if (args.weighted_responses or args.occupied_xc) and (
+        args.baseline or args.candidate
+    ):
         parser.error(
-            "--weighted-responses cannot be combined with --baseline/--candidate"
+            "an arithmetic default comparison cannot be combined with --baseline/--candidate"
         )
     for name in ("SLURM_JOB_ID", "CUDA_VISIBLE_DEVICES", "GENERATIVEQC_LIBRARY"):
         if not os.environ.get(name):
@@ -142,7 +152,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     environment = dict(os.environ, GENERATIVEQC_CUDA_KS_OCCUPIED_XC="0")
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         environment[name] = "8"
-    if args.weighted_responses:
+    if args.occupied_xc:
+        selector_name = "GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+        selectors = ("0", None)
+        environment.pop("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", None)
+        environment.pop("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES", None)
+    elif args.weighted_responses:
         selector_name = "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
         selectors = ("0", None)
         environment.pop("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", None)

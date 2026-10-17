@@ -326,6 +326,18 @@ calls and five moved-warm calls. Do not combine it with `--baseline` or
 An original-library comparison is additionally required to detect any cold
 module-loading cost hidden by a same-image selector comparison.
 
+To qualify occupied-frame XC reuse independently of the Direct force choices,
+use the same finite-allocation command with `--occupied-xc` instead of
+`--weighted-responses`. This compares explicit occupied-XC rollback with a
+genuinely unset preference and clears inherited weighted-force and
+order-six/seven overrides in both arms. It retains the original grid,
+strict-FP64 gates, 1800-second population limit and five calls in each warm
+population. The comparison axes are mutually exclusive. Include an original
+library control to expose cold module-loading/preparation changes, actual
+occupied-frame generation/launch receipts to show admission, and independent
+stored-density exponent-edge tests in addition to full E+F oracles. Do not
+attribute changed SCF iteration counts to an isolated contraction speedup.
+
 Two preparation-time experimental controls retain the incumbent defaults:
 `GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE=8|16|32` changes only the admitted
 dd×dp page width (default 32); `GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR=1`

@@ -91,8 +91,19 @@ def scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, "fixture")
 
 
-def test_weighted_response_comparison_isolates_its_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scheduler: None
+@pytest.mark.parametrize(
+    "axis, selector",
+    [
+        ("--weighted-responses", "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"),
+        ("--occupied-xc", "GENERATIVEQC_CUDA_KS_OCCUPIED_XC"),
+    ],
+)
+def test_arithmetic_comparison_isolates_its_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scheduler: None,
+    axis: str,
+    selector: str,
 ) -> None:
     """Inherited rollbacks must not leak into either automatic comparison arm."""
     import json
@@ -100,6 +111,7 @@ def test_weighted_response_comparison_isolates_its_default(
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-scheduler-assigned")
     monkeypatch.setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", "spatial-reuse")
     monkeypatch.setenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES", "0")
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC", "0")
     launches = []
 
     class Child:
@@ -117,15 +129,18 @@ def test_weighted_response_comparison_isolates_its_default(
     monkeypatch.setattr(direct_force_reuse.subprocess, "Popen", Child)
     monkeypatch.setattr(direct_force_reuse.os, "killpg", lambda *args: None)
     output = tmp_path / "weighted"
-    direct_force_reuse.main([str(output), "--weighted-responses"])
+    direct_force_reuse.main([str(output), axis])
     assert len(launches) == 2
-    selector = "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
     assert launches[0]["env"][selector] == "0"
     assert selector not in launches[1]["env"]
     for options in launches:
         assert "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS" not in options["env"]
         assert options["env"]["CUDA_VISIBLE_DEVICES"] == "GPU-scheduler-assigned"
         assert options["start_new_session"]
+        if axis == "--occupied-xc":
+            assert "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES" not in options["env"]
+        else:
+            assert options["env"]["GENERATIVEQC_CUDA_KS_OCCUPIED_XC"] == "0"
     assert json.loads((output / "comparison.json").read_text()) == {
         "selector": selector,
         "baseline": "0",
@@ -135,15 +150,24 @@ def test_weighted_response_comparison_isolates_its_default(
 
 
 @pytest.mark.parametrize("flag", ["--baseline", "--candidate"])
-def test_weighted_response_comparison_rejects_mixed_axes(
-    tmp_path: Path, scheduler: None, flag: str
+@pytest.mark.parametrize("axis", ["--weighted-responses", "--occupied-xc"])
+def test_arithmetic_comparison_rejects_mixed_axes(
+    tmp_path: Path, scheduler: None, flag: str, axis: str
 ) -> None:
     """Reject an ambiguous comparison before starting or claiming output."""
     output = tmp_path / "not-started"
     with pytest.raises(SystemExit, match="2"):
-        direct_force_reuse.main(
-            [str(output), "--weighted-responses", flag, "automatic"]
-        )
+        direct_force_reuse.main([str(output), axis, flag, "automatic"])
+    assert not output.exists()
+
+
+def test_arithmetic_comparisons_are_mutually_exclusive(
+    tmp_path: Path, scheduler: None
+) -> None:
+    """Reject an ambiguous arithmetic comparison before claiming any output."""
+    output = tmp_path / "not-started"
+    with pytest.raises(SystemExit, match="2"):
+        direct_force_reuse.main([str(output), "--weighted-responses", "--occupied-xc"])
     assert not output.exists()
 
 
