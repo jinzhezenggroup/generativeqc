@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import lzma
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -67,8 +68,103 @@ PRIMARY = "primary-node5/candidate/r2scan-3c-96"
 
 
 @pytest.fixture
-def packet() -> dict[str, Any]:
-    return evidence.load_packet()
+def packet(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Exercise scalar contracts without requiring an optional historical object."""
+    protocols = {
+        f"raw/reference-{case}.json.xz": {"method": method, "atoms": atoms}
+        for case, method, atoms in (
+            ("r2scan-3c-96", "r2SCAN-3c", 96),
+            ("hf-48", "RHF", 48),
+        )
+    }
+    monkeypatch.setitem(
+        evidence.REFERENCE, "load", lambda member: {"protocol": protocols[member]}
+    )
+    catalog = {
+        hashlib.sha256(
+            json.dumps(protocol, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(): {"pinned_oracle_member": member}
+        for member, protocol in protocols.items()
+    }
+    rows = [[1.0, 2, 3] for _ in evidence.PHASES]
+    population = {
+        "source_identity": "1" * 64,
+        "maximum_energy_error": 0.0,
+        "maximum_force_error": 0.0,
+        "samples_per_phase": dict(evidence.SAMPLES),
+        "complete_seconds": {phase: 1.0 for phase in evidence.SAMPLES},
+        "rows": rows,
+    }
+    populations = {}
+    for digest, binding in catalog.items():
+        case = (
+            binding["pinned_oracle_member"]
+            .removeprefix("raw/reference-")
+            .removesuffix(".json.xz")
+        )
+        populations[f"primary-node5/candidate/{case}"] = {
+            **copy.deepcopy(population),
+            "protocol_sha256": digest,
+        }
+    populations["secondary-first/candidate/r2scan-3c-96"] = copy.deepcopy(
+        populations[PRIMARY]
+    )
+    record = {
+        "phase": "warm",
+        "gate": True,
+        "converged": True,
+        "energy_error": 0.0,
+        "force_error": 0.0,
+        "iterations": 2,
+        "fock_builds": 3,
+        "complete_seconds": 1.0,
+        "seconds": 0.75,
+        "prepare_seconds": 0.25,
+    }
+    profile = {
+        "warm": {
+            "record": record,
+            "exclusive_host_seconds": {"scope": 0.75},
+            "exclusive_device_window_seconds": {"scope": 0.75},
+            "complete_wall_ledger": {"execution": 0.75, "preparation": 0.25},
+        }
+    }
+    return {
+        "schema": "direct-relative-scalar-receipts-v1",
+        "columns": ["complete_seconds", "iterations", "fock_builds"],
+        "phases": list(evidence.PHASES),
+        "bindings": {
+            "fixture": {
+                "native_identity": "1" * 64,
+                "revision": "2" * 40,
+                "all_production_inputs_byte_equal": True,
+                "production_input_count": 2,
+            }
+        },
+        "protocols": catalog,
+        "populations": populations,
+        "peers": {
+            "reference-node5": {
+                **copy.deepcopy(populations[PRIMARY]),
+                "columns": ["complete_seconds", "iterations", "scf_jk_builds"],
+                "independent_oracle": "raw/reference-r2scan-3c-96.json.xz",
+                "protocol_source_files_sha256": "3" * 64,
+            }
+        },
+        "profiles": {
+            name: copy.deepcopy(profile)
+            for name in ("relative-six-clean/candidate", "relative-six/candidate")
+        },
+    }
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_DIRECT_EVIDENCE_HISTORY_TEST") != "1",
+    reason="opt-in replay requires the explicitly retained historical Git object",
+)
+def test_original_historical_scalar_packet() -> None:
+    """Keep real retained-data replay explicit in shallow or exported checkouts."""
+    evidence.summarize(evidence.load_packet())
 
 
 def _run(packet: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
