@@ -123,9 +123,11 @@ int generativeqc_residency_observer_unbind_v1(generativeqc::runtime::ResidencyOb
 void* generativeqc_resource_ledger_create_v1(std::size_t bytes, int device) {
   if (device < 0) return nullptr;
   try {
-    return new std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>(
-        std::make_shared<generativeqc::runtime::DeviceResourceLedger>(
-            generativeqc::runtime::DeviceResourceLedger{bytes, device}));
+    auto ledger = std::make_shared<generativeqc::runtime::DeviceResourceLedger>();
+    ledger->limit = bytes;
+    ledger->device = device;
+    ledger->declared_peak = bytes;
+    return new std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>(std::move(ledger));
   } catch (const std::bad_alloc&) {
     return nullptr;
   }
@@ -142,19 +144,9 @@ int generativeqc_resource_ledger_bind_v1(void* handle) {
   using namespace generativeqc::runtime;
   if (!cpu_resource_observation.active || active_device_resource_ledger || handle == nullptr)
     return 1;
-  auto ledger = *static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
-  std::lock_guard<std::mutex> lock(device_resource_mutex);
-  if (ledger->active) return 1;
-  ledger->active = true;
-  ledger->peak = ledger->live;
-  ledger->allocations = 0;
-  ledger->rejected = 0;
-  ledger->requested_bytes = 0;
-  ledger->requested_bytes_overflow = false;
-  ledger->provider_reservation_peak = ledger->provider_reserved;
-  ledger->admission_peak = ledger->live + ledger->provider_reserved;
-  active_device_resource_ledger = std::move(ledger);
-  return 0;
+  return bind_device_resource_ledger(*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle))
+             ? 0
+             : 1;
 }
 
 int generativeqc_resource_ledger_read_v1(void* handle, std::uint64_t* values) {
@@ -526,11 +518,7 @@ int generativeqc_resource_tracking_end_v1(std::uint64_t* peak, std::uint64_t* sa
   *samples = observation.samples;
   observation.active = false;
   observation.cpu_worker_limit = 0;
-  if (generativeqc::runtime::active_device_resource_ledger) {
-    std::lock_guard<std::mutex> lock(generativeqc::runtime::device_resource_mutex);
-    generativeqc::runtime::active_device_resource_ledger->active = false;
-  }
-  generativeqc::runtime::active_device_resource_ledger.reset();
+  generativeqc::runtime::unbind_device_resource_ledger();
   return 0;
 }
 

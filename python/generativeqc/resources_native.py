@@ -15,6 +15,7 @@ def observe_method_call(
     owner: typing.Any,
     phase: typing.Any = "observation",
     previous: typing.Any = None,
+    native_managed: bool = False,
 ) -> typing.Any:
     """Bind the same prepared owner around setup and each synchronous replay.
 
@@ -24,12 +25,30 @@ def observe_method_call(
     """
     from generativeqc_compiler.common.resources import CpuResourceObservation
 
-    observed = CpuResourceObservation(library, cpu_workers=1, ledger=ledger)
+    if native_managed and ledger is None:
+        raise ValueError(
+            "native prepared observation requires its resource metadata handle"
+        )
+    observed = CpuResourceObservation(
+        library,
+        enabled=not native_managed,
+        cpu_workers=1,
+        ledger=None if native_managed else ledger,
+    )
     diagnostics = dict(previous or {})
     diagnostics.update(plan=plan.to_dict(), owner=owner, phase=phase)
 
     def evidence() -> typing.Any:
+        if native_managed:
+            snapshot = ledger.native_observation()
+            observed.device_observation = snapshot["device_ledger"]
+            observed.peak_bytes = snapshot["sampled_item_peak_host_bytes"]
+            observed.samples = snapshot["samples"]
+            observed.cuda_arena_peak_bytes = snapshot["sampled_cuda_arena_peak_bytes"]
+            observed.cuda_arena_samples = snapshot["cuda_arena_samples"]
         record = observed.to_dict()
+        if native_managed:
+            record["scope_owner"] = "native-prepared-owner"
         if owner == "ks":
             record["cuda_scope"] = (
                 "common direct-J provider arena samples; complete explicit KS device capacities are in device_ledger"
@@ -108,7 +127,12 @@ class NativeDeviceLedger:
     """
 
     def __init__(
-        self, library: typing.Any, plan: typing.Any, *, owner: typing.Any = "hf"
+        self,
+        library: typing.Any,
+        plan: typing.Any,
+        *,
+        owner: typing.Any = "hf",
+        prepared_kind: str | None = None,
     ) -> None:
         plan.require_feasible()
         self.owner = owner
@@ -120,6 +144,13 @@ class NativeDeviceLedger:
         self.library = library
         self.handle = None
         self._capacity_admission = None
+        self.prepared_call = (
+            self.native_prepare(prepared_kind) if prepared_kind is not None else None
+        )
+        if self.prepared_call is not None:
+            self._destroy = library.generativeqc_device_resources_destroy
+            self._create_public_inventory(candidate.estimates)
+            return
         create = getattr(
             library, "generativeqc_resource_ledger_create_from_buffers_v1", None
         )
@@ -133,6 +164,7 @@ class NativeDeviceLedger:
                 )
         library.generativeqc_resource_ledger_destroy_v1.argtypes = [ctypes.c_void_p]
         library.generativeqc_resource_ledger_destroy_v1.restype = None
+        self._destroy = library.generativeqc_resource_ledger_destroy_v1
         library.generativeqc_resource_ledger_bind_v1.argtypes = [ctypes.c_void_p]
         library.generativeqc_resource_ledger_bind_v1.restype = ctypes.c_int
         library.generativeqc_resource_ledger_read_v1.argtypes = [
@@ -189,6 +221,98 @@ class NativeDeviceLedger:
             )
             if not self.handle:
                 raise MemoryError("could not allocate native resource ledger metadata")
+
+    def _create_public_inventory(self, estimates: typing.Any) -> None:
+        """Use only the selected public owner ABI; rejection never retries private creation."""
+        from . import _native
+
+        if not 0 < len(estimates) <= 2**32 - 1:
+            raise ValueError("native selected inventory count exceeds uint32")
+        rows = (_native.DeviceResourceBuffer * len(estimates))(
+            *(
+                _native.DeviceResourceBuffer(
+                    estimate.bytes,
+                    4
+                    if estimate.space.startswith("device:")
+                    else {"pinned": 2, "pageable": 3}[estimate.space],
+                    int(estimate.space.split(":")[1])
+                    if estimate.space.startswith("device:")
+                    else 0,
+                    estimate.first_phase,
+                    estimate.last_phase,
+                    int(estimate.accounting == "runtime_allowance"),
+                )
+                for estimate in estimates
+            )
+        )
+        descriptor = _native.DeviceResourceDescriptor(
+            ctypes.sizeof(_native.DeviceResourceDescriptor),
+            _native.ABI_VERSION,
+            rows,
+            len(rows),
+        )
+        handle = ctypes.c_void_p()
+        status = self.library.generativeqc_device_resources_create(
+            ctypes.byref(descriptor), ctypes.byref(handle)
+        )
+        if status or not handle.value:
+            if handle.value:
+                self._destroy(handle)
+            if status == _native.STATUS_OUT_OF_MEMORY:
+                raise MemoryError("native prepared resource metadata allocation failed")
+            if status == _native.STATUS_NOT_IMPLEMENTED:
+                raise NotImplementedError(
+                    "native prepared resource inventory is unsupported"
+                )
+            raise ValueError("native prepared resource inventory was rejected")
+        try:
+            snapshot = _native.DeviceResourceDiagnostic(
+                ctypes.sizeof(_native.DeviceResourceDiagnostic), _native.ABI_VERSION
+            )
+            if self.library.generativeqc_device_resources_read(
+                handle, ctypes.byref(snapshot)
+            ):
+                raise ValueError(
+                    "native prepared resource creation returned no diagnostic"
+                )
+            devices = {row.device for row in rows if row.space == 4}
+            if devices != {snapshot.device} or not (
+                0 <= snapshot.device <= 2**31 - 1
+                and snapshot.numeric_limit <= snapshot.declared_device_peak <= 2**63 - 1
+                and snapshot.struct_size
+                == ctypes.sizeof(_native.DeviceResourceDiagnostic)
+                and snapshot.abi_version == _native.ABI_VERSION
+                and snapshot.requested_bytes_available == 1
+                and not any(
+                    getattr(snapshot, name)
+                    for name in (
+                        "numeric_live_bytes",
+                        "numeric_peak_bytes",
+                        "allocations",
+                        "rejected_allocations",
+                        "requested_bytes",
+                        "provider_reserved_bytes",
+                        "provider_reservation_peak_bytes",
+                        "combined_peak_bytes",
+                        "sampled_host_peak_bytes",
+                        "host_samples",
+                        "sampled_cuda_arena_peak_bytes",
+                        "cuda_arena_samples",
+                    )
+                )
+            ):
+                raise ValueError(
+                    "native prepared resource creation returned invalid admission"
+                )
+            self.device, self.limit = snapshot.device, snapshot.numeric_limit
+            self._capacity_admission = {
+                "source": "native-device-ledger-plan-v1",
+                "declared_device_peak": snapshot.declared_device_peak,
+            }
+        except BaseException:
+            self._destroy(handle)
+            raise
+        self.handle = handle.value
 
     def _create_from_inventory(self, create: typing.Any, estimates: typing.Any) -> None:
         """Bind only a complete native receipt, never retrying rejected metadata."""
@@ -255,6 +379,103 @@ class NativeDeviceLedger:
         self._capacity_admission = admission
         self.handle = handle.value
 
+    def native_prepare(self, kind: str) -> typing.Any:
+        """Select the native lifecycle ABI once; only a missing symbol permits compatibility."""
+        if kind not in ("batch", "calculation"):
+            raise ValueError("unknown native prepared resource owner kind")
+        prepare = getattr(
+            self.library, f"generativeqc_{kind}_prepare_with_device_resources", None
+        )
+        if prepare is not None and not all(
+            hasattr(self.library, name)
+            for name in (
+                f"generativeqc_{kind}_get_device_resources",
+                "generativeqc_device_resources_read",
+                "generativeqc_device_resources_create",
+                "generativeqc_device_resources_destroy",
+            )
+        ):
+            raise RuntimeError("native prepared resource ABI is incomplete")
+        return prepare
+
+    def native_observation(self) -> dict[str, typing.Any]:
+        """Present completed native-operation samples without binding frontend observers."""
+        from . import _native
+
+        if not self.handle:
+            raise RuntimeError("native resource ledger is closed")
+        snapshot = _native.DeviceResourceDiagnostic(
+            ctypes.sizeof(_native.DeviceResourceDiagnostic), _native.ABI_VERSION
+        )
+        status = self.library.generativeqc_device_resources_read(
+            self.handle, ctypes.byref(snapshot)
+        )
+        if status:
+            raise RuntimeError("native prepared resource observation is unavailable")
+        if (
+            snapshot.struct_size != ctypes.sizeof(_native.DeviceResourceDiagnostic)
+            or snapshot.abi_version != _native.ABI_VERSION
+            or snapshot.device != self.device
+            or snapshot.numeric_limit != self.limit
+            or snapshot.requested_bytes_available not in (0, 1)
+            or not snapshot.numeric_live_bytes
+            <= snapshot.numeric_peak_bytes
+            <= snapshot.numeric_limit
+            or snapshot.numeric_live_bytes + snapshot.provider_reserved_bytes
+            > snapshot.numeric_limit
+            or snapshot.combined_peak_bytes > snapshot.numeric_limit
+            or snapshot.numeric_live_bytes + snapshot.provider_reserved_bytes
+            > snapshot.combined_peak_bytes
+            or snapshot.numeric_peak_bytes > snapshot.combined_peak_bytes
+            or snapshot.provider_reservation_peak_bytes > snapshot.combined_peak_bytes
+            or snapshot.provider_reserved_bytes
+            > snapshot.provider_reservation_peak_bytes
+            or snapshot.declared_device_peak < snapshot.numeric_limit
+            or (
+                self._capacity_admission is not None
+                and snapshot.declared_device_peak
+                != self._capacity_admission["declared_device_peak"]
+            )
+        ):
+            raise ValueError("native prepared resource observation is inconsistent")
+        device = {
+            "device": self.device,
+            "limit_bytes": self.limit,
+            "live_bytes": snapshot.numeric_live_bytes,
+            "peak_bytes": snapshot.numeric_peak_bytes,
+            "allocations": snapshot.allocations,
+            "rejected_allocations": snapshot.rejected_allocations,
+            "owner": self.owner,
+            "scope": "owned CUDA buffer capacities; excludes driver/graph/pool and library-internal allocations",
+            "requested_bytes": snapshot.requested_bytes
+            if snapshot.requested_bytes_available
+            else None,
+            "admission": {
+                name: getattr(snapshot, name)
+                for name in (
+                    "numeric_live_bytes",
+                    "numeric_peak_bytes",
+                    "provider_reserved_bytes",
+                    "provider_reservation_peak_bytes",
+                    "combined_peak_bytes",
+                )
+            },
+        }
+        device["admission"]["limit_bytes"] = snapshot.numeric_limit
+        if self._capacity_admission is not None:
+            device["capacity_admission"] = dict(self._capacity_admission)
+        return {
+            "device_ledger": device,
+            "sampled_item_peak_host_bytes": snapshot.sampled_host_peak_bytes
+            if snapshot.host_samples
+            else None,
+            "samples": snapshot.host_samples or None,
+            "sampled_cuda_arena_peak_bytes": snapshot.sampled_cuda_arena_peak_bytes
+            if snapshot.cuda_arena_samples
+            else None,
+            "cuda_arena_samples": snapshot.cuda_arena_samples or None,
+        }
+
     def to_dict(self) -> typing.Any:
         """Read numeric capacities, v2 requested bytes and additive v3 admission.
 
@@ -263,6 +484,8 @@ class NativeDeviceLedger:
         """
         if not self.handle:
             raise RuntimeError("native resource ledger is closed")
+        if self.prepared_call is not None:
+            return self.native_observation()["device_ledger"]
         count = 5 if self._read_v2 is not None else 4
         values = (ctypes.c_uint64 * count)()
         status = (
@@ -309,7 +532,7 @@ class NativeDeviceLedger:
     def close(self) -> None:
         """Release the observation handle; any live native buffers keep charges."""
         if self.handle:
-            self.library.generativeqc_resource_ledger_destroy_v1(self.handle)
+            self._destroy(self.handle)
             self.handle = None
 
     def __del__(self) -> None:

@@ -139,12 +139,99 @@ void test_transactional_wire_and_lifecycle() {
   release.join();
   require(lifetime.expired(), "cross-thread final release retained ledger metadata");
 }
+
+void test_native_scope_without_observation() {
+  auto ledger = std::make_shared<DeviceResourceLedger>();
+  ledger->limit = 64;
+  ledger->device = 7;
+  std::unique_ptr<DeviceProviderAllowance> retained;
+  {
+    DeviceResourceScope operation(ledger);
+    require(ledger->active && active_device_resource_ledger == ledger,
+            "native scope depended on a CPU/Python observation");
+    retained = std::make_unique<DeviceProviderAllowance>(7, 64);
+    sample_cpu_capacity(17);
+    sample_cuda_arena_capacity(11);
+    const auto available = device_resource_available(7);
+    {
+      DeviceResourceScope nested(ledger);
+      require(device_resource_available(7) == available && ledger->provider_reserved == 64,
+              "same-owner nesting reset or detached retained charges");
+    }
+    auto foreign = std::make_shared<DeviceResourceLedger>();
+    bool rejected = false;
+    try {
+      DeviceResourceScope wrong_owner(foreign);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected && !foreign->active && active_device_resource_ledger == ledger,
+            "foreign owner replaced the native prepared ledger");
+    bool cross_thread_rejected = false;
+    std::thread concurrent([&] {
+      try {
+        DeviceResourceScope duplicate(ledger);
+      } catch (const std::invalid_argument&) {
+        cross_thread_rejected = true;
+      }
+      require(!active_device_resource_ledger, "failed worker binding leaked thread-local state");
+    });
+    concurrent.join();
+    require(cross_thread_rejected, "concurrent thread borrowed another operation's owner");
+    require(cpu_resource_observation.active && generativeqc_resource_tracking_begin_v1(1) == 1,
+            "native operation did not own its observation or replaced an active observer");
+    std::uint64_t peak = 0, samples = 0;
+    require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 &&
+                active_device_resource_ledger == ledger && ledger->active &&
+                resource_cpu_worker_limit() == 1,
+            "ending observation detached an executing native resource owner");
+  }
+  require(!ledger->active && !active_device_resource_ledger &&
+              native_device_resource_scope_depth == 0 && ledger->provider_reserved == 64,
+          "native scope did not unbind or erased retained provider charges");
+  require(!cpu_resource_observation.active && ledger->native_host_peak == 17 &&
+              ledger->native_host_samples == 1 && ledger->native_cuda_arena_peak == 11 &&
+              ledger->native_cuda_arena_samples == 1,
+          "native operation did not preserve samples or restore its caller's observation state");
+  try {
+    DeviceResourceScope replay(ledger);
+    require(ledger->provider_reservation_peak == 64 && ledger->admission_peak == 64,
+            "replay reset did not include retained live reservations");
+    DeviceProviderAllowance excess(7, 1);
+    throw std::runtime_error("over-cap provider reservation was accepted");
+  } catch (const std::bad_alloc&) {
+  }
+  require(!ledger->active && !active_device_resource_ledger && ledger->rejected == 1,
+          "exception did not restore the native resource binding");
+  require(generativeqc_resource_tracking_begin_v1(1) == 0 && bind_device_resource_ledger(ledger),
+          "legacy outer binding was rejected");
+  sample_cpu_capacity(33);
+  {
+    DeviceResourceScope borrowed(ledger);
+    require(ledger->rejected == 0, "outer scope did not reset operation counters");
+  }
+  require(ledger->active && active_device_resource_ledger == ledger,
+          "native borrowed scope detached its legacy outer owner");
+  require(ledger->native_host_samples == 0 && cpu_resource_observation.active,
+          "native scope mislabeled a borrowed outer observer as an isolated owner sample");
+  unbind_device_resource_ledger();
+  std::uint64_t peak = 0, samples = 0;
+  require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 && peak == 33,
+          "native scope erased its caller's outer samples");
+  std::weak_ptr<DeviceResourceLedger> lifetime = ledger;
+  ledger.reset();
+  require(!lifetime.expired(), "metadata close released a retained provider owner");
+  std::thread release([lease = std::move(retained)]() mutable { lease.reset(); });
+  release.join();
+  require(lifetime.expired(), "cross-thread release retained the closed native owner");
+}
 }  // namespace
 
 int main() {
   try {
     test_sparse_allowance_accounting();
     test_transactional_wire_and_lifecycle();
+    test_native_scope_without_observation();
     std::cout << "Native device-ledger admission, rollback and retained lifecycle passed\n";
     return 0;
   } catch (const std::exception& error) {

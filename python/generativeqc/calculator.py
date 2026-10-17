@@ -2895,6 +2895,7 @@ class Calculator:
         auxiliary_system = ctypes.c_void_p()
         calculation = ctypes.c_void_p()
         ledger = None
+        resource_prepare = None
         resource_diagnostics = None
         try:
             if (
@@ -2904,8 +2905,12 @@ class Calculator:
                 from .resources_native import NativeDeviceLedger
 
                 ledger = NativeDeviceLedger(
-                    self._library, resource_plan, owner=resource_plan.requests[0].name
+                    self._library,
+                    resource_plan,
+                    owner=resource_plan.requests[0].name,
+                    prepared_kind="calculation",
                 )
+                resource_prepare = ledger.prepared_call
             system = self._create_native_system(
                 context, native_atoms, charge, multiplicity
             )
@@ -2925,6 +2930,14 @@ class Calculator:
             )
 
             def prepare() -> typing.Any:
+                if resource_prepare is not None:
+                    return resource_prepare(
+                        context,
+                        system,
+                        ctypes.byref(method_descriptor),
+                        ledger.handle,
+                        ctypes.byref(calculation),
+                    )
                 return self._library.generativeqc_calculation_prepare(
                     context,
                     system,
@@ -2944,6 +2957,7 @@ class Calculator:
                     prepare,
                     owner=resource_plan.requests[0].name,
                     phase="preparation",
+                    native_managed=resource_prepare is not None,
                 )
                 if status != _native.STATUS_SUCCESS:
                     check_resource_status(self._library, status, resource_diagnostics)
@@ -3012,6 +3026,7 @@ class Calculator:
                     execute,
                     owner=resource_plan.requests[0].name,
                     previous=resource_diagnostics,
+                    native_managed=resource_prepare is not None,
                 )
             try:
                 if resource_diagnostics is None:

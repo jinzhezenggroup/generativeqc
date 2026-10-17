@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "api/device_resources.hpp"
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
@@ -121,9 +122,11 @@ generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(calculation->initial_guess, out);
 }
 
-generativeqc_status generativeqc_calculation_prepare(
+static generativeqc_status prepare_calculation(
     generativeqc_context* context, const generativeqc_system* system,
-    const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
+    const generativeqc_method_descriptor* descriptor,
+    const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
+    generativeqc_calculation** calculation) {
   generativeqc::runtime::host_trace::Region trace("calculation_prepare");
   if (context == nullptr || system == nullptr || descriptor == nullptr || calculation == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -140,8 +143,16 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   try {
+    if (resource_owner) {
+      if (context->state.executed_backend != generativeqc::core::kCudaBackend)
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      if (context->state.device_id != resource_owner->device)
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
+    candidate->resource_ledger = resource_owner;
     candidate->plan = generativeqc::methods::prepare_calculation(
         context->state, system->data, *descriptor,
         generativeqc::api::native_auxiliary_basis(*descriptor));
@@ -149,6 +160,36 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+generativeqc_status generativeqc_calculation_prepare(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
+  return prepare_calculation(context, system, descriptor, {}, calculation);
+}
+
+generativeqc_status generativeqc_calculation_prepare_with_device_resources(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor,
+    const generativeqc_device_resources* resources, generativeqc_calculation** calculation) {
+  if (!resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return prepare_calculation(context, system, descriptor,
+                             generativeqc::api::device_resource_owner(resources), calculation);
+}
+
+generativeqc_status generativeqc_calculation_get_device_resources(
+    const generativeqc_calculation* calculation, generativeqc_device_resources** resources) {
+  if (!calculation || !resources || *resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  if (!calculation->resource_ledger) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    auto handle =
+        std::make_unique<generativeqc::api::DeviceResourceHandle>(calculation->resource_ledger);
+    *resources = generativeqc::api::device_resource_handle(handle.release());
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&calculation->context->last_detail);
   }
 }
 
@@ -178,6 +219,7 @@ generativeqc_status generativeqc_calculation_execute_components_v1(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  std::optional<generativeqc::runtime::DeviceResourceScope> resource_scope;
   generativeqc::api::PreparedPublication publication(*calculation->plan);
   calculation->precision_work.reset();
   calculation->initial_guess.reset();
@@ -190,6 +232,7 @@ generativeqc_status generativeqc_calculation_execute_components_v1(
   // An attempted execution revokes any internal final-state token even if
   // the output descriptor is rejected before the method can run.
   try {
+    resource_scope.emplace(calculation->resource_ledger);
     calculation->plan->invalidate_result();
   } catch (...) {
     return generativeqc::api::map_exception(&calculation->context->last_detail);
