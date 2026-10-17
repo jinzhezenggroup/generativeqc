@@ -975,7 +975,10 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       std::all_of(result.forces.begin(), result.forces.end(),
                   [](double value) { return std::isfinite(value); })) {
     result.precision_work.gradient = {1, 2, 0, 0, 0};
-    result.precision_work.gradient_qualification = 7;
+    result.precision_work.gradient_qualification =
+        independently_qualified_df_hf_gradient(n, data.raw.naux, data.raw.ncoord / 3)
+            ? 7
+            : 107;
     result.precision_work.gradient_weighted_work_collected = true;
     result.precision_work.gradient_weighted_work = gradient_resources.precision_work;
   }
