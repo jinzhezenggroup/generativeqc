@@ -252,6 +252,48 @@ Full arrays, traces and immutable source/cache/device receipts remain in ignored
 with the implementation PR, explicitly not an offline force replay. No new
 tracked archive, storage budget, release or tag is introduced.
 
+## Fresh same-allocation GPU4PySCF comparison
+
+Slurm 9957 also completed the unchanged twelve-call GPU4PySCF 1.8.1 population
+on the same assigned RTX 5090, UUID
+`GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d`. All twelve peer endpoints pass the
+independent full-array gates, with maximum energy/force errors of
+1.819e-12 Eh and 5.445e-12 Eh/Bohr. The finite allocation and every native/peer
+population completed; no population timeout is omitted.
+
+| r2SCAN-3c96 complete phase | Candidate seconds | GPU4PySCF seconds | Candidate overhead |
+| --- | ---: | ---: | ---: |
+| Cold | 243.818824 | 153.054881 | 59.302% |
+| Five-call warm median | 29.489152 | 28.644904 | 2.947% |
+| Moved geometry | 142.982348 | 106.681865 | 34.027% |
+| Five-call moved-warm median | 29.499596 | 26.412007 | 11.690% |
+
+These are complete observed trajectories, not equal-iteration kernel claims.
+The candidate uses cold 24 iterations/24 Focks, moved 13/13 and every warm
+call 1/1. The peer uses cold 59 iterations/60 J/K builds, moved 39/40,
+warm iterations `[4, 4, 4, 6, 4]` with builds `[5, 5, 5, 7, 5]`, and moved-warm
+iterations `[3, 6, 3, 3, 3]` with builds `[4, 7, 4, 4, 4]`. Keep all calls;
+do not remove the slower peer calls or normalize away convergence differences.
+The historical 26.59-second warm result is not this card/source comparison.
+
+Parity remains unachieved, especially for cold and changed geometry. The
+candidate cold profile spends 101.095287 device seconds in exact SCF J and
+95.038179 in XC/AO/grid over 24 Fock builds. This force-only change does not
+claim to fix either cold bottleneck. The next force targets are 9.302022 warm
+device seconds in other stationary/grid response and 2.272499 in one-electron
+pair response. The former includes geometry response (4.152341), Becke
+(2.485601), GEMM (1.929906), AO radial (0.508335), and other (0.225839), not
+9.3 seconds of Becke alone.
+
+An ignored CPU-only weighted one-electron graph prototype reduces post-geometry
+scalar DAG operations for `ds`/`dp`/`dd` from 1590/8809/28745 to
+836/3809/11698. This is not production code, an executed-work measurement, a
+GPU timing, or a qualified improvement. Its `dd` graph has 160 live doubles,
+so resource-bounded partitions and independent compiled oracles are required
+before any native integration or default promotion. Merely enabling the old
+implicit cooperative Hcore path already failed the 48-atom endpoint gate;
+do not repeat that experiment or mix this next implementation into this change.
+
 ## Alternatives and invariants
 
 - Do not repeat page-width/task-enumeration experiments: they do not remove this
