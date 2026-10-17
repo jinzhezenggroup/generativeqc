@@ -66,6 +66,28 @@ full-Hessian cache. DF retains its fitted primary and uses this only for LR.
 
 ## Consequences and remaining limit
 
+Source `618f7e3ddf616f7960e9e3fc9df6aa31fda26107` completes both previously
+rejected native endpoints under the unchanged 180 s / 24 GiB sampled total-device
+limits: water tetramer/STO-3G at 100.742439 s primed and 16.939636 GiB, and
+water dimer/def2-SVP at 159.903344 s first and 17.006042 GiB. The tetramer full
+matrix differs from GPU4PySCF by 1.0689623e-7. Its primed complete endpoint is
+still 7.081 times slower than GPU4PySCF (14.227901 s); capacity is not a speed win.
+
+The def2-SVP stock GPU4PySCF analytic matrix fails the unchanged 3e-6 gate
+(1.3952071e-5 error), and its next fresh SCF fails. An independent full-matrix
+oracle using CPU PySCF analytic gradients at 73 independently converged
+geometries, central steps 0.004/0.002 Bohr and Richardson extrapolation agrees
+with native within 1.4380964e-9. This is qualification-only CPU work, not a
+production fallback. Native standalone HVP/full-column agreement is 2.598e-14.
+A dense solve of the reference's own response operator reaches a 6.27e-14 true
+residual without removing the analytic discrepancy: do not blame Krylov's
+dependence threshold or relax the comparison gate. The discrepancy's cause is
+not established. Do not claim a qualified stock def2-SVP speed ratio.
+
+Retained complete measurements, negative attempts, work/memory receipts and
+reproduction scripts are in
+`benchmarks/results/wb97mv-hessian-capacity-20261017/README.md`.
+
 This fixes storage/work-admission cliffs, not arbitrary molecular scaling.
 The optional 128 KiB dense CPKS representation is unchanged; larger rotation
 spaces still execute physical matrix-free GMRES. Recycled/block response and

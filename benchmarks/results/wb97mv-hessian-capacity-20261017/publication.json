@@ -1,0 +1,52 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Two formerly rejected native capacity cases complete unchanged resource gates. Tetramer full GPU comparison and dimer independent CPU gradient full matrix pass unchanged numerical gates, as do four complete native fallback pairs. The stock def2-SVP GPU comparator fails, and the larger-system performance target remains failed; neither is promoted.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6030,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "54c8cf58ad5aefe488bc2fbfc4a14cdf7240d1c34d3faade981f7ebab5760004"
+    },
+    {
+      "bytes": 48360,
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "sha256": "25fa3b8bd9f37ee6e03655b1e731290a56dcf41bf580844e991ae7b36790231e"
+    },
+    {
+      "bytes": 4784,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "032c78f2f307c8364e1aa452f9cecae960d764cb4a3aa80f240280530fd0c8c0"
+    },
+    {
+      "bytes": 1478,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "536a724b3e184b2056de7c5433a43cb80abc52c4b0f939769dc642b4eebddd3a"
+    },
+    {
+      "bytes": 106368,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "25a90d81d280ea655f9b93d8453def6a039126c94d4b01c1eb405aad2399533d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ],
+    "notes": "Finite Slurm requests and verified compiler cache; native C++ child is Python/JIT-free. External Python benchmark/reference/oracle only. Source-618 AOT binaries plus shared tetramer worker fixture; oracle staging paths documented in README."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "618f7e3ddf616f7960e9e3fc9df6aa31fda26107"
+  }
+}

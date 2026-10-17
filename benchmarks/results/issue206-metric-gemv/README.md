@@ -129,3 +129,9 @@ records for 96/192/384 AOs and the 19-AO batch-four BLAS force record as
 `measurements/*.json.gz`, with adjacent original-blob/decoded/stored receipts.
 No historical result or acceptance gate changes; use the shared `load_record`
 reader or `gzip -dc` to recover the original bytes.
+
+The 192/384-AO batch-one BLAS and 192-AO batch-one serial force records use
+the same exact-byte gzip representation and adjacent `.storage.json` receipts.
+This retains every historical observation while making room for the bounded
+Hessian capacity qualification; decoded Git blobs and scientific gates are
+unchanged.

@@ -1,5 +1,9 @@
 # Bounded WB97M-V response reuse and grid reductions
 
+The subsequent capacity investigation and bounded-source scheduling decision
+are recorded in `2026-10-17-wb97mv-bounded-source-tiles.md`. They supersede the
+old capacity boundary, not the source-matched small-system measurements here.
+
 ## Problem and acceptance boundary
 
 PR #2590's complete CLI endpoint advantage did not establish a Hessian-phase
