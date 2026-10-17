@@ -106,7 +106,7 @@ static __device__ __constant__ unsigned kCooperativeCoulombLevels[] = {{{levels}
 static __device__ const unsigned kCooperativeCoulombRoots[] = {{{roots}}};
 static __device__ __constant__ double kCooperativeCoulombConstants[] = {{{constants}}};
 struct CooperativeDirectPairDerivativeRecurrence {{
-  MaterializedDirectPairDerivativeRecurrence recurrence;
+  DirectRelativePairDerivativeRecurrence recurrence;
   double nodes[{len(schedule.instructions)}], boys[9], rho;
   Vec3<double> difference;
   double warp_sums[8];
@@ -249,20 +249,16 @@ __device__ inline void contract_cooperative_direct_pair_force(
       recurrence.p = cached.exponent_sum;
       recurrence.coefficients[0] = batch.primitive_coefficients[a];
       recurrence.coefficients[1] = batch.primitive_coefficients[b];
+      recurrence.product_scales[0] = batch.primitive_exponents[a] / recurrence.p;
+      recurrence.product_scales[1] = batch.primitive_exponents[b] / recurrence.p;
+      recurrence.first_product = cached.product_center;
+      if (work) atomicAdd(&work->bra_preparations, 1ULL);
     }
-    for (unsigned center = 0; center + 1U < centers; ++center) {
-      if (threadIdx.x < 3U) {
-        const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
-        const auto product = prepare_materialized_direct_pair_derivative(cached,
-            batch.primitive_exponents[a], batch.primitive_exponents[b],
-            atom_position<Dual3>(batch, atoms[0], coordinate),
-            atom_position<Dual3>(batch, atoms[1], coordinate), recurrence.bra[center],
-            li, lj, threadIdx.x, threadIdx.x + 1U);
-        if (threadIdx.x == 0U) {
-          recurrence.first_product[center] = product;
-          if (work) atomicAdd(&work->bra_preparations, 1ULL);
-        }
-      }
+    if (threadIdx.x < 3U) {
+      prepare_direct_relative_pair(cached,
+          batch.primitive_exponents[a], batch.primitive_exponents[b],
+          atom_position<double>(batch, atoms[0], -1),
+          atom_position<double>(batch, atoms[1], -1), recurrence.bra, li, lj, threadIdx.x);
     }
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
@@ -273,58 +269,67 @@ __device__ inline void contract_cooperative_direct_pair_force(
         recurrence.q = cached_ket.exponent_sum;
         recurrence.coefficients[2] = batch.primitive_coefficients[c];
         recurrence.coefficients[3] = batch.primitive_coefficients[d];
-        const Vec3<double> product{recurrence.first_product[0].x.value,
-            recurrence.first_product[0].y.value, recurrence.first_product[0].z.value};
+        recurrence.product_scales[2] = batch.primitive_exponents[c] / recurrence.q;
+        recurrence.product_scales[3] = batch.primitive_exponents[d] / recurrence.q;
+        for (unsigned center = 0; center + 1U < centers; ++center) {
+          const auto atom = unique_atoms[center];
+          recurrence.response_scales[center][0] =
+              double(atoms[0] == atom) - double(atoms[1] == atom);
+          recurrence.response_scales[center][1] =
+              double(atoms[2] == atom) - double(atoms[3] == atom);
+          recurrence.response_scales[center][2] =
+              recurrence.product_scales[0] * double(atoms[0] == atom) +
+              recurrence.product_scales[1] * double(atoms[1] == atom) -
+              recurrence.product_scales[2] * double(atoms[2] == atom) -
+              recurrence.product_scales[3] * double(atoms[3] == atom);
+        }
+        const auto product = recurrence.first_product;
         shared.rho = recurrence.p * recurrence.q / (recurrence.p + recurrence.q);
         shared.difference = {product.x - cached_ket.product_center.x,
             product.y - cached_ket.product_center.y, product.z - cached_ket.product_center.z};
         boys_values<8>(shared.rho * distance_squared(product, cached_ket.product_center), shared.boys);
-        if (work) atomicAdd(&work->coulomb_preparations, 1ULL);
+        if (work) {
+          atomicAdd(&work->coulomb_preparations, 1ULL);
+          atomicAdd(&work->ket_preparations, 1ULL);
+        }
       }
+      if (threadIdx.x < 3U)
+        prepare_direct_relative_pair(cached_ket,
+            batch.primitive_exponents[c], batch.primitive_exponents[d],
+            atom_position<double>(batch, atoms[2], -1),
+            atom_position<double>(batch, atoms[3], -1), recurrence.ket, lk, ll, threadIdx.x);
       __syncthreads();
       fill_cooperative_direct_coulomb(shared);
-      for (unsigned center = 0; center + 1U < centers; ++center) {
-        if (threadIdx.x < 3U) {
-          const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
-          const auto product = prepare_materialized_direct_pair_derivative(cached_ket,
-              batch.primitive_exponents[c], batch.primitive_exponents[d],
-              atom_position<Dual3>(batch, atoms[2], coordinate),
-              atom_position<Dual3>(batch, atoms[3], coordinate), recurrence.ket,
-              lk, ll, threadIdx.x, threadIdx.x + 1U);
-          if (threadIdx.x == 0U) {
-            recurrence.second_product = product;
-            if (work) atomicAdd(&work->ket_preparations, 1ULL);
-          }
-        }
-        __syncthreads();
-        const MaterializedCoulombSpatialResponse response{recurrence.coulomb,
-            recurrence.first_product[center].x.derivative_x - recurrence.second_product.x.derivative_x};
-        for (unsigned slot = 0; slot < Slots; ++slot) {
-          if (!admitted[slot]) continue;
-          const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
-              batch.direct_ao_coefficients[ao_begin + j[slot]] *
-              batch.direct_ao_coefficients[ao_begin + k[slot]] *
-              batch.direct_ao_coefficients[ao_begin + l[slot]];
-          const double weight = coefficient * recurrence.coefficients[0] * recurrence.coefficients[1] *
-                                recurrence.coefficients[2] * recurrence.coefficients[3];
-          const auto component = weight * consume_cartesian_coulomb_states<8, Dual3>(
-              recurrence.p, recurrence.q, direct_ao_angular(batch, ao_begin + i[slot]),
-              direct_ao_angular(batch, ao_begin + j[slot]), direct_ao_angular(batch, ao_begin + k[slot]),
-              direct_ao_angular(batch, ao_begin + l[slot]), recurrence.bra[center], recurrence.ket, response);
-          const double derivative[3] = {component.derivative_x, component.derivative_y,
-                                        component.derivative_z};
+      for (unsigned slot = 0; slot < Slots; ++slot) {
+        if (!admitted[slot]) continue;
+        const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
+            batch.direct_ao_coefficients[ao_begin + j[slot]] *
+            batch.direct_ao_coefficients[ao_begin + k[slot]] *
+            batch.direct_ao_coefficients[ao_begin + l[slot]];
+        const double weight = coefficient * recurrence.coefficients[0] * recurrence.coefficients[1] *
+                              recurrence.coefficients[2] * recurrence.coefficients[3];
+        double responses[3][3]{};
+        contract_direct_relative_response_basis(direct_ao_angular(batch, ao_begin + i[slot]),
+            direct_ao_angular(batch, ao_begin + j[slot]), direct_ao_angular(batch, ao_begin + k[slot]),
+            direct_ao_angular(batch, ao_begin + l[slot]), recurrence, responses);
+        const double prefactor = weight * 2.0 * pow(kPi, 2.5) /
+            (recurrence.p * recurrence.q * sqrt(recurrence.p + recurrence.q));
+        for (unsigned center = 0; center + 1U < centers; ++center) {
+          const auto* scales = recurrence.response_scales[center];
           for (unsigned axis = 0; axis < 3U; ++axis) {
+            const double derivative = prefactor * (scales[0] * responses[0][axis] +
+                scales[1] * responses[1][axis] + scales[2] * responses[2][axis]);
             for (unsigned source = 0; source < Sources; ++source)
-              gradients[center][source][axis] += weights[slot][source] * derivative[axis];
+              gradients[center][source][axis] += weights[slot][source] * derivative;
             if (checked_derivatives) {
               const std::size_t ordinal = slot * detail::kDirectQuartetTileSize + threadIdx.x;
-              checked_derivatives[(ordinal * 4 + center) * 3 + axis] += derivative[axis];
+              checked_derivatives[(ordinal * 4 + center) * 3 + axis] += derivative;
             }
           }
-          if (work) atomicAdd(&work->component_contractions, 1ULL);
         }
-        __syncthreads();
+        if (work) atomicAdd(&work->component_contractions, 1ULL);
       }
+      __syncthreads();
     }
   }
   for (unsigned slot = 0; slot < Slots; ++slot) {

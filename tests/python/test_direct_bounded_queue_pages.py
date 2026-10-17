@@ -85,6 +85,7 @@ int main() {
   static_assert(select_direct_spd_force_schedule("unknown") == DirectSpdForceSchedule::Incumbent);
   static_assert(select_direct_spd_force_schedule("1") == DirectSpdForceSchedule::SpatialReuse);
   static_assert(select_direct_spd_force_schedule("spatial-reuse") == DirectSpdForceSchedule::SpatialReuse);
+  static_assert(select_direct_spd_force_schedule("relative-reuse") == DirectSpdForceSchedule::RelativeReuse);
   for (const bool eligible : {false, true}) {
     assert(resolve_direct_spd_force_schedule(DirectSpdForceSchedule::Incumbent, eligible) == DirectSpdForceSchedule::Incumbent);
     assert(resolve_direct_spd_force_schedule(DirectSpdForceSchedule::SpatialReuse, eligible) == DirectSpdForceSchedule::SpatialReuse);

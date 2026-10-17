@@ -702,7 +702,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
       batch.direct_maximum_shell_angular == 2U && materialized_pair_derivative_available(batch) &&
       cooperative_pair_derivative_available(batch) && force_topology &&
       block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U && block_domain.prefix &&
-      spd_schedule == DirectSpdForceSchedule::SpatialReuse);
+      (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
+       spd_schedule == DirectSpdForceSchedule::RelativeReuse));
   if (purpose == DirectScreeningPurpose::Force && !batch.direct_force_work) {
     const auto status = diagnostic.prepare();
     if (status != cudaSuccess) return status;
@@ -738,13 +739,15 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     cudaError_t error;
     runtime::cuda_trace::TraceRegion low("direct_force_low_and_order6", stream);
     if (cooperative_available && block_domain.prefix &&
-        spd_schedule == DirectSpdForceSchedule::SpatialReuse) {
+        (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
+         spd_schedule == DirectSpdForceSchedule::RelativeReuse)) {
       error = launch_direct_force_spatial_spd_low(
           Unrestricted, grid, shared_bytes, stream, batch, screening_tolerance, shell_pair_bounds,
           shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
           system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
           schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
-          exchange_coefficient, separate_sources, block_domain);
+          exchange_coefficient, separate_sources, block_domain,
+          spd_schedule == DirectSpdForceSchedule::RelativeReuse, force_topology);
     } else {
       if (cooperative_available)
         generic.template operator()<-3>();
