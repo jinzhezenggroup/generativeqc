@@ -18,11 +18,9 @@
 extern "C" cudaError_t import_cuda_mem_get_info(std::size_t*, std::size_t*);
 extern "C" cublasStatus_t import_cublas_create(cublasHandle_t*);
 extern "C" cublasStatus_t import_cublas_set_stream(cublasHandle_t, cudaStream_t);
-extern "C" cublasStatus_t import_cublas_set_pointer_mode(cublasHandle_t,
-                                                          cublasPointerMode_t);
+extern "C" cublasStatus_t import_cublas_set_pointer_mode(cublasHandle_t, cublasPointerMode_t);
 extern "C" cusolverStatus_t import_cusolver_create(cusolverDnHandle_t*);
-extern "C" cusolverStatus_t import_cusolver_set_stream(cusolverDnHandle_t,
-                                                        cudaStream_t);
+extern "C" cusolverStatus_t import_cusolver_set_stream(cusolverDnHandle_t, cudaStream_t);
 extern "C" cusolverStatus_t import_cusolver_create_params(cusolverDnParams_t*);
 extern "C" void fake_provider_reset();
 extern "C" const char* fake_provider_snapshot();
@@ -30,12 +28,10 @@ extern "C" const char* fake_provider_snapshot();
 __asm__(".symver import_cuda_mem_get_info,cudaMemGetInfo@libcudart.so.12");
 __asm__(".symver import_cublas_create,cublasCreate_v2@libcublas.so.12");
 __asm__(".symver import_cublas_set_stream,cublasSetStream_v2@libcublas.so.12");
-__asm__(
-    ".symver import_cublas_set_pointer_mode,cublasSetPointerMode_v2@libcublas.so.12");
+__asm__(".symver import_cublas_set_pointer_mode,cublasSetPointerMode_v2@libcublas.so.12");
 __asm__(".symver import_cusolver_create,cusolverDnCreate@libcusolver.so.11");
 __asm__(".symver import_cusolver_set_stream,cusolverDnSetStream@libcusolver.so.11");
-__asm__(
-    ".symver import_cusolver_create_params,cusolverDnCreateParams@libcusolver.so.11");
+__asm__(".symver import_cusolver_create_params,cusolverDnCreateParams@libcusolver.so.11");
 
 namespace {
 
@@ -81,8 +77,8 @@ int run_provider_case(const char* name) {
       static_cast<int>(cublas_stream_status), static_cast<int>(cublas_pointer_status),
       static_cast<int>(cusolver_create_status), address(cusolver_handle),
       static_cast<int>(cusolver_stream_status), static_cast<int>(cusolver_params_status),
-      address(cusolver_parameters), static_cast<int>(after_status), after_free,
-      after_total, fake_provider_snapshot());
+      address(cusolver_parameters), static_cast<int>(after_status), after_free, after_total,
+      fake_provider_snapshot());
   return 0;
 }
 

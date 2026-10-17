@@ -64,9 +64,8 @@ void bad_argument() noexcept { argument_failures.fetch_add(1, std::memory_order_
 }  // namespace
 
 extern "C" cudaError_t fake_cuda_mem_get_info_expected(std::size_t* free_bytes,
-                                                         std::size_t* total_bytes) {
-  const unsigned call =
-      expected_calls[kCudaMemGetInfo].fetch_add(1, std::memory_order_relaxed) + 1;
+                                                       std::size_t* total_bytes) {
+  const unsigned call = expected_calls[kCudaMemGetInfo].fetch_add(1, std::memory_order_relaxed) + 1;
   if (!free_bytes || !total_bytes) {
     bad_argument();
     return cudaErrorInvalidValue;
@@ -77,7 +76,7 @@ extern "C" cudaError_t fake_cuda_mem_get_info_expected(std::size_t* free_bytes,
 }
 
 extern "C" cudaError_t fake_cuda_mem_get_info_default(std::size_t* free_bytes,
-                                                        std::size_t* total_bytes) {
+                                                      std::size_t* total_bytes) {
   default_calls[kCudaMemGetInfo].fetch_add(1, std::memory_order_relaxed);
   if (!free_bytes || !total_bytes) {
     bad_argument();
@@ -95,8 +94,8 @@ extern "C" cublasStatus_t fake_cublas_create_expected(cublasHandle_t* handle) {
     return CUBLAS_STATUS_INVALID_VALUE;
   }
   using MemInfo = cudaError_t (*)(std::size_t*, std::size_t*);
-  auto nested = reinterpret_cast<MemInfo>(
-      ::dlvsym(RTLD_DEFAULT, "cudaMemGetInfo", "libcudart.so.12"));
+  auto nested =
+      reinterpret_cast<MemInfo>(::dlvsym(RTLD_DEFAULT, "cudaMemGetInfo", "libcudart.so.12"));
   std::size_t free_bytes = 0;
   std::size_t total_bytes = 0;
   if (!nested || nested(&free_bytes, &total_bytes) != cudaSuccess || free_bytes != 950 ||
@@ -119,7 +118,7 @@ extern "C" cublasStatus_t fake_cublas_create_default(cublasHandle_t* handle) {
 }
 
 extern "C" cublasStatus_t fake_cublas_set_stream_expected(cublasHandle_t handle,
-                                                            cudaStream_t stream) {
+                                                          cudaStream_t stream) {
   expected_calls[kCublasSetStream].fetch_add(1, std::memory_order_relaxed);
   if (handle != pointer<cublasHandle_t>(kCublasHandle) ||
       stream != pointer<cudaStream_t>(kStream)) {
@@ -130,7 +129,7 @@ extern "C" cublasStatus_t fake_cublas_set_stream_expected(cublasHandle_t handle,
 }
 
 extern "C" cublasStatus_t fake_cublas_set_stream_default(cublasHandle_t handle,
-                                                           cudaStream_t stream) {
+                                                         cudaStream_t stream) {
   default_calls[kCublasSetStream].fetch_add(1, std::memory_order_relaxed);
   if (handle != pointer<cublasHandle_t>(kDefaultCublasHandle) ||
       stream != pointer<cudaStream_t>(kStream)) {
@@ -140,28 +139,25 @@ extern "C" cublasStatus_t fake_cublas_set_stream_default(cublasHandle_t handle,
   return CUBLAS_STATUS_SUCCESS;
 }
 
-extern "C" cublasStatus_t fake_cublas_set_pointer_mode_expected(
-    cublasHandle_t handle, cublasPointerMode_t mode) {
+extern "C" cublasStatus_t fake_cublas_set_pointer_mode_expected(cublasHandle_t handle,
+                                                                cublasPointerMode_t mode) {
   expected_calls[kCublasSetPointerMode].fetch_add(1, std::memory_order_relaxed);
-  if (handle != pointer<cublasHandle_t>(kCublasHandle) ||
-      mode != CUBLAS_POINTER_MODE_DEVICE) {
+  if (handle != pointer<cublasHandle_t>(kCublasHandle) || mode != CUBLAS_POINTER_MODE_DEVICE) {
     bad_argument();
     return CUBLAS_STATUS_INVALID_VALUE;
   }
-  return provider_failure_requested() ? CUBLAS_STATUS_EXECUTION_FAILED
-                                      : CUBLAS_STATUS_SUCCESS;
+  return provider_failure_requested() ? CUBLAS_STATUS_EXECUTION_FAILED : CUBLAS_STATUS_SUCCESS;
 }
 
-extern "C" cublasStatus_t fake_cublas_set_pointer_mode_default(
-    cublasHandle_t handle, cublasPointerMode_t mode) {
+extern "C" cublasStatus_t fake_cublas_set_pointer_mode_default(cublasHandle_t handle,
+                                                               cublasPointerMode_t mode) {
   default_calls[kCublasSetPointerMode].fetch_add(1, std::memory_order_relaxed);
   if (handle != pointer<cublasHandle_t>(kDefaultCublasHandle) ||
       mode != CUBLAS_POINTER_MODE_DEVICE) {
     bad_argument();
     return CUBLAS_STATUS_INVALID_VALUE;
   }
-  return provider_failure_requested() ? CUBLAS_STATUS_EXECUTION_FAILED
-                                      : CUBLAS_STATUS_SUCCESS;
+  return provider_failure_requested() ? CUBLAS_STATUS_EXECUTION_FAILED : CUBLAS_STATUS_SUCCESS;
 }
 
 extern "C" cusolverStatus_t fake_cusolver_create_expected(cusolverDnHandle_t* handle) {
@@ -185,7 +181,7 @@ extern "C" cusolverStatus_t fake_cusolver_create_default(cusolverDnHandle_t* han
 }
 
 extern "C" cusolverStatus_t fake_cusolver_set_stream_expected(cusolverDnHandle_t handle,
-                                                                cudaStream_t stream) {
+                                                              cudaStream_t stream) {
   expected_calls[kCusolverSetStream].fetch_add(1, std::memory_order_relaxed);
   if (handle != pointer<cusolverDnHandle_t>(kCusolverHandle) ||
       stream != pointer<cudaStream_t>(kStream)) {
@@ -196,7 +192,7 @@ extern "C" cusolverStatus_t fake_cusolver_set_stream_expected(cusolverDnHandle_t
 }
 
 extern "C" cusolverStatus_t fake_cusolver_set_stream_default(cusolverDnHandle_t handle,
-                                                               cudaStream_t stream) {
+                                                             cudaStream_t stream) {
   default_calls[kCusolverSetStream].fetch_add(1, std::memory_order_relaxed);
   if (handle != pointer<cusolverDnHandle_t>(kDefaultCusolverHandle) ||
       stream != pointer<cudaStream_t>(kStream)) {
@@ -206,8 +202,7 @@ extern "C" cusolverStatus_t fake_cusolver_set_stream_default(cusolverDnHandle_t 
   return CUSOLVER_STATUS_SUCCESS;
 }
 
-extern "C" cusolverStatus_t fake_cusolver_create_params_expected(
-    cusolverDnParams_t* parameters) {
+extern "C" cusolverStatus_t fake_cusolver_create_params_expected(cusolverDnParams_t* parameters) {
   expected_calls[kCusolverCreateParams].fetch_add(1, std::memory_order_relaxed);
   if (!parameters) {
     bad_argument();
@@ -217,8 +212,7 @@ extern "C" cusolverStatus_t fake_cusolver_create_params_expected(
   return CUSOLVER_STATUS_SUCCESS;
 }
 
-extern "C" cusolverStatus_t fake_cusolver_create_params_default(
-    cusolverDnParams_t* parameters) {
+extern "C" cusolverStatus_t fake_cusolver_create_params_default(cusolverDnParams_t* parameters) {
   default_calls[kCusolverCreateParams].fetch_add(1, std::memory_order_relaxed);
   if (!parameters) {
     bad_argument();
@@ -236,25 +230,24 @@ extern "C" void fake_provider_reset() {
 
 extern "C" const char* fake_provider_snapshot() {
   static thread_local char output[768]{};
-  std::snprintf(
-      output, sizeof(output),
-      "{\"expected_calls\":[%u,%u,%u,%u,%u,%u,%u],"
-      "\"default_calls\":[%u,%u,%u,%u,%u,%u,%u],\"argument_failures\":%u}",
-      expected_calls[0].load(std::memory_order_relaxed),
-      expected_calls[1].load(std::memory_order_relaxed),
-      expected_calls[2].load(std::memory_order_relaxed),
-      expected_calls[3].load(std::memory_order_relaxed),
-      expected_calls[4].load(std::memory_order_relaxed),
-      expected_calls[5].load(std::memory_order_relaxed),
-      expected_calls[6].load(std::memory_order_relaxed),
-      default_calls[0].load(std::memory_order_relaxed),
-      default_calls[1].load(std::memory_order_relaxed),
-      default_calls[2].load(std::memory_order_relaxed),
-      default_calls[3].load(std::memory_order_relaxed),
-      default_calls[4].load(std::memory_order_relaxed),
-      default_calls[5].load(std::memory_order_relaxed),
-      default_calls[6].load(std::memory_order_relaxed),
-      argument_failures.load(std::memory_order_relaxed));
+  std::snprintf(output, sizeof(output),
+                "{\"expected_calls\":[%u,%u,%u,%u,%u,%u,%u],"
+                "\"default_calls\":[%u,%u,%u,%u,%u,%u,%u],\"argument_failures\":%u}",
+                expected_calls[0].load(std::memory_order_relaxed),
+                expected_calls[1].load(std::memory_order_relaxed),
+                expected_calls[2].load(std::memory_order_relaxed),
+                expected_calls[3].load(std::memory_order_relaxed),
+                expected_calls[4].load(std::memory_order_relaxed),
+                expected_calls[5].load(std::memory_order_relaxed),
+                expected_calls[6].load(std::memory_order_relaxed),
+                default_calls[0].load(std::memory_order_relaxed),
+                default_calls[1].load(std::memory_order_relaxed),
+                default_calls[2].load(std::memory_order_relaxed),
+                default_calls[3].load(std::memory_order_relaxed),
+                default_calls[4].load(std::memory_order_relaxed),
+                default_calls[5].load(std::memory_order_relaxed),
+                default_calls[6].load(std::memory_order_relaxed),
+                argument_failures.load(std::memory_order_relaxed));
   return output;
 }
 
@@ -264,15 +257,11 @@ __asm__(".symver fake_cublas_create_expected,cublasCreate_v2@libcublas.so.12");
 __asm__(".symver fake_cublas_create_default,cublasCreate_v2@@FAKE_PROVIDER_9.9");
 __asm__(".symver fake_cublas_set_stream_expected,cublasSetStream_v2@libcublas.so.12");
 __asm__(".symver fake_cublas_set_stream_default,cublasSetStream_v2@@FAKE_PROVIDER_9.9");
-__asm__(
-    ".symver fake_cublas_set_pointer_mode_expected,cublasSetPointerMode_v2@libcublas.so.12");
-__asm__(
-    ".symver fake_cublas_set_pointer_mode_default,cublasSetPointerMode_v2@@FAKE_PROVIDER_9.9");
+__asm__(".symver fake_cublas_set_pointer_mode_expected,cublasSetPointerMode_v2@libcublas.so.12");
+__asm__(".symver fake_cublas_set_pointer_mode_default,cublasSetPointerMode_v2@@FAKE_PROVIDER_9.9");
 __asm__(".symver fake_cusolver_create_expected,cusolverDnCreate@libcusolver.so.11");
 __asm__(".symver fake_cusolver_create_default,cusolverDnCreate@@FAKE_PROVIDER_9.9");
 __asm__(".symver fake_cusolver_set_stream_expected,cusolverDnSetStream@libcusolver.so.11");
 __asm__(".symver fake_cusolver_set_stream_default,cusolverDnSetStream@@FAKE_PROVIDER_9.9");
-__asm__(
-    ".symver fake_cusolver_create_params_expected,cusolverDnCreateParams@libcusolver.so.11");
-__asm__(
-    ".symver fake_cusolver_create_params_default,cusolverDnCreateParams@@FAKE_PROVIDER_9.9");
+__asm__(".symver fake_cusolver_create_params_expected,cusolverDnCreateParams@libcusolver.so.11");
+__asm__(".symver fake_cusolver_create_params_default,cusolverDnCreateParams@@FAKE_PROVIDER_9.9");

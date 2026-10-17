@@ -40,8 +40,7 @@ extern "C" ssize_t write(int descriptor, const void* buffer, std::size_t size) {
   const char* enabled = std::getenv("FAKE_FAIL_ONE_TRACE_WRITE");
   bool expected = false;
   if (enabled && std::strcmp(enabled, "1") == 0 && buffer &&
-      contains(static_cast<const char*>(buffer), size,
-               "generativeqc.rhf-provider-probe.v1") &&
+      contains(static_cast<const char*>(buffer), size, "generativeqc.rhf-provider-probe.v1") &&
       failed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
     errno = EIO;
     return -1;
