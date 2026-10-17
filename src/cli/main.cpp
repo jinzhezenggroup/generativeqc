@@ -12,6 +12,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -232,6 +233,7 @@ void print_usage(std::ostream& out) {
          "  --auxiliary-basis NAME   Optional bundled auxiliary basis; default is orbital basis\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
+         "  --owned-device-bytes N   Run-only native numeric allocation cap (not total GPU/RSS)\n"
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --diis-history N         SCF history length (default: 8)\n"
@@ -546,6 +548,8 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (resources && option == "--batch") {
       options.batch = parse_positive_u32(value(), "batch");
       if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
+    } else if (std::string_view(argv[1]) == "run" && option == "--owned-device-bytes") {
+      options.owned_device_bytes = parse_bytes(value(), "owned device bytes");
     } else if (resources && option == "--host-bytes") {
       options.host_bytes = parse_bytes(value(), "host bytes");
     } else if (resources && option == "--device-bytes") {
@@ -779,9 +783,23 @@ int run(RunOptions options) {
 
   const generativeqc_method_descriptor method =
       method_descriptor(options, auxiliary_basis ? &*auxiliary_basis : nullptr);
+  std::unique_ptr<generativeqc_device_resources, decltype(&generativeqc_device_resources_destroy)>
+      resources(nullptr, generativeqc_device_resources_destroy);
+  if (options.owned_device_bytes) {
+    const std::array<generativeqc_device_resource_buffer_v1, 1> capacities{
+        {{*options.owned_device_bytes, 4, static_cast<std::uint64_t>(options.device_id), 0, 0, 0}}};
+    generativeqc_device_resource_descriptor inventory{};
+    inventory.struct_size = sizeof(inventory);
+    inventory.abi_version = GENERATIVEQC_ABI_VERSION;
+    inventory.buffers = capacities.data();
+    inventory.buffer_count = capacities.size();
+    generativeqc_device_resources* owner = nullptr;
+    generativeqc::check(generativeqc_device_resources_create(&inventory, &owner));
+    resources.reset(owner);
+  }
   generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
     const auto* row = options.composition;
-    if (!row) return {context, system, method};
+    if (!row) return {context, system, method, resources.get()};
     // Build the exact build-time-compiled primitive graph through one SDK owner.
     // Preparation retains authority over basis, device, provider, and SCF admission.
     generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
@@ -793,7 +811,7 @@ int run(RunOptions options) {
     for (const auto& term : exchanges(*row)) {
       composed.add_exact_exchange(term.operator_kind, term.coefficient, term.omega);
     }
-    return composed.prepare(context, system, method);
+    return composed.prepare(context, system, method, resources.get());
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.
@@ -804,6 +822,14 @@ int run(RunOptions options) {
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
+  std::optional<generativeqc_device_resource_diagnostic> resource_diagnostic;
+  if (resources) {
+    generativeqc_device_resource_diagnostic snapshot{};
+    snapshot.struct_size = sizeof(snapshot);
+    snapshot.abi_version = GENERATIVEQC_ABI_VERSION;
+    generativeqc::check(generativeqc_device_resources_read(resources.get(), &snapshot));
+    resource_diagnostic = snapshot;
+  }
 
   std::cout << std::setprecision(17);
   if (options.json) {
@@ -825,6 +851,24 @@ int run(RunOptions options) {
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
+    if (resource_diagnostic) {
+      const auto& snapshot = *resource_diagnostic;
+      std::cout
+          << ",\"owned_device_resources\":{\"owner\":\"native-prepared-owner\","
+          << "\"device\":" << snapshot.device
+          << ",\"numeric_limit_bytes\":" << snapshot.numeric_limit
+          << ",\"numeric_live_bytes\":" << snapshot.numeric_live_bytes
+          << ",\"numeric_peak_bytes\":" << snapshot.numeric_peak_bytes
+          << ",\"allocations\":" << snapshot.allocations
+          << ",\"rejected_allocations\":" << snapshot.rejected_allocations
+          << ",\"requested_bytes\":"
+          << (snapshot.requested_bytes_available ? std::to_string(snapshot.requested_bytes)
+                                                 : "null")
+          << ",\"provider_reserved_bytes\":" << snapshot.provider_reserved_bytes
+          << ",\"combined_peak_bytes\":" << snapshot.combined_peak_bytes
+          << ",\"complete_plan_peak\":false,"
+          << "\"scope\":\"instrumented numeric CUDA buffers and provider reservations, not RSS\"}";
+    }
     if (result.forces) {
       std::cout << ",\"forces_hartree_per_bohr\":[";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {

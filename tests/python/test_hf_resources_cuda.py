@@ -1,6 +1,5 @@
 """Direct-HF budget evidence; run only in a scheduler-assigned GPU job."""
 
-import ctypes
 import json
 import os
 import typing
@@ -217,35 +216,53 @@ def test_cuda_df_common_ledger_preserves_factor_differential(
 
 
 @pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("admission", ("public_native", "native_inventory", "legacy"))
 def test_native_ledger_rejects_unplanned_arena_and_releases_failed_state(
+    monkeypatch: typing.Any,
     fitted: typing.Any,
+    admission: str,
 ) -> None:
-    """Fault the assigned capacity to exercise the native allocation boundary."""
+    """Fault admission before native retention, then verify independent recovery."""
+    from _resource_admission_test_support import limit_device_admission
+    from generativeqc_compiler.common.resources import ResourceAllocationError
+
     calculator = Calculator(
         device="cuda",
         density_fitting="cuda" if fitted else "none",
         resource_budget=ResourceBudget(),
     )
-    create = calculator._library.generativeqc_resource_ledger_create_v1
-    # Native inventory admission does not bind this inactive legacy symbol.
-    # Fault injection must declare its own pointer-width return contract.
-    create.argtypes = [ctypes.c_size_t, ctypes.c_int]
-    create.restype = ctypes.c_void_p
-    with calculator.prepare_batch([H2]) as batch:
-        ledger = batch._resource_ledger
-        ledger.close()
-        ledger.handle = create(1, 0)
-        failed = batch.execute()
-        assert not failed.items[0].succeeded
-        observation = batch.resource_diagnostics["observation"]["device_ledger"]
+    ledger = None
+    with monkeypatch.context() as fault:
+        if admission != "public_native":
+            fault.setattr(
+                calculator._library,
+                "generativeqc_batch_prepare_with_device_resources",
+                None,
+            )
+        limit_device_admission(fault, calculator._library, 1, admission)
+        try:
+            with calculator.prepare_batch([H2]) as batch:
+                ledger = batch._resource_ledger
+                failed = batch.execute()
+                assert not failed.items[0].succeeded
+                observation = batch.resource_diagnostics["observation"]["device_ledger"]
+                batch._resource_ledger = None
+        except ResourceAllocationError as failed:
+            diagnostics = failed.resource_diagnostics
+            observation = diagnostics[diagnostics["phase"]]["device_ledger"]
+        finally:
+            if ledger is not None:
+                try:
+                    assert ledger.to_dict()["live_bytes"] == 0
+                finally:
+                    ledger.close()
+        assert observation["admission"]["limit_bytes"] == 1
         assert observation["rejected_allocations"] >= 1
         assert observation["live_bytes"] == 0
-        ledger.close()
-        ledger.handle = create(ledger.limit, 0)
+    with calculator.prepare_batch([H2]) as batch:
+        ledger = batch._resource_ledger
         result = batch.execute(strict=True)
         assert result.items[0].executed_backend == "cuda"
-        # Keep the metadata handle alive while closing the native cache, so
-        # the assertion observes actual charge release after destruction.
         batch._resource_ledger = None
     try:
         assert ledger.to_dict()["live_bytes"] == 0

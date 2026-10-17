@@ -544,6 +544,58 @@ class ResultDescriptor(ctypes.Structure):
     ]
 
 
+class DeviceResourceBuffer(ctypes.Structure):
+    """One typed native selected-inventory capacity and inclusive lifetime."""
+
+    _fields_ = [
+        (name, ctypes.c_uint64)
+        for name in (
+            "bytes",
+            "space",
+            "device",
+            "first_phase",
+            "last_phase",
+            "runtime_allowance",
+        )
+    ]
+
+
+class DeviceResourceDescriptor(ctypes.Structure):
+    """Selected inventory for one native prepared visible-device owner."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("buffers", ctypes.POINTER(DeviceResourceBuffer)),
+        ("buffer_count", ctypes.c_uint32),
+    ]
+
+
+class DeviceResourceDiagnostic(ctypes.Structure):
+    """Versioned native owner snapshot, independent of Python observation scopes."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("numeric_limit", ctypes.c_uint64),
+        ("declared_device_peak", ctypes.c_uint64),
+        ("numeric_live_bytes", ctypes.c_uint64),
+        ("numeric_peak_bytes", ctypes.c_uint64),
+        ("allocations", ctypes.c_uint64),
+        ("rejected_allocations", ctypes.c_uint64),
+        ("requested_bytes", ctypes.c_uint64),
+        ("provider_reserved_bytes", ctypes.c_uint64),
+        ("provider_reservation_peak_bytes", ctypes.c_uint64),
+        ("combined_peak_bytes", ctypes.c_uint64),
+        ("sampled_host_peak_bytes", ctypes.c_uint64),
+        ("host_samples", ctypes.c_uint64),
+        ("sampled_cuda_arena_peak_bytes", ctypes.c_uint64),
+        ("cuda_arena_samples", ctypes.c_uint64),
+        ("device", ctypes.c_int32),
+        ("requested_bytes_available", ctypes.c_int32),
+    ]
+
+
 class ScfDiagnostic(ctypes.Structure):
     """Additive query record; existing ResultDescriptor keeps its ABI layout."""
 
@@ -1555,6 +1607,39 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         void_pp,
     ]
     library.generativeqc_batch_prepare.restype = ctypes.c_int
+    for kind in ("batch", "calculation"):
+        resource_prepare = getattr(
+            library, f"generativeqc_{kind}_prepare_with_device_resources", None
+        )
+        if resource_prepare is not None:
+            ordinary_prepare = getattr(library, f"generativeqc_{kind}_prepare")
+            resource_prepare.argtypes = [
+                *ordinary_prepare.argtypes[:-1],
+                ctypes.c_void_p,
+                void_pp,
+            ]
+            resource_prepare.restype = ctypes.c_int
+        resource_get = getattr(
+            library, f"generativeqc_{kind}_get_device_resources", None
+        )
+        if resource_get is not None:
+            resource_get.argtypes = [ctypes.c_void_p, void_pp]
+            resource_get.restype = ctypes.c_int
+    resource_read = getattr(library, "generativeqc_device_resources_read", None)
+    if resource_read is not None:
+        resource_read.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(DeviceResourceDiagnostic),
+        ]
+        resource_read.restype = ctypes.c_int
+    resource_create = getattr(library, "generativeqc_device_resources_create", None)
+    if resource_create is not None:
+        resource_create.argtypes = [ctypes.POINTER(DeviceResourceDescriptor), void_pp]
+        resource_create.restype = ctypes.c_int
+    resource_destroy = getattr(library, "generativeqc_device_resources_destroy", None)
+    if resource_destroy is not None:
+        resource_destroy.argtypes = [ctypes.c_void_p]
+        resource_destroy.restype = None
     library.generativeqc_batch_destroy.argtypes = [ctypes.c_void_p]
     library.generativeqc_batch_get_system_count.argtypes = [ctypes.c_void_p]
     library.generativeqc_batch_get_system_count.restype = ctypes.c_uint32

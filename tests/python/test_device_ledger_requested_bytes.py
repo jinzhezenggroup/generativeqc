@@ -30,6 +30,19 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+@pytest.mark.parametrize("standard", ("c++17", "c++20"))
+def test_ledger_header_compiles_without_cmake_source_include_path(
+    tmp_path: Path, required_native_cxx: NativeCxx, standard: str
+) -> None:
+    """Offline generated providers include runtime headers without CMake's -I src."""
+    source = tmp_path / "ledger_header.cpp"
+    source.write_text(f'#include "{ROOT / "src/runtime/resource_ledger.hpp"}"\n')
+    required_native_cxx.compile_object(
+        source, tmp_path / "ledger_header.o", args=(f"-std={standard}",)
+    )
+
+
 CUDA_STUB = r"""
 #pragma once
 #include <cstddef>
