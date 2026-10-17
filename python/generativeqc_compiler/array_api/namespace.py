@@ -760,6 +760,16 @@ def _take_axis(axis: object, rank: int) -> int:
     return _axis(axis, rank, "take")
 
 
+def _take_indices(indices: object, extent: int) -> tuple[int, ...]:
+    if not isinstance(indices, tuple) or any(
+        type(index) is not int for index in indices
+    ):
+        raise TypeError("take indices must be a static tuple of integers")
+    if any(not -extent <= index < extent for index in indices):
+        raise ValueError("gather position is outside its input axis")
+    return tuple(index + extent if index < 0 else index for index in indices)
+
+
 def take(
     x: object,
     indices: tuple[int, ...],
@@ -769,11 +779,8 @@ def take(
     """Static gather; omitted axis selects the sole axis of a vector."""
     value = _array(x)
     position = _take_axis(axis, value.ndim)
-    if not isinstance(indices, tuple) or any(
-        type(index) is not int for index in indices
-    ):
-        raise TypeError("take indices must be a static tuple of integers")
-    result = VibeArray(tensor_ir.gather(value.node, position, indices))
+    positions = _take_indices(indices, value.shape[position])
+    result = VibeArray(tensor_ir.gather(value.node, position, positions))
     return _canonical_generic(result)
 
 
