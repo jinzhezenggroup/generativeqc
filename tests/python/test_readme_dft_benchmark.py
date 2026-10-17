@@ -85,6 +85,93 @@ def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
         protocol(3, basis, GridSpec(), 5, benchmark=replace(spec, density_fitting=True))
 
 
+def test_df_workspace_hint_is_explicit_in_the_benchmark_protocol() -> None:
+    """A memory-limited DF population must not be mislabeled as automatic DF."""
+    basis = load_r2scan3c_basis()
+    auxiliary = SimpleNamespace(name="explicit-jkfit", identity="auxiliary-identity")
+    fitted = replace(specification("hf"), density_fitting=True)
+    automatic = protocol(
+        3, basis, GridSpec(), 5, benchmark=fitted, auxiliary_basis=auxiliary
+    )
+    bounded = protocol(
+        3,
+        basis,
+        GridSpec(),
+        5,
+        benchmark=fitted,
+        auxiliary_basis=auxiliary,
+        density_fitting_memory_budget_bytes=12 << 30,
+    )
+    assert automatic["density_fitting_memory_budget_bytes"] == 0
+    assert bounded.pop("density_fitting_memory_budget_bytes") == 12 << 30
+    automatic.pop("density_fitting_memory_budget_bytes")
+    assert bounded == automatic
+    with pytest.raises(ValueError, match="DF workspace allowance"):
+        protocol(
+            3,
+            basis,
+            GridSpec(),
+            5,
+            benchmark=specification("hf"),
+            density_fitting_memory_budget_bytes=12 << 30,
+        )
+
+
+@pytest.mark.parametrize("budget", [-1, 1 << 41, True, 1.5])
+def test_df_workspace_hint_rejects_invalid_capacity(budget: Any) -> None:
+    """Reject unrepresentable budgets before any native or GPU preparation."""
+    with pytest.raises(ValueError, match="DF workspace allowance"):
+        protocol(
+            3,
+            load_r2scan3c_basis(),
+            GridSpec(),
+            5,
+            benchmark=replace(specification("hf"), density_fitting=True),
+            auxiliary_basis=SimpleNamespace(name="aux", identity="identity"),
+            density_fitting_memory_budget_bytes=budget,
+        )
+
+
+def test_native_df96_extension_preserves_historical_references(
+    monkeypatch: Any,
+) -> None:
+    """A new native size must not fabricate references or rewrite existing points."""
+    import runpy
+
+    publication = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/readme-refresh-20261015"
+    )
+    refresh = runpy.run_path(str(publication / "refresh.py"))
+    before = refresh["combined_summary"]("df-summary.json.xz")
+    campaign = refresh["read_summary"](publication / "native-summary.json.xz")
+    populations = campaign["populations"]["cuda"]["wb97m-v"]
+    populations[:] = [point for point in populations if point["atoms"] != 96]
+    native = {"status": "completed_unchecked", "records": []}
+    populations.append(
+        {"atoms": 96, "protocol": refresh["df96_protocol"](), "native": native}
+    )
+    monkeypatch.setitem(
+        refresh["combined_summary"].__globals__, "read_summary", lambda path: campaign
+    )
+    after = refresh["combined_summary"]("df-summary.json.xz")
+    for method, points in before["methods"].items():
+        current = {point["atoms"]: point for point in after["methods"][method]}
+        for point in points:
+            if (method, point["atoms"]) != ("wb97m-v", 96):
+                assert current[point["atoms"]] == point
+    added = after["methods"]["wb97m-v"][-1]
+    assert added["atoms"] == 96
+    assert added["protocol"]["density_fitting_memory_budget_bytes"] == 12 << 30
+    assert (
+        added["protocol"]["reference_rsh_exchange"]["long_range_correction_k"]
+        == "exact-direct"
+    )
+    assert added["engines"]["native"] == native
+    assert added["engines"]["reference"] == {"status": "not_run", "outcome": None}
+    assert "independent_references" not in added
+
+
 def test_varying_work_keeps_endpoint_median_but_failed_points_remain_gaps() -> None:
     entry = {
         "status": "measured",
