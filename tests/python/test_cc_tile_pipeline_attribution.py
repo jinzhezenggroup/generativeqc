@@ -1143,3 +1143,93 @@ def test_campaign_report_recomputes_even_identical_forged_passes(
         (directory / "receipt.json").write_text(json.dumps(receipt))
     with pytest.raises(ValueError):
         compare_runs(runs)
+
+
+@pytest.mark.parametrize(
+    ("name", "replacement", "wait_fails"),
+    [
+        ("native.log", "unchanged", False),
+        ("endpoint.json", "missing", False),
+        ("oracle.json", "missing", False),
+        ("native.log", "missing", False),
+        ("native.log", "symlink", False),
+        ("native.log", "directory", False),
+        ("native.log", "symlink", True),
+        ("native.log", "directory", True),
+    ],
+)
+def test_campaign_artifact_inventory_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    replacement: str,
+    wait_fails: bool,
+) -> None:
+    paths, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+    original = RuntimeError("original wait failure")
+    real_open = Path.open
+
+    class Log:
+        def __init__(self, stream: Any) -> None:
+            self.stream = stream
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.stream, name)
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+        def close(self) -> None:
+            self.stream.close()
+            if replacement == "unchanged":
+                return
+            artifact = output / name
+            artifact.unlink()
+            if replacement == "symlink":
+                artifact.symlink_to(paths["input"])
+            elif replacement == "directory":
+                artifact.mkdir()
+
+    def open_file(path: Path, *args: Any, **kwargs: Any) -> Any:
+        stream = real_open(path, *args, **kwargs)
+        if path == output / "native.log" and args == ("wb",):
+            return Log(stream)
+        return stream
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            Path(command[2]).write_bytes(endpoint)
+            self.killed = False
+
+        def wait(self, timeout: int | None = None) -> int:
+            if wait_fails and not self.killed:
+                raise original
+            return 0
+
+        def kill(self) -> None:
+            self.killed = True
+
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    monkeypatch.setattr(Path, "open", open_file)
+    if replacement == "unchanged":
+        assert campaign_main() == 0
+    else:
+        with pytest.raises(RuntimeError if wait_fails else ValueError) as caught:
+            campaign_main()
+        if wait_fails:
+            assert caught.value is original
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["outcome"] == ("PASS" if replacement == "unchanged" else "FAIL")
+    assert receipt["binary_identity_unchanged"] is True
+    assert receipt["input_identity_unchanged"] is True
+    assert (name in receipt["artifacts"]) is (replacement == "unchanged")
+    if replacement != "unchanged":
+        assert any(name in row["stage"] for row in receipt["finalization_errors"])
+    for artifact_name, metadata in receipt["artifacts"].items():
+        raw = (output / artifact_name).read_bytes()
+        assert metadata == {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}

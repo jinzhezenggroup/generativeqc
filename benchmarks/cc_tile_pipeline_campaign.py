@@ -365,17 +365,26 @@ def main() -> int:
                 if path in (receipt_path, pending_receipt_path):
                     continue
                 try:
-                    if path.is_file():
-                        receipt["artifacts"][path.name] = {
-                            "sha256": checksum(path),
-                            "size": path.stat().st_size,
-                        }
+                    if path.is_symlink() or not path.is_file():
+                        raise ValueError("campaign artifact must be a regular file")
+                    receipt["artifacts"][path.name] = {
+                        "sha256": checksum(path),
+                        "size": path.stat().st_size,
+                    }
                 except BaseException as error:  # noqa: BLE001
                     # One unreadable artifact must not hide the other artifacts.
                     retain_error(f"artifact {path.name}", error)
         except BaseException as error:  # noqa: BLE001
             # Directory failure still permits an attempted terminal receipt.
             retain_error("artifact inventory", error)
+        if receipt["outcome"] == "PASS":
+            for name in {"endpoint.json", "oracle.json", "native.log"} - receipt[
+                "artifacts"
+            ].keys():
+                retain_error(
+                    f"artifact {name}",
+                    ValueError("required campaign artifact unavailable"),
+                )
         changed = not all(identity_matches.values())
         if (changed or finalization_errors) and receipt["outcome"] != "TIMEOUT":
             receipt["outcome"] = "FAIL"
