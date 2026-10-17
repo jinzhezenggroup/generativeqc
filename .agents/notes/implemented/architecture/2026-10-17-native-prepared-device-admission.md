@@ -133,6 +133,27 @@ stale even though a clean build hashes it correctly. The real CMake regeneration
 control mutates this header, verifies that the manifest identity changes, and
 checks that unrelated edits and subsequent no-op builds do not regenerate it.
 
+## Typed refusal at the single HF boundary
+
+The first installed-SDK GPU qualification of `077ad249b` failed its low-capacity
+gate after the exact-source CUDA build succeeded (Slurm jobs 1759/1760).
+Independent public-header probes of the preserved SDK, in scheduler-owned fresh
+processes, separated status from ledger evidence: both RHF and UHF rejected a
+one-byte capacity with a positive rejection count and no live charges. RHF
+returned `OUT_OF_MEMORY`; UHF returned `NUMERICAL_FAILURE`, cold and after a
+generous-capacity execution, for both energy-only and energy/force requests.
+The failed test's combined assertion did not establish an unbudgeted retry.
+
+The UHF single endpoint discarded the bucket's typed OOM in its generic failure
+branch. Preserve that status through `std::bad_alloc`, as the RHF entry already
+does, so the public exception mapper returns OOM without changing admission or
+scientific execution. Regression coverage must check the status, rejected
+allocation receipt, and final numeric/provider release separately, before and
+after a successful request. Do not accept numerical failure as an equivalent
+refusal or introduce an unbudgeted fallback to make this gate pass. Historical
+failed qualification and frozen inputs stay unchanged; the fix needs a fresh
+source-matched qualification.
+
 ## Consequences and revisit conditions
 
 This removes a frontend lifetime authority without pretending to finish #2227

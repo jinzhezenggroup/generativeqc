@@ -344,6 +344,7 @@ ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, in
       run_uhf_cuda_bucket(systems, options, initial_densities, device_id);
   if (result.empty()) throw std::runtime_error("CUDA UHF returned no result");
   const generativeqc_status status = result.front().status;
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
     throw std::invalid_argument("CUDA UHF received invalid arguments");
   }

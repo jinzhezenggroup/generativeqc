@@ -6,6 +6,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 
@@ -177,6 +178,44 @@ Resources capacity(std::uint64_t bytes, std::uint64_t device = 0) {
   return Resources(result, generativeqc_device_resources_destroy);
 }
 
+/** A rejected energy-only or E/F request must preserve typed OOM as well as
+ * its ledger receipt. Run before and after generous execution so cached native
+ * state cannot mask admission or make status depend on an earlier request. */
+void reject_insufficient_single_capacity(generativeqc::Context& context,
+                                         const generativeqc::System& system,
+                                         const generativeqc_method_descriptor& method) {
+  for (const bool with_forces : {false, true}) {
+    auto insufficient = capacity(1);
+    generativeqc_calculation* handle = nullptr;
+    auto status = generativeqc_calculation_prepare_with_device_resources(
+        context.get(), system.get(), &method, insufficient.get(), &handle);
+    std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> single(
+        handle, generativeqc_calculation_destroy);
+    if (status == GENERATIVEQC_STATUS_SUCCESS) {
+      std::array<double, 6> forces{};
+      generativeqc_result_descriptor result{};
+      result.struct_size = sizeof(result);
+      result.abi_version = GENERATIVEQC_ABI_VERSION;
+      if (with_forces) {
+        result.forces = forces.data();
+        result.force_count = forces.size();
+      }
+      status = generativeqc_calculation_execute(single.get(), &result);
+    }
+    if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+      throw std::runtime_error(std::string("insufficient native single cap lost typed OOM: ") +
+                               generativeqc_status_message(status) + "; " +
+                               generativeqc_context_get_last_detail(context.get()));
+    }
+    require(read(insufficient.get()).rejected_allocations > 0,
+            "insufficient native single cap has no rejected allocation receipt");
+    single.reset();
+    const auto closed = read(insufficient.get());
+    require(closed.numeric_live_bytes == 0 && closed.provider_reserved_bytes == 0,
+            "failed single preparation/execution leaked numeric/provider charges");
+  }
+}
+
 /** Scheduler-only public SDK/C ABI lifecycle checks, not a complete allocation
  * or performance certificate. H2 constants are independent reference values;
  * ragged CPU controls check dispatch/publication separately from PySCF gates. */
@@ -198,6 +237,7 @@ void cuda_prepared_lifetime() {
     method.energy_tolerance = 1e-12;
     method.density_tolerance = 1e-10;
     method.max_iterations = 100;
+    reject_insufficient_single_capacity(context, system, method);
     auto resources = capacity(64 * 1024 * 1024);
     generativeqc_calculation* handle = nullptr;
     generativeqc::check(generativeqc_calculation_prepare_with_device_resources(
@@ -231,23 +271,7 @@ void cuda_prepared_lifetime() {
                 read(monitor.get()).provider_reserved_bytes == 0,
             "single close leaked retained numeric/provider charges");
 
-    auto insufficient = capacity(1);
-    handle = nullptr;
-    auto status = generativeqc_calculation_prepare_with_device_resources(
-        context.get(), system.get(), &method, insufficient.get(), &handle);
-    single.reset(handle);
-    if (status == GENERATIVEQC_STATUS_SUCCESS) {
-      generativeqc_result_descriptor result{};
-      result.struct_size = sizeof(result);
-      result.abi_version = GENERATIVEQC_ABI_VERSION;
-      status = generativeqc_calculation_execute(single.get(), &result);
-    }
-    require(status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
-                read(insufficient.get()).rejected_allocations > 0,
-            "insufficient native single cap silently retried unbudgeted execution");
-    single.reset();
-    require(read(insufficient.get()).numeric_live_bytes == 0,
-            "failed single preparation/execution leaked charges");
+    reject_insufficient_single_capacity(context, system, method);
 
     const std::array<const generativeqc::System*, 3> cpu_systems{&cpu_system, &cpu_other,
                                                                  &cpu_system};
