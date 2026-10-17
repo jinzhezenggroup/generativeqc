@@ -747,6 +747,23 @@ void mixed_df_rsh_cpu_endpoints_for_mode(const char* range_mode) {
       method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
       method.ks_options = &ks;
       method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      if (wb97mv) {
+        // An explicit LR-DF request cannot become an exact Hamiltonian merely
+        // because the primary provider has density fitting disabled.
+        auto exact_method = method;
+        exact_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+        generativeqc_calculation* exact_calculation = nullptr;
+        const auto status = generativeqc_calculation_prepare(fixture.context, fixture.system,
+                                                             &exact_method, &exact_calculation);
+        const std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+            exact_owner(exact_calculation, &generativeqc_calculation_destroy);
+        if (range_mode && std::strcmp(range_mode, "df") == 0)
+          require(status == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !exact_calculation,
+                  "explicit LR-DF silently accepted a non-DF primary");
+        else
+          require(status == GENERATIVEQC_STATUS_SUCCESS && exact_calculation,
+                  "default/direct LR rejected a valid non-DF primary");
+      }
       // The implicit auxiliary basis is the orbital basis for this bounded gate.
       generativeqc_calculation* calculation = nullptr;
       require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,

@@ -478,6 +478,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
         std::string_view(range_mode) != "direct")
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "GENERATIVEQC_DF_RANGE_EXCHANGE must be df or direct");
+    if (range_mode && std::string_view(range_mode) == "df" &&
+        fock.coulomb.approximation != scf::FockApproximation::DensityFitted)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "GENERATIVEQC_DF_RANGE_EXCHANGE=df requires density fitting");
     // LR fitting changes the Hamiltonian and remains opt-in until complete
     // endpoint promotion gates pass. Freeze this choice for energy and forces.
     execution_plan.density_fitted_range_exchange =

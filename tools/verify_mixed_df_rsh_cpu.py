@@ -1,8 +1,8 @@
 """Reproduce the CPU mixed-DF RSH oracles in test_dft_api.cpp.
 
 Requires optional PySCF 2.14.0 / Libxc 7.0.0. Both modes fit full-range J/K.
-The qualified WB97M-V composition fits LR exchange by default (or with the
-explicit ``df`` selector); ``direct`` keeps exact LR integrals. Generic PBE-RSH
+The qualified WB97M-V composition fits LR exchange only with the explicit
+``df`` selector; the default and ``direct`` keep exact LR integrals. Generic PBE-RSH
 keeps exact LR integrals in both modes. The tiny orbital auxiliary basis
 qualifies composition, not basis-set accuracy.
 Run from the checkout with PYTHONPATH=python python tools/verify_mixed_df_rsh_cpu.py.

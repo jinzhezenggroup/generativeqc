@@ -72,6 +72,8 @@ def emit_df_geometry_cuda(
     The emitted function lives where Vec3, Geometry, BoysWork and component
     already name the scalar derivative contract; no native equations are copied.
     """
+    if range_separated and moments != "boys_values(total+1,rho*distance,g.f,work);":
+        raise ValueError("range-separated DF geometry does not support custom moments")
     source = r"""__device__ __forceinline__ void prepare_geometry(double alpha,Vec3 A,double beta,Vec3 B,
     double gamma,Vec3 C,unsigned total,Geometry& g,BoysWork* work=nullptr) {
   const double p=alpha+beta,q=gamma,rho=p*q/(p+q);
