@@ -165,7 +165,12 @@ large-system solvers and cross-geometry intended-root tracking are unsupported.
 5. Compare overlap-metric AO densities to collapse identical restarts.
    A global alpha/beta flip is treated as equivalent only in equal-spin-count
    singlet references. This does **not** certify general point-group/spatial
-   equivalence.
+   equivalence. Root distances are per-spin Frobenius norms in an orthonormal
+   AO frame: with `S = L L.T`, use `||L.T (D1-D2) L||_F`. The same metric defines
+   the reported spin-density norm `||L.T (D_alpha-D_beta) L||_F`. These norms are
+   invariant under nonsingular AO basis changes; AO Mulliken populations remain
+   basis-labelled quantities. One Cholesky factor is reused for the complete
+   recovery, within its existing conservative numeric workspace allowance.
 
 The returned evidence binds the original and recovered certificates.
 Call UHFRecoveryResult.assert_current() before consumption; this does not yet

@@ -123,7 +123,18 @@ def _densities(reference: object) -> np.ndarray:
     return immutable(np.stack(blocks))
 
 
-def _metrics(reference: object, densities: np.ndarray) -> UHFSpinDiagnostics:
+def _metric_density_norm(density: np.ndarray, factor: np.ndarray) -> float:
+    """Frobenius norm in an orthonormal AO frame, S = factor @ factor.T."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        value = float(np.linalg.norm(factor.T @ density @ factor, "fro"))
+    if not math.isfinite(value):
+        raise RecoveryUnqualified("nonfinite overlap-metric density norm")
+    return value
+
+
+def _metrics(
+    reference: object, densities: np.ndarray, metric_factor: np.ndarray
+) -> UHFSpinDiagnostics:
     overlap = reference.overlap
     na, nb = reference.nocc("alpha"), reference.nocc("beta")
     sz = (na - nb) / 2.0
@@ -144,7 +155,7 @@ def _metrics(reference: object, densities: np.ndarray) -> UHFSpinDiagnostics:
         sz,
         immutable(populations[0]),
         immutable(populations[1]),
-        float(np.linalg.norm((densities[0] - densities[1]) @ overlap)),
+        _metric_density_norm(densities[0] - densities[1], metric_factor),
         canonical_hash(
             {
                 "reference": reference.identity,
@@ -196,13 +207,15 @@ def _rotate_density(
 def _same_root(
     left: np.ndarray,
     right: np.ndarray,
-    overlap: np.ndarray,
+    metric_factor: np.ndarray,
     tolerance: float,
     *,
     spin_flip: bool,
 ) -> bool:
     def defect(pair: np.ndarray) -> float:
-        return float(max(np.linalg.norm((left[i] - pair[i]) @ overlap) for i in (0, 1)))
+        return max(
+            _metric_density_norm(left[i] - pair[i], metric_factor) for i in (0, 1)
+        )
 
     if defect(right) < tolerance:
         return True
@@ -301,9 +314,16 @@ def recover_uhf_stability(
         raise RecoveryUnqualified(
             f"cannot publish unresolved {initial.status} reference"
         )
+    # The AO mixed representation D @ S is a similarity transform of the
+    # physical projector, whose Euclidean norm depends on basis conditioning.
+    # Whiten on both sides once per recovery; reuse the factor for every root.
+    try:
+        metric_factor = np.linalg.cholesky(r0.overlap)
+    except np.linalg.LinAlgError as error:
+        raise RecoveryUnqualified("overlap metric factorization failed") from error
     original = _densities(r0)
     if initial.status == "STABLE":
-        spin = _metrics(r0, original)
+        spin = _metrics(r0, original, metric_factor)
         return UHFRecoveryResult(
             "UNCHANGED",
             initial,
@@ -394,7 +414,7 @@ def recover_uhf_stability(
             if _same_root(
                 new_density,
                 original,
-                r0.overlap,
+                metric_factor,
                 options.root_tolerance,
                 spin_flip=False,
             ):
@@ -415,7 +435,7 @@ def recover_uhf_stability(
             certificate = diagnose(candidate)
             if certificate.status != "STABLE":
                 continue
-            spin = _metrics(r1, new_density)
+            spin = _metrics(r1, new_density, metric_factor)
             duplicate = next(
                 (
                     index
@@ -423,7 +443,7 @@ def recover_uhf_stability(
                     if _same_root(
                         new_density,
                         old[2],
-                        r0.overlap,
+                        metric_factor,
                         options.root_tolerance,
                         spin_flip=r0.nocc("alpha") == r0.nocc("beta"),
                     )
