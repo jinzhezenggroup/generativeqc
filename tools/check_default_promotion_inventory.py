@@ -324,7 +324,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             'selector == "1" || selector == "spatial-reuse"',
             "return DirectSpdForceSchedule::Incumbent;",
             "if (captured == DirectSpdForceSchedule::Automatic)",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse : DirectSpdForceSchedule::Incumbent;",
         )
     ):
         raise ValueError("Spatial force default scope or opt-out drifted")

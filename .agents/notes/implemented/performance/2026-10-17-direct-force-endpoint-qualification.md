@@ -3,6 +3,11 @@
 Status: implemented opt-in; integration/default-promotion gates remain open
 Date: 2026-10-17
 
+The later [default-promotion decision](2026-10-17-direct-force-default-promotion.md)
+supersedes this note's opt-in-only policy after testing the unset selector. The
+source-matched measurements and rejected experiments here remain historical;
+promotion does not turn them into measurements of unmodified current master.
+
 ## Decision and source boundary
 
 Retain the order-six relative-response recurrence consumer in PR #2587 and the
