@@ -3,6 +3,10 @@
 Status: proposed; implemented in an isolated default-off qualification export
 Date: 2026-10-17
 
+Endpoint follow-up: the [qualified opt-in decision](../implemented/performance/2026-10-17-direct-force-endpoint-qualification.md)
+records completed endpoint gates; default promotion remains open. Retain these
+preliminary observations as history.
+
 ## Problem and boundary
 
 Shell-shared order-six preparation removes repeated primitive and Coulomb/Boys
