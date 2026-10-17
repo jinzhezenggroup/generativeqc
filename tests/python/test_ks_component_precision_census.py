@@ -64,6 +64,7 @@ using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_point{}, experimental_mixed_contractions{}, pending_mixed_exchange{};
+  bool pending_mixed_contractions{};
   bool pending_mixed_resident{}, pending_mixed_range_resident{};
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
@@ -86,7 +87,8 @@ struct Owner {
                 std::array<std::uint64_t, 2> nonlocal_arithmetic = {}) {
     pending_mixed_coulomb = coulomb;
     pending_mixed_density = density;
-    mixed_precision_executed |= coulomb || density || pending_mixed_point || pending_mixed_range_resident ||
+    mixed_precision_executed |= coulomb || density || pending_mixed_point || pending_mixed_contractions ||
+                                pending_mixed_range_resident ||
                                 mixed_range_recurrences || nonlocal_arithmetic[0];
 """
         + census
@@ -101,12 +103,17 @@ std::uint64_t count(const Owner& p, Kind kind, Mode mode = Mode::Strict,
                     Dtype storage = Dtype::Fp64) {
   std::uint64_t total = 0;
   for (const auto& op : p.output.precision_work.operators) {
-    assert(op.accumulation == Dtype::Fp64);
+    assert(op.accumulation == Dtype::Fp64 ||
+           (op.kind == Kind::MatrixProduct && op.compute == Dtype::Fp32 &&
+            op.accumulation == Dtype::Fp32 && op.arithmetic_mode == Mode::Mixed));
     assert(op.storage == Dtype::Fp64 ||
            (op.storage == Dtype::Fp32 && op.arithmetic_mode == Mode::Mixed &&
             (op.kind == Kind::CoulombJ || op.kind == Kind::ExchangeK ||
              op.kind == Kind::CoulombRecurrence)));
-    assert(op.reduction == Dtype::Fp64);
+    assert(op.reduction == Dtype::Fp64 ||
+           (op.kind == Kind::MatrixProduct && op.compute == Dtype::Fp32 &&
+            op.accumulation == Dtype::Fp32 && op.reduction == Dtype::Fp32 &&
+            op.arithmetic_mode == Mode::Mixed));
     assert(op.compute == (op.arithmetic_mode == Mode::Mixed ? Dtype::Fp32 : Dtype::Fp64));
     if (op.kind == kind && op.arithmetic_mode == mode && op.storage == storage) total += op.count;
   }
@@ -131,6 +138,35 @@ void check_inventory(const Owner& p, bool coulomb, bool density, bool stabilized
   assert(p.output.precision_work.operators.size() == expected_rows);
 }
 int main() {
+  // Shared contraction arithmetic is independent of the point functional.
+  // The two logical products do not relabel point algebra or strict control.
+  Owner contractions;
+  contractions.pending_mixed_contractions = true;
+  contractions.complete(false, false, 0);
+  assert(count(contractions, Kind::MatrixProduct, Mode::Mixed) == 2);
+  assert(count(contractions, Kind::MatrixProduct) == 7);
+  assert(count(contractions, Kind::Xc) == 1);
+  assert(count(contractions, Kind::Xc, Mode::Mixed) == 0);
+  unsigned fp32_product_reductions = 0, fp64_product_reductions = 0;
+  for (const auto& op : contractions.output.precision_work.operators) {
+    if (op.kind == Kind::MatrixProduct && op.arithmetic_mode == Mode::Mixed) {
+      assert(op.storage == Dtype::Fp64 && op.compute == Dtype::Fp32);
+      assert(op.accumulation == Dtype::Fp32);
+      fp32_product_reductions += op.reduction == Dtype::Fp32;
+      fp64_product_reductions += op.reduction == Dtype::Fp64;
+    }
+  }
+  assert(fp32_product_reductions == 1 && fp64_product_reductions == 1);
+  assert(contractions.output.precision.mixed_stage_fock_builds == 1);
+  assert(contractions.refinement_iterations == 0);
+  contractions.pending_mixed_contractions = false;
+  contractions.complete(false, false, 0);
+  assert(contractions.output.precision.strict_stage_fock_builds == 1);
+  assert(contractions.refinement_iterations == 1);
+  assert(count(contractions, Kind::MatrixProduct, Mode::Mixed) == 2);
+  assert(count(contractions, Kind::MatrixProduct) == 14);
+  assert(count(contractions, Kind::Xc) == 2);
+  assert(contractions.output.precision_work.events.back().phase == scf::PrecisionWorkPhase::Refinement);
   // Budget-selected point work keeps J/K strict and records the actual
   // contraction accumulator instead of inheriting the legacy AUTO census.
   for (const bool contractions : {false, true}) {
@@ -401,6 +437,7 @@ int main() {
         GENERATIVEQC_PRECISION_AUTO, capabilities, false, false, false, false, {true, true});
     assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
     assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+    assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kXcMatrixContractions));
     assert(!fast_fock.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
     assert(resolve_cuda_ks_iteration_precision(fast_fock, true, true).is_strict_fp64());
     for (const bool nonlocal_graph : {false, true}) {
@@ -408,11 +445,17 @@ int main() {
           GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
           false, false, {true, false});
       assert(pure.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+      assert(pure.uses_lower_precision(cuda_ks_precision_region::kXcMatrixContractions));
+      const auto* products = pure.find(cuda_ks_precision_region::kXcMatrixContractions);
+      assert(products->storage_dtype == runtime::PrecisionDtype::Fp64);
+      assert(products->compute_dtype == runtime::PrecisionDtype::Fp32);
+      assert(products->accumulation_dtype == runtime::PrecisionDtype::Fp32);
       assert(!pure.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
       const auto hybrid = resolve_cuda_ks_precision_schedule(
           GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,
           false, false, {true, true}, true);
       assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kExactExchange));
+      assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kXcMatrixContractions));
       assert(hybrid.find(cuda_ks_precision_region::kRangeExchange));
       assert(!hybrid.uses_lower_precision(cuda_ks_precision_region::kRangeExchange));
       assert(hybrid.uses_lower_precision(cuda_ks_precision_region::kNonlocalCorrelation) == nonlocal_graph);
