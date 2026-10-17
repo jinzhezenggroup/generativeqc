@@ -15,6 +15,12 @@ enum class DirectSpdForceSchedule : unsigned char {
   DensityReuse
 };
 
+/** Arithmetic preference independent of acquisition, precision and method.
+ * Unknown nonempty requests retain the original nuclear-coordinate roots. */
+inline constexpr bool select_direct_weighted_force_response(std::string_view selector) noexcept {
+  return selector.empty() || selector == "1" || selector == "relative";
+}
+
 /** Bounded experimental queue sizes; unknown requests retain the incumbent.
  * This is task ownership only: each admitted task still uses all 256 lanes of
  * the same generated derivative. Capture the preference with the geometry. */

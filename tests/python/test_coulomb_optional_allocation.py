@@ -27,6 +27,7 @@ STUBS = r"""
 #include "scf/direct_block_schedule.hpp"
 #include "scf/cuda/direct_spd_force_schedule.hpp"
 using generativeqc::scf::cuda_execution::select_direct_order_seven_page_size;
+using generativeqc::scf::cuda_execution::select_direct_weighted_force_response;
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
 constexpr int cudaLimitStackSize=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
@@ -117,6 +118,7 @@ struct DeviceBatch {
   bool direct_pair_cooperative_derivatives=false;
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
+  bool direct_force_relative_response{true};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -165,6 +167,21 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
+  if(argc==2 && std::strcmp(argv[1],"--response-policy-only")==0) {
+    assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
+    DeviceBatch original;
+    configure_direct_coulomb_recurrence(original);
+    assert(original.direct_force_relative_response);
+    for(const auto* selector : {"0", "unknown", "", "1", "relative"}) {
+      assert(setenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES",selector,1)==0);
+      DeviceBatch prepared;
+      configure_direct_coulomb_recurrence(prepared);
+      assert(prepared.direct_force_relative_response==select_direct_weighted_force_response(selector));
+      assert(original.direct_force_relative_response);
+    }
+    assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
+    return 0;
+  }
   if(argc==2 && std::strcmp(argv[1],"--budget-only")==0) {
     HostBatch host; DeviceBatch borrowed;
     auto owner=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
@@ -296,7 +313,7 @@ def compile_cached_probe(
 @pytest.fixture(scope="module")
 def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("void configure_direct_coulomb_recurrence(")
+    begin = source.index("void configure_direct_")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     for stage, anchor in enumerate(
@@ -316,6 +333,15 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cpp.write_text(STUBS + preparation + DRIVER)
     compile_cached_probe(cpp, binary)
     return binary
+
+
+def test_weighted_response_policy_is_captured_per_prepared_owner(
+    allocation_probe: Path,
+) -> None:
+    """Explicit rollback never mutates an already prepared arithmetic policy."""
+    subprocess.run(
+        [str(allocation_probe), "--response-policy-only"], check=True, timeout=10
+    )
 
 
 def test_compensated_j_exact_and_one_byte_short_budget(allocation_probe: Path) -> None:

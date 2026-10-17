@@ -4,6 +4,8 @@ Run under finite Slurm with an authenticated CUDA core/AOT library selected by
 GENERATIVEQC_LIBRARY. Each arm retains cold, five warm calls, moved geometry,
 five moved-warm calls and the original 1800-second population limit. Independent
 oracles are reconstructed from the existing pinned benchmark evidence.
+Use --weighted-responses to isolate the low-order relative-response default
+against its nuclear rollback while keeping the qualified order-6/7 defaults.
 """
 
 from __future__ import annotations
@@ -104,22 +106,31 @@ def _stop(child: subprocess.Popen) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Compare explicit or unset selectors without changing device visibility."""
+    """Isolate one force selector without changing device visibility or limits."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=raw_output_path)
     parser.add_argument("--atoms", type=int, choices=(48, 96), default=96)
     parser.add_argument(
         "--baseline",
         choices=("spatial-reuse", "relative-reuse", "relative-density", "automatic"),
-        default="spatial-reuse",
+        default=None,
     )
     parser.add_argument(
         "--candidate",
         choices=("relative-reuse", "relative-density", "automatic"),
-        default="automatic",
+        default=None,
+    )
+    parser.add_argument(
+        "--weighted-responses",
+        action="store_true",
+        help="compare nuclear/automatic low-order responses; retain order-6/7 defaults",
     )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.weighted_responses and (args.baseline or args.candidate):
+        parser.error(
+            "--weighted-responses cannot be combined with --baseline/--candidate"
+        )
     for name in ("SLURM_JOB_ID", "CUDA_VISIBLE_DEVICES", "GENERATIVEQC_LIBRARY"):
         if not os.environ.get(name):
             parser.error(f"{name} is required; use finite srun and a built library")
@@ -131,14 +142,32 @@ def main(argv: Sequence[str] | None = None) -> None:
     environment = dict(os.environ, GENERATIVEQC_CUDA_KS_OCCUPIED_XC="0")
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         environment[name] = "8"
-    for arm, selector in (("baseline", args.baseline), ("candidate", args.candidate)):
+    if args.weighted_responses:
+        selector_name = "GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
+        selectors = ("0", None)
+        environment.pop("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", None)
+    else:
+        selector_name = "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS"
+        selectors = (args.baseline or "spatial-reuse", args.candidate or "automatic")
+    with (output / "comparison.json").open("x") as stream:
+        json.dump(
+            {
+                "selector": selector_name,
+                "baseline": selectors[0],
+                "candidate": selectors[1],
+                "population_limit_seconds": 1800,
+            },
+            stream,
+            indent=2,
+        )
+    for arm, selector in zip(("baseline", "candidate"), selectors, strict=True):
         target = output / arm
         target.mkdir()
         arm_environment = dict(environment)
-        if selector == "automatic":
-            arm_environment.pop("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", None)
+        if selector is None or selector == "automatic":
+            arm_environment.pop(selector_name, None)
         else:
-            arm_environment["GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS"] = selector
+            arm_environment[selector_name] = selector
         child = subprocess.Popen(
             [
                 sys.executable,

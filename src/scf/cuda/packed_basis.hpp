@@ -115,6 +115,8 @@ struct DeviceBatch {
   bool direct_dddd_force_class_major{};
   /** Intrusive census-only split repeats enumeration to time low/6 separately. */
   bool direct_force_split_low{};
+  /** Exact relative-coordinate AD; false retains the nuclear-coordinate graph. */
+  bool direct_force_relative_response{true};
   /** Per-launch qualification candidate, never a process-global precision mode.
    * Only full-range weighted order-0..5 sources consume it. Geometry, density
    * weights and radial moments stay double; all other derivative owners stay

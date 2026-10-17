@@ -417,6 +417,26 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
             *order3,
         )
     )
+    relative_force = _emit_weighted_force_class_bodies(
+        tuple(
+            (
+                kernel.integral.signature.angular[0],
+                kernel.integral.signature.angular[1],
+                kernel.integral.signature.angular[2],
+                kernel.integral.signature.angular[3],
+            )
+            for kernel, _ in (
+                (psss, "psss_force"),
+                (psps, "psps_force"),
+                (ppss, "ppss_force"),
+                (dsss, "dsss_force"),
+                *order3,
+            )
+        ),
+        "double",
+        relative_responses=True,
+        inline_single_use=inline_single_use,
+    )
     return (
         full[: -len(marker)]
         + specialized_result
@@ -427,6 +447,7 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         + order2_force
         + order3_force
         + mixed_force
+        + relative_force
         + marker
     )
 
@@ -461,14 +482,21 @@ def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...])
         "namespace generativeqc::scf::generated_weighted_eri {\n"
         + _emit_weighted_force_class_bodies(classes, "double")
         + _emit_weighted_force_class_bodies(classes, "float")
+        + _emit_weighted_force_class_bodies(classes, "double", relative_responses=True)
         + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
     )
 
 
 def _emit_weighted_force_class_bodies(
-    classes: tuple[tuple[int, int, int, int], ...], scalar_type: str
+    classes: tuple[tuple[int, int, int, int], ...],
+    scalar_type: str,
+    *,
+    relative_responses: bool = False,
+    inline_single_use: typing.Any = False,
 ) -> str:
-    """Keep primitive and partition reductions in the selected compute type."""
+    """Keep bounded partitions and retain nuclear roots beside relative FP64 AD."""
+    if relative_responses and scalar_type != "double":
+        raise ValueError("relative weighted responses require FP64")
     result_type = (
         "IndependentGradient" if scalar_type == "double" else "IndependentGradientF32"
     )
@@ -479,12 +507,16 @@ def _emit_weighted_force_class_bodies(
         name = "".join("spdf"[value] for value in angular) + "_force"
         if scalar_type == "float":
             name += "_fp32"
+        elif relative_responses:
+            name += "_relative"
         parts = []
         # Keep the existing 64-component lowering bound. Every partition
         # retains global weight indexing; their sum covers the full class.
         for begin in range(0, count, 64):
             kernel = build_weighted_eri_kernel(
-                integral, tuple(range(begin, min(begin + 64, count)))
+                integral,
+                tuple(range(begin, min(begin + 64, count))),
+                derivative_basis="relative" if relative_responses else "nuclear",
             )
             part_name = name if count <= 64 else f"{name}_part{begin // 64}"
             parts.append(part_name)
@@ -497,6 +529,7 @@ def _emit_weighted_force_class_bodies(
                     result_type=result_type,
                     ordering=AlgebraOrdering.PRESSURE_AWARE,
                     scalar_type=scalar_type,
+                    inline_single_use=inline_single_use,
                 )
             )
         if len(parts) > 1:
