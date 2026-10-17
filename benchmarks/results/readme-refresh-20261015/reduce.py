@@ -19,7 +19,14 @@ PUBLICATION = ROOT / "benchmarks/results/readme-refresh-20261015"
 
 def receipt(path: Path) -> dict:
     payload = path.read_bytes()
-    return {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+    identity = {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+    if path.suffix == ".xz":
+        expanded = lzma.decompress(payload)
+        identity["uncompressed"] = {
+            "bytes": len(expanded),
+            "sha256": hashlib.sha256(expanded).hexdigest(),
+        }
+    return identity
 
 
 def main() -> None:

@@ -6,15 +6,30 @@ set -euo pipefail
 root="${README_REFRESH_ROOT:-/data/jzzeng/gqc-readme-2531-2532-20261015-1593d3b2f}"
 output="${README_DF96_OUTPUT:?Select a fresh supplement output directory}"
 consumer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/df96-benchmark-consumer.py.xz"
-mkdir -p "$output"
-test ! -e "$output/source"
+# Resolve input paths before changing directory and atomically reserve the output.
+# Even an interrupted prior attempt owns its receipts and must never be reused.
+root="$(cd "$root" && pwd)"
+mkdir -p -- "$(dirname -- "$output")"
+mkdir -- "$output"
+output="$(cd "$output" && pwd)"
 cp -a "$root/source" "$output/source"
 python3 - "$consumer" "$output/source/benchmarks/readme_omol25.py" <<'PY'
+import hashlib
+import json
 import lzma
 import sys
 from pathlib import Path
 
-Path(sys.argv[2]).write_bytes(lzma.decompress(Path(sys.argv[1]).read_bytes()))
+archive = Path(sys.argv[1])
+receipt = json.loads((archive.parent / "manifest.json").read_bytes())["files"][archive.name]
+payload = archive.read_bytes()
+if len(payload) != receipt["bytes"] or hashlib.sha256(payload).hexdigest() != receipt["sha256"]:
+    raise ValueError("archived benchmark consumer checksum mismatch")
+expanded = lzma.decompress(payload)
+identity = receipt["uncompressed"]
+if len(expanded) != identity["bytes"] or hashlib.sha256(expanded).hexdigest() != identity["sha256"]:
+    raise ValueError("expanded benchmark consumer checksum mismatch")
+Path(sys.argv[2]).write_bytes(expanded)
 PY
 cd "$output/source"
 export PATH="/data/jzzeng/qc-provider-1886-tools/bin:/home/jzzeng/codes/wb97m-20261002/ccache/usr/bin:/home/jzzeng/.local/bin:/home/jzzeng/codes/wb97m-20261002/gpu-env/bin:/group/software/cuda-12.9.1/bin:/usr/bin:/bin"

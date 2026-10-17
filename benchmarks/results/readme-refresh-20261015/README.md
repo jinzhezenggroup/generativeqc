@@ -154,6 +154,8 @@ srun --partition=main --nodelist=node1 --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 ```
 
 The script restores the hash-bound executed consumer and never runs GPU4PySCF.
+It verifies both archived and expanded consumer checksums, reserves a new output
+directory exclusively, and refuses to reuse prior receipts, even after interruption.
 For a longer attempt, increase both `README_BENCHMARK_POINT_TIMEOUT` and the
 finite Slurm wall limit; this publication does not claim the missing phases
 completed. Offline replay still requires no GPU or new reference calculation.
