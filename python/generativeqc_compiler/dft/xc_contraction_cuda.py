@@ -284,6 +284,19 @@ __device__ void tiled_density_product_body(const double* density, const double* 
   const I panel = count*n;
   const double* source = ao+jet*panel;
   const double* matrix = density+spin*full_n*full_n;
+  // All AO rows for one point/jet share the same binary scale. Restoring it
+  // after the FP32 dot avoids selective tail underflow and needs no FP64 dot,
+  // additional AO panel, or change to the strict specialization.
+  int ao_exponent = 0;
+  if constexpr (std::is_same_v<Arithmetic, float>) {
+    double maximum = 0.0;
+    if (point < count)
+      for (I col = x; col < n; col += @TILE@)
+        maximum = fmax(maximum, fabs(source[point*n+col]));
+    for (I offset = @TILE@/2; offset; offset /= 2)
+      maximum = fmax(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset, @TILE@));
+    if (maximum > 0.0) frexp(maximum, &ao_exponent);
+  }
   Arithmetic value = 0.0;
   for (I begin = 0; begin < n; begin += @TILE@) {
     const I row = I(blockIdx.x)*@TILE@+y, col = begin+x;
@@ -305,7 +318,11 @@ __device__ void tiled_density_product_body(const double* density, const double* 
                     : 0.0;
     } else {
       d[y][x] = row < n && col < n ? 0.5*matrix[global_row*full_n+global_col]+0.5*matrix[global_col*full_n+global_row] : 0.0;
-      a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
+      if constexpr (std::is_same_v<Arithmetic, float>)
+        a[y][x] = point < count && col < n
+                      ? scalbn(source[point*n+col], -ao_exponent) : 0.0;
+      else
+        a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
     }
     __syncthreads();
     // Only discarded outputs may skip arithmetic. Every lane still loads the
@@ -321,8 +338,14 @@ __device__ void tiled_density_product_body(const double* density, const double* 
     }
     __syncthreads();
   }
-  if (mu < n && point < count)
-    work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
+  if (mu < n && point < count) {
+    // Normalize only the FP32 operand; restore its exact power-of-two scale
+    // in FP64 storage so tiny physical AO tails do not lose their sign/domain.
+    if constexpr (std::is_same_v<Arithmetic, float>)
+      work[(spin*work_jets+jet)*panel+point*n+mu] = finite(scalbn(static_cast<double>(value), ao_exponent), error, 1);
+    else
+      work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
+  }
 }
 
 template <bool Mixed, class Arithmetic = double>
@@ -384,13 +407,16 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       const Arithmetic right = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
       bool reuse_diagonal = false;
       if (DiagonalJets && !cross) {
-        const bool scaled = fabs(right) <= 0x1p128;
+        // Keep the qualified FP64 range unchanged. FP32 needs its own bound:
+        // a finite right panel can overflow when doubled before multiplication.
+        constexpr double diagonal_limit = std::is_same_v<Arithmetic, float> ? 0x1p30 : 0x1p128;
+        const bool scaled = fabs(right) <= diagonal_limit;
         scaled_wn[y][x] = scaled;
         wn[y][x] = scaled ? right+right : right;
         const bool unsafe_weight = !diagonal_weights ||
-            (p < count && fabs(diagonal_weights[p]) > 0x1p128);
-        const bool unsafe = unsafe_weight || !scaled || fabs(am[y][x]) > 0x1p128 ||
-            fabs(an[y][x]) > 0x1p128 || fabs(wm[y][x]) > 0x1p128;
+            (p < count && fabs(diagonal_weights[p]) > diagonal_limit);
+        const bool unsafe = unsafe_weight || !scaled || fabs(am[y][x]) > diagonal_limit ||
+            fabs(an[y][x]) > diagonal_limit || fabs(wm[y][x]) > diagonal_limit;
         reuse_diagonal = !__syncthreads_or(unsafe);
       } else {
         wn[y][x] = right;
@@ -437,10 +463,11 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
                         accumulate, error, ao_ids, full_n, blockIdx.z);
 }
 
+template <class Arithmetic = double>
 __global__ void tiled_diagonal_potential(const double* ao, const double* work, I n, I count,
     I work_jets, const double* point_totals, double* potential, double* totals,
     bool accumulate, int* error, const size_t* ao_ids, I full_n, const double* weights) {
-  tiled_potential_body<false, double, true>(ao, work, n, count, work_jets, point_totals,
+  tiled_potential_body<false, Arithmetic, true>(ao, work, n, count, work_jets, point_totals,
       potential, totals, accumulate, error, ao_ids, full_n, blockIdx.z, weights);
 }
 
@@ -453,6 +480,14 @@ inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   if (tiles > 65535 || point_tiles > 65535) return false;
   const I tile_pairs = tiles*(tiles+1)/2;
   return tile_pairs <= 65535;
+}
+/** FP32 also uses the existing masked tiled body for small/tail domains.
+ * Rounding dimensions up only for admission gives the same one-tile launch
+ * bounds without changing selected AOs, points or strict-FP64 scheduling. */
+inline bool fp32_tiled_xc_admitted(I ao_count, I count, I spins, I work_jets) {
+  return ao_count > 0 && count > 0 &&
+      tiled_xc_admitted(ao_count < @TILE@ ? @TILE@ : ao_count, count < @TILE@ ? @TILE@ : count,
+                       spins, work_jets);
 }
 template <bool Mixed, bool Tiled, class Arithmetic = double>
 void launch_density_product(cudaStream_t stream, const double* density,
@@ -484,17 +519,16 @@ inline void generated_potential(cudaStream_t stream, const double* ao,
     if (point_totals) accumulate_totals<<<1,32,0,stream>>>(point_totals,count,totals,error);
     return;
   }
-  if (tiled_xc_admitted(n, count, spins, work_jets)) {
-    if constexpr (std::is_same_v<Arithmetic, double>) {
-      if (work_jets == 4) {
-        compact_diagonal_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
-            ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
-        generativeqc_tensor::cuda_check(cudaGetLastError());
-        const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
-        tiled_diagonal_potential<<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
-            ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n,weights);
-        return;
-      }
+  if (tiled_xc_admitted(n, count, spins, work_jets) ||
+      (std::is_same_v<Arithmetic, float> && fp32_tiled_xc_admitted(n, count, spins, work_jets))) {
+    if (work_jets == 4) {
+      compact_diagonal_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+          ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
+      tiled_diagonal_potential<Arithmetic><<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
+          ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n,weights);
+      return;
     }
     compact_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
         ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);

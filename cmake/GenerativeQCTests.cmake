@@ -430,6 +430,8 @@ macro(generativeqc_add_native_tests)
     target_link_libraries(generativeqc_dft_cuda_tests PRIVATE CUDA::cudart CUDA::cublas)
     set_target_properties(generativeqc_dft_cuda_tests PROPERTIES CUDA_STANDARD 20)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
+    add_test(NAME generativeqc_dft_cuda_mixed_matrix_tests COMMAND generativeqc_dft_cuda_tests --mixed-matrix-contractions)
+    set_tests_properties(generativeqc_dft_cuda_mixed_matrix_tests PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME generativeqc_dft_cuda_point_batch_tests COMMAND generativeqc_dft_cuda_tests --point-batches)
     set_tests_properties(generativeqc_dft_cuda_point_batch_tests PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME generativeqc_dft_cuda_ragged_batch_tests COMMAND generativeqc_dft_cuda_tests --ragged-batches)
@@ -517,6 +519,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_device_resources.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
+  generativeqc_native_test(generativeqc_hf_df_resource_tests
+                       tests/native/test_hf_df_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)

@@ -74,7 +74,16 @@ def contraction_probe(native_cxx: Any, tmp_path_factory: Any, request: Any) -> A
 
 
 @pytest.mark.parametrize(
-    "active,count,jets", [(3, 5, 1), (19, 33, 1), (47, 257, 4), (96, 256, 4)]
+    "active,count,jets",
+    [
+        (1, 1, 1),
+        (1, 17, 4),
+        (17, 1, 4),
+        (3, 5, 1),
+        (19, 33, 1),
+        (47, 257, 4),
+        (96, 256, 4),
+    ],
 )
 @pytest.mark.parametrize("mapped", [False, True])
 def test_actual_fp32_products_preserve_domain_and_fp64_scatter(
@@ -129,8 +138,39 @@ def test_actual_fp32_products_preserve_domain_and_fp64_scatter(
     )
 
 
+@pytest.mark.parametrize("exponent", [-320, -200, -120, -50, 0])
+def test_fp32_density_products_preserve_representable_tiny_tails(
+    contraction_probe: Any,
+    exponent: int,
+) -> None:
+    """FP64 AO storage can represent tails far below FP32's smallest value."""
+    active, count, jets = 19, 33, 4
+    rng = np.random.default_rng(721)
+    factor = rng.normal(size=(active, active)) / active
+    density = np.ascontiguousarray(factor @ factor.T + np.eye(active))
+    ao = np.ascontiguousarray(rng.normal(size=(jets, count, active)) * 10.0**exponent)
+    work = np.ones_like(ao)
+    products = np.empty_like(ao)
+    potential = np.zeros((active, active))
+    ids = np.arange(active, dtype=np.uintp)
+    assert (
+        contraction_probe(
+            density, ao, work, products, potential, count, active, active, jets, ids, 1
+        )
+        == 0
+    )
+    expected = ao @ density.T
+    tolerance = 3e-6 * np.max(np.abs(expected)) + active * np.nextafter(0.0, 1.0)
+    assert np.max(np.abs(products - expected)) <= tolerance
+    assert np.any(products != 0.0)
+    rho = np.sum(ao[0] * products[0], axis=1)
+    assert np.all(rho >= 0.0)
+
+
+@pytest.mark.parametrize("mode", [1, 4, 5])
 def test_fp32_overflow_reports_rejection_instead_of_clipping(
     contraction_probe: Any,
+    mode: int,
 ) -> None:
     density = np.ones((3, 3))
     ao = np.full((1, 5, 3), 1e40)
@@ -143,15 +183,16 @@ def test_fp32_overflow_reports_rejection_instead_of_clipping(
         == 0
     )
     assert (
-        contraction_probe(density, ao, work, products, potential, 5, 3, 3, 1, ids, 1)
+        contraction_probe(density, ao, work, products, potential, 5, 3, 3, 1, ids, mode)
         > 0
     )
 
 
 @pytest.mark.parametrize("active,count", [(1, 1), (19, 33), (47, 257), (96, 256)])
 @pytest.mark.parametrize("mapped", [False, True])
-def test_fp64_diagonal_bilinear_uses_one_authoritative_triangle(
-    contraction_probe: Any, active: int, count: int, mapped: bool
+@pytest.mark.parametrize("mode", [2, 4, 5])
+def test_diagonal_bilinear_uses_one_authoritative_triangle(
+    contraction_probe: Any, active: int, count: int, mapped: bool, mode: int
 ) -> None:
     """Independent full bilinear, signed weights, ragged tails and global scatter."""
     generator = np.random.default_rng(20261016)
@@ -177,13 +218,16 @@ def test_fp64_diagonal_bilinear_uses_one_authoritative_triangle(
     potential = initial.copy()
     assert (
         contraction_probe(
-            density, ao, work, products, potential, count, active, full, 4, ids, 2
+            density, ao, work, products, potential, count, active, full, 4, ids, mode
         )
         == 0
     )
     actual = initial.copy()
     actual[np.ix_(ids, ids)] += expected
-    np.testing.assert_allclose(potential, actual, rtol=3e-14, atol=2e-12)
+    if mode in (4, 5):
+        np.testing.assert_allclose(potential, actual, rtol=0, atol=5e-4)
+    else:
+        np.testing.assert_allclose(potential, actual, rtol=3e-14, atol=2e-12)
     np.testing.assert_array_equal(potential, potential.T)
 
 
@@ -204,7 +248,7 @@ def test_generated_diagonal_panel_producer_preserves_spin_and_weights(
         == 0
     )
     density = generator.normal(size=(spins, active, active))
-    for mode in (2, 3):
+    for mode in (2, 3, 4, 5):
         potential = np.zeros((spins, active, active))
         products = np.empty_like(output)
         assert (
@@ -234,7 +278,16 @@ def test_generated_diagonal_panel_producer_preserves_spin_and_weights(
                 matrix += ao[jet].T @ (
                     (weights * coefficients[spin, 4])[:, None] * ao[jet]
                 )
-            np.testing.assert_allclose(potential[spin], matrix, rtol=3e-14, atol=2e-12)
+            if mode in (4, 5):
+                np.testing.assert_allclose(potential[spin], matrix, rtol=0, atol=5e-4)
+                np.testing.assert_array_equal(
+                    potential[spin],
+                    potential[spin].astype(np.float32).astype(np.float64),
+                )
+            else:
+                np.testing.assert_allclose(
+                    potential[spin], matrix, rtol=3e-14, atol=2e-12
+                )
     expected = np.empty_like(output)
     for spin in range(spins):
         expected[spin, 0] = 0.5 * coefficients[spin, 0, :, None] * ao[0]
@@ -250,6 +303,76 @@ def test_generated_diagonal_panel_producer_preserves_spin_and_weights(
         )
         > 0
     )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "finite-doubling-overflow",
+        "underflow-cancellation",
+        "hidden-preparation-underflow",
+    ],
+)
+def test_fp32_diagonal_range_fallback_preserves_original_arithmetic(
+    contraction_probe: Any,
+    case: str,
+) -> None:
+    """FP32-specific guards retain finite canonical products and cancellation."""
+    active = count = 16
+    ao = np.zeros((4, count, active))
+    coefficients = np.zeros((1, 5, count))
+    weights = np.ones(count)
+    if case == "finite-doubling-overflow":
+        ao[1, 0] = 2.0**-100
+        coefficients[0, 4, 0] = 2.0**228
+    elif case == "underflow-cancellation":
+        ao[1, 0, :2] = [2.0**40, 2.0**-80]
+        ao[1, 1, :2] = [2.0**-80, 2.0**40]
+        coefficients[0, 4, :2] = [2.0**-120, -(2.0**-120)]
+        weights[:2] = 2.0**100
+    else:
+        ao[1, 0, :2] = [2.0**-60, 2.0**60]
+        coefficients[0, 4, 0] = 2.0**-160
+        weights[0] = 2.0**140
+    work = np.empty_like(ao)
+    assert (
+        contraction_probe.diagonal_panels(
+            ao, coefficients, weights, work, active, count, 1
+        )
+        == 0
+    )
+    density = np.zeros((active, active))
+    indices = np.arange(active, dtype=np.uintp)
+    matrices = []
+    for mode in (1, 4, 5):
+        potential = np.zeros_like(density)
+        assert (
+            contraction_probe(
+                density,
+                ao,
+                work,
+                np.empty_like(ao),
+                potential,
+                count,
+                active,
+                active,
+                4,
+                indices,
+                mode,
+                weights=weights,
+            )
+            == 0
+        )
+        assert np.isfinite(potential).all()
+        matrices.append(potential)
+    for matrix in matrices[1:]:
+        np.testing.assert_array_equal(matrix, matrices[0])
+    if case == "finite-doubling-overflow":
+        np.testing.assert_array_equal(matrices[0], np.full_like(density, 2.0**28))
+    elif case == "underflow-cancellation":
+        assert matrices[0][0, 1] == 0
+    else:
+        assert matrices[0][0, 1] == 2.0**-20
 
 
 @pytest.mark.parametrize(

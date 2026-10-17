@@ -219,6 +219,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
+        "posthf": ("test_ccsdt_cbs_native.py",),
         "runtime-heavy": (
             "test_cpu_hf_high_l.py",
             "test_cuda_xc_point_contract.py",
@@ -266,11 +267,19 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("insertions", ((), ("test_000.py", "test_lambda_shift.py")))
+@pytest.mark.parametrize(
+    "insertions",
+    (
+        (),
+        ("test_000.py", "test_lambda_shift.py"),
+        ("test_000.py", "test_array_api_take_default_axis.py", "test_lambda_shift.py"),
+    ),
+)
 def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
     event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
 ) -> None:
     owners = {
+        "tests/python/test_ccsdt_cbs_native.py": "posthf",
         "tests/python/test_cpu_hf_high_l.py": "runtime-heavy",
         "tests/python/test_cuda_xc_point_contract.py": "runtime-heavy",
         "tests/python/test_uccsd_solver.py": "runtime-heavy",
@@ -285,6 +294,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         for name in (
             "test_aaa.py",
             "test_cc_triples_tiles_next.py",
+            "test_ccsdt_cbs_aaa.py",
+            "test_ccsdt_cbs_zzz.py",
             "test_cpu_hf_high_l_next.py",
             "test_cuda_xc_point_contract_next.py",
             "test_df_lambda_mixed_precision_next.py",
@@ -312,6 +323,7 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
             (tmp_path / relative).unlink()
     selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     assert selections["runtime-heavy"][0] == "loadfile"
+    assert selections["posthf"][0] == "loadfile"
     for path, owner in owners.items():
         actual = [
             shard for shard, (_, targets, _) in selections.items() if path in targets
@@ -371,7 +383,60 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert 'pytest "${collection_targets[@]}" -v' in source
     assert "source .github/scripts/ci_collect_python_shard.sh" in source
     assert '"${collection_args[@]}"' in source
-    assert "-o faulthandler_timeout=900" in source
+    _assert_timed_diagnostics_contract(source)
+
+
+def _assert_timed_diagnostics_contract(source: str) -> None:
+    step = source.split("      - name: Run Python tests with coverage\n", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    command = step.split('.venv/bin/python -m pytest "${collection_targets[@]}"', 1)[1]
+    command = command.replace("\\\n", " ").splitlines()[0]
+    arguments = shlex.split(command)
+    assert arguments.count("-o") == 1 and arguments.count("-p") == 1
+    assert arguments[arguments.index("-o") + 1] == "faulthandler_timeout=0"
+    assert arguments[arguments.index("-p") + 1] == "tools.pytest_safe_diagnostics"
+    assert "--diagnostic-timeout=900" in arguments
+    assert "--diagnostics-dir=$PWD/.artifacts/python-diagnostics" in arguments
+    assert "${diagnostic_args[@]}" in arguments
+    assert "-p tools.pytest_native_diagnostics" in step
+    assert (
+        '--native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"' in step
+    )
+    preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
+        1
+    ].split("\n      - name:", 1)[0]
+    assert (
+        'tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"'
+        in preparation
+    )
+    assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
+    assert "&& 90 || 30" in step
+    assert "&& 100 || 40" in source
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("-p tools.pytest_safe_diagnostics", ""),
+        ("-p tools.pytest_safe_diagnostics", "-p no:tools.pytest_safe_diagnostics"),
+        ("--diagnostic-timeout=900", "--diagnostic-timeout=0"),
+        ("--diagnostic-timeout=900", "--diagnostic-timeout=901"),
+        ("-o faulthandler_timeout=0", "-o faulthandler_timeout=900"),
+        ('"${diagnostic_args[@]}"', '""'),
+        ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
+        ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
+        ("&& 90 || 30", "&& 90 || 31"),
+        ("&& 100 || 40", "&& 100 || 41"),
+    ],
+)
+def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
+    before: str, after: str
+) -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert before in source
+    with pytest.raises(AssertionError):
+        _assert_timed_diagnostics_contract(source.replace(before, after))
 
 
 @pytest.mark.parametrize(
@@ -986,6 +1051,12 @@ def test_measured_file_priority_only_changes_routine_posthf_scheduling(
             "tests/python/test_uccsd_t_owner.py",
             "tests/python/test_uccsd_physical_response.py",
             "tests/python/test_dft_complete_cpu.py",
+        ]
+        complete_cc = selected.index("tests/python/test_cc_complete_gradient.py")
+        assert selected[complete_cc : complete_cc + 3] == [
+            "tests/python/test_cc_complete_gradient.py",
+            "tests/python/test_ccsdt_cbs_native.py",
+            "tests/python/test_ecp_heavy.py",
         ]
         # The shared collection adapter must not undo the measured file order.
         targets, arguments = _split_collection(
