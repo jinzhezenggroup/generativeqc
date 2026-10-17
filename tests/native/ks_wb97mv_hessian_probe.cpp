@@ -225,6 +225,14 @@ void run(bool unrestricted, const std::string& mode, bool full) {
                         cudaMemcpyHostToDevice, lease.stream));
   dft::CudaKsWb97mvHessian endpoint;
   dft::CudaKsWb97mvHessianOptions options;
+  if (mode.find("batch-chunked") != std::string::npos)
+    options.exact.max_batch_projection_bytes = fitted ? 32ULL << 10 : 512;
+  if (mode.find("unbatched") != std::string::npos) {
+    options.exact.max_batch_workspace_bytes = 0;
+    options.induced.max_resident_integral_bytes = 0;
+    options.grid.pair_tile_points = options.induced.grid.pair_tile_points = 32;
+    options.geometry.point_tile = 64;
+  }
   if (mode.find("streamed") != std::string::npos) options.exact.max_resident_integral_bytes = 0;
   options.cpks.gmres.absolute_tolerance = 2e-12;
   options.cpks.gmres.relative_tolerance = 2e-11;
@@ -287,6 +295,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   array("motion", motion);
   array("hvp", hvp);
   std::cout << ",\"resident_integral_bytes\":" << endpoint.work().exact.resident_integral_bytes;
+  std::cout << ",\"batched_workspace_bytes\":" << endpoint.work().exact.batched_workspace_bytes;
   if (full) {
     check(endpoint.hessian(matrix, lease.stream, result));
     require(result.converged() && result.completed_directions == coordinates,

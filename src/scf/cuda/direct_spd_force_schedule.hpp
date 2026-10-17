@@ -11,7 +11,8 @@ enum class DirectSpdForceSchedule : unsigned char {
   Incumbent,
   Automatic,
   SpatialReuse,
-  RelativeReuse
+  RelativeReuse,
+  DensityReuse
 };
 
 /** Bounded experimental queue sizes; unknown requests retain the incumbent.
@@ -22,20 +23,23 @@ inline constexpr unsigned select_direct_order_seven_page_size(std::string_view s
 }
 
 /** Unknown selectors fail closed; zero overrides even an eligible method hint.
- * Relative recurrence reuse is an explicit experiment, not an automatic default. */
+ * Explicit selectors retain their meaning for reproducible rollback comparisons. */
 inline constexpr DirectSpdForceSchedule select_direct_spd_force_schedule(
     std::string_view selector) noexcept {
   if (selector.empty()) return DirectSpdForceSchedule::Automatic;
   if (selector == "1" || selector == "spatial-reuse") return DirectSpdForceSchedule::SpatialReuse;
   if (selector == "relative-reuse") return DirectSpdForceSchedule::RelativeReuse;
+  if (selector == "relative-density") return DirectSpdForceSchedule::DensityReuse;
   return DirectSpdForceSchedule::Incumbent;
 }
 
-/** Generic/HF/RSH consumers supply no hint and keep their original default. */
+/** Qualified consumers use density-first contraction with guarded recurrence
+ * fallback. Generic/HF/RSH consumers supply no hint and keep their original
+ * default; this resolver does not widen method or resource eligibility. */
 inline constexpr DirectSpdForceSchedule resolve_direct_spd_force_schedule(
     DirectSpdForceSchedule captured, bool qualified_default) noexcept {
   if (captured == DirectSpdForceSchedule::Automatic)
-    return qualified_default ? DirectSpdForceSchedule::SpatialReuse
+    return qualified_default ? DirectSpdForceSchedule::DensityReuse
                              : DirectSpdForceSchedule::Incumbent;
   return captured;
 }

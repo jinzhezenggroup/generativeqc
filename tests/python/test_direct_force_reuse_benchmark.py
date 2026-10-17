@@ -20,7 +20,7 @@ def test_scheduler_visibility_is_required(
 
 
 @pytest.mark.parametrize("timeout", [False, True])
-@pytest.mark.parametrize("candidate", ["automatic", "relative-reuse"])
+@pytest.mark.parametrize("candidate", ["automatic", "relative-density"])
 def test_population_budget_and_owned_cleanup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timeout: bool, candidate: str
 ) -> None:
@@ -60,7 +60,9 @@ def test_population_budget_and_owned_cleanup(
         direct_force_reuse.os, "killpg", lambda *args: signals.append(args)
     )
     output = tmp_path / "population"
-    arguments = [str(output), "--candidate", candidate]
+    arguments = [str(output)]
+    if candidate != "automatic":
+        arguments.extend(["--candidate", candidate])
     if timeout:
         with pytest.raises(SystemExit, match="124"):
             direct_force_reuse.main(arguments)

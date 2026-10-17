@@ -23,6 +23,6 @@ cudaError_t launch_direct_order_seven_force(
     const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
-    bool separate_sources);
+    bool separate_sources, bool density_contraction = false);
 
 }  // namespace generativeqc::scf::cuda_execution

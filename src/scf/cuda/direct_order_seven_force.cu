@@ -21,7 +21,7 @@ static_assert(direct_shell_pair_class_cuda(2U, 1U) == kDirectDpPairClass);
  * cooperate on the unchanged generated derivative; reducing block width would
  * silently omit coefficients indexed by the generated 256-lane tile. */
 template <bool Unrestricted, DirectForceOutputMode Mode,
-          unsigned PageSize = kDirectOrderSevenKetPageSize>
+          unsigned PageSize = kDirectOrderSevenKetPageSize, bool DensityContraction = false>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_order_seven_force_kernel(
     DeviceBatch batch, const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
@@ -38,8 +38,6 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_order_seven_f
   __shared__ bool page_available;
   DirectOrderSevenPagePosition position{};
   const auto& topology = *topology_pointer;
-  auto& workspace =
-      *reinterpret_cast<CooperativeDirectPairDerivativeRecurrence*>(cooperative_workspace);
   while (true) {
     // Inactive and empty claims also finish reading the old shared descriptor
     // before the leader publishes another page.
@@ -92,9 +90,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_order_seven_f
     }
     __syncthreads();
     for (std::uint32_t slot = 0; slot < queue_count; ++slot) {
-      contract_cooperative_direct_pair_force<Unrestricted, Mode>(
+      contract_shared_direct_pair_force<Unrestricted, Mode, DensityContraction>(
           batch, queue[slot], screening_tolerance, schwarz_bounds, density, active, output,
-          coulomb_coefficient, exchange_coefficient, workspace);
+          coulomb_coefficient, exchange_coefficient, cooperative_workspace);
       __syncthreads();
     }
   }
@@ -108,36 +106,46 @@ cudaError_t launch_direct_order_seven_force(
     const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
-    bool separate_sources) {
-  const auto workspace_bytes =
-      std::max(shared_bytes, sizeof(CooperativeDirectPairDerivativeRecurrence));
-  auto launch = [&]<bool Unrestricted, DirectForceOutputMode Mode, unsigned PageSize>() {
-    direct_order_seven_force_kernel<Unrestricted, Mode, PageSize>
+    bool separate_sources, bool density_contraction) {
+  density_contraction =
+      density_contraction && exchange_coefficient == 0.0 && !batch.direct_force_seed;
+  auto launch = [&]<bool Unrestricted, DirectForceOutputMode Mode, unsigned PageSize,
+                    bool DensityContraction>() {
+    const auto workspace_bytes = std::max(
+        shared_bytes, DensityContraction ? sizeof(CooperativeDensityForceRecurrence)
+                                         : sizeof(CooperativeDirectPairDerivativeRecurrence));
+    direct_order_seven_force_kernel<Unrestricted, Mode, PageSize, DensityContraction>
         <<<grid, kBoundedDirectThreads, workspace_bytes, stream>>>(
             batch, topology, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             enabled_mask_pointer, enabled_mask, generated_overflow, schwarz_bounds, density, active,
             output, cursor, profile, coulomb_coefficient, exchange_coefficient);
   };
-  auto pages = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
+  auto pages = [&]<bool Unrestricted, DirectForceOutputMode Mode, bool DensityContraction>() {
     // Only acquisition width changes. Each queue entry keeps the existing
     // shared recurrence and uniform publish/retire barriers.
     if (batch.direct_order_seven_page_size == 8U)
-      launch.template operator()<Unrestricted, Mode, 8U>();
+      launch.template operator()<Unrestricted, Mode, 8U, DensityContraction>();
     else if (batch.direct_order_seven_page_size == 16U)
-      launch.template operator()<Unrestricted, Mode, 16U>();
+      launch.template operator()<Unrestricted, Mode, 16U, DensityContraction>();
     else
-      launch.template operator()<Unrestricted, Mode, 32U>();
+      launch.template operator()<Unrestricted, Mode, 32U, DensityContraction>();
+  };
+  auto contraction = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
+    if (density_contraction)
+      pages.template operator()<Unrestricted, Mode, true>();
+    else
+      pages.template operator()<Unrestricted, Mode, false>();
   };
   if (unrestricted) {
     if (separate_sources)
-      pages.template operator()<true, DirectForceOutputMode::Separate>();
+      contraction.template operator()<true, DirectForceOutputMode::Separate>();
     else
-      pages.template operator()<true, DirectForceOutputMode::Combined>();
+      contraction.template operator()<true, DirectForceOutputMode::Combined>();
   } else {
     if (separate_sources)
-      pages.template operator()<false, DirectForceOutputMode::Separate>();
+      contraction.template operator()<false, DirectForceOutputMode::Separate>();
     else
-      pages.template operator()<false, DirectForceOutputMode::Combined>();
+      contraction.template operator()<false, DirectForceOutputMode::Combined>();
   }
   return cudaPeekAtLastError();
 }

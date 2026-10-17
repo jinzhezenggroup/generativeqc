@@ -3,6 +3,10 @@
 Status: implemented in an isolated qualification export; default remains off
 Date: 2026-10-17
 
+Endpoint follow-up: the [qualified opt-in decision](../implemented/performance/2026-10-17-direct-force-endpoint-qualification.md)
+records completed endpoint gates; default promotion remains open. Retain these
+preliminary observations as history.
+
 ## Boundary and hypothesis
 
 Current master `a6ac79757e38be772f3a22c5e0b5b4bea314fad3` is composed with

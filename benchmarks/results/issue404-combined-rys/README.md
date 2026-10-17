@@ -77,7 +77,11 @@ Diagnostic derivative-contraction totals include every panel:
 
 Per-class packet totals, register/shared-memory counters, transfers, shell
 work conservation and scratch sizes are retained in each endpoint JSON and
-`summary.json`. The existing 000 Rys choice is held fixed and contributes no
+`summary.json.xz`. This is lossless storage compression of the original 131,267
+bytes (expanded SHA-256
+`c584f057cea4a1b5e4ac898ed3c9af5d03ee90131ad73551f5d1bb49948a99a8`);
+use `xz -dc summary.json.xz` to recover the exact original JSON. The existing
+000 Rys choice is held fixed and contributes no
 claimed new gain. The 768 final projection is reused; derivative panel count
 and scientific work are unchanged. Intrusive component times are explanatory
 and must not be substituted for clean endpoint times.
