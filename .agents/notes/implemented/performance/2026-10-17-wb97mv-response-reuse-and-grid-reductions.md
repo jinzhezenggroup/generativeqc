@@ -83,3 +83,35 @@ GPU4PySCF. Use finite Slurm jobs and preserve assigned visibility. The original
 Historical measurement JSON may be losslessly compressed with original Git-blob
 and decoded-byte receipts to retain the strict 64 MiB evidence budget; do not
 drop negative samples or enlarge that budget to make a result fit.
+
+## Source-matched observations
+
+The [retained campaign](../../../../benchmarks/results/wb97mv-hessian-response-reuse-20261017/README.md)
+binds the final rebuild to clean source `51a87a04fdb8ef8e17bd8f6b848f2fcdc77f60af`,
+rebased onto merged PR #2590 (`743c06bf80db5f04b43d78cb6b3a3ea423577c73`).
+Job 9950 on n1's Slurm-assigned RTX 5090 interleaves first observed and three
+artifact-primed fresh-process runs per engine/case. Compare the median of each
+native preparation-plus-Hessian sum, not the sum of independent medians:
+
+| Case | Native prepare + Hessian (s) | GPU4PySCF Hessian (s) | Reference / native |
+|---|---:|---:|---:|
+| water-dimer | 2.643700 | 2.873015 | 1.087x |
+| formaldehyde | 1.102402 | 7.359160 | 6.676x |
+| water | 0.446459 | 2.449993 | 5.488x |
+| H2 | 0.128532 | 0.456874 | 3.555x |
+
+All complete paired matrices pass the original 3e-6 absolute gate (maximum
+3.652e-8 hartree/Bohr²); all four previous-native matrices for each case also
+pass the original 3e-12 absolute/relative parity gate. Keep the modest dimer
+margin visible; this is not evidence of a universal or statistically general
+advantage. The grids remain coarse, spherical STO-3G diagnostics. UKS/DF/ECP
+qualification does not turn these direct-RKS timings into UKS/DF/ECP rankings.
+
+Total-device sampled native memory is about 16.8 GiB versus about 2.7 GiB for
+the reference, inside the unchanged 24 GiB limit but not a memory-efficiency win.
+Final native-only ethane/methanol endpoints complete in about 8.9/5.3 seconds;
+their independent paired reference attempts failed SCF under unchanged controls,
+so no larger-case speed ranking is justified. Formal broad performance promotion
+remains unavailable without converged-grid/scaling evidence, clean compilation
+cost and an isolated exact GPU peak. Preserve the final qualification, sanitizer,
+fallback parity, timeout and failed-harness receipts alongside these observations.
