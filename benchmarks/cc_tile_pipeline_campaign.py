@@ -163,123 +163,6 @@ def check_science(record: dict, oracle: dict) -> dict:
     }
 
 
-def _cleanup_owned_child(process: subprocess.Popen) -> dict:
-    """Bound cleanup to this child without replacing the active primary exception.
-
-    Secondary control-flow exceptions are retained too; the caller re-raises
-    the original failure after these bounded cleanup attempts.
-    """
-    result = {"reaped": False, "exit_code": None, "errors": []}
-    try:
-        running = process.poll() is None
-    except BaseException as error:  # noqa: BLE001
-        result["errors"].append({"operation": "poll", "type": type(error).__name__})
-        running = True
-    if running:
-        try:
-            process.kill()
-        except BaseException as error:  # noqa: BLE001
-            result["errors"].append({"operation": "kill", "type": type(error).__name__})
-    try:
-        result["exit_code"] = process.wait(timeout=5)
-        result["reaped"] = True
-    except BaseException as error:  # noqa: BLE001
-        result["errors"].append({"operation": "wait", "type": type(error).__name__})
-    return result
-
-
-def _finalize_receipt(
-    receipt: dict,
-    args: argparse.Namespace,
-    identity: dict,
-    receipt_path: Path,
-    started: int,
-) -> tuple[bool, BaseException | None]:
-    """Retain evidence and return secondary exceptions for the caller to propagate.
-
-    Collecting BaseException here preserves an already active interruption;
-    without a primary failure the caller raises the first finalization error.
-    """
-    errors = []
-    first_error = None
-
-    def unavailable(stage: str, name: str, error: BaseException) -> None:
-        nonlocal first_error
-        if first_error is None:
-            first_error = error
-        errors.append({"stage": stage, "name": name, "type": type(error).__name__})
-
-    checks = {}
-    observations = {}
-    for name in ("library", "executable", "input", "oracle"):
-        try:
-            digest = checksum(getattr(args, name))
-            checks[name] = digest == identity[name + "_sha256"]
-            observations[name] = {
-                "status": "UNCHANGED" if checks[name] else "CHANGED",
-                "sha256": digest,
-            }
-        except BaseException as error:  # noqa: BLE001
-            checks[name] = None
-            observations[name] = {"status": "UNAVAILABLE", "sha256": None}
-            unavailable("external_identity", name, error)
-
-    def unchanged(names: tuple[str, str]) -> bool | None:
-        values = [checks[name] for name in names]
-        if False in values:
-            return False
-        return None if None in values else True
-
-    receipt["binary_identity_unchanged"] = unchanged(("library", "executable"))
-    receipt["input_identity_unchanged"] = unchanged(("input", "oracle"))
-    receipt["identity_observations"] = observations
-    artifacts = {}
-    try:
-        paths = list(args.output.iterdir())
-    except BaseException as error:  # noqa: BLE001
-        unavailable("artifact_inventory", "directory", error)
-        paths = []
-    for path in paths:
-        if path == receipt_path:
-            continue
-        try:
-            if path.is_symlink() or not path.is_file():
-                raise ValueError("campaign artifact must be a regular file")
-            artifacts[path.name] = {
-                "sha256": checksum(path),
-                "size": path.stat().st_size,
-            }
-        except BaseException as error:  # noqa: BLE001
-            artifacts[path.name] = {
-                "sha256": None,
-                "size": None,
-                "status": "UNAVAILABLE",
-            }
-            unavailable("artifact_inventory", path.name, error)
-    receipt["artifacts"] = artifacts
-    if receipt["outcome"] == "PASS":
-        for name in {"endpoint.json", "oracle.json", "native.log"} - artifacts.keys():
-            unavailable(
-                "artifact_inventory", name, ValueError("required artifact unavailable")
-            )
-    verified = all(value is True for value in checks.values()) and not errors
-    if not verified and receipt["outcome"] in {"PASS", "INCOMPLETE"}:
-        receipt["outcome"] = "FAIL"
-    receipt["finalization_errors"] = errors
-    receipt["elapsed_wall_ns"] = time.perf_counter_ns() - started
-    try:
-        temporary = receipt_path.with_suffix(".json.tmp")
-        with temporary.open("x", encoding="utf-8") as stream:
-            stream.write(json.dumps(receipt, indent=2) + "\n")
-        temporary.replace(receipt_path)
-    except BaseException as error:  # noqa: BLE001
-        unavailable("receipt_write", "receipt.json", error)
-        if receipt["outcome"] in {"PASS", "INCOMPLETE"}:
-            receipt["outcome"] = "FAIL"
-        verified = False
-    return verified, first_error
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, required=True)
@@ -364,11 +247,30 @@ def main() -> int:
         "loader_library": str(args.library.resolve()),
     }
     receipt_path = args.output / "receipt.json"
-    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
-    started = time.perf_counter_ns()
+    pending_receipt_path = args.output / "receipt.json.tmp"
+
+    def write_receipt() -> None:
+        # A failed write must not truncate the last durable receipt.
+        pending_receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+        pending_receipt_path.replace(receipt_path)
+
+    write_receipt()
     process = None
-    reaped = False
-    primary_error = None
+    finished = False
+    failure = None
+    log = None
+    started = time.perf_counter_ns()
+    finalization_errors = []
+    finalization_failure = None
+
+    def retain_error(stage: str, error: BaseException) -> None:
+        nonlocal finalization_failure
+        if finalization_failure is None:
+            finalization_failure = error
+        finalization_errors.append(
+            {"stage": stage, "type": type(error).__name__, "message": str(error)}
+        )
+
     try:
         if args.diagnostic:
             import nvtx  # Explicit diagnostic-only dependency; never a production import.
@@ -376,53 +278,129 @@ def main() -> int:
             scope = nvtx.annotate("cc1765/complete-process", domain="cc1765")
         else:
             scope = nullcontext()
-        with (args.output / "native.log").open("wb") as log:
-            with scope:
+        log = (args.output / "native.log").open("wb")
+        started = time.perf_counter_ns()
+        with scope:
+            try:
                 process = subprocess.Popen(
                     command, stdout=log, stderr=subprocess.STDOUT
                 )
                 receipt["native_pid"] = process.pid
-                receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
+                write_receipt()
                 rc = process.wait(timeout=1800)
-                reaped = True
-            receipt["exit_code"] = rc
-            receipt["process_wall_ns"] = time.perf_counter_ns() - started
-            if rc != 0:
-                receipt["outcome"] = "FAIL"
-                return 2
-            record = json.loads(output.read_text())
-            receipt["science"] = check_science(record, oracle)
-            receipt["outcome"] = receipt["science"]["status"]
-            receipt["work"] = {key: record[key] for key in WORK}
-            return 0 if receipt["outcome"] == "PASS" else 2
+                finished = True
+            except BaseException as error:
+                # Remember the original error before diagnostic scope teardown.
+                failure = error
+                raise
+            finally:
+                # Kill/reap only our child, also on interrupts and receipt errors.
+                # Keep teardown inside the diagnostic complete-process interval.
+                if process is not None and not finished:
+                    for stage, action in (
+                        ("child kill", process.kill),
+                        ("child reap", lambda: process.wait(timeout=10)),
+                    ):
+                        try:
+                            action()
+                        except BaseException as error:  # noqa: BLE001
+                            # Cleanup must continue without replacing the failure.
+                            retain_error(stage, error)
+        receipt["exit_code"] = rc
+        receipt["process_wall_ns"] = time.perf_counter_ns() - started
+        if rc != 0:
+            receipt["outcome"] = "FAIL"
+            return 2
+        record = json.loads(output.read_text())
+        receipt["science"] = check_science(record, oracle)
+        receipt["outcome"] = receipt["science"]["status"]
+        receipt["work"] = {key: record[key] for key in WORK}
+        return 0 if receipt["outcome"] == "PASS" else 2
     except BaseException as error:
-        primary_error = error
-        receipt["outcome"] = (
-            "TIMEOUT" if isinstance(error, subprocess.TimeoutExpired) else "FAIL"
-        )
-        receipt["execution_error"] = {"type": type(error).__name__}
-        if process is not None and not reaped:
-            receipt["child_cleanup"] = _cleanup_owned_child(process)
+        if failure is not None and error is not failure:
+            retain_error("diagnostic scope", error)
+            raise failure from error
+        failure = error
         raise
     finally:
-        verified, finalization_error = _finalize_receipt(
-            receipt, args, identity, receipt_path, started
-        )
-        if primary_error is not None and receipt["finalization_errors"]:
-            primary_error.add_note(
-                "Campaign finalization errors: "
-                + ", ".join(
-                    f"{error['stage']}: {error['type']}"
-                    for error in receipt["finalization_errors"]
-                )
+        # Close before hashing; a close failure must not mask a wait failure.
+        if log is not None:
+            try:
+                log.close()
+            except BaseException as error:  # noqa: BLE001
+                # Preserve interrupts too, while retaining the original failure.
+                retain_error("native log close", error)
+        if failure is not None:
+            receipt["outcome"] = (
+                "TIMEOUT" if isinstance(failure, subprocess.TimeoutExpired) else "FAIL"
             )
-        elif primary_error is None:
-            if finalization_error is not None:
-                raise finalization_error
-            if not verified:
+            receipt["failure"] = {
+                "type": type(failure).__name__,
+                "message": str(failure),
+            }
+        identity_matches = {}
+        for key, path in (
+            ("library_sha256", args.library),
+            ("executable_sha256", args.executable),
+            ("input_sha256", args.input),
+            ("oracle_sha256", args.oracle),
+        ):
+            try:
+                identity_matches[key] = checksum(path) == identity[key]
+            except BaseException as error:  # noqa: BLE001
+                # Unavailable evidence fails closed; still inventory other files.
+                identity_matches[key] = False
+                retain_error(key, error)
+        receipt["identity_matches"] = identity_matches
+        receipt["binary_identity_unchanged"] = all(
+            identity_matches[key] for key in ("library_sha256", "executable_sha256")
+        )
+        receipt["input_identity_unchanged"] = all(
+            identity_matches[key] for key in ("input_sha256", "oracle_sha256")
+        )
+        receipt["elapsed_wall_ns"] = time.perf_counter_ns() - started
+        receipt["artifacts"] = {}
+        try:
+            for path in args.output.iterdir():
+                if path in (receipt_path, pending_receipt_path):
+                    continue
+                try:
+                    if path.is_file():
+                        receipt["artifacts"][path.name] = {
+                            "sha256": checksum(path),
+                            "size": path.stat().st_size,
+                        }
+                except BaseException as error:  # noqa: BLE001
+                    # One unreadable artifact must not hide the other artifacts.
+                    retain_error(f"artifact {path.name}", error)
+        except BaseException as error:  # noqa: BLE001
+            # Directory failure still permits an attempted terminal receipt.
+            retain_error("artifact inventory", error)
+        changed = not all(identity_matches.values())
+        if (changed or finalization_errors) and receipt["outcome"] != "TIMEOUT":
+            receipt["outcome"] = "FAIL"
+        if finalization_errors:
+            receipt["finalization_errors"] = finalization_errors
+        try:
+            write_receipt()
+        except BaseException as error:
+            original = failure if failure is not None else finalization_failure
+            if original is None:
+                raise
+            original.add_note(
+                f"receipt finalization failed: {type(error).__name__}: {error}"
+            )
+        if failure is None:
+            if finalization_failure is not None:
+                raise finalization_failure
+            if changed:
                 raise ValueError(
                     "binary/input/oracle changed during endpoint execution"
                 )
+        elif finalization_errors:
+            failure.add_note(
+                f"campaign finalization errors: {json.dumps(finalization_errors)}"
+            )
 
 
 if __name__ == "__main__":
