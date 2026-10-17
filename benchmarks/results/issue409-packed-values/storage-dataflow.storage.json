@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/issue409-packed-values/storage-dataflow.json",
+  "stored_path": "benchmarks/results/issue409-packed-values/storage-dataflow.json.gz",
+  "original_bytes": 135548,
+  "stored_bytes": 15237,
+  "original_sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c",
+  "stored_sha256": "144eda26c10941f108ef696950b1afbe40cb63a44fa515fdc43589af530a02b5",
+  "original_git_blob": "181bda3a865f07c7aaac8080773d7017a00c6357",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage change only; every historical numerical value, sample, setting and gate is preserved."
+}

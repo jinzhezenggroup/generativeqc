@@ -253,3 +253,11 @@ xz -dc /path/to/reproduction/source.patch.xz | git apply
 Neither isolated projection wins nor smaller factor arrays qualify complete
 SCF/force latency. The [Agent Note](../../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records the exact representation, fallback boundaries and retirement conditions.
+
+The retained storage-dataflow record is losslessly compressed in
+`storage-dataflow.json.gz`; `storage-dataflow.storage.json` pins its 135,548
+original bytes, original Git blob and stored/decoded SHA-256 identities.
+Read it with the shared `load_record` reader or `gzip -dc`. All eight cells,
+overlapping-counter cautions and four unmeasured limitations are unchanged.
+Historical manifest paths and hashes continue to identify the decoded bytes;
+restore the original snapshot before running its historical collectors.

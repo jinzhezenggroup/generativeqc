@@ -432,14 +432,6 @@
       "sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745"
     },
     {
-      "bytes": 142797,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json",
-      "role": "scientific-record",
-      "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
-    },
-    {
       "bytes": 143684,
       "classification": "required-compact-accepted-evidence",
       "family": "issue283-host-response",
@@ -454,14 +446,6 @@
       "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
       "role": "reference-input",
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
-    },
-    {
-      "bytes": 135548,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue409-packed-values",
-      "path": "benchmarks/results/issue409-packed-values/storage-dataflow.json",
-      "role": "scientific-record",
-      "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
     },
     {
       "bytes": 227600,
