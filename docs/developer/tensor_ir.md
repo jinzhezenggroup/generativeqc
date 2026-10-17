@@ -258,19 +258,22 @@ backend-independent TensorIR `Program` DAGs:
   `Program.dumps()` and can be passed directly to `plan_cuda`.
 - Unrelated Boolean diagnostic outputs are pruned from a requested real path.
   Selecting a Boolean output or a real output whose ancestors contain Boolean
-  data rejects by default. `linearize(..., allow_external_mask_where=True)`
-  explicitly admits first-order generated forward JVP for fixed external
+  data rejects by default. `linearize(..., allow_external_mask_where=True)` and
+  `transpose_program(..., allow_external_mask_where=True)` explicitly admit
+  first-order generated JVP/VJP for fixed external
   Boolean input/constant masks through the reference contract's validated
   type-preserving views, on generic finite FP64 arrays only. Boolean values
-  never receive tangent storage; the canonical `where` selects real tangents.
+  never receive tangent/cotangent storage; the canonical `where` selects real
+  tangents or routes real cotangents to the selected branches. Existing view
+  adjoints perform broadcast reductions and repeated-gather scatter additions.
   Computed comparisons, Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
-  CUDA, portable/scalar, public compiled AD, VJP and HVP are outside this slice.
+  CUDA, portable/scalar, public compiled AD and HVP are outside this slice.
   Generated real feeds preserve names, roles, dtypes and shapes but are declared
   non-differentiable execution data. This existing typed boundary survives
   reconstruction without provenance, replay and optimization; the result is
-  not another AD input space. Generation requires a declared real tangent input.
+  not another AD input space. Generation requires a declared real AD input.
 - In that opt-in domain, output selection controls publication, while all
   original live primal and forward derivative domains remain checked. Missing
   real input directions become explicit zero-like values, so an unselected or
@@ -279,12 +282,16 @@ backend-independent TensorIR `Program` DAGs:
   and optimization, including empty requested outputs. Guards zero each
   element before reducing, avoiding a new overflow from summing large finite
   primals/tangents. The reduced guards form an exact +1 multiplier on each
-  output tangent, preserving signed zero and other finite FP64 values.
-  The CPU node/work/byte budgets charge this validation work.
+  derivative output, preserving signed zero and other finite FP64 values.
+  Reverse generation reuses the forward rules with zero directions to preserve
+  those same domains, including unselected/unreturned branches. Each requested
+  output cotangent remains validated even when it has no path to a requested
+  input, or the published gradient is empty. The CPU node/work/byte budgets
+  charge this validation work.
   Retained definitions alone are insufficient: only output-reachable work
   executes. Non-selection forward programs keep the legacy generation version,
   equations and derivative identities, including when the flag is set.
-- Reverse slice/gather use exact incidence matrices. Repeated einsum labels
+- Reverse slice/gather use structural scatter additions. Repeated einsum labels
   use exact identity projections. A packed parameter is expanded through an
   explicit unpack DAG, and its reverse output applies `unpack_transpose`
   (including orbit weights).
