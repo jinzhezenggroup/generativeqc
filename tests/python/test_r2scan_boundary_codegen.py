@@ -83,14 +83,37 @@ def test_generated_r2scan_matches_high_precision_libxc_tail(tmp_path: Path) -> N
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated CUDA device",
 )
+@pytest.mark.parametrize("consumer", ("scf", "force"))
 def test_generated_cuda_r2scan_matches_high_precision_libxc_tail(
     tmp_path: Path,
+    consumer: str,
 ) -> None:
-    """Qualify CUDA against independent Libxc tail values and exchanged spins."""
+    """Qualify both production schedules against independent empty-spin tails."""
     assert os.environ.get("SLURM_JOB_ID")
     compiler = shutil.which("nvcc")
     assert compiler is not None, "allocated CUDA qualification requires nvcc"
-    _generate("generate_xc_r2scan_cuda.py", tmp_path / "r2scan.cuh")
+    if consumer == "scf":
+        _generate("generate_xc_r2scan_cuda.py", tmp_path / "r2scan.cuh")
+        point_function = "r2scan_device"
+    else:
+        body = subprocess.check_output(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from generativeqc_compiler.xc.geometry_cuda import _emit_stationary_point; "
+                    "print(_emit_stationary_point(2))"
+                ),
+            ],
+            text=True,
+            timeout=120,
+        )
+        (tmp_path / "r2scan.cuh").write_text(
+            "#include <cmath>\nnamespace generativeqc::dft::generated {\n"
+            + body
+            + "\n}\n"
+        )
+        point_function = "stationary_r2scan_raw"
     # Spin exchange permutes rho/sigma/tau channels without another oracle or
     # any dependence on the generated implementation's own mathematics.
     inputs = [values for values, _ in REFERENCE]
@@ -106,7 +129,7 @@ def test_generated_cuda_r2scan_matches_high_precision_libxc_tail(
         '#include <cstdio>\n#include <cuda_runtime.h>\n#include "r2scan.cuh"\n'
         "__global__ void evaluate(const double* inputs, double* outputs) {\n"
         "  const auto i = blockIdx.x; const auto* p = inputs + 7 * i;\n"
-        "  const auto v = generativeqc::dft::generated::r2scan_device(\n"
+        f"  const auto v = generativeqc::dft::generated::{point_function}(\n"
         "      p[0], p[1], p[2], p[3], p[4], p[5], p[6]);\n"
         "  outputs[8 * i] = v.energy_density;\n"
         "  for (unsigned k = 0; k < 7; ++k) outputs[8 * i + k + 1] = v.feature_derivative[k];\n"
@@ -126,17 +149,30 @@ def test_generated_cuda_r2scan_matches_high_precision_libxc_tail(
         "    std::printf(\"%.17g%c\", row[k], k == 7 ? '\\n' : ' ');\n}\n"
     )
     executable = tmp_path / "probe"
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    assert launcher is not None, "CUDA qualification requires a compiler cache"
+    subprocess.run([launcher, "--version"], check=True, capture_output=True, timeout=30)
+    object_file = tmp_path / "probe.o"
     subprocess.run(
         [
+            launcher,
             compiler,
             "-std=c++17",
             "-O2",
             "-arch=native",
             "--fmad=false",
+            "-c",
             str(source),
             "-o",
-            str(executable),
+            str(object_file),
         ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    subprocess.run(
+        [compiler, str(object_file), "-o", str(executable)],
         check=True,
         capture_output=True,
         text=True,
