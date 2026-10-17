@@ -21,9 +21,7 @@ from tools.generativeqc_validation.xc_diagonal_evidence import REFERENCE
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_COMMIT = "f40055ecdb7763175f59fe8108f87805c3f3f193"
-PACKET_MEMBER = (
-    "benchmarks/results/direct-relative-force-20261017/measurements.json.xz"
-)
+PACKET_MEMBER = "benchmarks/results/direct-relative-force-20261017/measurements.json.xz"
 PACKET_SHA256 = "b8ec7d7031d50f9fa0a0cafbc3b39ab9931133439d2303bb377628f9fe21b7a9"
 
 
@@ -78,7 +76,9 @@ def summarize(packet: dict[str, Any]) -> None:
             for phase, expected in population["complete_seconds"].items():
                 rows = [
                     row
-                    for label, row in zip(packet["phases"], population["rows"], strict=True)
+                    for label, row in zip(
+                        packet["phases"], population["rows"], strict=True
+                    )
                     if label == phase
                 ]
                 assert statistics.median(row[0] for row in rows) == expected
@@ -101,7 +101,9 @@ def summarize(packet: dict[str, Any]) -> None:
                 )
                 < 1e-7
             )
-    print("Retained observations and protocol identities pass; no offline force replay.")
+    print(
+        "Retained observations and protocol identities pass; no offline force replay."
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
