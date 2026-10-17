@@ -811,7 +811,11 @@ class PrecisionCalculator:
                     )
                 except BaseException as error:
                     calculator.clear_cache()
-                    if self._fast_fock and calculator is self._candidate:
+                    if (
+                        self.policy.profile == "fast"
+                        and self._fast_native
+                        and role == "candidate"
+                    ):
                         solves.append(
                             PrecisionSolve(
                                 role,
@@ -1046,6 +1050,7 @@ class PrecisionCalculator:
             if (
                 fast_native
                 and not self._fast_fock
+                and not gradient_requires_audit
                 and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
                 and work.get("operator_work_counters_valid") is True
                 and work.get("complete") is True

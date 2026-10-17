@@ -371,7 +371,10 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   const auto matched_model =
       binding ? dft::stationary_gradient_model_qualification(*binding, aos) : 0;
   if (execution_plan.generated_split_hybrid && !qualify_through_d &&
-      (!binding || !matched_model || (!native_shape && !application)))
+      (!binding || !matched_model ||
+       (!application &&
+        (!native_shape ||
+         !dft::stationary_gradient_independently_qualified(matched_model, aos, atoms)))))
     return {};
   if (application) {
     if (!binding) return {};
@@ -2946,12 +2949,17 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
         shape[0], runtime::size_mul(grid.radial_points,
                                     runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const bool strict_density = dft::admit_stationary_force_controls(
+        options.energy_tolerance, options.density_tolerance, options.screening_tolerance, false);
+    const bool budget_density =
+        options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+        dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                             options.screening_tolerance, true);
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
-        dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
-                                             options.screening_tolerance, false) &&
+        (strict_density || budget_density) &&
             dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                    shape[1], shape[0], shape[4]) != 0);
+                                                    shape[1], shape[0], shape[4], strict_density) != 0);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -3081,3 +3089,4 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
 }
 
 }  // namespace generativeqc::methods::detail
+
