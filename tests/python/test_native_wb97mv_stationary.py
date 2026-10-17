@@ -42,6 +42,7 @@ def _native(
     physical_cpks: bool = False,
     serial_one_electron: bool = False,
     serial_grid: bool = False,
+    directional_exact: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -61,6 +62,7 @@ def _native(
     mode += "-physical-cpks" if physical_cpks else ""
     mode += "-serial-one-electron" if serial_one_electron else ""
     mode += "-serial-grid" if serial_grid else ""
+    mode += "-directional-exact" if directional_exact else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -101,6 +103,7 @@ def test_stationary_response_reuse_and_parallel_integrals_preserve_hessians(
         physical_cpks=True,
         serial_one_electron=True,
         serial_grid=True,
+        directional_exact=True,
     )
     assert cached["cpks_operator_columns"] > 0
     # Symmetric minimal fixtures may have an exactly zero nuclear RHS, so a
@@ -110,6 +113,9 @@ def test_stationary_response_reuse_and_parallel_integrals_preserve_hessians(
     assert physical["cpks_operator_columns"] == 0
     assert physical["cpks_physical_checks"] == 0
     assert physical["parallel_one_electron_bytes"] == 0
+    assert cached["frozen_exact_bytes"] > 0
+    assert cached["frozen_exact_columns"] > 0
+    assert physical["frozen_exact_bytes"] == 0
     for field in ("energy", "hvp", "hessian", "response_residual"):
         np.testing.assert_allclose(
             cached[field], physical[field], atol=3e-12, rtol=3e-12

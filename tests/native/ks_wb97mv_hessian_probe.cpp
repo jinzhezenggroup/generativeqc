@@ -225,6 +225,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
                         cudaMemcpyHostToDevice, lease.stream));
   dft::CudaKsWb97mvHessian endpoint;
   dft::CudaKsWb97mvHessianOptions options;
+  if (mode.find("directional-exact") != std::string::npos) options.max_frozen_exact_bytes = 0;
   if (mode.find("physical-cpks") != std::string::npos) options.max_resident_cpks_bytes = 0;
   if (mode.find("serial-one-electron") != std::string::npos)
     options.one_electron.parallel_streams = 0;
@@ -330,6 +331,9 @@ void run(bool unrestricted, const std::string& mode, bool full) {
             << ",\"cpks_operator_columns\":" << work.cpks_operator_columns
             << ",\"cpks_cached_actions\":" << work.cpks_cached_actions
             << ",\"cpks_physical_checks\":" << work.cpks_physical_checks
+            << ",\"frozen_exact_bytes\":" << work.frozen_exact_bytes
+            << ",\"frozen_exact_columns\":" << work.frozen_exact_columns
+            << ",\"frozen_exact_contractions\":" << work.frozen_exact_contractions
             << ",\"parallel_one_electron_bytes\":"
             << work.one_electron.integrals.parallel_workspace_bytes
             << ",\"parallel_one_electron_actions\":" << work.one_electron.integrals.parallel_actions

@@ -15,6 +15,10 @@ int never_launch(const double*, std::size_t, const long long*, const double*, do
                  cudaStream_t) {
   throw std::runtime_error("host closure admission launched CUDA");
 }
+int never_batch(const aot::FactorizedIntegralBatch*, std::size_t, const double*, int*,
+                cudaStream_t) {
+  throw std::runtime_error("host tiled admission launched CUDA");
+}
 void require(bool valid, const char* message) {
   if (!valid) throw std::runtime_error(message);
 }
@@ -89,7 +93,7 @@ int main() {
       if (kind == 2) invalid.max_groups = 1;
       if (kind == 3) invalid.max_workspace_bytes = 1;
       if (kind == 4) invalid.max_primitive_component_evaluations = 319999;
-      if (kind == 5) invalid.max_projection_terms = 1619999;
+      if (kind == 5) invalid.max_projection_terms = 19999;
       if (kind == 6) invalid.max_reduction_terms = 1;
       if (kind == 7) invalid.symmetry_absolute_tolerance = -1;
       if (kind == 8) invalid.symmetry_relative_tolerance = std::numeric_limits<double>::infinity();
@@ -121,6 +125,54 @@ int main() {
       require(cuda_wb97mv_jk_workspace(shape, shells, options, bytes) == cudaSuccess,
               "valid radial bound rejected");
     }
+    selected.clear();
+    constexpr std::array<unsigned, 4> scalar_angular{};
+    constexpr std::array<std::uint32_t, 1> scalar_component{};
+    for (const auto radial : {"full_range", "long_range"}) {
+      aot::Program program{};
+      program.kind = aot::Kind::integral;
+      program.integral = never_launch;
+      program.integral_batch = never_batch;
+      program.signature = {"eri", scalar_angular, radial,
+                           radial == std::string_view("full_range") ? 0 : 0.3};
+      program.components = scalar_component;
+      program.centers = 4;
+      program.record_stride = 17;
+      program.outputs = 25;
+      selected.push_back(program);
+    }
+    std::vector<integrals::CudaOneElectronShell> large_shells;
+    for (std::size_t index = 0; index < 24; ++index)
+      large_shells.push_back({index, 0, index, 1, index, 1});
+    auto bounded = options;
+    bounded.max_workspace_bytes = 64ULL << 20;
+    require(
+        cuda_wb97mv_jk_workspace({24, 24, 24, 2}, large_shells, bounded, bytes) == cudaSuccess &&
+            bytes <= bounded.max_workspace_bytes,
+        "663552 ordered groups did not fit bounded canonical tiles");
+    bounded.max_source_groups = 90299;
+    require(cuda_wb97mv_jk_workspace({24, 24, 24, 2}, large_shells, bounded, bytes) ==
+                    cudaErrorInvalidValue &&
+                !bytes,
+            "global canonical source guard was bypassed");
+    large_shells.resize(4);
+    bounded = options;
+    bounded.max_groups = 16;
+    bounded.source_tile = 1;
+    bounded.max_primitive_component_evaluations = 110;
+    require(cuda_wb97mv_jk_workspace({4, 4, 4, 2}, large_shells, bounded, bytes) == cudaSuccess,
+            "canonical source work was charged as ordered primitive replay");
+    bounded.max_primitive_component_evaluations = 109;
+    require(cuda_wb97mv_jk_workspace({4, 4, 4, 2}, large_shells, bounded, bytes) ==
+                    cudaErrorInvalidValue &&
+                !bytes,
+            "source tiles reset the global primitive work guard");
+    bounded.max_primitive_component_evaluations = 110;
+    bounded.source_tile = 0;
+    require(cuda_wb97mv_jk_workspace({4, 4, 4, 2}, large_shells, bounded, bytes) ==
+                    cudaErrorInvalidValue &&
+                !bytes,
+            "disabled tiled fallback bypassed ordered admission");
     std::cout << "J/K host closure/work/arena gates passed\n";
     return 0;
   } catch (const std::exception& error) {

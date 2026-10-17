@@ -9,6 +9,10 @@ namespace generativeqc::dft {
 
 struct CudaGridGeometryShape {
   std::size_t atoms{}, primitives{}, nao{}, points{}, points_per_atom{};
+  /** Optional sum over AO primitive/polynomial incidences, checked against
+   * device AoBasis metadata before evaluating jets. Zero uses the generic
+   * AO*all-primitives*3 upper bound for callers without shell topology. */
+  std::size_t ao_primitive_terms{};
 };
 
 struct CudaGridGeometryOptions {
@@ -17,8 +21,8 @@ struct CudaGridGeometryOptions {
   std::size_t point_tile{1024};
   std::uint64_t max_partition_pairs{16'777'216};
   std::uint64_t max_ao_jet_values{134'217'728};
-  /** Conservative preparation bound: 20*points*AO*primitives*3 polynomial
-   * terms, independent of the output/storage bound. No Gaussian replay in mixed(). */
+  /** Preparation work bound: 20*points*AO primitive/polynomial incidences,
+   * independent of the output/storage bound. No Gaussian replay in mixed(). */
   std::uint64_t max_ao_primitive_terms{134'217'728};
   unsigned partition_iterations{3};
   double coincident_tolerance{1e-12};

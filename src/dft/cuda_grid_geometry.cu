@@ -41,11 +41,15 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
       options.reference_relative_tolerance < 0)
     return false;
   std::size_t points{}, matrix{}, tile{}, spatial{}, moving{}, atomic{}, primitive{}, records{};
+  plan.ao_primitive_terms = shape.ao_primitive_terms;
+  if (!plan.ao_primitive_terms && (!product(shape.nao, shape.primitives, plan.ao_primitive_terms) ||
+                                   !product(3, plan.ao_primitive_terms, plan.ao_primitive_terms)))
+    return false;
   if (!product(shape.atoms, shape.points_per_atom, points) || points != shape.points ||
       !product(shape.points, shape.nao, plan.panel) || !product(20, plan.panel, spatial) ||
       !product(12, plan.panel, moving) || spatial > options.max_ao_jet_values ||
-      !product(spatial, shape.primitives, plan.ao_primitive_terms) ||
-      !product(3, plan.ao_primitive_terms, plan.ao_primitive_terms) ||
+      !product(20, plan.ao_primitive_terms, plan.ao_primitive_terms) ||
+      !product(shape.points, plan.ao_primitive_terms, plan.ao_primitive_terms) ||
       plan.ao_primitive_terms > options.max_ao_primitive_terms ||
       !product(shape.atoms, shape.atoms, matrix) ||
       !product(shape.atoms, shape.atoms - 1, plan.point_pairs) ||
@@ -180,6 +184,14 @@ __global__ void validate_basis(CudaGridGeometryShape shape, const double* basis,
   if (atomicAdd(status, 0)) return;
   const auto* primitives = basis + 3 * shape.atoms;
   const auto* records = primitives + 2 * shape.primitives;
+  if (!blockIdx.x && !threadIdx.x && shape.ao_primitive_terms) {
+    double incidences{};
+    for (std::size_t index = 0; index < shape.nao; ++index) {
+      const auto* record = records + 16 * index;
+      incidences += record[2] * record[3];
+    }
+    if (!isfinite(incidences) || incidences > shape.ao_primitive_terms) atomicExch(status, 1);
+  }
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < max(shape.nao, shape.primitives);
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {

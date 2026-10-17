@@ -110,13 +110,13 @@ void host_admission() {
   std::cout << "{\"host_admission_without_cuda_initialization\":true}\n";
 }
 
-void run(const char* fixture, const char* output, bool reject, std::size_t point_tile) {
+void run(const char* fixture, const char* output, bool reject, std::size_t point_tile,
+         const std::string& topology) {
   std::ifstream input(fixture, std::ios::binary);
   std::array<std::uint64_t, 5> header{};
   require(static_cast<bool>(input.read(reinterpret_cast<char*>(header.data()), sizeof(header))),
           "missing probe fixture header");
-  const CudaGridGeometryShape shape{header[0], header[1], header[2], header[0] * header[3],
-                                    header[3]};
+  CudaGridGeometryShape shape{header[0], header[1], header[2], header[0] * header[3], header[3]};
   CudaGridGeometryOptions options;
   options.point_tile = point_tile;
   options.partition_iterations = static_cast<unsigned>(header[4]);
@@ -125,6 +125,15 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
   check(cuda_grid_geometry_workspace(shape, options, bytes));
   Storage storage;
   const auto basis = read(input, 3 * shape.atoms + 2 * shape.primitives + 16 * shape.nao);
+  if (!topology.empty()) {
+    const auto offset = 3 * shape.atoms + 2 * shape.primitives;
+    for (std::size_t index = 0; index < shape.nao; ++index)
+      shape.ao_primitive_terms +=
+          static_cast<std::size_t>(basis[offset + 16 * index + 2] * basis[offset + 16 * index + 3]);
+    if (topology == "understated") --shape.ao_primitive_terms;
+    options.max_ao_primitive_terms = 20 * shape.points * shape.ao_primitive_terms;
+    check(cuda_grid_geometry_workspace(shape, options, bytes));
+  }
   const auto points = read(input, 3 * shape.points);
   const auto weights = read(input, shape.points);
   const auto atomic = read(input, shape.points);
@@ -260,10 +269,16 @@ int main(int argc, char** argv) {
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
     require(argc == 3 || argc == 4,
             "usage: cuda_grid_geometry_probe input output [reject|point-tile]");
-    const auto reject = argc == 4 && std::string(argv[3]) == "reject";
-    const auto tile =
-        argc == 4 && !reject ? std::stoull(argv[3]) : CudaGridGeometryOptions{}.point_tile;
-    run(argv[1], argv[2], reject, tile);
+    const std::string topology =
+        argc == 4 && (std::string(argv[3]) == "topology" || std::string(argv[3]) == "understated")
+            ? argv[3]
+            : "";
+    const auto reject =
+        argc == 4 && (std::string(argv[3]) == "reject" || topology == "understated");
+    const auto tile = argc == 4 && !reject && topology.empty()
+                          ? std::stoull(argv[3])
+                          : CudaGridGeometryOptions{}.point_tile;
+    run(argv[1], argv[2], reject, tile, topology);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

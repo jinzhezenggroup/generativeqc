@@ -26,6 +26,10 @@ struct CudaKsWb97mvHessianOptions {
   /** Optional repeated-RHS CPKS representation, additionally constrained by
    * the existing response/aggregate budgets. Zero retains physical GMRES. */
   std::size_t max_resident_cpks_bytes{128ULL << 10};
+  /** Optional full-Hessian frozen exact derivatives, inside max_device_bytes.
+   * Stores O(3N*spin*AO^2) first Fock derivatives plus frozen HVP columns,
+   * never a four-index derivative tensor. Zero keeps directional replay. */
+  std::size_t max_frozen_exact_bytes{8ULL << 20};
   double symmetry_absolute_tolerance{2e-7};
   double symmetry_relative_tolerance{2e-7};
   response::CudaCpksOptions cpks{};
@@ -52,6 +56,7 @@ struct CudaKsWb97mvHessianWork {
   std::size_t device_bytes{}, assembly_terms_per_direction{}, nuclear_pairs{};
   std::size_t cpks_operator_bytes{}, cpks_operator_columns{}, cpks_cached_actions{},
       cpks_physical_checks{};
+  std::size_t frozen_exact_bytes{}, frozen_exact_columns{}, frozen_exact_contractions{};
   std::uint64_t attempted_directions{}, completed_directions{}, published_hvps{},
       published_hessians{};
   CudaKsWb97mvResponseWork induced{};

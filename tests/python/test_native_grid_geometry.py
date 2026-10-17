@@ -247,6 +247,7 @@ def _native(
     *,
     reject: bool = False,
     point_tile: int | None = None,
+    topology: str | None = None,
 ) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE")
     if not executable:
@@ -286,7 +287,9 @@ def _native(
             str(source),
             str(output),
             *(
-                ["reject"]
+                [topology]
+                if topology is not None
+                else ["reject"]
                 if reject
                 else [str(point_tile)]
                 if point_tile is not None
@@ -306,7 +309,7 @@ def _native(
     )
     assert process.returncode == 0, process.stderr
     receipt = json.loads(process.stdout)
-    if reject:
+    if reject or topology == "understated":
         assert receipt["prepare_rejected"]
         return (), receipt
     values = np.fromfile(output, dtype=np.float64)
@@ -461,6 +464,20 @@ def test_independent_displaced_value_oracles_agree() -> None:
             atol=3e-12,
             rtol=1e-9,
         )
+
+
+def test_native_topology_work_bound_is_checked_on_device(tmp_path: Path) -> None:
+    """Tighter admission must count contracted AO incidences, not all primitives."""
+    fixture = _fixture()
+    baseline, original = _native(fixture, tmp_path)
+    bounded, receipt = _native(fixture, tmp_path, topology="topology")
+    for actual, expected in zip(bounded, baseline, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    assert receipt["ao_primitive_term_bound"] < original["ao_primitive_term_bound"]
+    np.testing.assert_allclose(
+        bounded[0], _gaussians(fixture, _indices(3)), atol=2e-13, rtol=2e-12
+    )
+    _native(fixture, tmp_path, topology="understated")
 
 
 def test_native_point_parallel_tiles_preserve_geometry(tmp_path: Path) -> None:

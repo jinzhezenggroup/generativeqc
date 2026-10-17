@@ -730,6 +730,34 @@ traverses VV10 pairs once per right density direction; left-coordinate mixed
 contractions reuse its retained JVP and cached spatial AO jets. Pair incidence
 gathering uses O(atoms squared) work rather than scanning all pairs per atom.
 
+Full Hessians may additionally retain frozen exact J/K Fock derivatives and
+frozen HVP columns under `max_frozen_exact_bytes` and the aggregate byte budget.
+The compiler-AD integral source is traversed once per nuclear coordinate.
+Because exact J/K energy is quadratic in the signed spin densities, its solved
+density contribution is the contraction `F_R(D) : dD`. This retains only
+`3N * spin * AO^2 + (3N)^2` FP64 values, not four-index derivative jets. Standalone
+HVPs do not construct this cache. Zero capacity, insufficient aggregate storage
+or optional allocation failure preserves the original directional source passes.
+DF uses this cache only for its exact LR correction; fitted-primary AD is unchanged.
+
+The exact nuclear source admits a bounded canonical-source tiled schedule when
+the complete ordered schedule exceeds its group, work or arena bound. Each tile
+expands the distinct eightfold shell permutations with explicit Cartesian and
+derivative-slot mappings, using the same linked compiler-AD leaves. Only one
+tile resides on device. Adaptive subdivision preserves source reuse rather than
+silently falling back to eightfold primitive replay. `max_source_groups` and all
+primitive/projection/reduction bounds apply to the complete action, not per tile;
+`max_groups` continues to bound a resident ordered tile. Shared publication
+storage is reserved before admitting tile scratch. Disabling `source_tile` keeps
+the original fail-closed ordered admission. Diagnostics expose source groups,
+streaming tiles, source builds and frozen derivative contractions.
+
+Moving-grid preparation can admit the actual shell-derived AO primitive and
+polynomial incidences instead of multiplying every AO by every primitive in the
+molecule. The tighter bound is checked against device AoBasis records before
+the first AO jet evaluation. Callers without this topology retain the generic
+conservative bound, and understated metadata fails without publication.
+
 All independent owners, generated scratch, staged values and complete Hessian
 storage share an aggregate response-byte bound. Actions allocate nothing. CUDA
 success and CPKS convergence are checked separately; one failed column prevents
