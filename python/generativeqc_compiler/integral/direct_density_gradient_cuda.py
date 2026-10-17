@@ -24,7 +24,7 @@ def density_hermite_states(maximum: int = 4) -> tuple[tuple[int, int, int], ...]
     if not 0 <= maximum <= 4:
         raise ValueError("density projection supports s/p/d shell pairs only")
     return tuple(
-        tuple(component.count(axis) for axis in "xyz")
+        (component.count("x"), component.count("y"), component.count("z"))
         for degree in range(maximum + 1)
         for component in cartesian_components(degree)
     )
