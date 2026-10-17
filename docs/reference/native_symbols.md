@@ -416,7 +416,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_device_resources_create ( cons
 
 **Inputs.** Initialize descriptor with sizeof and GENERATIVEQC_ABI_VERSION. buffers contains
 buffer_count valid entries; count is positive. resources points to a NULL handle and is
-disjoint from descriptor and buffers. The caller has already admitted the global plan.
+disjoint from descriptor and buffers. Any global selection/admission remains caller-owned;
+an explicit numeric cap does not assert complete-plan feasibility.
 
 **Outputs.** Publish one owning metadata handle only after all admission/allocation succeeds.
 
@@ -1725,8 +1726,8 @@ The native owner binds around preparation and every execution, including compone
 without Python observation control. Admission owns the serialized host-workspace schedule.
 
 **Inputs.** Ordinary calculation_prepare inputs plus a live selected device-resources handle.
-The context must execute CUDA on the same visible device; the caller already admitted its
-matching global plan. This boundary does not authenticate frontend inventory/model identity.
+The context must execute CUDA on the same visible device. The caller owns any matching
+global-plan admission; an explicit cap is not full-plan or model-identity validation.
 
 **Outputs.** Follow calculation_prepare's output contract. Refusal never retries unbudgeted math.
 
@@ -2389,8 +2390,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_with_device_reso
 The native owner binds around preparation and every execution without a Python observation.
 
 **Inputs.** All ordinary batch_prepare inputs plus a live selected device-resources handle.
-The context must execute CUDA on that same visible device. Its global plan and inventory
-must match the intended calculation; this API does not authenticate those frontend inputs.
+The context must execute CUDA on that same visible device. The caller owns any matching
+global-plan admission; an explicit cap is not full-plan or model-identity validation.
 
 **Outputs.** Use batch_prepare's output/validation contract. No unbudgeted retry follows refusal.
 

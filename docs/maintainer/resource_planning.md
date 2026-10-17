@@ -163,7 +163,10 @@ closed frontend handles until their actual owners release them.
 ### Native prepared admission lifetime
 
 The public `generativeqc_device_resources_create` accepts the selected inventory
-as typed `generativeqc_device_resource_buffer_v1` records. It shares the native
+as typed `generativeqc_device_resource_buffer_v1` records. A caller may also
+provide one explicit numeric-cap row, as the CLI run-only option does; this is
+not a claim that a complete global plan has been selected or admitted.
+The interface shares the native
 lifetime sweep with the older private metadata interface; it does not perform a
 second global selection or validate model identity. Host-only metadata creation
 and snapshots do not initialize CUDA or certify scientific backend support.

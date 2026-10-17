@@ -81,6 +81,7 @@ inline std::unordered_map<void*, DeviceAllocationOwner> device_allocation_owners
 inline std::uint64_t device_allocation_generation{};
 inline thread_local std::shared_ptr<DeviceResourceLedger> active_device_resource_ledger;
 inline thread_local std::size_t native_device_resource_scope_depth{};
+inline thread_local bool device_resource_unbind_pending{};
 
 /** Bounded prepared inventories own one serialized host workspace, even if an
  * optional observer has ended or no frontend observation was requested. */
@@ -104,17 +105,24 @@ inline bool bind_device_resource_ledger(std::shared_ptr<DeviceResourceLedger> le
   ledger->provider_reservation_peak = ledger->provider_reserved;
   ledger->admission_peak = ledger->live + ledger->provider_reserved;
   active_device_resource_ledger = std::move(ledger);
+  device_resource_unbind_pending = false;
   return true;
 }
 
-/** End an observer-owned binding, but never detach an executing native owner. */
+/** End a binding after the last native borrower returns, even if its original
+ * observer ends first. A still-live outer binding is otherwise preserved. */
 inline void unbind_device_resource_ledger() noexcept {
-  if (native_device_resource_scope_depth || !active_device_resource_ledger) return;
+  if (native_device_resource_scope_depth) {
+    device_resource_unbind_pending = true;
+    return;
+  }
+  if (!active_device_resource_ledger) return;
   {
     std::lock_guard<std::mutex> lock(device_resource_mutex);
     active_device_resource_ledger->active = false;
   }
   active_device_resource_ledger.reset();
+  device_resource_unbind_pending = false;
 }
 
 /** Native prepared-operation admission independent of Python/CPU observation.
@@ -162,7 +170,8 @@ class DeviceResourceScope {
       cpu_resource_observation = previous_observation_;
     }
     --native_device_resource_scope_depth;
-    if (owns_binding_) unbind_device_resource_ledger();
+    if (owns_binding_ || (!native_device_resource_scope_depth && device_resource_unbind_pending))
+      unbind_device_resource_ledger();
   }
 
  private:

@@ -1432,8 +1432,9 @@ typedef struct generativeqc_device_resource_buffer_v1 {
   uint64_t bytes, space, device, first_phase, last_phase, runtime_allowance;
 } generativeqc_device_resource_buffer_v1;
 
-/** Selected, globally admitted inventory for one visible CUDA device.
- * Construction copies metadata only. This is not global-plan/model identity
+/** Caller-selected capacities for one visible CUDA device: selected buffers
+ * from an externally admitted plan, or a single explicit numeric-cap row.
+ * Construction copies metadata only. Neither form is global-plan/model identity
  * validation, physical allocation coverage, provider capability or an RSS cap. */
 typedef struct generativeqc_device_resource_descriptor {
   uint32_t struct_size;
@@ -1462,7 +1463,8 @@ typedef struct generativeqc_device_resource_diagnostic {
  * @behavior Derive allowance-separated numeric admission from selected capacity lifetimes.
  * @inputs Initialize descriptor with sizeof and GENERATIVEQC_ABI_VERSION. buffers contains
  * buffer_count valid entries; count is positive. resources points to a NULL handle and is
- * disjoint from descriptor and buffers. The caller has already admitted the global plan.
+ * disjoint from descriptor and buffers. Any global selection/admission remains caller-owned;
+ * an explicit numeric cap does not assert complete-plan feasibility.
  * @outputs Publish one owning metadata handle only after all admission/allocation succeeds.
  * @lifetime Copies all input metadata. Destroy the returned handle with the matching function.
  * Prepared batches retain the underlying owner independently of this metadata handle.
@@ -2666,8 +2668,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
  * The native owner binds around preparation and every execution, including component returns,
  * without Python observation control. Admission owns the serialized host-workspace schedule.
  * @inputs Ordinary calculation_prepare inputs plus a live selected device-resources handle.
- * The context must execute CUDA on the same visible device; the caller already admitted its
- * matching global plan. This boundary does not authenticate frontend inventory/model identity.
+ * The context must execute CUDA on the same visible device. The caller owns any matching
+ * global-plan admission; an explicit cap is not full-plan or model-identity validation.
  * @outputs Follow calculation_prepare's output contract. Refusal never retries unbudgeted math.
  * @lifetime Retains the underlying resource owner; the metadata handle may close after success.
  * Keep the context alive through calculation destruction. Actual buffers/providers release their
@@ -3114,8 +3116,8 @@ generativeqc_batch_prepare(generativeqc_context* context, const generativeqc_sys
  * @behavior Prepare the same scientific batch with native-owned device admission and lifetime.
  * The native owner binds around preparation and every execution without a Python observation.
  * @inputs All ordinary batch_prepare inputs plus a live selected device-resources handle.
- * The context must execute CUDA on that same visible device. Its global plan and inventory
- * must match the intended calculation; this API does not authenticate those frontend inputs.
+ * The context must execute CUDA on that same visible device. The caller owns any matching
+ * global-plan admission; an explicit cap is not full-plan or model-identity validation.
  * @outputs Use batch_prepare's output/validation contract. No unbudgeted retry follows refusal.
  * @lifetime The batch retains its own resource owner. The metadata handle may close after
  * successful preparation; retained buffers/providers remain charged until their actual release.

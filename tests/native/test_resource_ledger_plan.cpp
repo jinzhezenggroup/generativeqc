@@ -218,6 +218,48 @@ void test_native_scope_without_observation() {
   std::uint64_t peak = 0, samples = 0;
   require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0 && peak == 33,
           "native scope erased its caller's outer samples");
+  require(generativeqc_resource_tracking_begin_v1(1) == 0 && bind_device_resource_ledger(ledger),
+          "legacy observer could not bind before borrowed-scope teardown");
+  {
+    DeviceResourceScope borrowed(ledger);
+    {
+      DeviceResourceScope nested(ledger);
+      require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0,
+              "legacy observer could not end inside a borrowed native scope");
+      require(ledger->active && active_device_resource_ledger == ledger &&
+                  resource_cpu_worker_limit() == 1,
+              "observer teardown detached a nested borrowed native scope");
+    }
+    require(ledger->active && active_device_resource_ledger == ledger &&
+                resource_cpu_worker_limit() == 1,
+            "nested teardown detached the outer borrowed native scope");
+  }
+  require(
+      !ledger->active && !active_device_resource_ledger && native_device_resource_scope_depth == 0,
+      "borrowed native scope retained an ended observer's binding");
+  require(bind_device_resource_ledger(ledger),
+          "ended observer prevented the next operation from binding");
+  {
+    DeviceResourceScope borrowed_without_observer(ledger);
+  }
+  require(
+      ledger->active && active_device_resource_ledger == ledger && !cpu_resource_observation.active,
+      "native scope inferred ownership of an explicit non-observer binding");
+  unbind_device_resource_ledger();
+  require(generativeqc_resource_tracking_begin_v1(0) == 0 && bind_device_resource_ledger(ledger),
+          "legacy observer could not bind before exception teardown");
+  struct ExpectedFailure {};
+  try {
+    DeviceResourceScope borrowed(ledger);
+    DeviceResourceScope nested(ledger);
+    require(generativeqc_resource_tracking_end_v1(&peak, &samples) == 0,
+            "legacy observer could not end before exception teardown");
+    throw ExpectedFailure{};
+  } catch (const ExpectedFailure&) {
+  }
+  require(!ledger->active && !active_device_resource_ledger &&
+              native_device_resource_scope_depth == 0 && !device_resource_unbind_pending,
+          "exception teardown retained an ended observer's binding or pending request");
   std::weak_ptr<DeviceResourceLedger> lifetime = ledger;
   ledger.reset();
   require(!lifetime.expired(), "metadata close released a retained provider owner");

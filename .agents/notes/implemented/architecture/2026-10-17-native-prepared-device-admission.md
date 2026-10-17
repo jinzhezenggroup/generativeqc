@@ -26,6 +26,14 @@ unobserved operation owns an isolated native sampling scope and saves the sample
 in its diagnostic. Existing outer observations are borrowed without claiming an
 isolated native peak. Missing samples and requested-byte overflow stay unavailable.
 
+An unbind request made while a native scope borrows an outer binding is deferred
+until the outermost native borrower returns, including exception unwinding. The
+request must not simply be discarded: if the original observer ends first, a
+borrowed scope does not own the binding and would otherwise leave it permanently
+active. An explicit thread-local pending request distinguishes that case from a
+still-live outer owner. Observer activity alone cannot establish ownership, since
+explicit native bindings can exist without an observer.
+
 The Python adapter selects the public path once. Only a missing preparation
 symbol permits old-library compatibility; rejection, partial ABI or malformed
 publication cannot trigger private creation or unbudgeted preparation. CLI
