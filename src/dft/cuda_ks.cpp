@@ -340,6 +340,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool experimental_mixed_point{}, experimental_mixed_ao{}, pending_mixed_point{};
   bool experimental_mixed_history{};
   bool experimental_mixed_contractions{};
+  bool pending_mixed_contractions{};
   bool budget_fock{}, budget_stationarity{}, pending_mixed_exchange{}, pending_mixed_resident{};
   bool pending_mixed_range_exchange{}, pending_mixed_range_resident{}, pending_mixed_nonlocal{};
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
@@ -713,8 +714,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                   std::array<std::uint64_t, 2> nonlocal_arithmetic) {
     auto& work = output.precision_work;
     const bool mixed = pending_mixed_coulomb || pending_mixed_density || pending_mixed_point ||
-                       pending_mixed_range_resident || mixed_range_recurrences ||
-                       nonlocal_arithmetic[0];
+                       pending_mixed_contractions || pending_mixed_range_resident ||
+                       mixed_range_recurrences || nonlocal_arithmetic[0];
     const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
                              : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
                                                          : scf::PrecisionWorkPhase::Scf);
@@ -781,6 +782,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (pending_mixed_density)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                   scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
+      if (pending_mixed_contractions) {
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed, 1,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionDtype::Fp32,
+                                  scf::PrecisionDtype::Fp32);
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed, 1,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionDtype::Fp32);
+      }
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
@@ -1617,6 +1627,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         const auto admitted_precision = resolve_cuda_ks_iteration_precision(
             precision_schedule, false,
             cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+        if (admitted_precision.uses_lower_precision(
+                cuda_ks_precision_region::kXcMatrixContractions) &&
+            cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout))
+          xc->prepare_mixed_matrix_contractions();
         // Host and device reservations must both precede optional preparation.
         // The lowering layer owns qualification and implementation selection.
         const auto density_budget =
@@ -1838,6 +1852,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_mixed_resident = false;
     pending_mixed_density = false;
     pending_mixed_point = false;
+    pending_mixed_contractions = false;
     mixed_precision_executed = false;
     final_corrections = 0;
     refinement_iterations = 0;
@@ -2466,7 +2481,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // in opt-in diagnostics. Disabled tracing adds no events or fences.
       runtime::cuda_trace::trace_call("semilocal_density_features", stream, [&] {
         xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
-                                     nonlocal_raw_gradient);
+                                     nonlocal_raw_gradient, phase);
       });
       const auto quadrature = xc->grid_view();
       if (nonlocal_frozen_stage) {
@@ -2693,6 +2708,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               stream));
       pending_mixed_point =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kXcPointAlgebra);
+      pending_mixed_contractions = xc && prepared_ao_work.point_ao_visits != 0 &&
+                                   iteration_precision.uses_lower_precision(
+                                       cuda_ks_precision_region::kXcMatrixContractions) &&
+                                   cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout);
       const auto density_phase = strict_refinement
                                      ? generativeqc::runtime::PrecisionPhase::StrictAudit
                                      : generativeqc::runtime::PrecisionPhase::Admitted;
@@ -2771,7 +2790,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       jk_trace.finish();
       mixed_precision_executed = mixed_precision_executed || pending_mixed_coulomb ||
                                  pending_mixed_density || pending_mixed_point ||
-                                 pending_mixed_range_exchange || pending_mixed_nonlocal;
+                                 pending_mixed_contractions || pending_mixed_range_exchange ||
+                                 pending_mixed_nonlocal;
       pending_nonlocal_seed = nonlocal_seed_stage;
       pending_nonlocal_frozen = nonlocal_frozen_stage;
       runtime::cuda_trace::TraceRegion xc_trace("ks_xc", stream);
@@ -2927,7 +2947,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           nonlocal_cache_enabled ? nonlocal_work[2] : nonlocal_exact_iterations};
     const bool completed_mixed = pending_mixed_coulomb || pending_mixed_density ||
                                  pending_mixed_point || pending_mixed_range_resident ||
-                                 mixed_range_recurrences || nonlocal_arithmetic[0];
+                                 pending_mixed_contractions || mixed_range_recurrences ||
+                                 nonlocal_arithmetic[0];
     if (completed_mixed)
       ++output.precision.mixed_stage_fock_builds;
     else
@@ -2974,7 +2995,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (is_failed) {
       pending_incremental_delta = false;
       if (pending_mixed_coulomb || pending_mixed_density || pending_mixed_point ||
-          pending_mixed_range_exchange || pending_mixed_nonlocal) {
+          pending_mixed_contractions || pending_mixed_range_exchange || pending_mixed_nonlocal) {
         // Any failed low-precision attempt retries the same density with the
         // strict target operator. Do not publish or cache the failed proposal.
         ++output.precision.execution_retries;
