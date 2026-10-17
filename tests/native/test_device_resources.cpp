@@ -130,6 +130,21 @@ void reject_cpu_cutover_without_unbudgeted_retry() {
                   GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               !batch,
           "CPU batch silently retried without the requested device owner");
+  bool sdk_rejected = false;
+  try {
+    generativeqc::Calculation refused(context, system, method, resources.get());
+  } catch (const generativeqc::Error& error) {
+    sdk_rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(sdk_rejected, "C++ Calculation ignored its explicit device resources");
+  sdk_rejected = false;
+  const std::array<const generativeqc::System*, 1> sdk_systems{&system};
+  try {
+    generativeqc::Batch refused(context, sdk_systems, method, 0, resources.get());
+  } catch (const generativeqc::Error& error) {
+    sdk_rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(sdk_rejected, "C++ Batch ignored its explicit device resources");
   require(generativeqc_calculation_prepare(context.get(), system.get(), &method, &calculation) ==
               GENERATIVEQC_STATUS_SUCCESS,
           "ordinary public CPU preparation failed");
@@ -238,6 +253,33 @@ void cuda_prepared_lifetime() {
                                                                  &cpu_system};
     generativeqc::Batch reference(cpu, cpu_systems, method);
     const auto expected = reference.execute();
+    auto sdk_resources = capacity(64 * 1024 * 1024);
+    {
+      generativeqc::Calculation sdk(context, system, method, sdk_resources.get());
+      const auto result = sdk.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+      require(result.executed_backend == GENERATIVEQC_BACKEND_CUDA && result.forces &&
+                  std::abs(result.energy + 1.1167143251757694) < 2e-9 &&
+                  read(sdk_resources.get()).numeric_peak_bytes > 0,
+              "public C++ Calculation resource argument bypassed native admission");
+    }
+    require(read(sdk_resources.get()).numeric_live_bytes == 0,
+            "public C++ Calculation destruction leaked charges");
+    const std::array<const generativeqc::System*, 3> sdk_systems{&system, &other, &system};
+    {
+      generativeqc::Batch sdk(context, sdk_systems, method, GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+                              sdk_resources.get());
+      const auto results = sdk.execute();
+      for (std::size_t index = 0; index < results.size(); ++index)
+        require(results[index].status == GENERATIVEQC_STATUS_SUCCESS &&
+                    results[index].executed_backend == GENERATIVEQC_BACKEND_CUDA &&
+                    std::abs(results[index].energy - expected[index].energy) < 2e-9,
+                "public C++ Batch resource argument changed dispatch or energy");
+      require(read(sdk_resources.get()).numeric_live_bytes > 0,
+              "public C++ Batch did not retain native charges");
+    }
+    require(read(sdk_resources.get()).numeric_live_bytes == 0 &&
+                read(sdk_resources.get()).provider_reserved_bytes == 0,
+            "public C++ Batch destruction leaked retained charges");
     const std::array<const generativeqc_system*, 3> systems{system.get(), other.get(),
                                                             system.get()};
     resources = capacity(64 * 1024 * 1024);
