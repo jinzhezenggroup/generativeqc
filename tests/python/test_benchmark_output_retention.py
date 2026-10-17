@@ -522,6 +522,108 @@ def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None
     ) in seen
 
 
+@pytest.mark.parametrize("existing_output", [False, True])
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_resource_composition_rejects_retained_output_before_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    existing_output: bool,
+) -> None:
+    from benchmarks import _retention, native_resource_composition
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence", encoding="utf-8")
+    target = original if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid output reached scientific endpoint work")
+
+    monkeypatch.setattr(native_resource_composition, "endpoint", forbidden)
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(tmp_path / "missing-library.so"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "native_resource_composition",
+            "--source-sha",
+            "test-source",
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        native_resource_composition.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert original.read_text(encoding="utf-8") == "original evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_resource_composition_accepts_scratch_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+    import json
+
+    from benchmarks import _retention, native_resource_composition
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    library = tmp_path / "test-library.so"
+    library.write_bytes(b"test library identity")
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(library))
+    monkeypatch.setattr(
+        native_resource_composition,
+        "endpoint",
+        lambda *args: (0.125, {"phases": [[{"iterations": 1}]]}),
+    )
+    output = tmp_path / ".artifacts/benchmarks/result.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "native_resource_composition",
+            "--source-sha",
+            "test-source",
+            "--samples",
+            "2",
+            "--warmup",
+            "0",
+            "--output",
+            str(output),
+        ],
+    )
+    native_resource_composition.main()
+    record = json.loads(output.read_text())
+    assert record["python_source_sha"] == "test-source"
+    assert (
+        record["native_library_sha256"]
+        == hashlib.sha256(library.read_bytes()).hexdigest()
+    )
+    assert record["samples"] == 2
+    assert len(record["cases"]) == 4
+    assert all(case["seconds"] == [0.125, 0.125] for case in record["cases"])
+
+
 @pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
 @pytest.mark.parametrize("worker", [False, True])
 def test_rccsd_cpu_rejects_retained_output_before_work(

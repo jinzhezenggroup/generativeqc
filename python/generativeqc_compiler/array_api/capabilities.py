@@ -16,6 +16,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "multiply",
         "divide",
         "negative",
+        "positive",
         "pow",
         "exp",
         "log",
@@ -55,6 +56,9 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
+        "repeat",
+        "tile",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
     ),
@@ -66,6 +70,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "tensor-algebra": (
         "matmul",
+        "tensordot",
+        "vecdot",
         "einsum_extension",
     ),
 }
@@ -93,6 +99,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "multiply",
         "divide",
         "negative",
+        "positive",
         "pow",
         "exp",
         "log",
@@ -111,12 +118,17 @@ SUPPORTED_FUNCTIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
+        "repeat",
+        "tile",
         "slice",
         "take",
         "broadcast_to_explicit_indices",
         "slice_static",
         "take_static",
         "matmul",
+        "tensordot",
+        "vecdot",
         "matrix_transpose",
         "einsum_extension",
     }
@@ -167,6 +179,20 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
         "axis": "static-int|tuple|None",
         "capture": "gather extent <= 65536",
     },
+    "roll": {
+        "shift": "static-int|tuple; broadcast with axis; repeated axes accumulate",
+        "axis": "static-int|tuple|None; None flattens in row-major order",
+        "capture": "generic-only; total nonidentity gather positions <= 65536",
+    },
+    "repeat": {
+        "repeats": "static nonnegative Python integer; per-element counts unsupported",
+        "axis": "static signed integer or None; None flattens in row-major order",
+        "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
+    },
+    "tile": {
+        "repetitions": "static nonnegative Python-integer tuple; leading ones pad shape/counts",
+        "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
+    },
     "astype": {
         "dtype": "real float32/float64 only; bool identity unsupported",
         "copy": "eager-copy-policy",
@@ -182,6 +208,14 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     },
     "slice": {
         "ranges": "static in-bounds half-open",
+    },
+    "tensordot": {
+        "axes": "static-int|pair-of-axis-sequences; equal contracted extents",
+        "capture": "generic-real-only; at most 52 distinct labels",
+    },
+    "vecdot": {
+        "axis": "static-int; equal contracted extents; broadcast remaining axes",
+        "capture": "generic-real-only; rank <= 52",
     },
     "einsum_extension": {
         "equation": "explicit-output; no ellipsis",
@@ -228,6 +262,7 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "multiply",
         "divide",
         "negative",
+        "positive",
         "pow",
         "exp",
         "log",
@@ -251,6 +286,9 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "roll",
+        "repeat",
+        "tile",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
         "slice",
@@ -258,6 +296,8 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "slice_static",
         "take_static",
         "matmul",
+        "tensordot",
+        "vecdot",
         "einsum_extension",
     }
 )

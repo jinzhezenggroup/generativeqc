@@ -24,7 +24,6 @@ from generativeqc import (
     GridSpec,
     InitialGuessSpec,
     KsOptions,
-    MethodCapabilities,
     ResourceBudget,
     _native,
     resources_native,
@@ -41,6 +40,8 @@ from generativeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
+
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 WATER = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.7)), ("H", (1.6, 0.0, -0.5))]
@@ -106,17 +107,12 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     state.library = library
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
 
-    def capabilities(method: str) -> MethodCapabilities:
-        hf = method in ("rhf", "uhf")
-        return MethodCapabilities(
-            method,
-            "hartree_fock" if hf else "density_functional",
-            True,
-            True,
-            FORCES if hf else ENERGY,
-        )
-
-    monkeypatch.setattr(calculator_module, "method_capabilities", capabilities)
+    install_registry_stub(
+        library,
+        lambda method: (
+            FORCES if method in (_native.METHOD_RHF, _native.METHOD_UHF) else ENERGY
+        ),
+    )
     monkeypatch.setattr(
         Calculator, "_create_native_system", lambda *args, **kwargs: ctypes.c_void_p(1)
     )

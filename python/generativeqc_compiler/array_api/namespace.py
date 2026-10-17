@@ -5,15 +5,21 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
-from math import copysign, isfinite
+from math import copysign, isfinite, prod
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
-from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
+from generativeqc_compiler.tensor.types import (
+    Index,
+    IndexSpace,
+    TensorSpec,
+    checked_shape,
+)
 
 from .array import ExactScalar, VibeArray
 
 _GENERIC_SPACE_PREFIX = "_array_extent_"
+_MAX_STATIC_GATHER_POSITIONS = 65_536
 
 
 def _array(value: object, name: str = "operand") -> VibeArray:
@@ -459,6 +465,14 @@ def divide(x1: object, x2: object) -> VibeArray:
     raise TypeError("divide requires at least one symbolic VibeArray")
 
 
+def positive(x: object) -> VibeArray:
+    """Preserve a real symbolic array and its scientific index metadata."""
+    value = _array(x)
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("positive supports only float32 and float64")
+    return value
+
+
 def negative(x: object) -> VibeArray:
     value = _array(x)
     return VibeArray(tensor_ir.add(value.node, coefficients=(-1,)))
@@ -586,7 +600,7 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
         if axis is None
         else _normalized_axes(axis, value.ndim, "flip")
     )
-    if any(value.shape[position] > 65536 for position in axes):
+    if any(value.shape[position] > _MAX_STATIC_GATHER_POSITIONS for position in axes):
         raise ValueError("flip exceeds the bounded static gather index budget")
     node = value.node
     for position in sorted(axes):
@@ -594,6 +608,131 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
             node, position, range(value.shape[position] - 1, -1, -1)
         )
     return _canonical_generic(VibeArray(node))
+
+
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> VibeArray:
+    """Roll generic arrays with a bounded total of static gather positions."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("roll scientific arrays require explicit TensorIR index maps")
+    if type(shift) is int:
+        shifts = (shift,)
+    elif isinstance(shift, tuple) and all(type(item) is int for item in shift):
+        shifts = shift
+    else:
+        raise TypeError("roll shift must be an integer or tuple of integers")
+    if axis is None:
+        flattened = reshape(value, (value.size,))
+        return reshape(roll(flattened, builtins.sum(shifts), axis=0), value.shape)
+    if type(axis) is int:
+        axes = (axis,)
+    elif isinstance(axis, tuple) and all(type(item) is int for item in axis):
+        axes = axis
+    else:
+        raise TypeError("roll axis must be an integer or tuple of integers")
+    axes = tuple(_axis(item, value.ndim, "roll") for item in axes)
+    if len(shifts) != len(axes):
+        if len(shifts) == 1:
+            shifts = shifts * len(axes)
+        elif len(axes) == 1:
+            axes = axes * len(shifts)
+        else:
+            raise ValueError("roll shift and axis must have broadcastable lengths")
+    offsets: dict[int, int] = {}
+    for position, offset in zip(axes, shifts, strict=True):
+        extent = value.shape[position]
+        offsets[position] = (offsets.get(position, 0) + offset) % (extent or 1)
+    # Check the complete map budget before constructing any gather positions.
+    if (
+        builtins.sum(
+            value.shape[position] for position, offset in offsets.items() if offset
+        )
+        > _MAX_STATIC_GATHER_POSITIONS
+    ):
+        raise ValueError("roll exceeds the bounded static gather index budget")
+    result = value
+    for position, offset in sorted(offsets.items()):
+        if offset:
+            extent = value.shape[position]
+            result = take(
+                result,
+                tuple((index - offset) % extent for index in range(extent)),
+                axis=position,
+            )
+    return result
+
+
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
+    """Repeat generic elements with static reshape/broadcast metadata."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError(
+            "repeat scientific arrays require explicit TensorIR index maps"
+        )
+    if type(repeats) is not int:
+        raise TypeError("repeat requires a static integer repetition count")
+    if repeats < 0:
+        raise ValueError("repeat count must be nonnegative")
+    if axis is None:
+        value = reshape(value, (value.size,))
+        position = 0
+    else:
+        position = _axis(axis, value.ndim, "repeat")
+    if repeats == 1:
+        return value
+    shape = value.shape
+    # Collapse the leading and trailing groups so a valid rank-64 input
+    # does not need a rank-65 intermediate. Empty inputs use a harmless
+    # unit trailing group without multiplying possibly huge empty extents.
+    inner = prod(shape[position + 1 :]) if value.size else 1
+    outer = value.size // inner
+    expanded = (outer, 1, inner)
+    repeated = (outer, repeats, inner)
+    output = shape[:position] + (shape[position] * repeats,) + shape[position + 1 :]
+    return reshape(broadcast_to(reshape(value, expanded), repeated), output)
+
+
+def tile(x: object, repetitions: tuple[int, ...]) -> VibeArray:
+    """Tile generic arrays with static block repeats, without explicit index maps."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("tile scientific arrays require explicit TensorIR index maps")
+    if not isinstance(repetitions, tuple) or any(
+        type(count) is not int for count in repetitions
+    ):
+        raise TypeError("tile repetitions must be a static tuple of integers")
+    if any(count < 0 for count in repetitions):
+        raise ValueError("tile repetitions must be nonnegative")
+    rank = max(value.ndim, len(repetitions))
+    shape = (1,) * (rank - value.ndim) + value.shape
+    counts = (1,) * (rank - len(repetitions)) + repetitions
+    output = tuple(extent * count for extent, count in zip(shape, counts, strict=True))
+    checked_shape(output, value.node.spec.itemsize)
+    if value.size == 0:
+        return reshape(value, output)
+    if 0 in output:
+        # Empty results must not materialize any earlier nonzero repetitions.
+        empty = broadcast_to(reshape(value, (1, value.size)), (0, value.size))
+        return reshape(empty, output)
+    result = reshape(value, shape) if value.shape != shape else value
+    for axis, count in enumerate(counts):
+        if count == 1:
+            continue
+        shape = result.shape
+        outer = prod(shape[:axis])
+        inner = result.size // outer
+        # Split into three groups so rank-64 arrays do not require a
+        # rank-65 intermediate. Repeat whole axis blocks, not elements.
+        blocks = broadcast_to(reshape(result, (outer, 1, inner)), (outer, count, inner))
+        result = reshape(
+            blocks, shape[:axis] + (shape[axis] * count,) + shape[axis + 1 :]
+        )
+    return result
 
 
 def reshape(
@@ -656,23 +795,35 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> VibeArray:
     return _canonical_generic(result)
 
 
-def take(
-    x: object,
-    indices: tuple[int, ...],
-    *,
-    axis: int,
-) -> VibeArray:
-    """Static gather along one axis."""
-    value = _array(x)
-    if type(axis) is not int:
-        raise TypeError("take axis must be an integer")
+def _take_axis(axis: object, rank: int) -> int:
+    if axis is None:
+        if rank != 1:
+            raise ValueError("take requires a one-dimensional input when axis is None")
+        return 0
+    return _axis(axis, rank, "take")
+
+
+def _take_indices(indices: object, extent: int) -> tuple[int, ...]:
     if not isinstance(indices, tuple) or any(
         type(index) is not int for index in indices
     ):
         raise TypeError("take indices must be a static tuple of integers")
-    result = VibeArray(
-        tensor_ir.gather(value.node, _axis(axis, value.ndim, "take"), indices)
-    )
+    if any(not -extent <= index < extent for index in indices):
+        raise ValueError("gather position is outside its input axis")
+    return tuple(index + extent if index < 0 else index for index in indices)
+
+
+def take(
+    x: object,
+    indices: tuple[int, ...],
+    *,
+    axis: int | None = None,
+) -> VibeArray:
+    """Static gather; omitted axis selects the sole axis of a vector."""
+    value = _array(x)
+    position = _take_axis(axis, value.ndim)
+    positions = _take_indices(indices, value.shape[position])
+    result = VibeArray(tensor_ir.gather(value.node, position, positions))
     return _canonical_generic(result)
 
 
@@ -818,6 +969,88 @@ def matmul(x1: object, x2: object) -> VibeArray:
     return VibeArray(tensor_ir.einsum("ik,kj->ij", left.node, right.node))
 
 
+def _contraction_arrays(
+    x1: object, x2: object, operation: str
+) -> tuple[VibeArray, VibeArray]:
+    left, right = _binary_arrays(x1, x2, operation)
+    if not (_is_generic_array(left) and _is_generic_array(right)):
+        raise TypeError(
+            f"{operation} requires generic arrays; scientific domains need explicit einsum"
+        )
+    left, right = _promote_generic_arrays(left, right)
+    return left, right
+
+
+def _contraction_axes(
+    axes: object, left_rank: int, right_rank: int
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    if type(axes) is int:
+        if not 0 <= axes <= min(left_rank, right_rank):
+            raise ValueError("tensordot axes count is out of range")
+        return tuple(range(left_rank - axes, left_rank)), tuple(range(axes))
+    if not isinstance(axes, (tuple, list)) or len(axes) != 2:
+        raise TypeError("tensordot axes must be an integer or pair of axis sequences")
+    normalized = []
+    for selected, rank in zip(axes, (left_rank, right_rank), strict=True):
+        if not isinstance(selected, (tuple, list)):
+            raise TypeError("tensordot requires static axis sequences")
+        values = tuple(_axis(axis, rank, "tensordot") for axis in selected)
+        if len(set(values)) != len(values):
+            raise ValueError("tensordot axes must be unique")
+        normalized.append(values)
+    if len(normalized[0]) != len(normalized[1]):
+        raise ValueError("tensordot axis sequences must have equal lengths")
+    return normalized[0], normalized[1]
+
+
+def tensordot(x1: object, x2: object, /, *, axes: object = 2) -> VibeArray:
+    """Contract static generic real axes, keeping left then right free axes."""
+    left, right = _contraction_arrays(x1, x2, "tensordot")
+    left_axes, right_axes = _contraction_axes(axes, left.ndim, right.ndim)
+    if any(
+        left.shape[a] != right.shape[b]
+        for a, b in zip(left_axes, right_axes, strict=True)
+    ):
+        raise ValueError("tensordot contracted extents must match")
+    if left.ndim + right.ndim - len(left_axes) > len(ascii_letters):
+        raise ValueError("tensordot exceeds the 52-label contraction limit")
+    left_labels = list(ascii_letters[: left.ndim])
+    right_labels = [""] * right.ndim
+    for a, b in zip(left_axes, right_axes, strict=True):
+        right_labels[b] = left_labels[a]
+    unused = iter(ascii_letters[left.ndim :])
+    for axis in range(right.ndim):
+        if not right_labels[axis]:
+            right_labels[axis] = next(unused)
+    output = "".join(
+        label for axis, label in enumerate(left_labels) if axis not in left_axes
+    )
+    output += "".join(
+        label for axis, label in enumerate(right_labels) if axis not in right_axes
+    )
+    return einsum(
+        f"{''.join(left_labels)},{''.join(right_labels)}->{output}", left, right
+    )
+
+
+def vecdot(x1: object, x2: object, /, *, axis: object = -1) -> VibeArray:
+    """Contract equal vector extents while broadcasting the remaining axes."""
+    left, right = _contraction_arrays(x1, x2, "vecdot")
+    left_axis = _axis(axis, left.ndim, "vecdot")
+    right_axis = _axis(axis, right.ndim, "vecdot")
+    if left.shape[left_axis] != right.shape[right_axis]:
+        raise ValueError("vecdot contracted extents must match")
+    left = moveaxis(left, left_axis, -1)
+    right = moveaxis(right, right_axis, -1)
+    batch = _broadcast_shape(left.shape[:-1], right.shape[:-1])
+    shape = batch + (left.shape[-1],)
+    if len(shape) > len(ascii_letters):
+        raise ValueError("vecdot exceeds the 52-label contraction limit")
+    left, right = _broadcast_generic(left, shape), _broadcast_generic(right, shape)
+    labels = ascii_letters[: len(shape)]
+    return einsum(f"{labels},{labels}->{labels[:-1]}", left, right)
+
+
 def einsum(
     equation: str,
     *operands: object,
@@ -885,16 +1118,28 @@ def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
                 "generic symbolic indexing supports integers, slices, None, and ellipsis"
             )
         start, stop, step = item.indices(extent)
-        positions = tuple(range(start, stop, step))
-        if step == 1 and positions:
-            ranges = tuple(
-                (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
-                for axis in range(len(node.spec.shape))
-            )
-            node = tensor_ir.slice_tensor(node, ranges)
+        if step == 1:
+            # A contiguous slice needs only its bounds, not an index tuple.
+            selected_count = max(0, stop - start)
+            if selected_count:
+                ranges = tuple(
+                    (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
+                    for axis in range(len(node.spec.shape))
+                )
+                node = tensor_ir.slice_tensor(node, ranges)
+            else:
+                node = tensor_ir.gather(node, source_axis, ())
         else:
+            # Non-unit strides require an explicit gather map. Check its extent
+            # before TensorIR materializes the map as an immutable tuple.
+            positions = range(start, stop, step)
+            selected_count = len(positions)
+            if selected_count > _MAX_STATIC_GATHER_POSITIONS:
+                raise ValueError(
+                    "symbolic subscript exceeds the bounded static gather index budget"
+                )
             node = tensor_ir.gather(node, source_axis, positions)
-        output_shape.append(len(positions))
+        output_shape.append(selected_count)
         source_axis += 1
     return VibeArray(tensor_ir.reshape(node, _generic_indices(tuple(output_shape))))
 

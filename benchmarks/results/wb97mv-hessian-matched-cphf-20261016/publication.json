@@ -1,0 +1,47 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Both actual full matrices pass unchanged common and independent-energy gates; bounded complete endpoint ratios are valid, not a universal speedup/default promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 9400,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "9f61a4075351dffc4ea3529495ccc8cceb9095439db9a8727e8f0ca894ca3906"
+    },
+    {
+      "bytes": 7116,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "6abb8a93df746b03d259c8d4e702720e594bc1c7e50dd597c57cb845c4d4ca36"
+    },
+    {
+      "bytes": 2466,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "c1852b2de2e2267d42221cd2b5ca107e5c50876969f370fb026beac7764ce833"
+    },
+    {
+      "bytes": 1568,
+      "path": "reference-grid-control.py.xz",
+      "role": "reproduction",
+      "sha256": "87f6a50a598ecf092fa29e483301c92c1c35d12907226988534d17dea37cd12e"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/wb97mv-hessian-matched-cphf-20261016/reproduce.sh"
+    ],
+    "prerequisites": "Restore measured source; CUDA12.9.1 sm120, CMake/Ninja, verified compiler cache, build-time compiler Python dependencies and GPU4PySCF1.8.1/PySCF2.14.0/CuPy13.6.0. Set CUDA_ROOT, REFERENCE_PYTHON and reference library search paths. Preserve Slurm visibility. Standalone reproduction script not independently replayed.",
+    "source_restore": "Retain bundle outside checkout before restoring source.revision. Empty enabled-AOT inventory builds full orbital-f/auxiliary-g closure. For the independent energy matrices build the native probe and run test_native_wb97mv_stationary.py -k \"benchmark_h2_full or benchmark_water_full\" inside finite srun with receipts enabled. Reference control is historical Slurm3239, uses default response tolerance1e-6 to isolate only the grid; fresh official comparator keeps1e-11. Replay that historical control at source f8ee2dd66299a5704626a662f6dbe05d7725e3ed, before the shared reference helper aligned CPHF. Supply canonical-native-benchmarks.json with the first native result for each case from the source84 publication samples. The diagnostic script is retained unchanged, not relabeled as a source17 execution."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "17c539db5aa05dce9e2396aef814732f68cdfcb6"
+  }
+}

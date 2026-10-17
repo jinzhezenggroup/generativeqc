@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_df_response.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Nonmovable live-KS fitted-primary algebra adapter declarations and lifecycle/resource contracts; raw nuclear integral response and complete stationary molecular assembly are explicitly separate consumers.",
+  "regions": []
+}

@@ -12,8 +12,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("displacement", [0.0, 0.001])
+@pytest.mark.parametrize(
+    "mode,copies",
+    [("range-oracle", 1), ("range-mixed-oracle", 1), ("range-mixed-oracle", 4)],
+)
 def test_resident_range_sources_match_independent_matrices(
-    tmp_path: Path, native_cxx: NativeCxx, displacement: float
+    tmp_path: Path, native_cxx: NativeCxx, displacement: float, mode: str, copies: int
 ) -> None:
     """A new geometry owns new sources; signed spin matrices test raw K weights."""
     if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
@@ -27,6 +31,11 @@ def test_resident_range_sources_match_independent_matrices(
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1 + displacement)),
         ("H", (-0.15, -1.45, 1.12)),
+    ]
+    atoms = [
+        (symbol, (xyz[0] + 6.0 * copy, xyz[1], xyz[2]))
+        for copy in range(copies)
+        for symbol, xyz in atoms
     ]
     basis = {symbol: pyscf.gto.basis.load("def2-svp", symbol) for symbol in ("H", "O")}
     mol = pyscf.gto.M(atom=atoms, basis=basis, unit="Bohr", cart=False, verbose=0)
@@ -80,11 +89,19 @@ def test_resident_range_sources_match_independent_matrices(
             ),
         )
     result = subprocess.run(
-        [str(executable), str(fixture), "range-oracle"],
+        [str(executable), str(fixture), mode],
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=360,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "range oracle checks 16" in result.stdout
+    assert (
+        "mixed range oracle checks 24"
+        if mode == "range-mixed-oracle"
+        else "range oracle checks 16"
+    ) in result.stdout
+    if mode == "range-mixed-oracle":
+        assert "mixed full-range oracle checks 36" in result.stdout
+        assert "mixed resident range oracle checks 8" in result.stdout
+    (tmp_path / "oracle-result.txt").write_text(result.stdout)

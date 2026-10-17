@@ -1,0 +1,8 @@
+{
+  "name": "ks_cpks_maps",
+  "outputs": [
+    "generated/response/ks_cpks_maps.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/method/ks_cpks.py",
+  "scope": "RKS/UKS metric orbital motion, density rotation, gap and induced-Fock action/RHS, and AD density/energy-weighted-density response including a full occupied energy-matrix tangent. Generic full-range dynamic TensorIR emission belongs to tensor/cuda_affine.py; state authentication, spin-coupled physical providers and complete molecular assembly remain native method-owner responsibilities."
+}

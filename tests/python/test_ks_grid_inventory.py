@@ -92,8 +92,9 @@ def test_direct_response_and_optional_family_storage_remain_independent(
     jets = 1 if functional == 0 else 4
     work_jets = 4 if functional == 2 else 1
     features = (1, 4, 5)[functional]
-    # Independent count of the established private arena, including tau/response
-    # arrays. Neither this layout nor a standalone CPU-grid upload owns raw weights.
+    # Independent private-arena count: three published totals, three correction
+    # words and one error slot, plus tau/response arrays. Raw weights remain
+    # owned by the resident grid rather than this borrowed XC workspace.
     expected = 8 * (
         3 * 2
         + 2 * 6
@@ -101,7 +102,9 @@ def test_direct_response_and_optional_family_storage_remain_independent(
         + (jets + spins * work_jets) * tile * nao
         + ((3 if response else 2) * spins * features + 3) * tile
         + spins * nao * nao
-        + 4
+        + 3
+        + 3
+        + 1
     )
     assert borrowed == expected
     assert direct == expected + 4 * points * 8

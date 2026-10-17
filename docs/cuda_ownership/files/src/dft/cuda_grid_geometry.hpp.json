@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_grid_geometry.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Native moving-grid geometry source contracts: authenticated exact pre-partition atomic measures and packed AO basis, checked caller-owned arena/work bounds, first/mixed AO and Becke outputs, no allocation or runtime interpreter. This source component is not a complete stationary Hessian capability.",
+  "regions": []
+}

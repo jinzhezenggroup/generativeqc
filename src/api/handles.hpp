@@ -24,14 +24,23 @@ struct generativeqc_system {
   /** A source-only fit handle is not an orbital or a generic DF-HF export.
    * Full correlated RI-JK admits it through the bounded source/gradient owner. */
   bool correlation_auxiliary{false};
+  /** Values-only KS DF source handle, never an orbital or generic DF-HF export.
+   * Second-order consumers must independently authenticate their model/closure. */
+  bool ks_auxiliary{false};
 };
 
 namespace generativeqc::api {
 
 inline bool valid_system_roles(const generativeqc_system& orbital,
                                const generativeqc_method_descriptor& descriptor) {
-  if (orbital.correlation_auxiliary) return false;
+  if (orbital.correlation_auxiliary || orbital.ks_auxiliary) return false;
   const auto* auxiliary = descriptor.density_fitting_auxiliary_basis;
+  if (auxiliary && auxiliary->ks_auxiliary) {
+    const auto* capabilities = methods::find_capabilities(descriptor.method);
+    return capabilities && capabilities->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+           descriptor.ks_options &&
+           descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
+  }
   if (!auxiliary || !auxiliary->correlation_auxiliary) return true;
   return descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T ||
          (descriptor.method == GENERATIVEQC_METHOD_MP2 &&

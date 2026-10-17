@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -12,17 +13,20 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
+#include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/direct_task_layout.hpp"
+#include "scf/md_transform_layout.hpp"
 
 namespace generativeqc::scf {
 
@@ -96,6 +100,7 @@ struct MdJHost {
   std::vector<MdJPair> pairs;
   std::vector<MdJPrimitive> primitives;
   std::vector<std::uint32_t> ordered;
+  std::vector<std::uint16_t> transform_slots;
   std::array<std::size_t, 6> class_offsets{};
   std::size_t transforms{}, hermites{}, bytes{};
   bool work_counts{};
@@ -126,6 +131,25 @@ struct MdJHost {
                                sizeof(MdJPrimitive) + sizeof(std::uint32_t));
     bytes += direct_jk_product(host.system_shell_offsets.size(), 3 * sizeof(std::int64_t));
     if (bytes > available) return false;
+    std::map<MdTransformShell, std::size_t> signatures;
+    std::vector<MdTransformShell> expansions;
+    std::vector<std::size_t> shell_signatures;
+    for (std::size_t shell = 0; shell < host.shell_angular.size(); ++shell) {
+      MdTransformShell expansion;
+      for (auto ao = host.shell_ao_offsets[shell]; ao < host.shell_ao_offsets[shell + 1]; ++ao) {
+        MdTransformComponent component;
+        for (unsigned term = 0; term < host.ao_term_counts[ao]; ++term) {
+          const auto offset = (ao * molecule::kMaximumAoExpansionTerms + term) * 3;
+          component.push_back({host.ao_term_angular[offset], host.ao_term_angular[offset + 1],
+                               host.ao_term_angular[offset + 2]});
+        }
+        expansion.push_back(std::move(component));
+      }
+      const auto [signature, inserted] = signatures.emplace(expansion, expansions.size());
+      if (inserted) expansions.push_back(std::move(expansion));
+      shell_signatures.push_back(signature->second);
+    }
+    std::map<std::pair<std::size_t, std::size_t>, std::pair<std::uint32_t, std::uint32_t>> maps;
     for (std::size_t index = 0; index < total_pairs; ++index) {
       const auto first = host.shell_pair_first[index], second = host.shell_pair_second[index];
       const auto system = host.shell_pair_systems[index];
@@ -133,11 +157,25 @@ struct MdJHost {
       const auto count = md_j_hermite_count(angular);
       const auto first_count = host.shell_ao_offsets[first + 1] - host.shell_ao_offsets[first];
       const auto second_count = host.shell_ao_offsets[second + 1] - host.shell_ao_offsets[second];
-      const auto component_count = direct_jk_product(first_count, second_count);
+      const auto signature = std::make_pair(shell_signatures[first], shell_signatures[second]);
+      auto map = maps.find(signature);
+      if (map == maps.end()) {
+        const auto layout =
+            md_transform_layout(expansions[signature.first], expansions[signature.second], angular);
+        const auto map_bytes = direct_jk_product(layout.slots.size(), sizeof(std::uint16_t));
+        if (map_bytes > available - bytes ||
+            transform_slots.size() >
+                std::numeric_limits<std::uint32_t>::max() - layout.slots.size())
+          return false;
+        const auto offset = static_cast<std::uint32_t>(transform_slots.size());
+        bytes += map_bytes;
+        transform_slots.insert(transform_slots.end(), layout.slots.begin(), layout.slots.end());
+        map = maps.emplace(signature, std::make_pair(offset, layout.values)).first;
+      }
       const auto primitive_count =
           host.shell_pair_primitive_offsets[index + 1] - host.shell_pair_primitive_offsets[index];
       const auto pair_hermites = direct_jk_product(primitive_count, count);
-      const auto pair_transforms = direct_jk_product(pair_hermites, component_count);
+      const auto pair_transforms = direct_jk_product(primitive_count, map->second.second);
       const auto extra_bytes =
           direct_jk_product(pair_transforms + 2 * pair_hermites, sizeof(double));
       if (extra_bytes > available - bytes) return false;
@@ -148,7 +186,7 @@ struct MdJHost {
            static_cast<std::int32_t>(host.shell_ao_offsets[second] - ao_base),
            static_cast<std::int32_t>(first_count), static_cast<std::int32_t>(second_count), angular,
            count, static_cast<std::uint32_t>(primitives.size()),
-           static_cast<std::uint32_t>(primitives.size() + primitive_count)});
+           static_cast<std::uint32_t>(primitives.size() + primitive_count), map->second.first});
       for (auto first_primitive = host.shell_primitive_offsets[first];
            first_primitive < host.shell_primitive_offsets[first + 1]; ++first_primitive) {
         for (auto second_primitive = host.shell_primitive_offsets[second];
@@ -160,7 +198,7 @@ struct MdJHost {
                                 hermites,
                                 0.0,
                                 {}});
-          transforms += component_count * count;
+          transforms += map->second.second;
           hermites += count;
         }
       }
@@ -266,12 +304,17 @@ DirectCoulombRange direct_exchange_range(const FockTermSpec& term) {
   throw std::invalid_argument("unknown exact-exchange radial operator");
 }
 /** A range lease cannot stand in for full Coulomb or another radial source. */
-bool direct_jk_resident_matches(const CudaDirectJkPlan* plan, FockBuildSpec spec) noexcept {
-  if (!plan || !plan->resident_values) return false;
+bool direct_jk_resident_operator_matches(const CudaDirectJkPlan* plan,
+                                         FockBuildSpec spec) noexcept {
+  if (!plan) return false;
   if (plan->resident_operator == FockOperator::FullRange)
     return !spec.exchange.present || spec.exchange.op == FockOperator::FullRange;
   return !spec.coulomb.present && spec.exchange.present &&
          spec.exchange.op == plan->resident_operator && spec.exchange.omega == plan->resident_omega;
+}
+
+bool direct_jk_resident_matches(const CudaDirectJkPlan* plan, FockBuildSpec spec) noexcept {
+  return plan && plan->resident_values && direct_jk_resident_operator_matches(plan, spec);
 }
 
 FockBuildSpec direct_jk_strategy(const CudaDirectJkPlan* plan, FockBuildSpec spec,
@@ -360,7 +403,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   const auto cart = runtime::size_mul(nao, 2);
   const auto public_elements = runtime::size_mul(batch, runtime::size_mul(nao, nao));
   const auto cart_elements = runtime::size_mul(batch, runtime::size_mul(cart, cart));
-  add(cart_elements, 3 * sizeof(double));
+  add(cart_elements, 4 * sizeof(double));    // Density, J, J correction and Schwarz.
   add(public_elements, 6 * sizeof(double));  // Two rectangular and two public matrices.
   add(runtime::size_mul(batch, cart), sizeof(std::int32_t) + 3 + sizeof(double));
   add(runtime::size_mul(shells, shells),
@@ -1077,6 +1120,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             md.pairs = upload_vector(md_host.pairs);
             md.primitives = upload_vector(md_host.primitives);
             md.ordered_primitives = upload_vector(md_host.ordered);
+            md.transform_slots = upload_vector(md_host.transform_slots);
             md.shell_offsets = upload_vector(host.system_shell_offsets);
             md.pair_offsets = upload_vector(host.system_shell_pair_offsets);
             std::vector<std::int64_t> primitive_offsets;
@@ -1167,8 +1211,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     if (plan->md_j.minimum_bounds) {
       info.schedule = "md-j-hermite/retained-k";
       info.host_preparation_bytes +=
-          sizeof(md_host) +
-          runtime::vector_capacities(md_host.pairs, md_host.primitives, md_host.ordered);
+          sizeof(md_host) + runtime::vector_capacities(md_host.pairs, md_host.primitives,
+                                                       md_host.ordered, md_host.transform_slots);
     }
     info.derivative_order = derivative_order;
     info.screening_tolerance = screening_tolerance;
@@ -1411,17 +1455,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     direct_jk_require(spec.derivative_order == 0 && elements == plan->matrix_elements,
                       "device direct J/K requires full-plan value dimensions");
     const bool unrestricted = spec.spin == FockSpin::Unrestricted;
-    direct_jk_require(!mixed_resident ||
-                          (allow_resident && !mixed_j && !unrestricted && correction &&
-                           plan->resident_mixed_values && !plan->resident_values &&
-                           plan->resident_bucket_mask == (1U << 28) - 1 &&
-                           plan->resident_operator == FockOperator::FullRange &&
-                           (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange)),
+    direct_jk_require(!mixed_resident || (allow_resident && !mixed_j && !unrestricted &&
+                                          correction && plan->resident_mixed_values &&
+                                          !plan->resident_values && plan->resident_bucket_mask &&
+                                          direct_jk_resident_operator_matches(plan, spec)),
                       "mixed resident J/K source identity mismatch");
     direct_jk_require(!mixed_exchange || (mixed_j && !unrestricted && plan->canonical_pairs &&
-                                          spec.coulomb.present && spec.exchange.present &&
-                                          spec.exchange.op == FockOperator::FullRange),
-                      "mixed J/K requires restricted canonical full-range execution");
+                                          spec.exchange.present),
+                      "mixed K requires restricted canonical value execution");
     direct_jk_require(
         (unrestricted ? beta != nullptr : beta == nullptr) &&
             (spec.coulomb.present ? coulomb != nullptr : coulomb == nullptr) &&
@@ -1594,6 +1635,20 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
       auto* exchange_correction = correction ? correction + correction_elements / 2 : nullptr;
       direct_jk_canonical_density(plan, unrestricted, density, beta, 0,
                                   plan->diagnostic.batch_size);
+      // Rebuild bounds from this call's Cartesian density, not a previous J/K
+      // traversal. Borrow the geometry owner's charged scratch on its stream;
+      // missing optional storage retains the original geometry-only schedule.
+      const bool mixed_shell_screening =
+          mixed_j && !fixed && !correction && plan->materialized_pair_order && generated_coulomb;
+      if (mixed_shell_screening) {
+        constexpr unsigned threads = 128;
+        launch_reduce_shell_pair_density_bounds_kernel(
+            unrestricted, static_cast<unsigned>(plan->materialized_batch.total_shell_pairs),
+            threads, 3U * threads * sizeof(double), plan->stream, plan->materialized_batch,
+            plan->canonical_density, plan->canonical_active,
+            generated_coulomb->shell_pair_density_bounds);
+        direct_jk_check(cudaGetLastError());
+      }
       if (dispatch.canonical_coulomb)
         direct_jk_check(cudaMemsetAsync(plan->canonical_coulomb, 0, scratch_bytes, plan->stream));
       if (dispatch.canonical_exchange)
@@ -1603,8 +1658,11 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         const auto& offsets = plan->canonical_pair_offsets[item];
         for (unsigned first = 0; first < 7U; ++first)
           for (unsigned second = 0; second <= first; ++second) {
-            if (dispatch.canonical_coulomb && mixed_j) {
-              if (plan->materialized_pair_order && !correction && !fixed) {
+            if ((dispatch.canonical_coulomb && mixed_j) ||
+                (dispatch.canonical_exchange && mixed_exchange)) {
+              if (plan->materialized_pair_order && !correction && !fixed &&
+                  (!mixed_exchange || !spec.coulomb.present ||
+                   spec.exchange.op == FockOperator::FullRange)) {
                 const auto& shells = plan->materialized_pair_offsets[item];
                 const auto pairs = plan->materialized_pair_offsets.back()[7];
                 launch_materialized_canonical_mixed_j_kernel(
@@ -1614,8 +1672,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                     shells[first], shells[first + 1] - shells[first], shells[second],
                     shells[second + 1] - shells[second], unrestricted, plan->screening_tolerance,
                     plan->materialized_bounds, plan->canonical_density, plan->canonical_active,
-                    plan->canonical_coulomb, census ? census : plan->canonical_work_count,
-                    mixed_coulomb_work_count, mixed_exchange ? plan->canonical_exchange : nullptr);
+                    dispatch.canonical_coulomb ? plan->canonical_coulomb : nullptr,
+                    census ? census : plan->canonical_work_count, mixed_coulomb_work_count,
+                    mixed_exchange ? plan->canonical_exchange : nullptr,
+                    mixed_exchange ? direct_exchange_range(spec.exchange)
+                                   : DirectCoulombRange::Full,
+                    mixed_exchange ? spec.exchange.omega : 0.0,
+                    mixed_shell_screening ? generated_coulomb->shell_bounds : nullptr,
+                    mixed_shell_screening ? generated_coulomb->shell_pair_density_bounds : nullptr);
               } else
                 launch_canonical_mixed_j_kernel(
                     plan->stream, plan->canonical_batch, plan->canonical_cartesian,
@@ -1624,10 +1688,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                     offsets[first + 1U] - offsets[first], offsets[second],
                     offsets[second + 1U] - offsets[second], first == second, unrestricted,
                     plan->screening_tolerance, plan->canonical_bounds, plan->canonical_density,
-                    plan->canonical_coulomb, census ? census : plan->canonical_work_count,
-                    mixed_coulomb_work_count, correction,
-                    mixed_exchange ? plan->canonical_exchange : nullptr,
-                    mixed_exchange ? exchange_correction : nullptr);
+                    dispatch.canonical_coulomb ? plan->canonical_coulomb : nullptr,
+                    census ? census : plan->canonical_work_count, mixed_coulomb_work_count,
+                    correction, mixed_exchange ? plan->canonical_exchange : nullptr,
+                    mixed_exchange ? exchange_correction : nullptr,
+                    direct_exchange_range(spec.exchange),
+                    spec.exchange.present ? spec.exchange.omega : 0.0);
               direct_jk_check(cudaGetLastError());
             }
             if (mixed_exchange || (!canonical_strict_j && !dispatch.canonical_exchange)) continue;
@@ -1635,7 +1701,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
             const auto cached_offset = !resident || plan->resident_bucket_offsets.empty()
                                            ? value_offset
                                            : plan->resident_bucket_offsets[item][bucket];
-            if (mixed_resident)
+            if (mixed_resident && cached_offset != std::numeric_limits<std::size_t>::max())
               launch_mixed_resident_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
                   plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
@@ -1646,6 +1712,19 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
+            else if (mixed_resident)
+              launch_canonical_mixed_j_kernel(
+                  plan->stream, plan->canonical_batch, plan->canonical_cartesian,
+                  static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
+                  direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
+                  offsets[first + 1U] - offsets[first], offsets[second],
+                  offsets[second + 1U] - offsets[second], first == second, false,
+                  fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
+                  plan->canonical_density, canonical_strict_j ? plan->canonical_coulomb : nullptr,
+                  census ? census : plan->canonical_work_count, nullptr, correction,
+                  dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
+                  exchange_correction, direct_exchange_range(spec.exchange),
+                  spec.exchange.present ? spec.exchange.omega : 0.0);
             else if (resident && cached_offset != std::numeric_limits<std::size_t>::max())
               launch_resident_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
@@ -2043,28 +2122,43 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
   });
 }
 
-generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPlan* plan,
-                                                                 std::size_t maximum_bytes,
-                                                                 std::string& detail) {
+generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail,
+    FockOperator source_operator, double omega, std::uint32_t bucket_mask) {
+  if (!plan || !bucket_mask || bucket_mask >= (1U << 28) || !std::isfinite(omega) || omega < 0.0 ||
+      (source_operator != FockOperator::FullRange && source_operator != FockOperator::ShortRange &&
+       source_operator != FockOperator::LongRange) ||
+      (source_operator == FockOperator::FullRange && omega != 0.0)) {
+    detail = "invalid mixed resident source identity";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   const auto layout = prepare_cuda_direct_jk_resident_layout(plan, detail);
   if (layout != GENERATIVEQC_STATUS_SUCCESS) return layout;
   return direct_jk_guard(plan, detail, [&] {
-    // The complete through-d source has no density-dependent pruning. Its
+    // The through-d source has no density-dependent pruning. Its
     // precision is immutable even if a later consumer asks for strict J/K.
     direct_jk_require(!plan->resident_values, "resident Direct precision is immutable");
     for (const auto& offsets : plan->canonical_pair_offsets)
       if (offsets[5] != offsets[7])
         throw DirectJkFailure{GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                               "mixed resident Direct source supports through-d shells"};
-    const auto required =
-        cuda_direct_jk_resident_value_bytes(plan) / sizeof(double) * sizeof(float);
+    const auto required = cuda_direct_jk_selected_resident_value_bytes(plan, bucket_mask) /
+                          sizeof(double) * sizeof(float);
     if (!required || required > maximum_bytes) throw std::bad_alloc();
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
     direct_jk_require(current == plan->device_id, "mixed resident Direct source device mismatch");
-    if (plan->resident_mixed_values) return;
+    if (plan->resident_mixed_values) {
+      direct_jk_require(plan->resident_operator == source_operator &&
+                            plan->resident_omega == omega &&
+                            plan->resident_bucket_mask == bucket_mask,
+                        "resident Direct selection is immutable");
+      return;
+    }
     const auto total = direct_jk_sum(plan->device_bytes, required);
     const auto diagnostic_total = direct_jk_sum(plan->diagnostic.device_bytes, required);
+    std::vector<std::array<std::size_t, 28>> bucket_offsets(plan->diagnostic.batch_size);
+    for (auto& offsets : bucket_offsets) offsets.fill(std::numeric_limits<std::size_t>::max());
     struct Lease {
       cudaStream_t stream;
       float* values{};
@@ -2090,14 +2184,22 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPla
       const auto& offsets = plan->canonical_pair_offsets[item];
       for (unsigned first = 0; first < 7U; ++first)
         for (unsigned second = 0; second <= first; ++second) {
+          const auto bucket = first * (first + 1U) / 2U + second;
+          if (!(bucket_mask & (1U << bucket))) continue;
           const auto count = direct_jk_resident_bucket_count(plan, item, first, second);
+          if (!count) continue;
+          bucket_offsets[item][bucket] = value_offset;
           launch_canonical_mixed_resident_values_kernel(
               plan->stream, plan->canonical_batch, plan->canonical_cartesian,
               static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
               direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
               offsets[first + 1U] - offsets[first], offsets[second],
               offsets[second + 1U] - offsets[second], first == second, plan->screening_tolerance,
-              plan->canonical_bounds, lease.values + value_offset, count);
+              plan->canonical_bounds, lease.values + value_offset, count,
+              source_operator == FockOperator::FullRange   ? DirectCoulombRange::Full
+              : source_operator == FockOperator::LongRange ? DirectCoulombRange::Long
+                                                           : DirectCoulombRange::Short,
+              omega);
           direct_jk_check(cudaGetLastError());
           value_offset += count;
           plan->diagnostic.resident_values_submitted = value_offset;
@@ -2118,6 +2220,10 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPla
                             "nonfinite mixed resident Direct source values"};
     const auto old_capacity = plan->allocations.capacity();
     plan->allocations.push_back(lease.values);
+    plan->resident_bucket_offsets = std::move(bucket_offsets);
+    plan->resident_bucket_mask = bucket_mask;
+    plan->resident_operator = source_operator;
+    plan->resident_omega = omega;
     plan->resident_mixed_values = lease.values;
     plan->resident_value_count = value_offset;
     lease.values = nullptr;
@@ -2125,7 +2231,8 @@ generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(CudaDirectJkPla
     plan->diagnostic.device_bytes = diagnostic_total;
     plan->diagnostic.resident_value_count = value_offset;
     plan->diagnostic.resident_value_bytes = required;
-    const auto host_growth = (plan->allocations.capacity() - old_capacity) * sizeof(void*);
+    const auto host_growth = (plan->allocations.capacity() - old_capacity) * sizeof(void*) +
+                             runtime::vector_capacities(plan->resident_bucket_offsets);
     plan->diagnostic.host_bytes += host_growth;
     plan->diagnostic.host_preparation_bytes += host_growth;
   });
@@ -2455,9 +2562,8 @@ generativeqc_status enqueue_cuda_direct_jk_mixed_resident_device(
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail) {
   if (!std::isfinite(threshold) || threshold < 0 || !correction || !census ||
       spec.spin != FockSpin::Restricted ||
-      (spec.coulomb.present && spec.coulomb.op != FockOperator::FullRange) ||
-      (spec.exchange.present && spec.exchange.op != FockOperator::FullRange)) {
-    detail = "invalid mixed resident full-range restricted J/K request";
+      (spec.coulomb.present && spec.coulomb.op != FockOperator::FullRange)) {
+    detail = "invalid mixed resident restricted J/K request";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (!cuda_direct_jk_linear_available(plan)) {

@@ -173,9 +173,9 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   elements = size_add(elements, size_mul(feature_storage, out.tile_points, overflow), overflow);
   const auto matrix = size_mul(out.nao, out.nao, overflow);
   elements = size_add(elements, size_mul(out.spins, matrix, overflow), overflow);
-  elements = size_add(elements, 3, overflow);
-  // Preserve the historical double-sized error slot so resource bounds and
-  // diagnostics remain byte-for-byte unchanged.
+  elements = size_add(elements, kCudaXcTotalStorageElements, overflow);
+  // The compensated totals and historical double-sized error slot share the
+  // same overflow-checked request used by allocation and resource planning.
   out.device_bytes = size_mul(size_add(elements, 1, overflow), sizeof(double), overflow);
   return out;
 }
@@ -341,7 +341,7 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   point_totals_ = take_double(size_mul(3, l.tile_points, "CUDA XC workspace layout overflow"));
   const auto matrix = size_mul(l.nao, l.nao, "CUDA XC workspace layout overflow");
   potential_ = take_double(size_mul(l.spins, matrix, "CUDA XC workspace layout overflow"));
-  totals_ = take_double(3);
+  totals_ = take_double(kCudaXcTotalStorageElements);
   auto* error_storage = take_double(1);
   error_ = reinterpret_cast<int*>(error_storage);
   if (l.ao_map_entries) {
@@ -499,7 +499,18 @@ void CudaXcPlan::prepare_mixed_pbe_points(bool mixed_ao, bool mixed_contractions
     throw std::invalid_argument("mixed PBE AO arithmetic is unavailable for this point program");
   mixed_pbe_points_ = true;
   mixed_pbe_ao_ = mixed_ao;
-  mixed_pbe_contractions_ = mixed_contractions;
+  mixed_matrix_contractions_ = mixed_contractions;
+}
+
+void CudaXcPlan::prepare_mixed_matrix_contractions() {
+  check_device();
+  if (evaluation_started_ || !cuda_xc_detail::mixed_matrix_contractions_supported(layout_))
+    throw std::invalid_argument("mixed matrix contractions require a supported physical XC layout");
+  cudaStreamCaptureStatus capture{};
+  check(cudaStreamIsCapturing(stream_, &capture));
+  if (capture != cudaStreamCaptureStatusNone)
+    throw std::invalid_argument("mixed matrix preparation cannot capture");
+  mixed_matrix_contractions_ = true;
 }
 
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
@@ -728,6 +739,11 @@ CudaXcGridView CudaXcPlan::grid_view() const {
   return {points_, weights_, layout_.npoint, stream_};
 }
 
+const double* CudaXcPlan::packed_basis() const {
+  check_device();
+  return basis_;
+}
+
 void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                          PrecisionPhase phase) {
   if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");
@@ -736,24 +752,23 @@ void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint6
 
 void CudaXcPlan::enqueue_density_features(const double* density, std::size_t elements,
                                           std::uint64_t generation, double* total_density,
-                                          double* total_gradient) {
+                                          double* total_gradient, PrecisionPhase phase) {
   if (layout_.response)
     throw std::invalid_argument("XC response plan cannot publish physical features");
   if (total_density == nullptr || total_gradient == nullptr)
     throw std::invalid_argument("CUDA XC density-feature export requires both output buffers");
-  enqueue_impl(density, nullptr, elements, generation, PrecisionPhase::StrictAudit, total_density,
-               total_gradient);
+  enqueue_impl(density, nullptr, elements, generation, phase, total_density, total_gradient);
 }
 
 CudaXcView CudaXcPlan::enqueue_replay_density_features(const double* density, std::size_t elements,
                                                        double* total_density,
-                                                       double* total_gradient) {
+                                                       double* total_gradient,
+                                                       PrecisionPhase phase) {
   if (layout_.response)
     throw std::invalid_argument("XC response plan cannot publish physical replay features");
   if (total_density == nullptr || total_gradient == nullptr)
     throw std::invalid_argument("CUDA XC replay density-feature export requires both outputs");
-  enqueue_impl(density, nullptr, elements, 0, PrecisionPhase::StrictAudit, total_density,
-               total_gradient, false);
+  enqueue_impl(density, nullptr, elements, 0, phase, total_density, total_gradient, false);
   return {0, layout_.nao, layout_.spins, potential_, totals_, error_, stream_};
 }
 
@@ -930,7 +945,9 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
 #endif
     const bool mixed_point = mixed_pbe_points_ && phase == PrecisionPhase::Admitted;
     auto execution_layout = layout_;
-    execution_layout.fp32_contractions = mixed_point && mixed_pbe_contractions_;
+    execution_layout.fp32_contractions =
+        mixed_matrix_contractions_ && phase == PrecisionPhase::Admitted;
+    execution_layout.fp32_point_totals = mixed_point && execution_layout.fp32_contractions;
     if (mixed_point && mixed_pbe_ao_)
       execution_layout.ao_precision = CudaXcAoPrecision::Fp32ComputeFp64Storage;
     cuda_xc_detail::enqueue(

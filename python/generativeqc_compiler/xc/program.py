@@ -6,8 +6,7 @@ import typing
 from dataclasses import dataclass
 from itertools import combinations_with_replacement
 
-import numpy as np
-
+from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr, Graph

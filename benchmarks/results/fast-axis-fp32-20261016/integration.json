@@ -1,0 +1,427 @@
+{
+  "schema": "generativeqc.fp32-axis.pr-head-integration.v1",
+  "git_head": "a226b3cc0e7f5a802024339cfba465f68690310c",
+  "source_identity": "019aacd55512582b9846de645f5b0bfc872a9e5d1b94b2c4acac5c61b1ef144b",
+  "core_sha256": "a6d99746f884574c30210a07c2209f7169a53db89dad0e8d2265576df5dbe5d4",
+  "scope": "exact PR source qualification at a226b3cc0; based on 8d7246d25, not an assertion about subsequent upstream commits; historical performance cohort separate",
+  "native": {
+    "qualified": true,
+    "slurm_job_id": 3270,
+    "memcheck_errors": 0,
+    "hardware_scope": "node2 functional only; NVML mismatch retained",
+    "initial_failures": [
+      "3268 cache shared-library lookup",
+      "3269 nvcc host compiler lookup"
+    ],
+    "corrected_log_sha256": "6152701987465cacdd92253135f88b0ed0fdc9ca630a4df6dca54ef169e2add2"
+  },
+  "reference_summary_sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519",
+  "reference_timing_used": false,
+  "family_receipt_sha256": "2b6c269c1f6e6fb97af3a5c7eb76103aeda64d20677a62d753f34a18d9c75a38",
+  "family_summary": [
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "lda-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 8.526512829121202e-13,
+            "max_force_Eh_per_bohr": 1.7163204191206205e-10,
+            "rms_force_Eh_per_bohr": 8.738216378683979e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 6.622258297284134e-12,
+            "max_force_Eh_per_bohr": 9.264071816339481e-07,
+            "rms_force_Eh_per_bohr": 4.900786339337696e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "pbe-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 9.379164112033322e-13,
+            "max_force_Eh_per_bohr": 2.379612062952674e-10,
+            "rms_force_Eh_per_bohr": 1.3230293601293298e-10
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 6.679101716144942e-13,
+            "max_force_Eh_per_bohr": 1.8338493967817726e-07,
+            "rms_force_Eh_per_bohr": 9.162970448747739e-08
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "pbe0-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 8.810729923425242e-13,
+            "max_force_Eh_per_bohr": 6.98130442344791e-11,
+            "rms_force_Eh_per_bohr": 3.7220508299637677e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 4.8046899792097975e-11,
+            "max_force_Eh_per_bohr": 2.0470878738798604e-06,
+            "rms_force_Eh_per_bohr": 1.1158347983431572e-06
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "b3lyp-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 8.810729923425242e-13,
+            "max_force_Eh_per_bohr": 5.2737370026534336e-11,
+            "rms_force_Eh_per_bohr": 2.636089455719121e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 4.263256414560601e-13,
+            "max_force_Eh_per_bohr": 1.9461849287694122e-07,
+            "rms_force_Eh_per_bohr": 1.1386411875991911e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "r2scan-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 9.379164112033322e-13,
+            "max_force_Eh_per_bohr": 1.4870504827513287e-10,
+            "rms_force_Eh_per_bohr": 6.092291451782055e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 8.341771717823576e-12,
+            "max_force_Eh_per_bohr": 9.807836178765683e-07,
+            "rms_force_Eh_per_bohr": 5.339750585063466e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "m06-2x-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 9.521272659185342e-13,
+            "max_force_Eh_per_bohr": 8.544276397515205e-12,
+            "rms_force_Eh_per_bohr": 3.5002705764008456e-12
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 5.722711193811847e-11,
+            "max_force_Eh_per_bohr": 2.6559344474819113e-06,
+            "rms_force_Eh_per_bohr": 1.3485878964787231e-06
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "mn15-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 8.100187187665142e-13,
+            "max_force_Eh_per_bohr": 2.532773990537862e-11,
+            "rms_force_Eh_per_bohr": 1.4926005473154692e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 7.815970093361102e-13,
+            "max_force_Eh_per_bohr": 3.2927701898444184e-08,
+            "rms_force_Eh_per_bohr": 1.798556977711904e-08
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-def2-svp-spherical",
+      "method": "wb97m-v-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 9.379164112033322e-13,
+            "max_force_Eh_per_bohr": 7.681144609250623e-11,
+            "rms_force_Eh_per_bohr": 3.960478051160543e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 4.305888978706207e-12,
+            "max_force_Eh_per_bohr": 1.5602861758168274e-07,
+            "rms_force_Eh_per_bohr": 9.672753863991136e-08
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "lda-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 2.8421709430404007e-12,
+            "max_force_Eh_per_bohr": 7.867817508611097e-11,
+            "rms_force_Eh_per_bohr": 3.831199689790513e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 1.688817974354606e-10,
+            "max_force_Eh_per_bohr": 9.867702557286862e-07,
+            "rms_force_Eh_per_bohr": 4.612649506706153e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "pbe-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 3.183231456205249e-12,
+            "max_force_Eh_per_bohr": 1.6062617902434795e-10,
+            "rms_force_Eh_per_bohr": 7.856862734131885e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 1.7388401829521172e-10,
+            "max_force_Eh_per_bohr": 7.035277351796765e-07,
+            "rms_force_Eh_per_bohr": 3.1611179118374466e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "pbe0-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 1.5916157281026244e-12,
+            "max_force_Eh_per_bohr": 3.130817827212695e-10,
+            "rms_force_Eh_per_bohr": 2.0707732515236188e-10
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 5.2864379540551454e-11,
+            "max_force_Eh_per_bohr": 6.477973872875964e-07,
+            "rms_force_Eh_per_bohr": 2.7282876038410804e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "b3lyp-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 1.8758328224066645e-12,
+            "max_force_Eh_per_bohr": 3.597100395325015e-11,
+            "rms_force_Eh_per_bohr": 1.9536629283563692e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 8.054712452576496e-11,
+            "max_force_Eh_per_bohr": 4.841749303707843e-07,
+            "rms_force_Eh_per_bohr": 2.3590708104725073e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "r2scan-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 3.296918293926865e-12,
+            "max_force_Eh_per_bohr": 3.377498281054159e-11,
+            "rms_force_Eh_per_bohr": 1.7147448284008063e-11
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 1.759303813742008e-10,
+            "max_force_Eh_per_bohr": 4.691261001887881e-07,
+            "rms_force_Eh_per_bohr": 2.1390438625192306e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "m06-2x-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 5.684341886080801e-13,
+            "max_force_Eh_per_bohr": 2.887243777394133e-10,
+            "rms_force_Eh_per_bohr": 1.3002819138930158e-10
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 8.895995051716454e-11,
+            "max_force_Eh_per_bohr": 1.6435707075324046e-06,
+            "rms_force_Eh_per_bohr": 6.400538718545624e-07
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "mn15-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 5.684341886080801e-13,
+            "max_force_Eh_per_bohr": 3.360538514129985e-10,
+            "rms_force_Eh_per_bohr": 1.9702267756353408e-10
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 9.652012522565201e-11,
+            "max_force_Eh_per_bohr": 2.84719575871506e-06,
+            "rms_force_Eh_per_bohr": 1.1662162714539042e-06
+          }
+        }
+      ]
+    },
+    {
+      "case": "water-tetramer-def2-svp-spherical",
+      "method": "wb97m-v-rks",
+      "samples": [
+        {
+          "mode": "fp64",
+          "independent_errors": {
+            "energy_Eh": 1.3642420526593924e-12,
+            "max_force_Eh_per_bohr": 7.123968082112242e-10,
+            "rms_force_Eh_per_bohr": 3.2927446264110255e-10
+          }
+        },
+        {
+          "mode": "fast",
+          "independent_errors": {
+            "energy_Eh": 2.552837941038888e-10,
+            "max_force_Eh_per_bohr": 8.399460794894509e-06,
+            "rms_force_Eh_per_bohr": 3.982091069768275e-06
+          }
+        }
+      ]
+    }
+  ],
+  "complete": true,
+  "slurm_job_id": 1668,
+  "gpu": {
+    "node": "n5",
+    "name": "NVIDIA GeForce RTX 5090",
+    "uuid": "GPU-c17495e9-988d-0626-8bdd-95d0d1b47f36",
+    "driver": "570.86.16"
+  },
+  "gates_E_maxF_RMS": {
+    "fast": [
+      1e-05,
+      0.0001,
+      3e-05
+    ],
+    "fp64": [
+      1e-07,
+      1e-06,
+      3e-06
+    ]
+  },
+  "wb96": {
+    "fast": {
+      "seconds": 757.8806536999764,
+      "independent_errors": {
+        "energy_Eh": 6.680238584522158e-10,
+        "max_force_Eh_per_bohr": 3.855259008034295e-06,
+        "rms_force_Eh_per_bohr": 1.1664981147932787e-06
+      },
+      "mixed": 17,
+      "strict": 4,
+      "sha256": "fed42d12fd500de50b46a3436291f8539e0b4acf02dffc1c4e7e45b977ec7ccd"
+    },
+    "fp64": {
+      "seconds": 1071.5742629180895,
+      "independent_errors": {
+        "energy_Eh": 9.549694368615746e-12,
+        "max_force_Eh_per_bohr": 1.2496750301238535e-09,
+        "rms_force_Eh_per_bohr": 6.895161039614656e-10
+      },
+      "mixed": 0,
+      "strict": 34,
+      "sha256": "3fdc754bcc018fb57ee17cecbebfb4a814502968e5ca3eac6f3bf769b759fe13"
+    }
+  },
+  "all_fast_returns": {
+    "converged": true,
+    "genuine_fp32_operators": true,
+    "qualified_budget_solve_count": 1,
+    "execution_retries": 0,
+    "accumulation": "fp64"
+  },
+  "audit_sha256": "89617e7b32e6a68f059e047b68df7a1762a15efd0429e6a602811eda490c6069"
+}

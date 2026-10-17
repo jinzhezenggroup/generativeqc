@@ -14,6 +14,8 @@ from fractions import Fraction
 
 import numpy as np
 
+from generativeqc_compiler.common.array_execution import current_execution
+
 from .precision import describe_precision
 from .program import Program
 from .scaled_arithmetic import scaled_bilinear_value
@@ -365,6 +367,9 @@ def execute(
     programs share a fixture. Returned arrays never alias each other, inputs,
     or interpreter views. Every output/debug entry is an independent snapshot.
     """
+    execution = current_execution()
+    if execution is not None and namespace is None:
+        return execution.tensor(program, feeds, debug=debug, max_bytes=max_bytes)
     if namespace is not None and namespace is not np:
         from .namespace_interpreter import execute_namespace
 

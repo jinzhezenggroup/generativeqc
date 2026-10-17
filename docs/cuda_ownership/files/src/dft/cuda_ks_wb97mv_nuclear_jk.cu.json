@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_nuclear_jk.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Live canonical KS adapter: borrows actual accepted density and normalized basis, takes integer shell topology from the prepared Fock System, validates the complete WB97M-V physical model through shared admission, owns an independent bounded arena and reauthenticates Fock/grid bindings before action/publication. DF owners admit only the exact LR correction, explicitly rejecting substitution of exact primary J/K for the separate fitted source.",
+  "regions": []
+}

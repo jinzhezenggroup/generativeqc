@@ -555,7 +555,8 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
 
 void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
                             const core::System& system) {
-  if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
+  if (execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
+      dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
       !system.ecp_terms.empty())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "molecular-nonlocal KS ECP execution is not qualified");

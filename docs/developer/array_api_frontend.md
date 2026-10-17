@@ -79,8 +79,10 @@ The following contracts describe capture, not the standard eager surface.
 | `moveaxis/flip` | Signed-axis reorder through transpose; generic flip through static gather up to 65,536 indices per reversed axis |
 | `broadcast_shapes/broadcast_arrays` | Static integer-shape calculus / individual explicit generic broadcasts; each input retains its dtype |
 | `broadcast_to` | Shape-only for generic arrays; scientific arrays require explicit indices/axis map |
+| `tile` | Generic bool/float32/float64 arrays; static tuple of nonnegative Python integers, padding shape or repetitions with leading ones; scalar, empty and rank-64 inputs use reshape/broadcast without enumerating positions; native dtype/byte/work limits remain in force |
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
-| `take` | Static integer gather along one axis |
+| `take` | Static integer-tuple gather along one axis; negative positions count from that axis end; `axis=None` selects the sole axis of a one-dimensional input |
+| `tensordot/vecdot` | Static generic real contractions through TensorIR einsum; equal contracted extents; at most 52 labels; vecdot broadcasts remaining axes; annotated scientific domains require explicit einsum |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
 | `asarray` | CPU bool/float32/float64 compiler inputs; no silent external-device transfer |
 | `astype` | Explicit float32/float64 conversion through an existing TensorIR `cast` (or NumPy eager); native physical copy/alias guarantees are not independently claimed |
@@ -89,7 +91,7 @@ The following contracts describe capture, not the standard eager surface.
 | `zeros_like/ones_like/full_like` | Generic arrays only, preserve shape/dtype by default; scientifically annotated axes require an explicit typed TensorIR construction |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
-| dtype promotion | Generic float32/float64 operands promote to float64, using explicit TensorIR casts before ordinary binary arithmetic, matmul and einsum; scientific typed arrays remain strict |
+| dtype promotion | Generic float32/float64 operands promote to float64, using explicit TensorIR casts before ordinary binary arithmetic, matmul, tensordot, vecdot and einsum; scientific typed arrays remain strict |
 | dynamic Python control flow | Not supported |
 
 Scientifically annotated arrays keep the exact scalar spelling contract:

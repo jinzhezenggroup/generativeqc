@@ -189,6 +189,9 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   candidate->cartesian_nbf = cartesian_nbf;
   candidate->cartesian_naux = cartesian_naux;
   candidate->dummy_index = cartesian_nbf + cartesian_naux;
+  candidate->orbital_shells = orbital_systems.front().shells.size();
+  candidate->auxiliary_shells = auxiliary_systems.front().shells.size();
+  candidate->basis_primitives = host.primitive_exponents.size() - batch_size;
   candidate->batch.batch_size = static_cast<std::int32_t>(batch_size);
   candidate->batch.df_range_omega = policy.range_omega;
   candidate->batch.nbf = static_cast<std::int32_t>(host.nbf);

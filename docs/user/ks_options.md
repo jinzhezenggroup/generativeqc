@@ -114,12 +114,22 @@ for the algorithm, qualification scope and retained alternatives.
 ### CUDA final-state validation
 
 Native CUDA KS automatically requests resident final-state matrix products
-for strict-FP64 full-range exact-direct RKS global hybrids with at least 384 AOs.
-The admitted mathematical producer (such as PBE0 or B3LYP), signed exchange
-and Direct J/K operators—not the PBE0 label—determine eligibility. Resource and
-live-generation checks still require the matrix-library handle, charged packets
-and no previously published stationary W/total-D lease. UKS, fitted, RSH,
-nonlocal, mixed and incremental consumers retain the reference route.
+for these strict-FP64 restricted producers:
+
+- Full-range exact-direct global hybrids with at least 384 AOs. The signed
+  exchange coefficient and Direct J/K operators, not a functional name such as
+  PBE0 or B3LYP, determine eligibility.
+- All-electron full-range Coulomb-only models using exact-direct or
+  density-fitted J with at least **544 AOs**.
+  This includes eligible r²SCAN-3c owners; their separate D4/gCP corrections
+  remain part of the complete endpoint. The stationary-energy repair and its
+  source-matched complete-endpoint qualification replace the temporary
+  1088-AO exact-direct hold; the historical failed cohort remains rejected.
+
+Resource and live-generation checks still require the matrix-library handle,
+charged packets and no previously published stationary W/total-D lease. Smaller
+pure-J owners, UKS, fitted-exchange, RSH, ECP, nonlocal, mixed and incremental
+consumers are not admitted by the new pure-J policy.
 
 `GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=0` forces the reference route.
 Explicit `=1` requests the resident route outside the automatic scope, but does
@@ -128,8 +138,15 @@ automatic policy; other values are errors. This changes only execution of the
 shared strict proof: scientific acceptance gates, dense host exports and the
 orbital-energy expression for KS weighted density remain unchanged.
 
+Ordinary strict-FP64 all-electron exact-direct pure-J CUDA KS can hold an
+already stationary density while rebuilding the complete physical F[D] to
+confirm a failed energy gate. Density change and both physical residual norms
+must already pass their original thresholds. The fresh energy must still pass;
+this neither replays a cached energy nor changes convergence or iteration limits.
+
 See the [default-selection decision](../../.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md)
-for its evidence and limits.
+and [stationary pure-J energy confirmation](../../.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
+for their evidence and limits.
 
 ### Experimental incremental Direct-J/K and resource budgets
 

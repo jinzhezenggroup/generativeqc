@@ -252,6 +252,13 @@ def less_equal(x1: object, x2: object) -> typing.Any:
     return _compare("less_equal", x1, x2)
 
 
+def positive(x: object) -> typing.Any:
+    """Preserve a real array under eager or symbolic unary plus."""
+    if isinstance(x, VibeArray):
+        return _namespace.positive(x)
+    return _eager_compute(np.positive, _eager_array(x))
+
+
 def negative(x: object) -> typing.Any:
     """Negate each element of a host or symbolic array."""
     if isinstance(x, VibeArray):
@@ -422,6 +429,32 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     return np.flip(array, axis=axes)
 
 
+def roll(
+    x: object,
+    shift: int | tuple[int, ...],
+    *,
+    axis: int | tuple[int, ...] | None = None,
+) -> typing.Any:
+    """Roll generic arrays along static axes using bounded gather maps."""
+    if isinstance(x, VibeArray):
+        return _namespace.roll(x, shift, axis=axis)
+    return np.roll(_eager_data_array(x), shift, axis=axis)
+
+
+def repeat(x: object, repeats: int, *, axis: int | None = None) -> typing.Any:
+    """Repeat elements using a static integer count during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.repeat(x, repeats, axis=axis)
+    return np.repeat(_eager_data_array(x), repeats, axis=axis)
+
+
+def tile(x: object, repetitions: tuple[int, ...]) -> typing.Any:
+    """Tile whole blocks using static repetition metadata during capture."""
+    if isinstance(x, VibeArray):
+        return _namespace.tile(x, repetitions)
+    return np.tile(_eager_data_array(x), repetitions)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
@@ -447,19 +480,14 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     return array[tuple(builtins.slice(start, stop) for start, stop in ranges)]
 
 
-def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
+def take(x: object, indices: tuple[int, ...], *, axis: int | None = None) -> typing.Any:
     """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
     array = _eager_data_array(x)
-    normalized_axis = _namespace._axis(axis, array.ndim, "take")
-    if not isinstance(indices, tuple) or builtins.any(
-        type(index) is not int for index in indices
-    ):
-        raise TypeError("take indices must be a static tuple of integers")
-    if builtins.any(not 0 <= index < array.shape[normalized_axis] for index in indices):
-        raise ValueError("gather position is outside its input axis")
-    return np.take(array, indices, axis=normalized_axis)
+    normalized_axis = _namespace._take_axis(axis, array.ndim)
+    positions = _namespace._take_indices(indices, array.shape[normalized_axis])
+    return np.take(array, positions, axis=normalized_axis)
 
 
 def sum(
@@ -533,6 +561,20 @@ def matmul(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.matmul(x1, x2)
     return _eager_compute(np.matmul, *_eager_operands(x1, x2))
+
+
+def tensordot(x1: object, x2: object, *, axes: object = 2) -> typing.Any:
+    """Contract generic arrays along static axis pairs."""
+    if _symbolic(x1, x2):
+        return _namespace.tensordot(x1, x2, axes=axes)
+    return _eager_compute(np.tensordot, *_eager_operands(x1, x2), axes=axes)
+
+
+def vecdot(x1: object, x2: object, *, axis: object = -1) -> typing.Any:
+    """Compute real vector dot products with broadcast batch dimensions."""
+    if _symbolic(x1, x2):
+        return _namespace.vecdot(x1, x2, axis=axis)
+    return _eager_compute(np.vecdot, *_eager_operands(x1, x2), axis=axis)
 
 
 def einsum(
@@ -700,6 +742,8 @@ def asarray(
             return value
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
+        if copy is False:
+            raise ValueError("asarray dtype conversion requires a copy")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
     if "unknown-nested" in source_kinds:

@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_wb97mv_response.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Authenticate actual prepared Fock/grid/canonical owners, admit complete resource and semantic-work bounds, borrow immutable full-rank DF sources, prepare independent unscreened Direct scratch on the producer stream, launch compiler-owned physical Fock maps, audit reconstruction/symmetry and publish transactionally. Numerical contractions are build-time TensorIR energy VJP and composition maps, not handwritten response derivatives.",
+  "regions": []
+}

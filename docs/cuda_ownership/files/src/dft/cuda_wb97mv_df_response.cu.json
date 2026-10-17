@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_df_response.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Checked resource and scalar-term admission around compiler-emitted full-rank fitted-primary maps. Owns borrowed-arena partitioning, device-only finite/symmetry/cutoff-domain gates and synchronous original-stream execution. Retains immutable inverse/reference weights, stages response privately and reauthenticates before joint publication. No DF energy, inverse-derivative or VJP/JVP algebra authority, Python, runtime compilation, occupied factors or CPU numerical contraction.",
+  "regions": []
+}

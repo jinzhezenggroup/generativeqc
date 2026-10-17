@@ -440,6 +440,9 @@ const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
 const core::System& PreparedFockPlan::system() const noexcept { return impl_->orbital; }
+const core::System* PreparedFockPlan::auxiliary_system() const noexcept {
+  return impl_->auxiliary ? &*impl_->auxiliary : nullptr;
+}
 const integrals::IntegralData& PreparedFockPlan::one_electron() const noexcept {
   return impl_->one_electron();
 }

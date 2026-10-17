@@ -242,16 +242,13 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
         first_coefficients, second_coefficients, response, hermite_convolution);
   } else {
     CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
-    if constexpr (!std::is_same_v<Scalar, MixedPrecisionFloat>) {
-      if (range == generativeqc::integrals::CoulombRange::Full)
-        fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-      else if (!fill_range_coulomb<MaximumAngular>(rho, product_p, product_q, range, omega,
-                                                   auxiliary, domain))
-        return scalar<Scalar>(NAN);
-    } else {
-      if (range != generativeqc::integrals::CoulombRange::Full) return scalar<Scalar>(NAN);
+    if (range == generativeqc::integrals::CoulombRange::Full)
       fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-    }
+    // The radial seed remains FP64; the shared recurrence follows Scalar,
+    // including actual FP32 value work and unchanged FP64 geometry jets.
+    else if (!fill_range_coulomb<MaximumAngular>(scalar_value(rho), product_p, product_q,
+                                                 range, omega, auxiliary, domain))
+      return scalar<Scalar>(NAN);
     return contract_prepared_cartesian_coulomb<MaximumAngular, Scalar>(
         p, q, angular_first, angular_second, angular_third, angular_fourth,
         first_coefficients, second_coefficients, auxiliary, hermite_convolution);
@@ -420,13 +417,9 @@ __device__ inline Scalar contracted_eri_order(
   const std::int32_t shell_k = batch.ao_shells[ao_k];
   const std::int32_t shell_l = batch.ao_shells[ao_l];
   if (range != generativeqc::integrals::CoulombRange::Full) {
-    if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
-      return scalar<Scalar>(NAN);
-    } else {
-      return contracted_eri_cartesian<MaximumAngular, Scalar>(
-          batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
-          derivative_coordinate, range, omega);
-    }
+    return contracted_eri_cartesian<MaximumAngular, Scalar>(
+        batch, ao_i, ao_j, ao_k, ao_l, shell_i, shell_j, shell_k, shell_l,
+        derivative_coordinate, range, omega);
   }
   if constexpr (MaximumAngular == 0) {
     const Vec3<Scalar> first =

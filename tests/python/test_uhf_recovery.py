@@ -444,3 +444,221 @@ def test_native_h2_broken_root_matches_independent_pyscf_214(
         record_property("pyscf_version", pyscf.__version__)
         record_property("recovered_spin_squared", result.spin.spin_squared)
         record_property("source_evidence", result.identity)
+
+
+@pytest.mark.parametrize(
+    "transform",
+    (
+        np.eye(2),
+        np.diag([1e3, 1e-3]),
+        np.array([[12.0, 3.0], [0.0, 0.02]]),
+        np.array([[0.0, -0.02], [12.0, 3.0]]),
+    ),
+)
+@pytest.mark.parametrize("angle", (0.0, 1e-6, 1e-3))
+@pytest.mark.parametrize("flip", (False, True))
+def test_root_distance_matches_independent_physical_projectors(
+    transform: np.ndarray, angle: float, flip: bool
+) -> None:
+    from tools.generativeqc_response.recovery import _same_root
+
+    # Independent physical orthonormal frame; do not derive the expected
+    # classification from the production overlap factorization.
+    left = np.stack((np.diag([1.0, 0.0]), np.diag([0.0, 1.0])))
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+    )
+    right = np.stack([rotation @ block @ rotation.T for block in left])
+    expected = max(
+        np.linalg.norm(a - b, "fro") for a, b in zip(left, right, strict=True)
+    )
+    if flip:
+        right = right[::-1]
+    inverse = np.linalg.inv(transform)
+    ao_left = np.stack([inverse @ block @ inverse.T for block in left])
+    ao_right = np.stack([inverse @ block @ inverse.T for block in right])
+    factor = np.linalg.cholesky(transform.T @ transform)
+    assert _same_root(ao_left, ao_right, factor, 1e-5, spin_flip=flip) == (
+        expected < 1e-5
+    )
+    if flip:
+        assert not _same_root(ao_left, ao_right, factor, 1e-5, spin_flip=False)
+
+
+def _change_ao_basis(
+    operator: UHFResponseOperator, transform: np.ndarray
+) -> UHFResponseOperator:
+    """Independent tensor change of coordinates, not a recovery implementation."""
+    reference = operator.problem.reference
+    inverse = np.linalg.inv(transform)
+    updated = replace(
+        reference,
+        overlap=transform.T @ reference.overlap @ transform,
+        hcore=transform.T @ reference.hcore @ transform,
+        fock_alpha=transform.T @ reference.fock_alpha @ transform,
+        fock_beta=transform.T @ reference.fock_beta @ transform,
+        coefficients_alpha=inverse @ reference.coefficients_alpha,
+        coefficients_beta=inverse @ reference.coefficients_beta,
+        basis_hash="changed-coordinate-sites",
+    )
+    transformed_eri = np.einsum(
+        "pi,qj,rk,sl,pqrs->ijkl", transform, transform, transform, transform, ERI
+    )
+    backend = DenseAOResponseBackend(transformed_eri)
+    return UHFResponseOperator(
+        UHFResponseOperator.build_problem(updated, backend), backend
+    )
+
+
+@pytest.mark.parametrize(
+    "transform",
+    (np.diag([2.0, 0.5]), np.array([[1.2, 0.3], [0.0, 0.8]])),
+)
+def test_recovery_and_spin_norm_are_covariant_under_ao_basis_changes(
+    transform: np.ndarray,
+) -> None:
+    baseline = recover_uhf_stability(_symmetric(), _solve)
+
+    def solve(seed: np.ndarray) -> UHFResponseOperator:
+        physical = np.stack([transform @ block @ transform.T for block in seed])
+        return _change_ao_basis(_solve(physical), transform)
+
+    result = recover_uhf_stability(_change_ao_basis(_symmetric(), transform), solve)
+    assert result.status == "RECOVERED"
+    assert result.distinct_roots == baseline.distinct_roots == 1
+    assert result.equivalent_restarts == baseline.equivalent_restarts
+    np.testing.assert_allclose(result.energy_drop, baseline.energy_drop, atol=1e-10)
+    np.testing.assert_allclose(
+        result.spin.spin_squared, baseline.spin.spin_squared, atol=1e-10
+    )
+    np.testing.assert_allclose(
+        result.spin.spin_density_norm, baseline.spin.spin_density_norm, atol=1e-10
+    )
+    # The analytic dimer has <S^2> = 1 - (2t/U)^2 and a singlet spin-density
+    # projector norm squared of 2<S^2>. This oracle does not use AO whitening.
+    expected_s2 = 1 - (2 * T / U) ** 2
+    np.testing.assert_allclose(
+        result.spin.spin_density_norm, np.sqrt(2 * expected_s2), atol=1e-9
+    )
+    for spin, population in (
+        ("alpha", result.spin.alpha_ao_population),
+        ("beta", result.spin.beta_ao_population),
+    ):
+        np.testing.assert_allclose(
+            np.sum(population), result.operator.problem.reference.nocc(spin), atol=1e-10
+        )
+    result.assert_current()
+    # Stable/no-change publication must use the identical diagnostic metric.
+    stable = recover_uhf_stability(
+        result.operator, Mock(side_effect=AssertionError("unexpected restart"))
+    )
+    assert stable.status == "UNCHANGED"
+    np.testing.assert_allclose(
+        stable.spin.spin_density_norm, result.spin.spin_density_norm, atol=1e-12
+    )
+    stable.assert_current()
+
+
+def test_molecular_root_metric_matches_pinned_pyscf_occupied_subspaces() -> None:
+    import os
+
+    try:
+        import pyscf
+        from pyscf import gto, lib, scf
+    except ImportError:
+        if os.environ.get("GENERATIVEQC_REQUIRE_UHF_RECOVERY_ORACLE") == "1":
+            pytest.fail("pinned molecular root-metric oracle required")
+        pytest.skip("pinned molecular root-metric oracle unavailable")
+    assert pyscf.__version__ == "2.14.0"
+    from tools.generativeqc_response.recovery import _metrics, _same_root
+
+    lib.num_threads(1)
+    molecule = gto.M(
+        atom="H 0 0 0; H 0 0 2", basis="sto-3g", unit="Angstrom", spin=0, verbose=0
+    )
+    mf = scf.UHF(molecule)
+    mf.conv_tol, mf.conv_tol_grad = 1e-13, 1e-11
+    mf.kernel(dm0=np.array([np.diag([1.0, 0.0]), np.diag([0.0, 1.0])]))
+    assert mf.converged
+    overlap = mf.get_ovlp()
+    coefficients = mf.mo_coeff
+    densities = mf.make_rdm1()
+    expected_s2 = mf.spin_square()[0]
+    for transform in (
+        np.eye(2),
+        np.diag([1e3, 1e-3]),
+        np.array([[12.0, 3.0], [0.0, 0.02]]),
+    ):
+        inverse = np.linalg.inv(transform)
+        factor = np.linalg.cholesky(transform.T @ overlap @ transform)
+        changed = np.stack([inverse @ d @ inverse.T for d in densities])
+        # A normal immutable response reference carries all required metadata;
+        # only its geometry-independent spin diagnostic is under test here.
+        reference = replace(
+            _symmetric().problem.reference,
+            overlap=transform.T @ overlap @ transform,
+            hcore=transform.T @ mf.get_hcore() @ transform,
+            fock_alpha=transform.T @ mf.get_fock()[0] @ transform,
+            fock_beta=transform.T @ mf.get_fock()[1] @ transform,
+            coefficients_alpha=inverse @ coefficients[0],
+            coefficients_beta=inverse @ coefficients[1],
+            orbital_energies_alpha=mf.mo_energy[0],
+            orbital_energies_beta=mf.mo_energy[1],
+            reference_energy=mf.e_tot,
+        )
+        spin = _metrics(reference, changed, factor)
+        np.testing.assert_allclose(spin.spin_squared, expected_s2, atol=1e-10)
+        np.testing.assert_allclose(
+            spin.spin_density_norm, np.sqrt(2 * expected_s2), atol=1e-10
+        )
+        angle = 1e-6
+        rotated = [
+            c[:, 0] * np.cos(angle) + c[:, 1] * np.sin(angle) for c in coefficients
+        ]
+        nearby = np.stack([inverse @ np.outer(c, c) @ inverse.T for c in rotated])
+        assert _same_root(changed, nearby, factor, 1e-5, spin_flip=False)
+
+
+def test_metric_failure_blocks_root_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools.generativeqc_response.recovery import _metric_density_norm
+
+    with pytest.raises(RecoveryUnqualified, match="nonfinite overlap-metric"):
+        _metric_density_norm(np.full((2, 2), np.inf), np.eye(2))
+    model = _symmetric()
+    monkeypatch.setattr(
+        np.linalg, "cholesky", Mock(side_effect=np.linalg.LinAlgError("singular"))
+    )
+    with pytest.raises(RecoveryUnqualified, match="metric factorization"):
+        recover_uhf_stability(model, _solve)
+
+
+@pytest.mark.parametrize("failure", ("hamiltonian", "response"))
+def test_root_metric_does_not_relax_hamiltonian_or_response_qualification(
+    failure: str,
+) -> None:
+    model = _change_ao_basis(_symmetric(), np.diag([2.0, 0.5]))
+    if failure == "hamiltonian":
+        original = model.backend.coulomb_exchange
+
+        def mismatched(density: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            coulomb, exchange = original(density)
+            return coulomb + 1e-3 * np.eye(2), exchange
+
+        model.backend.coulomb_exchange = mismatched
+    else:
+        original_apply = model.apply
+
+        def inconsistent(vector: np.ndarray) -> np.ndarray:
+            result = original_apply(vector)
+            # A linear source must agree on non-basis directions too.
+            if np.count_nonzero(vector) > 1:
+                result = result + 1e-3
+            return result
+
+        model.apply = inconsistent
+    solver = Mock(side_effect=AssertionError("SCF forbidden"))
+    with pytest.raises(RecoveryUnqualified):
+        recover_uhf_stability(model, solver)
+    solver.assert_not_called()

@@ -1,0 +1,84 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Bounded exploratory ladder; preserve timeouts/reference convergence failures rather than selecting favorable cases or changing accuracy/convergence gates.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7374,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "ad35d0f6b900ff98c8c827b57bbf0d2d657575a3b1f17967c728a5995e51db2f"
+    },
+    {
+      "bytes": 2828,
+      "path": "final-driver.patch.xz",
+      "role": "source-patch",
+      "sha256": "534c31febdfd0d9854cec1047a85279b335e019b7d511300f15fa4f064d30419"
+    },
+    {
+      "bytes": 8324,
+      "path": "final-driver.py.xz",
+      "role": "reproduction",
+      "sha256": "6f12ef65f5ec4949250cdeab6154bac74a6427ab77a68dd5ec8368866f61c1a2"
+    },
+    {
+      "bytes": 2756,
+      "path": "followup-driver.patch.xz",
+      "role": "source-patch",
+      "sha256": "c719e3b5dfc89f65c9f766287f83ed5dd3a180bb718c903ae6c4d3386cf51747"
+    },
+    {
+      "bytes": 8292,
+      "path": "followup-driver.py.xz",
+      "role": "reproduction",
+      "sha256": "485f19052ae5b4b1f094957fb7314613eb06d9cbce73eeb7a6889db340d9cdd7"
+    },
+    {
+      "bytes": 2196,
+      "path": "pilot-driver.patch.xz",
+      "role": "source-patch",
+      "sha256": "a2e09b3bcb2419661dc271a97ed43a0ca46c160c764db895f13525fea4a380d8"
+    },
+    {
+      "bytes": 8024,
+      "path": "pilot-driver.py.xz",
+      "role": "reproduction",
+      "sha256": "6fffcfa3040ab2a0a96bd93c6167cd1cec265e7a6db8c92b7658cbcfd2d5ba65"
+    },
+    {
+      "bytes": 4544,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "11d0ea2ee704290e9f4aac0b331f4a79d95849bc1cd6c68e4860f1aa9ce9491d"
+    },
+    {
+      "bytes": 2657,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "769d80ac7e9aac8fe8038189e2b01945b4847abee8ed31e24cfd4d029651325f"
+    },
+    {
+      "bytes": 29920,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "10a45f1d21fd13709ad34f4df3fb85b13c6d2e84e131d497efacff0b5496cb04"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh",
+      "pilot"
+    ],
+    "notes": "Run pilot/followup/dimer in the documented finite single-GPU srun allocations; replay intentionally preserves failed cases. Native artifacts are reused, not rebuilt."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "dirty_scope": "Retained measurement-driver patches only; production compiled source and binary identities unchanged.",
+    "revision": "5aa703721fdce6a220838676af615d574f0fed05"
+  }
+}

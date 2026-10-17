@@ -136,7 +136,8 @@ struct Fixture {
             "XC enqueue staged data or synchronized");
   }
   std::pair<std::vector<double>, std::vector<double>> submit_density_features(
-      const std::vector<double>& d) {
+      const std::vector<double>& d, generativeqc::runtime::PrecisionPhase phase =
+                                        generativeqc::runtime::PrecisionPhase::StrictAudit) {
     double *device_rho{}, *device_gradient{};
     std::vector<double> rho(layout.npoint), gradient(3 * layout.npoint);
     try {
@@ -146,7 +147,8 @@ struct Fixture {
                             stream));
       check(cudaStreamSynchronize(stream));
       const auto before = plan->transfers();
-      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient);
+      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient,
+                                     phase);
       const auto after = plan->transfers();
       require(after.output_d2h_bytes == before.output_d2h_bytes &&
                   after.setup_h2d_bytes == before.setup_h2d_bytes &&
@@ -185,6 +187,31 @@ std::vector<double> density(std::size_t n, unsigned spins) {
         d[(s * n + i) * n + j] =
             (s == 0 ? 0.7 : 0.3) * ((i == j ? 0.2 : 0.0) + 0.1 / ((i + 1.0) * (j + 1.0)));
   return d;
+}
+
+/** The public resource request must suffice exactly, while one byte less must
+ * fail before publication for every curated spin/functional layout. */
+void workspace_boundary_cases() {
+  const auto molecule = system();
+  const AoBasis basis(molecule);
+  const MolecularGrid grid(molecule, {1, 2, 2, 4, 3, 1e-12});
+  for (std::uint32_t functional = 0; functional < 5; ++functional)
+    for (bool unrestricted : {false, true}) {
+      Fixture exact(basis, grid, functional, unrestricted, 7);
+      bool rejected = false;
+      try {
+        CudaXcPlan undersized(exact.layout, basis.packed, grid.points(), grid.weights(),
+                              exact.arena, exact.layout.device_bytes - 1, exact.stream);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected, "XC accepted an arena smaller than its resource request");
+      exact.submit(density(basis.nao, unrestricted ? 2 : 1));
+      const auto result = exact.scalars();
+      require(result.error == 0 && std::isfinite(result.energy),
+              "exactly sized XC arena did not publish a finite result");
+      exact.canary();
+    }
 }
 
 void json_vector(const std::vector<double>& values) {
@@ -1022,6 +1049,7 @@ void matrix_schedule_cases() {
 // tests; these in-namespace test fragments must retain dependency order.
 // clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_mixed_matrix_cases.cuh"
 #include "dft_point_batch_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
@@ -1040,6 +1068,12 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 1 || (argc == 2 && std::string(argv[1]) == "--workspace-boundary"))
+      workspace_boundary_cases();
+    if (argc == 2 && std::string(argv[1]) == "--workspace-boundary") {
+      std::cout << "CUDA XC exact-arena execution and one-byte refusal gates passed\n";
+      return 0;
+    }
     if (argc == 5 && std::string(argv[1]) == "--automatic-points-json") {
       automatic_point_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
                              static_cast<unsigned>(std::stoul(argv[3])), std::stoull(argv[4]));
@@ -1048,6 +1082,12 @@ int main(int argc, char** argv) {
     if (argc == 5 && std::string(argv[1]) == "--automatic-xc-json") {
       automatic_xc_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
                           static_cast<unsigned>(std::stoul(argv[3])), std::stod(argv[4]));
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--mixed-matrix-contractions") {
+      mixed_matrix_cases();
+      std::cout << "CUDA shared FP32 products: independent E/V, maps, batches and strict handoff "
+                   "passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--point-batches") {

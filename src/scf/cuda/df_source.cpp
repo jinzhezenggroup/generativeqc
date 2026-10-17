@@ -13,6 +13,7 @@
 #include "scf/cuda/df_source_internal.hpp"
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/cuda_density_fitting_basis.hpp"
 
 namespace generativeqc::scf {
 
@@ -29,6 +30,36 @@ double cuda_density_fitting_integral_source_range_omega(
   return static_cast<const cuda_execution::CudaDensityFittingIntegralSourceImpl*>(
              source->implementation)
       ->batch.df_range_omega;
+}
+
+CudaDfReadonlyBasis cuda_density_fitting_readonly_basis(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return {};
+  const auto& owner = *static_cast<const cuda_execution::CudaDensityFittingIntegralSourceImpl*>(
+      source->implementation);
+  int device{-1};
+  if (owner.batch_size != 1 || cudaGetDevice(&device) != cudaSuccess || device != owner.device_id)
+    return {};
+  const auto& batch = owner.batch;
+  return {device,
+          static_cast<std::size_t>(batch.total_atoms),
+          owner.basis_primitives,
+          owner.orbital_shells,
+          owner.auxiliary_shells,
+          owner.public_nbf,
+          owner.public_naux,
+          owner.cartesian_nbf,
+          owner.cartesian_naux,
+          batch.positions,
+          batch.primitive_exponents,
+          batch.primitive_coefficients,
+          batch.direct_ao_coefficients,
+          batch.shell_atoms,
+          batch.shell_angular,
+          batch.shell_primitive_offsets,
+          batch.shell_direct_ao_offsets,
+          owner.orbital_to_cartesian,
+          owner.auxiliary_to_cartesian};
 }
 
 namespace {
@@ -48,8 +79,8 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
     CudaDensityFittingIntegralSourceImpl* source, std::size_t system, std::size_t pair_begin,
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, const double* inverse_square_root, void* stream_handle,
-    double* output, std::string& detail, bool apply_metric_transform,
-    double* low_output = nullptr) {
+    double* output, std::string& detail, bool apply_metric_transform, double* low_output = nullptr,
+    bool current_device_only = false) {
   detail.clear();
   std::size_t pair_total = 0;
   if (source != nullptr && !generativeqc::runtime::checked_multiply(
@@ -85,8 +116,14 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
-  cudaError_t cuda_error = cudaSetDevice(source->device_id);
+  int current_device = -1;
+  cudaError_t cuda_error =
+      current_device_only ? cudaGetDevice(&current_device) : cudaSetDevice(source->device_id);
   if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
+  if (current_device_only && current_device != source->device_id) {
+    detail = "borrowed DF value source requires its current CUDA device";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   const cudaStream_t stream = reinterpret_cast<cudaStream_t>(stream_handle);
   constexpr unsigned source_threads = 128U;
   const unsigned mapping =
@@ -402,6 +439,23 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
       pair_begin, pair_count, auxiliary_begin, auxiliary_count, derivative_coordinate, nullptr,
       stream_handle, output, detail, false);
+}
+
+generativeqc_status enqueue_cuda_density_fitting_raw_values(
+    CudaDensityFittingIntegralSource* source, std::size_t pair_begin, std::size_t pair_count,
+    void* stream, double* output, std::string& detail) {
+  if (!source || !source->implementation || !stream) {
+    detail = "borrowed DF raw value source is unavailable";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto* owner = static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation);
+  if (owner->batch_size != 1) {
+    detail = "borrowed DF raw values require a single-system source";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return generate_cuda_density_fitting_transformed_tile_impl(
+      owner, 0, pair_begin, pair_count, 0, owner->public_naux, -1, nullptr, stream, output, detail,
+      false, nullptr, true);
 }
 
 generativeqc_status generate_cuda_density_fitting_raw_expansion(

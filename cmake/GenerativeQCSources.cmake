@@ -3,14 +3,18 @@ include_guard(GLOBAL)
 # Keep production source enumeration explicit and component-owned. Generated
 # outputs are registered separately in GenerativeQCGeneratedSources.cmake.
 function(generativeqc_add_api_sources target)
+  set_property(SOURCE src/api/c_api_ks_hessian.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "GENERATIVEQC_HAS_NATIVE_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES}>")
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
+    src/api/c_api_ks_hessian.cpp
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
+    src/api/c_api_response.cpp
     src/api/c_api_df_gradient.cpp
     src/api/c_api_d3.cpp
     src/api/c_api_d4.cpp
@@ -18,18 +22,29 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_gcp.cpp
     src/api/c_api_common.cpp
     src/api/c_api_context.cpp
+    src/api/c_api_basis_catalog.cpp
+    src/api/c_api_basis_builtin.cpp
     src/api/c_api_resources.cpp
+    src/api/c_api_resource_planning.cpp
+    src/api/c_api_resource_ledger_plan.cpp
+    src/api/c_api_scf_effort.cpp
+    src/api/c_api_response_recycle.cpp
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
     src/api/error.cpp
     src/methods/registry.cpp
+    src/methods/named_ks_catalog.cpp
     src/methods/prepared_execution.cpp)
 endfunction()
 
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
+    src/molecule/basis_catalog.cpp
+    src/molecule/basis_template.cpp
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
+    src/runtime/resource_planning.cpp
+    src/runtime/resource_ledger_plan.cpp
     src/runtime/cuda_provider.cpp
     src/tensor/cpu_linalg.cpp
     src/tensor/cpu/lp64_provider.cpp)
@@ -84,6 +99,7 @@ endfunction()
 function(generativeqc_add_posthf_cc_sources target)
   target_sources(${target} PRIVATE
     src/methods/mp2_method.cpp
+    src/methods/correlated_batch.cpp
     src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/uccsd_method.cpp
@@ -118,6 +134,7 @@ function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/methods/hf_method.cpp
     src/scf/density_fitting.cpp
+    src/scf/hf_df_resources.cpp
     src/scf/fleet.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
@@ -330,6 +347,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/scf/gradient/hf_gradient.cpp
       src/scf/reference/mean_field.cpp
       src/scf/initial_guess/density.cpp
+      src/scf/occupied_projection.cpp
       src/scf/initial_guess/minao.cpp
       src/scf/initial_guess/huckel.cpp
       src/scf/preliminary_guess.cpp

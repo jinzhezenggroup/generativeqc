@@ -109,6 +109,7 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                  beta, coefficients[axis]);
   const double weight = batch.primitive_coefficients[primitive.first] *
                         batch.primitive_coefficients[primitive.second];
+  if (threadIdx.x == 0) md.transforms[primitive.transform_offset] = weight * 0.0;
   const auto base = static_cast<std::int64_t>(pair.system) * batch.nbf;
   for (unsigned component = threadIdx.x;
        component < static_cast<unsigned>(pair.first_count * pair.second_count);
@@ -116,6 +117,8 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
     const auto ao_first = base + pair.first_ao + component / pair.second_count;
     const auto ao_second = base + pair.second_ao + component % pair.second_count;
     for (unsigned index = 0; index < pair.hermites; ++index) {
+      const auto slot = md.transform_slots[pair.transform_map + component * pair.hermites + index];
+      if (!slot) continue;
       const auto derivative = md_hermite_angular(pair.angular, index);
       double value = 0.0;
       for (unsigned first_term = 0; first_term < batch.ao_term_counts[ao_first]; ++first_term) {
@@ -134,8 +137,7 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                    coefficients[2].at(first_angular.z, second_angular.z, derivative.z);
         }
       }
-      md.transforms[primitive.transform_offset + component * pair.hermites + index] =
-          weight * value;
+      md.transforms[primitive.transform_offset + slot] = weight * value;
     }
   }
 }
@@ -160,8 +162,7 @@ __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, s
           total += density[reverse] + (unrestricted ? beta[reverse] : 0.0);
         }
         value +=
-            total * md.transforms[primitive.transform_offset +
-                                  (first * pair.second_count + second) * pair.hermites + index];
+            total * md_j_transform(md, primitive, pair, first * pair.second_count + second, index);
       }
     }
     md.density[primitive.hermite_offset + index] = value;
@@ -259,9 +260,8 @@ __global__ void md_j_project(DeviceBatch batch, MdJView md, std::size_t begin, s
     for (auto index = pair.primitive_begin; index < pair.primitive_end; ++index) {
       const auto primitive = md.primitives[index];
       for (unsigned derivative = 0; derivative < pair.hermites; ++derivative)
-        value +=
-            md.transforms[primitive.transform_offset + component * pair.hermites + derivative] *
-            md.potential[primitive.hermite_offset + derivative];
+        value += md_j_transform(md, primitive, pair, component, derivative) *
+                 md.potential[primitive.hermite_offset + derivative];
     }
     const auto first = pair.first_ao + component / pair.second_count;
     const auto second = pair.second_ao + component % pair.second_count;

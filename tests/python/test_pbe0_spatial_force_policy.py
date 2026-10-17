@@ -108,24 +108,37 @@ struct Method {
     std::optional<int> precision_mode{GENERATIVEQC_PRECISION_FP64};
   } options_;
   bool range_strategy_{};
+  bool native_stationary_admitted{};
+  unsigned gradient_qualification{};
+  const Method* admitted_cuda_stationary_binding() const {
+    return native_stationary_admitted ? this : nullptr;
+  }
+  unsigned application_gradient_qualification() const { return gradient_qualification; }
   struct Atom { int ecp_core{}; };
   struct { std::vector<int> ecp_terms; std::vector<Atom> atoms{Atom{}}; } system_;
 """
 
 DRIVER = r"""
 template<class Mutation> void reject_hybrid(Mutation mutate) {
-  Method method;
-  mutate(method);
-  assert(!method.qualified_spatial_force_default());
-}
-template<class Mutation> void reject(Mutation mutate) {
-  for (unsigned source : {0U, 1U, 2U}) {
+  for (bool native_fp64 : {false, true}) {
     Method method;
-    method.fock_.strategy_value.spec.exchange.present = source == 0;
-    method.execution_plan_.d4_correction = source == 2;
+    method.options_.precision_mode = native_fp64 ? 1 : GENERATIVEQC_PRECISION_FP64;
+    method.native_stationary_admitted = native_fp64;
     mutate(method);
     assert(!method.qualified_spatial_force_default());
   }
+}
+template<class Mutation> void reject(Mutation mutate) {
+  for (bool native_fp64 : {false, true})
+    for (unsigned source : {0U, 1U, 2U}) {
+      Method method;
+      method.options_.precision_mode = native_fp64 ? 1 : GENERATIVEQC_PRECISION_FP64;
+      method.native_stationary_admitted = native_fp64;
+      method.fock_.strategy_value.spec.exchange.present = source == 0;
+      method.execution_plan_.d4_correction = source == 2;
+      mutate(method);
+      assert(!method.qualified_spatial_force_default());
+    }
 }
 int main() {
   Method method;
@@ -175,8 +188,27 @@ int main() {
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.op = scf::FockOperator::LongRange; });
   reject_hybrid([](auto& value) { value.fock_.strategy_value.spec.exchange.op = scf::FockOperator::LongRange; });
   reject([](auto& value) { value.options_.density_fitting_mode = 1; });
-  reject([](auto& value) { value.options_.precision_mode = 1; });
-  reject([](auto& value) { value.options_.precision_mode.reset(); });
+  // Budget SCF may reuse the FP64 force source only through an authenticated
+  // native binding; independently qualified mixed derivatives are excluded.
+  for (unsigned source : {0U, 1U, 2U}) {
+    for (bool admitted : {false, true})
+      for (unsigned gradient : {0U, 1U}) {
+        Method precision;
+        precision.fock_.strategy_value.spec.exchange.present = source == 0;
+        precision.execution_plan_.d4_correction = source == 2;
+        precision.options_.precision_mode = 1;
+        precision.native_stationary_admitted = admitted;
+        precision.gradient_qualification = gradient;
+        assert(precision.qualified_spatial_force_default() == (admitted && gradient == 0));
+        precision.fock_.diagnostic_value.nbf = 383;
+        assert(!precision.qualified_spatial_force_default());
+      }
+    Method unresolved;
+    unresolved.fock_.strategy_value.spec.exchange.present = source == 0;
+    unresolved.execution_plan_.d4_correction = source == 2;
+    unresolved.options_.precision_mode.reset();
+    assert(!unresolved.qualified_spatial_force_default());
+  }
   reject([](auto& value) { value.execution_plan_.range_exchange = true; });
   reject([](auto& value) { value.range_strategy_ = true; });
   reject([](auto& value) { value.execution_plan_.nonlocal_correlation = true; });

@@ -65,7 +65,7 @@ using cudaEvent_t=Event*;
 using cublasHandle_t=Handle*;
 using cublasStatus_t=int;
 using cudaStreamCaptureStatus=int;
-constexpr int cudaSuccess=0, cudaErrorMemoryAllocation=2;
+constexpr int cudaSuccess=0, cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=101;
 constexpr int cudaStreamCaptureStatusNone=0, cudaStreamNonBlocking=1;
 constexpr int cudaMemcpyHostToDevice=1, CUBLAS_STATUS_ALLOC_FAILED=2;
 constexpr int CUBLAS_POINTER_MODE_HOST=0,CUBLAS_DEFAULT_MATH=0,CUBLAS_PEDANTIC_MATH=1;
@@ -107,19 +107,19 @@ void cuda_check(int s){if(s)throw DeviceRuntimeError("runtime failure");}
 void blas_check(int s){if(s)throw DeviceRuntimeError("provider failure");}
 void error_text(char* p,std::size_t n,const char* s){if(p&&n)std::snprintf(p,n,"%s",s);}
 }
+#include "runtime/cuda_device_scope.hpp"
 namespace generativeqc::runtime {
-void cuda_resource_check(int s){generativeqc_tensor::cuda_check(s);}
 template <class T> int resource_cuda_malloc(T** p,std::size_t n,bool* host_oom=nullptr){
   if(host_oom)*host_oom=false;
   return cudaMalloc(reinterpret_cast<void**>(p),n);
 }
 int resource_cuda_free(void* p){return cudaFree(p);}
 """
+    (tmp_path / "cuda_runtime_api.h").write_text("")
     source = f'#include "{ROOT / "src/dft/cuda_grid_storage.hpp"}"\n' + prelude
     # Keep the actual CSR buffer ownership/destruction types in the extracted
     # GridPlan; only CUDA API allocation is replaced by the host double.
     for marker in (
-        "class CudaDeviceScope",
         "template <class T>\nstruct BorrowedCudaBuffer",
         "template <class T>\nclass OwnedCudaBuffer",
     ):

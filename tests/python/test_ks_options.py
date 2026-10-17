@@ -428,6 +428,7 @@ def test_custom_model_changes_plan_identity_without_materializing_grid(
 def test_custom_native_grid_matches_independent_scf_and_budget(
     method: typing.Any, device: typing.Any
 ) -> None:
+    """Compare the explicit-grid energy model, independently of force admission."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
 
@@ -464,8 +465,11 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
     grid = MolecularGrid(
         atoms, spec=CUSTOM, charge=charge, multiplicity=multiplicity
     ).explicit()
-    native = calculator.singlepoint(atoms, charge=charge, multiplicity=multiplicity)
+    native = calculator.singlepoint(
+        atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
+    )
     assert native.converged and native.physical_residual_rms < 1e-9
+    assert native.forces is None
     assert native.executed_backend == ("cuda" if device == "cuda" else "cpu_reference")
     assert native.ks_diagnostic.grid_points == len(grid.weights)
     assert native.ks_diagnostic.tile_points == options.tile_points
@@ -481,7 +485,7 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
         assert reference.converged
         assert abs(native.energy - reference.e_tot) < 1e-8
     default = Calculator(method=method, device=device).singlepoint(
-        atoms, charge=charge, multiplicity=multiplicity
+        atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
     )
     assert abs(default.energy - native.energy) > 1e-8
     # Tile shape changes scheduling and capacity, while this fixed-grid energy
@@ -491,7 +495,9 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
     )
     assert (
         abs(
-            other.singlepoint(atoms, charge=charge, multiplicity=multiplicity).energy
+            other.singlepoint(
+                atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
+            ).energy
             - native.energy
         )
         < 1e-9
@@ -499,8 +505,10 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
     with calculator.prepare_batch(
         [atoms, atoms], charges=[charge] * 2, multiplicities=[multiplicity] * 2
     ) as batch:
-        batch.execute(strict=True)
-        assert batch.execute(strict=True).items[0].warm_start_used
+        batch.execute(properties=("energy",), strict=True)
+        assert (
+            batch.execute(properties=("energy",), strict=True).items[0].warm_start_used
+        )
         if device == "cuda":
             ledger = batch.resource_diagnostics["preparation"]["device_ledger"]
             assert ledger["live_bytes"] == batch.resource_plan.resident_bytes["device"]
@@ -509,7 +517,26 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
             method, replace(options, grid=GridSpec())
         )
         with pytest.raises(RuntimeError, match="model identity changed"):
-            batch.execute(strict=True)
+            batch.execute(properties=("energy",), strict=True)
+
+
+@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
+def test_custom_grid_packaged_cuda_force_domain_remains_rejected(
+    method: str, tmp_path: typing.Any
+) -> None:
+    """Energy support must not silently promote partition-2 packaged forces."""
+    from generativeqc_compiler.method import stationary_cuda
+
+    profile = stationary_cuda._qualified_aot_profile(method.replace("-", "_"))
+    with pytest.raises(NotImplementedError, match="partition_iterations=3 only"):
+        stationary_cuda.load_stationary_aot_artifact(
+            tmp_path,
+            functional=profile.functional,
+            spin=profile.spin,
+            plan=profile.plan,
+            architecture="sm_120",
+            iterations=CUSTOM.partition_iterations,
+        )
 
 
 def test_noncurrent_native_ks_schema_is_rejected(monkeypatch: typing.Any) -> None:

@@ -2,6 +2,7 @@
 #define GENERATIVEQC_GENERATIVEQC_HPP
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -131,6 +132,81 @@ inline generativeqc_method_descriptor default_method_descriptor(std::string_view
   return descriptor;
 }
 
+/** @native-contract generativeqc::ResponseResult
+ * @behavior Move-only owner of a completed shared CPU GMRES result, including failures
+ * such as workspace refusal and iteration exhaustion; convergence must be inspected.
+ * @lifetime Owns the C result independently of input callbacks, arrays and contexts.
+ * Borrowed data() views expire on destruction. Copying and move assignment are deleted;
+ * after move construction only destruction is supported on the source.
+ * @errors Construction/query errors throw Error. Destruction/move construction do not throw.
+ * @execution Synchronous CPU controller; this class does not supply molecular equations,
+ * assert symmetry, or establish a complete native Hessian/HVP endpoint.
+ */
+class ResponseResult {
+ public:
+  /** @native-contract generativeqc::ResponseResult::ResponseResult
+   * @behavior Execute the shared CPU GMRES owner and retain its immutable result.
+   * @inputs A complete current-ABI descriptor obeying the C action/options contracts.
+   * @lifetime Borrows inputs only for this call; result arrays are owned by this object.
+   * @errors Throws Error on API/callback failure; nonconvergence is a result, not an exception.
+   * @execution Synchronous CPU work; no Python, compiler, device or execution context required.
+   */
+  explicit ResponseResult(const generativeqc_response_gmres_descriptor_v1& descriptor) {
+    check(generativeqc_response_solve_v1(&descriptor, &handle_));
+  }
+  /** @native-contract generativeqc::ResponseResult::~ResponseResult
+   * @behavior Release owned solve output; a moved-from object is a no-op.
+   * @lifetime Invalidates every borrowed result view; never throws.
+   * @execution Synchronous CPU cleanup without numerical callbacks.
+   */
+  ~ResponseResult() { generativeqc_response_result_destroy(handle_); }
+  /** @native-contract generativeqc::ResponseResult::ResponseResult-copy
+   * @behavior Copy construction is deleted; result handles have one owner.
+   * @errors Copy construction fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult(const ResponseResult&) = delete;
+  /** @native-contract generativeqc::ResponseResult::operator=-copy
+   * @behavior Copy assignment is deleted; result ownership cannot be duplicated.
+   * @errors Copy assignment fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult& operator=(const ResponseResult&) = delete;
+  /** @native-contract generativeqc::ResponseResult::operator=-move
+   * @behavior Move assignment is deleted; transfer ownership by move construction.
+   * @errors Move assignment fails at compile time.
+   * @execution No executable operation or scientific work exists.
+   */
+  ResponseResult& operator=(ResponseResult&&) = delete;
+  /** @native-contract generativeqc::ResponseResult::ResponseResult-move
+   * @behavior Transfer the result owner without executing a solve or copying arrays.
+   * @inputs A distinct live or moved-from source wrapper.
+   * @lifetime Destination takes ownership; source becomes null and supports destruction only.
+   * @errors Nonthrowing.
+   * @execution CPU handle transfer; no callbacks, allocations or scientific execution.
+   */
+  ResponseResult(ResponseResult&& other) noexcept
+      : handle_(std::exchange(other.handle_, nullptr)) {}
+  /** @native-contract generativeqc::ResponseResult::data
+   * @behavior Borrow the completed solution, convergence/work and optional trace diagnostics.
+   * @outputs Returns a view value; its arrays remain owned by this result. Inspect converged
+   * and reason independently of successful API completion, including workspace refusal.
+   * @lifetime The result must remain live; copy arrays needed after destruction.
+   * @errors Throws Error for an invalid handle or failed C view query.
+   * @execution Synchronous CPU read without allocation or numerical execution.
+   */
+  generativeqc_response_result_view_v1 data() const {
+    generativeqc_response_result_view_v1 view{};
+    view.struct_size = sizeof(view);
+    view.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_response_result_view_v1_get(handle_, &view));
+    return view;
+  }
+
+ private:
+  generativeqc_response_result* handle_{};
+};
+
 /** Move-only context owner; dependent native objects must be destroyed first. */
 /** @native-contract generativeqc::Context
  * @behavior Move-constructible RAII context owner; copying is deleted.
@@ -232,6 +308,68 @@ class System {
   System(Context& context, const generativeqc_system_descriptor& descriptor)
       : atom_count_(descriptor.atom_count) {
     check(generativeqc_system_create(context.get(), &descriptor, &handle_));
+  }
+  /** @native-contract generativeqc::System::System-bundled
+   * @behavior Expand a compiled bundled basis and own the normalized native system.
+   * @inputs A live Context, nonempty native-domain atom span, bundled basis name, ionic charge,
+   * positive multiplicity and Cartesian/spherical representation. Embedded NUL names are
+   * rejected. Defaults are neutral closed-shell Cartesian. C bundled-constructor rules apply.
+   * @lifetime Copies atoms and basis data; input buffers and basis_name need not outlive the
+   * constructor. Prepared consumers retain their own system copies.
+   * @errors Throws Error for dimension/name/descriptor or native scientific/backend failures;
+   * local string allocation may throw standard allocation exceptions. No owner on failure.
+   * @execution Synchronous; serialize with other operations on the Context. No Python or I/O.
+   * @units Atom coordinates are Bohr, charge is in electron-charge units.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms, std::string_view basis_name,
+         std::int32_t charge = 0, std::uint32_t multiplicity = 1,
+         generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max() ||
+        basis_name.find('\0') != std::string_view::npos)
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid bundled system dimensions/name");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    const std::string name(basis_name);
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    descriptor.basis_representation = representation;
+    check(generativeqc_system_create_bundled(context.get(), &descriptor, name.c_str(), nullptr,
+                                             &handle_));
+  }
+  /** @native-contract generativeqc::System::System-basis-template
+   * @behavior Expand caller-supplied element templates and own the normalized system,
+   * retaining general contraction and scalar ECP source-channel semantics.
+   * @inputs A live Context, nonempty native-domain atom span, initialized v1 template
+   * descriptor, charge, positive multiplicity and Cartesian/spherical representation.
+   * The C template-constructor validation and backend/scientific admission rules apply.
+   * @lifetime Copies all required atom/basis/ECP data; input arrays may die on return.
+   * Prepared consumers retain their own copies after the System is destroyed.
+   * @errors Throws Error for dimension/ABI/record errors or native execution preparation
+   * failures; native allocation errors retain their mapped status. No owner on failure.
+   * @execution Synchronous; serialize with this Context. No I/O, Python or compiler.
+   * @units Coordinates and Gaussian/ECP arrays follow the C atomic-unit contracts.
+   */
+  System(Context& context, std::span<const generativeqc_atom> atoms,
+         const generativeqc_basis_template_descriptor_v1& basis, std::int32_t charge = 0,
+         std::uint32_t multiplicity = 1,
+         generativeqc_basis_representation representation = GENERATIVEQC_BASIS_CARTESIAN) {
+    if (atoms.size() > std::numeric_limits<std::uint32_t>::max())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid template system dimensions");
+    atom_count_ = static_cast<std::uint32_t>(atoms.size());
+    generativeqc_system_descriptor descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.atoms = atoms.data();
+    descriptor.atom_count = atom_count_;
+    descriptor.charge = charge;
+    descriptor.multiplicity = multiplicity;
+    descriptor.basis_representation = representation;
+    check(
+        generativeqc_system_create_basis_template_v1(context.get(), &descriptor, &basis, &handle_));
   }
   /** @native-contract generativeqc::System::System-ecp
    * @behavior Create an owned scalar-ECP system through the native ECP constructor.

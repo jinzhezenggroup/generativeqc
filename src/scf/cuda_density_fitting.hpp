@@ -237,6 +237,15 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream, double* output, std::string& detail);
 
+/** Raw zero-order [pair,aux] values from one immutable single-system source
+ * into caller storage on a borrowed stream. Unlike the compatibility source
+ * API this never changes the current device. No fitted J/K scratch or occupied
+ * projection lease is touched; all auxiliaries are emitted without compression.
+ */
+generativeqc_status enqueue_cuda_density_fitting_raw_values(
+    CudaDensityFittingIntegralSource* source, std::size_t pair_begin, std::size_t pair_count,
+    void* stream, double* output, std::string& detail);
+
 /** Raw value expansion for cancellation-sensitive orbital contractions.
  * Each disjoint caller-owned buffer has pair_count*auxiliary_count doubles in
  * the ordinary full-pair layout; the value is high+low. One source traversal

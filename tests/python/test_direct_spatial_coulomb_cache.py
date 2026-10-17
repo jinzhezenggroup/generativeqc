@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 def test_spatial_cache_covers_only_box_and_single_response_faces(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    """Check all axis partitions at orders 4/5/6, capacities and evaluation counts."""
+    """Check orders 4/5/6, capacities, evaluation counts and root forwarding."""
     emitted = emit_direct_high_order_pair_gradient_header()
     definition = _definition(
         emitted,
@@ -55,12 +55,23 @@ PREFIX = r"""
 #include <limits>
 #define __device__
 struct Angular { unsigned x{}, y{}, z{}; };
-template <unsigned Order> struct HighOrderCoulombWorkspace {};
+template <unsigned Order> struct HighOrderCoulombWorkspace {
+  double negative_two_rho_powers[Order + 1U];
+};
 unsigned evaluations{};
-template <unsigned Order>
+const double* input_boys{};
+bool expect_preweighted_boys{};
+template <unsigned Order, bool PreweightedBoys = false>
 double high_order_coulomb(unsigned state, double rho,
-                         const HighOrderCoulombWorkspace<Order>&, const double*) {
+                         const HighOrderCoulombWorkspace<Order>&, const double* boys) {
   ++evaluations;
+  assert(PreweightedBoys == expect_preweighted_boys);
+  // Check every forwarded root independently of the fixture workspace. The
+  // separate high-precision Wick tests cover the actual recurrence arithmetic.
+  for (unsigned order = 0; order <= Order; ++order) {
+    const double scale = PreweightedBoys ? std::pow(-2.0 * rho, order) : 1.0;
+    assert(boys[order] == scale * input_boys[order]);
+  }
   return (state + 0.25) * (rho + Order);
 }
 """
@@ -68,8 +79,16 @@ double high_order_coulomb(unsigned state, double rho,
 DRIVER = r"""
 template <unsigned Order>
 void exercise() {
-  const HighOrderCoulombWorkspace<Order + 1U> workspace{};
+  HighOrderCoulombWorkspace<Order + 1U> workspace{};
   const double rho = 0.375;
+  double boys[Order + 2U];
+  double power = 1.0;
+  for (unsigned order = 0; order <= Order + 1U; ++order) {
+    workspace.negative_two_rho_powers[order] = power;
+    power *= -2.0 * rho;
+    boys[order] = (order + 1.0) / 16.0;
+  }
+  input_boys = boys;
   for (unsigned maximum_x = 0; maximum_x <= Order; ++maximum_x) {
     for (unsigned maximum_y = 0; maximum_y <= Order - maximum_x; ++maximum_y) {
       const unsigned maximum_z = Order - maximum_x - maximum_y;
@@ -77,7 +96,8 @@ void exercise() {
       GradientSpatialCoulombValues<Order, true> cached;
       for (double& value : cached.values) value = std::numeric_limits<double>::quiet_NaN();
       evaluations = 0;
-      cached.prepare(total, empty, empty, empty, rho, workspace, nullptr);
+      expect_preweighted_boys = Order == 6U;
+      cached.prepare(total, empty, empty, empty, rho, workspace, boys);
       const unsigned expected = (maximum_x + 1U) * (maximum_y + 1U) * (maximum_z + 1U) +
           (maximum_y + 1U) * (maximum_z + 1U) + (maximum_x + 1U) * (maximum_z + 1U) +
           (maximum_x + 1U) * (maximum_y + 1U);
@@ -96,15 +116,16 @@ void exercise() {
             } else {
               const unsigned state = axis_x + 8U * axis_y + 64U * axis_z;
               const double independent = (state + 0.25) * (rho + Order + 1U);
-              assert(cached.value(state, rho, workspace, nullptr) == independent);
+              assert(cached.value(state, rho, workspace, boys) == independent);
             }
           }
       assert(evaluations == expected);
       GradientSpatialCoulombValues<Order, false> scalar;
       evaluations = 0;
-      scalar.prepare(total, empty, empty, empty, rho, workspace, nullptr);
+      expect_preweighted_boys = false;
+      scalar.prepare(total, empty, empty, empty, rho, workspace, boys);
       assert(evaluations == 0);
-      assert(scalar.value(0U, rho, workspace, nullptr) == 0.25 * (rho + Order + 1U));
+      assert(scalar.value(0U, rho, workspace, boys) == 0.25 * (rho + Order + 1U));
       assert(evaluations == 1U);
     }
   }

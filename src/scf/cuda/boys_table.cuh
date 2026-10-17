@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "integrals/execution_qualifiers.hpp"
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/integral_limits.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
@@ -15,13 +16,24 @@ template <unsigned MaximumOrder, typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values) {
   static_assert(MaximumOrder <= kMaximumCoulombResponseOrder);
   if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
-    // The alternating high-order series loses too many digits in FP32 near
-    // its branch boundary.  Evaluate the small special-function table in FP64
-    // and round once before the substantially larger Cartesian recurrence.
-    double accurate_values[MaximumOrder + 1];
-    boys_values<MaximumOrder, double>(static_cast<double>(argument.value), accurate_values);
+    // The positive incomplete-gamma series avoids the cancellation that made
+    // the alternating table require FP64. Share its established mathematical
+    // owner with range moments; only the mixed specialization narrows it.
+    float moments[MaximumOrder + 1];
+    const bool valid = generativeqc::integrals::range_detail::long_moments(
+        MaximumOrder, argument.value, 1.0F, moments);
+    // Preserve relative seed accuracy when the subsequent Coulomb multiplier
+    // can amplify a subnormal moment's rounding. Normal tables remain FP32.
+    if (valid && moments[MaximumOrder] < 0x1p-126F) {
+      double accurate_values[MaximumOrder + 1];
+      boys_values<MaximumOrder, double>(static_cast<double>(argument.value), accurate_values);
+      for (unsigned order = 0; order <= MaximumOrder; ++order) {
+        values[order] = MixedPrecisionFloat{accurate_values[order]};
+      }
+      return;
+    }
     for (unsigned order = 0; order <= MaximumOrder; ++order) {
-      values[order] = MixedPrecisionFloat{accurate_values[order]};
+      values[order] = MixedPrecisionFloat{valid ? moments[order] : NAN};
     }
   } else {
     for (unsigned order = 0; order <= MaximumOrder; ++order) {
