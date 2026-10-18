@@ -304,6 +304,28 @@ subrecord counts density terms and Hermite products separately from component
 contractions, including preparation performed by declined attempts. None of
 these invocation counts is a hardware FLOP count.
 
+The independent low-order arithmetic rollback is
+`GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0`. Its automatic FP64
+relative-response path shares differentiation of the existing weighted scalar;
+it does not alter screening or the admitted primitive/source counts. See the
+[compiler and fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
+To compare the nuclear rollback with genuinely unset selection while retaining
+the qualified order-six/seven defaults, run:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=01:05:00 env GENERATIVEQC_LIBRARY=/absolute/path/libgenerativeqc.so \
+  python -m benchmarks.direct_force_reuse .artifacts/weighted-responses-96 \
+  --atoms 96 --weighted-responses
+```
+
+This mode removes inherited order-six/seven overrides from both arms, records
+the comparison axis, and preserves each 1800-second population cap, five warm
+calls and five moved-warm calls. Do not combine it with `--baseline` or
+`--candidate`, which compare the separate order-six/seven schedule axis.
+An original-library comparison is additionally required to detect any cold
+module-loading cost hidden by a same-image selector comparison.
+
 Two preparation-time experimental controls retain the incumbent defaults:
 `GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE=8|16|32` changes only the admitted
 dd×dp page width (default 32); `GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR=1`

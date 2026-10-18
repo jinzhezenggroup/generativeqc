@@ -80,6 +80,11 @@ Plan prepare(bool force_capability) {
   return *plan;
 }
 int main() {
+  static_assert(select_direct_weighted_force_response(""));
+  static_assert(select_direct_weighted_force_response("1"));
+  static_assert(select_direct_weighted_force_response("relative"));
+  static_assert(!select_direct_weighted_force_response("0"));
+  static_assert(!select_direct_weighted_force_response("unknown"));
   static_assert(select_direct_spd_force_schedule("") == DirectSpdForceSchedule::Automatic);
   static_assert(select_direct_spd_force_schedule("0") == DirectSpdForceSchedule::Incumbent);
   static_assert(select_direct_spd_force_schedule("unknown") == DirectSpdForceSchedule::Incumbent);

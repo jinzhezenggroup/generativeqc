@@ -28,6 +28,9 @@ struct ShellPairDensityBounds;
  */
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
 
+/** Capture only exact weighted-force arithmetic, without changing Fock policy. */
+void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept;
+
 /** Query the opt-in at preparation only; optional retained storage freezes it.
  * This adapter keeps canonical providers independent of HF policy headers.
  */

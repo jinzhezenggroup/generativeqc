@@ -43,7 +43,14 @@ runtime::CompensatedOutput generated_coulomb_output(const GeneratedCoulombPlan& 
 }
 }  // namespace
 
+void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
+  const auto* selector = std::getenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES");
+  batch.direct_force_relative_response =
+      select_direct_weighted_force_response(selector ? selector : "");
+}
+
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
+  configure_direct_weighted_force_response(batch);
   batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
   batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();
   batch.direct_pair_materialized_values = cuda_policy::direct_pair_materialized_values_requested();

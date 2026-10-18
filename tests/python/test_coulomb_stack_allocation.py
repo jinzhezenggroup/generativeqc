@@ -10,7 +10,7 @@ from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS
 @pytest.fixture(scope="module")
 def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("void configure_direct_coulomb_recurrence(")
+    begin = source.index("void configure_direct_")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     get_limit = "*n=100000; return cudaSuccess;"
