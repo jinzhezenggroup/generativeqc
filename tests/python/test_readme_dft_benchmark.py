@@ -16,6 +16,7 @@ from generativeqc import GridSpec, load_r2scan3c_basis
 from benchmarks.readme_dft import SCHEMA, specification
 from benchmarks.readme_omol25 import (
     check_record,
+    native_solver_controls,
     protocol,
     reference_baselines,
     reference_energy_forces,
@@ -255,6 +256,18 @@ def completed_sample(phase: str = "cold", geometry: int = 0) -> dict:
         "complete_seconds": 1.0,
         "gate": True,
     }
+
+
+def test_fast_controls_leave_stationarity_to_the_application_policy() -> None:
+    assert native_solver_controls("fast") == {"max_iterations": 100}
+    assert native_solver_controls("fp64") == {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-12,
+        "max_iterations": 100,
+    }
+    with pytest.raises(ValueError, match="policy"):
+        native_solver_controls("unknown")
 
 
 def test_fast_budget_does_not_relabel_strict_parity_or_relax_other_norms() -> None:

@@ -227,3 +227,48 @@ and 3/12/48/96 atoms. Keep all eight original HF/DFT methods, both Direct/DF and
 independent GPU4PySCF in the rerun. Neither **48×12×24 shared** nor
 **32×12×24 split NLC** is an accepted FP64 replacement. Defaults stay unchanged
 pending evidence; retaining them is not a new convergence certification.
+
+## Profile-aware accuracy study
+
+Use `tools.analyze_vv10_grid_study` to compare FP64 and Fast budgets without
+turning reference-only observations into native precision certification. It
+requires successful process outcomes, original/moved force arrays, radial and
+angular anchor checks, and replay consistency. By default 10% of each budget
+is reserved for the empirical reference-refinement allowance; it is not a
+rigorous bound on the infinite-grid limit. Fast checks RMS forces as well as
+energy and maximum-force errors. An incomplete or unstable anchor leaves grid
+admission unknown or failed even if the observed candidate difference is small.
+
+For example, after an XC-only sweep with NLC fixed at 64×16×32:
+
+```bash
+PYTHONPATH=.:python python -m tools.analyze_vv10_grid_study \
+  --raw .artifacts/vv10-grid/precision-study/xc-scan --axis xc \
+  --fixed-grid 64,16,32 --anchor 144,48,96 \
+  --radial-check 120,48,96 --angular-check 144,40,80 \
+  --output .artifacts/vv10-grid/precision-study/xc-analysis.json
+```
+
+These dimensions are a study example, **not a recommendation**: the first
+three-atom anchor fails the reserved FP64 stability allowance and requires
+further refinement. An XC-only Fast pass still needs NLC convergence, combined
+error qualification, actual native Fast/fallback validation and 48/96-atom
+coverage. The [ongoing study rationale](../.agents/notes/proposed/2026-10-19-vv10-profile-grid-qualification.md)
+records these separate requirements. Accuracy studies may use n2's PRO 6000,
+but benchmark timing updates remain a separate RTX 5090 population.
+
+For expensive dense accuracy sweeps, `benchmarks.vv10_grid_accuracy_sweep`
+accepts `--grid-pairs XC_R,P,A:NLC_R,P,A ...`. It may reuse **only its own
+GPU4PySCF density** between neighboring rules, reconverging every target grid
+and both geometries. Its `accuracy-original` / `accuracy-moved` records are
+explicitly not cold/warm timing populations. Keep this optimization out of the
+fresh-process README timing runs; it does not justify subtracting setup or SCF
+work from published endpoint latency.
+
+For `readme_dft --policy fast`, the application policy selects native solver
+controls from the configured budget; it is no longer pinned to the FP64
+benchmark's explicit convergence ceilings. FP64 and independent-reference
+controls remain unchanged. Journals record requested/initial candidate controls
+and actual per-call refinement/fallback work separately. Earlier Fast journals
+without this distinction are tight-control populations, not interchangeable
+with default-control Fast timings.

@@ -311,6 +311,26 @@ def protocol(
     )
 
 
+def native_solver_controls(policy: str) -> dict[str, float | int]:
+    """Preserve FP64 controls while letting Fast own its budget-selected solver.
+
+    Passing the FP64 benchmark's tight tolerances as explicit user ceilings
+    suppresses Fast's default stationarity selection. The independent reference
+    still uses the tight target controls in ``protocol``; candidate controls and
+    per-call refinement/fallback work are recorded separately.
+    """
+    if policy == "fp64":
+        return {
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-10,
+            "screening_tolerance": 1e-12,
+            "max_iterations": 100,
+        }
+    if policy == "fast":
+        return {"max_iterations": 100}
+    raise ValueError("native benchmark policy must be fp64 or fast")
+
+
 def check_record(
     row: dict[str, Any], oracle: dict[str, Any], *, budget: dict | None = None
 ) -> dict[str, Any]:
@@ -842,6 +862,10 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         else asdict(precision_policy.budget),
         "native_experiment": {
             "precision_policy": args.policy,
+            "solver_control_policy": "application-policy-selected"
+            if args.policy == "fast"
+            else "fixed-fp64-target",
+            "requested_solver_controls": native_solver_controls(args.policy),
             "preliminary_provider": args.preliminary_provider,
             "force_active_ao_cutoff": 1e-16 if args.force_active_ao else None,
             "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
@@ -1079,15 +1103,19 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 auxiliary_basis=auxiliary_basis,
                 density_fitting_relative_threshold=1e-10,
                 density_fitting_memory_budget_bytes=args.df_memory_budget_bytes,
-                energy_tolerance=1e-12,
-                density_tolerance=1e-10,
-                screening_tolerance=1e-12,
-                max_iterations=100,
+                **native_solver_controls(args.policy),
                 **precision_options,
             )
             cp.cuda.Stream.null.synchronize()
             calculator_seconds = perf_counter() - started
             record["native_calculator_seconds"] = calculator_seconds
+            selected_calculator = calc if precision_policy is None else calc._candidate
+            record["native_experiment"]["initial_candidate_solver_controls"] = {
+                "energy_tolerance": selected_calculator._energy_tolerance,
+                "density_tolerance": selected_calculator._density_tolerance,
+                "screening_tolerance": selected_calculator._screening_tolerance,
+                "max_iterations": selected_calculator._max_iterations,
+            }
             record["native_build"] = native_build_metadata(
                 calc if precision_policy is None else calc._candidate
             )

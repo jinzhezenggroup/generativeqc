@@ -189,8 +189,22 @@ def audit(
     plan: dict[str, Any],
     *,
     candidate_grid: tuple[int, int, int] | None = (48, 12, 24),
+    native_attempt: str | None = None,
 ) -> dict[str, Any]:
-    """Require fresh campaign job identities as well as complete numerical gates."""
+    """Require fresh campaign identities and retain explicitly superseded attempts.
+
+    A setup repair uses its own directory and package receipt. Selecting that
+    attempt never falls back to an older native point while the rerun is missing
+    or failed; the original journal remains hash-linked for diagnosis.
+    """
+    attempt = None
+    if native_attempt is not None:
+        attempt = plan.get("native_attempts", {}).get(native_attempt)
+        if not isinstance(attempt, dict):
+            raise ValueError("native attempt is absent from the campaign plan")
+        relative = Path(attempt["relative_root"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("native attempt must remain within the campaign root")
     points = []
     for mode, grid, method, atoms in expected_points(candidate_grid):
         directory = (
@@ -201,8 +215,26 @@ def audit(
         errors = []
         failed_engines = set()
         pending_processes = set()
+        selected_attempt = (
+            attempt if attempt is not None and method in attempt["methods"] else None
+        )
         for engine in ("native", "reference"):
             path = directory / f"{engine}.json"
+            if engine == "native" and selected_attempt is not None:
+                if path.exists():
+                    receipts["previous_native_attempt"] = {
+                        "file": str(path.relative_to(root)),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                path = (
+                    root
+                    / selected_attempt["relative_root"]
+                    / mode
+                    / grid_directory(grid)
+                    / method
+                    / str(atoms)
+                    / "native.json"
+                )
             journals[engine] = None
             if not path.exists():
                 continue
@@ -213,6 +245,14 @@ def audit(
             }
             try:
                 raw = json.loads(payload)
+                if (
+                    engine == "native"
+                    and raw.get("native_experiment", {}).get("precision_policy")
+                    != "fp64"
+                ):
+                    raise ValueError(
+                        "FP64 timing cohort cannot admit a Fast policy journal"
+                    )
                 job = raw.get("scheduler", {}).get("SLURM_JOB_ID")
                 if job not in plan["allowed_job_ids"]:
                     raise ValueError("journal is not from a fresh campaign Slurm job")
@@ -265,6 +305,15 @@ def audit(
                     raise ValueError("measurement process did not exit successfully")
                 if not outcome.exists():
                     pending_processes.add(engine)
+                elif (
+                    engine == "native"
+                    and selected_attempt is not None
+                    and json.loads(outcome.read_text()).get("stationary_package_sha256")
+                    != selected_attempt["stationary_package_sha256"]
+                ):
+                    raise ValueError(
+                        "native stationary package differs from the planned repair"
+                    )
                 journals[engine] = raw
             except (KeyError, TypeError, ValueError) as error:
                 errors.append(f"{engine}: {error}")
@@ -307,6 +356,7 @@ def audit(
         "expected_endpoint_calls": 24 * len(points),
         "statuses": dict(statuses),
         "plan": copy.deepcopy(plan),
+        "native_attempt": native_attempt,
         "points": points,
     }
 
@@ -317,11 +367,18 @@ def main() -> None:
     parser.add_argument("--raw", type=Path, required=True)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--candidate-grid", type=parse_grid, default=(48, 12, 24))
+    parser.add_argument(
+        "--native-attempt",
+        help="Explicit repaired native attempt from the campaign plan",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--allow-incomplete", action="store_true")
     args = parser.parse_args()
     report = audit(
-        args.raw, json.loads(args.plan.read_text()), candidate_grid=args.candidate_grid
+        args.raw,
+        json.loads(args.plan.read_text()),
+        candidate_grid=args.candidate_grid,
+        native_attempt=args.native_attempt,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

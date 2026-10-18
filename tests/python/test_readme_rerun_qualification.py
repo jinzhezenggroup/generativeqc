@@ -30,6 +30,7 @@ def _journal(engine: str) -> dict:
         "stage": "complete",
         "status": "measured" if engine == "reference" else "completed_unchecked",
         "scheduler": {"SLURM_JOB_ID": "fresh-job"},
+        "native_experiment": {"precision_policy": "fp64"},
         "protocol": {
             "method": "WB97M-V/RKS",
             "basis": "def2-SVP",
@@ -229,3 +230,74 @@ def test_same_grid_rerun_does_not_claim_grid_or_fast_qualification(
     assert report["qualification_scope"] == "same-grid-engine-parity-only"
     assert report["grid_convergence"] == "not_evaluated"
     assert report["endpoint_precision_qualification"] == "not_evaluated"
+
+
+def repaired_plan() -> dict:
+    return {
+        "allowed_job_ids": ["fresh-job"],
+        "native_attempts": {
+            "aot-fixed": {
+                "relative_root": "attempts/aot-fixed",
+                "methods": ["wb97m-v"],
+                "stationary_package_sha256": "f" * 64,
+            }
+        },
+    }
+
+
+def test_explicit_repair_does_not_fall_back_to_old_native_timings(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "measurements/none/grid-48x16x32/wb97m-v/3"
+    directory.mkdir(parents=True)
+    for engine in ("native", "reference"):
+        (directory / f"{engine}.json").write_text(json.dumps(_journal(engine)))
+        (directory / f"{engine}.outcome").write_text('{"exit_code":0}')
+    report = audit(tmp_path, repaired_plan(), native_attempt="aot-fixed")
+    point = next(point for point in report["points"] if point["raw_receipts"])
+    assert point["engines"]["native"]["status"] == "not_run"
+    assert point["engines"]["reference"]["status"] == "measured"
+    assert point["raw_receipts"]["previous_native_attempt"]["sha256"]
+
+
+@pytest.mark.parametrize("package_matches", (True, False))
+def test_repaired_population_requires_its_exact_package_receipt(
+    tmp_path: Path, package_matches: bool
+) -> None:
+    original = tmp_path / "measurements/none/grid-48x16x32/wb97m-v/3"
+    repaired = tmp_path / "attempts/aot-fixed/none/grid-48x16x32/wb97m-v/3"
+    original.mkdir(parents=True)
+    repaired.mkdir(parents=True)
+    (original / "native.json").write_text(json.dumps(_journal("native")))
+    (original / "native.outcome").write_text('{"exit_code":1}')
+    (original / "reference.json").write_text(json.dumps(_journal("reference")))
+    (original / "reference.outcome").write_text('{"exit_code":0}')
+    (repaired / "native.json").write_text(json.dumps(_journal("native")))
+    (repaired / "native.outcome").write_text(
+        json.dumps(
+            {
+                "exit_code": 0,
+                "stationary_package_sha256": ("f" if package_matches else "a") * 64,
+            }
+        )
+    )
+    report = audit(tmp_path, repaired_plan(), native_attempt="aot-fixed")
+    point = next(point for point in report["points"] if point["raw_receipts"])
+    assert point["engines"]["native"]["status"] == (
+        "measured" if package_matches else "failed"
+    )
+    assert point["engines"]["reference"]["status"] == "measured"
+    assert "previous_native_attempt" in point["raw_receipts"]
+    assert json.loads((original / "native.outcome").read_text())["exit_code"] == 1
+
+
+def test_fast_journal_cannot_be_relabelled_as_fp64_timings(tmp_path: Path) -> None:
+    directory = tmp_path / "measurements/none/grid-48x16x32/wb97m-v/3"
+    directory.mkdir(parents=True)
+    native = _journal("native")
+    native["native_experiment"]["precision_policy"] = "fast"
+    (directory / "native.json").write_text(json.dumps(native))
+    report = audit(tmp_path, {"allowed_job_ids": ["fresh-job"]})
+    point = next(point for point in report["points"] if point["raw_receipts"])
+    assert point["engines"]["native"]["status"] == "failed"
+    assert any("Fast policy" in error for error in point["errors"])
