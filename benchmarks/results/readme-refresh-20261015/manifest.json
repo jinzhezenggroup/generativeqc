@@ -10,12 +10,16 @@
   "reference_policy": "historical timing/work/geometry observations unchanged; no reference execution",
   "files": {
     "README.md": {
-      "bytes": 9012,
-      "sha256": "bcb1ccc0d27bfca072b18bc4221ada42bb21c88d9bbbacfc92a8dc96becc7e84"
+      "bytes": 8552,
+      "sha256": "7a119368243f80995a950e2e8f2809bed590ee74d67dadae256d740baf7da0fa"
     },
     "build-settings.json": {
       "bytes": 15352,
       "sha256": "48952a66b60e11d05ac8bf13eda722939ff1da52e44fbf73d2b4914122d6581f"
+    },
+    "df-cold-warm.svg": {
+      "bytes": 86368,
+      "sha256": "de825991c360f71937a33ce90efcfb381348a062fc3ba9ae0079fd52711221d6"
     },
     "df-timings.md": {
       "bytes": 4805,
@@ -80,14 +84,6 @@
     "timings.md": {
       "bytes": 4737,
       "sha256": "6687b7c42c5886ff5f6fa398c61403194d5c4ba1ed35bec89a08a83764832cec"
-    },
-    "df-cold-warm.svg.xz": {
-      "bytes": 8596,
-      "sha256": "1d21c9a2c04f485029d40a31da2108d7df7760d01719f3591acc7a0d95559f50",
-      "uncompressed": {
-        "bytes": 86368,
-        "sha256": "de825991c360f71937a33ce90efcfb381348a062fc3ba9ae0079fd52711221d6"
-      }
     }
   },
   "baseline_files": {

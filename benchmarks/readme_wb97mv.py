@@ -203,6 +203,38 @@ def configure_reference_mixed_rsh_df(engine: typing.Any) -> None:
     )
 
 
+def _reference_grid_table(mol: typing.Any, cp: typing.Any, spec: typing.Any) -> dict:
+    """Construct an independent atom-centered rule for a moving reference grid."""
+    if spec.partition_iterations != 3:
+        raise ValueError("GPU4PySCF comparator requires three Becke iterations")
+    radial_nodes, radial_weights = np.polynomial.legendre.leggauss(spec.radial_points)
+    mapped_nodes, mapped_weights = (radial_nodes + 1) / 2, radial_weights / 2
+    radii = mapped_nodes / (1 - mapped_nodes)
+    weights = mapped_weights * mapped_nodes**2 / (1 - mapped_nodes) ** 4
+    polar_nodes, polar_weights = np.polynomial.legendre.leggauss(spec.angular_polar)
+    azimuth = np.arange(spec.angular_azimuth) * (2 * np.pi / spec.angular_azimuth)
+    polar_mesh, azimuth_mesh = np.meshgrid(polar_nodes, azimuth, indexing="ij")
+    directions = np.stack(
+        (
+            np.sqrt(1 - polar_mesh**2) * np.cos(azimuth_mesh),
+            np.sqrt(1 - polar_mesh**2) * np.sin(azimuth_mesh),
+            polar_mesh,
+        ),
+        axis=-1,
+    ).reshape(-1, 3)
+    angular_weights = np.repeat(polar_weights * 2 * np.pi / len(azimuth), len(azimuth))
+    table = {}
+    element_radii = dict(spec.element_radii)
+    for atom_index in range(mol.natm):
+        symbol = mol.atom_symbol(atom_index)
+        scale = element_radii.get(int(mol.atom_charge(atom_index)), 1.0)
+        table[symbol] = (
+            cp.asarray((radii[:, None, None] * directions * scale).reshape(-1, 3)),
+            cp.asarray((weights[:, None] * angular_weights * scale**3).ravel()),
+        )
+    return table
+
+
 def reference_engine(
     atoms: typing.Any,
     basis: typing.Any,
@@ -211,6 +243,7 @@ def reference_engine(
     spin: int = 0,
     xc: str = "WB97M_V",
     full_fock: bool = False,
+    nlc_spec: typing.Any = None,
 ) -> typing.Any:
     """Build an independent GPU4PySCF engine on the same moving quadrature.
 
@@ -219,6 +252,9 @@ def reference_engine(
     Three original-Becke iterations with no radius adjustment match GridSpec.
     The Hessian response uses that same primary grid, not GPU4PySCF's default
     secondary SG1 CPHF grid, which would differentiate a different quadrature.
+    An explicit ``nlc_spec`` is for reference-only split-grid feasibility probes;
+    native KS still requires a shared grid. Each response owner receives its
+    own atomic rule, rather than static coordinates from a different grid.
     """
     import cupy as cp
     from gpu4pyscf.dft import gen_grid, rks, uks
@@ -229,31 +265,19 @@ def reference_engine(
     mol = gto.M(atom=atoms, unit="Bohr", basis=basis, spin=spin, cart=False, verbose=0)
     engine = (uks.UKS if spin else rks.RKS)(mol)
     engine.xc = xc
-    # Reconstruct the stated quadrature independently from its public spec.
-    x, wx = np.polynomial.legendre.leggauss(spec.radial_points)
-    t, wt = (x + 1) / 2, wx / 2
-    r, wr = t / (1 - t), wt * t**2 / (1 - t) ** 4
-    z, wz = np.polynomial.legendre.leggauss(spec.angular_polar)
-    phi = np.arange(spec.angular_azimuth) * (2 * np.pi / spec.angular_azimuth)
-    zz, pp = np.meshgrid(z, phi, indexing="ij")
-    directions = np.stack(
-        (np.sqrt(1 - zz**2) * np.cos(pp), np.sqrt(1 - zz**2) * np.sin(pp), zz), axis=-1
-    ).reshape(-1, 3)
-    wa = np.repeat(wz * 2 * np.pi / len(phi), len(phi))
-    table = {}
-    radii = dict(spec.element_radii)
-    for atom in range(mol.natm):
-        symbol, number = mol.atom_symbol(atom), int(mol.atom_charge(atom))
-        scale = radii.get(number, 1.0)
-        table[symbol] = (
-            cp.asarray((r[:, None, None] * directions * scale).reshape(-1, 3)),
-            cp.asarray((wr[:, None] * wa * scale**3).ravel()),
-        )
-    for grids in (engine.grids, engine.nlcgrids):
+    table = _reference_grid_table(mol, cp, spec)
+    nlc_table = (
+        table
+        if nlc_spec is None or nlc_spec == spec
+        else _reference_grid_table(mol, cp, nlc_spec)
+    )
+    for grids, atomic_table in ((engine.grids, table), (engine.nlcgrids, nlc_table)):
         grids.radii_adjust = None
         grids.becke_scheme = gen_grid.original_becke
         grids.prune = None
-        grids.gen_atomic_grids = lambda mol, *args, **kwargs: table
+        grids.gen_atomic_grids = lambda mol, *args, _table=atomic_table, **kwargs: (
+            _table
+        )
     engine.cphf_grids = engine.grids
     engine.small_rho_cutoff = 0
     engine.conv_tol = 1e-11

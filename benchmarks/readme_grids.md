@@ -84,3 +84,125 @@ constructs fresh integrators. The benchmark's scoped iterator adapter preserves
 all offsets in both paths and represents an empty tile by exactly zero AOs.
 It changes no points, weights, density threshold, XC/VV10 formula or force
 mathematics, and restores the response iterator even after an exception.
+
+## Matched publication protocol
+
+The shared-grid study uses original and H(1)-z-displaced (+0.001 bohr) 3/12-atom
+water clusters, spherical def2-SVP and WB97M-V/RKS. DF uses cc-pVDZ-JKFIT and the
+matched full-range-DF / exact-long-range exchange contract. Both XC and VV10
+share the explicit grid in the native path. Radial reductions to 32 points fail
+the exploratory force gate; 40×16×32 also fails on 12 atoms. The smaller plotted
+48×12×24 rule therefore keeps 48 radial points. Point and pair-bound reductions
+are sizing statements, not measured speedups or executed-work counts.
+
+Inside a finite GPU allocation with a source-matched Release library selected,
+retain priming separately before fresh-process publication runs:
+
+```bash
+export README_BENCHMARK_METHODS=wb97m-v README_BENCHMARK_SIZES='3 12'
+export README_BENCHMARK_GRIDS='48,12,24 48,16,32'
+for mode in none cuda; do
+  export README_BENCHMARK_DENSITY_FITTING="$mode"
+  export README_BENCHMARK_REPEATS=1
+  export README_BENCHMARK_OUTPUT=".artifacts/readme-grids/priming/$mode"
+  bash benchmarks/run_readme_dft_benchmarks.sh both
+  export README_BENCHMARK_REPEATS=5
+  export README_BENCHMARK_OUTPUT=".artifacts/readme-grids/measurements/$mode"
+  bash benchmarks/run_readme_dft_benchmarks.sh both
+done
+```
+
+Run the separate reference sweep including 64×16×32 with one replay, using the
+convergence commands above and explicit `1e-5 Eh` / `1e-4 Eh/bohr` gates.
+Same-grid parity remains `1e-8 Eh` / `1e-7 Eh/bohr`; DF parity is not separate
+denser-grid convergence certification. n4's independent CPU-PySCF/GPU4PySCF
+grid regression passed 12 paired/open-shell, Direct/DF, LDA/PBE/r²SCAN cases
+with CUDA 12.9.1. Its earlier default-toolkit loading failure, initial empty-AO
+reference failures and finite-deadline partial runs remain in raw evidence,
+not accepted timing populations. These water results do not certify universal
+defaults, 48/96 atoms or other molecules/bases.
+
+## Independent XC/VV10 feasibility probe
+
+`benchmarks.readme_split_vv10` is **reference-only**: native SCF and analytic
+force owners still share one quadrature. Keep XC fixed while varying NLC;
+otherwise a force error cannot be attributed to VV10-grid coarsening alone.
+Both moving atomic rules are supplied independently to GPU4PySCF's SCF and
+full grid response. Complete timings include preparation, SCF, J/K, both
+quadratures, analytic forces, synchronization and host force export. No
+reference-only improvement is a measured native speedup.
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env PYTHONPATH=.:python python -m benchmarks.readme_split_vv10 \
+  --atoms 3 --xc-grid 48,16,32 --nlc-grid 32,12,24 --repeats 5 \
+  --finite-difference-step 0.001 --output .artifacts/split-vv10/3.json
+```
+
+Use `--density-fitting cuda` for matched cc-pVDZ-JKFIT DF. Retain priming
+separately; measured populations must start new processes. Compare original
+and moved geometries with the same XC grid and a denser NLC baseline, keeping
+energy/force convergence gates separate from timing. The optional finite
+difference checks H(1)-z at two steps; its energy-only diagnostic calls are not
+timing samples. Raw records retain both grid identities, all endpoint arrays,
+SCF iterations/builds, scheduler visibility and caller hashes. A baseline's
+self-difference is never accepted as convergence evidence.
+
+### Measured split-grid decision
+
+The 2026-10-19 feasibility run used GPU4PySCF 1.8.1 / PySCF 2.14.0 on n1's
+RTX 5090s: Slurm jobs 10263/10264, each limited to 30 minutes, with distinct
+scheduler-assigned devices. XC stayed **48×16×32** for every population.
+Direct and matched DF each tested NLC **64×16×32**, **48×16×32**,
+**48×12×24**, **32×12×24** and **24×8×16**, on both 3/12-atom geometries.
+All 20 populations completed: 240 full E+F calls, excluding separate priming
+and finite-difference diagnostics. Each population has one cold, five warm,
+one moved and five moved-warm calls; no setup time is subtracted.
+
+**Investigate independent grids next, with VV10 32×12×24 and XC 48×16×32.**
+Against NLC 64×16×32 with the same XC grid, that candidate's maximum errors
+over Direct/DF and original/moved 3/12-atom geometries were **6.38e-7 Eh** and
+**3.23e-6 Eh/bohr**, passing the exploratory `1e-5 Eh` / `1e-4 Eh/bohr` gates.
+These measure NLC-only convergence, not convergence of the fixed XC grid.
+Two-step H(1)-z finite differences at 0.001/0.0005 bohr on 3 atoms gave errors
+below `1.01e-8 Eh/bohr` in Direct and DF; this is not an all-coordinate Hessian
+or large-system response qualification.
+
+Complete endpoint seconds below compare **NLC 48×16×32 → 32×12×24**, with XC
+unchanged. Warm entries are medians of five calls; cold/moved are single calls.
+
+| Mode / atoms | Cold | Warm | Moved | Moved-warm |
+| --- | ---: | ---: | ---: | ---: |
+| Direct / 3 | 21.079 → 17.639 | 2.114 → 1.731 | 21.422 → 17.138 | 2.432 → 1.771 |
+| DF / 3 | 21.608 → 16.900 | 1.768 → 1.325 | 20.625 → 16.465 | 1.741 → 1.380 |
+| Direct / 12 | 102.527 → 39.562 | 8.498 → 3.787 | 92.849 → 32.823 | 8.560 → 3.030 |
+| DF / 12 | 100.671 → 36.219 | 7.938 → 2.688 | 90.863 → 31.073 | 7.881 → 2.583 |
+
+The 12-atom warm reference speedups are **2.24× Direct / 2.95× DF**. Actual
+SCF work is not reduced to fabricate this comparison: cold iterations/builds
+are 32/33 (3 atoms) and 45/46 (12); moved are 39/40 and 42/43. Warm calls use
+1/2 except original 12-atom Direct at NLC32, which uses 2/3 versus 1/2 at
+NLC48. Every population's phase work sets are retained in the archive.
+
+All tested smaller NLC rules pass these small-system gates, but NLC24's
+12-atom energy error reaches `6.64e-6 Eh`, leaving much less margin; do not
+promote it from timing alone. Coarsening is not monotonically faster on
+3 atoms. Keep the more conservative NLC32 as a follow-up candidate, not a
+universal default. It has 9,216 NLC points/atom versus 24,576 XC points/atom;
+the 62.5% NLC-point reduction is sizing, not executed work or a native speedup.
+
+The publication's `grid-timings.json.xz` contains a separate
+`split_grid_feasibility` summary: all 20 phase medians (rounded to 5 decimals),
+actual SCF work sets, both-geometry NLC errors, finite-difference diagnostics,
+reference versions, caller hashes and scheduler visibility. Its column-labelled
+rows bind full raw endpoint arrays/times to SHA-256 journals under
+`n1:/data/jzzeng/readme-split-vv10-20261019` (also ignored locally). The dense
+baseline has no self-convergence pass. These reference observations do not
+change the original shared-grid DF convergence scope.
+
+Native SCF, the C ABI, prepared plans and analytic-force owners still assume
+one quadrature. A production split needs separate grid/AO ownership, model and
+cache identities, resource/work accounting, final-density handoff and moving-grid
+response. Qualify native same-model parity, complete E+F and 48/96 atoms before
+changing defaults. Until then the matched native sweep remains shared-grid;
+**48×12×24** is its tested smaller option, not a 32-radial-point shared rule.

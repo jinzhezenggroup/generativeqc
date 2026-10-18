@@ -414,27 +414,36 @@ def test_retained_publication_replays_independent_energy_and_force_gates() -> No
     study = json.loads(
         lzma.decompress((publication / "grid-timings.json.xz").read_bytes())
     )
-    accuracy = study["accuracy_observations"]
     assert study["raw_evidence"]["files"]
     native_calls = 0
-    for population in accuracy["populations"]:
-        baselines = {
-            row["geometry"]: row
-            for row in population["reference_records"]
-            if row["phase"] in ("cold", "moved")
-        }
-        assert set(baselines) == {0, 1}
-        assert (
-            population["native_source_identity"] == manifest["native_source_identity"]
-        )
-        for row in population["native_records"]:
-            checked = check_record(row, baselines[row["geometry"]])
-            assert checked["gate"] is True
-            assert checked["energy_error"] == pytest.approx(
-                row["energy_error"], abs=1e-14
-            )
-            assert checked["force_error"] == pytest.approx(
-                row["force_error"], abs=1e-14
-            )
-            native_calls += 1
+    reference_calls = 0
+    for populations in study["modes"].values():
+        for population in populations:
+            for point in population["points"]:
+                reference = point["engines"]["reference"]["records"]
+                reference_calls += len(reference)
+                baselines = {
+                    row["geometry"]: row
+                    for row in reference
+                    if row["phase"] in ("cold", "moved")
+                }
+                assert set(baselines) == {0, 1}
+                assert (
+                    point["native_source_identity"]
+                    == manifest["native_source_identity"]
+                )
+                assert (
+                    point["native_library_sha256"] == manifest["native_library_sha256"]
+                )
+                for row in point["engines"]["native"]["records"]:
+                    checked = check_record(row, baselines[row["geometry"]])
+                    assert checked["gate"] is True
+                    assert checked["energy_error"] == pytest.approx(
+                        row["energy_error"], abs=1e-14
+                    )
+                    assert checked["force_error"] == pytest.approx(
+                        row["force_error"], abs=1e-14
+                    )
+                    native_calls += 1
     assert native_calls == manifest["native_endpoint_calls"]
+    assert reference_calls == manifest["reference_endpoint_calls"]

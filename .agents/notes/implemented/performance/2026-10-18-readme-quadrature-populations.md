@@ -61,3 +61,37 @@ reference arrays. The superseded README DF SVG is losslessly compressed using
 its existing stored/expanded-identity verifier, matching the earlier Direct
 figure's storage policy. Do not raise the budget or delete other studies'
 observations to fit this publication.
+
+## Scope correction (2026-10-19)
+
+The user rejected replacing the entire HF/DFT overview with the small VV10
+study. Restore both complete overview figures and every pre-existing study
+unchanged, including the DF SVG whose storage was modified above. The scoped
+grid study has its own asset and supplementary link, not ownership of the
+other methods or larger-system results. Deduplicate its endpoint arrays and
+metadata within the new publication instead of modifying older evidence.
+Every measured native/reference force array, endpoint time, SCF build count,
+semantic work counter and raw journal hash remains retained.
+
+Independent XC and VV10 grids are worth measuring, but the native SCF and
+stationary geometry owners currently share a grid. A new reference-only
+feasibility probe fixes XC while scanning NLC, checks original/moved E+F and
+finite-difference forces, and explicitly refuses to label its timings as a
+native improvement. Production split-grid admission needs its own grid owner,
+model/cache identity, resource accounting and analytic-response qualification.
+
+The completed 2026-10-19 reference-only probe keeps XC at 48×16×32 and measures
+five NLC rules on Direct/DF, original/moved 3/12-atom water: 20 populations,
+240 full E+F calls, plus separate priming and two-step finite differences.
+NLC32×12×24 passes NLC-only gates with maximum errors 6.38e-7 Eh / 3.23e-6
+Eh/bohr; 12-atom warm reference medians improve 8.498→3.787 s Direct and
+7.938→2.688 s DF. Original Direct/12 warm work increases from 1/2 to 2/3
+iterations/builds, so the gain is not fewer SCF iterations. NLC24 is faster in
+some cases but has much less energy-error margin. Prefer NLC32 as a future
+native split-grid candidate, not a shared-grid radial reduction or a default.
+The new study's existing archive holds compact hash-linked reference summaries;
+all original native/reference endpoint arrays remain intact. Full probe journals
+stay on n1 and ignored locally; no older evidence or budget is changed.
+The measured grid adapter precedes an annotation-only `Iterator` import move
+under `TYPE_CHECKING`. Preserve its measured hash and snapshot rather than
+relabelling those bytes as the subsequently formatted checkout.

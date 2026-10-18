@@ -27,12 +27,7 @@ the preview uses its existing Git snapshot. The verifier checks both stored
 and expanded identities. This storage-only compaction makes room for the
 native r²SCAN-3c update without removing observations or raising the 64-MiB cap.
 
-![DF cold and warm E+F](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/4e79f783640f71d41cd5dc6d1fe798e05faf55a1/benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
-
-The superseded DF figure is also retained losslessly as `df-cold-warm.svg.xz`,
-with stored and original expanded hashes checked by the existing verifier.
-This 2026-10-19 storage-only compaction makes room for the explicit-grid README
-study without changing historical observations or the aggregate evidence cap.
+![DF cold and warm E+F](df-cold-warm.svg)
 
 Full [Direct timing/work table](timings.md) and
 [DF timing/work table](df-timings.md).
