@@ -1,5 +1,10 @@
 {
   "families": {
+    "occupied-xc-certificate-20261018": {
+      "owner": "occupied-XC all-five-feature cancellation repair and original-density fallback",
+      "reason": "Retain all 240 native, 12 same-card peer and four diagnostic full force arrays losslessly, independent oracle geometries, actual SCF/Fock counts, complete endpoint negatives, reduced exclusive profiles and source/resource/sanitizer receipts. Byte-plane XOR storage preserves every FP64 bit; duplicate nested timing histories, raw profiler databases, binaries and full source inventories stay ignored with identities. No storage-budget increase, historical evidence deletion, publication exception or scientific/default-promotion waiver.",
+      "review_document": "benchmarks/results/occupied-xc-certificate-20261018/README.md"
+    },
     "ks-resident-final-validation-default-20261011": {
       "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
@@ -279,6 +284,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/occupied-xc-certificate-20261018/evidence.json.xz",
+      "family": "occupied-xc-certificate-20261018",
+      "bytes": 188680,
+      "sha256": "7d07505aa86395273194340a5948ac4f9c619c8d7fe698f9c908176d4f8dd85f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All-five-feature cancellation repair: full FP64 endpoint arrays and independent oracles, convergence/work/source receipts, original-image controls, reversed order and retained default-rejection evidence"
+    },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
       "family": "bounded-dft-schedules-2475-2479",

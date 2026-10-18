@@ -105,7 +105,7 @@
     },
     {
       "id": "ks.occupied-xc-features",
-      "classification": "needs-qualification",
+      "classification": "negative-evidence",
       "controls": [
         "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
       ],
@@ -116,12 +116,15 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_precision.hpp"
       ],
-      "rationale": "Only explicit 1 requests strict-FP64 occupied-frame features; unset, empty and other values retain the matrix default pending renewed qualification. Authenticated frames need room for projection and outward-rounded absolute-dot panels inside the existing scratch. Every rho, gradient and tau feature must pass a pointwise cancellation/roundoff certificate; refusal recomputes the original stored-D consumer with its scalar/warp dispatch and finite-error contract. Response, nonlocal, chunk, mixed or stale frames retain bounded matrix evaluation; potential assembly and exact Direct J/K are unchanged.",
-      "revisit_condition": "Require independent stored-density edge cases, native owner/sanitizer/resource checks and source-matched complete cold, five-warm, moved and five-moved-warm E+F populations before extending precision, feature or lifetime admission. Retain original-library controls for preparation/module-loading costs; do not infer universal warm gains from cold contraction improvements.",
+      "rationale": "Only explicit 1 requests strict-FP64 occupied-frame features; unset, empty and other values retain the matrix default. The renewed source-matched 96/48-atom populations retain cold/moved regressions after adding all-five-feature cancellation certificates and original stored-D fallback; warm behavior does not qualify default promotion. Authenticated frames need room for projection and outward-rounded absolute-dot panels inside existing scratch. Refusal preserves the matrix scalar/warp dispatch and finite-error contract. Response, nonlocal, chunk, mixed or stale frames retain bounded matrix evaluation; potential assembly and exact Direct J/K are unchanged.",
+      "revisit_condition": "Require independently reviewed cancellation/underflow bounds and a reduction in actual certificate/refusal work, then repeat independent stored-density edge cases, native owner/sanitizer/resource checks and source-matched complete cold, five-warm, moved and five-moved-warm E+F populations. Retain original-library controls and actual convergence counts; no iteration normalization, tolerance relaxation or default activation from isolated projection gains.",
       "evidence": [
         "docs/user/ks_options.md",
         "docs/developer/xc_native_cuda.md",
         ".agents/notes/implemented/numerics/2026-10-17-occupied-xc-representability.md",
+        ".agents/notes/implemented/numerics/2026-10-18-occupied-xc-error-certificate.md",
+        "benchmarks/results/occupied-xc-certificate-20261018/README.md",
+        "tests/python/test_xc_occupied_certificate.py",
         "tests/python/test_xc_occupied_selection.py",
         "tests/python/test_xc_occupied_features.py",
         "tests/python/test_xc_occupied_features_cuda.py",

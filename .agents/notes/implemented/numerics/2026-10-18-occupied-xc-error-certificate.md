@@ -1,6 +1,6 @@
 # Decision: certify occupied-XC cancellation against the stored density
 
-Status: implemented, opt-in; renewed resource and complete-endpoint qualification required
+Status: implemented, opt-in; renewed numerical gates pass, default performance rejected
 Date: 2026-10-18
 
 ## Why the exponent repair was insufficient
@@ -183,3 +183,34 @@ scratch with AO-stride products, loosening numerical gates, or changing tile/pag
 scheduling to conceal extra certificate/fallback arithmetic. Endpoint evidence
 must count or explicitly mark unavailable that additional work, not infer a
 win from projection admission or kernel launch counts alone.
+
+## Renewal outcome
+
+All 20 native populations (240 E+F calls) completed within their original
+1800-second limits. Every full force array passes the independent reference;
+maximum energy/force errors are `2.547e-11` Eh / `5.735e-11` Eh/Bohr.
+The same-image primary 96-atom control/candidate cold times are
+242.955053/279.241177 s, with matched 24/24 iteration/Fock counts; moved is
+143.150417/162.011812 s with matched 13/13 counts. Warm/moved-warm medians
+are essentially flat. The 48-atom cold/moved regressions are also about 16%.
+The reverse 96-atom control changes convergence (candidate cold 25 versus
+baseline 24, baseline moved 14 versus candidate 13); its elapsed time is
+retained without iteration normalization or a pure-kernel interpretation.
+
+The counted cold profile has the same 24-versus-25 convergence distinction.
+Raw XC device sums increase 95.051359 to 135.075474 s. Candidate occupied
+feature kernels consume 25.541778 s standalone plus 18.377863 s compact;
+these contain certificate and original-D refusal work, whose per-point
+refusal count was not instrumented. They must not be described as projection
+work savings. Order-6/7/8 force work counters remain identical; warm device
+times are approximately 2.611/0.491/0.454 s in both arms.
+
+Therefore the mathematical repair is retained for explicit opt-in use, not
+promoted by default. The next smallest performance step is to avoid paying
+projection/certificate work followed by expensive per-point original-D
+recomputation, using a proved bounded early refusal and the existing tiled
+matrix consumer. It needs a separate generated implementation, independent
+review and complete-endpoint requalification, not another page-width trial.
+The [retained packet](../../../../benchmarks/results/occupied-xc-certificate-20261018/README.md)
+contains lossless full-force reconstruction, all convergence counts and
+mutually exclusive wall ledgers separately from kernel device sums.
