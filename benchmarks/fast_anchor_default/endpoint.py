@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
+import tempfile
 import traceback
+import uuid
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -45,6 +48,48 @@ def payload(value: Any) -> Any:
     if isinstance(value, np.generic):
         return value.item()
     raise TypeError(f"Unrecorded diagnostic type: {type(value).__name__}")
+
+
+def publish_json(path: Path, record: dict[str, Any]) -> None:
+    """Expose complete JSON atomically without replacing files or symlinks."""
+    data = json.dumps(record, indent=2, allow_nan=False) + "\n"
+    with tempfile.TemporaryDirectory(prefix=".receipt-", dir=path.parent) as staging:
+        staged = Path(staging) / path.name
+        with staged.open("x") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(staged, path)
+
+
+def json_evidence(value: Any, invalid: list[str], location: str = "$") -> Any:
+    """Keep nonfinite diagnostics readable while refusing their qualification."""
+    if isinstance(value, float) and not math.isfinite(value):
+        invalid.append(location)
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): json_evidence(item, invalid, f"{location}.{key}")
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            json_evidence(item, invalid, f"{location}[{index}]")
+            for index, item in enumerate(value)
+        ]
+    return value
+
+
+def publish_density(owner: Any, path: Path) -> dict[str, Any]:
+    """Stage the existing export and publish it without clobbering evidence."""
+    with tempfile.TemporaryDirectory(prefix=".density-", dir=path.parent) as staging:
+        staged = Path(staging) / path.name
+        result = export_density(owner, staged)
+        density = np.load(staged, allow_pickle=False)
+        if not density.size or not np.isfinite(density).all():
+            raise ValueError("Final density is empty or nonfinite")
+        os.link(staged, path)
+    return {**result, "path": path.name}
 
 
 def reference_gate(
@@ -88,33 +133,16 @@ def main() -> None:
     parser.add_argument("--delta", choices=("0", "1", "auto"), required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
-        raise RuntimeError("Real GPU endpoints require Slurm-assigned visibility")
-    if args.output.exists():
-        raise FileExistsError(args.output)
-    selected = os.environ.get("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")
-    if selected != (None if args.delta == "auto" else args.delta):
-        raise RuntimeError("Argument and native Fast anchor selection differ")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    root = Path(os.environ["EXPERIMENT_ROOT"])
-    case = scaling_cases()[f"water-{args.atoms}"]
-    basis_path = root / "def2-svp.json"
-    basis, _ = load_comparison_basis(
-        basis_path, case, role="orbital", compute_forces=True
-    )
     record = {
         "schema": 1,
         "atoms": args.atoms,
         "policy": args.policy,
         "delta": args.delta,
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
-        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "method": "wb97m-v-rks",
         "grid": [48, 16, 32],
         "density_fitting": "none",
-        "basis_identity": basis.identity,
-        "basis_sha256": hashlib.sha256(basis_path.read_bytes()).hexdigest(),
-        "atoms_bohr": [[atom[0], list(atom[1])] for atom in case.atoms],
         "initial_guess_request": "native auto (no external seed)",
         "warm_owner": "fresh; export enabled but no previous execute or imported seed",
         "timing_scope": "constructor+prepare+first synchronized E/F+host/density export+owner teardown+clear_cache; imports/basis parsing/provenance/oracle excluded",
@@ -126,8 +154,31 @@ def main() -> None:
         "production_defaults_changed": True,
     }
     calculator = None
-    started = perf_counter()
+    started = None
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     try:
+        if not os.environ.get("SLURM_JOB_ID") or not os.environ.get(
+            "CUDA_VISIBLE_DEVICES"
+        ):
+            raise RuntimeError("Real GPU endpoints require Slurm-assigned visibility")
+        for path in (args.output, args.output.with_suffix(".density.npy")):
+            if os.path.lexists(path):
+                raise FileExistsError(path)
+        selected = os.environ.get("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")
+        if selected != (None if args.delta == "auto" else args.delta):
+            raise RuntimeError("Argument and native Fast anchor selection differ")
+        root = Path(os.environ["EXPERIMENT_ROOT"])
+        case = scaling_cases()[f"water-{args.atoms}"]
+        basis_path = root / "def2-svp.json"
+        basis, _ = load_comparison_basis(
+            basis_path, case, role="orbital", compute_forces=True
+        )
+        record.update(
+            basis_identity=basis.identity,
+            basis_sha256=hashlib.sha256(basis_path.read_bytes()).hexdigest(),
+            atoms_bohr=[[atom[0], list(atom[1])] for atom in case.atoms],
+        )
+        started = perf_counter()
         calculator = PrecisionCalculator(
             method="wb97m-v-rks",
             basis=basis,
@@ -184,7 +235,7 @@ def main() -> None:
                     raise RuntimeError(
                         "Audit detached the native owner; no candidate density exported"
                     )
-                record["final_density"] = export_density(
+                record["final_density"] = publish_density(
                     owner._owner, args.output.with_suffix(".density.npy")
                 )
             cp.cuda.runtime.deviceSynchronize()
@@ -210,11 +261,28 @@ def main() -> None:
             )
     except Exception:  # noqa: BLE001 - Retain every failed endpoint and its traceback.
         record["error"] = traceback.format_exc()
-        record.setdefault("failed_elapsed_seconds", perf_counter() - started)
+        if started is not None:
+            record.setdefault("failed_elapsed_seconds", perf_counter() - started)
     finally:
         if calculator is not None:
-            calculator.clear_cache()
-    args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+            try:
+                calculator.clear_cache()
+            except Exception:  # noqa: BLE001 - Cleanup cannot erase the first failure.
+                record["cleanup_error"] = traceback.format_exc()
+    invalid: list[str] = []
+    record = json_evidence(record, invalid)
+    if invalid:
+        record["nonfinite_fields"] = invalid
+    try:
+        publish_json(args.output, record)
+    except FileExistsError:
+        record.setdefault("error", "Requested receipt path is already occupied")
+        record["publication_error"] = traceback.format_exc()
+        failure = args.output.with_name(
+            f"{args.output.stem}.failed-{uuid.uuid4().hex}.json"
+        )
+        publish_json(failure, record)
+        print(f"Failure receipt: {failure}", flush=True)
     print(
         json.dumps(
             {
@@ -237,11 +305,13 @@ def main() -> None:
     )
     if (
         record.get("error")
+        or record.get("cleanup_error")
+        or record.get("nonfinite_fields")
         or not record.get("succeeded")
         or not record.get("converged")
         or not record.get("finite_forces")
         or record.get("warm_start_used")
-        or not record.get("independent_gate", {"gate": True})["gate"]
+        or not record.get("independent_gate", {}).get("gate")
     ):
         raise SystemExit(1)
 

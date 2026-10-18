@@ -105,7 +105,7 @@ not decrease, do not justify its enablement using Fast's result.
 ## References
 
 - `benchmarks/results/wb97mv-anchor-delta-20261018/README.md`
-- `benchmarks/results/wb97mv-anchor-delta-20261018/evidence.json`
+- `benchmarks/results/wb97mv-anchor-delta-20261018/evidence.json.xz`
 - `benchmarks/results/wb97mv-anchor-delta-20261018/experiment.patch`
 - Raw local/remote bundle: `.artifacts/scf-delta96-20261018/` and
   `/data/jzzeng/scf-delta96-20261018/` on n1/n4.

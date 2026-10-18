@@ -110,7 +110,12 @@ first-use subtraction is made. Do not generalize the water-96 win to all sizes.
 
 ## Evidence and reproduction
 
-`evidence.json` retains work, precision, numerical and paired-state reductions.
+`evidence.json.xz` retains work, precision, numerical and paired-state reductions.
+`evidence.storage.json` binds the lossless XZ representation to the exact
+original JSON bytes. Read it with
+`tools.generativeqc_validation.record.load_json`, or recover the historical
+bytes with `xz -dc evidence.json.xz`. No slower observations, original hashes,
+work counters or acceptance gates were removed.
 `experiment.patch` is the isolated source change. Raw results, forces,
 densities, build/cache/authentication receipts and executable harnesses remain
 in ignored `.artifacts/scf-delta96-20261018/` locally and

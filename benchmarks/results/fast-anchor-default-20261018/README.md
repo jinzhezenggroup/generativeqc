@@ -2,7 +2,7 @@
 
 This qualifies the guarded production default, not the earlier environment-only
 experiment. The frozen base is `5d1dbbcaf2f04fb83980c8f988795df28b41e392` plus
-the three production input changes retained in `qualification.json`. No unrelated
+the three production input changes retained in `qualification.json.xz`. No unrelated
 changes from the original dirty working checkout are part of this source.
 
 ## Admission and retained fallback
@@ -89,14 +89,21 @@ Compiler commands and before/after shared-cache statistics are retained.
 
 ## Evidence and reproduction
 
-`qualification.json` retains all six accepted reductions, raw-receipt hashes,
+`qualification.json.xz` retains all six accepted reductions, raw-receipt hashes,
 unchanged-library checks, work/precision inventories, independent gates, paired
 state differences, build authentication and compiler-cache snapshots.
+The XZ representation is lossless. `qualification.storage.json` records the
+original/stored sizes and SHA256 identities; use
+`tools.generativeqc_validation.record.load_json` to read the compressed record,
+or `xz -dc qualification.json.xz` to recover its exact historical JSON bytes.
+
 Full arrays, raw receipts, test logs, executable source archive and build harness
 remain in ignored `.artifacts/fast-anchor-default-20261018/` in the PR worktree
 and `/data/jzzeng/fast-anchor-default-20261018/` on n1/n4 as applicable.
 
-The retained `endpoint.py` and `run-endpoint.sh` reproduce each arm. Source the
+The retained [endpoint driver](../../fast_anchor_default/endpoint.py),
+[Slurm wrapper](../../fast_anchor_default/run-endpoint.sh) and
+[reducer](../../fast_anchor_default/analyze.py) reproduce each arm. Source the
 CUDA/Python environment, set `EXPERIMENT_ROOT` to an authenticated directory with
 `source/`, `library/`, `def2-svp.json`, `reference12.json`, `reference96.json` and
 the scripts, and preserve the same 2 GiB source allowance. The reference receipts
@@ -104,16 +111,21 @@ are the same independently reconverged oracles described by the frozen experimen
 their hashes are retained with each acceptance result.
 
 ```bash
+cp benchmarks/fast_anchor_default/{endpoint.py,run-endpoint.sh} "$EXPERIMENT_ROOT/"
 srun --exclusive --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:20:00 bash "$EXPERIMENT_ROOT/run-endpoint.sh" \
   fast 96 auto "$EXPERIMENT_ROOT/new-fast96-auto"
-python benchmarks/results/fast-anchor-default-20261018/analyze.py \
+python benchmarks/fast_anchor_default/analyze.py \
   .artifacts/fast-anchor-default-20261018/suite \
   --build-receipts .artifacts/fast-anchor-default-20261018/build-receipts \
   --output /tmp/fast-anchor-qualification.json
 ```
 
-Run the corresponding `0` arm in a fresh output directory. Use an allowed node
+Run the corresponding `0` arm in a fresh output directory. The reducer requires
+all six unique arms (Fast 12/96 default/off and FP64 12 default/off), retains
+rejected-reduction diagnostics, and never replaces an existing output. Endpoint
+failures, including cleanup errors, remain in separate fresh-attempt receipts.
+These rerun safeguards do not alter the historical measurements or their hashes. Use an allowed node
 (`n1`, `n2`, `n4` or `n5`), a compatible GPU request and finite scheduler time.
 The toolchain on n4 uses the retained matching private glibc loader through its
 Python wrapper; do not replace the Slurm device environment to work around host
