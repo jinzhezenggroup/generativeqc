@@ -24,6 +24,10 @@ try:
 except ModuleNotFoundError:
     from benchmarks._support import raw_output_path
 
+from benchmarks._gpu4pyscf_grid import (
+    preserve_reference_grid_order,
+    reference_grid_order,
+)
 from benchmarks.dft_force_components import normalize_force_work
 
 
@@ -256,6 +260,9 @@ def reference_engine(
     engine.conv_tol_grad = 1e-8
     engine.direct_scf_tol = 1e-12
     engine.max_cycle = 180
+    # Dense radial tails can form empty AO blocks. Preserve their point offsets
+    # so VV10 density arrays still correspond to the full coordinates/weights.
+    preserve_reference_grid_order(engine)
     if full_fock:
         configure_reference_full_fock(engine)
     return engine
@@ -279,7 +286,8 @@ def reference_sample(
         raise RuntimeError("GPU4PySCF WB97M-V did not converge")
     gradient = engine.nuc_grad_method()
     gradient.grid_response = True
-    forces = -gradient.kernel()
+    with reference_grid_order():
+        forces = -gradient.kernel()
     cp.cuda.Stream.null.synchronize()
     elapsed = perf_counter() - started
     convergence = gpu_convergence_payload([engine], [tracker])

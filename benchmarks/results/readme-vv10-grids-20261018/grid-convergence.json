@@ -1,0 +1,895 @@
+{
+  "schema": "generativeqc.readme-grid-convergence.v1",
+  "energy_tolerance_hartree": 1e-05,
+  "force_tolerance_hartree_per_bohr": 0.0001,
+  "baseline_is_exact_integral": false,
+  "comparisons": [
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          24,
+          8,
+          16
+        ],
+        "points_per_atom": 3072,
+        "semilocal_points": 9216,
+        "vv10_points": 9216,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 84934656
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-24x8x16/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "828a46cbbbbf23c079e828f3ab73b0c8b8badc5ca3741d4edfc6e9038922b751"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 0.00018877249829074572,
+          "force_max_error_hartree_per_bohr": 0.001076235643838519
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 0.00018938655894373824,
+          "force_max_error_hartree_per_bohr": 0.0010734510641747796
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          32,
+          12,
+          24
+        ],
+        "points_per_atom": 9216,
+        "semilocal_points": 27648,
+        "vv10_points": 27648,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 764411904
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-32x12x24/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "ccd5952cb2fd7e1a2dbd36d6a846acf4abda0123c73dee5666bfe24f328d75fc"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 5.472786881455249e-06,
+          "force_max_error_hartree_per_bohr": 0.0001801849651563714
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 5.456044604557064e-06,
+          "force_max_error_hartree_per_bohr": 0.0001799243049860344
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          32,
+          16,
+          32
+        ],
+        "points_per_atom": 16384,
+        "semilocal_points": 49152,
+        "vv10_points": 49152,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 2415919104
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-32x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "a99cba0e193f3adc342a77eaffe9ecba0b714c4b2ad96b6e5ae795ad7c606355"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 5.397918982907868e-06,
+          "force_max_error_hartree_per_bohr": 0.00016339214398097823
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 5.3993220774373185e-06,
+          "force_max_error_hartree_per_bohr": 0.0001635084056048619
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          40,
+          16,
+          32
+        ],
+        "points_per_atom": 20480,
+        "semilocal_points": 61440,
+        "vv10_points": 61440,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 3774873600
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-40x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "3d48ba8c695a3a129627b657895a40bb433756eab28ffcf8c43ca8f1124ef270"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 1.7828544116582634e-06,
+          "force_max_error_hartree_per_bohr": 6.010344069906637e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 1.7795839823975257e-06,
+          "force_max_error_hartree_per_bohr": 6.010150355439947e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          48,
+          12,
+          24
+        ],
+        "points_per_atom": 13824,
+        "semilocal_points": 41472,
+        "vv10_points": 41472,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 1719926784
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-48x12x24/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429507e60df826238e9c277a869013f13e457bf874bfbb537d2dc9cc84348e44"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 2.0858554279357122e-06,
+          "force_max_error_hartree_per_bohr": 3.478663037448371e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 2.0979275490162763e-06,
+          "force_max_error_hartree_per_bohr": 3.477819426800366e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          48,
+          16,
+          32
+        ],
+        "points_per_atom": 24576,
+        "semilocal_points": 73728,
+        "vv10_points": 73728,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 5435817984
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-48x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "298bcf08b0abddf9c62b53c05289cfd0918ad537d8929742b7a490c62d6cd83a"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 1.3308919619703374e-06,
+          "force_max_error_hartree_per_bohr": 2.9689487577477802e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 1.3321859029247207e-06,
+          "force_max_error_hartree_per_bohr": 2.967984398749568e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          64,
+          12,
+          24
+        ],
+        "points_per_atom": 18432,
+        "semilocal_points": 55296,
+        "vv10_points": 55296,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 3057647616
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x12x24/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "e90bac5faef3e57e7da73d299bb00a0945b23cf044e5a9880770bc0fdc32c864"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 7.328164741693399e-07,
+          "force_max_error_hartree_per_bohr": 1.845386375931568e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 7.468343596883642e-07,
+          "force_max_error_hartree_per_bohr": 1.846818484718682e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 3,
+      "grid_work": {
+        "dimensions": [
+          64,
+          16,
+          32
+        ],
+        "points_per_atom": 32768,
+        "semilocal_points": 98304,
+        "vv10_points": 98304,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 9663676416
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": true,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/3/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "429edb97c30d308323bab04c5530960b8a7acb36a962a4830040b053461e4b24"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 0.0,
+          "force_max_error_hartree_per_bohr": 0.0
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 0.0,
+          "force_max_error_hartree_per_bohr": 0.0
+        }
+      ],
+      "convergence_gate": null
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          24,
+          8,
+          16
+        ],
+        "points_per_atom": 3072,
+        "semilocal_points": 36864,
+        "vv10_points": 36864,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 1358954496
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-24x8x16/wb97m-v/12/reference.json",
+        "status": "not_run"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": null
+        },
+        {
+          "geometry": 1,
+          "gate": null
+        }
+      ],
+      "convergence_gate": null
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          32,
+          12,
+          24
+        ],
+        "points_per_atom": 9216,
+        "semilocal_points": 110592,
+        "vv10_points": 110592,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 12230590464
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-32x12x24/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "e45bfbe14dc1753c30808502325b612eaf2dc4e2bfd0088d0aa1224694bf3743"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 6.172307678298239e-05,
+          "force_max_error_hartree_per_bohr": 0.00021711464126461522
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 6.169189884985826e-05,
+          "force_max_error_hartree_per_bohr": 0.00021709719763141067
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          32,
+          16,
+          32
+        ],
+        "points_per_atom": 16384,
+        "semilocal_points": 196608,
+        "vv10_points": 196608,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 38654705664
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-32x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "d2ae68ba57acaf1fbd4f87fd5df3836f3e4d2a175f7d514cc5612184182ceff7"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 5.752807385306369e-05,
+          "force_max_error_hartree_per_bohr": 0.0002455658955486939
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 5.752279071202793e-05,
+          "force_max_error_hartree_per_bohr": 0.00024555950214244504
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          40,
+          16,
+          32
+        ],
+        "points_per_atom": 20480,
+        "semilocal_points": 245760,
+        "vv10_points": 245760,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 60397977600
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-40x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "79410fdc18ffcd83f629be4a57e94c498c9605a98ec662b1e9be414ed03b8df8"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": false,
+          "energy_error_hartree": 3.4349498037045123e-06,
+          "force_max_error_hartree_per_bohr": 0.00011492919581268524
+        },
+        {
+          "geometry": 1,
+          "gate": false,
+          "energy_error_hartree": 3.4297811453143368e-06,
+          "force_max_error_hartree_per_bohr": 0.00011493099369230819
+        }
+      ],
+      "convergence_gate": false
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          48,
+          12,
+          24
+        ],
+        "points_per_atom": 13824,
+        "semilocal_points": 165888,
+        "vv10_points": 165888,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 27518828544
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-48x12x24/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "f9edf4eed66b5366c3c28827bdda5f87c2b9cf3327150f5d51c7bd3e90bab0d9"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 5.226232133281883e-06,
+          "force_max_error_hartree_per_bohr": 4.2511547562629204e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 5.2422718681555125e-06,
+          "force_max_error_hartree_per_bohr": 4.250403623862198e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          48,
+          16,
+          32
+        ],
+        "points_per_atom": 24576,
+        "semilocal_points": 294912,
+        "vv10_points": 294912,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 86973087744
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-48x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "2bd45145b2127b577a54fb269dcb8377c41331d7f2fb66db9bbd1952456bf2c0"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 6.888507869007299e-06,
+          "force_max_error_hartree_per_bohr": 3.2060200492622926e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 6.8890902866769466e-06,
+          "force_max_error_hartree_per_bohr": 3.206056972704374e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          64,
+          12,
+          24
+        ],
+        "points_per_atom": 18432,
+        "semilocal_points": 221184,
+        "vv10_points": 221184,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 48922361856
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": false,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x12x24/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "3285b5138ac89e92abdcc17e4a0a83ca9e07f97190b2ec74ed1d1f77393c5f56"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 2.2263299115365953e-06,
+          "force_max_error_hartree_per_bohr": 2.7381591265029925e-05
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 2.2064804170440766e-06,
+          "force_max_error_hartree_per_bohr": 2.7425582053819397e-05
+        }
+      ],
+      "convergence_gate": true
+    },
+    {
+      "method": "wb97m-v",
+      "density_fitting": false,
+      "atoms": 12,
+      "grid_work": {
+        "dimensions": [
+          64,
+          16,
+          32
+        ],
+        "points_per_atom": 32768,
+        "semilocal_points": 393216,
+        "vv10_points": 393216,
+        "vv10_grid_policy": "same_as_semilocal",
+        "vv10_unscreened_ordered_pair_upper_bound": 154618822656
+      },
+      "baseline_grid": [
+        64,
+        16,
+        32
+      ],
+      "is_baseline": true,
+      "reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "baseline_reference": {
+        "file": ".artifacts/vv10-grid/reference-sweep/grid-64x16x32/wb97m-v/12/reference.json",
+        "status": "measured",
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 800
+        },
+        "sha256": "55e2e621080ebaefa1e3710f018a537a89cf832d9c10e54cb46dd4c1b4180a35"
+      },
+      "geometries": [
+        {
+          "geometry": 0,
+          "gate": true,
+          "energy_error_hartree": 0.0,
+          "force_max_error_hartree_per_bohr": 0.0
+        },
+        {
+          "geometry": 1,
+          "gate": true,
+          "energy_error_hartree": 0.0,
+          "force_max_error_hartree_per_bohr": 0.0
+        }
+      ],
+      "convergence_gate": null
+    }
+  ]
+}

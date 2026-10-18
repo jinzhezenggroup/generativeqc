@@ -196,6 +196,7 @@ def collect(
                     "basis_file_sha256",
                     "native_force_components",
                     "grid_points",
+                    "grid_work",
                     "scheduler",
                     "reference_tensor_engine",
                     "reference_libxc",

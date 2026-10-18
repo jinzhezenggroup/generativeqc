@@ -17,6 +17,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+from benchmarks._readme_grid import grid_directory
 from benchmarks.readme_dft import METHODS, SCHEMA
 from tools.render_omol25_benchmarks import collect
 
@@ -31,6 +32,26 @@ LABELS = {
     "wb97m-v": "ωB97M-V",
 }
 COLORS = {"native": "#087e8b", "reference": "#cf5c36"}
+
+
+def quadrature_label(points: list[dict[str, Any]]) -> str | None:
+    """Label a homogeneous timing series; never connect different grid models."""
+    grids = {
+        json.dumps(point["protocol"]["grid"], sort_keys=True)
+        for point in points
+        if point.get("protocol", {}).get("grid") is not None
+    }
+    if len(grids) > 1:
+        raise ValueError("different grids cannot share a timing series")
+    if not grids:
+        return None
+    spec = json.loads(next(iter(grids)))
+    dimensions = (
+        [spec[name] for name in ("radial_points", "angular_polar", "angular_azimuth")]
+        if isinstance(spec, dict)
+        else spec
+    )
+    return "grid " + "×".join(str(count) for count in dimensions)
 
 
 def phase_rows(entry: dict[str, Any], phase: str) -> list[dict[str, Any]]:
@@ -179,6 +200,10 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         }
     )
     methods = list(summary["methods"])
+    grid_labels = {
+        method: quadrature_label(points)
+        for method, points in summary["methods"].items()
+    }
     composite_note = (
         "r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP. "
         if "r2scan-3c" in methods
@@ -237,6 +262,8 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             "def2-mTZVPP · includes D4 + gCP" if method == "r2scan-3c" else "def2-SVP"
         )
         title = f"{LABELS[method]}\n{basis}"
+        if grid_labels[method]:
+            title += f" · {grid_labels[method]}"
         annotation = summary.get("panel_annotations", {}).get(method)
         if annotation:
             title += f"\n{annotation}"
@@ -314,7 +341,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
     fig.text(
         0.5,
         0.018,
-        f"{route} · lower is faster · warm: median of 5 fixed-density replays · bars: min–max · crosses: varying SCF work\n"
+        f"{route} · lower is faster · warm: median of fixed-density replays · bars: min–max · crosses: varying SCF work\n"
         f"Cold includes preparation. {composite_note}Complete phases shown independently; open markers: accuracy unchecked.",
         ha="center",
         fontsize=9,
@@ -330,6 +357,14 @@ def render(summary: dict[str, Any], destination: Path) -> None:
 
     lines = [
         f"# Complete {route} endpoint timings",
+        "",
+        *[
+            f"- {LABELS[method]}: {label}; XC/VV10 share this unpruned quadrature."
+            if method == "wb97m-v"
+            else f"- {LABELS[method]}: {label}."
+            for method, label in grid_labels.items()
+            if label
+        ],
         "",
         "| Functional | Atoms (AOs) | GenerativeQC cold (s) | GPU4PySCF cold (s) | GenerativeQC warm (s) | GPU4PySCF warm (s) |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -409,6 +444,12 @@ def main() -> None:
     parser.add_argument("--sizes", nargs="+", type=int, default=[3, 12, 48, 96])
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument(
+        "--grid",
+        nargs=3,
+        type=int,
+        help="Select a grid-RxPxA population under --raw from an explicit grid sweep",
+    )
+    parser.add_argument(
         "--density-fitting",
         action="store_true",
         help="Label a separately gated DF campaign",
@@ -418,6 +459,10 @@ def main() -> None:
         help="Exact native source revision, recorded alongside binary and consumer hashes",
     )
     args = parser.parse_args()
+    if args.grid is not None:
+        if args.raw is None:
+            parser.error("--grid requires --raw")
+        args.raw = args.raw / grid_directory(tuple(args.grid))
     args.output.mkdir(parents=True, exist_ok=True)
     if args.raw:
         summary = {

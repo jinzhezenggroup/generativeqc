@@ -1,5 +1,10 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-18 WB97M-V grid study](readme-vv10-grids-20261018/README.md)
+compares explicit 48×12×24 and 48×16×32 quadratures on master, with newly
+measured Direct/DF E+F endpoints, separate same-grid parity and cross-grid
+convergence gates, and grid-local source/work/cache-priming provenance.
+
 The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
 separates shared J/K, nonlocal packet and native-force gains from remaining
 small-system slowdowns, with source-bound independent accuracy and work counts.

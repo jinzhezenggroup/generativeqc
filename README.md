@@ -124,46 +124,29 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
-Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
-#2563, #2567 and the #2558 force stack. All other native points retain the frozen
-#2531 + #2532 snapshot. GPU4PySCF ωB97M-V Direct/96 and DF/96 are supplemented
-on 2026-10-18; its other timings and independent references remain historical,
-not rerun. Cold includes setup and the
-first E+F call; warm reuses converged density. The water clusters have
-3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
+**ωB97M-V complete energy + analytic forces, with explicit grid sizes** on
+RTX 5090 (FP64), measured from master `2a62a17e8` on 2026-10-18. The 3/12-atom
+water clusters use spherical def2-SVP; both DF engines use cc-pVDZ-JKFIT.
+Cold includes setup and the first E+F call in a fresh process after separately
+retained compilation-cache priming; warm shows five fixed-density replays,
+with their full min–max range.
 
-The figures combine explicitly frozen sources, not a timing claim for the current
-checkout. The [r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update)
-records the exact measured composition, accuracy gates and actual SCF work;
-the force overlay is not part of #2567. The earlier Direct/96 moved regression
-remains rejected (+15.985%).
-The [stationary-energy repair](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
-and [integrated-head Direct/48/96 requalification](benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
-are retained separately, without relabeling either historical cohort.
-Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
-[repair decision](.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md).
+![Cold and warm WB97M-V Direct/DF energy-plus-force timings for two explicit grids](assets/readme-dft-performance.svg)
 
-**Direct J/K**
+The angularly reduced **48×12×24** grid has **13,824 points per atom**, versus
+24,576 for **48×16×32**. These are unpruned radial × polar × azimuthal counts,
+not Lebedev grid levels. XC and VV10 currently share the same grid: changing
+the triple changes both contributions and their analytic grid response.
 
-![Cold and warm direct HF and DFT energy-plus-force timings](assets/readme-dft-performance.svg)
-
-**Density fitting (DF)** — cc-pVDZ-JKFIT for both engines.
-
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](assets/readme-dft-df-performance.svg)
-
-Native ωB97M-V DF/48 and historical DF/96 retain their unchecked accuracy labels.
-The [GPU4PySCF/96 supplement](benchmarks/results/readme-gpu4pyscf96-20261018/README.md)
-adds independent Direct/DF timings without rerunning or relabeling native calls.
-Native DF/96 includes a complete **4717.471 s cold E+F** call with explicit resource budgets:
-12 GiB DF workspace, 4 GiB device/host force allowances each, and a 2 GiB LR
-cache ceiling. The historical four-hour native run completed only four of five
-warm repeats, so no native DF/96 warm median is plotted. Small-system
-compilation-cache priming is recorded separately, never subtracted from cold. See the
-[updated r²SCAN-3c Direct timings](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update),
-[other Direct timings](benchmarks/results/readme-gpu4pyscf96-20261018/timings.md),
-[DF timings](benchmarks/results/readme-gpu4pyscf96-20261018/df-timings.md), and
-[protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
+Every plotted native call passes independent **same-grid** energy/force gates
+(`1e-8 Eh`, `1e-7 Eh/bohr`). Separately, both plotted grids pass the exploratory
+**Direct-reference cross-grid** gates (`1e-5 Eh`, `1e-4 Eh/bohr`) against 64×16×32
+on both original and moved 3/12-atom geometries. DF has same-grid parity checks,
+not a separate denser-grid convergence certification. The baseline is not an exact integral;
+this study does not qualify production defaults, larger clusters or other molecules.
+See [timings and SCF work](benchmarks/results/readme-vv10-grids-20261018/grid-timings.md),
+[grid convergence and provenance](benchmarks/results/readme-vv10-grids-20261018/README.md),
+and [running custom grids or a grid sweep](benchmarks/readme_grids.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

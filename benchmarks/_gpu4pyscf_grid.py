@@ -6,13 +6,17 @@ change either engine's coordinates, weights, density cutoff or functional.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from functools import wraps
 from inspect import signature
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
-def preserve_reference_grid_order(engine: Any) -> None:
-    """Keep zero-AO blocks in a GPU4PySCF RKS/UKS numerical integrator.
+def _ordered_blocks(original: Any) -> Any:
+    """Keep zero-AO blocks in a bound or unbound GPU4PySCF iterator.
 
     GPU4PySCF 1.8.1 fills full-grid density arrays in yielded-block order. Its
     default iterator skips empty AO blocks, shifting densities relative to the
@@ -26,10 +30,8 @@ def preserve_reference_grid_order(engine: Any) -> None:
     """
     import cupy as cp
 
-    integrator = engine._numint
-    original = integrator.block_loop
     if getattr(original, "_generativeqc_preserves_grid_order", False):
-        return
+        return original
     parameters = signature(original)
     if "strict_grid_order" not in parameters.parameters:
         raise RuntimeError("GPU4PySCF block_loop lacks the strict-grid-order contract")
@@ -57,4 +59,28 @@ def preserve_reference_grid_order(engine: Any) -> None:
                 yield ao, indices, weights, coords
 
     blocks._generativeqc_preserves_grid_order = True  # type: ignore[attr-defined]
-    integrator.block_loop = blocks
+    return blocks
+
+
+def preserve_reference_grid_order(engine: Any) -> None:
+    """Adapt one independent SCF integrator without changing its quadrature."""
+    engine._numint.block_loop = _ordered_blocks(engine._numint.block_loop)
+
+
+@contextmanager
+def reference_grid_order() -> Iterator[None]:
+    """Also cover fresh integrators constructed by analytic grid response.
+
+    GPU4PySCF 1.8.1 get_exc_full_response creates a new NumInt rather than using
+    the SCF instance. Scope its iterator compatibility to this reference call,
+    restoring the class even when SCF/forces fail. Different concurrent reference
+    policies must run in separate processes, as for the VV10 density domain.
+    """
+    from gpu4pyscf.dft import numint
+
+    original = numint.NumInt.block_loop
+    try:
+        numint.NumInt.block_loop = _ordered_blocks(original)
+        yield
+    finally:
+        numint.NumInt.block_loop = original

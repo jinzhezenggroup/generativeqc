@@ -25,6 +25,8 @@ from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 
+from benchmarks._gpu4pyscf_grid import reference_grid_order
+from benchmarks._readme_grid import grid_work
 from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks._support import environment_metadata, raw_output_path
 from benchmarks.compare_df_direct_endpoint import check_endpoint, reference_work_counter
@@ -116,6 +118,8 @@ def source_hashes() -> dict[str, str]:
         "benchmarks/ks_preliminary_density.py",
         "benchmarks/readme_pbe0.py",
         "benchmarks/readme_dft.py",
+        "benchmarks/_readme_grid.py",
+        "benchmarks/_gpu4pyscf_grid.py",
         "tools/generativeqc_gcp/reference.py",
         "tools/parameters/r2scan3c_gcp.json",
         "benchmarks/readme_wb97mv.py",
@@ -575,7 +579,8 @@ def reference_energy_forces(
     if hasattr(engine, "with_df"):
         # Nuclear derivatives include motion of the fitting basis and metric.
         gradient.auxbasis_response = True
-    forces = export(-gradient.kernel())
+    with reference_grid_order() if hasattr(engine, "xc") else nullcontext():
+        forces = export(-gradient.kernel())
     if correction is not None:
         correction_energy, correction_gradient = correction()
         energy += correction_energy
@@ -665,7 +670,14 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         help="Explicit native DF workspace hint; zero preserves automatic selection",
     )
     parser.add_argument("--auxiliary-basis-file", type=Path)
-    parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
+    parser.add_argument(
+        "--grid",
+        type=int,
+        nargs=3,
+        default=(48, 16, 32),
+        metavar=("RADIAL", "POLAR", "AZIMUTH"),
+        help="Explicit shared XC/VV10 grid; the historical default is not a convergence recommendation",
+    )
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
     parser.add_argument(
@@ -820,6 +832,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         "engine": args.engine,
         "status": "running",
         "protocol": scientific,
+        "grid_work": None
+        if benchmark.method == "hf"
+        else grid_work(args.atoms, spec, has_vv10=benchmark.has_vv10),
         "records": [],
         "source_file_sha256": source_hashes(),
         "application_budget": None

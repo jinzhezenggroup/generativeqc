@@ -19,6 +19,7 @@ def test_reference_response_uses_the_primary_moving_quadrature(
     """A hidden default SG1 response grid cannot satisfy the common-grid gate."""
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.1, 0.2, 1.5))]
     original_becke = object()
+    observed_orders = []
 
     class Molecule:
         def __init__(self, **settings: object) -> None:
@@ -36,6 +37,11 @@ def test_reference_response_uses_the_primary_moving_quadrature(
             self.mol = molecule
             self.grids = SimpleNamespace()
             self.nlcgrids = SimpleNamespace()
+            self._numint = SimpleNamespace(
+                block_loop=lambda *, strict_grid_order=False: (
+                    observed_orders.append(strict_grid_order) or iter(())
+                )
+            )
             self.cphf_grids = SimpleNamespace(
                 prune="SG1",
                 gen_atomic_grids=lambda *args: {"H": (np.zeros((1, 3)), np.ones(1))},
@@ -53,6 +59,8 @@ def test_reference_response_uses_the_primary_moving_quadrature(
         sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=Molecule))
     )
     engine = reference_engine(atoms, "sto-3g", GridSpec(8, 4, 8), spin=spin)
+    assert list(engine._numint.block_loop()) == []
+    assert observed_orders and all(observed_orders)
     primary = engine.grids.gen_atomic_grids(engine.mol)
     for grid in (engine.cphf_grids, engine.nlcgrids):
         assert grid.radii_adjust is None
