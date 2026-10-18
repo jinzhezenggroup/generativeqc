@@ -22,6 +22,8 @@ from time import perf_counter
 
 import numpy as np
 
+from benchmarks._retention import raw_output_path
+
 
 def accuracy_gates(method: str, atoms: int) -> dict[str, float]:
     """Retain the small-water error budgets per water unit and maximum force."""
@@ -145,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--repeats", type=int, default=6)
     parser.add_argument("--reference-levels", nargs=2, type=int, default=(8, 9))
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args(argv)
     if (
         args.repeats < 2
@@ -187,11 +189,14 @@ def main(argv: list[str] | None = None) -> None:
         "cache_policy": "one untimed complete warmup per candidate; no cross-sample SCF-state reuse",
         "methods": {},
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
 
     def save() -> None:
         """Retain incomplete evidence even if a later candidate fails."""
-        args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        destination = raw_output_path(args.output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+        )
 
     save()
     try:

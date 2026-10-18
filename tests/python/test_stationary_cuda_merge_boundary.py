@@ -576,6 +576,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             radial_points=1,
             angular_polar=1,
             angular_azimuth=2,
+            points_per_atom=2,
         ),
         hamiltonian="all-electron",
         ecp_cores=(0, 0),

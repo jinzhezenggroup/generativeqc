@@ -62,6 +62,7 @@ the schedule, capacity and FP64 reduction order. With local-AO maps, larger
 block unions can also admit additional AO tail work; complete numerical gates
 remain necessary even though the grid and cutoff are unchanged.
 
+(angular-pruning)=
 ## Angular pruning
 
 `GridPolicy` and the default LDA/PBE `KsOptions` use the version-3 `radial-v1`

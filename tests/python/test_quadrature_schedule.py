@@ -1,12 +1,16 @@
 """Pure-host shape overflow/charging gates for generated molecular quadrature."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
 from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
 def test_codegen_has_no_runtime_or_numpy_dependency(tmp_path: Path) -> None:
@@ -192,11 +196,9 @@ def test_partition_reuses_inverse_center_separations() -> None:
 
 def test_emitted_layout_counts_actual_buffer_shapes_without_cuda(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
     """No device/runtime import is needed to reject impossible resource shapes."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
     header = tmp_path / "quadrature.cuh"
     source = emit_quadrature_cuda()
     assert source == emit_quadrature_cuda()
@@ -220,6 +222,7 @@ int main() {
       if (l.polar != l.radial + 2*512*atoms) return 3;
       if (l.azimuth != l.polar + 3*256) return 4;
       if (l.geometry != l.azimuth + 3*1024) return 5;
+      if (l.points != points) return 7;
     }
   unsigned rejected = 0;
   try { (void)layout(0, 1); } catch (const std::invalid_argument&) { ++rejected; }
@@ -232,10 +235,7 @@ int main() {
 }
 """
     )
-    binary = tmp_path / "layout"
-    subprocess.run(
-        [compiler, "-std=c++20", str(main), "-o", str(binary)],
-        check=True,
-        capture_output=True,
+    binary = native_cxx.build_executable(
+        [main], tmp_path / "layout", compile_args=["-std=c++20"]
     )
     subprocess.run([str(binary)], check=True, capture_output=True)

@@ -102,9 +102,24 @@ root cause remains unestablished. No failed reference replaces a qualified one.
 The native Release binary is the source-matched CUDA 12.9.1 / SM120 build
 documented in the initial note, with native LDA/PBE stationary CUDA enabled.
 The default promotion changes Python policy/selection, not compiled quadrature
-math. Input overlays and the original dirty source capsule are hash-bound in
-the compact retained evidence under `benchmarks/results/radial-pruning-20261019/`.
-Raw local reports and scripts remain in `.artifacts/pruning-gpu-20261019/`.
+math. Input overlays, the original dirty source capsule and per-sample summaries
+are retained locally in `.artifacts/pruning-gpu-20261019/compact-summary.json`.
+Raw reports, scripts and a verified 357,965-byte archive remain alongside it.
+The archive SHA256 is
+`87b4cc59b062a2d02f28dd39dcaa24c7e82514c5a067e2136150509c4eab338e`;
+the unchanged compact-summary SHA256 is
+`e9e6b0e060fdaf96b82c4effba2f85a0e2a6f31aa8ef93485364300cdd7790c9`.
+The native library SHA256 is
+`92e4508516078043a72030fcd8dbf8ed6bbe556b8eece29a0e1b3511c4fac447`;
+the original source-capsule SHA256 is
+`a99c821eeca51c0e6acb61a71630f5996694b7182c9bdf590640f2f6c97192bb`.
+
+The repository's 64 MiB aggregate evidence budget was already nearly full:
+even the new 14,764-byte compact report exceeded its remaining capacity.
+Keep these new data in the verified ignored local store, not a relocated JSON
+dump elsewhere in the source tree. This decision note retains only the scope,
+acceptance rationale and measured summary. Do not enlarge the evidence budget,
+delete unrelated historical records or publish a Release/archive implicitly.
 
 ## Resource qualification and limitations
 
@@ -127,6 +142,30 @@ run. Existing numerical and AOT capability tests remain intact.
 No 96-atom VV10, hybrid/meta-GGA, larger-basis performance or whole-README
 production ranking is inferred from this water/STO-3G campaign. Such method
 defaults remain unpromoted and the broad homepage ranking remains pending.
+
+## Integration compatibility checks
+
+The frozen DFT-MP-v1 campaign explicitly selects `GridPolicy("tight",
+pruning="none")`. Its original v2 manifest, grid identities, input hashes and
+acceptance gates remain unchanged when public defaults move to v3. Heavy-element
+translation checks now execute both legacy and pruned grids. Host setup bounds
+include the added shell/angular storage; the independent LP64 inventory tests
+retain exact byte expectations rather than confusing setup and retained bytes.
+
+Decoder, Python-grid, emitted-layout and CUDA-grid body hashes are recorded as
+current source provenance, not refreshed historical implementation acceptance
+pins. Executable legacy/pruned point/weight/owner comparisons, emitted-layout
+buffer/point counts, allocated CUDA tests and snapshot mismatch/provider checks
+cover the behavior instead. New host wire cases explicitly exercise v1/v2/v3
+prescriptions for both spins. ABI, immutable-input, native-provider and cache
+integrity controls remain in force; a source-only capacity report is not a
+substitute for numerical or real-device qualification.
+
+The no-toolchain H2/PBE sentinel retains its 2e-9 Eh tolerance and also exercises
+the explicit legacy grid. Its pruned-default oracle energy is
+-1.1520643723572155 Eh from independent PySCF SCF on the identical prescribed
+points and weights (zero density cutoff), rather than a native result copied
+into the expected value. The native value differs by 2.84e-10 Eh.
 
 ## Revisit when
 

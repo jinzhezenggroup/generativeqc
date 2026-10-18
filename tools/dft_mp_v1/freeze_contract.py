@@ -36,7 +36,7 @@ def canonical(value: dict) -> bytes:
 
 
 def build() -> dict:
-    grid = GridPolicy("tight").resolve("pbe", derivative_order=1)
+    grid = GridPolicy("tight", pruning="none").resolve("pbe", derivative_order=1)
     basis_bytes = (REPO / "python/generativeqc/data/basis_pack.json").read_bytes()
     cases = {}
     for path in sorted((ROOT / "inputs").glob("*.json")):

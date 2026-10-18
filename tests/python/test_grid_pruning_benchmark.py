@@ -48,3 +48,29 @@ def test_gpu_qualification_requires_scheduler_allocation(
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     with pytest.raises(RuntimeError, match="srun"):
         main(["--output", str(tmp_path / "qualification.json")])
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_gpu_qualification_rejects_retained_output_before_gpu_work(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, destination_kind: str
+) -> None:
+    """Reject retained paths before allocation checks, imports or evidence writes."""
+    from benchmarks import _retention
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "qualification.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+    with pytest.raises(SystemExit) as error:
+        main(["--output", str(destination / existing.name)])
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
