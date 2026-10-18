@@ -37,6 +37,10 @@ def _evidence_bytes(evidence: Path | None) -> bytes:
 
 def verify(evidence: Path | None = None) -> None:
     """Verify retained packet bytes, numerical gates and actual convergence counts."""
+    if not __debug__:
+        raise RuntimeError(
+            "Evidence verification requires assertions; rerun without -O or PYTHONOPTIMIZE."
+        )
     raw = _evidence_bytes(evidence)
     for row in (ROOT / "SHA256SUMS").read_text().splitlines():
         expected, name = row.split(maxsplit=1)
