@@ -31,6 +31,13 @@ contract. Requiring fake numeric mask tangents would weaken Boolean ownership.
 Changing pullbacks to return a scalar result for integer argnums would diverge
 from their existing tuple ABI. Public JVP needs its own selected-seed contract.
 
+## Integration boundary
+
+The scalar-gradient opt-in in #2603 is complementary and remains unchanged.
+This change extends only the standalone pullback interface; it does not alter
+its derivative algebra or re-enable the deferred public JVP/higher-order paths.
+The current contracts include both interfaces after normal master integration.
+
 ## Evidence
 
 Independent NumPy selection/scatter adjoints, central finite differences and dot

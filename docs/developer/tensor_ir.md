@@ -270,9 +270,10 @@ backend-independent TensorIR `Program` DAGs:
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
   CUDA, portable/scalar and HVP are outside this slice. The public scalar
-  `grad`/`value_and_grad` wrappers expose the same explicit opt-in on
+  `grad`/`value_and_grad` wrappers and selected-argument `vjp` expose the same
+  explicit opt-in on
   reference/CPU; see the [Array API contract](../user/experimental_array_api.md).
-  Their combined primal graph uses the generated execution inputs, preserving
+  Combined value/gradient graphs use the generated execution inputs, preserving
   the non-differentiable boundary.
   Generated real feeds preserve names, roles, dtypes and shapes but are declared
   non-differentiable execution data. This existing typed boundary survives
