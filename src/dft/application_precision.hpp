@@ -113,17 +113,37 @@ inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t 
 
 /** Budget-Fock candidate domain, independent of mixed-gradient capacity.
  * The prepared owner authenticates the requested model and the shared Direct
- * operator capabilities. A strict physical Fock closes the solve;
+ * operator capabilities and validates actual dimensions and resources. AO and
+ * atom counts have no qualification-window ceiling. A strict physical Fock closes the solve;
  * allowances select provisional arithmetic, not a per-molecule error bound. */
 inline bool admit_application_fock(const std::array<double, 3>& allowances, std::size_t aos,
                                    std::size_t atoms, unsigned maximum_angular, bool restricted,
                                    bool all_electron, bool mixed_fock_available) noexcept {
   for (const auto allowance : allowances)
     if (!std::isfinite(allowance) || allowance < 0.0) return false;
-  return restricted && all_electron && mixed_fock_available && aos >= 24 && aos <= 768 &&
-         atoms >= 2 && atoms <= 96 && maximum_angular <= 2 && allowances[0] >= 1e-5 &&
-         allowances[1] >= 1e-4 && (allowances[2] == 0.0 || allowances[2] >= 3e-5);
+  return restricted && all_electron && mixed_fock_available && aos >= 24 && atoms >= 2 &&
+         maximum_angular <= 2 && allowances[0] >= 1e-5 && allowances[1] >= 1e-4 &&
+         (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
+
+/** Fixed FP64 anchors are qualified only for the relaxed Fast WB97M-V outer
+ * solve. The caller supplies already-admitted Fock/shape capabilities and an
+ * exact full/range Direct provider; this never admits new mixed arithmetic.
+ * Public resource-ledger and device-chunk owners keep their incumbent plan. */
+inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
+                                    std::uint32_t functional, bool exact_direct, unsigned spins,
+                                    bool vv10, bool resource_ledger,
+                                    unsigned chunk_width) noexcept {
+  return budget_fock && budget_stationarity &&
+         functional == semilocal_family_code(SemilocalFamily::Wb97mv) && exact_direct &&
+         spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
+}
+
+/** Profitability is separate from scientific eligibility and resource admission.
+ * Retain the lower floor established by complete endpoints, not an upper bound
+ * tied to measured sizes. Smaller eligible owners retain opt-in; membership is
+ * no per-call speed or observable-error guarantee. */
+inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 192; }
 
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for

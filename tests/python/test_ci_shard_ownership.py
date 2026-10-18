@@ -216,6 +216,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_triples_fock_response.py",
         ),
         "uccsd-forces": (
+            "test_wb97mv_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
@@ -226,7 +227,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
-        "core-a": ("test_cc_triples_tiles.py", "test_wb97mv_hessian.py"),
+        "core-a": ("test_cc_triples_tiles.py",),
         "core-b": (
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -350,11 +351,12 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
 @pytest.mark.parametrize(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
-def test_complete_uccsd_forces_are_one_worksteal_owner_with_prioritized_cases(
+def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
     event: str,
 ) -> None:
     distribution, targets, arguments = _selection(event, "uccsd-forces")
     expected = [
+        "tests/python/test_wb97mv_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
     ]
@@ -591,7 +593,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
 ) -> None:
     """Inventory insertions cannot collide fresh owners or shift ordinary slots."""
     frontiers = {
-        "rks": ("tests/python/test_wb97mv_hessian.py", "core-a"),
+        "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
         "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-c"),
     }
@@ -644,6 +646,14 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
             path for path, expected in owners.items() if tracked and expected == shard
         ]
         assert ("tools.pytest_ci_fresh_frontier" in extra) == bool(priorities)
+    _, force_targets, force_extra = selections["uccsd-forces"]
+    force_priorities = [
+        argument.split("=", 1)[1]
+        for argument in force_extra
+        if argument.startswith("--ci-fresh-priority=")
+    ]
+    assert force_priorities == [path for path in force_targets if path in owners]
+    assert ("tools.pytest_ci_fresh_frontier" in force_extra) == bool(force_priorities)
     for _, _, extra in selections.values():
         assert all(
             not any(path in argument for path in owners)
@@ -1209,3 +1219,87 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             path.unlink()
     assert inventories[0] == inventories[1]
     assert first_files == [set(ordinary), set(priority)]
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
+    event: str, tmp_path: Path
+) -> None:
+    """Execute the selector's real order and plugin without scientific workloads."""
+    names = (
+        "test_wb97mv_hessian.py",
+        "test_uccsd_gradient.py",
+        "test_uccsd_t_gradient.py",
+    )
+    counts = (10, 24, 24)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (tmp_path / "conftest.py").write_text(
+        "import json\nimport os\nfrom pathlib import Path\n\n"
+        "def pytest_runtest_setup(item):\n"
+        "    worker = os.environ['PYTEST_XDIST_WORKER']\n"
+        "    with Path('worker-' + worker + '.jsonl').open('a') as output:\n"
+        "        output.write(json.dumps(item.nodeid) + '\\n')\n",
+        encoding="utf-8",
+    )
+    for name, count in zip(names, counts, strict=True):
+        (directory / name).write_text(
+            "import pytest\n"
+            f"@pytest.mark.parametrize('value', range({count}))\n"
+            "def test_case(value):\n    assert value >= 0\n",
+            encoding="utf-8",
+        )
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    distribution, targets, extra = _selection(event, "uccsd-forces", root=tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "xdist.plugin",
+            "-c",
+            "pytest.ini",
+            "-n",
+            "4",
+            f"--dist={distribution}",
+            "-q",
+            *targets,
+            *extra,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=90,
+        env={
+            **os.environ,
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "PYTEST_ADDOPTS": "",
+            "PYTHONPATH": str(ROOT),
+        },
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    records = [
+        [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        for path in tmp_path.glob("worker-*.jsonl")
+    ]
+    assert len(records) == 4
+    prefix = "tests/python/test_wb97mv_hessian.py::"
+    assert all(entries[0].startswith(prefix) for entries in records)
+    # The real module's water HVP is the fifth collected case. It must start
+    # after at most one cheap admission check, before any force case on its lane.
+    hvp = prefix + "test_case[4]"
+    owner = next(entries for entries in records if hvp in entries)
+    assert owner.index(hvp) <= 1
+    assert all(node.startswith(prefix) for node in owner[: owner.index(hvp)])
+    expected = Counter(
+        f"tests/python/{name}::test_case[{value}]"
+        for name, count in zip(names, counts, strict=True)
+        for value in range(count)
+    )
+    assert Counter(node for entries in records for node in entries) == expected
