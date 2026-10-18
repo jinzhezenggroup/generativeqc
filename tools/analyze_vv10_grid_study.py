@@ -75,6 +75,40 @@ def geometry_rows(population: dict[str, Any]) -> dict[int, dict[str, Any]]:
     return result
 
 
+def accuracy_contract(population: dict[str, Any]) -> dict[str, Any]:
+    """Keep screening/SCF controls separate from quadrature resolution.
+
+    Older split-grid journals bind implicit controls through their source
+    receipts. Never silently equate that missing metadata with explicit controls
+    in newer journals: use a separate, measured replay to bridge the cohorts.
+    """
+    if population["schema"] == "generativeqc.reference-split-vv10.v1":
+        return {"implicit_controls_source_sha256": population["source_sha256"]}
+    protocol = population["accuracy_protocol"]
+    threshold = protocol.get("vv10_density_threshold")
+    controls = protocol.get("scf_tolerances", {})
+    if (
+        not isinstance(threshold, (int, float))
+        or not math.isfinite(threshold)
+        or threshold <= 0
+        or protocol.get("full_grid_response") is not True
+        or set(controls) != {"energy", "gradient", "direct_scf", "max_cycle"}
+        or any(
+            not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+            for value in controls.values()
+        )
+    ):
+        raise ValueError("reference accuracy controls are missing or invalid")
+    return {
+        "vv10_density_threshold": threshold,
+        "scf_tolerances": controls,
+        "full_grid_response": True,
+        "fock_policy": protocol.get("fock_policy"),
+    }
+
+
 def load_population(path: Path) -> dict[str, Any]:
     """Bind complete reference endpoints to their successful process and bytes."""
     payload = path.read_bytes()
@@ -102,6 +136,7 @@ def load_population(path: Path) -> dict[str, Any]:
     if not outcome.exists() or json.loads(outcome.read_text())["exit_code"] != 0:
         raise ValueError("successful process outcome is missing")
     geometry_rows(raw)
+    accuracy_contract(raw)
     raw["receipt"] = {
         "file": str(path),
         "sha256": hashlib.sha256(payload).hexdigest(),
@@ -120,9 +155,8 @@ def compare_populations(
     for field in ("atoms", "basis", "density_fitting", "geometries_bohr"):
         if candidate[field] != reference[field]:
             raise ValueError(f"grid comparison changes {field}")
-    for field in ("vv10_density_threshold", "scf_tolerances"):
-        if candidate.get(field) != reference.get(field):
-            raise ValueError(f"grid comparison changes {field}")
+    if accuracy_contract(candidate) != accuracy_contract(reference):
+        raise ValueError("grid comparison changes reference accuracy controls")
     for axis in ("xc", "nlc"):
         prescription = [
             {

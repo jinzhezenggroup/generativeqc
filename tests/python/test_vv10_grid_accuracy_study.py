@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
+from contextlib import nullcontext
 from dataclasses import asdict
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc import GridSpec
 
-from benchmarks.vv10_grid_accuracy_sweep import parse_grid_pair
+from benchmarks.vv10_grid_accuracy_sweep import parse_density_threshold, parse_grid_pair
 from tools.analyze_vv10_grid_study import (
     PROFILES,
     analyze_case,
@@ -224,6 +227,14 @@ def test_accuracy_only_cross_grid_seeds_cannot_be_relabelled_as_cold(
     raw["accuracy_protocol"] = {
         "density_sources": "independent-GPU4PySCF-only",
         "cold_timing_qualified": False,
+        "vv10_density_threshold": 1e-8,
+        "scf_tolerances": {
+            "energy": 1e-12,
+            "gradient": 1e-10,
+            "direct_scf": 1e-14,
+            "max_cycle": 100,
+        },
+        "full_grid_response": True,
     }
     raw["records"] = [raw["records"][0], raw["records"][2]]
     for row, phase in zip(
@@ -256,3 +267,108 @@ def test_accuracy_sweep_rejects_ambiguous_grid_domains(pair: str) -> None:
 
 def test_accuracy_sweep_preserves_distinct_xc_and_nlc_shapes() -> None:
     assert parse_grid_pair("144,48,96:64,16,32") == ((144, 48, 96), (64, 16, 32))
+
+
+@pytest.mark.parametrize("threshold", ("0", "-1e-8", "nan", "inf", "-inf"))
+def test_screening_control_requires_a_finite_positive_threshold(threshold: str) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        parse_density_threshold(threshold)
+
+
+def test_screening_control_preserves_requested_threshold() -> None:
+    assert parse_density_threshold("1e-12") == 1e-12
+
+
+def test_failed_accuracy_scf_retains_diagnostics_without_a_successful_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed tight solve must not lose the residual needed to diagnose it."""
+    from benchmarks import vv10_grid_accuracy_sweep as sweep
+
+    fake_cupy = SimpleNamespace(
+        asnumpy=lambda value: value,
+        cuda=SimpleNamespace(
+            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "cupy", fake_cupy)
+    monkeypatch.setenv("SLURM_JOB_ID", "host-mocked-accuracy-test")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "accuracy-sweep",
+            "--atoms",
+            "3",
+            "--grid-pairs",
+            "48,16,32:64,16,32",
+            "--output",
+            str(tmp_path),
+        ],
+    )
+    monkeypatch.setattr(sweep, "reference_vv10_domain", lambda value: nullcontext())
+    monkeypatch.setattr(sweep, "environment_metadata", lambda **kwargs: {})
+    monkeypatch.setattr(sweep, "cuda_accelerator_metadata", lambda value: {})
+    monkeypatch.setattr(sweep, "_engine", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        sweep,
+        "reference_work_counter",
+        lambda engine: nullcontext({"tracker": object(), "scf_jk_builds": 101}),
+    )
+    monkeypatch.setattr(
+        sweep,
+        "gpu_convergence_payload",
+        lambda *args, **kwargs: [{"converged": False, "iterations": 100}],
+    )
+
+    def fail_scf(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("GPU4PySCF SCF did not converge")
+
+    monkeypatch.setattr(sweep, "reference_energy_forces", fail_scf)
+    with pytest.raises(RuntimeError, match="did not converge"):
+        sweep.main()
+    path = tmp_path / "xc-48x16x32-nlc-64x16x32.json"
+    result = json.loads(path.read_text())
+    assert result["stage"] == "failed" and result["records"] == []
+    assert result["last_scf_attempt"]["convergence"]["iterations"] == 100
+    assert result["last_scf_attempt"]["convergence"]["converged"] is False
+    assert result["accuracy_protocol"]["fock_policy"] == "full-density-rebuild"
+    assert json.loads(path.with_suffix(".outcome").read_text())["exit_code"] == 1
+
+
+@pytest.mark.parametrize(
+    "field", ("vv10_density_threshold", "scf_tolerances", "fock_policy")
+)
+def test_explicit_accuracy_controls_cannot_be_conflated_with_grid_error(
+    field: str,
+) -> None:
+    candidate = population(CANDIDATE)
+    reference = population(ANCHOR)
+    for raw in (candidate, reference):
+        raw["schema"] = "generativeqc.reference-vv10-grid-accuracy.v1"
+        raw["accuracy_protocol"] = {
+            "vv10_density_threshold": 1e-8,
+            "scf_tolerances": {
+                "energy": 1e-12,
+                "gradient": 1e-10,
+                "direct_scf": 1e-14,
+                "max_cycle": 100,
+            },
+            "full_grid_response": True,
+        }
+        raw["records"] = [raw["records"][0], raw["records"][2]]
+        for row, phase in zip(
+            raw["records"], ("accuracy-original", "accuracy-moved"), strict=True
+        ):
+            row["phase"] = phase
+    assert compare_populations(candidate, reference, PROFILES["fast"])[
+        "observed_budget_gate"
+    ]
+    if field == "scf_tolerances":
+        candidate["accuracy_protocol"][field]["gradient"] = 1e-6
+    elif field == "fock_policy":
+        candidate["accuracy_protocol"][field] = "full-density-rebuild"
+    else:
+        candidate["accuracy_protocol"][field] = 1e-12
+    with pytest.raises(ValueError, match="changes reference accuracy controls"):
+        compare_populations(candidate, reference, PROFILES["fast"])

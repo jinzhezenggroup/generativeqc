@@ -15,6 +15,38 @@ from generativeqc import GridSpec
 from benchmarks.readme_split_vv10 import compare_geometries, split_grid_work
 
 
+def test_full_fock_reference_binds_the_decorated_df_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-decoration bound method could silently keep the unfitted operator."""
+    from types import SimpleNamespace
+
+    from benchmarks import readme_split_vv10, readme_wb97mv
+
+    fitted = SimpleNamespace()
+    base = SimpleNamespace(density_fit=lambda **kwargs: fitted)
+    monkeypatch.setattr(
+        readme_split_vv10, "reference_engine", lambda *args, **kwargs: base
+    )
+    monkeypatch.setattr(
+        readme_split_vv10,
+        "configure_reference_mixed_rsh_df",
+        lambda engine: setattr(engine, "mixed_rsh_configured", True),
+    )
+
+    def bind_full(engine: SimpleNamespace) -> None:
+        assert engine is fitted
+        assert engine.mixed_rsh_configured
+        engine.full_fock_bound = True
+
+    monkeypatch.setattr(readme_wb97mv, "configure_reference_full_fock", bind_full)
+    engine = readme_split_vv10._engine(
+        [], GridSpec(), GridSpec(), "cuda", full_fock=True
+    )
+    assert engine is fitted and engine.full_fock_bound
+    assert engine.conv_tol == 1e-12 and engine.conv_tol_grad == 1e-10
+
+
 def _population(nlc_grid: tuple[int, int, int]) -> dict:
     return {
         "atoms": 3,

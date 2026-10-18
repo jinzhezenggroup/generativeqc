@@ -272,3 +272,19 @@ controls remain unchanged. Journals record requested/initial candidate controls
 and actual per-call refinement/fallback work separately. Earlier Fast journals
 without this distinction are tight-control populations, not interchangeable
 with default-control Fast timings.
+
+The accuracy-only sweep also accepts `--vv10-density-threshold` for an explicit
+screening-control experiment. Keep different thresholds in separate output
+directories. This does not change native screening or certify an unscreened
+functional. The convergence analyzer checks the nested SCF/screening protocol,
+not absent top-level fields, and rejects cross-threshold comparisons as grid-only
+evidence. Older implicit-control journals remain bound to their source receipts;
+do not silently merge them with the newer explicit-control schema.
+
+New accuracy-only sweeps use full-density Fock rebuilds, matching the tight
+README reference policy rather than accumulating screened density increments.
+Bind this policy after DF/mixed-RSH decoration so the rebuilt potential uses
+the fitted operator. The analyzer separates different Fock policies, and failed
+SCF journals retain the last convergence diagnostics without accepting an E+F
+endpoint. Preserve older attempts; do not loosen the accuracy gates to hide a
+reference convergence failure.

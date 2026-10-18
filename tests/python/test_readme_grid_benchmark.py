@@ -170,6 +170,23 @@ def test_grid_summary_preserves_endpoint_samples_and_semantic_work() -> None:
     assert render_readme_grids.compact_summary(compact) == compact
 
 
+def test_grid_compaction_preserves_explicitly_absent_diagnostics() -> None:
+    """HF and older journals may record absent optional KS/force profiles as null."""
+    entry = {
+        "native_ks_diagnostic": None,
+        "native_force_components": None,
+        "records": [
+            {
+                "complete_seconds": 1.25,
+                "native_ks_diagnostic": None,
+                "native_force_components": None,
+            }
+        ],
+    }
+    summary = {"modes": {"none": [{"points": [{"engines": {"native": entry}}]}]}}
+    assert render_readme_grids.compact_summary(summary) == summary
+
+
 def test_grid_renderer_retains_separate_series_and_work(tmp_path: Path) -> None:
     entry = {
         "status": "measured",

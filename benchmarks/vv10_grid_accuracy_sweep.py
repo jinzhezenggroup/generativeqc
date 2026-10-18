@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from dataclasses import asdict
 from pathlib import Path
@@ -39,6 +40,14 @@ def parse_grid_pair(value: str) -> tuple[tuple[int, int, int], tuple[int, int, i
     return parse_grid(fields[0]), parse_grid(fields[1])
 
 
+def parse_density_threshold(value: str) -> float:
+    """Require an explicit finite positive VV10 active-density threshold."""
+    threshold = float(value)
+    if not math.isfinite(threshold) or threshold <= 0:
+        raise ValueError("VV10 density threshold must be finite and positive")
+    return threshold
+
+
 def save_population(path: Path, result: dict[str, Any]) -> None:
     """Keep incomplete endpoints inspectable without calling them successful."""
     path.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
@@ -50,6 +59,12 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, choices=(3, 12, 48, 96), required=True)
     parser.add_argument("--density-fitting", choices=("none", "cuda"), default="none")
     parser.add_argument("--grid-pairs", type=parse_grid_pair, nargs="+", required=True)
+    parser.add_argument(
+        "--vv10-density-threshold",
+        type=parse_density_threshold,
+        default=float(MOLECULAR_VV10_DENSITY_THRESHOLD),
+        help="screening-control study only; does not change the native policy",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
@@ -70,7 +85,7 @@ def main() -> None:
     densities: dict[int, Any] = {}
     previous_grids = {}
     args.output.mkdir(parents=True, exist_ok=True)
-    with reference_vv10_domain(float(MOLECULAR_VV10_DENSITY_THRESHOLD)):
+    with reference_vv10_domain(args.vv10_density_threshold):
         for xc_dimensions, nlc_dimensions in args.grid_pairs:
             xc_spec, nlc_spec = GridSpec(*xc_dimensions), GridSpec(*nlc_dimensions)
             stem = (
@@ -103,8 +118,9 @@ def main() -> None:
                         "direct_scf": 1e-14,
                         "max_cycle": 100,
                     },
-                    "vv10_density_threshold": float(MOLECULAR_VV10_DENSITY_THRESHOLD),
+                    "vv10_density_threshold": args.vv10_density_threshold,
                     "full_grid_response": True,
+                    "fock_policy": "full-density-rebuild",
                     "cold_timing_qualified": False,
                 },
                 "environment": environment_metadata(
@@ -151,17 +167,34 @@ def main() -> None:
                         seed = densities[0]
                         initial = "same-grid-original-geometry"
                         seed_grid = previous_grids[0]
-                    engine = _engine(atoms, xc_spec, nlc_spec, args.density_fitting)
+                    engine = _engine(
+                        atoms,
+                        xc_spec,
+                        nlc_spec,
+                        args.density_fitting,
+                        full_fock=True,
+                    )
                     with reference_work_counter(engine) as work:
-                        energy, forces, seconds = reference_energy_forces(
-                            engine,
-                            None if seed is None else seed.copy(),
-                            export=cp.asnumpy,
-                            synchronize=cp.cuda.Stream.null.synchronize,
-                        )
-                        convergence = gpu_convergence_payload(
-                            [engine], [work["tracker"]]
-                        )[0]
+                        try:
+                            energy, forces, seconds = reference_energy_forces(
+                                engine,
+                                None if seed is None else seed.copy(),
+                                export=cp.asnumpy,
+                                synchronize=cp.cuda.Stream.null.synchronize,
+                            )
+                        finally:
+                            convergence = gpu_convergence_payload(
+                                [engine],
+                                [work["tracker"]],
+                                warm_start_used=seed is not None,
+                            )[0]
+                            result["last_scf_attempt"] = {
+                                "geometry": geometry,
+                                "convergence": convergence,
+                                "fock_builds": work["scf_jk_builds"],
+                                "initial_density": initial,
+                                "initial_density_grid": seed_grid,
+                            }
                     if (
                         not engine.converged
                         or not np.isfinite(energy)

@@ -136,11 +136,23 @@ def compare_geometries(
     return result
 
 
-def _engine(atoms: Any, xc_spec: GridSpec, nlc_spec: GridSpec, mode: str) -> Any:
+def _engine(
+    atoms: Any,
+    xc_spec: GridSpec,
+    nlc_spec: GridSpec,
+    mode: str,
+    *,
+    full_fock: bool = False,
+) -> Any:
+    """Build the reference, binding full rebuilds after optional DF decoration."""
     engine = reference_engine(atoms, "def2-svp", xc_spec, nlc_spec=nlc_spec)
     if mode == "cuda":
         engine = engine.density_fit(auxbasis="cc-pvdz-jkfit")
         configure_reference_mixed_rsh_df(engine)
+    if full_fock:
+        from benchmarks.readme_wb97mv import configure_reference_full_fock
+
+        configure_reference_full_fock(engine)
     engine.conv_tol = 1e-12
     engine.conv_tol_grad = 1e-10
     engine.direct_scf_tol = 1e-14

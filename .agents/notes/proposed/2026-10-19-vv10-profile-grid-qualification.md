@@ -116,3 +116,64 @@ and records requested and initially selected controls explicitly beside each
 call's actual refinement/fallback work. The independent reference protocol stays
 tight and its accuracy gates are not relaxed. Remeasure the default-control Fast
 cohort in a separate attempt before selecting performance results.
+
+The default-control pilot (job 10334, a distinct raw directory) has now completed
+the same eight populations and 96 calls. All same-grid Fast gates pass, but
+Direct errors reach `2.83e-9 Eh` / `4.45e-5 Eh/bohr` / `1.46e-5 Eh/bohr` RMS,
+not FP64 force accuracy. Direct uses mixed stages plus strict refinement; all
+DF calls report effective 64-bit execution. Retain those actual execution labels
+rather than describing every Fast request as mixed arithmetic or a speedup.
+The selected initial native controls are `1e-10` energy / `1e-8` density, versus
+the explicitly pinned `1e-12` / `1e-10` FP64 controls. None of these same-grid
+passes establishes the total Fast budget after quadrature error is included.
+
+The complete initial twelve-atom XC sweep still shows `7.13e-6 Eh` /
+`2.67e-5 Eh/bohr` versus its provisional XC144×48×96 anchor at fixed
+NLC64×16×32. Even XC144×40×80 differs by about `1.03e-6 Eh/bohr` on 12 atoms;
+its three-atom XC-only pass must not be generalized. The denser twelve-atom
+anchor study, 48/96-atom accuracy sweeps and actual default Fast endpoints
+remain separate required populations.
+
+The initial three-atom NLC120×32×64 anchor is not FP64-stable under the reserved
+allowance: its radial check differs by `4.83e-9 Eh` / `1.11e-8 Eh/bohr` in
+Direct. Extend NLC and run explicit density-threshold controls; do not select
+the older candidate merely because its difference fits one full observable
+budget. The sweep now records a requested screening threshold, and the analyzer
+validates nested accuracy controls. Implicit source-bound legacy journals are
+not silently interchangeable with explicit protocols or different thresholds.
+
+No final README data or grid recommendation is replaced by these partial
+studies. The shared evidence store is at its existing aggregate cap; retain full
+raw journals in the declared ignored mirrors until a deliberate replacement or
+lossless compaction within this study and the freshly rerun README cohort fits.
+Do not delete unrelated studies or raise the cap to publish partial evidence.
+
+## Larger reference convergence and full-Fock control
+
+The first 48-atom accuracy sweep (job 3443) failed its tight SCF solve before
+returning any E+F endpoint. It used the split-reference helper's default
+incremental Fock policy, unlike the full-density rebuilds in the README
+reference benchmark. Preserve that failed journal; do not count it as an
+accepted grid or relax its tolerances. The old 96-atom accuracy sweep (3444)
+was deliberately cancelled with a saved scheduler receipt to prioritize a
+full-Fock control, not declared a measured 96-atom numerical failure.
+
+Accuracy-only sweeps now bind full-density rebuilds **after** optional DF and
+mixed-RSH decoration; binding a method to the pre-decoration object could retain
+the wrong operator. Record the Fock policy and the last SCF convergence payload,
+including unsuccessful solves. A separate source-frozen control first replays
+three-atom Direct/DF, then retries the failed larger case. At this point the
+repair is an implemented measurement setup, not evidence of a successful
+48/96-atom FP64 grid selection. Do not pool old/new Fock-control timings or use
+an unverified reference as an independent acceptance oracle.
+
+The full-Fock three-atom replay has completed eight paired original/moved
+comparisons (two grids, Direct/DF), differing from the prior reference by at
+most `2.65e-12 Eh` / `2.63e-11 Eh/bohr`. Larger convergence is still pending.
+The completed extended twelve-atom Direct XC sweep rejects even its
+XC240×80×160 anchor: radial and angular checks differ by `2.91e-7` and
+`1.20e-7 Eh/bohr`, respectively. Its old XC48×16×32 difference is
+`7.17e-6 Eh` / `2.75e-5 Eh/bohr`. The reference-only XC Fast gate passes;
+FP64 does not. Extend the separate full-Fock twelve-atom study through
+480×160×320, with independent radial/angular checks, rather than labeling a
+three-atom pass or an unstable larger anchor as a universal grid choice.

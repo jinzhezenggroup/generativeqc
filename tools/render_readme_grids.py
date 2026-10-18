@@ -77,10 +77,10 @@ def compact_summary(summary: dict[str, Any]) -> dict[str, Any]:
             for point in population["points"]:
                 for entry in point["engines"].values():
                     for owner in [entry, *entry.get("records", [])]:
-                        diagnostic = owner.get("native_ks_diagnostic", {})
+                        diagnostic = owner.get("native_ks_diagnostic") or {}
                         for key in ("components", "history"):
                             diagnostic.pop(key, None)
-                        components = owner.get("native_force_components", {})
+                        components = owner.get("native_force_components") or {}
                         for key in (
                             "wall_seconds",
                             "profiled_ms",
