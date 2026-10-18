@@ -183,3 +183,29 @@ The first default-control Direct/48 Fast population (job 10337, shared
 `2.35e-9 Eh` / `1.27e-5 Eh/bohr` / `3.96e-6 Eh/bohr` RMS and pass Fast's
 arithmetic-only gates. Its quadrature and total endpoint budgets remain
 unchecked; preserve this distinction for the larger-size timing refresh.
+
+## Density-screening evidence
+
+At fixed XC240×80×160 / NLC120×32×64 on three-atom Direct, changing the
+VV10 density threshold from `1e-8` to `1e-12` shifts energy/maximum force by
+`1.05e-8 Eh` / `1.31e-8 Eh/bohr`. The `1e-10` to `1e-12` differences are only
+`1.60e-10 Eh` / `1.88e-10 Eh/bohr`. These are controlled finite-grid observations,
+not proof of an exact unscreened limit or of larger-system screening error.
+Nevertheless, the existing `1e-8` domain difference already consumes the full
+FP64 energy budget on this small case. A defensible total-error selection must
+qualify screening too, not rely on cancellation between grid and domain errors.
+
+The pending full-Fock twelve-atom ultra-dense reference sweeps therefore use an
+explicit `1e-12` density threshold. Native production thresholds are unchanged;
+changing their scientific policy requires its own source-matched native and
+derivative qualification. The Fast reference sweep retains `1e-8` to study the
+current native domain, but still needs the total error budget and larger cases.
+An additional lower-threshold check on the final dense reference remains needed.
+
+The repaired full-Fock 48-atom Direct probe has now reconverged both geometries
+at both XC48×16×32 and XC64×24×48, with NLC fixed at 48×12×24 and unchanged
+SCF tolerances. Their observed XC-only differences reach `3.94e-5 Eh` /
+`3.51e-5 Eh/bohr` / `1.95e-5 Eh/bohr` RMS. Even Fast's energy budget is
+exceeded by this two-grid difference. It does not establish that XC64 is a
+converged anchor or select a final Fast grid; complete the separate 48/96-atom
+reference sweeps and the combined/native gates before a timing recommendation.
