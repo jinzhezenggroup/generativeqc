@@ -142,8 +142,12 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
                                  ? sum({nonlocal_provider, product({32, tile, shape.orbital_aos}),
                                         product({8, orbital_square, shape.spins == 2 ? 3u : 1u})})
                                  : 0;
+  // Bound the radial shell descriptors and up to three cached angular rules,
+  // including the original and temporary polar vectors during CUDA setup.
+  // This shape-only ABI deliberately admits both unpruned and pruned grids.
   auto quadrature = sum(
-      {product({16, sum({shape.radial_points, shape.polar_points})}), product({8, shape.atoms})});
+      {product({16, sum({product({2, shape.radial_points}), product({3, shape.polar_points})})}),
+       product({8, shape.atoms})});
   Bytes setup = 0;
   if (cpu) {
     const auto cartesian_fourth = product({cartesian_square, cartesian_square});

@@ -668,7 +668,12 @@ typedef struct generativeqc_ks_options {
   const char* scf_domain;
   /** Grid contract version. Version 1 is the deterministic reference
    * prescription with unit-radius fallback. Version 2 is a fully resolved
-   * production prescription with sourced element radii. */
+   * production prescription with sourced element radii. Version 3 requires
+   * explicit element radii and uses radial-v1 angular pruning: for radial rank
+   * u=(index+1/2)/radial_points, full orders on [1/3,3/4], half outside,
+   * quarter for u<1/5 or u>6/7,
+   * with orders rounded up and at least three azimuth points. Its maximum
+   * angular orders are 128 polar and 512 azimuth. No density pruning is implied. */
   uint32_t grid_version;
   uint32_t radial_points;
   uint32_t angular_polar;

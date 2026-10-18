@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <limits>
+#include <map>
 #include <stdexcept>
 
 #include "dft/grid.hpp"
@@ -37,8 +38,7 @@ std::size_t cuda_quadrature_bytes(std::size_t atoms, std::size_t points) {
 MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec, int device,
                                        bool retain_device) {
   MolecularGrid result(system, spec, Deferred{});
-  const auto per_atom =
-      q::product(q::product(spec.radial_points, spec.angular_polar), spec.angular_azimuth);
+  const auto per_atom = grid_points_per_atom(spec);
   const auto l = q::layout(system.atoms.size(), q::product(system.atoms.size(), per_atom));
   const auto [rn, rw] = legendre_rule(spec.radial_points);
   const auto [zn, zw] = legendre_rule(spec.angular_polar);
@@ -55,6 +55,43 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
   std::copy(rw.begin(), rw.end(), input.begin() + l.rules + 512);
   std::copy(zn.begin(), zn.end(), input.begin() + l.rules + 1024);
   std::copy(zw.begin(), zw.end(), input.begin() + l.rules + 1280);
+  q::PrunedShells pruned{};
+  std::size_t polar_entries = spec.angular_polar;
+  std::vector<std::pair<std::size_t, std::size_t>> azimuth_rules{{spec.angular_azimuth, 0}};
+  if (spec.version == 3) {
+    const auto shells = grid_angular_shells(spec);
+    std::map<std::pair<std::size_t, std::size_t>, std::pair<std::size_t, std::size_t>> rules;
+    std::size_t azimuth_entries = 0, point_begin = 0;
+    polar_entries = 0;
+    azimuth_rules.clear();
+    pruned.points_per_atom = per_atom;
+    for (std::size_t radial = 0; radial < shells.size(); ++radial) {
+      const auto shape = shells[radial];
+      if (!rules.contains(shape)) {
+        const auto [nodes, weights] = legendre_rule(shape.first);
+        std::copy(nodes.begin(), nodes.end(), input.begin() + l.rules + 1024 + polar_entries);
+        std::copy(weights.begin(), weights.end(), input.begin() + l.rules + 1280 + polar_entries);
+        rules.emplace(shape, std::pair{polar_entries, azimuth_entries});
+        azimuth_rules.emplace_back(shape.second, azimuth_entries);
+        polar_entries += shape.first;
+        azimuth_entries += shape.second;
+      }
+      if (radial == 0 || shape != shells[radial - 1]) {
+        const auto band = pruned.bands++;
+        if (band >= 5) throw std::logic_error("radial-v1 exceeded its bounded band count");
+        pruned.radial_begin[band] = radial;
+        pruned.point_begin[band] = point_begin;
+        pruned.polar_count[band] = shape.first;
+        pruned.azimuth_count[band] = shape.second;
+        pruned.polar_offset[band] = rules.at(shape).first;
+        pruned.azimuth_offset[band] = rules.at(shape).second;
+      }
+      point_begin += q::product(shape.first, shape.second);
+    }
+    pruned.point_begin[pruned.bands] = point_begin;
+    if (polar_entries > 256 || azimuth_entries > 1024 || point_begin != per_atom)
+      throw std::logic_error("radial-v1 exceeded its bounded angular tables");
+  }
   result.points_.resize(q::product(3, l.points));
   result.weights_.resize(l.points);
   result.owners_.resize(l.points);
@@ -86,20 +123,28 @@ MolecularGrid MolecularGrid::from_cuda(const core::System& system, GridSpec spec
       l.atoms, spec.radial_points, data + 3 * l.atoms, data + l.rules, data + l.rules + 512,
       data + l.radial);
   check(cudaGetLastError());
-  q::polar_kernel<<<q::blocks(spec.angular_polar), 128, 0, stream.get()>>>(
-      spec.angular_polar, data + l.rules + 1024, data + l.rules + 1280, data + l.polar);
+  q::polar_kernel<<<q::blocks(polar_entries), 128, 0, stream.get()>>>(
+      polar_entries, data + l.rules + 1024, data + l.rules + 1280, data + l.polar);
   check(cudaGetLastError());
-  q::azimuth_kernel<<<q::blocks(spec.angular_azimuth), 128, 0, stream.get()>>>(spec.angular_azimuth,
-                                                                               data + l.azimuth);
-  check(cudaGetLastError());
+  for (const auto& [count, offset] : azimuth_rules) {
+    q::azimuth_kernel<<<q::blocks(count), 128, 0, stream.get()>>>(count,
+                                                                  data + l.azimuth + 3 * offset);
+    check(cudaGetLastError());
+  }
   q::geometry_kernel<<<q::blocks(l.atoms * l.atoms), 128, 0, stream.get()>>>(
       data, l.atoms, spec.coincident_tolerance, data + l.geometry);
   check(cudaGetLastError());
   for (std::size_t begin = 0; begin < l.points; begin += l.tile) {
     const auto count = std::min(l.tile, l.points - begin);
-    q::points_kernel<<<q::blocks(count), 128, 0, stream.get()>>>(
-        begin, count, spec.radial_points, spec.angular_polar, spec.angular_azimuth, data,
-        data + l.radial, data + l.polar, data + l.azimuth, data + l.xyz, data + l.weights);
+    if (spec.version == 3) {
+      q::pruned_points_kernel<<<q::blocks(count), 128, 0, stream.get()>>>(
+          begin, count, spec.radial_points, pruned, data, data + l.radial, data + l.polar,
+          data + l.azimuth, data + l.xyz, data + l.weights);
+    } else {
+      q::points_kernel<<<q::blocks(count), 128, 0, stream.get()>>>(
+          begin, count, spec.radial_points, spec.angular_polar, spec.angular_azimuth, data,
+          data + l.radial, data + l.polar, data + l.azimuth, data + l.xyz, data + l.weights);
+    }
     check(cudaGetLastError());
     q::distances_kernel<<<q::atom_point_grid(count, l.atoms), 128, 0, stream.get()>>>(
         count, l.atoms, data + l.xyz, data, data + l.distances);

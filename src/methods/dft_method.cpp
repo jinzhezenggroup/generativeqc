@@ -2929,9 +2929,7 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
                                                          shape[5] == 0 && shape[6] == 0, shape[4],
                                                          shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    const auto points = runtime::size_mul(
-        shape[0], runtime::size_mul(grid.radial_points,
-                                    runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
+    const auto points = runtime::size_mul(shape[0], dft::grid_points_per_atom(grid));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,

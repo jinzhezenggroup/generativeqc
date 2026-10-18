@@ -124,43 +124,34 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
-Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
-#2563, #2567 and the #2558 force stack. All other native points retain the frozen
-#2531 + #2532 snapshot; GPU4PySCF timings and independent references are
-historical, not rerun. Cold includes setup and the
-first E+F call; warm reuses converged density. The water clusters have
-3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
+**Complete HF/DFT energy + analytic forces — production comparison pending.**
+The headline comparison must use each engine's fastest independently qualified
+production configuration for the same scientific task and energy/force accuracy
+targets on RTX 5090. Identical DFT grids are not required: grid resolution,
+pruning, screening and precision may differ when both configurations pass the
+same independent accuracy gates. Cold includes setup and the first E+F call;
+warm uses the same declared reuse policy for both engines. See the
+[production-comparison policy](docs/maintainer/performance_engineering.md#readme-production-comparisons).
 
-The figures combine explicitly frozen sources, not a timing claim for the current
-checkout. The [r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update)
-records the exact measured composition, accuracy gates and actual SCF work;
-the force overlay is not part of #2567. The earlier Direct/96 moved regression
-remains rejected (+15.985%).
-The [stationary-energy repair](benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md)
-and [integrated-head Direct/48/96 requalification](benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md)
-are retained separately, without relabeling either historical cohort.
-Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
-[repair decision](.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md).
+LDA/PBE calculations now use angular-pruned production grids by default, with
+`GridPolicy(pruning="none")` retaining the previous unpruned prescription.
+The LDA/PBE [GPU qualification runner](benchmarks/grid_pruning_gpu.py) compares
+complete energy-plus-force endpoints against independent dense references;
+GPU4PySCF uses its own NWChem-pruned production grids. This does not qualify
+pruning defaults for VV10 or turn the historical matched-grid plots into a
+production ranking.
 
-**Direct J/K**
-
-![Cold and warm direct HF and DFT energy-plus-force timings](assets/readme-dft-performance.svg)
-
-**Density fitting (DF)** — cc-pVDZ-JKFIT for both engines.
-
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
-
-Native ωB97M-V DF/48 and DF/96 lack independent accuracy references. DF/96 now
-includes a complete **4717.471 s cold E+F** call with explicit resource budgets:
-12 GiB DF workspace, 4 GiB device/host force allowances each, and a 2 GiB LR
-cache ceiling. The four-hour run completed only four of five warm repeats, so
-no DF/96 warm median is plotted. Small-system compilation-cache priming is
-recorded separately, never subtracted from cold. See the
-[updated r²SCAN-3c Direct timings](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update),
-[other Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
-[DF timings](benchmarks/results/readme-refresh-20261015/df-timings.md), and
-[protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
+The previous fixed, unpruned `(48, 16, 32)` HF/DFT plots are historical
+matched-grid diagnostics, not evidence of either engine's best production
+configuration. They remain in the
+[measurement report and figures](benchmarks/results/readme-refresh-20261015/README.md),
+[Direct timing/work table](benchmarks/results/readme-refresh-20261015/timings.md),
+[DF timing/work table](benchmarks/results/readme-refresh-20261015/df-timings.md), and
+[r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update).
+No replacement HF/DFT ranking is published until both engines' selected
+configurations have complete endpoint measurements and independent energy/force
+qualification. Historical measurements and failed or unchecked cases are not
+relabelled as production-qualified results.
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

@@ -34,25 +34,43 @@ def test_codegen_has_no_runtime_or_numpy_dependency(tmp_path: Path) -> None:
     )
 
 
-def test_emitted_cuda_uses_atom_major_2d_schedule() -> None:
-    """Keep hot point-center kernels free of flattened runtime div/mod decode."""
-    source = emit_quadrature_cuda()
-    assert source.count("for (size_t a = blockIdx.y; a < na; a += gridDim.y)") == 2
-    assert source.count("point += size_t(blockDim.x) * gridDim.x)") == 2
-    assert "const size_t a = i / count, point = i % count;" not in source
-    assert "partition_kernel<1><<<atom_point_grid(count, na), 128" in source
-
-    root = Path(__file__).resolve().parents[2]
-    native = (root / "src/dft/cuda_quadrature.cu").read_text()
-    assert "q::distances_kernel<<<q::atom_point_grid(count, l.atoms), 128" in native
-
-    # Production PBE endpoint shapes retained in the performance record. The
-    # old distance + partition kernels each decoded atom/point with / and %.
-    for atoms, points, decoded in (
-        (48, 1_327_104, 254_803_968),
-        (96, 2_654_208, 1_019_215_872),
-    ):
-        assert 4 * atoms * points == decoded
+def test_atom_major_launch_covers_each_axis_with_bounded_blocks(
+    tmp_path: Path, native_cxx: object
+) -> None:
+    """Adding another point kernel must not invalidate a global source count."""
+    (tmp_path / "quadrature.cuh").write_text(emit_quadrature_cuda())
+    source = tmp_path / "launch.cpp"
+    source.write_text(r"""
+#include "quadrature.cuh"
+#include <vector>
+int main() {
+  using namespace generativeqc::generated::quadrature;
+  for (size_t points : {1U, 127U, 4096U, 8193U}) {
+    for (size_t atoms : {1U, 48U, 96U, 70001U}) {
+      const auto [x, y] = atom_point_blocks(points, atoms);
+      if (!x || !y || size_t(x) * y > 65535) return 1;
+      std::vector<unsigned> point_visits(points), atom_visits(atoms);
+      for (size_t block = 0; block < x; ++block)
+        for (size_t lane = 0; lane < 128; ++lane)
+          for (size_t point = 128 * block + lane; point < points; point += 128 * x)
+            ++point_visits[point];
+      for (size_t block = 0; block < y; ++block)
+        for (size_t atom = block; atom < atoms; atom += y) ++atom_visits[atom];
+      for (unsigned visits : point_visits) if (visits != 1) return 2;
+      for (unsigned visits : atom_visits) if (visits != 1) return 3;
+    }
+  }
+  for (const auto shape : {std::pair<size_t, size_t>{0, 1}, {1, 0}}) {
+    try { (void)atom_point_blocks(shape.first, shape.second); return 4; }
+    catch (const std::invalid_argument&) {}
+  }
+}
+""")
+    output = tmp_path / "launch"
+    native_cxx.build_executable(
+        (source,), output, compile_args=("-std=c++20", "-I", str(tmp_path))
+    )
+    subprocess.run([str(output)], check=True, timeout=30)
 
 
 def test_points_reuse_radial_factors() -> None:

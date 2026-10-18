@@ -1,8 +1,9 @@
 # Prepared semilocal KS model options
 
 `Calculator(method="lda-rks" | "pbe-rks" | "lda-uks" | "pbe-uks",
-ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA. Its default
-grid and tile reproduce the original method behavior. The existing compiler
+ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA.
+LDA/PBE production grids enable radial angular pruning by default. Explicit
+`GridSpec` v1/v2 prescriptions retain their unpruned behavior. The existing compiler
 `FunctionalSpec` and `GridSpec` are reused, with an explicit native SCF
 tail/spin domain; a second functional catalog is not introduced.
 
@@ -54,11 +55,100 @@ coincident-center tolerance and per-element radial scales. The native grid
 uses the same rational-Legendre radial rule, Legendre-trapezoid angular rule
 and equal-radius Becke partition as the reference. Element radii scale radial
 points and radial Jacobians; they do not add a heteronuclear partition
-correction. Pruning, screening, rules and units retain the version-1 contract.
+correction. Versions 1 and 2 remain unpruned; version 3 explicitly opts into
+the angular-pruning contract described next. Density screening is separate.
 Changing the grid changes the discrete energy. Changing `tile_points` changes
 the schedule, capacity and FP64 reduction order. With local-AO maps, larger
 block unions can also admit additional AO tail work; complete numerical gates
 remain necessary even though the grid and cutoff are unchanged.
+
+## Angular pruning
+
+`GridPolicy` and the default LDA/PBE `KsOptions` use the version-3 `radial-v1`
+prescription. The standard profile also increases radial resolution relative to
+v2; LDA uses additional angular resolution. These changes preserve the retained
+energy/force gates on the qualified water fixtures, rather than assuming that
+fewer points alone justify a default. Pruning is not automatically promoted to
+hybrid, meta-GGA or VV10 profiles. Select the retained unpruned policy explicitly
+when reproducing v2 calculations:
+
+```python
+from dataclasses import replace
+from generativeqc import Calculator, GridPolicy, KsOptions
+
+unpruned = GridPolicy(pruning="none").resolve("pbe-rks")
+pruned = GridPolicy().resolve("pbe-rks")
+print(unpruned.points_per_atom, pruned.points_per_atom)
+calculator = Calculator(
+    method="pbe-rks",
+    device="cuda",
+    ks_options=KsOptions(grid=pruned),
+)
+```
+
+Version 3 requires a finite positive radial scale for every element actually
+used. For an isolated angular-pruning experiment on a fixed v2 grid, use
+`replace(unpruned, version=3, pruning="radial-v1")` instead; this differs from
+selecting the newly qualified default radial/angular maxima. Custom radial
+counts, radii and angular orders remain explicit inputs.
+Maximum version-3 orders are 128 polar and 512 azimuth points. Unsupported
+prescriptions fail validation rather than silently disabling pruning. Native
+C/C++ callers select the same contract with `grid_version=3` / `KsGrid.version=3`
+and explicit element radii; the descriptor layout is unchanged.
+
+For increasing radial index `i`, define `u=(i+1/2)/radial_points`:
+
+| Radial rank | Angular orders relative to the requested maximum |
+| --- | --- |
+| `u < 1/5` | Quarter polar and azimuth orders |
+| `1/5 <= u < 1/3` | Half orders |
+| `1/3 <= u <= 3/4` | Full orders |
+| `3/4 < u <= 6/7` | Half orders |
+| `u > 6/7` | Quarter orders |
+
+Reduced orders round upward, with at least one polar and three azimuth points.
+Each shell uses its own complete Gauss-Legendre × periodic-trapezoid rule with
+the corresponding integration weights. This is an original table-free policy,
+**not NWChem/Lebedev pruning**. Element radii scale the physical shell positions;
+the angular schedule depends only on integer radial rank. Consequently the exact
+point count can be planned without constructing quadrature, and topology stays
+fixed as nuclei move. CPU and CUDA materialization, atomic-measure exports,
+resident ownership and moving-grid weight response use that same shell order.
+Other method/backend force-admission restrictions are unchanged.
+
+Pruning removes constructed points; it does not change a density cutoff or imply
+that an existing density-screened VV10 pair domain shrinks by the same fraction.
+Changing pruning changes the discrete energy and its analytic forces. Qualify
+the chosen method, basis and geometry class before using it for a production
+comparison. With the independent PySCF reference dependencies installed, run:
+
+```console
+python -m benchmarks.grid_policy_convergence --include-pruning --output .artifacts/grid-pruning-convergence.json
+```
+
+This CPU oracle checks LDA/PBE energy and grid-responsive analytic gradients
+against a dense grid whose stability is checked against a denser grid. Pruned
+standard/tight profiles must meet the unchanged unpruned accuracy gates while
+reducing point counts. It is not a VV10, large-system or GPU performance claim.
+The matched-grid runners default to `--grid-pruning auto`: LDA/PBE select the
+production policy for both native and GPU4PySCF; other methods retain unpruned
+diagnostic grids until independently qualified. `--grid-pruning none` selects
+the retained unpruned policy. Explicit `--grid NR NP NA` counts preserve the
+historical one-Bohr radial scales. `README_BENCHMARK_GRID_PRUNING` forwards this
+choice through `benchmarks/run_readme_dft_benchmarks.sh`.
+
+For an independent production-grid comparison, use
+`python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
+inside a finite Slurm GPU allocation with a source-matched Release library and
+GPU4PySCF installed. This runner uses GPU4PySCF's **own NWChem-pruned grids**,
+not the native angular rules. It checks dense-reference stability and both
+engines' complete energy/force results before selecting among timed candidates.
+The energy budget scales per water unit; maximum force budgets do not scale
+with system size. Qualification also reserves margin for the observed
+dense-reference variation; that variation is not a rigorous error bound.
+Raw samples, failed candidates, work counts and independent
+reference results are retained. Publishing a README production ranking still requires
+the [complete endpoint and accuracy qualification](../maintainer/performance_engineering.md#readme-production-comparisons).
 
 ## SCF and force tile policies
 

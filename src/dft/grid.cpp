@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <numbers>
 #include <stdexcept>
 #include <utility>
@@ -15,6 +16,17 @@ std::size_t multiply(std::size_t a, std::size_t b) {
   if (b && a > std::numeric_limits<std::size_t>::max() / b)
     throw std::invalid_argument("DFT grid size overflow");
   return a * b;
+}
+
+std::pair<std::size_t, std::size_t> angular_shape(const GridSpec& spec, std::size_t radial) {
+  if (spec.version != 3) return {spec.angular_polar, spec.angular_azimuth};
+  const auto rank = 2 * radial + 1;
+  const auto count = spec.radial_points;
+  const std::size_t divisor = 5 * rank < 2 * count || 7 * rank > 12 * count
+                                  ? 4
+                                  : (3 * rank < 2 * count || 4 * rank > 6 * count ? 2 : 1);
+  return {(spec.angular_polar + divisor - 1) / divisor,
+          std::max(std::size_t{3}, (spec.angular_azimuth + divisor - 1) / divisor)};
 }
 
 std::pair<std::vector<double>, std::vector<double>> gauss_legendre(std::size_t count) {
@@ -105,14 +117,40 @@ double owner_partition(const double* point, const core::System& system, std::siz
 }  // namespace
 
 void validate_grid_spec(const GridSpec& spec) {
-  if ((spec.version != 1 && spec.version != 2) || !spec.radial_points || spec.radial_points > 512 ||
-      !spec.angular_polar || spec.angular_polar > 256 || spec.angular_azimuth < 3 ||
-      spec.angular_azimuth > 1024 || !spec.partition_iterations || spec.partition_iterations > 5 ||
-      !std::isfinite(spec.coincident_tolerance) || spec.coincident_tolerance < 0.0)
+  if ((spec.version != 1 && spec.version != 2 && spec.version != 3) || !spec.radial_points ||
+      spec.radial_points > 512 || !spec.angular_polar || spec.angular_polar > 256 ||
+      spec.angular_azimuth < 3 || spec.angular_azimuth > 1024 || !spec.partition_iterations ||
+      spec.partition_iterations > 5 || !std::isfinite(spec.coincident_tolerance) ||
+      spec.coincident_tolerance < 0.0)
     throw std::invalid_argument("unsupported DFT grid prescription/version");
+  if (spec.version == 3 && (spec.angular_polar > 128 || spec.angular_azimuth > 512))
+    throw std::invalid_argument("radial-v1 angular rule exceeds bounded table capacity");
   for (double radius : spec.element_radii)
     if (!std::isfinite(radius) || radius < 0.0)
       throw std::invalid_argument("invalid DFT element radius");
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells(const GridSpec& spec) {
+  validate_grid_spec(spec);
+  std::vector<std::pair<std::size_t, std::size_t>> shells(
+      spec.radial_points, {spec.angular_polar, spec.angular_azimuth});
+  if (spec.version != 3) return shells;
+  for (std::size_t radial = 0; radial < shells.size(); ++radial)
+    shells[radial] = angular_shape(spec, radial);
+  return shells;
+}
+
+std::size_t grid_points_per_atom(const GridSpec& spec) {
+  validate_grid_spec(spec);
+  std::size_t points = 0;
+  for (std::size_t radial = 0; radial < spec.radial_points; ++radial) {
+    const auto [polar, azimuth] = angular_shape(spec, radial);
+    const auto count = multiply(polar, azimuth);
+    if (points > std::numeric_limits<std::size_t>::max() - count)
+      throw std::invalid_argument("DFT grid size overflow");
+    points += count;
+  }
+  return points;
 }
 
 std::pair<std::vector<double>, std::vector<double>> MolecularGrid::legendre_rule(
@@ -136,15 +174,17 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec, Deferred
 
 MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec)
     : MolecularGrid(system, spec, Deferred{}) {
-  auto [polar, polar_weights] = legendre_rule(spec_.angular_polar);
+  const auto shells = grid_angular_shells(spec_);
+  std::map<std::size_t, std::pair<std::vector<double>, std::vector<double>>> polar_rules;
+  for (const auto& [polar_count, azimuth_count] : shells)
+    if (!polar_rules.contains(polar_count))
+      polar_rules.emplace(polar_count, legendre_rule(polar_count));
   auto [radial_nodes, radial_weights] = legendre_rule(spec_.radial_points);
-  const std::size_t angular = multiply(spec_.angular_polar, spec_.angular_azimuth);
-  const std::size_t per_atom = multiply(spec_.radial_points, angular);
+  const std::size_t per_atom = grid_points_per_atom(spec_);
   const std::size_t total = multiply(system_.atoms.size(), per_atom);
   points_.reserve(multiply(total, 3));
   weights_.reserve(total);
   owners_.reserve(total);
-  const double azimuth_weight = 2.0 * std::numbers::pi / spec_.angular_azimuth;
   for (std::size_t owner = 0; owner < system_.atoms.size(); ++owner) {
     const auto& center = system_.atoms[owner].position;
     const auto z = system_.atoms[owner].atomic_number;
@@ -154,13 +194,16 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec)
       throw std::invalid_argument("production DFT grid has no sourced element radius");
     const double radius = stored > 0.0 ? stored : 1.0;
     for (std::size_t radial = 0; radial < spec_.radial_points; ++radial) {
+      const auto [polar_count, azimuth_count] = shells[radial];
+      const auto& [polar, polar_weights] = polar_rules.at(polar_count);
+      const double azimuth_weight = 2.0 * std::numbers::pi / azimuth_count;
       const double t = 0.5 * (radial_nodes[radial] + 1.0);
       const double r = radius * t / (1.0 - t);
       const double wr = radial_measure(radius, radial_nodes[radial], radial_weights[radial]);
-      for (std::size_t z = 0; z < spec_.angular_polar; ++z) {
+      for (std::size_t z = 0; z < polar_count; ++z) {
         const double ring = std::sqrt(std::max(0.0, 1.0 - polar[z] * polar[z]));
-        for (std::size_t azimuth = 0; azimuth < spec_.angular_azimuth; ++azimuth) {
-          const double phi = 2.0 * std::numbers::pi * azimuth / spec_.angular_azimuth;
+        for (std::size_t azimuth = 0; azimuth < azimuth_count; ++azimuth) {
+          const double phi = 2.0 * std::numbers::pi * azimuth / azimuth_count;
           const double point[3]{center[0] + r * ring * std::cos(phi),
                                 center[1] + r * ring * std::sin(phi), center[2] + r * polar[z]};
           points_.insert(points_.end(), point, point + 3);
@@ -174,9 +217,12 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec)
 }
 
 std::vector<double> MolecularGrid::atomic_weights() const {
-  const auto [polar, polar_weights] = legendre_rule(spec_.angular_polar);
+  const auto shells = grid_angular_shells(spec_);
+  std::map<std::size_t, std::vector<double>> polar_weights;
+  for (const auto& [polar_count, azimuth_count] : shells)
+    if (!polar_weights.contains(polar_count))
+      polar_weights.emplace(polar_count, legendre_rule(polar_count).second);
   const auto [nodes, weights] = legendre_rule(spec_.radial_points);
-  const double azimuth_weight = 2.0 * std::numbers::pi / spec_.angular_azimuth;
   std::vector<double> result;
   result.reserve(point_count());
   for (const auto& atom : system_.atoms) {
@@ -184,11 +230,14 @@ std::vector<double> MolecularGrid::atomic_weights() const {
     if (spec_.version >= 2 && !(stored > 0.0))
       throw std::invalid_argument("production DFT grid has no sourced element radius");
     const double radius = stored > 0.0 ? stored : 1.0;
-    for (std::size_t radial = 0; radial < nodes.size(); ++radial)
-      for (double polar_weight : polar_weights)
-        for (std::size_t azimuth = 0; azimuth < spec_.angular_azimuth; ++azimuth)
+    for (std::size_t radial = 0; radial < nodes.size(); ++radial) {
+      const auto [polar_count, azimuth_count] = shells[radial];
+      const double azimuth_weight = 2.0 * std::numbers::pi / azimuth_count;
+      for (double polar_weight : polar_weights.at(polar_count))
+        for (std::size_t azimuth = 0; azimuth < azimuth_count; ++azimuth)
           result.push_back(radial_measure(radius, nodes[radial], weights[radial]) * polar_weight *
                            azimuth_weight);
+    }
   }
   return result;
 }

@@ -348,7 +348,9 @@ def _item_host_inventory(
         + matrix_binding_host
         + structured_binding_host
     )
-    quadrature = 16 * (model.grid.radial_points + model.grid.angular_polar) + 8 * a
+    quadrature = (
+        16 * (2 * model.grid.radial_points + 3 * model.grid.angular_polar) + 8 * a
+    )
     if backend == "cuda":
         # Shared rule/center/radius upload coexists with the small rule vectors.
         quadrature += 8 * (4 * a + 2 * (512 + 256))
@@ -996,9 +998,7 @@ def ks_resource_request(
                 "spins": 2 if unrestricted else 1,
                 "grid_points": byte_product(
                     len(atoms),
-                    model.grid.radial_points,
-                    model.grid.angular_polar,
-                    model.grid.angular_azimuth,
+                    model.grid.points_per_atom,
                 ),
             }
         )

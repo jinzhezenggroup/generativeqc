@@ -113,6 +113,8 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_quadrature_tests tests/native/test_cuda_quadrature.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    generativeqc_native_test(generativeqc_grid_pruning_cuda_tests tests/native/test_grid_pruning_cuda.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_xc_response_cuda_tests tests/native/test_xc_response_cuda.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
     target_compile_definitions(generativeqc_xc_response_cuda_tests PRIVATE

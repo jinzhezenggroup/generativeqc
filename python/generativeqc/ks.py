@@ -1019,9 +1019,12 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
                 grid_method = (
                     f"{family}-{'uks' if method_ir.spin == 'polarized' else 'rks'}"
                 )
-            grid = GridPolicy(options.grid_accuracy).resolve(
-                grid_method, derivative_order=0
-            )
+            grid = GridPolicy(
+                options.grid_accuracy,
+                pruning="none"
+                if parse_automatic_libxc_selector(method) is not None
+                else "radial-v1",
+            ).resolve(grid_method, derivative_order=0)
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(

@@ -1,4 +1,4 @@
-"""Generated directional response of the existing unpruned Becke grid.
+"""Generated directional response of fixed-topology Becke quadratures.
 
 This is a tiled CPU diagnostic/consumer building block for #163 B and #180,
 not a complete KS gradient/HVP or a native derivative capability. Scalar first

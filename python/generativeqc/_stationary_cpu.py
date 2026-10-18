@@ -431,7 +431,7 @@ def complete_rks_gradient_diagnostic(
     Mixed DF uses the shared native fitted primary and only one compiler-generated
     exact LR correction traversal, never exact SR/full-range replacements;
     public RSH snapshot/capability admission remains a separate boundary. Uses a
-    native unpruned version-one grid, distinct nuclei and no
+    native fixed-topology grid, distinct nuclei and no
     point/center collisions. CPU is explicit; CUDA snapshots are rejected.
     Caller chooses an ignored/temporary compilation cache and may supply a
     CppCompilerAdapter; otherwise CXX (or c++) selects the executable. Scientific work is

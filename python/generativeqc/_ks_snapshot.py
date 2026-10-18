@@ -1035,6 +1035,7 @@ class NativeKsSnapshot:
             radii = take((119,))
             self.grid_spec = GridSpec(
                 version=int(version),
+                pruning="radial-v1" if int(version) == 3 else "none",
                 radial_points=int(radial),
                 angular_polar=int(polar),
                 angular_azimuth=int(azimuth),

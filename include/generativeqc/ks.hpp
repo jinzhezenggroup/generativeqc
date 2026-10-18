@@ -17,7 +17,8 @@ namespace generativeqc {
 /** @native-contract generativeqc::KsGrid
  * @behavior Value descriptor for caller-selected molecular quadrature; defaults form a small
  * reference grid and do not promise production convergence.
- * @outputs version selects reference (1) or resolved production (2) grid semantics;
+ * @outputs version selects reference (1), explicit-radius unpruned (2), or
+ * explicit-radius radial-v1 pruned (3) grid semantics;
  * radial_points, angular_polar, and angular_azimuth set quadrature counts;
  * partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
  * coincident-center threshold; tile_points bounds the grid tile size.
