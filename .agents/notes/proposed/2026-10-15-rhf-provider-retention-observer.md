@@ -1,5 +1,9 @@
 # Proposal: diagnose RHF provider-retained memory outside the SCF owner
 
+Follow-up: [direct external guard-call observation](2026-10-18-external-rhf-guard-observation.md)
+records a separately bound 129d failure; the historical a308 ambiguity below is
+unchanged.
+
 Status: proposed
 Date: 2026-10-15
 
