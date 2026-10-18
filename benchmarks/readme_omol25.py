@@ -727,7 +727,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         )
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
-    if args.repeats < 1 or min(args.grid) < 1:
+    if args.repeats < 1 or (args.grid is not None and min(args.grid) < 1):
         parser.error("repeats and grid dimensions must be positive")
     if (
         args.engine == "native"

@@ -246,7 +246,10 @@ def test_pruned_moving_grid_derivative_matches_multistep_finite_differences() ->
         )
 
     errors = []
-    for step in (1e-3, 1e-4, 1e-5):
+    # Start in the truncation-dominated regime. At 1e-5 the energy difference
+    # is already roundoff-limited on some NumPy/BLAS builds, so a further
+    # error-ratio requirement can reject an accurate analytic derivative.
+    for step in (1e-2, 1e-3, 1e-4):
         finite_difference = (
             integral(CENTERS + step * MOTION) - integral(CENTERS - step * MOTION)
         ) / (2 * step)

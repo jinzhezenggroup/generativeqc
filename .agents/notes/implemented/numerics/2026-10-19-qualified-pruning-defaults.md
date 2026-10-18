@@ -109,6 +109,14 @@ The archive SHA256 is
 `87b4cc59b062a2d02f28dd39dcaa24c7e82514c5a067e2136150509c4eab338e`;
 the unchanged compact-summary SHA256 is
 `e9e6b0e060fdaf96b82c4effba2f85a0e2a6f31aa8ef93485364300cdd7790c9`.
+The previously published compact [summary](https://github.com/jinzhezenggroup/generativeqc/blob/ebf0aca81ffe0b6788469e780b7626ccad2f6813/benchmarks/results/radial-pruning-20261019/summary.json)
+and [scope/reproduction note](https://github.com/jinzhezenggroup/generativeqc/blob/ebf0aca81ffe0b6788469e780b7626ccad2f6813/benchmarks/results/radial-pruning-20261019/README.md)
+remain recoverable at that immutable commit. The summary is the unchanged
+11,722-byte file with the SHA256 above, including all 48 timing samples and
+the rejected old-native classifications. These historical records retain
+their original source-capsule scope; they are not measurements of later
+integration or runner repairs. The larger raw archive is still local-only.
+
 The native library SHA256 is
 `92e4508516078043a72030fcd8dbf8ed6bbe556b8eece29a0e1b3511c4fac447`;
 the original source-capsule SHA256 is
