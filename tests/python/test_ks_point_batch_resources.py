@@ -50,6 +50,7 @@ CUDA_STUB = r"""
 #include <cstdint>
 using cudaError_t = int;
 using cudaStream_t = void*;
+using cudaEvent_t = void*;
 constexpr cudaError_t cudaSuccess=0, cudaErrorInvalidValue=1;
 constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
 inline std::size_t allocation_limit=~std::size_t{0};

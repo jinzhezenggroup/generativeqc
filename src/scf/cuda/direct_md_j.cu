@@ -357,12 +357,15 @@ void launch_md_j_density_bounds(cudaStream_t stream, DeviceBatch batch, MdJView 
 
 void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t system_begin,
                  std::size_t system_count, bool unrestricted, double screening,
-                 const double* density, const double* beta, double* coulomb) {
+                 const double* density, const double* beta, double* coulomb,
+                 cudaEvent_t* profile_events) {
   const auto end = system_begin + system_count;
-  md_j_density_bounds<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
-      batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
+  if (profile_events) {
+    const auto error = cudaEventRecord(profile_events[3], stream);
+    if (error != cudaSuccess) throw error;
+  }
   if (md.reciprocal) {
     launch_md_reciprocal_potential<0, 0>(stream, md, system_begin, end, screening);
     launch_md_reciprocal_potential<0, 1>(stream, md, system_begin, end, screening);
@@ -370,6 +373,12 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
     launch_md_reciprocal_potential<1, 1>(stream, md, system_begin, end, screening);
     launch_md_reciprocal_potential<1, 2>(stream, md, system_begin, end, screening);
     launch_md_reciprocal_potential<2, 2>(stream, md, system_begin, end, screening);
+  }
+  if (profile_events) {
+    const auto error = cudaEventRecord(profile_events[4], stream);
+    if (error != cudaSuccess) throw error;
+  }
+  if (md.reciprocal) {
     launch_potential<0, 3>(stream, md, system_begin, end, screening);
     launch_potential<0, 4>(stream, md, system_begin, end, screening);
     launch_potential<1, 3>(stream, md, system_begin, end, screening);
@@ -383,8 +392,16 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
   }
   launch_potential_classes<3>(stream, md, system_begin, end, screening);
   launch_potential_classes<4>(stream, md, system_begin, end, screening);
+  if (profile_events) {
+    const auto error = cudaEventRecord(profile_events[5], stream);
+    if (error != cudaSuccess) throw error;
+  }
   md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, coulomb);
+  if (profile_events) {
+    const auto error = cudaEventRecord(profile_events[6], stream);
+    if (error != cudaSuccess) throw error;
+  }
 }
 
 }  // namespace generativeqc::scf::cuda_execution

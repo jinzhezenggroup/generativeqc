@@ -47,7 +47,9 @@ def test_md_source_launch_propagates_first_failure(
         )
     )
     executable = native_cxx.build_executable(
-        [cpp], tmp_path / "md_source_status", compile_args=["-std=c++17", "-O2"]
+        [cpp],
+        tmp_path / "md_source_status",
+        compile_args=["-std=c++17", "-O2", f"-I{ROOT / 'src'}"],
     )
     subprocess.run([executable], check=True, timeout=10)
 
@@ -61,6 +63,10 @@ PREFIX = r"""
 #include <new>
 #include <stdexcept>
 #include <vector>
+#define __host__
+#define __device__
+#include "scf/cuda/md_source_tiles.cuh"
+using namespace generativeqc::scf::cuda_execution;
 using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaErrorLaunchFailure=2;
@@ -71,6 +77,7 @@ struct MdJView {
   unsigned long long* source_cursor=nullptr;
   void* work_counts=nullptr;
   unsigned long long residual_candidate_count=15;
+  bool residual_tiled=false;
 };
 template<unsigned A,unsigned B> struct SourceSchedule {
   static constexpr unsigned groups=A+B<=2?16:1, block_threads=A+B<=2?128:32;
@@ -103,7 +110,7 @@ cudaError_t cudaMemsetAsync(void* pointer,int value,std::size_t bytes,cudaStream
 cudaError_t cudaGetLastError() {
   auto error=sticky;sticky=cudaSuccess;return error;
 }
-template<unsigned A,unsigned B,bool Count,class... Args>
+template<unsigned A,unsigned B,bool Count,bool Tiled,class... Args>
 void consume_source_tasks(unsigned workers,unsigned threads,std::size_t shared_bytes,
                           cudaStream_t stream,Args...) {
   assert(workers>0 && threads>0 && shared_bytes>0 && stream==7);
@@ -135,8 +142,10 @@ int main() {
     });
   };
   for(bool want_j:{false,true})for(bool want_k:{false,true})
-  for(bool unrestricted:{false,true})for(bool counted:{false,true}) {
+  for(bool unrestricted:{false,true})for(bool counted:{false,true})
+  for(bool tiled:{false,true}) {
     md.work_counts=counted?&cursor:nullptr;
+    md.residual_tiled=tiled;
     reset();assert(run(want_j,want_k,unrestricted)==cudaSuccess);
     assert(drains==0 && detail.empty());
     const auto successful=submissions;

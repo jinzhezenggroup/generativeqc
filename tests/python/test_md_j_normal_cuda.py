@@ -23,8 +23,13 @@ WATER = [
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 @pytest.mark.parametrize("screening", [0.0, 1e-12, 0.02])
+@pytest.mark.parametrize("residual_tiles", ["0", "1", None])
 def test_normal_md_j_independent_screened_oracle(
-    representation: str, spin: str, screening: float, monkeypatch: pytest.MonkeyPatch
+    representation: str,
+    spin: str,
+    screening: float,
+    residual_tiles: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Nonsymmetric total densities retain native phases and exact AO masks."""
     from generativeqc.fock import FockBuildSpec, FockTerm
@@ -32,6 +37,10 @@ def test_normal_md_j_independent_screened_oracle(
     from md_j_resident_probe import ResidentMdJProbe as FockPlan
 
     assert os.environ.get("SLURM_JOB_ID")
+    if residual_tiles is None:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_RESIDUAL_TILES", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES", residual_tiles)
     with NativeAO(WATER, "def2-svp", representation=representation) as basis:
         molecule, scales = reference_molecule(basis)
     integrals = molecule.intor("int2e") * np.einsum(
@@ -189,12 +198,115 @@ def test_reciprocal_work_census_preserves_density_consumers(
         for name in (
             "uniform_directions",
             "uniform_summands",
-            "residual_candidates",
             "residual_tasks",
             "residual_roots",
         ):
             assert normal[name] == reciprocal[name] == default[name]
+        assert (
+            len(
+                {
+                    row["residual_candidates"] + row["residual_screened_candidates"]
+                    for row in (normal, reciprocal, default)
+                }
+            )
+            == 1
+        )
         assert default["uniform_roots"] == reciprocal["uniform_roots"]
     assert sum(row["uniform_roots"] for row in counts[1]) < sum(
         row["uniform_roots"] for row in counts[0]
     )
+
+
+def test_residual_tiles_preserve_domain_tasks_and_replay_policy(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Compare actual resident work; changing the environment cannot alter replay."""
+    from generativeqc.fock import FockBuildSpec, FockTerm
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe as FockPlan
+
+    monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    monkeypatch.setenv("GENERATIVEQC_MD_J_PROFILE", "1")
+    monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    spec = replace(
+        FockBuildSpec.hf("restricted", derivative_order=0), exchange=FockTerm(False)
+    )
+
+    def work_rows() -> list[dict[str, int]]:
+        lines = capfd.readouterr().err.splitlines()
+        timings = [
+            {
+                name: float(value)
+                for name, value in (field.split("=") for field in line.split()[1:])
+            }
+            for line in lines
+            if line.startswith("MD_J_TIMING ")
+        ]
+        assert len(timings) == 1
+        timing = timings[0]
+        assert all(np.isfinite(value) and value >= 0 for value in timing.values())
+        stages = sum(
+            value
+            for name, value in timing.items()
+            if name.endswith("_seconds") and name != "total_seconds"
+        )
+        assert timing["total_seconds"] == pytest.approx(stages, rel=1e-4, abs=1e-5)
+        return [
+            {
+                name: int(value)
+                for name, value in (field.split("=") for field in line.split()[1:])
+            }
+            for line in lines
+            if line.startswith("MD_J_WORK ")
+        ]
+
+    outputs, counts = [], []
+    with NativeAO(WATER, "def2-svp", representation="spherical") as basis:
+        density = np.random.default_rng(9191).normal(size=(basis.nao, basis.nao)) * 0.04
+        for mode in ("0", "1", None):
+            if mode is None:
+                monkeypatch.delenv("GENERATIVEQC_MD_J_RESIDUAL_TILES", raising=False)
+            else:
+                monkeypatch.setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES", mode)
+            with FockPlan(basis, spec, device="cuda", screening_tolerance=0.02) as plan:
+                capfd.readouterr()
+                outputs.append(plan.evaluate(density).coulomb)
+                rows = work_rows()
+                assert len(rows) == 25
+                counts.append(rows)
+                monkeypatch.setenv(
+                    "GENERATIVEQC_MD_J_RESIDUAL_TILES", "1" if mode == "0" else "0"
+                )
+                np.testing.assert_allclose(
+                    plan.evaluate(density).coulomb, outputs[-1], atol=3e-11, rtol=3e-11
+                )
+                replay = work_rows()
+                assert [
+                    {key: value for key, value in row.items() if key != "fock"}
+                    for row in replay
+                ] == [
+                    {key: value for key, value in row.items() if key != "fock"}
+                    for row in rows
+                ]
+                np.testing.assert_array_equal(
+                    plan.evaluate(np.zeros_like(density)).coulomb, 0.0
+                )
+                zero = work_rows()
+                assert all(row["residual_roots"] == 0 for row in zero)
+                if mode != "0":
+                    assert all(row["residual_candidates"] == 0 for row in zero)
+    np.testing.assert_allclose(outputs[0], outputs[1], atol=3e-11, rtol=3e-11)
+    np.testing.assert_allclose(outputs[1], outputs[2], atol=3e-11, rtol=3e-11)
+    for tiled_counts in counts[1:]:
+        assert sum(row["residual_tiles"] for row in tiled_counts) > 0
+        for incumbent, tiled in zip(counts[0], tiled_counts, strict=True):
+            assert incumbent["residual_candidates"] == (
+                tiled["residual_candidates"] + tiled["residual_screened_candidates"]
+            )
+            for name in (
+                "residual_tasks",
+                "residual_roots",
+                "uniform_directions",
+                "uniform_summands",
+            ):
+                assert incumbent[name] == tiled[name]

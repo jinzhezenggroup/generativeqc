@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/md_source_tiles.cuh",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Bounded shell-pair tile indexing and outward-rounded rejection preserve the incumbent residual-J candidate domain and density error allowance; the default J-only schedule does not replace the per-orientation AO mask or K ownership.",
+  "regions": []
+}

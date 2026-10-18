@@ -40,11 +40,15 @@ struct MdJPrimitive {
  * Uniform roots are radial source evaluations; directions and summands count
  * density consumers independently. Residual roots count primitive products
  * actually contracted after shell and density admission, not queue capacity.
+ * residual_candidates counts individual tests; screened_candidates counts
+ * candidates bypassed by tile bounds, so their sum retains the search domain.
  * All arrays use the index 5 * bra_angular + ket_angular.
  */
 struct MdJWorkCounts {
   unsigned long long uniform_roots[25]{}, uniform_directions[25]{}, uniform_summands[25]{};
   unsigned long long residual_candidates[25]{}, residual_tasks[25]{}, residual_roots[25]{};
+  unsigned long long residual_tiles[25]{}, residual_screened_tiles[25]{};
+  unsigned long long residual_screened_candidates[25]{};
 };
 
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.
@@ -65,6 +69,9 @@ struct MdJView {
   MdJWorkCounts* work_counts{};
   /** Freeze the schedule with the resident owner; replay never polls policy. */
   bool reciprocal{};
+  /** J-only residual tiles are the default; K retains its incumbent traversal. */
+  bool residual_tiled{true};
+  bool profile{};
   std::size_t active_pair_count{};
   std::size_t residual_candidate_count{};
   /** Compact angular segments let each source kernel retain a fixed recurrence
@@ -111,9 +118,12 @@ void launch_md_source_jk(cudaStream_t stream, DeviceBatch batch, MdJView md,
 /** Allocation-free FP64 density transform, Coulomb contraction and AO projection.
  * Add to the independently computed partially screened J; never touch K or
  * neighboring items. Metadata and geometry remain immutable during replay.
+ * The caller must refresh density bounds on this stream before residual J.
+ * Optional seven-event diagnostic storage records stages 3 through 6 here.
  */
 void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t system_begin,
                  std::size_t system_count, bool unrestricted, double screening,
-                 const double* density, const double* beta, double* coulomb);
+                 const double* density, const double* beta, double* coulomb,
+                 cudaEvent_t* profile_events = nullptr);
 
 }  // namespace generativeqc::scf::cuda_execution

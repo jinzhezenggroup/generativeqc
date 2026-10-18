@@ -6,6 +6,7 @@
 #include "scf/cuda/coulomb_auxiliary.cuh"
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/md_hermite_index.cuh"
+#include "scf/cuda/md_source_tiles.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -213,8 +214,10 @@ __device__ __forceinline__ void contract_source_task(
  * The 64-bit cursor replaces per-page host launches; neither the task inventory
  * nor the scratch grows with the molecular quartet count. Angular dispatch is
  * a launch boundary, not a device switch: low-order tasks cannot inherit the
- * high-order recurrence's register footprint and stack frame. */
-template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
+ * high-order recurrence's register footprint and stack frame. Default J-only
+ * tiles reject whole batches before individual tests without changing the
+ * surviving task predicates or primitive contraction. */
+template <unsigned BraAngular, unsigned KetAngular, bool CountWork, bool Tiled>
 __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t system_begin,
                                      std::size_t system_end, bool want_j, bool want_k,
                                      bool unrestricted, double screening, const double* bounds,
@@ -224,6 +227,9 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
   __shared__ MdSourceTask tasks[kSourceCandidates];
   __shared__ unsigned task_count;
   __shared__ unsigned long long candidate_begin;
+  __shared__ MdSourceTile tile;
+  __shared__ std::uint32_t tile_pairs[2 * kMdSourceTileWidth];
+  __shared__ bool tile_rejected;
   const auto bra_begin = md.active_pair_offsets[BraAngular];
   const auto ket_begin = md.active_pair_offsets[KetAngular];
   const auto bra_count = md.active_pair_offsets[BraAngular + 1] - bra_begin;
@@ -231,38 +237,104 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
   const auto candidates = BraAngular == KetAngular
                               ? static_cast<unsigned long long>(bra_count) * (bra_count + 1ULL) / 2
                               : static_cast<unsigned long long>(bra_count) * ket_count;
+  const auto tiles = md_source_tile_count(bra_count, ket_count, BraAngular == KetAngular);
   const double density_allowance =
       __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
   unsigned long long tested = 0, admitted = 0, roots = 0;
+  unsigned long long visited_tiles = 0, screened_tiles = 0, screened_candidates = 0;
   while (true) {
     if (threadIdx.x == 0) {
-      candidate_begin =
-          atomicAdd(md.source_cursor, static_cast<unsigned long long>(kSourceCandidates));
+      candidate_begin = atomicAdd(
+          md.source_cursor, Tiled ? 1ULL : static_cast<unsigned long long>(kSourceCandidates));
+      if constexpr (Tiled) {
+        if (candidate_begin < tiles)
+          tile = md_source_tile(candidate_begin, ket_count, BraAngular == KetAngular);
+      }
       task_count = 0;
     }
     __syncthreads();
-    if (candidate_begin >= candidates) {
+    if (candidate_begin >= (Tiled ? tiles : candidates)) {
       if constexpr (CountWork) {
         for (unsigned stride = 16; stride; stride /= 2) {
           tested += __shfl_down_sync(0xffffffff, tested, stride);
           admitted += __shfl_down_sync(0xffffffff, admitted, stride);
           roots += __shfl_down_sync(0xffffffff, roots, stride);
+          visited_tiles += __shfl_down_sync(0xffffffff, visited_tiles, stride);
+          screened_tiles += __shfl_down_sync(0xffffffff, screened_tiles, stride);
+          screened_candidates += __shfl_down_sync(0xffffffff, screened_candidates, stride);
         }
         if (threadIdx.x % 32 == 0) {
           constexpr auto angular = 5 * BraAngular + KetAngular;
           atomicAdd(&md.work_counts->residual_candidates[angular], tested);
           atomicAdd(&md.work_counts->residual_tasks[angular], admitted);
           atomicAdd(&md.work_counts->residual_roots[angular], roots);
+          atomicAdd(&md.work_counts->residual_tiles[angular], visited_tiles);
+          atomicAdd(&md.work_counts->residual_screened_tiles[angular], screened_tiles);
+          atomicAdd(&md.work_counts->residual_screened_candidates[angular], screened_candidates);
         }
       }
       return;
     }
-    for (auto candidate = candidate_begin + threadIdx.x;
-         candidate < candidates && candidate < candidate_begin + kSourceCandidates;
+    if constexpr (Tiled) {
+      if (threadIdx.x < 32) {
+        const auto lane = threadIdx.x;
+        const bool bra_side = lane < kMdSourceTileWidth;
+        const auto local_index = bra_side ? tile.bra + lane : tile.ket + lane - kMdSourceTileWidth;
+        const bool valid =
+            lane < 2 * kMdSourceTileWidth && local_index < (bra_side ? bra_count : ket_count);
+        double minimum = INFINITY, maximum = 0.0, density_maximum = 0.0;
+        if (valid) {
+          const auto pair = md.active_pairs[(bra_side ? bra_begin : ket_begin) + local_index];
+          tile_pairs[lane] = pair;
+          minimum = md.minimum_bounds[pair];
+          maximum = md.maximum_bounds[pair];
+          density_maximum = md.density_bounds[pair];
+        }
+        for (unsigned stride = kMdSourceTileWidth / 2; stride; stride /= 2) {
+          minimum =
+              fmin(minimum, __shfl_down_sync(0xffffffff, minimum, stride, kMdSourceTileWidth));
+          maximum =
+              fmax(maximum, __shfl_down_sync(0xffffffff, maximum, stride, kMdSourceTileWidth));
+          density_maximum = fmax(density_maximum, __shfl_down_sync(0xffffffff, density_maximum,
+                                                                   stride, kMdSourceTileWidth));
+        }
+        const double ket_minimum = __shfl_sync(0xffffffff, minimum, kMdSourceTileWidth);
+        const double ket_maximum = __shfl_sync(0xffffffff, maximum, kMdSourceTileWidth);
+        const double ket_density = __shfl_sync(0xffffffff, density_maximum, kMdSourceTileWidth);
+        if (lane == 0) {
+          const double bound = __dmul_ru(maximum, ket_maximum);
+          tile_rejected = md_source_tile_rejected(
+              bound, __dmul_rd(minimum, ket_minimum), __dmul_ru(bound, density_maximum),
+              __dmul_ru(bound, ket_density), density_maximum == 0.0 && ket_density == 0.0,
+              screening, density_allowance);
+          if constexpr (CountWork) {
+            ++visited_tiles;
+            if (tile_rejected) {
+              ++screened_tiles;
+              const auto bra_size = min(kMdSourceTileWidth, bra_count - tile.bra);
+              const auto ket_size = min(kMdSourceTileWidth, ket_count - tile.ket);
+              screened_candidates += BraAngular == KetAngular && tile.bra == tile.ket
+                                         ? bra_size * (bra_size + 1) / 2
+                                         : bra_size * ket_size;
+            }
+          }
+        }
+      }
+      __syncthreads();
+      if (tile_rejected) continue;
+    }
+    const auto candidate_end = Tiled ? kMdSourceTileWidth * kMdSourceTileWidth
+                                     : min(candidates, candidate_begin + kSourceCandidates);
+    for (auto candidate = (Tiled ? 0ULL : candidate_begin) + threadIdx.x; candidate < candidate_end;
          candidate += blockDim.x) {
-      if constexpr (CountWork) ++tested;
       unsigned long long bra_index{}, ket_index{};
-      if constexpr (BraAngular == KetAngular) {
+      if constexpr (Tiled) {
+        bra_index = tile.bra + candidate / kMdSourceTileWidth;
+        ket_index = tile.ket + candidate % kMdSourceTileWidth;
+        if (bra_index >= bra_count || ket_index >= ket_count ||
+            (BraAngular == KetAngular && bra_index < ket_index))
+          continue;
+      } else if constexpr (BraAngular == KetAngular) {
         bra_index = static_cast<unsigned long long>((sqrt(8.0 * candidate + 1.0) - 1.0) * 0.5);
         while (bra_index * (bra_index + 1ULL) / 2 > candidate) --bra_index;
         while ((bra_index + 1ULL) * (bra_index + 2ULL) / 2 <= candidate) ++bra_index;
@@ -271,9 +343,12 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
         bra_index = candidate / ket_count;
         ket_index = candidate % ket_count;
       }
+      if constexpr (CountWork) ++tested;
       {
-        const auto bra = md.active_pairs[bra_begin + bra_index],
-                   ket = md.active_pairs[ket_begin + ket_index];
+        const auto bra = Tiled ? tile_pairs[candidate / kMdSourceTileWidth]
+                               : md.active_pairs[bra_begin + bra_index];
+        const auto ket = Tiled ? tile_pairs[kMdSourceTileWidth + candidate % kMdSourceTileWidth]
+                               : md.active_pairs[ket_begin + ket_index];
         const auto system = md.pairs[bra].system;
         if (system >= system_begin && system < system_end && system == md.pairs[ket].system &&
             md.maximum_bounds[bra] * md.maximum_bounds[ket] >= screening &&
@@ -314,7 +389,7 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
   }
 }
 
-template <unsigned BraAngular, unsigned KetAngular>
+template <unsigned BraAngular, unsigned KetAngular, bool Tiled>
 void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
                          std::size_t system_begin, std::size_t system_count, bool want_j,
                          bool want_k, bool unrestricted, double screening, const double* bounds,
@@ -336,15 +411,16 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
       BraAngular == KetAngular ? bra_count * (bra_count + 1ULL) / 2 : bra_count * ket_count;
   if (!candidates) return;
   const unsigned workers = static_cast<unsigned>(std::min<unsigned long long>(
-      kSourceWorkers, (candidates + kSourceCandidates - 1) / kSourceCandidates));
+      kSourceWorkers, Tiled ? md_source_tile_count(bra_count, ket_count, BraAngular == KetAngular)
+                            : (candidates + kSourceCandidates - 1) / kSourceCandidates));
   check_md_j_cuda(cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream));
   if (md.work_counts && !want_k)
-    consume_source_tasks<BraAngular, KetAngular, true>
+    consume_source_tasks<BraAngular, KetAngular, true, Tiled>
         <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
             batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
             screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
   else
-    consume_source_tasks<BraAngular, KetAngular, false>
+    consume_source_tasks<BraAngular, KetAngular, false, Tiled>
         <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
             batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
             screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
@@ -368,10 +444,15 @@ void launch_md_source_jk(cudaStream_t stream, DeviceBatch batch, MdJView md,
       check_md_j_cuda(cudaMemsetAsync(beta_exchange + begin, 0, elements * sizeof(double), stream));
   }
   if (!want_k && !md.residual_candidate_count) return;
-#define MD_SOURCE_CLASS(bra, ket)                                                              \
-  launch_source_class<bra, ket>(stream, batch, md, system_begin, system_count, want_j, want_k, \
-                                unrestricted, screening, bounds, density, beta, coulomb,       \
-                                alpha_exchange, beta_exchange)
+#define MD_SOURCE_CLASS(bra, ket)                                                                \
+  if (md.residual_tiled && !want_k)                                                              \
+    launch_source_class<bra, ket, true>(stream, batch, md, system_begin, system_count, want_j,   \
+                                        want_k, unrestricted, screening, bounds, density, beta,  \
+                                        coulomb, alpha_exchange, beta_exchange);                 \
+  else                                                                                           \
+    launch_source_class<bra, ket, false>(stream, batch, md, system_begin, system_count, want_j,  \
+                                         want_k, unrestricted, screening, bounds, density, beta, \
+                                         coulomb, alpha_exchange, beta_exchange)
   MD_SOURCE_CLASS(0, 0);
   MD_SOURCE_CLASS(1, 0);
   MD_SOURCE_CLASS(1, 1);

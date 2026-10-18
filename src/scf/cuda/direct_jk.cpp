@@ -60,6 +60,52 @@ void direct_jk_require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
 
+/** Intrusive on-stream intervals, not kernel sums or clean cold wall time.
+ * No events, fence or output are introduced unless profiling was requested
+ * when the resident owner was prepared. Partial construction also cleans up. */
+struct MdJProfile {
+  std::array<cudaEvent_t, 7> events{};
+
+  explicit MdJProfile(bool enabled) {
+    if (!enabled) return;
+    try {
+      for (auto& event : events) direct_jk_check(cudaEventCreate(&event));
+    } catch (...) {
+      destroy();
+      throw;
+    }
+  }
+  ~MdJProfile() { destroy(); }
+  MdJProfile(const MdJProfile&) = delete;
+  MdJProfile& operator=(const MdJProfile&) = delete;
+
+  void destroy() noexcept {
+    for (auto event : events)
+      if (event) (void)cudaEventDestroy(event);
+  }
+  void record(unsigned index, cudaStream_t stream) {
+    if (events[0]) direct_jk_check(cudaEventRecord(events[index], stream));
+  }
+  void report(std::size_t fock) {
+    if (!events[0]) return;
+    direct_jk_check(cudaEventSynchronize(events.back()));
+    std::array<double, 6> seconds{};
+    for (unsigned stage = 0; stage < seconds.size(); ++stage) {
+      float milliseconds = 0.0F;
+      direct_jk_check(cudaEventElapsedTime(&milliseconds, events[stage], events[stage + 1]));
+      seconds[stage] = milliseconds * 1e-3;
+    }
+    float total = 0.0F;
+    direct_jk_check(cudaEventElapsedTime(&total, events.front(), events.back()));
+    std::fprintf(stderr,
+                 "MD_J_TIMING fock=%zu density_bounds_seconds=%.9g residual_seconds=%.9g "
+                 "density_transform_seconds=%.9g reciprocal_seconds=%.9g "
+                 "oriented_seconds=%.9g projection_seconds=%.9g total_seconds=%.9g\n",
+                 fock, seconds[0], seconds[1], seconds[2], seconds[3], seconds[4], seconds[5],
+                 total * 1e-3);
+  }
+};
+
 /** Default to bounded shell ownership for retained derivatives, not SCF values.
  * The existing value-capability and bounded-value opt-in gates remain separate.
  * Value-only and borrowed resident-source plans do not acquire this resource. */
@@ -105,6 +151,8 @@ struct MdJHost {
   std::size_t transforms{}, hermites{}, bytes{};
   bool work_counts{};
   bool reciprocal{};
+  bool residual_tiled{true};
+  bool profile{};
 
   bool prepare(const HostBatch& host, std::size_t available) {
     const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
@@ -120,6 +168,14 @@ struct MdJHost {
     if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL must be 0 or 1");
     reciprocal = !reuse || std::strcmp(reuse, "1") == 0;
+    const char* tiled = std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+    if (tiled && std::strcmp(tiled, "0") != 0 && std::strcmp(tiled, "1") != 0)
+      throw std::invalid_argument("GENERATIVEQC_MD_J_RESIDUAL_TILES must be 0 or 1");
+    residual_tiled = !tiled || std::strcmp(tiled, "1") == 0;
+    const char* timing = std::getenv("GENERATIVEQC_MD_J_PROFILE");
+    if (timing && std::strcmp(timing, "0") != 0 && std::strcmp(timing, "1") != 0)
+      throw std::invalid_argument("GENERATIVEQC_MD_J_PROFILE must be 0 or 1");
+    profile = timing && std::strcmp(timing, "1") == 0;
     const auto total_pairs = host.shell_pair_first.size();
     if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
         host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
@@ -1139,6 +1195,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             if (md_host.work_counts)
               md.work_counts = reinterpret_cast<MdJWorkCounts*>(scratch(sizeof(MdJWorkCounts)));
             md.reciprocal = md_host.reciprocal;
+            md.residual_tiled = md_host.residual_tiled;
+            md.profile = md_host.profile;
             md.transforms = scratch(md_host.transforms * sizeof(double));
             md.density = scratch(md_host.hermites * sizeof(double));
             md.potential = scratch(md_host.hermites * sizeof(double));
@@ -1586,17 +1644,22 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
       if (plan->md_j.work_counts)
         direct_jk_check(
             cudaMemsetAsync(plan->md_j.work_counts, 0, sizeof(MdJWorkCounts), plan->stream));
-      direct_jk_check(cudaMemsetAsync(coulomb, 0, bytes, plan->stream));
+      MdJProfile profile(plan->md_j.profile);
+      profile.record(0, plan->stream);
       launch_md_j_density_bounds(plan->stream, plan->batch, plan->md_j, 0,
                                  plan->diagnostic.batch_size, unrestricted, density, beta);
       direct_jk_check(cudaGetLastError());
+      profile.record(1, plan->stream);
       launch_md_source_jk(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
                           true, false, unrestricted, plan->screening_tolerance, plan->bounds,
                           density, beta, coulomb, nullptr, nullptr);
       direct_jk_check(cudaGetLastError());
+      profile.record(2, plan->stream);
       launch_md_j(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
-                  unrestricted, plan->screening_tolerance, density, beta, coulomb);
+                  unrestricted, plan->screening_tolerance, density, beta, coulomb,
+                  profile.events[0] ? profile.events.data() : nullptr);
       direct_jk_check(cudaGetLastError());
+      profile.report(plan->md_j_calls);
       if (plan->md_j.work_counts) {
         // This opt-in fence/download is explicitly diagnostic, not clean timing.
         MdJWorkCounts counts;
@@ -1607,10 +1670,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           std::fprintf(stderr,
                        "MD_J_WORK fock=%zu bra=%u ket=%u uniform_roots=%llu "
                        "uniform_directions=%llu uniform_summands=%llu "
-                       "residual_candidates=%llu residual_tasks=%llu residual_roots=%llu\n",
+                       "residual_candidates=%llu residual_tasks=%llu "
+                       "residual_tiles=%llu residual_screened_tiles=%llu "
+                       "residual_screened_candidates=%llu residual_roots=%llu\n",
                        plan->md_j_calls, angular / 5, angular % 5, counts.uniform_roots[angular],
                        counts.uniform_directions[angular], counts.uniform_summands[angular],
                        counts.residual_candidates[angular], counts.residual_tasks[angular],
+                       counts.residual_tiles[angular], counts.residual_screened_tiles[angular],
+                       counts.residual_screened_candidates[angular],
                        counts.residual_roots[angular]);
       }
     }

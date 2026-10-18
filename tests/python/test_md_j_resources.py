@@ -97,6 +97,7 @@ MD_STUBS = r"""
 #include <type_traits>
 #define __host__
 #define __device__
+using cudaEvent_t=void*;
 // Use actual MD-J types, constants and Vec3/DeviceBatch ABI from production.
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/md_transform_layout.hpp"
@@ -170,6 +171,10 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
       const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
       assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
+      const char* tiled=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+      const char* profile=std::getenv("GENERATIVEQC_MD_J_PROFILE");
+      assert(owner.md_j.residual_tiled==bool(!tiled || std::strcmp(tiled,"1")==0));
+      assert(owner.md_j.profile==bool(profile && std::strcmp(profile,"1")==0));
     } else {
       assert(propagated);
     }
@@ -178,6 +183,25 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
   return allocation_index;
 }
 int main() {
+  const std::string initial_tiled=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+  const std::string initial_profile=std::getenv("GENERATIVEQC_MD_J_PROFILE");
+  unsetenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+  unsetenv("GENERATIVEQC_MD_J_PROFILE");
+  for(const char* control:{"GENERATIVEQC_MD_J_RESIDUAL_TILES","GENERATIVEQC_MD_J_PROFILE"}) {
+    unsetenv(control);
+    HostBatch host; MdJHost defaults;
+    assert(defaults.prepare(host,128U<<20) && defaults.residual_tiled && !defaults.profile);
+    for(const char* invalid:{"", "yes", "2"}) {
+      setenv(control,invalid,1);
+      MdJHost candidate; bool rejected=false;
+      try { candidate.prepare(host,128U<<20); }
+      catch(const std::invalid_argument&) { rejected=true; }
+      assert(rejected);
+    }
+    unsetenv(control);
+  }
+  setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",initial_tiled.c_str(),1);
+  setenv("GENERATIVEQC_MD_J_PROFILE",initial_profile.c_str(),1);
   // Resident-only sources must not allocate optional MD storage either.
   for(bool resident_source_only:{false,true}) {
     for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
@@ -194,17 +218,21 @@ int main() {
 
 
 @pytest.mark.parametrize("counted", [False, True])
+@pytest.mark.parametrize("diagnostics", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
     native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
     counted: bool,
+    diagnostics: bool,
 ) -> None:
     """Optional diagnostic storage obeys the same admission and rollback cap."""
     if counted:
         monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
     else:
         monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
+    for control in ("GENERATIVEQC_MD_J_RESIDUAL_TILES", "GENERATIVEQC_MD_J_PROFILE"):
+        monkeypatch.setenv(control, "1" if diagnostics else "0")
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     # Reuse the existing failure/ownership runtime, adding the real MD layout.
     stubs = STUBS.replace(

@@ -58,13 +58,56 @@ MD request. The selector is frozen with the resident owner, not polled during
 replay. The same optional-storage admission and normal-J fallback still apply.
 
 `GENERATIVEQC_MD_J_WORK_COUNTS=1` requests a per-replay diagnostic census at
-plan creation. Its 1200-byte owner-local buffer is charged within the same
+plan creation. Its 1800-byte owner-local buffer is charged within the same
 128-MiB allowance. It reports actual uniform radial evaluations, independent
 density directions and Hermite summands, plus tested/admitted residual shell
 tasks and contracted primitive products. Counters aggregate locally rather
 than adding per-product global atomics. The diagnostic download/fence is
 intrusive and must not be included in clean performance samples. Unset/0 adds
 no counter storage or diagnostic fence and uses uninstrumented kernels.
+
+J-only residual work defaults to an 8x8 **shell-pair** tile prefilter, distinct
+from the uniform reciprocal primitive tiles. Unset/1 selects this schedule;
+`GENERATIVEQC_MD_J_RESIDUAL_TILES=0` restores individual-candidate traversal for
+paired diagnostics. The owner
+freezes this selector at preparation; other values reject an active MD request.
+Each tile shares pair indices and rejects an entire batch only when conservative
+Schwarz, uniform-MD eligibility or total-density bounds prove that no incumbent
+residual task can survive. Surviving candidates retain the original shell,
+system, density and per-orientation AO predicates. K never uses this prefilter.
+No additional resident allocation is required, and the existing capacity and
+normal-J fallbacks remain unchanged. A reduction in candidate checks is not by
+itself a complete-endpoint speedup claim.
+
+`MD_J_WORK` distinguishes `residual_candidates` (individual
+tests actually performed), `residual_screened_candidates` (bypassed by a tile
+bound), `residual_tiles`, `residual_screened_tiles`, `residual_tasks` (admitted
+shell quartets) and `residual_roots` (contracted primitive products). For matching
+inputs and policies, tested plus tile-screened candidates must equal the
+incumbent candidate census; admitted tasks and primitive products must match.
+The prefilter changes enumeration, not the scientific error budget.
+
+`GENERATIVEQC_MD_J_PROFILE=1` separately opts into per-Fock `MD_J_TIMING` records.
+Unset/0 allocates no events; invalid active values reject preparation. Seven
+CUDA events partition the native MD-J stream into density bounds, residual J
+(including its output reset), density transform, reciprocal uniform contraction,
+oriented uniform contraction and AO projection. The record also reports the
+complete J interval. With reciprocal reuse disabled, the oriented interval owns
+all uniform contraction. The intervals include on-stream launch gaps and are
+**not** sums of GPU kernel execution, host preparation time or complete cold SCF
+wall time. Profiling creates events and synchronizes the final event, so these
+records and work-count runs belong to intrusive diagnostics, not clean timing
+populations.
+
+For the 96-atom r2SCAN-3c investigation, collect matching-density incumbent and
+tiled runs with both diagnostic flags enabled, then collect clean complete
+cold/warm/changed-geometry endpoints with `GENERATIVEQC_MD_J_PROFILE` and
+`GENERATIVEQC_MD_J_WORK_COUNTS` unset. Use the actual native-KS seam or its
+resident test adapter, not the public host compatibility evaluator. Retain
+Fock counts, scientific settings and independent numerical gates separately
+from per-stage attribution. The
+[default residual scheduling note](../../.agents/notes/implemented/performance/2026-10-18-md-j-residual-default.md)
+records the qualification and links the conservative rounding rationale.
 
 The public host `FockPlan.evaluate` uses a retained compatibility evaluator;
 its preparation schedule is not proof that resident MD kernels ran. Raw MD

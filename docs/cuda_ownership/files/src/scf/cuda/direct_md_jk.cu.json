@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_md_jk.cu",
   "role": "scientific",
   "subsystem": "scf_tensor",
-  "reason": "Bounded angular source pages preserve per-orientation public-AO quartet screening. The production MD-J caller requests only the partial Coulomb residual; normal generated/canonical K ownership is not replaced.",
+  "reason": "Bounded angular source pages preserve per-orientation public-AO quartet screening. The default J-only shell-pair tile prefilter conservatively bypasses rejected residual candidates without growing resident storage, retaining the individual-candidate diagnostic schedule. The production MD-J caller requests only the partial Coulomb residual; normal generated/canonical K ownership is not replaced.",
   "regions": []
 }
