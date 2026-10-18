@@ -533,8 +533,31 @@ Scientific index domains, representations and symmetry annotations are not
 admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
 tests support only external fixed Boolean masks in finite generic real graphs;
 see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
-The public compiled AD wrappers, default generated derivatives and HVP remain
-unsupported for `where`. The low-level `linearize` and `transpose_program`
+`xp.grad` and `xp.value_and_grad` accept `allow_external_mask_where=True`
+for first-order fixed external-mask gradients on generic finite FP64 arrays
+with `backend="reference"` or the default native CPU backend. Select only real
+arguments with `argnums`; pass the mask as a separate non-differentiated argument.
+For example:
+
+```python
+def selected_energy(x, y, mask):
+    return xp.sum(xp.where(mask, x * x, y * y))
+
+derivative = xp.value_and_grad(
+    selected_energy, argnums=(0, 1), allow_external_mask_where=True
+)
+value, (dx, dy) = derivative(x, y, mask)
+derivative.close()
+```
+
+All live branches and forward derivative domains remain checked, including
+unselected branches and disconnected or empty requested gradients. Prepared
+calls read the current mask; the function does not freeze its contents. The
+combined value/gradient call uses one native endpoint and retains inherited
+byte/work/node budgets and independent executor lifetime. Computed predicates,
+Boolean differentiation, scientific annotations, FP32/mixed/packed policies,
+higher-order transforms and CUDA remain unsupported. Public `jvp`/`vjp` and
+default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
 functions accept `allow_external_mask_where=True` to generate first-order
 JVP/VJP programs for fixed external masks on generic finite FP64 arrays,
 replayable by the reference interpreter and materializing native CPU owner.

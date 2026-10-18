@@ -1267,6 +1267,7 @@ def grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile a scalar function's reverse derivative for the selected arguments.
@@ -1274,10 +1275,20 @@ def grad(
     An integer argnums returns one Array; a tuple returns a tuple in that order.
     Existing compiled functions retain their backend, budgets and scientific
     specs. Plain functions use native CPU unless a backend is explicitly chosen.
+    ``allow_external_mask_where=True`` admits first-order fixed-mask selection
+    on generic finite FP64 arrays for reference/CPU only. Select real arguments
+    with argnums; the Boolean mask must remain non-differentiable.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=False)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=False,
+        allow_external_mask_where=allow_external_mask_where,
+    )
 
 
 def value_and_grad(
@@ -1285,17 +1296,26 @@ def value_and_grad(
     *,
     argnums: int | tuple[int, ...] = 0,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Compile scalar energy and selected gradients as one shared TensorIR program.
 
     Primal and derivative nodes share the same native endpoint, specialization
     cache and resource gates. This is not numerical differentiation or a call to
-    the reference autodiff evaluator.
+    the reference autodiff evaluator. ``allow_external_mask_where=True`` has
+    the same fixed-mask, generic finite FP64 reference/CPU contract as grad.
     """
     from ._array_api_autodiff import _GradientFunction
 
-    return _GradientFunction(function, argnums, backend, options, with_value=True)
+    return _GradientFunction(
+        function,
+        argnums,
+        backend,
+        options,
+        with_value=True,
+        allow_external_mask_where=allow_external_mask_where,
+    )
 
 
 def jvp(
@@ -1403,6 +1423,14 @@ def capabilities() -> dict[str, object]:
                 "scope": "first-order-generic-fixed-external-mask; snapshot-all-primals; eager-all-live-domains",
             },
             "compiled_differentiability": "explicit-parameter-names",
+            "external_mask_gradients": {
+                "transforms": ("grad", "value_and_grad"),
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "scope": "first-order-generic-fixed-external-mask; real-argnums-only; eager-all-live-domains",
+            },
             "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
             "runtime_array": "numpy-backed-array-api-cpu",
             "eager_dtypes": _eager.DTYPE_NAMES,
