@@ -35,6 +35,7 @@ def test_factorized_inventory_groups_host_metadata_without_changing_selectors() 
         if request.family in ("eri", "coulomb_metric", "three_center_eri"):
             assert request.name + ".cu" not in units
             assert "factorized_integral_callback<" in source
+            assert "factorized_integral_batch_callback<" in source
             assert integral_program_identity(request) in source
             assert request.name in source
     with pytest.raises(ValueError, match="inventory"):

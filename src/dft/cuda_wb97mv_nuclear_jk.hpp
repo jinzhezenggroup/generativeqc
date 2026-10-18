@@ -23,6 +23,12 @@ struct CudaWb97mvJkShape {
 struct CudaWb97mvJkOptions {
   CudaWb97mvJkPart part{CudaWb97mvJkPart::exact};
   std::size_t max_workspace_bytes{512ULL << 20};
+  /** Optional source/projection batching, charged in the same workspace arena.
+   * Zero or insufficient capacity retains the ordered per-group schedule. */
+  std::size_t max_batch_workspace_bytes{128ULL << 20};
+  /** Reusable projected shell-group tile, within the same arena/cap. Small
+   * tiles retain group/incidence sum order; zero disables optional batching. */
+  std::size_t max_batch_projection_bytes{16ULL << 20};
   std::size_t max_groups{100'000};
   std::size_t radial_tile{64};  ///< Primitive streaming bound, in [1,64].
   std::uint64_t max_primitive_component_evaluations{67'108'864};
@@ -61,6 +67,8 @@ struct CudaWb97mvJkWork {
   std::uint64_t attempted_actions{}, completed_actions{}, component_evaluations{},
       projection_terms_bound{}, reduction_terms{};
   std::size_t resident_integral_bytes{};
+  std::size_t batched_workspace_bytes{};
+  std::uint64_t integral_launches{}, projection_launches{}, reduction_launches{};
   std::uint64_t integral_source_builds{}, resident_integral_hits{};
 };
 

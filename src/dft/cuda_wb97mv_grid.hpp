@@ -17,7 +17,9 @@ struct CudaWb97mvGridShape {
 struct CudaWb97mvGridOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
   std::uint64_t max_pair_evaluations{16'777'216};
-  std::size_t pair_tile_points{32};
+  /** Tile cap, not extra VV10 work. Smaller explicit tiles retain the bounded
+   * low-memory schedule; 256 supplies enough independent pairs for modern GPUs. */
+  std::size_t pair_tile_points{256};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
   bool nuclear_response{false};

@@ -267,6 +267,11 @@
       "reason": "Retain all 192 complete comparison calls, full-precision numerical arrays, independent cold/moved geometry references, paired timings and SCF work, failures and exact source/binary bindings. The 2%/MAD label is descriptive, not enablement; work-confounded Direct/96 cold/moved samples stay visible. No raw profiler stream, binary or policy-cap increase is introduced.",
       "review_document": "benchmarks/results/r2scan3c-final-validation-20261015/README.md"
     },
+    "wb97mv-hessian-dispatch-20261017": {
+      "owner": "bounded native CUDA WB97M-V Hessian dispatch qualification",
+      "reason": "Lossless complete paired matrices, fresh-process phase timings, semantic work, sampled-device memory, old/new controls, larger native-only runs, and canceled/failed harness attempts are retained. Numerical acceptance only: dimer Hessian-only latency remains slower than GPU4PySCF, grids are not chemically converged, and mixed GPU placements are explicit. Historical evidence is compressed without changing decoded bytes; no storage-budget increase or broad performance promotion.",
+      "review_document": "benchmarks/results/wb97mv-hessian-dispatch-20261017/README.md"
+    },
     "readme-refresh-20261015": {
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
       "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
@@ -427,14 +432,6 @@
       "sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745"
     },
     {
-      "bytes": 142797,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json",
-      "role": "scientific-record",
-      "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
-    },
-    {
       "bytes": 143684,
       "classification": "required-compact-accepted-evidence",
       "family": "issue283-host-response",
@@ -449,22 +446,6 @@
       "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
       "role": "reference-input",
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
-    },
-    {
-      "bytes": 131267,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-combined-rys",
-      "path": "benchmarks/results/issue404-combined-rys/summary.json",
-      "role": "decision-or-audit-record",
-      "sha256": "c584f057cea4a1b5e4ac898ed3c9af5d03ee90131ad73551f5d1bb49948a99a8"
-    },
-    {
-      "bytes": 135548,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue409-packed-values",
-      "path": "benchmarks/results/issue409-packed-values/storage-dataflow.json",
-      "role": "scientific-record",
-      "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
     },
     {
       "bytes": 227600,
@@ -593,6 +574,14 @@
       "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
       "classification": "required-compact-accepted-evidence",
       "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    },
+    {
+      "path": "benchmarks/results/wb97mv-hessian-dispatch-20261017/samples.json.xz",
+      "family": "wb97mv-hessian-dispatch-20261017",
+      "bytes": 177452,
+      "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
     },
     {
       "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",

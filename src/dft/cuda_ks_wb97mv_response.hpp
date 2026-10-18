@@ -20,6 +20,10 @@ namespace generativeqc::dft {
 struct CudaKsWb97mvResponseOptions {
   CudaWb97mvGridOptions grid{};
   std::size_t max_device_bytes{512ULL << 20};
+  /** Optional strict full/LR values for repeated induced actions. Values and
+   * extra provider metadata remain charged to max_device_bytes; zero disables. */
+  std::size_t max_resident_integral_bytes{64ULL << 20};
+  bool defer_resident_integrals{false};
   std::size_t max_affine_term_visits{100'000'000};
   std::uint64_t max_direct_eri_evaluations{16'777'216};
   double reference_absolute_tolerance{3e-9};
@@ -30,6 +34,8 @@ struct CudaKsWb97mvResponseWork {
   std::size_t device_bytes{}, affine_reference_terms{}, affine_action_terms{};
   std::uint64_t reference_quartets{}, reference_eris{}, response_quartets{}, response_eris{};
   std::uint64_t actions{};
+  std::size_t resident_integral_bytes{};
+  std::uint64_t resident_source_evaluations{};
   CudaWb97mvGridWork grid{};
 };
 
@@ -62,6 +68,11 @@ class CudaKsWb97mvResponse {
                               const CudaKsWb97mvResponseOptions& options, std::string& detail);
   cudaError_t apply(const double* direction, double* output, cudaStream_t stream) noexcept;
   CudaKsWb97mvResponseWork work() const noexcept;
+  /** Optional post-preparation admission, before the first action. Composite
+   * owners call this only after all mandatory consumers have reserved storage.
+   * The additional-byte cap includes extra provider metadata, not just values.
+   * A resource refusal keeps the exact replay; numerical/device faults fail. */
+  generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, std::string& detail);
   /** Directly compatible with solve_cuda_cpks, passing this owner as context. */
   static cudaError_t induced_fock(void* context, const double* direction, double* output,
                                   const response::CudaCpksShape& shape,

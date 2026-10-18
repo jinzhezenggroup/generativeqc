@@ -110,7 +110,7 @@ void host_admission() {
   std::cout << "{\"host_admission_without_cuda_initialization\":true}\n";
 }
 
-void run(const char* fixture, const char* output, bool reject) {
+void run(const char* fixture, const char* output, bool reject, std::size_t point_tile) {
   std::ifstream input(fixture, std::ios::binary);
   std::array<std::uint64_t, 5> header{};
   require(static_cast<bool>(input.read(reinterpret_cast<char*>(header.data()), sizeof(header))),
@@ -118,6 +118,7 @@ void run(const char* fixture, const char* output, bool reject) {
   const CudaGridGeometryShape shape{header[0], header[1], header[2], header[0] * header[3],
                                     header[3]};
   CudaGridGeometryOptions options;
+  options.point_tile = point_tile;
   options.partition_iterations = static_cast<unsigned>(header[4]);
   options.coincident_tolerance = read(input, 1)[0];
   std::size_t bytes{};
@@ -257,9 +258,12 @@ int main(int argc, char** argv) {
     }
     int devices{};
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
-    require(argc == 3 || (argc == 4 && std::string(argv[3]) == "reject"),
-            "usage: cuda_grid_geometry_probe input output [reject]");
-    run(argv[1], argv[2], argc == 4);
+    require(argc == 3 || argc == 4,
+            "usage: cuda_grid_geometry_probe input output [reject|point-tile]");
+    const auto reject = argc == 4 && std::string(argv[3]) == "reject";
+    const auto tile =
+        argc == 4 && !reject ? std::stoull(argv[3]) : CudaGridGeometryOptions{}.point_tile;
+    run(argv[1], argv[2], reject, tile);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

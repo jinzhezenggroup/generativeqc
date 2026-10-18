@@ -54,14 +54,16 @@ inline double nonlocal_confirmation_tolerance(bool budget_stationarity,
 }
 
 /** Frozen operators propose densities, never accepted physical states.
- * Oversolving that changing fixed-point problem below budget confirmation
- * accuracy adds strict J/K work without certifying the target operator.
- * Explicit strict solves retain their incumbent adaptive inner tolerance. */
+ * Use a bounded fraction of the last full-target AO residual to avoid
+ * oversolving a potential that will change at the next target refresh.
+ * The strict floor still follows tighter caller tolerances; publication
+ * requires fresh full-target checks, not this provisional stopping gate.
+ * Budget-selected proposals retain their separate confirmation policy. */
 inline double nonlocal_inner_tolerance(bool budget_stationarity, double maximum_residual,
                                        double density_tolerance) noexcept {
   if (budget_stationarity) return nonlocal_confirmation_tolerance(true, density_tolerance);
   const double target_gate = std::min(1e-9, density_tolerance);
-  return std::clamp(maximum_residual * 1e-3, std::min(1e-12, target_gate * 0.1), 1e-7);
+  return std::clamp(maximum_residual * 1e-2, std::min(1e-12, target_gate * 0.1), 1e-5);
 }
 
 /** Private size-tagged Python transport. The original public KS descriptor
