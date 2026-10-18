@@ -97,6 +97,7 @@ def test_sparse_preparation_against_polynomial_oracle(
     """
     (tmp_path / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t=void*; using cudaError_t=int;\n"
+        "using cudaEvent_t=void*;\n"
     )
     kernel = cpp_function_definition(
         (ROOT / "src/scf/cuda/direct_md_j.cu").read_text(), "md_j_transforms"
