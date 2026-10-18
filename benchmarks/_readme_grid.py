@@ -11,6 +11,10 @@ if TYPE_CHECKING:
     from typing import Any
 
 
+FP64_GRID_ENERGY_TOLERANCE = 1e-8
+FP64_GRID_FORCE_TOLERANCE = 1e-7
+
+
 def parse_grid(value: str) -> tuple[int, int, int]:
     """Parse radial, polar and azimuthal counts using the production size limits."""
     try:

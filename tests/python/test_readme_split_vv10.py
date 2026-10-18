@@ -62,6 +62,36 @@ def test_split_grid_convergence_requires_both_original_and_moved_forces() -> Non
 
 
 @pytest.mark.parametrize(
+    "energy_error,force_error", ((6.38e-7, 0.0), (0.0, 3.23e-6), (7.63e-8, 3.86e-7))
+)
+def test_exploratory_nlc_pass_cannot_relax_fp64_thresholds(
+    energy_error: float, force_error: float
+) -> None:
+    candidate, baseline = _population((32, 12, 24)), _population((64, 16, 32))
+    candidate["records"][1]["energy"] += energy_error
+    candidate["records"][1]["forces"][1][2] = force_error
+    strict = compare_geometries(candidate, baseline)
+    assert strict["gate"] is False
+    assert strict["fp64_threshold_gate"] is False
+    exploratory = compare_geometries(
+        candidate, baseline, energy_tolerance=1e-5, force_tolerance=1e-4
+    )
+    assert exploratory["gate"] is True
+    assert exploratory["fp64_threshold_gate"] is False
+    assert exploratory["comparison_scope"] == "nlc-only-fixed-xc"
+    assert exploratory["endpoint_qualification"] == "not_evaluated"
+    assert exploratory["energy_tolerance_hartree"] == 1e-5
+    assert exploratory["force_tolerance_hartree_per_bohr"] == 1e-4
+
+
+def test_small_nlc_difference_does_not_certify_xc_or_a_fast_budget() -> None:
+    result = compare_geometries(_population((48, 16, 32)), _population((64, 16, 32)))
+    assert result["gate"] is True
+    assert result["fp64_threshold_gate"] is True
+    assert result["endpoint_qualification"] == "not_evaluated"
+
+
+@pytest.mark.parametrize(
     "field", ("atoms", "basis", "density_fitting", "xc_grid", "geometries_bohr")
 )
 def test_split_grid_comparison_rejects_other_model_changes(field: str) -> None:
@@ -81,7 +111,9 @@ def test_split_grid_baseline_self_comparison_is_not_a_convergence_pass() -> None
 def test_split_grid_missing_geometry_is_unknown() -> None:
     candidate = _population((32, 12, 24))
     candidate["records"].pop()
-    assert compare_geometries(candidate, _population((64, 16, 32)))["gate"] is None
+    result = compare_geometries(candidate, _population((64, 16, 32)))
+    assert result["gate"] is None
+    assert result["fp64_threshold_gate"] is None
 
 
 @pytest.mark.parametrize("failure", ("nonfinite", "shape", "unconverged"))
@@ -110,9 +142,11 @@ def test_split_grid_tolerances_are_explicit_and_finite(tolerance: float) -> None
 def test_retained_feasibility_separates_reference_work_and_nlc_error() -> None:
     """Protect measured gates and work, without pinning source spelling or speed."""
     archive = Path("benchmarks/results/readme-vv10-grids-20261018/grid-timings.json.xz")
-    summary = json.loads(lzma.decompress(archive.read_bytes()))[
-        "split_grid_feasibility"
-    ]
+    publication = json.loads(lzma.decompress(archive.read_bytes()))
+    summary = publication["split_grid_feasibility"]
+    acceptance = publication["accuracy_acceptance"]
+    assert acceptance["historical_grid_gates"] == "exploratory-only"
+    assert acceptance["endpoint_qualification"] == "not_evaluated"
     assert summary["native_split_grid_supported"] is False
     assert len(summary["phases"]) == len(summary["phase_sample_counts"])
     populations = set()
@@ -136,6 +170,7 @@ def test_retained_feasibility_separates_reference_work_and_nlc_error() -> None:
         errors = row["geometry_energy_force_errors"]
         if row["nlc"] == 0:
             assert errors is None
+            assert row["fp64_threshold_gate"] is None
         else:
             assert len(errors) == 2
             assert all(
@@ -143,6 +178,13 @@ def test_retained_feasibility_separates_reference_work_and_nlc_error() -> None:
                 and 0 <= force <= summary["gates"]["force_Eh_per_bohr"]
                 for energy, force in errors
             )
+            assert row["fp64_threshold_gate"] is all(
+                energy <= acceptance["fp64_energy_Eh"]
+                and force <= acceptance["fp64_force_Eh_per_bohr"]
+                for energy, force in errors
+            )
+            if row["atoms"] == 12:
+                assert row["fp64_threshold_gate"] is False
     for diagnostic in summary["finite_difference"]:
         assert len(diagnostic["steps"]) == len(diagnostic["errors"]) == 2
         assert all(0 <= error < 1e-5 for error in diagnostic["errors"])

@@ -118,6 +118,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         "",
         "Warm values retain all requested fixed-density replays. Columns show median seconds and observed SCF iterations/builds.",
         "Same-grid engine parity and cross-grid convergence are separate gates; see grid-convergence.md.",
+        "Exploratory grids: FP64 quadrature accuracy is not certified.",
         "",
         "| Mode | Grid | Atoms | Engine | Cold (s) | Warm (s) | Cold work | Warm work |",
         "| --- | --- | ---: | --- | ---: | ---: | --- | --- |",
@@ -173,7 +174,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             colors.items(), ("GenerativeQC", "GPU4PySCF"), strict=True
         )
     ] + grid_handles
-    figure.suptitle("ωB97M-V / def2-SVP · FP64 · matched moving XC/VV10 grids")
+    figure.suptitle("ωB97M-V / def2-SVP · exploratory grids (not FP64-qualified)")
     figure.legend(
         handles=handles,
         loc="lower center",

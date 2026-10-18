@@ -16,7 +16,11 @@ import numpy as np
 from generativeqc import GridSpec
 from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
 
-from benchmarks._readme_grid import parse_grid
+from benchmarks._readme_grid import (
+    FP64_GRID_ENERGY_TOLERANCE,
+    FP64_GRID_FORCE_TOLERANCE,
+    parse_grid,
+)
 from benchmarks._support import cuda_accelerator_metadata, environment_metadata
 from benchmarks.compare_df_direct_endpoint import reference_work_counter
 from benchmarks.compare_gpu4pyscf_batch import gpu_convergence_payload
@@ -55,10 +59,15 @@ def compare_geometries(
     candidate: dict[str, Any],
     baseline: dict[str, Any],
     *,
-    energy_tolerance: float = 1e-5,
-    force_tolerance: float = 1e-4,
+    energy_tolerance: float = FP64_GRID_ENERGY_TOLERANCE,
+    force_tolerance: float = FP64_GRID_FORCE_TOLERANCE,
 ) -> dict[str, Any]:
-    """Isolate NLC-grid error; missing, nonfinite or changed XC inputs cannot pass."""
+    """Compare NLC rules at fixed XC, without certifying the full endpoint.
+
+    Explicit exploratory tolerances never relax the separate FP64 threshold
+    check. Neither check proves convergence of XC or of the denser NLC baseline,
+    nor qualifies a native Fast implementation and its total error budget.
+    """
     if any(
         not math.isfinite(value) or value <= 0
         for value in (energy_tolerance, force_tolerance)
@@ -70,6 +79,15 @@ def compare_geometries(
     if candidate["nlc_grid"] == baseline["nlc_grid"]:
         raise ValueError("a baseline self-comparison cannot certify convergence")
     errors = []
+    result = {
+        "comparison_scope": "nlc-only-fixed-xc",
+        "energy_tolerance_hartree": energy_tolerance,
+        "force_tolerance_hartree_per_bohr": force_tolerance,
+        "endpoint_qualification": "not_evaluated",
+        "gate": None,
+        "fp64_threshold_gate": None,
+        "geometries": errors,
+    }
     for geometry in (0, 1):
         rows = [
             next(
@@ -83,7 +101,7 @@ def compare_geometries(
             for population in (candidate, baseline)
         ]
         if any(row is None for row in rows):
-            return {"gate": None, "reason": "missing geometry", "geometries": errors}
+            return {**result, "reason": "missing geometry"}
         measured, reference = rows
         actual = np.asarray(measured["forces"], dtype=float)
         expected = np.asarray(reference["forces"], dtype=float)
@@ -106,9 +124,16 @@ def compare_geometries(
                 "gate": bool(
                     valid and energy <= energy_tolerance and force <= force_tolerance
                 ),
+                "fp64_threshold_gate": bool(
+                    valid
+                    and energy <= FP64_GRID_ENERGY_TOLERANCE
+                    and force <= FP64_GRID_FORCE_TOLERANCE
+                ),
             }
         )
-    return {"gate": all(row["gate"] for row in errors), "geometries": errors}
+    result["gate"] = all(row["gate"] for row in errors)
+    result["fp64_threshold_gate"] = all(row["fp64_threshold_gate"] for row in errors)
+    return result
 
 
 def _engine(atoms: Any, xc_spec: GridSpec, nlc_spec: GridSpec, mode: str) -> Any:

@@ -1280,7 +1280,7 @@ L 853.2 416.68
    </g>
   </g>
   <g id="text_28">
-   <text style="font-size: 12px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="432" y="19.198125" transform="rotate(-0 432 19.198125)">ωB97M-V / def2-SVP · FP64 · matched moving XC/VV10 grids</text>
+   <text style="font-size: 12px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="432" y="19.198125" transform="rotate(-0 432 19.198125)">ωB97M-V / def2-SVP · exploratory grids (not FP64-qualified)</text>
   </g>
   <g id="text_29">
    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="432" y="497.952" transform="rotate(-0 432 497.952)">Cold: fresh process with existing compile caches, preparation + first E+F. Warm: median, bars: min–max. Unchecked phases omitted.</text>

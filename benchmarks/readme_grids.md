@@ -56,15 +56,24 @@ The grids above are an exploratory sweep, not universally qualified defaults.
    GPU4PySCF calculation of that exact grid (`1e-8 Eh`, `1e-7 Eh/bohr`). A
    missing oracle remains unchecked; shrinking the grid never relaxes these gates.
 2. **Quadrature convergence:** compare independent reference E+F results between
-   grids on both the original and displaced geometries. Specify the application
-   tolerances explicitly. The selected denser baseline is not an exact integral;
+   grids on both the original and displaced geometries. For FP64 publication,
+   require at least `1e-8 Eh` / `1e-7 Eh/bohr` in this comparison as well; a loose
+   exploratory pass cannot qualify FP64. The selected baseline is not an exact integral;
    a baseline's zero self-difference is not evidence that it is converged.
+
+These are separate necessary checks, not a proof of total endpoint accuracy.
+Converge radial and angular resolution for **both XC and NLC**, establish a
+stable denser reference, and account for combined errors before publication.
+The comparator reports requested and FP64 threshold gates separately, even
+when explicitly given loose exploratory tolerances. Neither result automatically
+qualifies Fast: Fast also needs its configured total energy, maximum-force and
+RMS-force budgets, actual native arithmetic and the full benchmark cohort.
 
 ```bash
 PYTHONPATH=.:python python -m tools.compare_readme_grids \
   --raw .artifacts/readme-grids/none \
   --grids 48,12,24 48,16,32 64,16,32 --baseline-grid 64,16,32 \
-  --sizes 3 12 --energy-tolerance 1e-5 --force-tolerance 1e-4 \
+  --sizes 3 12 --energy-tolerance 1e-8 --force-tolerance 1e-7 \
   --output .artifacts/readme-grid-report
 PYTHONPATH=.:python python -m tools.render_readme_grids \
   --raw .artifacts/readme-grids --grids 48,12,24 48,16,32 --sizes 3 12 \
@@ -87,12 +96,13 @@ mathematics, and restores the response iterator even after an exception.
 
 ## Matched publication protocol
 
-The shared-grid study uses original and H(1)-z-displaced (+0.001 bohr) 3/12-atom
+The historical exploratory shared-grid study uses original and H(1)-z-displaced (+0.001 bohr) 3/12-atom
 water clusters, spherical def2-SVP and WB97M-V/RKS. DF uses cc-pVDZ-JKFIT and the
 matched full-range-DF / exact-long-range exchange contract. Both XC and VV10
 share the explicit grid in the native path. Radial reductions to 32 points fail
 the exploratory force gate; 40×16×32 also fails on 12 atoms. The smaller plotted
-48×12×24 rule therefore keeps 48 radial points. Point and pair-bound reductions
+48×12×24 rule therefore keeps 48 radial points, but **neither plotted shared
+grid passes the FP64 grid thresholds**. Point and pair-bound reductions
 are sizing statements, not measured speedups or executed-work counts.
 
 Inside a finite GPU allocation with a source-matched Release library selected,
@@ -112,9 +122,11 @@ for mode in none cuda; do
 done
 ```
 
-Run the separate reference sweep including 64×16×32 with one replay, using the
-convergence commands above and explicit `1e-5 Eh` / `1e-4 Eh/bohr` gates.
-Same-grid parity remains `1e-8 Eh` / `1e-7 Eh/bohr`; DF parity is not separate
+The archived reference sweep used 64×16×32 with one replay and exploratory
+`1e-5 Eh` / `1e-4 Eh/bohr` gates; retain those observations, not their use as
+FP64 acceptance. New FP64 comparisons use the stricter commands above and need
+further baseline convergence checks. Same-grid parity remains
+`1e-8 Eh` / `1e-7 Eh/bohr`; DF parity is not separate
 denser-grid convergence certification. n4's independent CPU-PySCF/GPU4PySCF
 grid regression passed 12 paired/open-shell, Direct/DF, LDA/PBE/r²SCAN cases
 with CUDA 12.9.1. Its earlier default-toolkit loading failure, initial empty-AO
@@ -159,14 +171,19 @@ All 20 populations completed: 240 full E+F calls, excluding separate priming
 and finite-difference diagnostics. Each population has one cold, five warm,
 one moved and five moved-warm calls; no setup time is subtracted.
 
-**Investigate independent grids next, with VV10 32×12×24 and XC 48×16×32.**
+**Correction: withdraw the FP64 recommendation of VV10 32×12×24 / XC 48×16×32.**
 Against NLC 64×16×32 with the same XC grid, that candidate's maximum errors
 over Direct/DF and original/moved 3/12-atom geometries were **6.38e-7 Eh** and
-**3.23e-6 Eh/bohr**, passing the exploratory `1e-5 Eh` / `1e-4 Eh/bohr` gates.
-These measure NLC-only convergence, not convergence of the fixed XC grid.
+**3.23e-6 Eh/bohr**, passing only the exploratory `1e-5 Eh` / `1e-4 Eh/bohr` gates.
+They exceed the FP64 energy/maximum-force thresholds by about **64× / 32×**.
+These measure NLC-only differences, not convergence of the fixed XC grid.
+Even NLC48×16×32 versus NLC64×16×32 has 12-atom errors up to
+`7.63e-8 Eh` / `3.86e-7 Eh/bohr`, failing both FP64 thresholds. NLC64's
+self-comparison cannot qualify it either. No tested grid is certified as a
+complete FP64 endpoint; do not replace the README cohort with these timings.
 Two-step H(1)-z finite differences at 0.001/0.0005 bohr on 3 atoms gave errors
 below `1.01e-8 Eh/bohr` in Direct and DF; this is not an all-coordinate Hessian
-or large-system response qualification.
+or large-system response qualification, and does not establish grid convergence.
 
 Complete endpoint seconds below compare **NLC 48×16×32 → 32×12×24**, with XC
 unchanged. Warm entries are medians of five calls; cold/moved are single calls.
@@ -184,11 +201,12 @@ are 32/33 (3 atoms) and 45/46 (12); moved are 39/40 and 42/43. Warm calls use
 1/2 except original 12-atom Direct at NLC32, which uses 2/3 versus 1/2 at
 NLC48. Every population's phase work sets are retained in the archive.
 
-All tested smaller NLC rules pass these small-system gates, but NLC24's
+All tested smaller NLC rules pass only the exploratory small-system gates; NLC24's
 12-atom energy error reaches `6.64e-6 Eh`, leaving much less margin; do not
 promote it from timing alone. Coarsening is not monotonically faster on
-3 atoms. Keep the more conservative NLC32 as a follow-up candidate, not a
-universal default. It has 9,216 NLC points/atom versus 24,576 XC points/atom;
+3 atoms. NLC32 is at most an **unqualified Fast candidate**; the probe has no
+native split implementation, total error-budget acceptance or complete 48/96
+coverage. It has 9,216 NLC points/atom versus 24,576 XC points/atom;
 the 62.5% NLC-point reduction is sizing, not executed work or a native speedup.
 
 The publication's `grid-timings.json.xz` contains a separate
@@ -203,6 +221,9 @@ change the original shared-grid DF convergence scope.
 Native SCF, the C ABI, prepared plans and analytic-force owners still assume
 one quadrature. A production split needs separate grid/AO ownership, model and
 cache identities, resource/work accounting, final-density handoff and moving-grid
-response. Qualify native same-model parity, complete E+F and 48/96 atoms before
-changing defaults. Until then the matched native sweep remains shared-grid;
-**48×12×24** is its tested smaller option, not a 32-radial-point shared rule.
+response. First converge XC and NLC against a stable denser reference under the
+intended precision contract, then qualify native same-model parity, complete E+F
+and 3/12/48/96 atoms. Keep all eight original HF/DFT methods, both Direct/DF and
+independent GPU4PySCF in the rerun. Neither **48×12×24 shared** nor
+**32×12×24 split NLC** is an accepted FP64 replacement. Defaults stay unchanged
+pending evidence; retaining them is not a new convergence certification.

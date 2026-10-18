@@ -18,7 +18,13 @@ from typing import Any
 import numpy as np
 from generativeqc import GridSpec
 
-from benchmarks._readme_grid import grid_directory, grid_work, parse_grid
+from benchmarks._readme_grid import (
+    FP64_GRID_ENERGY_TOLERANCE,
+    FP64_GRID_FORCE_TOLERANCE,
+    grid_directory,
+    grid_work,
+    parse_grid,
+)
 from benchmarks.readme_dft import METHODS, SCHEMA, specification
 from benchmarks.readme_omol25 import SIZES, reference_baselines
 
@@ -81,7 +87,11 @@ def compare(
     differences = []
     for geometry in (0, 1):
         row, oracle = rows.get(geometry), dense_rows.get(geometry)
-        result: dict[str, Any] = {"geometry": geometry, "gate": None}
+        result: dict[str, Any] = {
+            "geometry": geometry,
+            "gate": None,
+            "fp64_threshold_gate": None,
+        }
         if row is not None and oracle is not None:
             energy_error = abs(row["energy"] - oracle["energy"])
             force_error = float(
@@ -92,10 +102,16 @@ def compare(
                 force_max_error_hartree_per_bohr=force_error,
                 gate=energy_error <= energy_tolerance
                 and force_error <= force_tolerance,
+                fp64_threshold_gate=energy_error <= FP64_GRID_ENERGY_TOLERANCE
+                and force_error <= FP64_GRID_FORCE_TOLERANCE,
             )
         differences.append(result)
     gates = [row["gate"] for row in differences]
     return {
+        "comparison_scope": "cross-grid-reference",
+        "energy_tolerance_hartree": energy_tolerance,
+        "force_tolerance_hartree_per_bohr": force_tolerance,
+        "endpoint_qualification": "not_evaluated",
         "method": method,
         "density_fitting": (scientific or dense or {}).get("density_fitting"),
         "atoms": atoms,
@@ -110,6 +126,9 @@ def compare(
         "convergence_gate": None
         if dimensions == baseline or None in gates
         else all(gates),
+        "fp64_threshold_gate": None
+        if dimensions == baseline or None in gates
+        else all(row["fp64_threshold_gate"] for row in differences),
     }
 
 
@@ -145,6 +164,11 @@ def main() -> None:
         "energy_tolerance_hartree": args.energy_tolerance,
         "force_tolerance_hartree_per_bohr": args.force_tolerance,
         "baseline_is_exact_integral": False,
+        "endpoint_qualification": "not_evaluated",
+        "fp64_thresholds": {
+            "energy_hartree": FP64_GRID_ENERGY_TOLERANCE,
+            "force_hartree_per_bohr": FP64_GRID_FORCE_TOLERANCE,
+        },
         "comparisons": results,
     }
     args.output.mkdir(parents=True, exist_ok=True)
@@ -156,9 +180,11 @@ def main() -> None:
         "",
         "Differences are against the selected GPU4PySCF grid, not exact integrals.",
         "Both original and moved geometries must pass. Engine parity is a separate gate.",
+        f"Requested comparison gates: {args.energy_tolerance:g} Eh / {args.force_tolerance:g} Eh/bohr. FP64 thresholds: {FP64_GRID_ENERGY_TOLERANCE:g} Eh / {FP64_GRID_FORCE_TOLERANCE:g} Eh/bohr.",
+        "Neither column certifies the baseline, a complete FP64 endpoint or a Fast total error budget.",
         "",
-        "| Method | Mode | Atoms | Grid | Points/atom | Max ΔE (Eh) | Max ΔF (Eh/bohr) | Grid gate |",
-        "| --- | --- | ---: | --- | ---: | ---: | ---: | --- |",
+        "| Method | Mode | Atoms | Grid | Points/atom | Max ΔE (Eh) | Max ΔF (Eh/bohr) | Requested gate | FP64 thresholds |",
+        "| --- | --- | ---: | --- | ---: | ---: | ---: | --- | --- |",
     ]
     for result in results:
         work = result["grid_work"]
@@ -183,8 +209,15 @@ def main() -> None:
         )
         dimensions = "×".join(str(value) for value in work["dimensions"])
         mode = {True: "DF", False: "Direct", None: "unknown"}[result["density_fitting"]]
+        fp64_gate = (
+            "baseline"
+            if result["is_baseline"]
+            else {True: "pass", False: "fail", None: "unavailable"}[
+                result["fp64_threshold_gate"]
+            ]
+        )
         lines.append(
-            f"| {result['method']} | {mode} | {result['atoms']} | {dimensions} | {work['points_per_atom']} | {energy} | {force} | {gate} |"
+            f"| {result['method']} | {mode} | {result['atoms']} | {dimensions} | {work['points_per_atom']} | {energy} | {force} | {gate} | {fp64_gate} |"
         )
     (args.output / "grid-convergence.md").write_text("\n".join(lines) + "\n")
 

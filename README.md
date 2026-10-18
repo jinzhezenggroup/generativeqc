@@ -165,23 +165,26 @@ compilation-cache priming is recorded separately, never subtracted from cold. Se
 [DF timings](benchmarks/results/readme-gpu4pyscf96-20261018/df-timings.md), and
 [protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
 
-**ωB97M-V grid qualification** — this supplements, rather than replaces, the
+**ωB97M-V grid experiments (not FP64-qualified)** — these supplement the
 complete HF/DFT results above. A separate 2026-10-18 study from master `2a62a17e8`
 compares **48×12×24** (13,824 points/atom) and **48×16×32** (24,576 points/atom)
 on 3/12-atom water clusters, for Direct and DF. These are unpruned radial × polar
 × azimuthal counts, not Lebedev levels; XC and VV10 currently share that grid.
-All plotted native calls pass same-grid energy/force gates (`1e-8 Eh`,
-`1e-7 Eh/bohr`). Both grids also pass exploratory **Direct-reference** convergence
-gates (`1e-5 Eh`, `1e-4 Eh/bohr`) against 64×16×32 on original and moved geometries.
-DF has same-grid parity, not separate denser-grid convergence certification.
-This does not change production defaults or qualify larger clusters or other
-molecules. See the [grid comparison figure](assets/readme-vv10-grid-performance.svg),
+All plotted native calls pass **same-grid engine parity** (`1e-8 Eh`,
+`1e-7 Eh/bohr`), not grid convergence. Both shared grids pass only exploratory
+Direct-reference gates (`1e-5 Eh`, `1e-4 Eh/bohr`) against 64×16×32; neither
+passes the FP64 thresholds on original/moved 3/12-atom geometries. DF has no
+separate denser-shared-grid certification. The denser baseline is not itself
+certified converged. **No smaller grid is recommended for the FP64 overview**;
+production defaults and the existing HF/DFT results remain unchanged.
+See the [exploratory timing figure](assets/readme-vv10-grid-performance.svg),
 [timings and SCF work](benchmarks/results/readme-vv10-grids-20261018/grid-timings.md),
 [convergence and provenance](benchmarks/results/readme-vv10-grids-20261018/README.md),
 and [custom-grid/sweep commands](benchmarks/readme_grids.md). A subsequent
 [reference-only split-grid probe](benchmarks/readme_grids.md#measured-split-grid-decision)
-keeps XC at 48×16×32 and finds 32×12×24 VV10 promising; native split-grid support
-and its performance are not yet qualified.
+keeps XC at 48×16×32. Its 32×12×24 VV10 errors (`6.38e-7 Eh`, `3.23e-6 Eh/bohr`)
+**fail FP64 acceptance**. It is at most an unqualified Fast candidate, not a
+qualified Fast configuration or a measured native speedup.
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

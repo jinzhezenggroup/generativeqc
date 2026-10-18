@@ -2,6 +2,7 @@
 
 Warm values retain all requested fixed-density replays. Columns show median seconds and observed SCF iterations/builds.
 Same-grid engine parity and cross-grid convergence are separate gates; see grid-convergence.md.
+Exploratory grids: FP64 quadrature accuracy is not certified.
 
 | Mode | Grid | Atoms | Engine | Cold (s) | Warm (s) | Cold work | Warm work |
 | --- | --- | ---: | --- | ---: | ---: | --- | --- |

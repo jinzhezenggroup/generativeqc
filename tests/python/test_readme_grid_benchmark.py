@@ -347,6 +347,7 @@ def test_missing_geometry_is_unknown_not_a_pass(tmp_path: Path) -> None:
         force_tolerance=1e-5,
     )
     assert result["convergence_gate"] is None
+    assert result["fp64_threshold_gate"] is None
     assert result["geometries"][0]["gate"] is True
     assert result["geometries"][1]["gate"] is None
 
@@ -397,6 +398,49 @@ def test_baseline_self_comparison_never_certifies_convergence(tmp_path: Path) ->
         force_tolerance=1e-5,
     )
     assert result["is_baseline"] and result["convergence_gate"] is None
+    assert result["fp64_threshold_gate"] is None
+
+
+@pytest.mark.parametrize("energy,force", [(-76.0 + 6.38e-7, 0.0), (-76.0, 3.23e-6)])
+def test_loose_shared_grid_gate_never_becomes_fp64_acceptance(
+    tmp_path: Path, energy: float, force: float
+) -> None:
+    retain_reference(tmp_path, (64, 16, 32))
+    retain_reference(tmp_path, (48, 12, 24), energy=energy, force=force)
+    result = compare(
+        tmp_path,
+        (48, 12, 24),
+        (64, 16, 32),
+        "wb97m-v",
+        3,
+        energy_tolerance=1e-5,
+        force_tolerance=1e-4,
+    )
+    assert result["convergence_gate"] is True
+    assert result["fp64_threshold_gate"] is False
+    assert result["endpoint_qualification"] == "not_evaluated"
+
+
+def test_archived_shared_grid_passes_remain_exploratory_not_fp64() -> None:
+    archive = Path("benchmarks/results/readme-vv10-grids-20261018/grid-timings.json.xz")
+    summary = json.loads(lzma.decompress(archive.read_bytes()))
+    acceptance = summary["accuracy_acceptance"]
+    for point in summary["grid_convergence"]["comparisons"]:
+        errors = point["geometries"]
+        expected = (
+            None
+            if point["is_baseline"] or any(row["gate"] is None for row in errors)
+            else all(
+                row["energy_error_hartree"] <= acceptance["fp64_energy_Eh"]
+                and row["force_max_error_hartree_per_bohr"]
+                <= acceptance["fp64_force_Eh_per_bohr"]
+                for row in errors
+            )
+        )
+        assert point["fp64_threshold_gate"] is expected
+        if point["grid_work"]["dimensions"] in ([48, 12, 24], [48, 16, 32]):
+            assert point["convergence_gate"] is True
+            assert point["fp64_threshold_gate"] is False
 
 
 def test_retained_publication_replays_independent_energy_and_force_gates() -> None:

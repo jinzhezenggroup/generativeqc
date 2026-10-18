@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-18
 
+The split-grid recommendation below is superseded by the
+[2026-10-19 FP64 acceptance correction](../numerics/2026-10-19-vv10-fp64-acceptance-correction.md).
+Historical observations are retained, not promoted to FP64 or Fast acceptance.
+
 ## Problem
 
 The README's shared `(48,16,32)` quadrature has 24,576 points per atom. Its
