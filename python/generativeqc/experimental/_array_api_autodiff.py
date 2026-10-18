@@ -72,6 +72,23 @@ def _seed(value: Any, spec: Any, name: str) -> np.ndarray:
 
 
 def _combine(primal: Program, derivative: Program) -> Program:
+    if derivative.provenance.get("external_mask_where_vjp"):
+        # Fixed-mask derivatives freeze real feeds as non-differentiable execution
+        # data. Rebuild the primal against those same canonical inputs before
+        # combining; restoring their AD flags would reopen higher-order AD.
+        from generativeqc_compiler.tensor.ad_program import _rebuild
+
+        inputs = {
+            node.attrs["name"]: node for node in derivative.nodes if node.op == "input"
+        }
+        primal = _rebuild(
+            primal,
+            {
+                node: inputs[node.attrs["name"]]
+                for node in primal.nodes
+                if node.op == "input"
+            },
+        )
     if set(primal.outputs) & set(derivative.outputs):
         raise ValueError("primal and derivative output names collide")
     return Program(
@@ -100,8 +117,15 @@ class _GradientFunction:
         options: dict[str, Any],
         *,
         with_value: bool,
+        allow_external_mask_where: bool = False,
     ) -> None:
+        if type(allow_external_mask_where) is not bool:
+            raise TypeError("allow_external_mask_where must be Boolean")
         base = _compiled(function, backend, options)
+        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+            base.close()
+            raise ValueError("external-mask gradients require reference or CPU backend")
+        self.allow_external_mask_where = allow_external_mask_where
         self.names, self.single = _arguments(base, argnums)
         self.function = base._variant(self.names)
         self.with_value = with_value
@@ -122,7 +146,12 @@ class _GradientFunction:
         key = (primal.logical_hash, *(input_specs[name] for name in self.names))
         cached = self.programs.get(key)
         if cached is None:
-            reverse = transpose_program(primal, ("output",), inputs=self.names)
+            reverse = transpose_program(
+                primal,
+                ("output",),
+                inputs=self.names,
+                allow_external_mask_where=self.allow_external_mask_where,
+            )
             program = (
                 _combine(primal, reverse.program)
                 if self.with_value
