@@ -10,10 +10,11 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
+from typing_extensions import Self
 
 RUNNERS = Path(
     os.environ.get(
