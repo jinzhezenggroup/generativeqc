@@ -38,12 +38,16 @@ def _compiled(function: Any, backend: str | None, options: dict[str, Any]) -> An
     return compile(function, backend=backend or "cpu", **options)
 
 
-def _arguments(function: Any, argnums: Any) -> tuple[tuple[str, ...], bool]:
+def _arguments(
+    function: Any, argnums: Any, *, positional_count: int | None = None
+) -> tuple[tuple[str, ...], bool]:
     parameters = tuple(
         name
         for name, parameter in function._signature.parameters.items()
         if parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
     )
+    if positional_count is not None:
+        parameters = parameters[:positional_count]
     single = type(argnums) is int
     positions = (argnums,) if single else argnums
     if not isinstance(positions, tuple) or not positions:
@@ -207,6 +211,8 @@ class _Pullback:
         primal: Program,
         feeds: dict[str, Any],
         names: tuple[str, ...],
+        *,
+        allow_external_mask_where: bool = False,
     ) -> None:
         self.function, self.primal, self.feeds, self.names = (
             function,
@@ -214,7 +220,12 @@ class _Pullback:
             feeds,
             names,
         )
-        self.reverse = transpose_program(primal, tuple(primal.outputs), inputs=names)
+        self.reverse = transpose_program(
+            primal,
+            tuple(primal.outputs),
+            inputs=names,
+            allow_external_mask_where=allow_external_mask_where,
+        )
 
     def __call__(self, cotangents: Any) -> tuple[Any, ...]:
         if tuple(self.primal.outputs) == ("output",):
@@ -248,15 +259,32 @@ def _vjp(
     primals: tuple[Any, ...],
     backend: str | None,
     options: dict[str, Any],
+    *,
+    argnums: int | tuple[int, ...] | None = None,
+    allow_external_mask_where: bool = False,
 ) -> tuple[Any, _Pullback]:
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
     base = _compiled(function, backend, options)
-    names, _ = _arguments(base, tuple(range(len(primals))))
-    base = base._variant(names)
-    primal, feeds = base._prepare(*primals)
-    # A pullback belongs to this forward call, not to subsequently mutated inputs.
-    feeds = {name: np.array(value, copy=True) for name, value in feeds.items()}
     try:
-        pullback = _Pullback(base, primal, feeds, names)
+        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+            raise ValueError("external-mask VJP requires reference or CPU backend")
+        names, _ = _arguments(
+            base,
+            tuple(range(len(primals))) if argnums is None else argnums,
+            positional_count=len(primals),
+        )
+        base = base._variant(names)
+        primal, feeds = base._prepare(*primals)
+        # Snapshot every primal, including selectors and non-differentiated data.
+        feeds = {name: np.array(value, copy=True) for name, value in feeds.items()}
+        pullback = _Pullback(
+            base,
+            primal,
+            feeds,
+            names,
+            allow_external_mask_where=allow_external_mask_where,
+        )
         values = base._execution.execute(primal, feeds)
         return _outputs(primal, values), pullback
     except BaseException:
