@@ -102,9 +102,9 @@ class DirectForceDiagnostic {
       const auto& row = work.classes[c];
       const auto& recurrence = row.recurrence;
       const auto order = detail::direct_quartet_shell_class_angular_order(c);
-      // Order six is owned per AO component, so there is no unique executed
-      // shell census at that site. Low-order generated bilinears precontract
-      // weights and have no component execution count. Preserve unavailable.
+      // The retained order-six consumer has no unique shell census. Its
+      // shared-recurrence alternative reports shells only after actual entry.
+      // Low-order precontracted bilinears have no component execution count.
       auto count = [](unsigned long long value, bool available, char (&buffer)[32]) {
         if (available)
           std::snprintf(buffer, sizeof(buffer), "%llu", value);
@@ -116,23 +116,26 @@ class DirectForceDiagnostic {
           contractions[32], published[32];
       // Only the cooperative/materialized consumers instrument recurrence
       // preparation sites. Zero must never stand for unavailable attribution.
-      const bool shared_recurrence = complete_ && (order == 7 || order == 8);
-      std::fprintf(out,
-                   "%s{\"class\":%u,\"angular_order\":%zu,\"enumerated\":%llu,"
-                   "\"shell_screened\":%llu,\"generated_owned\":%llu,\"admitted\":%llu,"
-                   "\"executed_shells\":%s,\"executed_components\":%s,"
-                   "\"primitive_pair_products\":%s,\"bra_preparations\":%s,"
-                   "\"ket_preparations\":%s,\"coulomb_preparations\":%s,"
-                   "\"component_contractions\":%s,\"published_components\":%s}",
-                   c ? "," : "", c, order, row.enumerated, row.shell_screened, row.generated_owned,
-                   row.admitted, count(row.executed_shells, complete_ && order != 6, shells),
-                   count(row.executed_components, complete_ && order >= 6, components),
-                   count(row.primitive_pair_products, complete_, products),
-                   count(recurrence.bra_preparations, shared_recurrence, bra),
-                   count(recurrence.ket_preparations, shared_recurrence, ket),
-                   count(recurrence.coulomb_preparations, shared_recurrence, coulomb),
-                   count(recurrence.component_contractions, shared_recurrence, contractions),
-                   count(recurrence.published_components, shared_recurrence, published));
+      const bool shared_recurrence =
+          complete_ && (order == 7 || order == 8 || recurrence.coulomb_preparations != 0U);
+      std::fprintf(
+          out,
+          "%s{\"class\":%u,\"angular_order\":%zu,\"enumerated\":%llu,"
+          "\"shell_screened\":%llu,\"generated_owned\":%llu,\"admitted\":%llu,"
+          "\"executed_shells\":%s,\"executed_components\":%s,"
+          "\"primitive_pair_products\":%s,\"bra_preparations\":%s,"
+          "\"ket_preparations\":%s,\"coulomb_preparations\":%s,"
+          "\"component_contractions\":%s,\"published_components\":%s}",
+          c ? "," : "", c, order, row.enumerated, row.shell_screened, row.generated_owned,
+          row.admitted,
+          count(row.executed_shells, complete_ && (order != 6 || shared_recurrence), shells),
+          count(row.executed_components, complete_ && order >= 6, components),
+          count(row.primitive_pair_products, complete_, products),
+          count(recurrence.bra_preparations, shared_recurrence, bra),
+          count(recurrence.ket_preparations, shared_recurrence, ket),
+          count(recurrence.coulomb_preparations, shared_recurrence, coulomb),
+          count(recurrence.component_contractions, shared_recurrence, contractions),
+          count(recurrence.published_components, shared_recurrence, published));
     }
     std::fputs("]}\n", out);
     std::fclose(out);

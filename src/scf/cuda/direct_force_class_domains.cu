@@ -175,7 +175,8 @@ cudaError_t launch_direct_force_spatial_spd_low(
     const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
-    bool separate_sources, detail::BoundedDirectBlockDomain block_domain) {
+    bool separate_sources, detail::BoundedDirectBlockDomain block_domain, bool relative_six,
+    const GeneratedShellPairStream* topology) {
   if (batch.direct_maximum_shell_angular != 2U || !block_domain.prefix)
     return cudaErrorInvalidValue;
   auto launch = [&]<bool Unrestricted, DirectForceOutputMode Mode, unsigned Partition>() {
@@ -188,6 +189,20 @@ cudaError_t launch_direct_force_spatial_spd_low(
     return cudaPeekAtLastError();
   };
   auto partition = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
+    if (relative_six) {
+      runtime::cuda_trace::TraceRegion low("direct_force_generated_low", stream);
+      auto error = launch.template operator()<Unrestricted, Mode, 5>();
+      low.finish();
+      if (error != cudaSuccess) return error;
+      error = cudaMemsetAsync(cursor, 0, sizeof(*cursor), stream);
+      if (error != cudaSuccess) return error;
+      runtime::cuda_trace::TraceRegion six("direct_force_order6_relative", stream);
+      return launch_direct_force_relative_six(
+          Unrestricted, grid, shared_bytes, stream, batch, topology, screening_tolerance,
+          shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
+          generated_overflow, schwarz_bounds, density, active, output, cursor, profile,
+          coulomb_coefficient, exchange_coefficient, Mode == DirectForceOutputMode::Separate);
+    }
     if (!batch.direct_force_work || !batch.direct_force_split_low)
       return launch.template operator()<Unrestricted, Mode, 0>();
     // Diagnostic only: two disjoint consumers repeat the bounded candidate
@@ -212,7 +227,8 @@ cudaError_t launch_direct_force_spatial_spd_low(
 
 /** Each specialization instantiates only its existing scientific consumer,
  * never the private generic Coulomb/AD frame of an unrelated angular class. */
-template <bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain>
+template <bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain,
+          unsigned AngularOrder = 0U>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_force_class_domain_kernel(
     DeviceBatch batch, const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
@@ -231,7 +247,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_force_class_d
   while (true) {
     __syncthreads();
     if (threadIdx.x == 0U) {
-      available = direct_force_class_pair_page<Domain>(
+      available = direct_force_class_pair_page<Domain, AngularOrder>(
           topology.pair_class_offsets, batch.batch_size, atomicAdd(cursor, 1ULL), position, page);
       queue_count = 0U;
     }
@@ -309,6 +325,33 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_force_class_d
       }
     }
   }
+}
+
+cudaError_t launch_direct_force_relative_six(
+    bool unrestricted, dim3 grid, std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
+    const GeneratedShellPairStream* topology, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    const std::uint64_t* enabled_mask_pointer, std::uint64_t enabled_mask,
+    const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
+    bool separate_sources) {
+  if (!topology || batch.direct_maximum_shell_angular > 2U) return cudaErrorInvalidValue;
+  const auto workspace_bytes =
+      std::max(shared_bytes, sizeof(CooperativeDirectPairDerivativeRecurrence));
+  auto launch = [&]<bool Unrestricted, DirectForceOutputMode Mode>() {
+    direct_force_class_domain_kernel<Unrestricted, Mode, DirectForceClassDomain::Cooperative, 6U>
+        <<<grid, kBoundedDirectThreads, workspace_bytes, stream>>>(
+            batch, topology, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            enabled_mask_pointer, enabled_mask, generated_overflow, schwarz_bounds, density, active,
+            output, cursor, profile, coulomb_coefficient, exchange_coefficient);
+    return cudaPeekAtLastError();
+  };
+  if (unrestricted)
+    return separate_sources ? launch.template operator()<true, DirectForceOutputMode::Separate>()
+                            : launch.template operator()<true, DirectForceOutputMode::Combined>();
+  return separate_sources ? launch.template operator()<false, DirectForceOutputMode::Separate>()
+                          : launch.template operator()<false, DirectForceOutputMode::Combined>();
 }
 
 cudaError_t launch_direct_force_materialized_class(

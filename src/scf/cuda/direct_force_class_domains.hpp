@@ -35,7 +35,21 @@ cudaError_t launch_direct_force_spatial_spd_low(
     const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
-    bool separate_sources, detail::BoundedDirectBlockDomain block_domain);
+    bool separate_sources, detail::BoundedDirectBlockDomain block_domain, bool relative_six = false,
+    const GeneratedShellPairStream* topology = nullptr);
+
+/** Reuse the generated relative-center recurrence across a complete order-six
+ * quartet. The caller proves the resident-cache and s/p/d resource guards.
+ * Other orders remain with their existing owners; no screening is weakened. */
+cudaError_t launch_direct_force_relative_six(
+    bool unrestricted, dim3 grid, std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,
+    const GeneratedShellPairStream* topology, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    const std::uint64_t* enabled_mask_pointer, std::uint64_t enabled_mask,
+    const std::uint32_t* generated_overflow, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DeviceShellClassProfileEntry* profile, double coulomb_coefficient, double exchange_coefficient,
+    bool separate_sources);
 
 /** Execute only the proved s/p/d subdomains of a mixed f basis.
  * The caller supplies compatible resident primitive pairs, both retained

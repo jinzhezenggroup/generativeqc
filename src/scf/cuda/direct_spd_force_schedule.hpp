@@ -7,7 +7,12 @@ namespace generativeqc::scf::cuda_execution {
 /** Capture execution preference at preparation, without encoding DFT policy.
  * Automatic needs an authenticated method-owned eligibility hint at execution;
  * an explicit request still cannot bypass the scheduler's resource guards. */
-enum class DirectSpdForceSchedule : unsigned char { Incumbent, Automatic, SpatialReuse };
+enum class DirectSpdForceSchedule : unsigned char {
+  Incumbent,
+  Automatic,
+  SpatialReuse,
+  RelativeReuse
+};
 
 /** Bounded experimental queue sizes; unknown requests retain the incumbent.
  * This is task ownership only: each admitted task still uses all 256 lanes of
@@ -16,11 +21,13 @@ inline constexpr unsigned select_direct_order_seven_page_size(std::string_view s
   return selector == "8" ? 8U : selector == "16" ? 16U : 32U;
 }
 
-/** Unknown selectors fail closed; zero overrides even an eligible method hint. */
+/** Unknown selectors fail closed; zero overrides even an eligible method hint.
+ * Relative recurrence reuse is an explicit experiment, not an automatic default. */
 inline constexpr DirectSpdForceSchedule select_direct_spd_force_schedule(
     std::string_view selector) noexcept {
   if (selector.empty()) return DirectSpdForceSchedule::Automatic;
   if (selector == "1" || selector == "spatial-reuse") return DirectSpdForceSchedule::SpatialReuse;
+  if (selector == "relative-reuse") return DirectSpdForceSchedule::RelativeReuse;
   return DirectSpdForceSchedule::Incumbent;
 }
 
