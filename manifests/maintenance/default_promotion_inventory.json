@@ -1674,6 +1674,26 @@
         "tests/python/test_tensor_where_jvp_program.py",
         "docs/developer/tensor_ir.md"
       ]
+    },
+    {
+      "id": "tensor.external-mask-generated-vjp",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:transpose_program.allow_external_mask_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generated VJP for fixed external Boolean masks on generic finite FP64 arrays remains explicit. All live primal and forward domains and every requested cotangent feed are retained, including disconnected and empty gradients. Only materializing native CPU is qualified; default Boolean rejection and non-selection generated equations remain unchanged.",
+      "revisit_condition": "Broader dtype, backend, higher-order or public compiled AD admission requires separate source-matched independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_tensor_where_jvp_program.py",
+        "docs/developer/tensor_ir.md"
+      ]
     }
   ]
 }

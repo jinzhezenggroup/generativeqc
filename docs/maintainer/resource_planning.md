@@ -242,6 +242,20 @@ selection and admission use the separately discovered native composition owner
 described above; prepared leases remain frontend-owned. Native fleet sizing is
 not complete endpoint/RSS allocation accounting.
 
+Direct CUDA RHF/UHF plans with a discovered
+`generativeqc_resource_hf_cuda_fleet_v1` obtain host bounds, retained device
+arenas and serialized retry composition from the same allocation-free C++ owner
+as the native CLI. The topology-aware allocator v2 and ECP queries remain the
+leaf authorities; composition never constructs a CUDA provider or context.
+Ragged fleets sum retained host/device capacities and preserve the conservative
+retry `max(arena) + max(ecp_workspace)`, including maxima from different items.
+The entire fleet is validated before publication, and homogeneous CLI batches
+apply multiplicity exactly once. Schedule identity names native fleet ownership;
+only an absent symbol permits portable compatibility. Native refusal, overflow
+or inconsistent publication never restarts Python arithmetic. This does not
+change density-fitted HF, scientific admission, prepared lease ownership or the
+exclusion of provider/allocator retention and complete simultaneously-live RSS.
+
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
 owners as the installed CLI for per-item diagnostics, twelve retained-owner
