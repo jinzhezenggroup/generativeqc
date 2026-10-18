@@ -2630,6 +2630,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
     resource.state_device_bytes = sum(resource.state_device_bytes, bytes);
   }
 
+  /** The idle force consumer never borrows the optional cold-SCF anchor.
+   * Release it only after the producer stream is drained. A later cold solve
+   * keeps the ordinary Fast path; cumulative execution evidence is unchanged. */
+  std::size_t retire_fast_anchor_storage() {
+    if (!fast_anchor_arena) return 0;
+    const auto bytes = sum(product(matrix, 5 * sizeof(double)), sizeof(double));
+    check(runtime::resource_cuda_free(fast_anchor_arena));
+    fast_anchor_arena = nullptr;
+    fast_anchor_density = fast_delta_density = fast_anchor_j = fast_anchor_exchange =
+        fast_anchor_range_exchange = fast_delta_maximum = nullptr;
+    fast_anchor_eligible = fast_anchor_active = fast_anchor_ready = pending_fast_delta = false;
+    resource.state_device_bytes -= bytes;
+    return bytes;
+  }
+
   /** Reconstruct linear operators from one fixed strict anchor. Full targets
    * always refresh FP64 J/K; nonlinear XC continues to consume total density.
    * Keeping the anchor fixed avoids chaining screened or rounded updates. */
@@ -4368,15 +4383,22 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before && impl_->phase_source) {
+    if (additional_device_bytes > free_before &&
+        (impl_->fast_anchor_arena || impl_->phase_source)) {
       // The final-state token excludes active/pending SCF work. Drain its
-      // producer before invalidating graph borrowers and freeing immutable ERIs;
-      // downstream D/W/XC leases do not borrow this independently owned source.
+      // producer before freeing optional cold-SCF storage. Downstream D/W/XC
+      // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      retired = impl_->phase_device_bytes;
-      impl_->retire_phase_source(false);  // Successful SCF already audited it.
-      check(cudaMemGetInfo(&free_after, &total));
+      if (impl_->fast_anchor_arena) {
+        retired = impl_->retire_fast_anchor_storage();
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if (additional_device_bytes > free_after && impl_->phase_source) {
+        retired += impl_->phase_device_bytes;
+        impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
     }
     receipt = {additional_device_bytes, free_before, free_after, retired};
     return GENERATIVEQC_STATUS_SUCCESS;

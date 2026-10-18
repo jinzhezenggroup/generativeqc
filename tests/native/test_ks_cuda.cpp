@@ -1044,6 +1044,92 @@ void run_fast_anchor_delta_case() {
                     plan.transfers().fast_anchor_builds > before_recovery.fast_anchor_builds &&
                     plan.transfers().fast_delta_builds > before_recovery.fast_delta_builds,
                 "Fast anchor recovery did not establish a fresh strict anchor");
+        // Exercise the real owner without filling device memory or assuming
+        // globally free bytes stay constant. Total device capacity cannot fit
+        // while mandatory owner storage is live. The handoff stays advisory;
+        // optional leases retire but final D/W/token and the warm seed survive.
+        dft::CudaKsFinalStateToken token, after_handoff;
+        dft::CudaKsResidentDensityBinding density_before, density_after;
+        dft::CudaKsResidentStationaryWeightsBinding weights_before, weights_after;
+        dft::KsFinalStateDiagnostic weights_diagnostic;
+        require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    plan.resident_final_density(token, density_before, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    plan.prepare_resident_final_stationary_weights(token, weights_before,
+                                                                   weights_diagnostic, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS,
+                "Fast anchor pre-handoff final-state binding failed: " + detail);
+        const auto anchor_bytes = (5 * basis.nao * basis.nao + 1) * sizeof(double);
+        const auto state_bytes = plan.resources().state_device_bytes;
+        const auto provider_bytes = plan.resources().provider_device_bytes;
+        const auto warm_seed = plan.warm_density();
+        const auto before_handoff = plan.transfers();
+        std::array<std::uint64_t, 4> receipt{};
+        require(
+            plan.prepare_force_memory(token, 0, receipt, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                receipt[3] == 0 && plan.resources().state_device_bytes == state_bytes,
+            "Roomy force handoff retired the Fast anchor");
+        auto stale_token = token;
+        stale_token.version = 0;
+        require(plan.prepare_force_memory(stale_token, receipt[1] + 1, receipt, detail) ==
+                        GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                    plan.resources().state_device_bytes == state_bytes &&
+                    plan.resources().provider_device_bytes == provider_bytes,
+                "Stale force-memory token changed Fast anchor ownership");
+        std::size_t free_bytes{}, total_bytes{};
+        require(cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess,
+                "Could not query Fast anchor force-memory pressure");
+        require(plan.prepare_force_memory(token, total_bytes, receipt, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+                    plan.resources().provider_device_bytes <= provider_bytes &&
+                    receipt[3] ==
+                        anchor_bytes + provider_bytes - plan.resources().provider_device_bytes &&
+                    plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    after_handoff == token &&
+                    plan.resident_final_density(token, density_after, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    plan.resident_final_stationary_weights(token, weights_after, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    density_after.alpha == density_before.alpha &&
+                    weights_after.density == weights_before.density &&
+                    weights_after.weighted_density == weights_before.weighted_density &&
+                    plan.warm_density() == warm_seed,
+                "Fast anchor force handoff lost state or resource accounting: " + detail);
+        const auto after_retirement = plan.transfers();
+        const auto retired_provider_bytes = plan.resources().provider_device_bytes;
+        require(after_retirement.fast_anchor_builds == before_handoff.fast_anchor_builds &&
+                    after_retirement.fast_delta_builds == before_handoff.fast_delta_builds &&
+                    after_retirement.fast_anchor_invalidations ==
+                        before_handoff.fast_anchor_invalidations &&
+                    after_retirement.fast_anchor_allocation_fallbacks ==
+                        before_handoff.fast_anchor_allocation_fallbacks &&
+                    plan.prepare_force_memory(token, total_bytes, receipt, detail) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    receipt[3] == 0 &&
+                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+                    plan.resources().provider_device_bytes == retired_provider_bytes &&
+                    plan.final_state_token(after_handoff, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    after_handoff == token,
+                "Fast anchor retirement rewrote work evidence or retired storage twice");
+        const auto retired_warm = plan.run();
+        require(retired_warm.converged && std::abs(retired_warm.energy - reference.energy) < 1e-5,
+                "Warm solve after Fast anchor retirement lost independent-oracle parity");
+        ks_cuda_fail_next_runtime_for_test_v1();
+        failed = false;
+        try {
+          (void)plan.run(nullptr, false);
+        } catch (const std::exception&) {
+          failed = true;
+        }
+        require(failed && plan.failed(), "Retired Fast anchor failure injection did not fail");
+        const auto retired_recovery = plan.run(nullptr, false);
+        require(retired_recovery.converged &&
+                    std::abs(retired_recovery.energy - reference.energy) < 1e-5 &&
+                    plan.resources().state_device_bytes == state_bytes - anchor_bytes &&
+                    plan.transfers().fast_anchor_builds == before_handoff.fast_anchor_builds &&
+                    plan.transfers().fast_delta_builds == before_handoff.fast_delta_builds,
+                "Retired Fast anchor was reused by warm replay or cold recovery");
         auto ledger = std::make_shared<runtime::DeviceResourceLedger>();
         ledger->limit = 512ULL * 1024ULL * 1024ULL;
         ledger->device = 0;
