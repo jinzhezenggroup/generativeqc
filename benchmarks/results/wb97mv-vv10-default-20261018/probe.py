@@ -10,6 +10,7 @@ import os
 import traceback
 from pathlib import Path
 from time import perf_counter
+from typing import Any, BinaryIO
 
 import cupy as cp
 import numpy as np
@@ -17,9 +18,29 @@ import numpy as np
 from generativeqc import Calculator, GridSpec, KsOptions
 
 from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis, native_build_metadata
-from benchmarks.pbe0_initial_guesses import export_density
 from benchmarks.readme_hf_scaling import scaling_cases
 from tools.generate_build_identity import _inventory, _source_identity
+
+
+def export_density(owner: Any, path: Path, destination: BinaryIO) -> dict:
+    """Export after timing through the exclusively reserved density descriptor."""
+    from generativeqc import _native
+    from generativeqc.checkpoint import _descriptor, _pointer
+
+    state = _descriptor()
+    query = owner._library.generativeqc_batch_get_hf_warm_state
+    _native.check(owner._library, query(owner._batch, 0, ctypes.byref(state)))
+    if not state.present or not 0 < state.density_count <= 768**2:
+        raise RuntimeError("missing or unbounded final density")
+    density = np.empty(state.density_count, dtype=np.float64)
+    coordinates = np.empty(state.coordinate_count, dtype=np.float64)
+    state.density, state.coordinates = _pointer(density), _pointer(coordinates)
+    _native.check(owner._library, query(owner._batch, 0, ctypes.byref(state)))
+    np.save(destination, density)
+    destination.flush()
+    destination.seek(0)
+    return {"path": path.name, "sha256": hashlib.sha256(destination.read()).hexdigest(),
+            "count": density.size}
 
 
 def main() -> None:
@@ -39,8 +60,10 @@ def main() -> None:
     ):
         if name in os.environ:
             raise RuntimeError(f"Default qualification forbids an override: {name}")
-    if arguments.output.exists():
-        raise FileExistsError(arguments.output)
+    density_path = arguments.output.with_suffix(".density.npy")
+    for path in (arguments.output, density_path):
+        if os.path.lexists(path):
+            raise FileExistsError(path)
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     source = arguments.source.resolve()
     identity = _source_identity(
@@ -73,51 +96,58 @@ def main() -> None:
         "production_defaults_changed": True,
         "experimental_proposal_policy": None,
     }
-    started = perf_counter()
-    try:
-        calculator = Calculator(
-            method="wb97m-v-rks", basis=basis, device="cuda",
-            basis_representation="spherical",
-            ks_options=KsOptions(grid=GridSpec(48, 16, 32)),
-            density_fitting="none", precision="fp64",
-            energy_tolerance=1e-12, density_tolerance=1e-10,
-            screening_tolerance=1e-12, max_iterations=100, diis_history=8,
-        )
-        record["construction_seconds"] = perf_counter() - started
-        record["native_build"] = native_build_metadata(calculator)
+    # Exclusive creation rejects existing files and symlinks, including races
+    # after preflight. Keep both descriptors and failed attempts; never reopen
+    # a receipt path or remove a reservation that another invocation may see.
+    with (
+        arguments.output.open("x", encoding="utf-8") as receipt,
+        density_path.open("x+b") as density_destination,
+    ):
         started = perf_counter()
-        with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
-            cp.cuda.runtime.deviceSynchronize()
-            record["prepare_seconds"] = perf_counter() - started
-            execution_started = perf_counter()
-            item = owner.execute(strict=False, properties=("energy", "forces")).items[0]
-            cp.cuda.runtime.deviceSynchronize()
-            record["execute_seconds"] = perf_counter() - execution_started
-            record["cold_endpoint_seconds"] = perf_counter() - started
-            record.update(
-                succeeded=item.succeeded, converged=item.converged,
-                energy=float(item.energy), iterations=int(item.iterations),
-                fock_builds=item.fock_builds, density_rms=float(item.density_rms),
-                physical_residual_rms=float(item.physical_residual_rms),
-                energy_change=float(item.energy_change), initial_guess=item.initial_guess,
-                warm_start_used=bool(item.warm_start_used),
-                warm_start_fallback=bool(item.warm_start_fallback), precision=item.precision,
-                ks_diagnostic=item.ks_diagnostic.to_payload(),
-                forces=None if item.forces is None else item.forces.tolist(),
-                finite_forces=None if item.forces is None else bool(np.isfinite(item.forces).all()),
+        try:
+            calculator = Calculator(
+                method="wb97m-v-rks", basis=basis, device="cuda",
+                basis_representation="spherical",
+                ks_options=KsOptions(grid=GridSpec(48, 16, 32)),
+                density_fitting="none", precision="fp64",
+                energy_tolerance=1e-12, density_tolerance=1e-10,
+                screening_tolerance=1e-12, max_iterations=100, diis_history=8,
             )
-            if item.succeeded and item.converged:
-                record["final_density"] = export_density(
-                    owner, arguments.output.with_suffix(".density.npy")
+            record["construction_seconds"] = perf_counter() - started
+            record["native_build"] = native_build_metadata(calculator)
+            started = perf_counter()
+            with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+                cp.cuda.runtime.deviceSynchronize()
+                record["prepare_seconds"] = perf_counter() - started
+                execution_started = perf_counter()
+                item = owner.execute(strict=False, properties=("energy", "forces")).items[0]
+                cp.cuda.runtime.deviceSynchronize()
+                record["execute_seconds"] = perf_counter() - execution_started
+                record["cold_endpoint_seconds"] = perf_counter() - started
+                record.update(
+                    succeeded=item.succeeded, converged=item.converged,
+                    energy=float(item.energy), iterations=int(item.iterations),
+                    fock_builds=item.fock_builds, density_rms=float(item.density_rms),
+                    physical_residual_rms=float(item.physical_residual_rms),
+                    energy_change=float(item.energy_change), initial_guess=item.initial_guess,
+                    warm_start_used=bool(item.warm_start_used),
+                    warm_start_fallback=bool(item.warm_start_fallback), precision=item.precision,
+                    ks_diagnostic=item.ks_diagnostic.to_payload(),
+                    forces=None if item.forces is None else item.forces.tolist(),
+                    finite_forces=None if item.forces is None else bool(np.isfinite(item.forces).all()),
                 )
-    except Exception:
-        record["error"] = traceback.format_exc()
-    arguments.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+                if item.succeeded and item.converged:
+                    record["final_density"] = export_density(
+                        owner, density_path, density_destination
+                    )
+        except Exception:
+            record["error"] = traceback.format_exc()
+        receipt.write(json.dumps(record, indent=2, allow_nan=False) + "\n")
     print(json.dumps({key: record.get(key) for key in (
         "iterations", "fock_builds", "energy", "density_rms", "physical_residual_rms",
         "cold_endpoint_seconds", "error",
     )}), flush=True)
-    if not record.get("succeeded") or not record.get("converged"):
+    if "error" in record or not record.get("succeeded") or not record.get("converged"):
         raise SystemExit(1)
 
 

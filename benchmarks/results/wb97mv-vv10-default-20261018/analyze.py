@@ -25,6 +25,8 @@ def digest(path: Path) -> str:
 
 def physical_gate(record: dict[str, Any], atoms: int) -> bool:
     """Reject provisional endpoints, tolerance changes, retries and warm densities."""
+    if "error" in record:
+        return False
     history = record["ks_diagnostic"]["history"]
     work = record["ks_diagnostic"]["nonlocal_work"]
     precision = record["precision"]
@@ -189,7 +191,9 @@ def main() -> None:
     for receipt in sorted(root.glob("expanded-tests*")):
         output["receipt_hashes"][receipt.name] = digest(receipt)
     output["receipt_hashes"]["restore-exit-code.txt"] = digest(root / "restore-exit-code.txt")
-    arguments.output.write_text(json.dumps(output, indent=2, allow_nan=False) + "\n")
+    # A reduction must never replace a raw/consumed receipt or follow a symlink.
+    with arguments.output.open("x", encoding="utf-8") as receipt:
+        receipt.write(json.dumps(output, indent=2, allow_nan=False) + "\n")
     for row in output["records"]:
         print(json.dumps({key: row.get(key) for key in (
             "atoms", "iterations", "fock_builds", "nonlocal_work", "physical_gate",
