@@ -40,13 +40,29 @@ int main() {
          proposal_limit);
   assert(nonlocal_confirmation_tolerance(false, 1e-4) == 1e-9);
   assert(nonlocal_confirmation_tolerance(true, 1e-4) == 1e-5);
-  assert(nonlocal_inner_tolerance(false, 1e-2, 1e-4) == 1e-7);
-  assert(nonlocal_inner_tolerance(false, 1e-6, 1e-4) == 1e-9);
+  assert(nonlocal_inner_tolerance(false, 1e-2, 1e-4) == 1e-5);
+  assert(nonlocal_inner_tolerance(false, 1e-6, 1e-4) == 1e-8);
   assert(nonlocal_inner_tolerance(true, 1e-2, 1e-4) == 1e-5);
   for (const auto density_tolerance : {1e-10, 1e-12}) {
     assert(nonlocal_confirmation_tolerance(false, density_tolerance) == density_tolerance);
     assert(nonlocal_confirmation_tolerance(true, density_tolerance) == density_tolerance);
     assert(nonlocal_inner_tolerance(true, 1e-2, density_tolerance) == density_tolerance);
+  }
+  for (const auto density_tolerance : {1e-4, 1e-10, 1e-12, 1e-14}) {
+    const auto floor = std::min(1e-12, 0.1 * std::min(1e-9, density_tolerance));
+    double previous = 1e-5;
+    for (const auto maximum_residual : {1.0, 1e-3, 1e-5, 1e-8, 1e-12, 1e-16, 0.0}) {
+      const auto inner = nonlocal_inner_tolerance(false, maximum_residual, density_tolerance);
+      const auto expected = std::clamp(0.01 * maximum_residual, floor, 1e-5);
+      assert(std::abs(inner - expected) <= expected * 1e-14);
+      assert(inner >= floor && inner <= previous);
+      assert(nonlocal_inner_tolerance(true, maximum_residual, density_tolerance) ==
+             nonlocal_confirmation_tolerance(true, density_tolerance));
+      previous = inner;
+    }
+    assert(nonlocal_inner_tolerance(false, 0.0, density_tolerance) == floor);
+    assert(nonlocal_confirmation_tolerance(false, density_tolerance) ==
+           std::min(1e-9, density_tolerance));
   }
   using generativeqc::dft::admit_application_xc_warmup;
   using generativeqc::dft::admit_application_gradient;
