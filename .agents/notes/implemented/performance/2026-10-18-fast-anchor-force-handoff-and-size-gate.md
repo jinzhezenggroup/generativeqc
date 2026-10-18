@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-18
 
+The upper AO/atom-count admission limits below are superseded by
+[the size-cap removal decision](2026-10-19-fast-fock-size-cap-removal.md).
+The lower default floor, force-memory lifetime and historical evidence remain.
+
 ## Problem
 
 Review of #2602 exposed two gaps in the

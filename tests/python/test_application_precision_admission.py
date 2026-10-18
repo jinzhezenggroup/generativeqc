@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_native_budget_domain_admission(
     required_native_cxx: Any, tmp_path: Path
 ) -> None:
+    """Admit large shapes without weakening precision or backend exclusions."""
     source = tmp_path / "admission.cpp"
     source.write_text(r"""
 #include <cassert>
@@ -140,16 +141,21 @@ int main() {
     assert(!cuda_range_exchange_precision_capability(range));
     range.schedule = FockSchedule::CudaIndependent;
   }
-  for (const auto aos : {24u, 384u, 768u})
-    assert(admit_application_fock(loose, aos, 96, 2, true, true, true));
-  for (const auto aos : {0u, 23u, 769u})
+  for (const auto aos : {24u, 384u, 768u, 769u, 1024u, 1536u, 2048u, 4096u, 8192u}) {
+    for (const auto atoms : {2u, 96u, 97u, 128u, 192u, 256u, 1024u})
+      assert(admit_application_fock(loose, aos, atoms, 2, true, true, true));
+  }
+  for (const auto aos : {0u, 23u})
     assert(!admit_application_fock(loose, aos, 96, 2, true, true, true));
-  assert(!admit_application_fock(loose, 768, 97, 2, true, true, true));
   assert(!admit_application_fock(loose, 768, 1, 2, true, true, true));
   assert(!admit_application_fock(loose, 768, 96, 3, true, true, true));
   assert(!admit_application_fock(loose, 768, 96, 2, false, true, true));
   assert(!admit_application_fock(loose, 768, 96, 2, true, false, true));
   assert(!admit_application_fock(loose, 768, 96, 2, true, true, false));
+  assert(!admit_application_fock(loose, 1536, 192, 3, true, true, true));
+  assert(!admit_application_fock(loose, 1536, 192, 2, false, true, true));
+  assert(!admit_application_fock(loose, 1536, 192, 2, true, false, true));
+  assert(!admit_application_fock(loose, 1536, 192, 2, true, true, false));
   for (unsigned index = 0; index < 3; ++index) {
     for (const auto value : {loose[index] * 0.9, -1.0,
                             std::numeric_limits<double>::infinity(),
@@ -157,6 +163,7 @@ int main() {
       auto invalid = loose;
       invalid[index] = value;
       assert(!admit_application_fock(invalid, 768, 96, 2, true, true, true));
+      assert(!admit_application_fock(invalid, 1536, 192, 2, true, true, true));
     }
   }
   using generativeqc::scf::admit_application_hf_gradient;

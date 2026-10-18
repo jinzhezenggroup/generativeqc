@@ -9,11 +9,14 @@ Every supported native CUDA XC composition uses the same shared Direct-Fock prec
 policy. Admission depends on executable operator capabilities, not a functional
 name, canonical exchange fraction or MethodIR identity. The current restricted,
 all-electron Direct consumer admits **FP32 J and full-range K recurrence** with
-24–768 AOs, 2–96 atoms and shells through d. It uses the requested supported
+at least 24 AOs, at least two atoms and shells through d. There is no fixed AO
+or atom-count upper limit in this precision policy; native dimension validation
+and actual resource admission still apply. It uses the requested supported
 quadrature unchanged; the J/K precision decision does not require a particular grid.
 Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
 `3e-5` Eh/bohr RMS force when requested. This domain is independent of the
-384-AO mixed-gradient limit; neither is a hardware AO limit.
+384-AO mixed-gradient limit, which remains unchanged. Admission is not a
+per-system observable-error certificate; explicit audits retain their contract.
 
 Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
@@ -93,8 +96,8 @@ counted once; replay reports mixed-source J/K work but no new recurrence work.
 
 For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
 nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
-at 192–768 AOs, a continuous domain supported by complete-endpoint qualification.
-This is not a whitelist of measured AO counts. Smaller eligible
+at 192 or more AOs, without a fixed upper AO limit. This is not a whitelist of
+measured AO counts or a claim that every larger shape has been benchmarked. Smaller eligible
 owners keep ordinary Fast unless explicitly opted in. Provisional
 initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
@@ -113,7 +116,7 @@ warm and cold solves on that owner use ordinary Fast without reallocating anchor
 FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
 device chunks and same-owner warm replays retain their incumbent path.
 `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset selects the 192–768-AO default; `1` opts in within the existing scientific
+unset selects the default at 192 or more AOs; `1` opts in within the scientific
 eligibility domain, including smaller owners, without forcing unsupported domains.
 There is no universal iteration-count or speed guarantee.
 
