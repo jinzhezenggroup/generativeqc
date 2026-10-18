@@ -47,15 +47,18 @@ def retain_observations(root: Path) -> None:
         ).hexdigest(),
         "populations": {},
     }
+    staged = {}
+    historical = historical_summaries()
     for mode, label in (("none", "direct"), ("cuda", "df")):
         directory = root / "measurements" / mode / "wb97m-v/96"
         update = collect_point(directory.parent, 96)
         reference = update["engines"]["reference"]
         if reference["status"] != "measured":
             raise ValueError(f"unfinished or unqualified reference: {mode}")
+        overlay_reference(historical[mode], update)
         payload = (directory / "reference.json").read_bytes()
         filename = f"{label}-reference.json.xz"
-        (PUBLICATION / filename).write_bytes(lzma.compress(payload, preset=9))
+        staged[filename] = lzma.compress(payload, preset=9)
         job = reference["scheduler"]["SLURM_JOB_ID"]
         manifest["populations"][mode] = {
             "file": filename,
@@ -65,9 +68,31 @@ def retain_observations(root: Path) -> None:
             "allocation_receipt": (root / "receipts" / f"{job}.job.txt").read_text(),
             "execution_receipt": (root / f"{label}.log").read_text(),
         }
-    (PUBLICATION / "manifest.json").write_text(
+    staged["manifest.json"] = (
         json.dumps(manifest, indent=2, allow_nan=False) + "\n"
-    )
+    ).encode()
+    # Validate both populations and all receipts before touching publication.
+    # A rerun cannot replace historical evidence, even through a symlink.
+    for filename, payload in staged.items():
+        target = PUBLICATION / filename
+        if target.is_symlink() or (
+            target.exists() and (not target.is_file() or target.read_bytes() != payload)
+        ):
+            raise ValueError(f"refusing to replace retained evidence: {target}")
+    for filename, payload in staged.items():
+        target = PUBLICATION / filename
+        try:
+            with target.open("xb") as stream:
+                stream.write(payload)
+        except FileExistsError:
+            if (
+                target.is_symlink()
+                or not target.is_file()
+                or target.read_bytes() != payload
+            ):
+                raise ValueError(
+                    f"concurrent retained evidence differs: {target}"
+                ) from None
 
 
 def overlay_reference(
@@ -132,16 +157,22 @@ def read_reference(mode: str) -> dict[str, Any]:
         return collect_point(Path(temporary), 96)
 
 
-def combined_summaries() -> dict[str, dict[str, Any]]:
-    """Reconstruct the current mixed-source homepage, changing two engines only."""
+def historical_summaries() -> dict[str, dict[str, Any]]:
+    """Read the two existing homepage populations without changing their owners."""
     from tools.render_readme_r2scan3c import combined_summary
 
     previous = runpy.run_path(str(RESULTS / "readme-refresh-20261015/refresh.py"))
     return {
-        "none": overlay_reference(combined_summary(), read_reference("none")),
-        "cuda": overlay_reference(
-            previous["combined_summary"]("df-summary.json.xz"), read_reference("cuda")
-        ),
+        "none": combined_summary(),
+        "cuda": previous["combined_summary"]("df-summary.json.xz"),
+    }
+
+
+def combined_summaries() -> dict[str, dict[str, Any]]:
+    """Reconstruct the current mixed-source homepage, changing two engines only."""
+    return {
+        mode: overlay_reference(summary, read_reference(mode))
+        for mode, summary in historical_summaries().items()
     }
 
 

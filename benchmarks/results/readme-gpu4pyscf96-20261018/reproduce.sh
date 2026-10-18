@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run only the two missing independent 96-atom populations, without a process deadline.
 set -euo pipefail
+set -o noclobber
 : "${SLURM_JOB_ID:?Run through srun with an explicit finite allocation}"
 : "${CUDA_VISIBLE_DEVICES:?Preserve Slurm-assigned device visibility}"
 root="${README_GPU4PYSCF96_ROOT:?Select the retained campaign directory}"
@@ -14,10 +15,14 @@ export LD_PRELOAD="$CUDA_PATH/lib64/libcudart.so.12:$CUDA_PATH/lib64/libcublas.s
 export PYTHONPATH=.:python
 export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8
 directory="$root/measurements/$mode/wb97m-v/96"
-mkdir -p "$directory" "$root/receipts"
-test ! -e "$directory/reference.json"
+mkdir -p "$(dirname "$directory")" "$root/receipts"
+# A partial run can contain unique logs even before its journal exists.
+mkdir "$directory"
 date --iso-8601=ns
-scontrol show job "$SLURM_JOB_ID" -o | tee "$root/receipts/$SLURM_JOB_ID.job.txt"
+receipt="$root/receipts/$SLURM_JOB_ID.job.txt"
+[[ ! -e "$receipt" && ! -L "$receipt" ]]
+scontrol show job "$SLURM_JOB_ID" -o > "$receipt"
+cat "$receipt"
 printf 'CUDA_VISIBLE_DEVICES=%s\n' "$CUDA_VISIBLE_DEVICES"
 nvidia-smi -i "$CUDA_VISIBLE_DEVICES" --query-gpu=index,uuid,name --format=csv
 extra=()

@@ -94,25 +94,52 @@ timings are not a balanced same-revision performance experiment.
 Prepare an immutable `source/` checkout/archive of the consumer revision above
 and the retained orbital snapshot at `inputs/def2-svp.json` under a campaign
 directory. `reproduce.sh` selects the existing n1 GPU Python/CUDA environment;
-it runs only one of the two requested populations and refuses to overwrite an
-existing reference journal. No native shared library or build is required.
+it runs only one of the two requested populations and exclusively reserves a new
+population directory. Existing directories (including partial runs), symlinks,
+logs and job receipts are never overwritten. Use a fresh campaign root for a
+new attempt. No native shared library or build is required.
+
+The manifest retains the hash of the original measured launcher. The current
+launcher adds output-retention guards only; it does not relabel those historical
+measurements or their consumer source.
 
 On n1, launch the two independent GPU allocations:
 
 ```bash
+set -euo pipefail
 export README_GPU4PYSCF96_ROOT=/path/to/campaign
-cp benchmarks/results/readme-gpu4pyscf96-20261018/reproduce.sh \
-    "$README_GPU4PYSCF96_ROOT/reproduce.sh"
+(
+    set -o noclobber
+    target="$README_GPU4PYSCF96_ROOT/reproduce.sh"
+    [[ ! -e "$target" && ! -L "$target" ]]
+    cat benchmarks/results/readme-gpu4pyscf96-20261018/reproduce.sh \
+        > "$target"
+)
+pids=()
 for mode in none cuda; do
-    srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-        --cpus-per-task=8 --mem=64G --time=2-00:00:00 \
-        bash "$README_GPU4PYSCF96_ROOT/reproduce.sh" "$mode" \
-        > "$README_GPU4PYSCF96_ROOT/$([[ $mode == none ]] && echo direct || echo df).log" 2>&1 &
+    label=$([[ $mode == none ]] && echo direct || echo df)
+    (
+        set -o noclobber
+        log="$README_GPU4PYSCF96_ROOT/$label.log"
+        [[ ! -e "$log" && ! -L "$log" ]]
+        exec > "$log" 2>&1
+        exec srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+            --cpus-per-task=8 --mem=64G --time=2-00:00:00 \
+            bash "$README_GPU4PYSCF96_ROOT/reproduce.sh" "$mode"
+    ) &
+    pids+=("$!")
 done
-wait
+status=0
+for pid in "${pids[@]}"; do
+    wait "$pid" || status=1
+done
+test "$status" -eq 0
 ```
 
-Retain completed evidence and regenerate the two homepage figures/tables:
+Retain completed evidence and regenerate the two homepage figures/tables.
+Both populations are validated and all receipt files are read before publication; an existing
+archive or manifest must be byte-identical. A different attempt needs its own
+publication rather than replacing these historical records:
 
 ```bash
 PYTHONPATH=.:python python -m tools.render_readme_gpu4pyscf96 \
