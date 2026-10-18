@@ -78,10 +78,14 @@ raw evidence; none becomes an accepted timing or convergence bound.
 
 See [grid controls and commands](../../readme_grids.md) and [reproduce.sh](reproduce.sh).
 Use `tools.render_readme_grids --summary grid-timings.json.xz` to regenerate
-the figure/table without a GPU. `manifest.json` binds the compact
-`accuracy-observations.json.xz`, reduced reports and build settings, with hashes
-for original journals and receipts. The compact archive retains every plotted
-E+F call and both engines' force arrays for executable numerical replay.
+the figure/table without a GPU. `manifest.json` binds `grid-timings.json.xz`
+and the reduced reports. That single archive also contains `accuracy_observations`,
+`grid_convergence`, `build_settings` and `raw_evidence`, including the hashes of
+original journals and receipts. It retains every plotted E+F call, both engines'
+force arrays, and semantic SCF/force work and traffic counters for executable
+numerical replay. Optional iteration trajectories and subcomponent timing
+profiles stay in the hash-bound journals. The figure is stored only once, as
+the [homepage asset](../../../assets/readme-dft-performance.svg).
 Full journals, logs, failed attempts, priming calls and measured consumer
 snapshots remain under `/data/jzzeng/readme-vv10-grids-20261018` on n1 and in the
 ignored local `.artifacts/vv10-grid` directory, not a new source-controlled run

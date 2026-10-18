@@ -46,3 +46,18 @@ qualification uses finite Slurm allocations on supported nodes. The benchmark
 report retains measured work and outcomes, including rejected grids. Separate
 semilocal and VV10 grids require a production owner/ABI/analytic-response change,
 not another reference-only benchmark override.
+
+## Publication storage (2026-10-19)
+
+The first PR check exposed the repository's aggregate evidence budget. Store
+timings, independent force/energy arrays, convergence observations, build
+settings and raw receipt hashes together in one compressed JSON record, with
+one canonical SVG in `assets/`. Remove only optional iteration trajectories
+and subcomponent timing profiles from the reduction, not complete endpoint
+samples, convergence gates, SCF builds, nonlocal scopes, or semantic work and
+traffic counters. Full journals remain locally and on n1 under their original
+hashes. A replay regression still checks all 96 native calls against independent
+reference arrays. The superseded README DF SVG is losslessly compressed using
+its existing stored/expanded-identity verifier, matching the earlier Direct
+figure's storage policy. Do not raise the budget or delete other studies'
+observations to fit this publication.

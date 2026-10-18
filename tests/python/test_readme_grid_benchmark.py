@@ -113,6 +113,63 @@ def test_grid_renderer_rejects_misfiled_populations(
         render_readme_grids.collect_grid(tmp_path, (48, 12, 24), [3])
 
 
+def test_grid_summary_preserves_endpoint_samples_and_semantic_work() -> None:
+    record = {
+        "phase": "cold",
+        "complete_seconds": 2.0,
+        "iterations": 3,
+        "fock_builds": 4,
+        "gate": True,
+        "native_scf_ao_work": {"point_ao_visits": 123},
+        "native_ks_diagnostic": {
+            "history": [{"energy_change": 0.01}],
+            "components": {"xc": -1.0},
+            "coulomb_exchange_work": {"quartets": 17},
+            "nonlocal_work": {"pairs": 23},
+            "nonlocal_history_scopes": ["full-target"],
+        },
+        "native_force_components": {
+            "wall_seconds": {"xc": 0.2},
+            "work_counts": {"pairs": 37},
+            "becke_owners": {"semilocal": {"work_counters": {"pairs": 41}}},
+            "traffic": {"bytes": 128},
+        },
+    }
+    original = {
+        "modes": {
+            "none": [{"points": [{"engines": {"native": {"records": [record]}}}]}]
+        }
+    }
+    compact = render_readme_grids.compact_summary(original)
+    retained = compact["modes"]["none"][0]["points"][0]["engines"]["native"]["records"][
+        0
+    ]
+    assert "history" in record["native_ks_diagnostic"]
+    assert "wall_seconds" in record["native_force_components"]
+    assert "history" not in retained["native_ks_diagnostic"]
+    assert "components" not in retained["native_ks_diagnostic"]
+    assert "wall_seconds" not in retained["native_force_components"]
+    for field in (
+        "complete_seconds",
+        "iterations",
+        "fock_builds",
+        "gate",
+        "native_scf_ao_work",
+    ):
+        assert retained[field] == record[field]
+    for field in ("coulomb_exchange_work", "nonlocal_work", "nonlocal_history_scopes"):
+        assert (
+            retained["native_ks_diagnostic"][field]
+            == record["native_ks_diagnostic"][field]
+        )
+    for field in ("work_counts", "becke_owners", "traffic"):
+        assert (
+            retained["native_force_components"][field]
+            == record["native_force_components"][field]
+        )
+    assert render_readme_grids.compact_summary(compact) == compact
+
+
 def test_grid_renderer_retains_separate_series_and_work(tmp_path: Path) -> None:
     entry = {
         "status": "measured",
@@ -130,10 +187,11 @@ def test_grid_renderer_retains_separate_series_and_work(tmp_path: Path) -> None:
     summary = {
         "sizes": [3],
         "modes": {
+            "cuda": [{"dimensions": [48, 12, 24], "points": [point]}],
             "none": [
                 {"dimensions": [48, 12, 24], "points": [point]},
                 {"dimensions": [48, 16, 32], "points": [point]},
-            ]
+            ],
         },
     }
     render_readme_grids.render(summary, tmp_path)
@@ -141,6 +199,7 @@ def test_grid_renderer_retains_separate_series_and_work(tmp_path: Path) -> None:
     assert "48×12×24" in svg and "48×16×32" in svg
     table = (tmp_path / "grid-timings.md").read_text()
     assert "2.000 | 0.500 | 1/1 | 1/1" in table
+    assert table.index("| none |") < table.index("| cuda |")
 
 
 @pytest.mark.parametrize("grids", ["24,8,16 48,16,32", "48,16,32", "24,8,16\n48,16,32"])
@@ -352,9 +411,11 @@ def test_retained_publication_replays_independent_energy_and_force_gates() -> No
     assert (
         hashlib.sha256(Path(asset["file"]).read_bytes()).hexdigest() == asset["sha256"]
     )
-    accuracy = json.loads(
-        lzma.decompress((publication / "accuracy-observations.json.xz").read_bytes())
+    study = json.loads(
+        lzma.decompress((publication / "grid-timings.json.xz").read_bytes())
     )
+    accuracy = study["accuracy_observations"]
+    assert study["raw_evidence"]["files"]
     native_calls = 0
     for population in accuracy["populations"]:
         baselines = {

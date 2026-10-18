@@ -73,6 +73,8 @@ PYTHONPATH=.:python python -m tools.render_readme_grids \
 
 The renderer retains scalar samples, original/moved reference force arrays,
 SCF work, scheduler metadata and raw hashes in `grid-timings.json.xz`.
+Optional per-iteration trajectories and subcomponent timing profiles stay in
+the hash-bound raw journals; semantic work and traffic counters are retained.
 It plots only complete checked phases; failed or unchecked observations remain
 visible in the accompanying table. Different grids are separate series.
 The ordinary DFT renderer also accepts `--raw <sweep-root> --grid R P A`.

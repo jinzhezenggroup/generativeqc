@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import lzma
 from dataclasses import asdict
@@ -50,14 +51,45 @@ def collect_sweep(
     modes: list[str],
 ) -> dict[str, Any]:
     """Retain every endpoint's independent gates, work, outcomes and raw hashes."""
-    return {
-        "schema": "generativeqc.readme-grid-timings.v1",
-        "sizes": sizes,
-        "modes": {
-            mode: [collect_grid(root / mode, grid, sizes) for grid in dimensions]
-            for mode in modes
-        },
-    }
+    return compact_summary(
+        {
+            "schema": "generativeqc.readme-grid-timings.v1",
+            "sizes": sizes,
+            "modes": {
+                mode: [collect_grid(root / mode, grid, sizes) for grid in dimensions]
+                for mode in modes
+            },
+        }
+    )
+
+
+def compact_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Omit optional profiles, never endpoint samples or semantic work counters.
+
+    Full iteration trajectories and subcomponent timing profiles remain in the
+    hash-bound raw journals. Publication records retain endpoint timings,
+    convergence outcomes, SCF build counts, AO work, nonlocal scopes, and all
+    force work/traffic counters. Copy first so raw evidence is never mutated.
+    """
+    compact = copy.deepcopy(summary)
+    for populations in compact["modes"].values():
+        for population in populations:
+            for point in population["points"]:
+                for entry in point["engines"].values():
+                    for owner in [entry, *entry.get("records", [])]:
+                        diagnostic = owner.get("native_ks_diagnostic", {})
+                        for key in ("components", "history"):
+                            diagnostic.pop(key, None)
+                        components = owner.get("native_force_components", {})
+                        for key in (
+                            "wall_seconds",
+                            "profiled_ms",
+                            "source_component_seconds",
+                            "attributed_wall_seconds",
+                            "unattributed_wall_seconds",
+                        ):
+                            components.pop(key, None)
+    return compact
 
 
 def render(summary: dict[str, Any], destination: Path) -> None:
@@ -71,7 +103,11 @@ def render(summary: dict[str, Any], destination: Path) -> None:
     matplotlib.rcParams.update(
         {"svg.fonttype": "none", "svg.hashsalt": "readme-vv10-grids"}
     )
-    modes = summary["modes"]
+    modes = {
+        mode: summary["modes"][mode]
+        for mode in ("none", "cuda")
+        if mode in summary["modes"]
+    }
     figure, axes = plt.subplots(
         2, len(modes), figsize=(6 * len(modes), 7), squeeze=False
     )
@@ -179,11 +215,16 @@ def main() -> None:
     summary = (
         collect_sweep(args.raw, args.grids, args.sizes, args.modes)
         if args.raw
-        else json.loads(lzma.decompress(args.summary.read_bytes()))
+        else compact_summary(json.loads(lzma.decompress(args.summary.read_bytes())))
     )
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "grid-timings.json.xz").write_bytes(
-        lzma.compress((json.dumps(summary, indent=2, allow_nan=False) + "\n").encode())
+        lzma.compress(
+            json.dumps(
+                summary, separators=(",", ":"), sort_keys=True, allow_nan=False
+            ).encode(),
+            preset=9,
+        )
     )
     render(summary, args.output)
 
