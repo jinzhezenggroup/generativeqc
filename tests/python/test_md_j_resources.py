@@ -174,9 +174,11 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       const char* tiled=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
       const char* profile=std::getenv("GENERATIVEQC_MD_J_PROFILE");
       const char* high=std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
+      const char* reuse=std::getenv("GENERATIVEQC_MD_J_RECIPROCAL");
       assert(owner.md_j.residual_tiled==bool(!tiled || std::strcmp(tiled,"1")==0));
       assert(owner.md_j.profile==bool(profile && std::strcmp(profile,"1")==0));
-      assert(owner.md_j.reciprocal_high==bool(high && std::strcmp(high,"1")==0));
+      assert(owner.md_j.reciprocal_high==bool((!reuse || std::strcmp(reuse,"1")==0) &&
+                                             (!high || std::strcmp(high,"1")==0)));
     } else {
       assert(propagated);
     }
@@ -191,12 +193,13 @@ int main() {
   unsetenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
   unsetenv("GENERATIVEQC_MD_J_PROFILE");
   unsetenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
+  unsetenv("GENERATIVEQC_MD_J_RECIPROCAL");
   for(const char* control:{"GENERATIVEQC_MD_J_RESIDUAL_TILES","GENERATIVEQC_MD_J_PROFILE",
                           "GENERATIVEQC_MD_J_RECIPROCAL_HIGH"}) {
     unsetenv(control);
     HostBatch host; MdJHost defaults;
     assert(defaults.prepare(host,128U<<20) && defaults.residual_tiled && !defaults.profile &&
-           !defaults.reciprocal_high);
+           defaults.reciprocal && defaults.reciprocal_high);
     for(const char* invalid:{"", "yes", "2"}) {
       setenv(control,invalid,1);
       MdJHost candidate; bool rejected=false;
@@ -206,6 +209,18 @@ int main() {
     }
     unsetenv(control);
   }
+  for(const char* reuse:{"0","1"}) {
+    setenv("GENERATIVEQC_MD_J_RECIPROCAL",reuse,1);
+    for(const char* high:{static_cast<const char*>(nullptr),"0","1"}) {
+      if(high) setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH",high,1);
+      else unsetenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
+      HostBatch host; MdJHost policy;
+      assert(policy.prepare(host,128U<<20));
+      assert(policy.reciprocal_high==bool(std::strcmp(reuse,"1")==0 &&
+                                         (!high || std::strcmp(high,"1")==0)));
+    }
+  }
+  unsetenv("GENERATIVEQC_MD_J_RECIPROCAL");
   setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",initial_tiled.c_str(),1);
   setenv("GENERATIVEQC_MD_J_PROFILE",initial_profile.c_str(),1);
   setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH",initial_high.c_str(),1);

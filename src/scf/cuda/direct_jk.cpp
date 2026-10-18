@@ -172,7 +172,7 @@ struct MdJHost {
     const char* high = std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
     if (high && std::strcmp(high, "0") != 0 && std::strcmp(high, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL_HIGH must be 0 or 1");
-    reciprocal_high = reciprocal && high && std::strcmp(high, "1") == 0;
+    reciprocal_high = reciprocal && (!high || std::strcmp(high, "1") == 0);
     const char* tiled = std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
     if (tiled && std::strcmp(tiled, "0") != 0 && std::strcmp(tiled, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RESIDUAL_TILES must be 0 or 1");

@@ -1585,6 +1585,30 @@
       ]
     },
     {
+      "id": "dft.md-j-angular-three-reciprocal",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:GENERATIVEQC_MD_J_RECIPROCAL_HIGH"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_md_j.hpp"
+      ],
+      "rationale": "User-authorized default promotion of existing generated FP64 reciprocal reuse for uniform pair-angular (0,3), (1,3), (2,3), (3,3). Same-density prepared J improved 4.80%; one complete cold E/F pair improved 2.03%, with unchanged Fock counts and independent numerical gates. This measured scope is not a cross-device or statistically established performance claim. Unset/1 enables reuse; 0 or parent reciprocal disable restores oriented work. Policy freezes at owner preparation without new resident allocation; exact residual masks, K and normal/resource fallbacks remain unchanged.",
+      "revisit_condition": "Reassess on reproducible complete-endpoint regressions, new angular domains or devices, altered screening/numerics or optional-storage admission. Preserve the explicit opt-out, independent raw-J/E/F gates and conserved density/residual work. This uniform-only decision does not close the draft residual-tile PR's separate qualification limits.",
+      "evidence": [
+        "pr:#2600",
+        "benchmarks/results/md-j-residual-20261018/contraction-trials.md",
+        ".agents/notes/implemented/performance/2026-10-18-md-j-high-reciprocal-default.md",
+        "benchmarks/results/md-j-residual-20261018/default-reuse.md",
+        "tests/python/test_md_j_resources.py",
+        "tests/python/test_md_j_normal_cuda.py"
+      ]
+    },
+    {
       "id": "ks.exact-two-electron-response-reuse",
       "classification": "needs-qualification",
       "controls": [

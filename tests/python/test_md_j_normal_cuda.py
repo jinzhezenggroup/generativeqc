@@ -24,13 +24,13 @@ WATER = [
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 @pytest.mark.parametrize("screening", [0.0, 1e-12, 0.02])
 @pytest.mark.parametrize("residual_tiles", ["0", "1", None])
-@pytest.mark.parametrize("reciprocal_high", ["0", "1"])
+@pytest.mark.parametrize("reciprocal_high", ["0", "1", None])
 def test_normal_md_j_independent_screened_oracle(
     representation: str,
     spin: str,
     screening: float,
     residual_tiles: str | None,
-    reciprocal_high: str,
+    reciprocal_high: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Nonsymmetric total densities retain native phases and exact AO masks."""
@@ -39,7 +39,11 @@ def test_normal_md_j_independent_screened_oracle(
     from md_j_resident_probe import ResidentMdJProbe as FockPlan
 
     assert os.environ.get("SLURM_JOB_ID")
-    monkeypatch.setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", reciprocal_high)
+    monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL", raising=False)
+    if reciprocal_high is None:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", reciprocal_high)
     if residual_tiles is None:
         monkeypatch.delenv("GENERATIVEQC_MD_J_RESIDUAL_TILES", raising=False)
     else:
@@ -248,9 +252,18 @@ def test_high_reciprocal_preserves_consumers_and_frozen_policy(
     outputs, counts = [], []
     with NativeAO(WATER, "def2-svp", representation="spherical") as basis:
         density = np.random.default_rng(8439).normal(size=(basis.nao, basis.nao)) * 0.04
-        for reciprocal, high in (("1", "0"), ("1", "1"), ("0", "1")):
+        for reciprocal, high in (
+            ("1", "0"),
+            ("1", "1"),
+            ("1", None),
+            ("0", "1"),
+            ("0", None),
+        ):
             monkeypatch.setenv("GENERATIVEQC_MD_J_RECIPROCAL", reciprocal)
-            monkeypatch.setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", high)
+            if high is None:
+                monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", raising=False)
+            else:
+                monkeypatch.setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH", high)
             with FockPlan(
                 basis, spec, device="cuda", screening_tolerance=1e-12
             ) as plan:
@@ -260,7 +273,7 @@ def test_high_reciprocal_preserves_consumers_and_frozen_policy(
                 assert len(rows) == 25
                 counts.append(rows)
                 monkeypatch.setenv(
-                    "GENERATIVEQC_MD_J_RECIPROCAL_HIGH", "0" if high == "1" else "1"
+                    "GENERATIVEQC_MD_J_RECIPROCAL_HIGH", "1" if high == "0" else "0"
                 )
                 np.testing.assert_allclose(
                     plan.evaluate(density).coulomb, outputs[-1], atol=3e-11, rtol=3e-11
@@ -290,6 +303,10 @@ def test_high_reciprocal_preserves_consumers_and_frozen_policy(
     assert sum(row["uniform_roots"] for row in counts[1]) < sum(
         row["uniform_roots"] for row in counts[0]
     )
+    for explicit, default in ((counts[1], counts[2]), (counts[3], counts[4])):
+        assert [row["uniform_roots"] for row in explicit] == [
+            row["uniform_roots"] for row in default
+        ]
 
 
 def test_residual_tiles_preserve_domain_tasks_and_replay_policy(

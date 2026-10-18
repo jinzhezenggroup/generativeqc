@@ -7,6 +7,11 @@ Prepared-J observations must not be substituted for complete cold/warm timings.
 
 The [follow-up contraction trials](contraction-trials.md) retain two rejected
 residual rewrites and the opt-in angular-three reciprocal-reuse experiment.
+Its [subsequent user-authorized default decision](../../../../.agents/notes/implemented/performance/2026-10-18-md-j-high-reciprocal-default.md)
+changes the uniform angular-three selector only, not this historical residual
+qualification record.
+The [default-path validation](default-reuse.md) retains the distinct default
+binary, new complete off/unset endpoint pair and explicit/unset work gates.
 
 ## Identity and scope
 

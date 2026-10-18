@@ -294,6 +294,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
         raise ValueError("MD-J default resident cap drifted from 128 MiB")
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
+        or 'std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH")' not in source
         or 'std::strcmp(disabled, "1") == 0' not in source
         or "host.nbf < 8" not in source
         or "return angular > 2;" not in source
@@ -304,6 +305,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_MD_J_RECIPROCAL_HIGH": relative.as_posix(),
     }
 
 

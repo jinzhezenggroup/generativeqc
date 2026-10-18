@@ -3,6 +3,11 @@
 Status: implemented as an opt-in experiment, not a default promotion
 Date: 2026-10-18
 
+Subsequent decision: the user-authorized
+[default promotion](2026-10-18-md-j-high-reciprocal-default.md) supersedes this
+note's selector policy. The historical opt-in measurements and rejected
+alternatives below retain their original scope and source identities.
+
 ## Problem
 
 The [contraction-priority investigation](../../proposed/2026-10-18-md-j-residual-contraction-priority.md)

@@ -99,3 +99,9 @@ retaining angular-three uniform reciprocal reuse as opt-in only. Neither
 residual experiment implements masked Hermite density, so this proposal's main
 representation question remains open. Complete endpoint work counts and gates,
 not just the prepared-J improvement, still govern any default promotion.
+
+Subsequently, the user explicitly authorized
+[default angular-three reuse](../implemented/performance/2026-10-18-md-j-high-reciprocal-default.md)
+based on the measured prepared-J and complete-endpoint gains, with an explicit
+opt-out. This does not change the residual representation proposal or close its
+separate qualification questions.

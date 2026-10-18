@@ -49,9 +49,10 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     [
         "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR",
         "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT",
+        "dft-policy:GENERATIVEQC_MD_J_RECIPROCAL_HIGH",
     ],
 )
-def test_warm_factor_controls_require_inventory_registration(control: str) -> None:
+def test_runtime_controls_require_inventory_registration(control: str) -> None:
     """Production selection and diagnostic overhead need separate policy owners."""
     payload = _payload()
     payload["entries"] = [

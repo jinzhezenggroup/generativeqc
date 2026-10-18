@@ -150,3 +150,16 @@ Every retained member hash is verified against the original bytes. The sibling
 timelines and binary snapshots remain in the ignored original local/remote
 task directories; they are not added to Git or replaced by this compact
 archive. No Release, release asset or new external storage host is created.
+
+## Subsequent default decision
+
+Following these measurements, the user explicitly authorized default-on
+angular-three reciprocal reuse. The
+[superseding decision](../../../../.agents/notes/implemented/performance/2026-10-18-md-j-high-reciprocal-default.md)
+sets unset/1 to enabled and retains `GENERATIVEQC_MD_J_RECIPROCAL_HIGH=0` as
+the oriented fallback. The historical tables above measure the original opt-in
+binary, not a relabeled default build. Separate default-path validation retains
+its own source and binary receipts. This promotion does not imply statistically
+established cross-device speedups or resolve the residual-tile qualification.
+The [default-path record](default-reuse.md) reports that separate pair and its
+114 scheduled independent GPU tests.

@@ -57,9 +57,10 @@ plan creation; unset/1 selects reciprocal tiles. Other values reject an active
 MD request. The selector is frozen with the resident owner, not polled during
 replay. The same optional-storage admission and normal-J fallback still apply.
 
-`GENERATIVEQC_MD_J_RECIPROCAL_HIGH=1` additionally shares the radial source for
-uniform pair-angular classes `(0,3)`, `(1,3)`, `(2,3)` and `(3,3)`. Unset/0 keeps
-their oriented contraction; invalid values reject active MD preparation.
+Angular-three reciprocal reuse is also enabled by default: unset/1 for
+`GENERATIVEQC_MD_J_RECIPROCAL_HIGH` shares the radial source for uniform
+pair-angular classes `(0,3)`, `(1,3)`, `(2,3)` and `(3,3)`. Set it to `0` to
+restore their oriented contraction; invalid values reject active MD preparation.
 Disabling reciprocal reuse also disables this extension. The owner freezes both
 selectors. Each output retains its own density-admission predicate and error
 allowance, and partially screened residual quartets keep their exact AO masks.
