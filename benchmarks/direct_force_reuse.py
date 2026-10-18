@@ -110,13 +110,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--atoms", type=int, choices=(48, 96), default=96)
     parser.add_argument(
         "--baseline",
-        choices=("spatial-reuse", "relative-reuse", "automatic"),
+        choices=("spatial-reuse", "relative-reuse", "relative-density", "automatic"),
         default="spatial-reuse",
     )
     parser.add_argument(
         "--candidate",
-        choices=("relative-reuse", "automatic"),
-        default="relative-reuse",
+        choices=("relative-reuse", "relative-density", "automatic"),
+        default="automatic",
     )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)

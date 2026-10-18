@@ -117,7 +117,8 @@ class DirectForceDiagnostic {
       // Only the cooperative/materialized consumers instrument recurrence
       // preparation sites. Zero must never stand for unavailable attribution.
       const bool shared_recurrence =
-          complete_ && (order == 7 || order == 8 || recurrence.coulomb_preparations != 0U);
+          complete_ && (order == 7 || order == 8 || recurrence.coulomb_preparations != 0U ||
+                        row.density.recurrence.coulomb_preparations != 0U);
       std::fprintf(
           out,
           "%s{\"class\":%u,\"angular_order\":%zu,\"enumerated\":%llu,"
@@ -125,7 +126,11 @@ class DirectForceDiagnostic {
           "\"executed_shells\":%s,\"executed_components\":%s,"
           "\"primitive_pair_products\":%s,\"bra_preparations\":%s,"
           "\"ket_preparations\":%s,\"coulomb_preparations\":%s,"
-          "\"component_contractions\":%s,\"published_components\":%s}",
+          "\"component_contractions\":%s,\"published_components\":%s,"
+          "\"density_contraction\":{\"attempted_shells\":%llu,\"accepted_shells\":%llu,"
+          "\"mask_rejections\":%llu,\"numerical_rejections\":%llu,\"density_terms\":%llu,"
+          "\"hermite_products\":%llu,\"bra_preparations\":%llu,\"ket_preparations\":%llu,"
+          "\"coulomb_preparations\":%llu}}",
           c ? "," : "", c, order, row.enumerated, row.shell_screened, row.generated_owned,
           row.admitted,
           count(row.executed_shells, complete_ && (order != 6 || shared_recurrence), shells),
@@ -135,7 +140,11 @@ class DirectForceDiagnostic {
           count(recurrence.ket_preparations, shared_recurrence, ket),
           count(recurrence.coulomb_preparations, shared_recurrence, coulomb),
           count(recurrence.component_contractions, shared_recurrence, contractions),
-          count(recurrence.published_components, shared_recurrence, published));
+          count(recurrence.published_components, shared_recurrence, published),
+          row.density.attempted_shells, row.density.accepted_shells, row.density.mask_rejections,
+          row.density.numerical_rejections, row.density.density_terms, row.density.hermite_products,
+          row.density.recurrence.bra_preparations, row.density.recurrence.ket_preparations,
+          row.density.recurrence.coulomb_preparations);
     }
     std::fputs("]}\n", out);
     std::fclose(out);

@@ -14,6 +14,12 @@ struct MaterializedDirectPairWork {
   unsigned long long component_contractions{}, published_components{};
 };
 
+struct DensityDirectPairWork {
+  unsigned long long attempted_shells{}, accepted_shells{}, mask_rejections{};
+  unsigned long long numerical_rejections{}, density_terms{}, hermite_products{};
+  MaterializedDirectPairWork recurrence;
+};
+
 /** Diagnostic-only census of one complete force dispatch. Queue visits and
  * actual source work have distinct fields; no shell inventory is called an
  * executed integral. Null borrowed pointers retain the ordinary route.
@@ -22,6 +28,7 @@ struct DirectForceClassWork {
   unsigned long long enumerated{}, shell_screened{}, generated_owned{}, admitted{};
   unsigned long long executed_shells{}, executed_components{}, primitive_pair_products{};
   MaterializedDirectPairWork recurrence;
+  DensityDirectPairWork density;
 };
 
 struct DirectForceTraversalWork {

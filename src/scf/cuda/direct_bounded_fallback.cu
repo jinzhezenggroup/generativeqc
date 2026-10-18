@@ -703,7 +703,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
       cooperative_pair_derivative_available(batch) && force_topology &&
       block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U && block_domain.prefix &&
       (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
-       spd_schedule == DirectSpdForceSchedule::RelativeReuse));
+       spd_schedule == DirectSpdForceSchedule::RelativeReuse ||
+       spd_schedule == DirectSpdForceSchedule::DensityReuse));
   if (purpose == DirectScreeningPurpose::Force && !batch.direct_force_work) {
     const auto status = diagnostic.prepare();
     if (status != cudaSuccess) return status;
@@ -740,14 +741,16 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     runtime::cuda_trace::TraceRegion low("direct_force_low_and_order6", stream);
     if (cooperative_available && block_domain.prefix &&
         (spd_schedule == DirectSpdForceSchedule::SpatialReuse ||
-         spd_schedule == DirectSpdForceSchedule::RelativeReuse)) {
+         spd_schedule == DirectSpdForceSchedule::RelativeReuse ||
+         spd_schedule == DirectSpdForceSchedule::DensityReuse)) {
       error = launch_direct_force_spatial_spd_low(
           Unrestricted, grid, shared_bytes, stream, batch, screening_tolerance, shell_pair_bounds,
           shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
           system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
           schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
           exchange_coefficient, separate_sources, block_domain,
-          spd_schedule == DirectSpdForceSchedule::RelativeReuse, force_topology);
+          spd_schedule != DirectSpdForceSchedule::SpatialReuse, force_topology,
+          spd_schedule == DirectSpdForceSchedule::DensityReuse);
     } else {
       if (cooperative_available)
         generic.template operator()<-3>();
@@ -767,7 +770,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
           Unrestricted, grid, shared_bytes, stream, batch, force_topology, screening_tolerance,
           shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
           bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-          profile, coulomb_coefficient, exchange_coefficient, separate_sources);
+          profile, coulomb_coefficient, exchange_coefficient, separate_sources,
+          spd_schedule == DirectSpdForceSchedule::DensityReuse && block_domain.prefix);
       order7.finish();
       if (error != cudaSuccess) return error;
       error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);

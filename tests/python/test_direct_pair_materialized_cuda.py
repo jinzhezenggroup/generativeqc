@@ -134,3 +134,15 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     )
     assert responses.returncode == 0, responses.stdout + responses.stderr
     assert "shared scalar responses and exact primitive work PASS" in responses.stdout
+    density = subprocess.run(
+        [str(executable), "--density-contraction"],
+        capture_output=True,
+        text=True,
+        timeout=360,
+        check=False,
+    )
+    (tmp_path / "density-contraction-gpu.log").write_text(
+        density.stdout + density.stderr
+    )
+    assert density.returncode == 0, density.stdout + density.stderr
+    assert "raw AD orbits PASS" in density.stdout
