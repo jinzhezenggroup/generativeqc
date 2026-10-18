@@ -134,6 +134,7 @@ function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/methods/hf_method.cpp
     src/scf/density_fitting.cpp
+    src/scf/hf_df_resources.cpp
     src/scf/fleet.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp

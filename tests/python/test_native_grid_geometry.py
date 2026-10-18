@@ -47,7 +47,7 @@ def _indices(order: int) -> tuple[tuple[int, int, int], ...]:
     )[: (1, 4, 10, 20)[order]]
 
 
-def _fixture(atoms: int = 3, iterations: int = 3) -> dict:
+def _fixture(atoms: int = 3, iterations: int = 3, points_per_atom: int = 3) -> dict:
     """Normalized-ABI s/p/real-spherical d/f polynomial records, two primitives."""
     random = np.random.default_rng(1949 + atoms)
     centers = random.normal(size=(atoms, 3)) * 1.7
@@ -63,7 +63,7 @@ def _fixture(atoms: int = 3, iterations: int = 3) -> dict:
         records[orbital, :4] = (orbital % atoms, 2 * orbital, 2, len(polynomial))
         for term, (coefficient, powers) in enumerate(polynomial):
             records[orbital, 4 + 4 * term : 8 + 4 * term] = (*powers, coefficient)
-    owner = np.repeat(np.arange(atoms), 3)
+    owner = np.repeat(np.arange(atoms), points_per_atom)
     points = centers[owner] + random.normal(scale=0.6, size=(len(owner), 3))
     fixture = {
         "centers": centers,
@@ -241,7 +241,13 @@ def test_native_host_geometry_admission_without_cuda_initialization() -> None:
     assert json.loads(process.stdout)["host_admission_without_cuda_initialization"]
 
 
-def _native(fixture: dict, tmp_path: Path, *, reject: bool = False) -> tuple:
+def _native(
+    fixture: dict,
+    tmp_path: Path,
+    *,
+    reject: bool = False,
+    point_tile: int | None = None,
+) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE")
     if not executable:
         pytest.skip("set GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE inside finite Slurm job")
@@ -275,7 +281,18 @@ def _native(fixture: dict, tmp_path: Path, *, reject: bool = False) -> tuple:
         ):
             np.asarray(fixture[name], dtype=np.float64).tofile(stream)
     process = subprocess.run(
-        [str(path), str(source), str(output), *(["reject"] if reject else [])],
+        [
+            str(path),
+            str(source),
+            str(output),
+            *(
+                ["reject"]
+                if reject
+                else [str(point_tile)]
+                if point_tile is not None
+                else []
+            ),
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -444,6 +461,24 @@ def test_independent_displaced_value_oracles_agree() -> None:
             atol=3e-12,
             rtol=1e-9,
         )
+
+
+def test_native_point_parallel_tiles_preserve_geometry(tmp_path: Path) -> None:
+    """A non-divisible, multi-tile grid preserves jets and independent values."""
+    fixture = _fixture(points_per_atom=345)
+    baseline, _ = _native(fixture, tmp_path, point_tile=64)
+    parallel, _ = _native(fixture, tmp_path, point_tile=1024)
+    for actual, expected in zip(parallel, baseline, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    expected = _gaussians(fixture, _indices(3))
+    np.testing.assert_allclose(parallel[0], expected, atol=2e-13, rtol=2e-12)
+    np.testing.assert_allclose(
+        parallel[1], _ao_motion(fixture, expected), atol=2e-13, rtol=2e-12
+    )
+    coarse, fine = (_weight_differences(fixture, step) for step in (0.004, 0.002))
+    np.testing.assert_allclose(
+        parallel[2], (4 * fine - coarse) / 3, atol=2e-8, rtol=2e-6
+    )
 
 
 @pytest.mark.parametrize("iterations", [1, 2, 3, 4, 5])

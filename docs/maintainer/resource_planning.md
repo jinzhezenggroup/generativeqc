@@ -105,6 +105,34 @@ iteration-branch histograms, source identity and the library checksum. A changed
 numerical/work signature invalidates a pooled timing comparison. This scoped
 procedure does not establish GPU performance or complete physical receipts.
 
+## CUDA DF bucket capacity ownership
+
+With `generativeqc_resource_hf_df_cuda_fleet_v1`, the Python CUDA HF DF planner
+and native CLI share one C++ numeric composition owner. It groups expanded
+topologies by orbital/electron/primitive compatibility, checks Cartesian,
+auxiliary and atom dimensions, and composes the existing source-upload, DIIS
+and tile-planner leaves. Python packs scalar metadata and renders labels;
+it does not choose tile capacities or recompute the fleet's numeric bounds.
+
+The owner preserves resident/recomputed alternatives, explicit packed and
+packed-single selection, occupied/automatic exchange reservations, requested
+or default DF sub-budgets, and RHF/UHF ragged fleets. Packed-single retains
+the conservative two-factor shape-query bound rather than claiming the
+executable single-factor allocation. All bucket caches remain simultaneously
+retained; preparation/setup/force workspace is serialized, and an independent
+singleton cold numerical retry receives its own reservation. The existing
+explicit CPU numerical-recovery contract is unchanged.
+
+The private ABI validates a complete inventory before either sizing or full
+publication. Invalid schemas, topology, byte-domain overflow, overlapping
+input/output/error buffers and insufficient sub-budgets leave capacity output
+unchanged. It allocates linear topology/plan metadata, not scientific arrays,
+and neither probes nor initializes CUDA. Only a missing fleet symbol enables
+the isolated old-library Python compatibility composer; native refusal or
+malformed output never retries Python capacity arithmetic. These declared
+bounds do not establish complete allocator/provider/lease/RSS authority or
+qualify a new scientific backend or property.
+
 ## Native device ledger binding
 
 An already-loaded library exposing

@@ -37,6 +37,8 @@ def _native(
     benchmark_water: bool = False,
     orbital_angular: int = 0,
     streamed: bool = False,
+    unbatched: bool = False,
+    batch_chunked: bool = False,
 ) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
     if not executable:
@@ -51,6 +53,8 @@ def _native(
     mode += "-benchmark-water" if benchmark_water else ""
     mode += "-orbd" if orbital_angular == 2 else "-orbf" if orbital_angular == 3 else ""
     mode += "-streamed" if streamed else ""
+    mode += "-unbatched" if unbatched else ""
+    mode += "-batch-chunked" if batch_chunked else ""
     result = subprocess.run(
         [executable, "rks" if spins == 1 else "uks", mode, *(["full"] if full else [])],
         capture_output=True,
@@ -89,6 +93,35 @@ def test_stationary_resident_and_streamed_hessians_agree(
         np.testing.assert_allclose(
             resident[field], streamed[field], atol=3e-12, rtol=3e-12
         )
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("fitted", (False, True))
+def test_stationary_batched_and_small_tile_hessians_agree(
+    spins: int, fitted: bool
+) -> None:
+    """Full coupled endpoints preserve spin, DF, ECP and spherical contracts."""
+    batched = _native(spins, fitted, True, fitted, True)
+    ordered = _native(spins, fitted, True, fitted, True, unbatched=True)
+    assert batched["batched_workspace_bytes"] > 0
+    assert ordered["batched_workspace_bytes"] == 0
+    for field in ("energy", "hvp", "hessian", "response_residual"):
+        np.testing.assert_allclose(
+            batched[field], ordered[field], atol=3e-12, rtol=3e-12
+        )
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("fitted", (False, True))
+def test_stationary_projected_tiles_preserve_full_hessians(
+    spins: int, fitted: bool
+) -> None:
+    """Reusing projected storage preserves full coupled DF/ECP/spin endpoints."""
+    batched = _native(spins, fitted, True, fitted, True)
+    tiled = _native(spins, fitted, True, fitted, True, batch_chunked=True)
+    assert 0 < tiled["batched_workspace_bytes"] < batched["batched_workspace_bytes"]
+    for field in ("energy", "hvp", "hessian", "response_residual"):
+        np.testing.assert_allclose(batched[field], tiled[field], atol=3e-12, rtol=3e-12)
 
 
 class MolecularEnergy:

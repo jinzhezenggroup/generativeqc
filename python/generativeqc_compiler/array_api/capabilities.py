@@ -58,6 +58,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "flip",
         "roll",
         "repeat",
+        "tile",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
     ),
@@ -119,6 +120,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "flip",
         "roll",
         "repeat",
+        "tile",
         "slice",
         "take",
         "broadcast_to_explicit_indices",
@@ -185,6 +187,10 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "repeat": {
         "repeats": "static nonnegative Python integer; per-element counts unsupported",
         "axis": "static signed integer or None; None flattens in row-major order",
+        "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
+    },
+    "tile": {
+        "repetitions": "static nonnegative Python-integer tuple; leading ones pad shape/counts",
         "capture": "generic-only; reshape/broadcast; backend resource budgets retained",
     },
     "astype": {
@@ -282,6 +288,7 @@ _NATIVE_CPU_OPERATIONS = frozenset(
         "flip",
         "roll",
         "repeat",
+        "tile",
         "broadcast_to_explicit_indices",
         "matrix_transpose",
         "slice",

@@ -258,6 +258,10 @@ measured_core_runtime_paths=(
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
   "${measured_core_runtime_paths[@]}"
+  # The complete CBS module took 309-329 s in recent CI. Keep its core
+  # slot, but transfer all cases and shared fixtures to posthf loadfile;
+  # run 38996287111 posthf finished its Python step in 1112 s.
+  tests/python/test_ccsdt_cbs_native.py
   tests/python/test_df_cc_native_solver.py
   tests/python/test_df_lambda_matrix.py
   tests/python/test_df_lambda_reduction.py
@@ -534,6 +538,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # These measured complete UCCSD owners keep all numerical/failure
     # gates and module-local oracle caches under the existing loadfile.
     for path in \
+      tests/python/test_ccsdt_cbs_native.py \
       tests/python/test_uccsd_lambda.py \
       tests/python/test_uccsd_t_owner.py \
       tests/python/test_uccsd_physical_response.py; do

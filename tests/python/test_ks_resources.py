@@ -288,6 +288,9 @@ def test_cuda_shape_queries_need_no_execution_context_and_cover_large_solver(
         method="pbe-rks",
         basis="def2-svp",
         device="cuda",
+        # The probe intentionally inventories KS alone. Automatic-guess budget
+        # composition is covered by the ledger prepare/replay/rebuild test above.
+        initial_guess=None,
         resource_budget=ResourceBudget(
             host_bytes=probe.peak_bytes["host"], device_bytes=probe.peak_bytes["device"]
         ),

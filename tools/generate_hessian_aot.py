@@ -149,7 +149,8 @@ const Program& program_{request.name}() noexcept {{
     "{request.name}","{integral_program_identity(request)}",Kind::integral,{{}},{1 + 6 * request.centers},components,
     {request.centers},{request.record_stride},nullptr,nullptr,
     &factorized_integral_callback<{family},{radial},{padded},{components}>,
-    {{"{request.family}",angular,"{request.radial}",{request.payload()["omega"]:.17g}}}
+    {{"{request.family}",angular,"{request.radial}",{request.payload()["omega"]:.17g}}},
+    &factorized_integral_batch_callback<{family},{radial},{padded},{components}>
   }};
   return program;
 }}

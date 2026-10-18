@@ -179,8 +179,21 @@ def protocol(
     *,
     benchmark: EndpointSpec = OMOL25,
     auxiliary_basis: Any = None,
+    density_fitting_memory_budget_bytes: int = 0,
 ) -> dict[str, Any]:
-    """Describe inputs without loading a native library or touching the GPU."""
+    """Describe inputs without loading a native library or touching the GPU.
+
+    Retain workspace hints so distinct resource/work populations are not pooled,
+    even though the hint changes neither the Hamiltonian nor its accuracy gates.
+    """
+    if (
+        type(density_fitting_memory_budget_bytes) is not int
+        or not 0 <= density_fitting_memory_budget_bytes <= 1 << 40
+        or (density_fitting_memory_budget_bytes and not benchmark.density_fitting)
+    ):
+        raise ValueError(
+            "DF workspace allowance requires DF and an integer in [0,2**40]"
+        )
     if benchmark.density_fitting and auxiliary_basis is None:
         raise ValueError("DF protocol requires an explicit auxiliary basis identity")
     original = scaling_cases()[f"water-{atoms}"].atoms
@@ -220,7 +233,7 @@ def protocol(
                         "auxiliary_basis": auxiliary_basis.name,
                         "auxiliary_basis_identity": auxiliary_basis.identity,
                         "density_fitting_relative_threshold": 1e-10,
-                        "density_fitting_memory_budget_bytes": 0,
+                        "density_fitting_memory_budget_bytes": density_fitting_memory_budget_bytes,
                         "reference_auxbasis_response": True,
                     }
                     if benchmark.density_fitting
@@ -645,6 +658,12 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("--atoms", type=int, choices=SIZES, required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
     parser.add_argument("--density-fitting", choices=("none", "cuda"), default="none")
+    parser.add_argument(
+        "--df-memory-budget-bytes",
+        type=int,
+        default=0,
+        help="Explicit native DF workspace hint; zero preserves automatic selection",
+    )
     parser.add_argument("--auxiliary-basis-file", type=Path)
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
     parser.add_argument("--repeats", type=int, default=5)
@@ -710,6 +729,13 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         parser.error("native execution requires the independent --reference JSON")
     if (args.density_fitting == "cuda") != (args.auxiliary_basis_file is not None):
         parser.error("DF requires an explicit matching --auxiliary-basis-file")
+    if not 0 <= args.df_memory_budget_bytes <= 1 << 40 or (
+        args.df_memory_budget_bytes
+        and (args.engine != "native" or args.density_fitting != "cuda")
+    ):
+        parser.error(
+            "DF workspace allowance requires native DF and a value in [0,2**40]"
+        )
     benchmark = replace(benchmark, density_fitting=args.density_fitting == "cuda")
     try:
         force_options = force_execution_options(
@@ -782,6 +808,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         args.repeats,
         benchmark=benchmark,
         auxiliary_basis=auxiliary_basis,
+        density_fitting_memory_budget_bytes=args.df_memory_budget_bytes,
     )
     oracle = None
     if args.engine == "native" and args.reference and args.reference.exists():
@@ -1036,7 +1063,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 density_fitting=args.density_fitting,
                 auxiliary_basis=auxiliary_basis,
                 density_fitting_relative_threshold=1e-10,
-                density_fitting_memory_budget_bytes=0,
+                density_fitting_memory_budget_bytes=args.df_memory_budget_bytes,
                 energy_tolerance=1e-12,
                 density_tolerance=1e-10,
                 screening_tolerance=1e-12,

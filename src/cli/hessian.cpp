@@ -154,10 +154,12 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   descriptor.density_fitting_relative_threshold = options.density_fitting_threshold;
   descriptor.density_fitting_memory_budget_bytes = options.density_fitting_memory_bytes;
   descriptor.ks_options = &ks;
+  const auto scf_started = std::chrono::steady_clock::now();
   auto batch = methods::prepare_batch(context, {std::move(system)}, descriptor,
                                       GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
                                       auxiliary ? &*auxiliary : nullptr);
   const auto solved = batch->execute(methods::Coordinates(1), false);
+  const auto scf_completed = std::chrono::steady_clock::now();
   if (solved.size() != 1 || solved[0].status != GENERATIVEQC_STATUS_SUCCESS ||
       !solved[0].calculation.convergence.converged)
     throw std::runtime_error("native WB97M-V SCF did not converge; no Hessian published");
@@ -197,6 +199,7 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   policy.cpks.gmres.max_iterations = invocation.response_iterations;
   dft::CudaKsWb97mvHessian endpoint;
   require(endpoint.prepare(*batch, 0, token, policy, detail), detail);
+  const auto hessian_prepared = std::chrono::steady_clock::now();
   dft::CudaKsWb97mvHessianResult result;
   if (motion.empty())
     check(endpoint.hessian(storage.output, storage.stream, result));
@@ -208,6 +211,7 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   check(cudaMemcpyAsync(values.data(), storage.output, count * sizeof(double),
                         cudaMemcpyDeviceToHost, storage.stream));
   check(cudaStreamSynchronize(storage.stream));
+  const auto hessian_completed = std::chrono::steady_clock::now();
   Json panel = Json::array();
   const auto columns = motion.empty() ? coordinates : 3;
   for (std::size_t row = 0; row < count / columns; ++row) {
@@ -235,10 +239,18 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
       {"device_bytes", work.device_bytes + external_bytes},
       {"completed_directions", work.completed_directions},
       {"induced_fock_actions", work.induced.actions},
+      {"induced_resident_integral_bytes", work.induced.resident_integral_bytes},
+      {"induced_resident_source_evaluations", work.induced.resident_source_evaluations},
+      {"induced_response_eris", work.induced.response_eris},
+      {"induced_response_quartets", work.induced.response_quartets},
       {"exact_primitive_components", work.exact.component_evaluations},
       {"exact_integral_source_builds", work.exact.integral_source_builds},
       {"exact_resident_integral_hits", work.exact.resident_integral_hits},
       {"exact_resident_integral_bytes", work.exact.resident_integral_bytes},
+      {"exact_batched_workspace_bytes", work.exact.batched_workspace_bytes},
+      {"exact_integral_launches", work.exact.integral_launches},
+      {"exact_projection_launches", work.exact.projection_launches},
+      {"exact_reduction_launches", work.exact.reduction_launches},
       {"one_electron_primitive_components", work.one_electron.integrals.component_evaluations},
       {"df_value_passes", work.raw_df.value_passes},
       {"df_contraction_passes", work.raw_df.contraction_passes},
@@ -246,6 +258,11 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
       {"grid_mixed_contractions", work.grid.nuclear_contractions},
       {"vv10_reference_pairs", work.induced.grid.reference_pairs + work.grid.reference_pairs},
       {"native_execution_seconds", seconds},
+      {"scf_seconds", std::chrono::duration<double>(scf_completed - scf_started).count()},
+      {"response_preparation_seconds",
+       std::chrono::duration<double>(hessian_prepared - scf_completed).count()},
+      {"hessian_seconds",
+       std::chrono::duration<double>(hessian_completed - hessian_prepared).count()},
       {"scf_iterations", solved[0].calculation.convergence.iterations},
       {"response_iterations", result.response.gmres.iterations},
       {"ecp_ad_backend", work.ecp.workspace_bytes ? Json("cuda") : Json(nullptr)},

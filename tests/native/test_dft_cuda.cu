@@ -136,7 +136,8 @@ struct Fixture {
             "XC enqueue staged data or synchronized");
   }
   std::pair<std::vector<double>, std::vector<double>> submit_density_features(
-      const std::vector<double>& d) {
+      const std::vector<double>& d, generativeqc::runtime::PrecisionPhase phase =
+                                        generativeqc::runtime::PrecisionPhase::StrictAudit) {
     double *device_rho{}, *device_gradient{};
     std::vector<double> rho(layout.npoint), gradient(3 * layout.npoint);
     try {
@@ -146,7 +147,8 @@ struct Fixture {
                             stream));
       check(cudaStreamSynchronize(stream));
       const auto before = plan->transfers();
-      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient);
+      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient,
+                                     phase);
       const auto after = plan->transfers();
       require(after.output_d2h_bytes == before.output_d2h_bytes &&
                   after.setup_h2d_bytes == before.setup_h2d_bytes &&
@@ -1047,6 +1049,7 @@ void matrix_schedule_cases() {
 // tests; these in-namespace test fragments must retain dependency order.
 // clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_mixed_matrix_cases.cuh"
 #include "dft_point_batch_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
@@ -1079,6 +1082,12 @@ int main(int argc, char** argv) {
     if (argc == 5 && std::string(argv[1]) == "--automatic-xc-json") {
       automatic_xc_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
                           static_cast<unsigned>(std::stoul(argv[3])), std::stod(argv[4]));
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--mixed-matrix-contractions") {
+      mixed_matrix_cases();
+      std::cout << "CUDA shared FP32 products: independent E/V, maps, batches and strict handoff "
+                   "passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--point-batches") {

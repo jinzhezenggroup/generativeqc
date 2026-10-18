@@ -1,0 +1,29 @@
+--- a/src/dft/application_precision.hpp
++++ b/src/dft/application_precision.hpp
+@@ -4,6 +4,8 @@
+ #include <array>
+ #include <cmath>
+ #include <cstddef>
++#include <cstdlib>
++#include <string_view>
+ 
+ #include "dft/cuda_stationary_binding.hpp"
+ #include "dft/semilocal_family.hpp"
+@@ -61,6 +63,17 @@
+                                        double density_tolerance) noexcept {
+   if (budget_stationarity) return nonlocal_confirmation_tolerance(true, density_tolerance);
+   const double target_gate = std::min(1e-9, density_tolerance);
++  // Experiment-only: refresh the changing operator earlier without changing
++  // any full-target acceptance gate, iteration cap, or bounded tail policy.
++  const auto* selection = std::getenv("GENERATIVEQC_EXPERIMENT_VV10_INNER_POLICY");
++  const std::string_view policy = selection ? selection : "baseline";
++  const bool factor100 = policy == "factor100" || policy == "factor100-floor";
++  const bool factor10 = policy == "factor10" || policy == "factor10-floor";
++  if (factor100 || factor10) {
++    const bool relax_floor = policy == "factor100-floor" || policy == "factor10-floor";
++    const double floor = relax_floor ? target_gate * 0.1 : std::min(1e-12, target_gate * 0.1);
++    return std::clamp(maximum_residual * (factor100 ? 1e-2 : 1e-1), floor, 1e-5);
++  }
+   return std::clamp(maximum_residual * 1e-3, std::min(1e-12, target_gate * 0.1), 1e-7);
+ }
+ 

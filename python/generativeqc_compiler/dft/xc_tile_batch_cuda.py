@@ -82,12 +82,13 @@ __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const dou
       error, nullptr, tile.active, blockIdx.z % spins);
 }
 
+template <class Arithmetic = double>
 __global__ void batch_local_diagonal_potentials(const CudaXcCompactTile* tiles, const double* ao,
     const double* work, double* potential, I spins, I work_jets, int* error, const double* weights) {
   const auto& tile = tiles[blockIdx.z / spins];
   const I columns = (tile.active + @TILE@ - 1) / @TILE@;
   if (!tile.active || blockIdx.x >= columns * (columns + 1) / 2) return;
-  tiled_potential_body<true, double, true>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
+  tiled_potential_body<true, Arithmetic, true>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
       tile.count, work_jets, nullptr, potential + tile.potential_offset, nullptr, false,
       error, nullptr, tile.active, blockIdx.z % spins, weights + tile.begin);
 }
@@ -203,7 +204,7 @@ inline void launch_batch_potential_typed(cudaStream_t stream, const CudaXcLayout
     const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* ao, const double* coefficients,
     const double* weights, double* work, double* local, const double* point_totals,
     I batch_begin, const size_t* ids, double* potential, double* totals, int* error) {
-  const bool diagonal = std::is_same_v<Arithmetic, double> && layout.work_jets == 4;
+  const bool diagonal = layout.work_jets == 4;
   if (diagonal)
     batch_diagonal_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * max_active,
         128), tile_count), 128, 0, stream>>>(tiles, ao, coefficients, weights, work, batch_begin,
@@ -215,7 +216,7 @@ inline void launch_batch_potential_typed(cudaStream_t stream, const CudaXcLayout
   generativeqc_tensor::cuda_check(cudaGetLastError());
   const I columns = (max_active + @TILE@ - 1) / @TILE@;
   if (diagonal)
-    batch_local_diagonal_potentials<<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
+    batch_local_diagonal_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
         dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error, weights);
   else
     batch_local_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),

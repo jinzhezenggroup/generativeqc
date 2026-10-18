@@ -22,6 +22,7 @@
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
 #include "scf/hf_cuda_resources.hpp"
+#include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
@@ -684,6 +685,82 @@ int generativeqc_resource_df_packed_tiles_v1(std::size_t batch, std::size_t nbf,
   return generativeqc_resource_df_packed_tiles_v2(batch, nbf, naux, rank_capacity, budget,
                                                   fixed_device_bytes, 0, output, count, error,
                                                   error_size);
+}
+
+/** Private CUDA DF numeric fleet query; available without a CUDA runtime.
+ * Thirteen slots per expanded/repeated item follow CudaDfResourceItem. A
+ * three-slot output queries bucket count, candidate count and full wire length;
+ * a full output appends each eight-slot candidate and its 66-slot buckets.
+ * Both passes validate the entire fleet. Publication is transactional, including
+ * late overflow/refusal. Input, output and error ranges must be disjoint. Only
+ * linear topology/plan metadata is allocated, never scientific/GPU storage.
+ * Status 2 preserves an unsupported-domain refusal; status 1 is invalid input,
+ * overflow or insufficient budget. Neither status permits Python fallback. */
+int generativeqc_resource_hf_df_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                              unsigned diis_history, std::uint64_t requested_budget,
+                                              unsigned storage, unsigned occupied_exchange,
+                                              std::uint64_t* values, std::size_t value_count,
+                                              char* error, std::size_t error_size) {
+  using namespace generativeqc;
+  if (!shapes || !shape_count || shape_count % scf::cuda_df_resource_item_width || !values ||
+      value_count < 3 || !error || !error_size)
+    return 1;
+  try {
+    const auto shape_bytes = runtime::size_mul(shape_count, sizeof(*shapes));
+    const auto value_bytes = runtime::size_mul(value_count, sizeof(*values));
+    if (runtime::ranges_overlap(shapes, shape_bytes, values, value_bytes) ||
+        runtime::ranges_overlap(shapes, shape_bytes, error, error_size) ||
+        runtime::ranges_overlap(values, value_bytes, error, error_size))
+      return 1;
+  } catch (const std::exception&) {
+    return 1;
+  }
+  try {
+    if (storage > 3 || occupied_exchange > 1)
+      throw std::invalid_argument("invalid CUDA DF fleet selector");
+    std::vector<scf::CudaDfResourceItem> items;
+    items.reserve(shape_count / scf::cuda_df_resource_item_width);
+    for (std::size_t offset = 0; offset < shape_count; offset += scf::cuda_df_resource_item_width) {
+      const auto* item = shapes + offset;
+      items.push_back({item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7],
+                       item[8], item[9], item[10], item[11], item[12]});
+    }
+    const auto candidates = scf::cuda_df_fleet_resources(
+        items, diis_history, requested_budget, static_cast<scf::DfPairStorageRequest>(storage),
+        occupied_exchange != 0);
+    const auto bucket_count = candidates.front().buckets.size();
+    const auto candidate_size =
+        runtime::size_add(scf::cuda_df_resource_candidate_width,
+                          runtime::size_mul(bucket_count, scf::cuda_df_resource_bucket_width));
+    const auto full_count =
+        runtime::size_add(3, runtime::size_mul(candidates.size(), candidate_size));
+    if (value_count != 3 && value_count != full_count)
+      throw std::invalid_argument("invalid CUDA DF fleet output length");
+    const std::array<std::uint64_t, 3> header{bucket_count, candidates.size(), full_count};
+    std::copy(header.begin(), header.end(), values);
+    if (value_count != 3) {
+      auto* destination = values + 3;
+      for (const auto& candidate : candidates) {
+        const auto inventory = candidate.inventory();
+        destination = std::copy(inventory.begin(), inventory.end(), destination);
+        for (const auto& bucket : candidate.buckets) {
+          destination = std::copy(bucket.values.begin(), bucket.values.end(), destination);
+          destination =
+              std::copy(bucket.energy_tiles.begin(), bucket.energy_tiles.end(), destination);
+          destination =
+              std::copy(bucket.force_tiles.begin(), bucket.force_tiles.end(), destination);
+        }
+      }
+    }
+    error[0] = '\0';
+    return 0;
+  } catch (const scf::CudaDfResourceUnsupported& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 2;
+  } catch (const std::exception& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 1;
+  }
 }
 
 int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atoms,

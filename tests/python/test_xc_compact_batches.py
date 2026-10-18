@@ -240,6 +240,17 @@ double __shfl_down_sync(unsigned,double value,int offset) {
   warp_barriers[warp]->arrive_and_wait();
   return result;
 }
+double __shfl_xor_sync(unsigned,double value,int offset,int width=32) {
+  // Tiled FP32 AO normalization reduces full-warp participants in width16
+  // groups, unlike the one-dimensional point-feature shuffle above.
+  const unsigned lane=threadIdx.y*blockDim.x+threadIdx.x,warp=lane/32;
+  shuffle_values[lane]=value;
+  warp_barriers[warp]->arrive_and_wait();
+  const unsigned source=(lane/width)*width+((lane%width)^offset);
+  const double result=source/width==lane/width ? shuffle_values[source] : value;
+  warp_barriers[warp]->arrive_and_wait();
+  return result;
+}
 float __double2float_rn(double value) { return float(value); }
 float __fadd_rn(float left,float right) { return left+right; }
 float __fmul_rn(float left,float right) { return left*right; }
@@ -441,6 +452,25 @@ int main() {
   });
   assert(potential==serial_potential);
   for (I channel=0;channel<3;++channel) assert(totals[channel]==serial_totals[channel]);
+  assert(error==0);
+  std::fill(potential.begin(),potential.end(),0.0);
+  std::fill(std::begin(totals),std::end(totals),0.0);
+  launch({64,4,1},{128,1,1},[&] {
+    batch_diagonal_potential_panels(tiles.data(),ao.data(),coefficients.data(),weights.data(),work.data(),
+                                     0,spins,terms,work_jets,&error);
+  });
+  launch({6,1,8},{16,16,1},[&] {
+    batch_local_diagonal_potentials<float>(tiles.data(),ao.data(),work.data(),local.data(),spins,
+                                           work_jets,&error,weights.data());
+  });
+  for (double value : local) assert(value==double(float(value)));
+  launch({2,1,1},{128,1,1},[&] {
+    batch_ordered_scatter(tiles.data(),4,local.data(),point_totals.data(),0,ids.data(),full_n,
+                           potential.data(),totals,&error);
+  });
+  for (std::size_t index=0;index<potential.size();++index)
+    assert(std::abs(potential[index]-expected[index])<=1e-8);
+  for (I channel=0;channel<3;++channel) assert(totals[channel]==reference_totals[channel]);
   assert(error==0);
   check_diagonal_ranges();
 }

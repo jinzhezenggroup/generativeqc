@@ -13,7 +13,8 @@ struct CudaGridGeometryShape {
 
 struct CudaGridGeometryOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
-  std::size_t point_tile{64};
+  /** Bounded point-parallel Becke scratch; small explicit tiles remain valid. */
+  std::size_t point_tile{1024};
   std::uint64_t max_partition_pairs{16'777'216};
   std::uint64_t max_ao_jet_values{134'217'728};
   /** Conservative preparation bound: 20*points*AO*primitives*3 polynomial
