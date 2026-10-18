@@ -138,6 +138,11 @@ inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
 
+/** Profitability is separate from scientific eligibility. Complete endpoints
+ * support a continuous large-owner domain, not a whitelist of measured sizes.
+ * Smaller eligible owners retain opt-in; membership is no per-call speed guarantee. */
+inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 192 && aos <= 768; }
+
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for
  * an arbitrary molecule. Explicit observable targets still require an audit.

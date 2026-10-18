@@ -1013,7 +1013,7 @@ void run_fast_anchor_delta_case() {
         require(result.converged && std::abs(result.energy - reference.energy) < 1e-5,
                 "Fast anchor total-density XC/VV10 endpoint disagrees with independent CPU");
         const auto cold = plan.transfers();
-        const bool expected = mode == 0 && (!selection || std::strcmp(selection, "0") != 0);
+        const bool expected = mode == 0 && selection && std::strcmp(selection, "1") == 0;
         if (mode == 0 && !expected) ordinary_fast_state_bytes = plan.resources().state_device_bytes;
         if (expected) {
           const auto matrix_elements = basis.nao * basis.nao;
@@ -1076,6 +1076,17 @@ void run_fast_anchor_delta_case() {
                     plan.resources().state_device_bytes == state_bytes &&
                     plan.resources().provider_device_bytes == provider_bytes,
                 "Stale force-memory token changed Fast anchor ownership");
+        const auto stream = static_cast<cudaStream_t>(density_before.stream);
+        require(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal) == cudaSuccess,
+                "could not capture the Fast anchor producer stream");
+        const auto capture_status = plan.prepare_force_memory(token, 1, receipt, detail);
+        cudaGraph_t capture_graph{};
+        const auto capture_end = cudaStreamEndCapture(stream, &capture_graph);
+        if (capture_graph) cudaGraphDestroy(capture_graph);
+        require(capture_status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                    capture_end == cudaSuccess && receipt == std::array<std::uint64_t, 4>{} &&
+                    plan.resources().state_device_bytes == state_bytes,
+                "captured force handoff retired anchor storage or submitted work");
         std::size_t free_bytes{}, total_bytes{};
         require(cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess,
                 "Could not query Fast anchor force-memory pressure");

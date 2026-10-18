@@ -1447,6 +1447,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
           throw std::invalid_argument("Fast anchor delta accepts 0 or 1");
         fast_anchor_eligible = std::strcmp(selected, "1") == 0;
+      } else {
+        fast_anchor_eligible = default_fast_anchor_delta(n);
       }
     }
     const bool host_unfused =

@@ -92,7 +92,10 @@ without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
 For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
-nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor. Provisional
+nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
+at 192–768 AOs, a continuous domain supported by complete-endpoint qualification.
+This is not a whitelist of measured AO counts. Smaller eligible
+owners keep ordinary Fast unless explicitly opted in. Provisional
 initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
@@ -103,12 +106,16 @@ unchanged: this does not promise FP64-mode observable accuracy.
 The anchor lease is optional, allocated after mandatory preparation and included
 in the native state capacity. It requires five additional FP64 AO matrices and
 one scalar. Device allocation failure keeps the ordinary Fast path; host
-reservation and non-allocation errors remain explicit failures. FP64 policy,
-strict caller controls, other models, DF/UKS, public resource-ledger owners,
+reservation and non-allocation errors remain explicit failures. At a pressured
+force handoff the idle anchor is retired before optional ERIs; density, stationary
+weights, XC, the final-state token and the warm seed remain valid. Subsequent
+warm and cold solves on that owner use ordinary Fast without reallocating anchors.
+FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
 device chunks and same-owner warm replays retain their incumbent path.
 `GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset or `1` selects automatic admission, not a force-enable for unsupported
-domains. There is no universal iteration-count or speed guarantee.
+unset selects the 192–768-AO default; `1` opts in within the existing scientific
+eligibility domain, including smaller owners, without forcing unsupported domains.
+There is no universal iteration-count or speed guarantee.
 
 The shared nonlocal initializer and frozen-potential proposal stages also admit
 budget-selected mixed Focks. Provisional residuals never certify the target.

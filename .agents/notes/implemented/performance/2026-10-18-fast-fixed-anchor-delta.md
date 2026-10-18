@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-18
 
+The automatic size domain and optional-storage lifetime below are superseded by
+[the force-handoff and size-gate decision](2026-10-18-fast-anchor-force-handoff-and-size-gate.md).
+This note preserves the original promotion and its measured source identity.
+
 ## Problem
 
 The isolated [anchor experiment](../../proposed/2026-10-18-wb97mv-anchor-delta-jk.md)

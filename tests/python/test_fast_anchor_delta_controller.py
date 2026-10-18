@@ -13,16 +13,21 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fast_anchor_admission(required_native_cxx: NativeCxx, tmp_path: Path) -> None:
-    """Exclude strict precision, unsupported models, and bounded resource owners."""
+    """Separate measured default profitability from scientific opt-in eligibility."""
     source = tmp_path / "admission.cpp"
     source.write_text(r"""
 #include <cassert>
 #include "dft/application_precision.hpp"
 int main() {
   using generativeqc::dft::admit_fast_anchor_delta;
+  using generativeqc::dft::default_fast_anchor_delta;
   using generativeqc::dft::SemilocalFamily;
   using generativeqc::dft::semilocal_family_code;
   const auto wb = semilocal_family_code(SemilocalFamily::Wb97mv);
+  for (const std::size_t aos : {0U, 24U, 96U, 191U, 769U, 1024U})
+    assert(!default_fast_anchor_delta(aos));
+  for (const std::size_t aos : {192U, 193U, 256U, 383U, 384U, 512U, 767U, 768U})
+    assert(default_fast_anchor_delta(aos));
   assert(admit_fast_anchor_delta(true, true, wb, true, 1, true, false, 1));
   assert(!admit_fast_anchor_delta(false, true, wb, true, 1, true, false, 1));
   assert(!admit_fast_anchor_delta(true, false, wb, true, 1, true, false, 1));

@@ -129,7 +129,7 @@ def reference_gate(
 def main() -> None:
     """Keep all failures; each process owns exactly one fresh native calculator."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--atoms", type=int, choices=(12, 96), required=True)
+    parser.add_argument("--atoms", type=int, choices=(12, 24, 48, 96), required=True)
     parser.add_argument("--policy", choices=("fp64", "fast"), required=True)
     parser.add_argument("--delta", choices=("0", "1", "auto"), required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)

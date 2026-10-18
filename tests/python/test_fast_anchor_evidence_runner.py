@@ -40,6 +40,41 @@ def load_runner(name: str) -> Any:
     return module
 
 
+@pytest.mark.parametrize("occupied", [False, True])
+def test_independent_oracle_rejects_before_gpu_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, occupied: bool
+) -> None:
+    """Bad ownership or absent Slurm must not touch scientific backends."""
+    runner = load_runner("reference")
+    output = tmp_path / "reference24.json"
+    if occupied:
+        output.write_bytes(b"retained independent evidence")
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setitem(sys.modules, "cupy", None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "reference.py",
+            "--atoms",
+            "24",
+            "--basis-file",
+            str(tmp_path / "unopened-basis.json"),
+            "--output",
+            str(output),
+        ],
+    )
+    if occupied:
+        with pytest.raises(FileExistsError):
+            runner.main()
+        assert output.read_bytes() == b"retained independent evidence"
+    else:
+        with pytest.raises(RuntimeError, match="Slurm-assigned visibility"):
+            runner.main()
+        assert not output.exists()
+
+
 def sample_record(atoms: int, policy: str, delta: str) -> dict[str, Any]:
     return {
         "atoms": atoms,
