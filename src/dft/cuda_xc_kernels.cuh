@@ -241,7 +241,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto density_launcher = l.local_ao
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
-      const bool occupied_tile = occupied.coefficients && occupied.rank() < std::size_t(active);
+      const bool occupied_tile =
+          occupied.coefficients && occupied.rank() <= std::size_t(active / 2);
       if (occupied_tile) {
         launch_occupied_density(stream, occupied, ao, active, count, work, features,
                                 l.feature_terms, error, ids);

@@ -328,14 +328,17 @@ module-loading cost hidden by a same-image selector comparison.
 
 To qualify occupied-frame XC reuse independently of the Direct force choices,
 use the same finite-allocation command with `--occupied-xc` instead of
-`--weighted-responses`. This compares explicit occupied-XC rollback with a
-genuinely unset preference and clears inherited weighted-force and
+`--weighted-responses`. This compares explicit matrix selection (`0`) with
+explicit certified occupied-XC selection (`1`); the production default remains
+matrix evaluation pending qualification. It clears inherited weighted-force and
 order-six/seven overrides in both arms. It retains the original grid,
 strict-FP64 gates, 1800-second population limit and five calls in each warm
 population. The comparison axes are mutually exclusive. Include an original
 library control to expose cold module-loading/preparation changes, actual
 occupied-frame generation/launch receipts to show admission, and independent
-stored-density exponent-edge tests in addition to full E+F oracles. Do not
+stored-density exponent-edge, finite-cancellation and finite-error tests in
+addition to full E+F oracles. Count absolute-dot certificate arithmetic and
+original-D fallback work; fewer admitted projections do not prove less work. Do not
 attribute changed SCF iteration counts to an isolated contraction speedup.
 
 Two preparation-time experimental controls retain the incumbent defaults:

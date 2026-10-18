@@ -131,7 +131,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     arithmetic_axis.add_argument(
         "--occupied-xc",
         action="store_true",
-        help="compare matrix/automatic occupied-frame XC; retain force defaults",
+        help="compare matrix/explicit certified occupied-frame XC; retain force defaults",
     )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -154,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         environment[name] = "8"
     if args.occupied_xc:
         selector_name = "GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
-        selectors = ("0", None)
+        selectors = ("0", "1")
         environment.pop("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", None)
         environment.pop("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES", None)
     elif args.weighted_responses:

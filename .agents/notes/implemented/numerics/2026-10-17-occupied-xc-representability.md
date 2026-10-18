@@ -3,6 +3,11 @@
 Status: implemented; composed default has separate endpoint qualification
 Date: 2026-10-17
 
+The proposed default and exponent-only admission recorded here are superseded
+by the [2026-10-18 error certificate](2026-10-18-occupied-xc-error-certificate.md).
+Finite cancellation remained outside this note's repaired domain. Historical
+measurements below do not qualify the revised implementation or its default.
+
 ## Problem
 
 PR #2577 projects AO jets through an accepted occupied coefficient frame before

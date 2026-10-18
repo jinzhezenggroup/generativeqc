@@ -172,15 +172,25 @@ requests reuse but cannot bypass these checks.
 
 The compiler projects the original four AO jets through occupied coefficients,
 then uses the existing feature bilinears. Reuse is admitted independently per
-tile only when occupied rank is smaller than the active AO width. Projection
-shares the bounded matrix-product panels; potential construction retains the
+tile only when twice the occupied rank fits the active AO width. Projection
+and outward-rounded absolute-dot bounds share the existing matrix-product
+scratch; this does not allocate a second AO panel. Potential construction retains the
 original AO jets and differentiated legs. No additional full-grid or quartic
 storage is introduced. RKS applies its occupation factor exactly once; UKS
 retains separate, possibly unequal or empty, occupied spin spans.
 
 Floating-point storage is part of the contract. A nonzero coefficient outside
 the conservative IEEE exponent interval `2^-256..2^256`, or a nonfinite projected
-panel, declines occupied arithmetic. A warp vote in the existing feature kernel
+panel, declines occupied arithmetic. Finite coefficients alone are not enough:
+each jet also accumulates `sum(abs(C*AO))` with upward-rounded products/adds.
+The feature kernel uses upward-rounded squared norms and Cauchy bounds to
+certify the combined stored-Gram, dense-feature and projected-feature errors
+separately for rho, all three gradients and tau. The bound must be no greater
+than `2^-45 * max(1, abs(feature))`; this internal FP64 admission rule does not
+replace or relax external numerical tolerances. Missing/unsafe bounds decline
+reuse. See the [rounding model and proof envelope](../../.agents/notes/implemented/numerics/2026-10-18-occupied-xc-error-certificate.md).
+
+A warp vote in the existing feature kernel
 recomputes the affected point from the still-live original stored density and
 AO jets using the shared `symmetric_density_element` graph and feature
 bilinears. This register-only fallback must not overwrite compact occupied
@@ -188,7 +198,10 @@ panels, whose strides differ from dense AO panels. It adds no allocation,
 kernel launch, host synchronization or CTA barrier. A temporary refusal
 sentinel is not a numerical error; invalid matrix results retain the original
 finite-error behavior. Matrix fallback must not receive RKS occupation scaling
-a second time. See the [representability rationale and independent edge cases](../../.agents/notes/implemented/numerics/2026-10-17-occupied-xc-representability.md).
+a second time. The fallback retains scalar feature accumulation below a warp
+of active AOs, warp accumulation otherwise, and the original matrix-product
+finite checks. No host synchronization is needed to select refused points.
+Reuse remains opt-in while scientific/resource/endpoint qualification is renewed.
 
 ### Matrix density providers
 

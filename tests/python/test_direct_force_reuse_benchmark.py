@@ -132,7 +132,10 @@ def test_arithmetic_comparison_isolates_its_default(
     direct_force_reuse.main([str(output), axis])
     assert len(launches) == 2
     assert launches[0]["env"][selector] == "0"
-    assert selector not in launches[1]["env"]
+    if axis == "--occupied-xc":
+        assert launches[1]["env"][selector] == "1"
+    else:
+        assert selector not in launches[1]["env"]
     for options in launches:
         assert "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS" not in options["env"]
         assert options["env"]["CUDA_VISIBLE_DEVICES"] == "GPU-scheduler-assigned"
@@ -144,7 +147,7 @@ def test_arithmetic_comparison_isolates_its_default(
     assert json.loads((output / "comparison.json").read_text()) == {
         "selector": selector,
         "baseline": "0",
-        "candidate": None,
+        "candidate": "1" if axis == "--occupied-xc" else None,
         "population_limit_seconds": 1800,
     }
 

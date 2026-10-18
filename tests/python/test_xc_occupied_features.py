@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from _cpp_source_support import cpp_function_definition, cpp_record_definition
+from _cuda_rounding_support import DIRECTED_ROUNDING_HOST
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 from generativeqc_compiler.dft.xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
@@ -84,6 +85,11 @@ def test_generated_occupied_features_match_independent_density_matrix(
         + "namespace generativeqc_grid_policy {\n"
         + emit_feature_policy(device=False)
         + "}\n"
+        + DIRECTED_ROUNDING_HOST
+        + cpp_function_definition(
+            _emit_occupied_features(DEFAULT_XC_MATRIX_SCHEDULE),
+            "occupied_feature_certificate",
+        )
         + body
         + r"""
 int main(int argc, char** argv) {

@@ -37,7 +37,7 @@ __global__ void batch_density_products(const CudaXcCompactTile* tiles, const dou
   if (!tile.active || blockIdx.x >= (tile.active + @TILE@ - 1) / @TILE@ ||
       blockIdx.y >= (tile.count + @TILE@ - 1) / @TILE@) return;
   if constexpr (Occupied) {
-    if (occupied.rank() < tile.active) {
+    if (occupied.rank() <= tile.active / 2) {
       if (blockIdx.x >= (occupied.rank() + @TILE@ - 1) / @TILE@) return;
       tiled_occupied_product_body(occupied, ao + tile.ao_offset, tile.active, tile.count,
           work + tile.work_offset, error, compact_tile_ids(tile, ids, full_n),
@@ -57,10 +57,11 @@ __global__ void batch_density_features(const CudaXcCompactTile* tiles, const dou
   const auto& tile = tiles[blockIdx.y];
   auto* target = features + (tile.begin - batch_begin) * spins * terms;
   if constexpr (Occupied) {
-    if (occupied.rank() < tile.active) {
+    if (occupied.rank() <= tile.active / 2) {
       occupied_density_features_body(work + tile.work_offset, occupied.rank(), tile.count,
           spins, terms, target, error, occupied.density, ao + tile.ao_offset, tile.active,
-          occupied.nao, compact_tile_ids(tile, ids, occupied.nao));
+          occupied.nao, compact_tile_ids(tile, ids, occupied.nao),
+          work + tile.work_offset + occupied.spins * 4 * tile.count * occupied.rank());
       return;
     }
   }

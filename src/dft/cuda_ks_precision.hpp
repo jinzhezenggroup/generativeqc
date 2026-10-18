@@ -24,11 +24,11 @@ inline constexpr std::string_view kNonlocalCorrelation = "dft.nonlocal_correlati
 inline constexpr std::string_view kFinalAudit = "dft.final_audit";
 }  // namespace cuda_ks_precision_region
 
-/** Default to exact occupied-frame reuse; any nonempty value except 1 opts out.
+/** Keep occupied-frame reuse opt-in until numerical and endpoint qualification.
  * This is only an arithmetic preference. The owner must still authenticate the
  * accepted density/frame lease, strict FP64 policy and bounded tile resources. */
 inline constexpr bool cuda_ks_occupied_xc_requested(const char* setting) noexcept {
-  return !setting || !setting[0] || (setting[0] == '1' && !setting[1]);
+  return setting && setting[0] == '1' && !setting[1];
 }
 
 /** Resolve method policy into the compiler-common native precision contract.

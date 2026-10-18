@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _cuda_rounding_support import DIRECTED_ROUNDING_HOST
 from generativeqc_compiler.dft.ao_cuda import _NATIVE_XC_CONTRACTION_KERNELS
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 from generativeqc_compiler.dft.xc_contraction_cuda import (
@@ -99,15 +100,18 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         "template ", 1
     )[0]
     occupied = _emit_occupied_features(DEFAULT_XC_MATRIX_SCHEDULE)
-    occupied_bodies = definition(
-        occupied, "__device__ void tiled_occupied_product_body"
-    ) + definition(
-        occupied,
-        "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+    occupied_bodies = (
+        definition(occupied, "__device__ bool occupied_feature_certificate")
+        + definition(occupied, "__device__ void tiled_occupied_product_body")
+        + definition(
+            occupied,
+            "template<bool Cooperative = true>\n__device__ void occupied_density_features_body",
+        )
     )
     source = tmp_path / "compact-numerics.cpp"
     source.write_text(
         _SIMULATOR
+        + DIRECTED_ROUNDING_HOST
         + compact_types()
         + "namespace generativeqc_grid_policy {\n"
         + emit_feature_policy(device=True)

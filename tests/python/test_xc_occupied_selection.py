@@ -20,8 +20,8 @@ def test_occupied_xc_default_and_explicit_rollback(
         "#include <cassert>\n"
         "int main() {\n"
         "  using generativeqc::dft::cuda_ks_occupied_xc_requested;\n"
-        "  assert(cuda_ks_occupied_xc_requested(nullptr));\n"
-        '  assert(cuda_ks_occupied_xc_requested(""));\n'
+        "  assert(!cuda_ks_occupied_xc_requested(nullptr));\n"
+        '  assert(!cuda_ks_occupied_xc_requested(""));\n'
         '  assert(cuda_ks_occupied_xc_requested("1"));\n'
         '  for (const char* value : {"0", "false", "true", " 1", "10", "unknown"})\n'
         "    assert(!cuda_ks_occupied_xc_requested(value));\n"

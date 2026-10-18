@@ -105,7 +105,7 @@
     },
     {
       "id": "ks.occupied-xc-features",
-      "classification": "already-default",
+      "classification": "needs-qualification",
       "controls": [
         "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
       ],
@@ -116,7 +116,7 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_precision.hpp"
       ],
-      "rationale": "Unset, empty or 1 requests strict-FP64 occupied-frame density/gradient/tau features only for an authenticated accepted-density lease and tiles with rank below active AO width. Explicit 0 and other nonempty values select the matrix route. Response, nonlocal, chunk, mixed or stale frames retain bounded matrix evaluation. Exponent-unsafe or nonfinite projections recompute from the original stored density inside the existing feature kernel; potential assembly and exact Direct J/K are unchanged.",
+      "rationale": "Only explicit 1 requests strict-FP64 occupied-frame features; unset, empty and other values retain the matrix default pending renewed qualification. Authenticated frames need room for projection and outward-rounded absolute-dot panels inside the existing scratch. Every rho, gradient and tau feature must pass a pointwise cancellation/roundoff certificate; refusal recomputes the original stored-D consumer with its scalar/warp dispatch and finite-error contract. Response, nonlocal, chunk, mixed or stale frames retain bounded matrix evaluation; potential assembly and exact Direct J/K are unchanged.",
       "revisit_condition": "Require independent stored-density edge cases, native owner/sanitizer/resource checks and source-matched complete cold, five-warm, moved and five-moved-warm E+F populations before extending precision, feature or lifetime admission. Retain original-library controls for preparation/module-loading costs; do not infer universal warm gains from cold contraction improvements.",
       "evidence": [
         "docs/user/ks_options.md",

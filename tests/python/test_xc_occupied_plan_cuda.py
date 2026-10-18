@@ -20,8 +20,14 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("spins", [1, 2])
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("coefficient_scale", [0.002, 0.000002])
 def test_native_occupied_source_fallback_and_compact_domains(
-    tmp_path: Path, native_cxx: "NativeCxx", spins: int, mapped: bool, compact: bool
+    tmp_path: Path,
+    native_cxx: "NativeCxx",
+    spins: int,
+    mapped: bool,
+    compact: bool,
+    coefficient_scale: float,
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
@@ -48,7 +54,13 @@ def test_native_occupied_source_fallback_and_compact_domains(
         ],
     )
     subprocess.run(
-        [executable, str(spins), str(int(mapped)), str(int(compact))],
+        [
+            executable,
+            str(spins),
+            str(int(mapped)),
+            str(int(compact)),
+            str(coefficient_scale),
+        ],
         check=True,
         timeout=90,
     )
@@ -91,7 +103,7 @@ int main(int argc, char** argv) {
     core::System system;
     system.atoms = {{1, {0, 0, 0}}};
     system.multiplicity = 2;
-    for (unsigned shell = 0; shell < 65; ++shell)
+    for (unsigned shell = 0; shell < 81; ++shell)
       system.shells.push_back({0, 0, {{0.2 + 0.1 * shell, 1.0}}});
     std::string detail;
     require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
@@ -118,7 +130,7 @@ int main(int argc, char** argv) {
       for (size_t orbital = 0; orbital < occupied; ++orbital)
         for (size_t row = 0; row < basis.nao; ++row)
           frames[spin * matrix + orbital * basis.nao + row] =
-              0.002 * (1 + (row + 3 * orbital + spin) % 7);
+              std::stod(argv[4]) * (1 + (row + 3 * orbital + spin) % 7);
       for (size_t row = 0; row < basis.nao; ++row)
         for (size_t column = 0; column < basis.nao; ++column)
           for (size_t orbital = 0; orbital < occupied; ++orbital)
