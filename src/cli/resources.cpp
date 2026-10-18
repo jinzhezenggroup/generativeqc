@@ -11,6 +11,7 @@
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
 #include "runtime/resource_planning.hpp"
+#include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
@@ -528,21 +529,26 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
           "CUDA HF inventory requires a CUDA library and ordinary <=16-AO s/p/d/f topology";
       return emit();
     }
-    const Bytes pairs = orbital.shells * (orbital.shells + 1) / 2;
-    retained =
-        sum({4 * values[1],
-             product({2048, sum({1, atoms.size(), orbital.shells, orbital.primitives, orbital.nbf,
-                                 orbital.cartesian_nbf, pairs, product({pairs, pairs})})}),
-             product({512, spins, orbital.nbf, orbital.nbf}), product({384, atoms.size()}),
-             ecp_workspace});
-    device = sum({product({options.batch, values[0]}), values[0], ecp_workspace});
-    plan["resident_bytes"]["device:" + std::to_string(options.device_id)] =
-        product({options.batch, values[0]});
+    scf::CudaHfFleetResources fleet;
+    try {
+      const auto item =
+          fleet.append({atoms.size(), orbital.nbf, orbital.cartesian_nbf, orbital.shells,
+                        orbital.primitives, spins, values[0], values[1], ecp_workspace},
+                       options.batch);
+      plan["item_inventory"] = {{"arena", item[0]}, {"host", item[1]}, {"ecp_workspace", item[2]}};
+    } catch (const std::exception& error) {
+      throw UsageError(error.what());
+    }
+    const auto aggregate = fleet.inventory();
+    retained = aggregate[3];
+    device = aggregate[2];
+    plan["resident_bytes"]["device:" + std::to_string(options.device_id)] = aggregate[0];
+    plan["cuda_hf_fleet_composition"] = "native-declared-capacity";
   } else {
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
     return emit();
   }
-  if (!cpu && !ks) retained = product({options.batch, retained});
+  // Each native fleet already applies batch multiplicity to retained storage.
   const Bytes resident_device =
       plan["resident_bytes"].value("device:" + std::to_string(options.device_id), Bytes{0});
   if (resident_device > device)

@@ -181,25 +181,35 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ### CUDA Direct integral forces
 
-Exact-direct full-range RKS global hybrids with strict FP64 and at least
-384 public AOs automatically request primitive-local spatial Coulomb reuse in
-the order-six s/p/d force consumer. This includes eligible PBE0 and B3LYP:
-the method authenticates Direct J/K, operators, exact-exchange coefficient and
-resident final-density token, not a functional name alone. HF, UKS, fitted, ECP,
-RSH, nonlocal, D4 and lower-precision consumers retain the incumbent defaults.
+Full-range exact-Direct FP64 force workers use generated relative-coordinate
+responses by default for angular orders one through five, including separate
+and combined J/K and RKS/UKS sources. Unset, empty, `1` and `relative` select
+this arithmetic; `GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0` or an unknown
+nonempty value retains the nuclear-coordinate rollback. `ssss`, FP32 and
+long-range roots are unchanged. See the
+[compiler and finite-fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
+
+Independently, qualified full-range exact-Direct restricted FP64 force producers
+with at least 384 public AOs automatically request relative-response order-six
+reuse and guarded pure-J density-first contraction in orders six/seven. The
+method authenticates the actual J/K source and resident final-density token,
+not a functional name. Pure J permits independent D4/gCP terms; nonzero
+exchange, bilinear seeds and partial AO masks retain component contraction.
+HF, UKS, fitted, ECP, RSH, nonlocal and D4-hybrid consumers keep their previous
+order-six/seven defaults. All resource and derivative-capability guards remain.
 
 `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
-Explicit `=1` or `=spatial-reuse` requests reuse outside the automatic method
-scope, without bypassing the resident primitive-pair, prefix, topology or
-derivative-capability guards. Unset or empty selects the automatic policy;
-other values retain the incumbent. Preference is captured when the force
-owner is prepared, so changing the environment needs a new prepared owner.
-The cache is primitive-local, introduces no retained quartet inventory, and
-leaves screening and gradient accumulation order unchanged. Orders seven/eight
-and mixed-f fallback routing retain their existing consumers.
+Explicit `=1` or `=spatial-reuse` selects the earlier spatial consumer;
+`=relative-reuse` shares relative responses without density-first contraction,
+and `=relative-density` also requests the guarded factorization. No selector
+bypasses admission. Unset or empty selects the automatic policy; other values
+retain the incumbent. Both independent preferences are captured when preparing
+the force owner, so changing either requires a new prepared owner. Screening,
+source/atom accumulation, order-eight and mixed-f fallback semantics remain.
 
-See the [spatial-reuse decision](../../.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md)
-for the algorithm, qualification scope and retained alternatives.
+See the [order-six/seven default decision](../../.agents/notes/implemented/performance/2026-10-17-direct-force-default-promotion.md)
+and [low-order default decision](../../.agents/notes/implemented/performance/2026-10-17-weighted-relative-force-responses.md)
+for qualification boundaries and retained alternatives.
 
 ### CUDA final-state validation
 

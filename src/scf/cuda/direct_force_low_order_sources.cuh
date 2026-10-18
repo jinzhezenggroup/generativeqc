@@ -85,6 +85,31 @@ struct LowOrderSourceRoots {
       return generated_weighted_eri::fsss_force(geometry, weights);
     }
   }
+
+  /** The scalar ssss root is already smaller than a relative-frame rewrite. */
+  __device__ static __forceinline__ generated_weighted_eri::IndependentGradient evaluate_relative(
+      const generated_weighted_eri::Geometry& geometry, const double* weights) {
+    if constexpr (ShellClass == kSsssShellClass)
+      return evaluate(geometry, weights);
+    else if constexpr (ShellClass == kPsssShellClass)
+      return generated_weighted_eri::psss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPspsShellClass)
+      return generated_weighted_eri::psps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPpssShellClass)
+      return generated_weighted_eri::ppss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDsssShellClass)
+      return generated_weighted_eri::dsss_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kPppsShellClass)
+      return generated_weighted_eri::ppps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDspsShellClass)
+      return generated_weighted_eri::dsps_force_relative(geometry, weights);
+    else if constexpr (ShellClass == kDpssShellClass)
+      return generated_weighted_eri::dpss_force_relative(geometry, weights);
+    else {
+      static_assert(ShellClass == kFsssShellClass);
+      return generated_weighted_eri::fsss_force_relative(geometry, weights);
+    }
+  }
 };
 
 /**
@@ -109,13 +134,14 @@ struct LowOrderSourceRoots {
 template <bool Unrestricted, unsigned ShellClass, bool LongRange = false,
           class Roots = LowOrderSourceRoots<ShellClass>,
           DirectForceOutputMode Mode = DirectForceOutputMode::Separate, bool ResidentBra = false,
-          bool Mixed = false>
+          bool Mixed = false, bool RelativeResponse = false>
 __device__ inline __noinline__ bool contract_two_electron_force_low_order_sources_impl(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     double coulomb_coefficient, double exchange_coefficient, double omega = 0.0,
     const PrimitivePairData* resident_first_pairs = nullptr,
     std::int64_t resident_first_pair_count = 0) {
+  static_assert(!Mixed || !RelativeResponse);
   using Sources = DirectForceSources<Mode>;
   constexpr unsigned source_count = LongRange ? 1U : Sources::count;
   if (task.tile != 0U) return true;
@@ -271,7 +297,9 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
       for (unsigned source = 0; source < source_count; ++source) {
         if (!source_active[source]) continue;
         const auto primitive = [&] {
-          if constexpr (Mixed)
+          if constexpr (RelativeResponse)
+            return Roots::evaluate_relative(geometry, weights[source]);
+          else if constexpr (Mixed)
             return Roots::evaluate_mixed(geometry, weights[source]);
           else
             return Roots::evaluate(geometry, weights[source]);
@@ -295,6 +323,8 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
       atomicAdd(work, 1ULL);
       atomicAdd(work + 1, primitive_sources);
     }
+  }
+  if constexpr (Mixed || RelativeResponse) {
     bool finite = true;
     for (unsigned source = 0; source < source_count; ++source)
       for (unsigned center = 0; center < 3; ++center)
@@ -302,8 +332,13 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
           finite = finite && isfinite(result[source].center[center][axis]);
     if (!finite) {
       // Nothing has reached the atom arrays yet. Retry exactly this task once
-      // in FP64; do not clip inputs, omit sources or publish a partial force.
-      if (work) atomicAdd(work + 2, 1ULL);
+      // with the retained FP64 graph; never clip inputs or publish partial forces.
+      if constexpr (Mixed) {
+        auto* work = batch.direct_force_precision_work
+                         ? batch.direct_force_precision_work + 3 * static_cast<std::size_t>(system)
+                         : nullptr;
+        if (work) atomicAdd(work + 2, 1ULL);
+      }
       return false;
     }
   }
@@ -339,6 +374,21 @@ __device__ inline void contract_two_electron_force_low_order_sources_task(
     if (batch.direct_force_fp32 && batch.direct_force_seed == nullptr) {
       if (contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
                                                              Roots, Mode, ResidentBra, true>(
+              batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
+              coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
+              resident_first_pair_count))
+        return;
+    }
+    if constexpr (Roots::angular_order != 0U &&
+                  requires(const generated_weighted_eri::Geometry& geometry,
+                           const double* weights) {
+                    Roots::evaluate_relative(geometry, weights);
+                  }) {
+      // Retry the original nuclear graph before any atom scatter if the
+      // relative factorization or its primitive reduction becomes nonfinite.
+      if (batch.direct_force_relative_response && !batch.direct_force_fp32 &&
+          contract_two_electron_force_low_order_sources_impl<Unrestricted, ShellClass, LongRange,
+                                                             Roots, Mode, ResidentBra, false, true>(
               batch, task, screening_tolerance, schwarz_bounds, density, active, forces,
               coulomb_coefficient, exchange_coefficient, omega, resident_first_pairs,
               resident_first_pair_count))

@@ -148,6 +148,10 @@ configuration. They remain in the
 [Direct timing/work table](benchmarks/results/readme-refresh-20261015/timings.md),
 [DF timing/work table](benchmarks/results/readme-refresh-20261015/df-timings.md), and
 [r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update).
+The [GPU4PySCF/96 supplement](benchmarks/results/readme-gpu4pyscf96-20261018/README.md)
+adds independent Direct/DF comparator timings on the historical quadrature,
+without rerunning or relabelling native measurements. It remains retained
+diagnostic evidence, not qualification of a pruned VV10 production ranking.
 No replacement HF/DFT ranking is published until both engines' selected
 configurations have complete endpoint measurements and independent energy/force
 qualification. Historical measurements and failed or unchecked cases are not

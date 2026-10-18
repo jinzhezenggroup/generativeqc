@@ -147,7 +147,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
-    "real-selection": "unsupported; forward-reference-only",
+    "real-selection": "fixed-external-mask-only; reference-AD; generated-fp64-first-order-opt-in",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -312,7 +312,7 @@ _NATIVE_CPU_BOOLEAN_OPERATIONS = (
 )
 
 _NATIVE_CPU_NOTES: dict[str, str] = {
-    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; forward-only",
+    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; generated-fixed-mask-AD-opt-in",
     **{
         name: "finite-float64-operands; one-byte-bool-result; non-differentiable"
         for name in _OPERATION_GROUPS["real-comparison"]
@@ -399,10 +399,10 @@ def capabilities() -> dict[str, object]:
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
         "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD",
-        "where_native_scope": "materializing-cpu-forward-only; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD; generated-fixed-mask-fp64-opt-in",
+        "where_native_scope": "materializing-cpu-forward-and-opt-in-generated-fixed-mask-AD; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
         "boolean_native_lowering": True,
-        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-forward-where; no-AD",
+        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-where; Boolean-data-nondifferentiable",
         "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "typed-bool-or-exact-real-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",

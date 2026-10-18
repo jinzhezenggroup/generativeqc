@@ -38,12 +38,16 @@ def _compiled(function: Any, backend: str | None, options: dict[str, Any]) -> An
     return compile(function, backend=backend or "cpu", **options)
 
 
-def _arguments(function: Any, argnums: Any) -> tuple[tuple[str, ...], bool]:
+def _arguments(
+    function: Any, argnums: Any, *, positional_count: int | None = None
+) -> tuple[tuple[str, ...], bool]:
     parameters = tuple(
         name
         for name, parameter in function._signature.parameters.items()
         if parameter.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
     )
+    if positional_count is not None:
+        parameters = parameters[:positional_count]
     single = type(argnums) is int
     positions = (argnums,) if single else argnums
     if not isinstance(positions, tuple) or not positions:
@@ -72,6 +76,23 @@ def _seed(value: Any, spec: Any, name: str) -> np.ndarray:
 
 
 def _combine(primal: Program, derivative: Program) -> Program:
+    if derivative.provenance.get("external_mask_where_vjp"):
+        # Fixed-mask derivatives freeze real feeds as non-differentiable execution
+        # data. Rebuild the primal against those same canonical inputs before
+        # combining; restoring their AD flags would reopen higher-order AD.
+        from generativeqc_compiler.tensor.ad_program import _rebuild
+
+        inputs = {
+            node.attrs["name"]: node for node in derivative.nodes if node.op == "input"
+        }
+        primal = _rebuild(
+            primal,
+            {
+                node: inputs[node.attrs["name"]]
+                for node in primal.nodes
+                if node.op == "input"
+            },
+        )
     if set(primal.outputs) & set(derivative.outputs):
         raise ValueError("primal and derivative output names collide")
     return Program(
@@ -100,8 +121,15 @@ class _GradientFunction:
         options: dict[str, Any],
         *,
         with_value: bool,
+        allow_external_mask_where: bool = False,
     ) -> None:
+        if type(allow_external_mask_where) is not bool:
+            raise TypeError("allow_external_mask_where must be Boolean")
         base = _compiled(function, backend, options)
+        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+            base.close()
+            raise ValueError("external-mask gradients require reference or CPU backend")
+        self.allow_external_mask_where = allow_external_mask_where
         self.names, self.single = _arguments(base, argnums)
         self.function = base._variant(self.names)
         self.with_value = with_value
@@ -122,7 +150,12 @@ class _GradientFunction:
         key = (primal.logical_hash, *(input_specs[name] for name in self.names))
         cached = self.programs.get(key)
         if cached is None:
-            reverse = transpose_program(primal, ("output",), inputs=self.names)
+            reverse = transpose_program(
+                primal,
+                ("output",),
+                inputs=self.names,
+                allow_external_mask_where=self.allow_external_mask_where,
+            )
             program = (
                 _combine(primal, reverse.program)
                 if self.with_value
@@ -207,6 +240,8 @@ class _Pullback:
         primal: Program,
         feeds: dict[str, Any],
         names: tuple[str, ...],
+        *,
+        allow_external_mask_where: bool = False,
     ) -> None:
         self.function, self.primal, self.feeds, self.names = (
             function,
@@ -214,7 +249,12 @@ class _Pullback:
             feeds,
             names,
         )
-        self.reverse = transpose_program(primal, tuple(primal.outputs), inputs=names)
+        self.reverse = transpose_program(
+            primal,
+            tuple(primal.outputs),
+            inputs=names,
+            allow_external_mask_where=allow_external_mask_where,
+        )
 
     def __call__(self, cotangents: Any) -> tuple[Any, ...]:
         if tuple(self.primal.outputs) == ("output",):
@@ -248,15 +288,32 @@ def _vjp(
     primals: tuple[Any, ...],
     backend: str | None,
     options: dict[str, Any],
+    *,
+    argnums: int | tuple[int, ...] | None = None,
+    allow_external_mask_where: bool = False,
 ) -> tuple[Any, _Pullback]:
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
     base = _compiled(function, backend, options)
-    names, _ = _arguments(base, tuple(range(len(primals))))
-    base = base._variant(names)
-    primal, feeds = base._prepare(*primals)
-    # A pullback belongs to this forward call, not to subsequently mutated inputs.
-    feeds = {name: np.array(value, copy=True) for name, value in feeds.items()}
     try:
-        pullback = _Pullback(base, primal, feeds, names)
+        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+            raise ValueError("external-mask VJP requires reference or CPU backend")
+        names, _ = _arguments(
+            base,
+            tuple(range(len(primals))) if argnums is None else argnums,
+            positional_count=len(primals),
+        )
+        base = base._variant(names)
+        primal, feeds = base._prepare(*primals)
+        # Snapshot every primal, including selectors and non-differentiated data.
+        feeds = {name: np.array(value, copy=True) for name, value in feeds.items()}
+        pullback = _Pullback(
+            base,
+            primal,
+            feeds,
+            names,
+            allow_external_mask_where=allow_external_mask_where,
+        )
         values = base._execution.execute(primal, feeds)
         return _outputs(primal, values), pullback
     except BaseException:

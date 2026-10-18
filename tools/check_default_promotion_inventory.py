@@ -324,7 +324,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             'selector == "1" || selector == "spatial-reuse"',
             "return DirectSpdForceSchedule::Incumbent;",
             "if (captured == DirectSpdForceSchedule::Automatic)",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse : DirectSpdForceSchedule::Incumbent;",
         )
     ):
         raise ValueError("Spatial force default scope or opt-out drifted")
@@ -710,6 +710,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():

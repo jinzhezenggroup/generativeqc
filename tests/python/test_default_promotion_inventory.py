@@ -274,8 +274,8 @@ def test_native_ks_final_validation_default_is_audited(
         ),
         (
             "src/scf/cuda/direct_spd_force_schedule.hpp",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse",
-            "return true ? DirectSpdForceSchedule::SpatialReuse",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse",
+            "return true ? DirectSpdForceSchedule::DensityReuse",
         ),
         (
             "src/methods/dft_method.cpp",

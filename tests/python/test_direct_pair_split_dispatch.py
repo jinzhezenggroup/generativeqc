@@ -35,6 +35,7 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
             "cudaError_t launch_direct_order_seven_force(",
             "cudaError_t launch_direct_force_materialized_class(",
             "cudaError_t launch_direct_force_class_domains(",
+            "cudaError_t launch_direct_force_relative_six(",
             "cudaError_t launch_direct_force_spatial_spd_low(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
@@ -87,6 +88,7 @@ struct DeviceBatch {
   bool direct_dddd_force_class_major{};
   bool direct_force_split_low{};
   bool direct_force_fp32{};
+  const double* direct_force_seed{};
   bool operator==(const DeviceBatch&) const = default;
 };
 // Diagnostics are disabled for this scheduling/fault-injection seam. Their
@@ -112,6 +114,7 @@ struct GeneratedShellPairStream {};
 struct DeviceShellClassProfileEntry {};
 struct MaterializedDirectPairDerivativeRecurrence { unsigned char bytes[513]; };
 struct CooperativeDirectPairDerivativeRecurrence { unsigned char bytes[1537]; };
+struct CooperativeDensityForceRecurrence { unsigned char bytes[2049]; };
 namespace detail {
 struct BoundedDirectBlockDomain {
   unsigned identity{};
@@ -131,6 +134,7 @@ struct Event {
   bool cooperative{};
   bool spatial_reuse{};
   bool class_major{};
+  bool density_contraction{};
   bool operator==(const Event&) const = default;
 };
 std::vector<Event> events;
@@ -170,7 +174,8 @@ cudaError_t cudaMemsetAsync(void* target, int value, std::size_t bytes, cudaStre
   if (error == cudaSuccess) cursor = 0;
   return error;
 }
-template<bool Unrestricted, DirectForceOutputMode Mode, unsigned PageSize = 32>
+template<bool Unrestricted, DirectForceOutputMode Mode, unsigned PageSize = 32,
+         bool DensityContraction = false>
 void direct_order_seven_force_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     const GeneratedShellPairStream* force_topology, double screening, const double* shell,
@@ -190,10 +195,11 @@ void direct_order_seven_force_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
-  last_error = record({Launch,7,false,false,256,bytes,true});
+  last_error = record({Launch,7,false,false,256,bytes,true,false,false,DensityContraction});
   cursor = 999;
 }
-template<bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain>
+template<bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain,
+         unsigned AngularOrder = 0U, bool DensityContraction = false>
 void direct_force_class_domain_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     const GeneratedShellPairStream* force_topology, double screening, const double* shell,
@@ -217,7 +223,7 @@ void direct_force_class_domain_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
-  last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative,false,true});
+  last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative,false,true,DensityContraction});
   cursor = 999;
 }
 template<bool Unrestricted, DirectForceOutputMode Mode, unsigned Partition = 0>
@@ -240,7 +246,7 @@ void direct_force_spatial_spd_low_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
-  last_error = record({Launch,-5,false,false,128,bytes,false,true});
+  last_error = record({Launch,Partition == 5U ? -6 : -5,false,false,128,bytes,false,true});
   cursor = 999;
 }
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
@@ -283,17 +289,22 @@ void bounded_direct_shell_quartet_kernel(
 
 DRIVER = r"""
 int main() {
-  for (bool spin : {false, true})
+  for (double coefficient : {0.0, -0.23})
+   for (bool spin : {false, true})
     for (bool separate : {false, true})
       for (auto purpose : {DirectScreeningPurpose::Fock, DirectScreeningPurpose::Force})
         for (unsigned maximum : {0U, 1U, 2U, 3U, 255U})
           for (unsigned state_bits = 0; state_bits < 128; ++state_bits)
             for (dim3 block : {dim3{256}, dim3{128}, dim3{64}, dim3{256,2}, dim3{256,1,2}})
               for (std::size_t requested_bytes : {0U, 1024U, 4096U})
-                for (auto schedule : {DirectSpdForceSchedule::Incumbent, DirectSpdForceSchedule::SpatialReuse})
+                for (auto schedule : {DirectSpdForceSchedule::Incumbent,
+                                      DirectSpdForceSchedule::SpatialReuse,
+                                      DirectSpdForceSchedule::RelativeReuse,
+                                      DirectSpdForceSchedule::DensityReuse})
                   for (bool have_prefix : {false, true})
                     for (bool dddd : {false, true}) {
                 domain.prefix = have_prefix ? prefix_storage : nullptr;
+                exchange = coefficient;
                 expected_spin = spin;
                 expected_separate = separate;
                 expected_purpose = purpose;
@@ -308,6 +319,9 @@ int main() {
                 const bool split = pair && purpose == DirectScreeningPurpose::Force && maximum == 2 && block == dim3{256};
                 const bool cooperative = split && expected_batch.direct_pair_cooperative_derivatives && expected_topology;
                 const bool spatial = cooperative && have_prefix && schedule == DirectSpdForceSchedule::SpatialReuse;
+                const bool relative = cooperative && have_prefix &&
+                    (schedule == DirectSpdForceSchedule::RelativeReuse || schedule == DirectSpdForceSchedule::DensityReuse);
+                const bool density_contraction = relative && exchange == 0.0 && schedule == DirectSpdForceSchedule::DensityReuse;
                 const bool class_domains = pair && purpose == DirectScreeningPurpose::Force && maximum == 3 &&
                     expected_batch.direct_pair_cooperative_derivatives && expected_topology && block == dim3{256};
                 const auto workspace = pair ? std::max(requested_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence)) : requested_bytes;
@@ -320,6 +334,11 @@ int main() {
                               {Reset},{Launch,5,false,false,128,requested_bytes,false,false,true},{Peek},
                               {Reset},{Launch,6,false,false,256,cooperative_workspace,true,false,true},{Peek},
                               {Reset},{Launch,8,true,true,256,workspace,false,false,true},{Peek}};
+                else if (relative)
+                  expected = {{Launch,-6,false,false,128,requested_bytes,false,true},{Peek},{Reset},
+                              {Launch,6,false,false,256,cooperative_workspace,true,false,true},{Peek},{Reset},
+                              {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
+                              {Launch,8,true,true,256,workspace},{Peek}};
                 else if (spatial)
                   expected = {{Launch,-5,false,false,128,requested_bytes,false,true},{Peek},{Reset},
                               {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
@@ -336,6 +355,12 @@ int main() {
                 if (split && dddd && expected_topology)
                   for (auto& event : expected)
                     if (event.kind == Launch && event.order == 8) event.class_major = true;
+                if (density_contraction)
+                  for (auto& event : expected)
+                    if (event.kind == Launch && (event.order == 6 || event.order == 7)) {
+                      event.density_contraction = true;
+                      event.bytes = std::max(requested_bytes, sizeof(CooperativeDensityForceRecurrence));
+                    }
                 for (int failed = -1; failed < static_cast<int>(expected.size()); ++failed) {
                   fail_event = failed;
                   events.clear(); last_error = cudaSuccess; cursor = 0;

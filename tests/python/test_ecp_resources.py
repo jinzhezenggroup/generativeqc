@@ -234,7 +234,10 @@ def test_cuda_frontend_inventories_use_native_ecp_without_gpu_work(
         cuda_layout_library, topology, 8, "fp64", 1e-10, 1e-12
     )
     assert hf["ecp_workspace"] == expected
-    assert hf["host"] >= expected
+    assert (
+        resources_hf._portable_small_cuda_item_inventory(topology, hf)["host"]
+        >= expected
+    )
     ks = resources_ks._cuda_item_inventory(
         cuda_layout_library,
         topology,
