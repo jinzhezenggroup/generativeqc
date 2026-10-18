@@ -87,6 +87,37 @@ their primal inputs, so later mutation cannot change the derivative. Call
 `pullback.close()` to release native owners. Compiled and gradient functions
 also provide `close()` and `compilation_info()`.
 
+`xp.vjp` additionally accepts `argnums` (an integer or nonempty tuple). It returns
+only those input cotangents, always as a tuple in the requested order. Negative
+positions count from the supplied positional primals, rather than any omitted
+function defaults. Omitting `argnums` retains differentiation of all supplied
+primals.
+
+For fixed external masks, select only real arguments and explicitly enable
+`allow_external_mask_where=True`:
+
+```python
+def selected_values(x, y, mask):
+    return xp.where(mask, x * x, y * y)
+
+value, pullback = xp.vjp(
+    selected_values, x, y, mask,
+    argnums=(0, 1), allow_external_mask_where=True,
+)
+dx, dy = pullback(xp.ones_like(value))
+pullback.close()
+```
+
+This first-order opt-in is limited to generic finite FP64 arrays on reference or
+materializing native CPU. All primal arrays, including the Boolean mask and
+non-selected real inputs, belong to the forward snapshot. Mutating them after
+`vjp` does not change a pullback. Every output needs a matching finite cotangent,
+including empty/disconnected outputs. All live primal/forward domains and
+reference retained-byte and native byte/work/node gates remain enforced.
+Computed predicates, Boolean AD, scientific
+annotations, FP32/mixed/packed policies, higher-order selection and CUDA are
+unsupported; default `where` rejection is unchanged.
+
 For quantum-chemistry equations, pass `specs={parameter: TensorSpec(...)}` to
 `compile` to retain AO, occupied, virtual, auxiliary and spin domains. Equal
 extents never authorize mixing scientific spaces. `einsum` accepts exact
@@ -526,8 +557,7 @@ calls read the current mask; the function does not freeze its contents. The
 combined value/gradient call uses one native endpoint and retains inherited
 byte/work/node budgets and independent executor lifetime. Computed predicates,
 Boolean differentiation, scientific annotations, FP32/mixed/packed policies,
-higher-order transforms and CUDA remain unsupported. Public `jvp`/`vjp` and
-default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
+higher-order transforms and CUDA remain unsupported. Public `jvp` and default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
 functions accept `allow_external_mask_where=True` to generate first-order
 JVP/VJP programs for fixed external masks on generic finite FP64 arrays,
 replayable by the reference interpreter and materializing native CPU owner.
