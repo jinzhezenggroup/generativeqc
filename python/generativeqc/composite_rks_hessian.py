@@ -191,6 +191,15 @@ class _CompositeJK:
                     metric_relative_threshold=threshold if self.fitted else 1e-10,
                 )
             )
+            if self.fitted:
+                rank = self.plans[0].diagnostics["auxiliary_rank"]
+                if type(rank) is not int or not 0 < rank <= self.auxiliary.nao:
+                    raise ValueError("native DF metric rank is invalid")
+                if rank != self.auxiliary.nao:
+                    raise NotImplementedError(
+                        "DF Hessian requires a full-rank metric; "
+                        "rank-truncated metric response is not qualified"
+                    )
             for primitive in state._source.method_ir.primitives:
                 if primitive.kind != "range_separated_exchange":
                     continue
