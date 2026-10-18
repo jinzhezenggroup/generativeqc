@@ -69,6 +69,8 @@ struct MdJView {
   MdJWorkCounts* work_counts{};
   /** Freeze the schedule with the resident owner; replay never polls policy. */
   bool reciprocal{};
+  /** Opt-in exact reciprocal reuse for angular-three pairs; other classes fall back. */
+  bool reciprocal_high{};
   /** J-only residual tiles are the default; K retains its incumbent traversal. */
   bool residual_tiled{true};
   bool profile{};

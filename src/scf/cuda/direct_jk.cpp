@@ -151,6 +151,7 @@ struct MdJHost {
   std::size_t transforms{}, hermites{}, bytes{};
   bool work_counts{};
   bool reciprocal{};
+  bool reciprocal_high{};
   bool residual_tiled{true};
   bool profile{};
 
@@ -168,6 +169,10 @@ struct MdJHost {
     if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL must be 0 or 1");
     reciprocal = !reuse || std::strcmp(reuse, "1") == 0;
+    const char* high = std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
+    if (high && std::strcmp(high, "0") != 0 && std::strcmp(high, "1") != 0)
+      throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL_HIGH must be 0 or 1");
+    reciprocal_high = reciprocal && high && std::strcmp(high, "1") == 0;
     const char* tiled = std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
     if (tiled && std::strcmp(tiled, "0") != 0 && std::strcmp(tiled, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RESIDUAL_TILES must be 0 or 1");
@@ -1195,6 +1200,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             if (md_host.work_counts)
               md.work_counts = reinterpret_cast<MdJWorkCounts*>(scratch(sizeof(MdJWorkCounts)));
             md.reciprocal = md_host.reciprocal;
+            md.reciprocal_high = md_host.reciprocal_high;
             md.residual_tiled = md_host.residual_tiled;
             md.profile = md_host.profile;
             md.transforms = scratch(md_host.transforms * sizeof(double));

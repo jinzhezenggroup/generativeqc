@@ -85,7 +85,7 @@ __device__ void md_reciprocal_contract(const MdJPrimitive& bra, const MdJPrimiti
 template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
 __global__ void md_j_reciprocal_potential(MdJView md, std::size_t system_begin,
                                          std::size_t system_end, double screening) {
-  static_assert(BraAngular <= 2 && KetAngular <= 2);
+  static_assert(BraAngular <= 3 && KetAngular <= 3);
   constexpr unsigned bra_components = md_j_hermite_count(BraAngular);
   constexpr unsigned ket_components = md_j_hermite_count(KetAngular);
   __shared__ double bra_terms[kMdReciprocalTile][kMdReciprocalTile][bra_components];

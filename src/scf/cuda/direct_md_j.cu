@@ -379,18 +379,29 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
     if (error != cudaSuccess) throw error;
   }
   if (md.reciprocal) {
-    launch_potential<0, 3>(stream, md, system_begin, end, screening);
+    if (md.reciprocal_high) {
+      launch_md_reciprocal_potential<0, 3>(stream, md, system_begin, end, screening);
+      launch_md_reciprocal_potential<1, 3>(stream, md, system_begin, end, screening);
+      launch_md_reciprocal_potential<2, 3>(stream, md, system_begin, end, screening);
+      launch_md_reciprocal_potential<3, 3>(stream, md, system_begin, end, screening);
+    } else {
+      launch_potential<0, 3>(stream, md, system_begin, end, screening);
+      launch_potential<1, 3>(stream, md, system_begin, end, screening);
+      launch_potential<2, 3>(stream, md, system_begin, end, screening);
+    }
     launch_potential<0, 4>(stream, md, system_begin, end, screening);
-    launch_potential<1, 3>(stream, md, system_begin, end, screening);
     launch_potential<1, 4>(stream, md, system_begin, end, screening);
-    launch_potential<2, 3>(stream, md, system_begin, end, screening);
     launch_potential<2, 4>(stream, md, system_begin, end, screening);
   } else {
     launch_potential_classes<0>(stream, md, system_begin, end, screening);
     launch_potential_classes<1>(stream, md, system_begin, end, screening);
     launch_potential_classes<2>(stream, md, system_begin, end, screening);
   }
-  launch_potential_classes<3>(stream, md, system_begin, end, screening);
+  if (md.reciprocal_high) {
+    launch_potential<3, 4>(stream, md, system_begin, end, screening);
+  } else {
+    launch_potential_classes<3>(stream, md, system_begin, end, screening);
+  }
   launch_potential_classes<4>(stream, md, system_begin, end, screening);
   if (profile_events) {
     const auto error = cudaEventRecord(profile_events[5], stream);

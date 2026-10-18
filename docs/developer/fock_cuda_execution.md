@@ -57,6 +57,15 @@ plan creation; unset/1 selects reciprocal tiles. Other values reject an active
 MD request. The selector is frozen with the resident owner, not polled during
 replay. The same optional-storage admission and normal-J fallback still apply.
 
+`GENERATIVEQC_MD_J_RECIPROCAL_HIGH=1` additionally shares the radial source for
+uniform pair-angular classes `(0,3)`, `(1,3)`, `(2,3)` and `(3,3)`. Unset/0 keeps
+their oriented contraction; invalid values reject active MD preparation.
+Disabling reciprocal reuse also disables this extension. The owner freezes both
+selectors. Each output retains its own density-admission predicate and error
+allowance, and partially screened residual quartets keep their exact AO masks.
+The extension reuses the generated bounded tile and existing FP64 recurrence;
+it adds no resident allocation. Angular-four work retains its oriented fallback.
+
 `GENERATIVEQC_MD_J_WORK_COUNTS=1` requests a per-replay diagnostic census at
 plan creation. Its 1800-byte owner-local buffer is charged within the same
 128-MiB allowance. It reports actual uniform radial evaluations, independent
@@ -98,6 +107,12 @@ all uniform contraction. The intervals include on-stream launch gaps and are
 wall time. Profiling creates events and synchronizes the final event, so these
 records and work-count runs belong to intrusive diagnostics, not clean timing
 populations.
+
+The optional angular-three extension runs in the higher-order interval, whose
+historical record field is `oriented_seconds`; that interval then includes both
+angular-three reciprocal kernels and the remaining oriented kernels. Use kernel
+names in a separate timeline trace to distinguish them, rather than treating
+the historical field name as an exhaustive kernel classification.
 
 For the 96-atom r2SCAN-3c investigation, collect matching-density incumbent and
 tiled runs with both diagnostic flags enabled, then collect clean complete

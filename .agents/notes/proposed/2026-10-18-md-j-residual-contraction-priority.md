@@ -90,3 +90,12 @@ atomics. No driver permissions or Slurm device visibility were changed.
 XC is a separate representation experiment: PR #2597 is still open/draft at
 `659a6635814bef090885c529bc70ad8ee27df7f7` on this date. This work neither repeats
 its occupied-frame optimization nor claims its cancellation issue is qualified.
+
+## Subsequent implementation trials
+
+The [bounded implementation/timing trials](../implemented/performance/2026-10-18-md-j-high-reciprocal.md)
+reject register/loop expansion and task-local J publication reduction, while
+retaining angular-three uniform reciprocal reuse as opt-in only. Neither
+residual experiment implements masked Hermite density, so this proposal's main
+representation question remains open. Complete endpoint work counts and gates,
+not just the prepared-J improvement, still govern any default promotion.

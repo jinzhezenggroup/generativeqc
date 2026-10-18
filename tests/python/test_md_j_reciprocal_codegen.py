@@ -17,7 +17,6 @@ def test_reciprocal_consumer_reuses_the_existing_radial_owner() -> None:
     assert source.count("fill_coulomb<BraAngular + KetAngular>") == 1
     assert "(-1)^(a+b)" in source
     assert "__dmul_ru(" in source
-    assert "static_assert(BraAngular <= 2 && KetAngular <= 2)" in source
     assert source.count("output_index += blockDim.x") == 2
     assert "std::min<std::size_t>(4096, tile_count)" in source
     assert "cudaMalloc" not in source

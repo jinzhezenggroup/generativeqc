@@ -5,6 +5,9 @@ PR #2600 proposes the tiled residual default but remains draft: only one of thre
 complete-endpoint pairs finishes, and that pair is slightly slower in aggregate.
 Prepared-J observations must not be substituted for complete cold/warm timings.
 
+The [follow-up contraction trials](contraction-trials.md) retain two rejected
+residual rewrites and the opt-in angular-three reciprocal-reuse experiment.
+
 ## Identity and scope
 
 - Base: master `e4aff7810b0462204831eb5168f19b6e217ef520`.

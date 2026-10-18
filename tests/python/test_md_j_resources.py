@@ -173,8 +173,10 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
       const char* tiled=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
       const char* profile=std::getenv("GENERATIVEQC_MD_J_PROFILE");
+      const char* high=std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
       assert(owner.md_j.residual_tiled==bool(!tiled || std::strcmp(tiled,"1")==0));
       assert(owner.md_j.profile==bool(profile && std::strcmp(profile,"1")==0));
+      assert(owner.md_j.reciprocal_high==bool(high && std::strcmp(high,"1")==0));
     } else {
       assert(propagated);
     }
@@ -185,12 +187,16 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
 int main() {
   const std::string initial_tiled=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
   const std::string initial_profile=std::getenv("GENERATIVEQC_MD_J_PROFILE");
+  const std::string initial_high=std::getenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
   unsetenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
   unsetenv("GENERATIVEQC_MD_J_PROFILE");
-  for(const char* control:{"GENERATIVEQC_MD_J_RESIDUAL_TILES","GENERATIVEQC_MD_J_PROFILE"}) {
+  unsetenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH");
+  for(const char* control:{"GENERATIVEQC_MD_J_RESIDUAL_TILES","GENERATIVEQC_MD_J_PROFILE",
+                          "GENERATIVEQC_MD_J_RECIPROCAL_HIGH"}) {
     unsetenv(control);
     HostBatch host; MdJHost defaults;
-    assert(defaults.prepare(host,128U<<20) && defaults.residual_tiled && !defaults.profile);
+    assert(defaults.prepare(host,128U<<20) && defaults.residual_tiled && !defaults.profile &&
+           !defaults.reciprocal_high);
     for(const char* invalid:{"", "yes", "2"}) {
       setenv(control,invalid,1);
       MdJHost candidate; bool rejected=false;
@@ -202,6 +208,7 @@ int main() {
   }
   setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",initial_tiled.c_str(),1);
   setenv("GENERATIVEQC_MD_J_PROFILE",initial_profile.c_str(),1);
+  setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH",initial_high.c_str(),1);
   // Resident-only sources must not allocate optional MD storage either.
   for(bool resident_source_only:{false,true}) {
     for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
@@ -231,7 +238,11 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
     else:
         monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
-    for control in ("GENERATIVEQC_MD_J_RESIDUAL_TILES", "GENERATIVEQC_MD_J_PROFILE"):
+    for control in (
+        "GENERATIVEQC_MD_J_RESIDUAL_TILES",
+        "GENERATIVEQC_MD_J_PROFILE",
+        "GENERATIVEQC_MD_J_RECIPROCAL_HIGH",
+    ):
         monkeypatch.setenv(control, "1" if diagnostics else "0")
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     # Reuse the existing failure/ownership runtime, adding the real MD layout.
