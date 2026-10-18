@@ -488,6 +488,8 @@ CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",
 CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
 CUDA_MODULES["cuda_direct_spd_force_schedule"] = ("direct_spd_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_spd_force_schedule"] = ()
+CUDA_MODULES["cuda_md_source_tiles"] = ("md_source_tiles.cuh",)
+CUDA_ALLOWED["cuda_md_source_tiles"] = ()
 CUDA_MODULES["cuda_direct_bounded_queue_page"] = ("direct_bounded_queue_page.cuh",)
 CUDA_ALLOWED["cuda_direct_bounded_queue_page"] = (
     "scf/cuda/direct_queue_index.cuh",
@@ -565,6 +567,7 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda_weighted_eri.hpp",
         "scf/cuda/direct_bounded_queue_page.cuh",
         "scf/cuda/direct_force_diagnostic.hpp",
+        "scf/cuda/md_source_tiles.cuh",
         "runtime/cuda_component_trace.hpp",
     )
 )

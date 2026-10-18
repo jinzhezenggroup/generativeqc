@@ -118,3 +118,12 @@ draft until the required endpoint qualification is resolved; do not count initia
 intrusive captures, superseded/aborted jobs or incomplete arms as completed
 promotion cohorts. Receipts live under the ignored remote task's
 `default-qualification/` and are copied into the local ignored artifact tree.
+
+## Follow-up diagnosis
+
+The subsequent [contraction-priority proposal](../../proposed/2026-10-18-md-j-residual-contraction-priority.md)
+records a same-domain zero/scaled-density control: all legacy candidates can be
+checked in about ten milliseconds when none reaches contraction. That is not
+an additive attribution of the physical kernel, but it rules out attributing
+the roughly 2.5-second residual interval to candidate count alone. Preserve this
+negative evidence before proposing another enumeration-only optimization.

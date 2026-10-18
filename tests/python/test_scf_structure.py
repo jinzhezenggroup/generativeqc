@@ -131,18 +131,36 @@ def test_md_j_device_consumers_cannot_acquire_host_provider(
     """MD contractions share recurrence leaves, never a provider or method driver."""
     source = tmp_path / "src/scf/cuda"
     source.mkdir(parents=True)
-    for header in ("direct_md_j.hpp", "md_hermite_index.cuh", "direct_jk_plan.hpp"):
+    for header in (
+        "direct_md_j.hpp",
+        "md_hermite_index.cuh",
+        "md_source_tiles.cuh",
+        "direct_jk_plan.hpp",
+    ):
         (source / header).write_text("\n")
     adapter = source / kernel
     adapter.write_text(
         '#include "scf/cuda/direct_md_j.hpp"\n'
         '#include "scf/cuda/md_hermite_index.cuh"\n'
+        '#include "scf/cuda/md_source_tiles.cuh"\n'
     )
     assert not audit_scf_structure(tmp_path)["errors"]
     adapter.write_text('#include "scf/cuda/direct_jk_plan.hpp"\n')
     errors = audit_scf_structure(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden cuda_direct_consumers" in errors[0]
+
+
+@pytest.mark.parametrize("header", ["direct_jk_plan.hpp", "direct_md_j.hpp"])
+def test_md_source_tiles_remains_dependency_leaf(tmp_path: Path, header: str) -> None:
+    """Bounded tile indexing cannot acquire a provider or contraction interface."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / header).write_text("\n")
+    (source / "md_source_tiles.cuh").write_text(f'#include "scf/cuda/{header}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_md_source_tiles" in errors[0]
 
 
 @pytest.mark.parametrize(
