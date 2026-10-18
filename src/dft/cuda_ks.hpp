@@ -97,6 +97,12 @@ struct CudaKsTransfers {
    * density export materializes D in dead scratch, without modifying the seed. */
   std::uint64_t fitted_warm_factor_publications{}, fitted_warm_factor_restores{};
   std::uint64_t fitted_warm_factor_fallbacks{};
+  /** Successful fixed-anchor Fast J/K actions, cumulative across solves.
+   * Delta actions use the total current-minus-anchor density, not a chain of
+   * preceding iterates. Optional allocation misses retain the ordinary solve.
+   * These counters are internal and do not extend the public C transport ABI. */
+  std::uint64_t fast_anchor_builds{}, fast_delta_builds{}, fast_anchor_invalidations{};
+  std::uint64_t fast_anchor_allocation_fallbacks{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The

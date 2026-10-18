@@ -55,6 +55,13 @@ void launch_copy_matrix_kernel(unsigned,unsigned,unsigned,int,std::size_t n,
     const double* a,double* out) {for(std::size_t i=0;i<n;++i)out[i]=a[i];}
 void require(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 struct Consumer {
+  bool fast_anchor_active=false;
+  const double* prepare_fast_anchor_jk_density() {
+    throw std::runtime_error("generic incremental owner entered the Fast controller");
+  }
+  void finalize_fast_anchor_jk_components() {
+    throw std::runtime_error("generic incremental owner entered the Fast controller");
+  }
   bool incremental_direct_jk=true, incremental_anchored=false, pending_incremental_delta=false;
   bool incremental_energy_refinement=false;
   unsigned incremental_energy_full_builds=0;

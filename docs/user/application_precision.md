@@ -91,6 +91,25 @@ two quartic caches do not overlap. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
+For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
+nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor. Provisional
+initializer and frozen-VV10 iterations evaluate linear operators on the total
+current-minus-anchor density and reconstruct their full matrices in FP64.
+Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
+XC and VV10 still consume total density. Delta iterations do not advance the
+anchor. Final physical checks and Fast's selected convergence tolerances are
+unchanged: this does not promise FP64-mode observable accuracy.
+
+The anchor lease is optional, allocated after mandatory preparation and included
+in the native state capacity. It requires five additional FP64 AO matrices and
+one scalar. Device allocation failure keeps the ordinary Fast path; host
+reservation and non-allocation errors remain explicit failures. FP64 policy,
+strict caller controls, other models, DF/UKS, public resource-ledger owners,
+device chunks and same-owner warm replays retain their incumbent path.
+`GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
+unset or `1` selects automatic admission, not a force-enable for unsupported
+domains. There is no universal iteration-count or speed guarantee.
+
 The shared nonlocal initializer and frozen-potential proposal stages also admit
 budget-selected mixed Focks. Provisional residuals never certify the target.
 The initializer retains its eleven-step cap; additional mixed budget belongs to

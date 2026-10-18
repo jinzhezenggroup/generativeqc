@@ -81,6 +81,25 @@
       ]
     },
     {
+      "id": "ks.fast-fixed-anchor-delta",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_FAST_ANCHOR_DELTA"
+      ],
+      "owner_issues": [1598],
+      "sources": ["src/dft/cuda_ks.cpp"],
+      "rationale": "Unset or 1 admits fixed FP64 J/K/range-K anchors only for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Explicit 0, unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged; scientific acceptance gates are unchanged.",
+      "revisit_condition": "Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger domains independently. Retained single water-96 timings are not a universal speed guarantee; preserve strict full-target audits, explicit rollback and optional-memory fallback.",
+      "evidence": [
+        "docs/user/application_precision.md",
+        ".agents/notes/implemented/performance/2026-10-18-fast-fixed-anchor-delta.md",
+        "benchmarks/results/wb97mv-anchor-delta-20261018/README.md",
+        "benchmarks/results/fast-anchor-default-20261018/README.md",
+        "tests/python/test_fast_anchor_delta_controller.py",
+        "tests/native/test_ks_cuda.cpp"
+      ]
+    },
+    {
       "id": "ks.df-warm-factor-replay",
       "classification": "already-default",
       "controls": [

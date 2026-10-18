@@ -125,6 +125,19 @@ inline bool admit_application_fock(const std::array<double, 3>& allowances, std:
          allowances[1] >= 1e-4 && (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
 
+/** Fixed FP64 anchors are qualified only for the relaxed Fast WB97M-V outer
+ * solve. The caller supplies already-admitted Fock/shape capabilities and an
+ * exact full/range Direct provider; this never admits new mixed arithmetic.
+ * Public resource-ledger and device-chunk owners keep their incumbent plan. */
+inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
+                                    std::uint32_t functional, bool exact_direct, unsigned spins,
+                                    bool vv10, bool resource_ledger,
+                                    unsigned chunk_width) noexcept {
+  return budget_fock && budget_stationarity &&
+         functional == semilocal_family_code(SemilocalFamily::Wb97mv) && exact_direct &&
+         spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
+}
+
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for
  * an arbitrary molecule. Explicit observable targets still require an audit.

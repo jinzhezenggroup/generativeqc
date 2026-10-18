@@ -947,6 +947,135 @@ std::unique_ptr<dft::nlc::Vv10Plan> prepare_wb97mv_nonlocal(generativeqc_backend
   return plan;
 }
 
+/** Qualify default/rollback behavior against the independent CPU composition,
+ * then exercise cold, warm and failed solve lifetimes on the actual GPU owner. */
+void run_fast_anchor_delta_case() {
+  auto system = hydrogens(2, true);
+  // Keep the fixture small while reaching Fast's existing 24-AO admission floor.
+  for (unsigned atom : {0U, 1U}) {
+    system.shells.push_back({atom, 0, {{0.09, 1.0}}});
+    system.shells.push_back({atom, 0, {{1.2, 1.0}}});
+    system.shells.push_back({atom, 1, {{0.6, 1.0}}});
+    system.shells.push_back({atom, 2, {{0.4, 1.0}}});
+  }
+  std::string detail;
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, {1, 12, 4, 8, 3, 1e-12});
+  constexpr std::size_t tile_points = 64;
+  const auto cpu_model = wb97mv_rsh_strategies(true, scf::FockBackend::Cpu);
+  const auto gpu_model = wb97mv_rsh_strategies(true, scf::FockBackend::Cuda);
+  const scf::PreparedFockPlan cpu(system, nullptr, cpu_model.primary);
+  const scf::PreparedFockPlan cpu_range(system, nullptr, cpu_model.correction);
+  const scf::PreparedFockPlan gpu(system, nullptr, gpu_model.primary, 0);
+  auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
+                                              grid.point_count(), tile_points);
+  auto gpu_nonlocal =
+      prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CUDA, 0, grid.point_count(), tile_points);
+  scf::ScfOptions strict;
+  strict.compute_forces = false;
+  strict.energy_tolerance = 1e-10;
+  strict.density_tolerance = 1e-8;
+  strict.screening_tolerance = 1e-12;
+  strict.max_iterations = 100;
+  strict.xc_tile_points = tile_points;
+  const auto reference = scf::run_wb97mv_rks(cpu, cpu_range, basis, grid, strict, *cpu_nonlocal);
+  require(reference.converged, "Fast anchor independent CPU reference did not converge");
+  const char* previous = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+  const std::string saved = previous ? previous : "";
+  const bool had_previous = previous != nullptr;
+  std::size_t ordinary_fast_state_bytes = 0;
+  const auto restore = [&] {
+    if (had_previous)
+      ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", saved.c_str(), 1);
+    else
+      ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA");
+  };
+  try {
+    for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
+      require((selection ? ::setenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA", selection, 1)
+                         : ::unsetenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) == 0,
+              "could not select Fast anchor qualification route");
+      for (const unsigned mode : {0U, 1U, 2U}) {
+        auto options = strict;
+        options.precision_mode =
+            mode == 1 ? GENERATIVEQC_PRECISION_FP64 : GENERATIVEQC_PRECISION_AUTO;
+        options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+        if (mode == 0) {
+          options.energy_tolerance = 1e-6;
+          options.density_tolerance = 1e-4;
+          options.screening_tolerance = 1e-10;
+        }
+        dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Wb97mv, tile_points,
+                             &gpu_model.correction, gpu_nonlocal.get(),
+                             dft::nlc::Vv10DensityDomain::MolecularV1);
+        const auto result = plan.run(nullptr, false);
+        require(result.converged && std::abs(result.energy - reference.energy) < 1e-5,
+                "Fast anchor total-density XC/VV10 endpoint disagrees with independent CPU");
+        const auto cold = plan.transfers();
+        const bool expected = mode == 0 && (!selection || std::strcmp(selection, "0") != 0);
+        if (mode == 0 && !expected) ordinary_fast_state_bytes = plan.resources().state_device_bytes;
+        if (expected) {
+          const auto matrix_elements = basis.nao * basis.nao;
+          require(plan.resources().state_device_bytes ==
+                      ordinary_fast_state_bytes + (5 * matrix_elements + 1) * sizeof(double),
+                  "Fast anchor capacity omitted its optional matrices or scalar");
+        }
+        require(expected ? cold.fast_anchor_builds > 0 && cold.fast_delta_builds > 0
+                         : cold.fast_anchor_builds == 0 && cold.fast_delta_builds == 0,
+                "Fast anchor default/rollback or FP64 exclusion did not execute as selected");
+        if (!expected) continue;
+        const auto warm = plan.run();
+        require(warm.converged && std::abs(warm.energy - reference.energy) < 1e-5 &&
+                    plan.transfers().fast_anchor_builds == cold.fast_anchor_builds &&
+                    plan.transfers().fast_delta_builds == cold.fast_delta_builds,
+                "same-owner warm replay borrowed cold anchor state");
+        ks_cuda_fail_next_runtime_for_test_v1();
+        bool failed = false;
+        try {
+          (void)plan.run(nullptr, false);
+        } catch (const std::exception&) {
+          failed = true;
+        }
+        require(failed && plan.failed(), "Fast anchor failure injection did not fail the solve");
+        const auto before_recovery = plan.transfers();
+        const auto recovered = plan.run(nullptr, false);
+        require(recovered.converged && std::abs(recovered.energy - reference.energy) < 1e-5 &&
+                    plan.transfers().fast_anchor_builds > before_recovery.fast_anchor_builds &&
+                    plan.transfers().fast_delta_builds > before_recovery.fast_delta_builds,
+                "Fast anchor recovery did not establish a fresh strict anchor");
+        auto ledger = std::make_shared<runtime::DeviceResourceLedger>();
+        ledger->limit = 512ULL * 1024ULL * 1024ULL;
+        ledger->device = 0;
+        const auto previous_ledger = runtime::active_device_resource_ledger;
+        runtime::active_device_resource_ledger = ledger;
+        try {
+          {
+            dft::CudaKsPlan bounded(gpu, basis, grid, options, dft::SemilocalFamily::Wb97mv,
+                                    tile_points, &gpu_model.correction, gpu_nonlocal.get(),
+                                    dft::nlc::Vv10DensityDomain::MolecularV1);
+            const auto bounded_result = bounded.run(nullptr, false);
+            require(bounded_result.converged &&
+                        std::abs(bounded_result.energy - reference.energy) < 1e-5 &&
+                        bounded.transfers().fast_anchor_builds == 0 &&
+                        bounded.transfers().fast_delta_builds == 0,
+                    "resource-ledger owner borrowed the unplanned Fast anchor lease");
+          }
+          require(ledger->live == 0, "Fast fallback retained charged storage after destruction");
+        } catch (...) {
+          runtime::active_device_resource_ledger = previous_ledger;
+          throw;
+        }
+        runtime::active_device_resource_ledger = previous_ledger;
+      }
+    }
+  } catch (...) {
+    restore();
+    throw;
+  }
+  restore();
+}
+
 void run_wb97mv_nonlocal_composition_case(bool restricted, bool fitted = false) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
@@ -2442,6 +2571,12 @@ int main(int argc, char** argv) {
       std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--fast-anchor-delta") {
+      run_fast_anchor_delta_case();
+      std::cout
+          << "Native CUDA Fast anchor default, independent oracle and lifetime gates passed\n";
+      return 0;
+    }
     minao_gpu_case();
     ks_density_provider_cases();
     prepared_cuda_fock_seam();
@@ -2492,6 +2627,7 @@ int main(int argc, char** argv) {
     run_wb97mv_nonlocal_composition_case(false);
     run_wb97mv_nonlocal_composition_case(true, true);
     run_wb97mv_nonlocal_composition_case(false, true);
+    run_fast_anchor_delta_case();
     for (bool pbe : {false, true}) {
       run_case(2, true, pbe);
       run_hydroxyl(pbe);

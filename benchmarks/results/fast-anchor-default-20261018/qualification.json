@@ -1,0 +1,1610 @@
+{
+  "schema": "generativeqc.fast-anchor-default-endpoints.v1",
+  "base_revision": "5d1dbbcaf2f04fb83980c8f988795df28b41e392",
+  "warning": "One cold observation per arm, not repeated statistics or a universal speed claim; all first-use costs retained.",
+  "build": {
+    "frozen_revision": "5d1dbbcaf",
+    "source_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+    "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+    "library": "/data/jzzeng/fast-anchor-default-20261018/library/libgenerativeqc.so.0.1.0",
+    "reuse": "unchanged objects; all changed-header dependencies rebuilt",
+    "original_build_modified": false
+  },
+  "rebuilt_inputs": {
+    "candidate_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+    "changed_inputs": [
+      "src/dft/application_precision.hpp",
+      "src/dft/cuda_ks.cpp",
+      "src/dft/cuda_ks.hpp"
+    ],
+    "old_build_differences": [
+      "src/dft/application_precision.hpp",
+      "src/dft/cuda_ks.cpp",
+      "src/dft/cuda_ks.hpp"
+    ],
+    "rebuilt_sources": [
+      "src/api/c_api_ks_snapshot.cpp",
+      "src/api/c_api_resources.cpp",
+      "src/api/c_api_tuning.cpp",
+      "src/methods/registry.cpp",
+      "src/methods/dft_method.cpp",
+      "src/methods/dft_method_preparation.cpp",
+      "src/methods/dft_method_final_state_adapter.cpp",
+      "src/methods/dft_method_derivative_adapter.cpp",
+      "src/dft/cuda_ks.cpp",
+      "src/dft/cuda_stationary_controller.cpp"
+    ],
+    "objects": {
+      "CMakeFiles/generativeqc.dir/src/api/c_api_ks_snapshot.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/api/c_api_ks_snapshot.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/api/c_api_resources.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/api/c_api_resources.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/api/c_api_tuning.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/api/c_api_tuning.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/methods/registry.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/methods/registry.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/methods/dft_method.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/methods/dft_method.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/methods/dft_method_preparation.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/methods/dft_method_preparation.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/methods/dft_method_final_state_adapter.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/methods/dft_method_final_state_adapter.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/methods/dft_method_derivative_adapter.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/methods/dft_method_derivative_adapter.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/dft/cuda_ks.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/dft/cuda_ks.cpp.o",
+      "CMakeFiles/generativeqc.dir/src/dft/cuda_stationary_controller.cpp.o": "/data/jzzeng/fast-anchor-default-20261018/objects/CMakeFiles/generativeqc.dir/src/dft/cuda_stationary_controller.cpp.o"
+    }
+  },
+  "compiler_cache_version": "sccache 0.16.0",
+  "compiler_cache_before": "Compile requests                         7609\nCompile requests executed               22238\nCache hits                               2429\nCache hits (C/C++)                         75\nCache hits (CUBIN)                       1447\nCache hits (CUDA)                         528\nCache hits (CUDA (Device code))           191\nCache hits (PTX)                          188\nCache misses                            16143\nCache misses (C/C++)                     3853\nCache misses (CUBIN)                     2214\nCache misses (CUDA)                      3133\nCache misses (CUDA (Device code))        3470\nCache misses (PTX)                       3473\nCache hits rate                         13.08 %\nCache hits rate (C/C++)                  1.91 %\nCache hits rate (CUBIN)                 39.52 %\nCache hits rate (CUDA)                  14.42 %\nCache hits rate (CUDA (Device code))     5.22 %\nCache hits rate (PTX)                    5.14 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                            19804\nCompilation failures                        5\nNon-cacheable compilations               3661\nNon-cacheable calls                         0\nNon-compilation calls                      15\nUnsupported compiler calls                  0\nAverage cache write                     0.005 s\nAverage compiler                       13.274 s\nAverage cache read hit                  0.001 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n",
+  "compiler_cache_after": "Compile requests                         7626\nCompile requests executed               22256\nCache hits                               2445\nCache hits (C/C++)                         87\nCache hits (CUBIN)                       1448\nCache hits (CUDA)                         529\nCache hits (CUDA (Device code))           192\nCache hits (PTX)                          189\nCache misses                            16144\nCache misses (C/C++)                     3854\nCache misses (CUBIN)                     2214\nCache misses (CUDA)                      3133\nCache misses (CUDA (Device code))        3470\nCache misses (PTX)                       3473\nCache hits rate                         13.15 %\nCache hits rate (C/C++)                  2.21 %\nCache hits rate (CUBIN)                 39.54 %\nCache hits rate (CUDA)                  14.45 %\nCache hits rate (CUDA (Device code))     5.24 %\nCache hits rate (PTX)                    5.16 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                            19806\nCompilation failures                        5\nNon-cacheable compilations               3662\nNon-cacheable calls                         0\nNon-compilation calls                      18\nUnsupported compiler calls                  0\nAverage cache write                     0.005 s\nAverage compiler                       13.273 s\nAverage cache read hit                  0.001 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n",
+  "samples": [
+    {
+      "atoms": 12,
+      "policy": "fast",
+      "delta": "0",
+      "slurm_job_id": "1142",
+      "energy": -305.34498611594324,
+      "iterations": 17,
+      "fock_builds": 17,
+      "construction_seconds": 0.20189724396914244,
+      "prepare_seconds": 0.7346986470511183,
+      "execute_seconds": 11.11642276099883,
+      "export_seconds": 0.0009898479329422116,
+      "teardown_seconds": 0.0037257210351526737,
+      "cold_endpoint_seconds": 12.057746001984924,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009751842
+      },
+      "density_rms": 2.7310460521028463e-06,
+      "physical_residual_rms": 7.686305712682742e-07,
+      "energy_change": 1.0455353512069042e-14,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-06,
+        "density_tolerance": 0.0001,
+        "screening_tolerance": 1e-10,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference12.json",
+        "sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+        "engine": "reference",
+        "energy_error_hartree": 2.6856241674977355e-09,
+        "force_max_error_hartree_per_bohr": 4.360076115172973e-05,
+        "force_rms_error_hartree_per_bohr": 1.4442706927514614e-05,
+        "limits_energy_force_max_force_rms": [
+          1e-05,
+          0.0001,
+          3e-05
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fast12-0",
+      "receipt_sha256": "567422ae88360c74ab4d51596b53f925c25f4fbd6a4ca2a5033eb5d9ac5e30b4",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 14,
+        "target_focks": 3,
+        "pair_cache_probes": 1,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 2
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp32",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 7216846
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp32",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 119
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp32",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 98719992
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 1
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 2
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 4
+        }
+      ],
+      "mixed_stage_fock_builds": 15,
+      "strict_stage_fock_builds": 2,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    },
+    {
+      "atoms": 12,
+      "policy": "fast",
+      "delta": "auto",
+      "slurm_job_id": "1142",
+      "energy": -305.3449861185154,
+      "iterations": 17,
+      "fock_builds": 17,
+      "construction_seconds": 0.6702207289636135,
+      "prepare_seconds": 0.8923623700393364,
+      "execute_seconds": 34.48535186506342,
+      "export_seconds": 0.0007959059439599514,
+      "teardown_seconds": 0.0031688440358266234,
+      "cold_endpoint_seconds": 36.051909302012064,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.010992074
+      },
+      "density_rms": 1.0675842983917438e-07,
+      "physical_residual_rms": 9.165190081174055e-08,
+      "energy_change": 9.46982010314996e-15,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-06,
+        "density_tolerance": 0.0001,
+        "screening_tolerance": 1e-10,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference12.json",
+        "sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+        "engine": "reference",
+        "energy_error_hartree": 1.134594640461728e-10,
+        "force_max_error_hartree_per_bohr": 2.3073251025351738e-06,
+        "force_rms_error_hartree_per_bohr": 1.0982621356352134e-06,
+        "limits_energy_force_max_force_rms": [
+          1e-05,
+          0.0001,
+          3e-05
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fast12-auto",
+      "receipt_sha256": "9e319abd6657adb01b14802ebb30642e4c6e92fec5fb7674b99ffce4e6f6cabe",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 14,
+        "target_focks": 3,
+        "pair_cache_probes": 1,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 2
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp32",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 7216846
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 4
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 8
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 119
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp32",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 15
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 17
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 13
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 13
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp32",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 13
+        },
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 76555561
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 1
+        }
+      ],
+      "mixed_stage_fock_builds": 15,
+      "strict_stage_fock_builds": 2,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    },
+    {
+      "atoms": 96,
+      "policy": "fast",
+      "delta": "0",
+      "slurm_job_id": "1142",
+      "energy": -2443.2164193667645,
+      "iterations": 18,
+      "fock_builds": 18,
+      "construction_seconds": 0.20273962593637407,
+      "prepare_seconds": 5.045901432982646,
+      "execute_seconds": 574.0052306529833,
+      "export_seconds": 0.008801446063444018,
+      "teardown_seconds": 0.01901877101045102,
+      "cold_endpoint_seconds": 579.2817073789192,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.27895786
+      },
+      "density_rms": 2.1214721822209556e-07,
+      "physical_residual_rms": 1.9703919568441346e-07,
+      "energy_change": 4.379473275214221e-14,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-06,
+        "density_tolerance": 0.0001,
+        "screening_tolerance": 1e-10,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference96.json",
+        "sha256": "41cad9df8090259a87949400dfee16a3a627a75c5f29de5ece2b78e0b8910b9c",
+        "engine": "GPU4PySCF accuracy-only independently reconverged geometry",
+        "energy_error_hartree": 2.2082531359046698e-09,
+        "force_max_error_hartree_per_bohr": 6.463349873087054e-06,
+        "force_rms_error_hartree_per_bohr": 1.909353221987734e-06,
+        "limits_energy_force_max_force_rms": [
+          1e-05,
+          0.0001,
+          3e-05
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fast96-0",
+      "receipt_sha256": "18866c6b603934f3e48df46d011c9375dbcc95baf1479f97ed80e53b7cd08393",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 14,
+        "target_focks": 4,
+        "pair_cache_probes": 2,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 3
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 14
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 28
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 126
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp32",
+          "arithmetic_mode": "mixed",
+          "count": 14
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 14
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 18
+        },
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 16112330035
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 1
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 4
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 8
+        }
+      ],
+      "mixed_stage_fock_builds": 14,
+      "strict_stage_fock_builds": 4,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    },
+    {
+      "atoms": 96,
+      "policy": "fast",
+      "delta": "auto",
+      "slurm_job_id": "1142",
+      "energy": -2443.216419367639,
+      "iterations": 16,
+      "fock_builds": 16,
+      "construction_seconds": 0.19977649999782443,
+      "prepare_seconds": 5.044655484962277,
+      "execute_seconds": 455.5372784639476,
+      "export_seconds": 0.014145012013614178,
+      "teardown_seconds": 0.020619753981009126,
+      "cold_endpoint_seconds": 460.81649262900464,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.277350562
+      },
+      "density_rms": 1.444838092821169e-07,
+      "physical_residual_rms": 1.7702598990469297e-07,
+      "energy_change": 7.687049409539661e-15,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-06,
+        "density_tolerance": 0.0001,
+        "screening_tolerance": 1e-10,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference96.json",
+        "sha256": "41cad9df8090259a87949400dfee16a3a627a75c5f29de5ece2b78e0b8910b9c",
+        "engine": "GPU4PySCF accuracy-only independently reconverged geometry",
+        "energy_error_hartree": 1.3337739801499993e-09,
+        "force_max_error_hartree_per_bohr": 3.188557992750418e-06,
+        "force_rms_error_hartree_per_bohr": 1.1703642224295184e-06,
+        "limits_energy_force_max_force_rms": [
+          1e-05,
+          0.0001,
+          3e-05
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fast96-auto",
+      "receipt_sha256": "38ad39ade7dbd89c55505d9dfd51048953da2b44fef98612a14dc39d4eb7c710",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 13,
+        "target_focks": 3,
+        "pair_cache_probes": 1,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 2
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 4
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 8
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 112
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp32",
+          "arithmetic_mode": "mixed",
+          "count": 14
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp32",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 14
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 16
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 12
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 24
+        },
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 12385702777
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp32",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "mixed",
+          "count": 1
+        }
+      ],
+      "mixed_stage_fock_builds": 14,
+      "strict_stage_fock_builds": 2,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    },
+    {
+      "atoms": 12,
+      "policy": "fp64",
+      "delta": "0",
+      "slurm_job_id": "1142",
+      "energy": -305.3449861186317,
+      "iterations": 30,
+      "fock_builds": 31,
+      "construction_seconds": 0.19303452200256288,
+      "prepare_seconds": 0.7377999960444868,
+      "execute_seconds": 23.327520163031295,
+      "export_seconds": 0.0010420059552416205,
+      "teardown_seconds": 0.0034498610766604543,
+      "cold_endpoint_seconds": 24.262856645975262,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009742199
+      },
+      "density_rms": 1.1465566162762678e-13,
+      "physical_residual_rms": 1.6346072999053809e-13,
+      "energy_change": 1.0399201140942128e-14,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-10,
+        "density_tolerance": 1e-08,
+        "screening_tolerance": 1e-12,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference12.json",
+        "sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+        "engine": "reference",
+        "energy_error_hartree": 2.8421709430404007e-12,
+        "force_max_error_hartree_per_bohr": 1.1942891120497734e-11,
+        "force_rms_error_hartree_per_bohr": 3.976377104220882e-12,
+        "limits_energy_force_max_force_rms": [
+          1e-08,
+          1e-07,
+          1e-07
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fp6412-0",
+      "receipt_sha256": "0e9dfb4242a0eb512ba773d6f9ff6f97ef65e52b3eca1d1b7c340eab57cd1fc2",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 25,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 8266864
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 31
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 62
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 210
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 31
+        }
+      ],
+      "mixed_stage_fock_builds": 0,
+      "strict_stage_fock_builds": 30,
+      "post_scf_fock_builds": 1,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    },
+    {
+      "atoms": 12,
+      "policy": "fp64",
+      "delta": "auto",
+      "slurm_job_id": "1142",
+      "energy": -305.3449861186318,
+      "iterations": 30,
+      "fock_builds": 31,
+      "construction_seconds": 0.19522793602664024,
+      "prepare_seconds": 0.7358484310097992,
+      "execute_seconds": 23.24802211194765,
+      "export_seconds": 0.0010905800154432654,
+      "teardown_seconds": 0.004009442985989153,
+      "cold_endpoint_seconds": 24.184209694038145,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009749186
+      },
+      "density_rms": 1.0856865391026555e-13,
+      "physical_residual_rms": 1.6361880239474778e-13,
+      "energy_change": 3.9969331893493225e-16,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "candidate_controls": {
+        "energy_tolerance": 1e-10,
+        "density_tolerance": 1e-08,
+        "screening_tolerance": 1e-12,
+        "precision": null
+      },
+      "independent_gate": {
+        "reference": "/data/jzzeng/fast-anchor-default-20261018/reference12.json",
+        "sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+        "engine": "reference",
+        "energy_error_hartree": 2.9558577807620168e-12,
+        "force_max_error_hartree_per_bohr": 1.1873169114551274e-11,
+        "force_rms_error_hartree_per_bohr": 3.965334085647126e-12,
+        "limits_energy_force_max_force_rms": [
+          1e-08,
+          1e-07,
+          1e-07
+        ],
+        "gate": true
+      },
+      "error": null,
+      "receipt": "fp6412-auto",
+      "receipt_sha256": "e7282061ed508dd94a330b3c844f10a343374e46bb147681ea329ce301d60ab2",
+      "source_authentication": {
+        "native_identity": "8be4a7fcfc9c653688cac2cb9f269dfca4acb6a78213c6fbe7e92db679305318",
+        "source": "/data/jzzeng/fast-anchor-default-20261018/source"
+      },
+      "library_sha256": "0ad9d62d76fd2f2b0635e8fcf17901186952ec475e51f7d54ebe9e84d0d2629f",
+      "library_unchanged": true,
+      "exit_code": 0,
+      "nonlocal_work": {
+        "provisional_focks": 25,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "coulomb_exchange_work": {
+        "complete": false,
+        "coulomb_applications": null,
+        "exchange_applications": null
+      },
+      "nonlocal_history_scopes": [
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target"
+      ],
+      "operator_inventory": [
+        {
+          "name": "coulomb_recurrence",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 8266864
+        },
+        {
+          "name": "coulomb_j",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 31
+        },
+        {
+          "name": "exchange_k",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 62
+        },
+        {
+          "name": "xc",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "nonlocal_correlation",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "fock_assembly",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "physical_residual",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "matrix_product",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 210
+        },
+        {
+          "name": "diis",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "eigensolver",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "density_build",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 30
+        },
+        {
+          "name": "diagnostics",
+          "storage": "fp64",
+          "compute": "fp64",
+          "accumulation": "fp64",
+          "reduction": "fp64",
+          "arithmetic_mode": "strict",
+          "count": 31
+        }
+      ],
+      "mixed_stage_fock_builds": 0,
+      "strict_stage_fock_builds": 30,
+      "post_scf_fock_builds": 1,
+      "execution_retries": 0,
+      "fallback_count": 0,
+      "final_residual_audits": 1,
+      "gate": true
+    }
+  ],
+  "pairs": [
+    {
+      "atoms": 12,
+      "policy": "fast",
+      "off_receipt": "fast12-0",
+      "default_receipt": "fast12-auto",
+      "off_seconds": 12.057746001984924,
+      "default_seconds": 36.051909302012064,
+      "speedup_off_over_default": 0.3344551297124222,
+      "elapsed_reduction_percent": -198.9937696156252,
+      "energy_abs_difference_hartree": 2.5721647034515627e-09,
+      "force_max_difference_hartree_per_bohr": 4.373988524219996e-05,
+      "density_max_difference": 7.033009262956413e-05,
+      "same_controls": true,
+      "same_geometry": true,
+      "same_basis": true,
+      "both_independently_qualified": true
+    },
+    {
+      "atoms": 96,
+      "policy": "fast",
+      "off_receipt": "fast96-0",
+      "default_receipt": "fast96-auto",
+      "off_seconds": 579.2817073789192,
+      "default_seconds": 460.81649262900464,
+      "speedup_off_over_default": 1.257076768398758,
+      "elapsed_reduction_percent": 20.450363483068568,
+      "energy_abs_difference_hartree": 8.744791557546705e-10,
+      "force_max_difference_hartree_per_bohr": 6.672669442764345e-06,
+      "density_max_difference": 1.6307411291119345e-05,
+      "same_controls": true,
+      "same_geometry": true,
+      "same_basis": true,
+      "both_independently_qualified": true
+    },
+    {
+      "atoms": 12,
+      "policy": "fp64",
+      "off_receipt": "fp6412-0",
+      "default_receipt": "fp6412-auto",
+      "off_seconds": 24.262856645975262,
+      "default_seconds": 24.184209694038145,
+      "speedup_off_over_default": 1.0032519959482697,
+      "elapsed_reduction_percent": 0.32414547505543734,
+      "energy_abs_difference_hartree": 1.1368683772161603e-13,
+      "force_max_difference_hartree_per_bohr": 8.970602038971265e-14,
+      "density_max_difference": 2.046696145896476e-13,
+      "same_controls": true,
+      "same_geometry": true,
+      "same_basis": true,
+      "both_independently_qualified": true
+    }
+  ]
+}
