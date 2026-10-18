@@ -553,6 +553,112 @@ def test_endpoint_success_exports_both_files(
     assert np.isfinite(np.load(density)).all()
 
 
+@pytest.mark.parametrize("runner", ["analyze", "endpoint"])
+@pytest.mark.parametrize("existing_output", [False, True])
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_relocated_runners_reject_retained_outputs_before_work(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    endpoint: tuple[Any, Path, dict[str, Any]],
+    runner: str,
+    existing_output: bool,
+    destination_kind: str,
+) -> None:
+    from benchmarks import _retention
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    target = original if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output-link.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("retained output reached input, native or scientific work")
+
+    if runner == "analyze":
+        module = load_runner("analyze")
+        monkeypatch.setattr(module, "read_evidence", forbidden)
+        arguments = [
+            "analyze",
+            str(tmp_path / "missing-suite"),
+            "--build-receipts",
+            str(tmp_path / "missing-build"),
+        ]
+    else:
+        module = endpoint[0]
+        monkeypatch.setattr(module, "scaling_cases", forbidden)
+        monkeypatch.setattr(module, "PrecisionCalculator", forbidden)
+        arguments = ["endpoint", "--atoms", "12", "--policy", "fast", "--delta", "auto"]
+    monkeypatch.setattr(sys, "argv", [*arguments, "--output", str(destination)])
+    with pytest.raises(SystemExit) as error:
+        module.main()
+    assert error.value.code == 2
+    assert original.read_text() == "original evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()
+    assert list(retained.iterdir()) == [original]
+    if destination_kind == "file-alias":
+        assert destination.is_symlink()
+
+
+@pytest.mark.parametrize("help_only", [False, True])
+def test_analyzer_direct_cli_without_pythonpath(
+    tmp_path: Path, help_only: bool
+) -> None:
+    checkout = tmp_path / "checkout"
+    scripts = checkout / "benchmarks/fast_anchor_default"
+    scripts.mkdir(parents=True)
+    (checkout / "benchmarks/__init__.py").write_text("")
+    (scripts / "analyze.py").write_bytes((RUNNERS / "analyze.py").read_bytes())
+    (checkout / "benchmarks/_retention.py").write_bytes(
+        (Path(__file__).resolve().parents[2] / "benchmarks/_retention.py").read_bytes()
+    )
+    retained = checkout / "benchmarks/results"
+    retained.mkdir()
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    arguments = (
+        ["--help"]
+        if help_only
+        else [
+            "missing-suite",
+            "--build-receipts",
+            "missing-build",
+            "--output",
+            "benchmarks/results/new/result.json",
+        ]
+    )
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, "benchmarks/fast_anchor_default/analyze.py", *arguments],
+        cwd=checkout,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (0 if help_only else 2), result.stderr
+    assert "--output" in (result.stdout if help_only else result.stderr)
+    assert "ModuleNotFoundError" not in result.stderr
+    assert original.read_text() == "original evidence"
+    assert list(retained.iterdir()) == [original]
+
+
 @pytest.mark.parametrize("relative", [True, False])
 def test_shell_receipt_path_and_resident_budget(tmp_path: Path, relative: bool) -> None:
     tools = tmp_path / "bin"
@@ -612,6 +718,10 @@ def test_optimized_python_still_authenticates_source_and_library(
     experiment = tmp_path / "experiment"
     source = experiment / "source"
     (source / "tools").mkdir(parents=True)
+    (source / "benchmarks").mkdir()
+    (source / "benchmarks/_retention.py").write_bytes(
+        (Path(__file__).resolve().parents[2] / "benchmarks/_retention.py").read_bytes()
+    )
     (experiment / "library").mkdir()
     library = experiment / "library/libgenerativeqc.so"
     library.write_bytes(b"fixture library: never loaded by native ctypes")
@@ -684,3 +794,148 @@ def test_optimized_python_still_authenticates_source_and_library(
         assert result.returncode != 0
         assert "Source/library identity mismatch" in result.stderr
         assert not (receipt / "result.json").exists()
+
+
+@pytest.mark.parametrize(
+    "destination_kind",
+    ["retained", "traversal", "alias", "file-alias", "raw", "existing_raw"],
+)
+@pytest.mark.parametrize("foreign_checkout", [False, True])
+def test_shell_rejects_retained_output_before_receipts_or_tooling(
+    tmp_path: Path, destination_kind: str, foreign_checkout: bool
+) -> None:
+    experiment = tmp_path / "experiment"
+    source = experiment / "source"
+    retained = source / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    (source / "benchmarks/__init__.py").write_text("")
+    (source / "benchmarks/_retention.py").write_bytes(
+        (Path(__file__).resolve().parents[2] / "benchmarks/_retention.py").read_bytes()
+    )
+    caller = tmp_path
+    if foreign_checkout:
+        caller = tmp_path / "other-checkout"
+        (caller / "benchmarks").mkdir(parents=True)
+        (caller / "benchmarks/__init__.py").write_text("")
+        (caller / "benchmarks/_retention.py").write_bytes(
+            (source / "benchmarks/_retention.py").read_bytes()
+        )
+    target = retained / "new-receipt"
+    destination = str(target)
+    if destination_kind == "traversal":
+        (source / ".artifacts").mkdir()
+        destination = str(source / ".artifacts/../benchmarks/results/new-receipt")
+    elif destination_kind == "alias":
+        (caller / "alias").symlink_to(retained, target_is_directory=True)
+        destination = "alias/new-receipt"
+    elif destination_kind == "file-alias":
+        alias = caller / "receipt-link"
+        alias.symlink_to(target, target_is_directory=True)
+        destination = str(alias)
+    elif destination_kind in ("raw", "existing_raw"):
+        target = caller / "raw-receipt"
+        destination = "raw-receipt"
+        if destination_kind == "existing_raw":
+            target.mkdir()
+            (target / "existing.txt").write_text("accepted raw evidence")
+
+    commands = tmp_path / "bin"
+    commands.mkdir()
+    calls = tmp_path / "tooling-called.txt"
+    for name in ("scontrol", "nvidia-smi", "sccache"):
+        command = commands / name
+        command.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' '{name}' >> \"$FIXTURE_CALLS\"\n"
+            "printf 'reached tooling boundary\\n' >&2\nexit 91\n"
+        )
+        command.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{commands}:{os.environ['PATH']}",
+        "EXPERIMENT_ROOT": str(experiment),
+        "PYTHON": sys.executable,
+        "SLURM_JOB_ID": "fixture",
+        "CUDA_VISIBLE_DEVICES": "scheduler-owned-device",
+        "FIXTURE_CALLS": str(calls),
+    }
+    result = subprocess.run(
+        ["bash", str(RUNNERS / "run-endpoint.sh"), "fast", "12", "auto", destination],
+        cwd=caller,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert original.read_text() == "original evidence"
+    assert list(retained.iterdir()) == [original]
+    if destination_kind == "raw":
+        assert result.returncode == 91
+        assert calls.read_text().splitlines() == ["scontrol"]
+        assert (target / "started.txt").is_file()
+    elif destination_kind == "existing_raw":
+        assert result.returncode != 0
+        assert not calls.exists()
+        assert (target / "existing.txt").read_text() == "accepted raw evidence"
+        assert list(target.iterdir()) == [target / "existing.txt"]
+    else:
+        assert result.returncode != 0
+        assert "raw benchmark output" in result.stderr
+        assert not calls.exists()
+        assert not target.exists()
+
+
+def test_copied_endpoint_uses_authenticated_source_retention_root(
+    tmp_path: Path,
+) -> None:
+    experiment = tmp_path / "experiment"
+    source = experiment / "source"
+    retained = source / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    (source / "benchmarks/__init__.py").write_text("")
+    (source / "benchmarks/_retention.py").write_bytes(
+        (Path(__file__).resolve().parents[2] / "benchmarks/_retention.py").read_bytes()
+    )
+    driver = experiment / "endpoint.py"
+    driver.write_bytes((RUNNERS / "endpoint.py").read_bytes())
+    stub = (
+        "import runpy, sys\n"
+        "from types import SimpleNamespace as NS\n"
+        "def forbidden(*args, **kwargs): raise RuntimeError('unexpected scientific work')\n"
+        "sys.modules['cupy'] = NS()\n"
+        "sys.modules['generativeqc'] = NS(GridSpec=forbidden, KsOptions=forbidden, PrecisionCalculator=forbidden)\n"
+        "sys.modules['benchmarks.compare_gpu4pyscf_batch'] = NS(load_comparison_basis=forbidden, native_build_metadata=forbidden)\n"
+        "sys.modules['benchmarks.pbe0_initial_guesses'] = NS(export_density=forbidden)\n"
+        "sys.modules['benchmarks.readme_hf_scaling'] = NS(scaling_cases=forbidden)\n"
+        "sys.argv = sys.argv[1:]\n"
+        "runpy.run_path(sys.argv[0], run_name='__main__')\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            stub,
+            str(driver),
+            "--atoms",
+            "12",
+            "--policy",
+            "fast",
+            "--delta",
+            "auto",
+            "--output",
+            str(retained / "new/result.json"),
+        ],
+        cwd=experiment,
+        env={**os.environ, "PYTHONPATH": str(source)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    assert "invalid raw_output_path value" in result.stderr
+    assert "unexpected scientific work" not in result.stderr
+    assert original.read_text() == "original evidence"
+    assert list(retained.iterdir()) == [original]

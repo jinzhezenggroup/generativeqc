@@ -18,6 +18,7 @@ import cupy as cp
 import numpy as np
 from generativeqc import GridSpec, KsOptions, PrecisionCalculator
 
+from benchmarks._retention import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import (
     load_comparison_basis,
     native_build_metadata,
@@ -131,7 +132,7 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, choices=(12, 96), required=True)
     parser.add_argument("--policy", choices=("fp64", "fast"), required=True)
     parser.add_argument("--delta", choices=("0", "1", "auto"), required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     record = {
         "schema": 1,

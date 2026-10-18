@@ -7,12 +7,18 @@ import hashlib
 import json
 import math
 import os
+import sys
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from benchmarks._retention import raw_output_path
 
 EXPECTED_ARMS = frozenset(
     (atoms, policy, delta)
@@ -325,7 +331,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
     parser.add_argument("--build-receipts", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     errors: list[str] = []
     paths = []

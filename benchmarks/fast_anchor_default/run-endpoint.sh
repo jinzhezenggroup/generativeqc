@@ -19,6 +19,7 @@ unset GENERATIVEQC_INCREMENTAL_DIRECT_JK GENERATIVEQC_KS_FAST_ANCHOR_DELTA
 if [[ $selection != auto ]]; then
     export GENERATIVEQC_KS_FAST_ANCHOR_DELTA="$selection"
 fi
+"$PYTHON" -c 'import os, sys; sys.path.insert(0, os.path.join(os.environ["EXPERIMENT_ROOT"], "source")); from benchmarks._retention import raw_output_path; raw_output_path(sys.argv[1])' "$output"
 mkdir -- "$output"
 output=$(cd -- "$output" && pwd -P)
 date --iso-8601=ns > "$output/started.txt"
