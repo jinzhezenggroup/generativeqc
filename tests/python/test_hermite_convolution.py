@@ -219,6 +219,9 @@ POWERS = [
     ((1, 1, 0), (0, 1, 1), (1, 0, 0), (0, 0, 0)),
     ((2, 0, 0), (0, 1, 1), (0, 1, 0), (0, 0, 1)),
     ((2, 1, 0), (0, 1, 1), (1, 0, 0), (0, 0, 1)),
+    ((2, 0, 0), (2, 0, 0), (2, 0, 0), (1, 0, 0)),
+    ((1, 1, 0), (0, 1, 1), (1, 0, 1), (0, 0, 1)),
+    ((0, 0, 2), (1, 1, 0), (0, 2, 0), (1, 0, 0)),
     ((2, 0, 0), (0, 1, 1), (1, 1, 0), (0, 0, 2)),
     ((2, 1, 0), (0, 1, 2), (1, 1, 1), (0, 0, 0)),
     ((2, 1, 0), (0, 1, 2), (1, 1, 0), (0, 0, 2)),
@@ -361,7 +364,10 @@ def test_generic_high_order_radial_limits_and_invalid_moments(
     primitive: Callable[..., int], order: int, selected: int
 ) -> None:
     """Scalar responses must retain exact LR-zero and the nonfinite failure signal."""
-    powers = np.asarray(POWERS[order], dtype=np.uint32)
+    powers = np.asarray(
+        next(powers for powers in POWERS if sum(map(sum, powers)) == order),
+        dtype=np.uint32,
+    )
     positions = np.asarray(
         ((0.1, -0.2, -0.8), (0.3, 0.1, 0.7), (-0.5, 0.6, 0.2), (0.8, -0.4, 0.3))
     )

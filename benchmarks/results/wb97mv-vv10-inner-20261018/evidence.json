@@ -1,0 +1,1218 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "base_revision": "e4aff7810b0462204831eb5168f19b6e217ef520",
+  "artifact_root": ".artifacts/wb97mv-inner-20261017-mastere4aff7810",
+  "execution_host": "n4 / node4",
+  "build_host": "n1 / node1",
+  "scientific_contract": {
+    "fixture": "README water-96 proxy, not OMol25",
+    "method": "wb97m-v-rks, VV10 retained",
+    "basis": "spherical def2-SVP, 768 AOs at 96 atoms",
+    "density_fitting": "none",
+    "arithmetic": "FP64 for all provisional and target Focks",
+    "grid": [
+      48,
+      16,
+      32
+    ],
+    "water96_grid_points": 2359296,
+    "energy_density_screening_tolerances": [
+      1e-12,
+      1e-10,
+      1e-12
+    ],
+    "max_iterations": 100,
+    "diis_history": 8,
+    "initial_guess": "native automatic Modified Huckel, seven preliminary atomic Focks",
+    "lr_resident_ceiling_bytes": 2147483648,
+    "changes_final_acceptance": false,
+    "changes_functional": false,
+    "production_defaults_changed": false
+  },
+  "policies": {
+    "baseline": {
+      "relative_factor": 0.001,
+      "upper_bound": 1e-07,
+      "floor": "min(1e-12, 0.1*g)"
+    },
+    "factor100": {
+      "relative_factor": 0.01,
+      "upper_bound": 1e-05,
+      "floor": "unchanged"
+    },
+    "factor10": {
+      "relative_factor": 0.1,
+      "upper_bound": 1e-05,
+      "floor": "unchanged"
+    },
+    "factor100-floor": {
+      "relative_factor": 0.01,
+      "upper_bound": 1e-05,
+      "floor": "0.1*g",
+      "scope": "water12 only"
+    },
+    "factor10-floor": {
+      "relative_factor": 0.1,
+      "upper_bound": 1e-05,
+      "floor": "0.1*g",
+      "scope": "water12 only"
+    }
+  },
+  "timing_protocol": {
+    "cold_owner_density": true,
+    "process_per_endpoint": true,
+    "common_shape_preflight_retained": true,
+    "priming_cost_subtracted": false,
+    "compiler_jit_caches_reused": true,
+    "water12_timing_comparison_qualified": false,
+    "timing_limits": "Water12 screens include sequential first-use cache effects; endpoint comparisons are single cold-owner observations after a retained shape preflight, not statistical qualification.",
+    "included": [
+      "preparation",
+      "SCF",
+      "forces",
+      "synchronized host publication"
+    ],
+    "excluded": [
+      "imports",
+      "CUDA context",
+      "Calculator construction",
+      "optional density export",
+      "serialization",
+      "destruction"
+    ]
+  },
+  "independent_reference": {
+    "scope": "retained independent GPU4PySCF water12 E+F, not reexecuted",
+    "sha256": "fc69cc806e851bdc694eafaeb1277361c783def0ef0e4b60994d426c616fc91e",
+    "historical_binding": {
+      "publication": "benchmarks/results/readme-wb97mv-20261014/summary.json.xz",
+      "publication_sha256": "bc25a49be54429892af21521d1cf09f0b677d28bfe6d6fff7dc0f8f865b5c519",
+      "original_raw_sha256": "488dd190c8721efc4dc3de3429ec3661d3cc09d0109cfb021146fef26e8126d4",
+      "reference_not_reexecuted": true
+    },
+    "energy_force_gates": [
+      1e-08,
+      1e-07
+    ],
+    "used_for_initialization": false,
+    "water96_independent_reference_available": false
+  },
+  "paired_gates": {
+    "energy": 1e-08,
+    "maximum_force": 1e-07,
+    "maximum_density_element": 1e-07
+  },
+  "runtime": {
+    "description": "Private n1 glibc 2.39 loader/libc/C++ runtime for Python on n4; compiler children use host runtime; no system library changes",
+    "files": {
+      "ld-linux-x86-64.so.2": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da",
+      "libc.so.6": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf",
+      "libdl.so.2": "c2994527172cc23b7fb0f7d611b71e00a37da27af12c2e5e9e0dc1a742886c96",
+      "libgcc_s.so.1": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "libm.so.6": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0",
+      "libpthread.so.0": "90491a21ce44efcf3bd4b65ec82501c091d7ebe7f8d9b341dd01d721001d9ecd",
+      "libresolv.so.2": "1d730ea434da5a5595bc6a961d7a9ace83e03703205df9644044b3dca79c362f",
+      "librt.so.1": "6d072187d88e092e81561a44c03a4a41397319022c6d43519757cc051c576d82",
+      "libstdc++.so.6": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+    },
+    "wrapper_sha256": "d12321e269e58bd295a9eef499c211b2999a1d8c802400123ac900ab451aa67c",
+    "compiler_cache": "verified sccache 0.16.0, caches not cleared"
+  },
+  "patch_sha256": "e7d8c0a35d1c310b733718f0b9f92185249e00c7a361eac1105865b6ec44b26b",
+  "slurm": {
+    "screen_job_id": "1120",
+    "endpoint_job_id": "1121",
+    "endpoint_srun_wait_exit_code": 0,
+    "endpoint_wait_receipt_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "allocation_sha256": "93b3b63e31bd9277ec7601d1d0da4f77e199c5103403135a3aa2c627aba8287e",
+    "accounting_claim": "Completion is evidenced by finite srun wait and per-endpoint exit receipts, not historical sacct state"
+  },
+  "consumer_hashes": {
+    "probe.py": "1e825aa75a5d30713d276c1d04c8b2ea20fd8adc7e8761498cd84cf4805d4f45",
+    "run-policy.sh": "bee7bd5cc888b52fa4143184e1efa7461564d030986e24a13ac80300e35a72a1",
+    "endpoint-suite.sh": "4fd29abca236923ef4e9c377764a9e3523d4498934107bff6ab65644871699d9",
+    "launch-suite.sh": "5956aabb45ca7a11d1b42459f892a19fc51ede849b4e3394255d1140d01f799a",
+    "analyze.py": "30d2db194ea342debd8b77098da9dc3054db86cbe37837978010195e6885fd59",
+    "publish.py": "192bd9d38fdc7a2e1d54ed8759c69db34cfc63f2f06cc018b227d9fb313bad42",
+    "env.sh": "d866e31247720689a8d4aae76f229e7e19a34e5be2866e7087d952694b542b74",
+    "check-policy.cpp": "bf9c267e3543e2f4c037bc69fdfad8d5b1b467faff4f8fa9e5630b24f06c8041"
+  },
+  "build_receipt_hashes": {
+    "master": {
+      "compiler-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+      "compiler-cache-before.txt": "28eb5b3ec26b33a77d9d351d5f5f68e6f90d886895bf73b2509a8546b452e79a",
+      "compiler-cache-after.txt": "f54eb3f194549bd3fa2af494b36c4125ec917a4df595495f3e3f77213c63be0f",
+      "compiler-commands.txt": "bb942b7931d2e73ac5e32900996a886a52e625aca39df332c758c195399e47c2",
+      "build.log": "0e12234799aa47dbe5b0a9c4ab8aeaf32c2986938bf74a6d5925afd901903798",
+      "library.sha256": "05af70c5d87863e24cce9ec3f18779c774ff17d5eb7190d3e57922ae8798419a"
+    },
+    "experiment": {
+      "compiler-cache-version.txt": "b9775324eb204d37ce747b4467dacb89e84f351e00f956fc4f0b41927b669109",
+      "compiler-cache-before.txt": "f54eb3f194549bd3fa2af494b36c4125ec917a4df595495f3e3f77213c63be0f",
+      "compiler-cache-after.txt": "a0b6fa70adc923444bda93a76df68542ef11b31038bc25e5dd34d5419cf646ad",
+      "compiler-commands.txt": "bb942b7931d2e73ac5e32900996a886a52e625aca39df332c758c195399e47c2",
+      "build.log": "8956374467f5632bb09ff4e074984cec30716fc96d1a612937239f1b37351a67",
+      "library.sha256": "95deeb595bffdd679739076776ba2a57b9641ff13bbd5edbbbcf7764d765a375"
+    }
+  },
+  "records": [
+    {
+      "path": "screen-job1120/baseline/water12.json",
+      "sha256": "132bae0e19a07097ed18075de34e07812261cf74f58db1754e7d76b8f6a60e24",
+      "atoms": 12,
+      "policy": "baseline",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "small-system-screen",
+      "iterations": 36,
+      "fock_builds": 37,
+      "energy": -305.34498611863177,
+      "energy_change": 1.1303699154898553e-15,
+      "density_rms": 7.434977638678078e-14,
+      "physical_residual_rms": 1.1641455997087146e-13,
+      "prepare_seconds": 0.7396794529631734,
+      "execute_seconds": 82.21701743791346,
+      "cold_endpoint_seconds": 82.95670348394196,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.01031565
+      },
+      "slurm_job_id": "1120",
+      "nonlocal_work": {
+        "provisional_focks": 31,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 1,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 6
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 7
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "oracle_energy_error": 2.8990143619012088e-12,
+      "oracle_force_error": 1.2470913191009458e-11,
+      "paired_energy_error": 0.0,
+      "paired_force_error": 0.0,
+      "paired_density_error": 0.0,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "3ab19401b3aba413f272442372f3f7868d820a9360537275016a94ee7ac671c9",
+      "native_source_identity": "4273ddfaf16abf1281e296ba95d38038e562962bb06a134f845634432b8d68ce",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "98f5341043539c8a0b9fd79c2f6d588e30440ee1816cbc51dbd1ab8c8b8133fc",
+        "library-before.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "library-after.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "slurm.txt": "009422b0483f1d54059485ad292c4727175ebb07f9db99c61ca3a9136ba6b776",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "53d3e1aad9c857b2949f793edf3d6e097d19adf00c65dca82b9e374576075e8a",
+        "completed.txt": "20db7f1a91bd524ab40d445886714d9678cef79da3895c842069a36441f390b4"
+      },
+      "density_sha256": "0980f71094faf7ec170f125e7838d12d19269a10d8b3abc3a82236555be5cf3f"
+    },
+    {
+      "path": "screen-job1120/factor10/water12.json",
+      "sha256": "3e509ed36b074acbf5b97bde60eb9220befa33de6643c7b0b69479b054b8ab96",
+      "atoms": 12,
+      "policy": "factor10",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "small-system-screen",
+      "iterations": 28,
+      "fock_builds": 29,
+      "energy": -305.34498611863177,
+      "energy_change": 1.954448135441239e-14,
+      "density_rms": 1.0163067188565797e-12,
+      "physical_residual_rms": 1.1780034978701745e-12,
+      "prepare_seconds": 0.7562234600773081,
+      "execute_seconds": 23.274741219938733,
+      "cold_endpoint_seconds": 24.030974338995293,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.00975671
+      },
+      "slurm_job_id": "1120",
+      "nonlocal_work": {
+        "provisional_focks": 22,
+        "target_focks": 6,
+        "pair_cache_probes": 5,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 5
+      },
+      "additional_endpoint_fock_builds": 1,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 3
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 3
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 2
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "oracle_energy_error": 2.8990143619012088e-12,
+      "oracle_force_error": 1.6621815035477994e-11,
+      "paired_energy_error": 0.0,
+      "paired_force_error": 7.692069203812935e-12,
+      "paired_density_error": 2.544883748178961e-11,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "5287d3f848225611fceea99715f6a3179589df9a7be8f4765dd23b8b9332e2f1",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "dd48a47a76ea625ed6bc17383d93e2b5249beb143431ca8b2358d2490b97c331",
+        "completed.txt": "fe03d7a092203652f61dee03f20e962a122ca7013c77162695f104d26f7108e5"
+      },
+      "density_sha256": "7feeb64d4b6c8518dcf863364c8fde4a5a36c886c893faefee339f2bfcf4c541"
+    },
+    {
+      "path": "screen-job1120/factor10-floor/water12.json",
+      "sha256": "d127e59754c13533dd7ab65e1955296c0278fcaa074bfd350a573417c5548400",
+      "atoms": 12,
+      "policy": "factor10-floor",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "small-system-screen",
+      "iterations": 28,
+      "fock_builds": 29,
+      "energy": -305.34498611863177,
+      "energy_change": 1.2105181300913341e-14,
+      "density_rms": 9.783717106635564e-13,
+      "physical_residual_rms": 1.177937436282339e-12,
+      "prepare_seconds": 0.7595748410094529,
+      "execute_seconds": 23.37013835005928,
+      "cold_endpoint_seconds": 24.129723921068944,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009791907
+      },
+      "slurm_job_id": "1120",
+      "nonlocal_work": {
+        "provisional_focks": 22,
+        "target_focks": 6,
+        "pair_cache_probes": 5,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 5
+      },
+      "additional_endpoint_fock_builds": 1,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 3
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 3
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 2
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "oracle_energy_error": 2.8990143619012088e-12,
+      "oracle_force_error": 1.6649792655698548e-11,
+      "paired_energy_error": 0.0,
+      "paired_force_error": 7.73558994637824e-12,
+      "paired_density_error": 2.5462541797249827e-11,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "a24588076e6123c1d0c36a1106fd546edd8bffd006f48e5c72dffab373c5bb58",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "bfe39ff8006e62986be7cf315b2782837d0bb1b6035c8e4b6a8034dc94758a51",
+        "completed.txt": "f2ca9bc7e49816210de4474225cbd77a8483d20f104be976e08c7599fca93544"
+      },
+      "density_sha256": "cdc99c2654305bdf0aee90466c21c811656a60b406268ae1270042d3728b6b9d"
+    },
+    {
+      "path": "screen-job1120/factor100/water12.json",
+      "sha256": "fa4d89afa692559600fdcd5a64ba97102ba58ff786e2c27b0af9f4a23b60f9a4",
+      "atoms": 12,
+      "policy": "factor100",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "small-system-screen",
+      "iterations": 30,
+      "fock_builds": 31,
+      "energy": -305.34498611863165,
+      "energy_change": 4.77697058900655e-15,
+      "density_rms": 1.0790809285915747e-13,
+      "physical_residual_rms": 1.634041628395539e-13,
+      "prepare_seconds": 0.7311546119162813,
+      "execute_seconds": 44.35282074601855,
+      "cold_endpoint_seconds": 45.08398163993843,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009762962
+      },
+      "slurm_job_id": "1120",
+      "nonlocal_work": {
+        "provisional_focks": 25,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 1,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 6
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "oracle_energy_error": 2.7853275241795927e-12,
+      "oracle_force_error": 1.184741194037997e-11,
+      "paired_energy_error": 1.1368683772161603e-13,
+      "paired_force_error": 1.7186252421197423e-12,
+      "paired_density_error": 3.0000030237786746e-12,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "b153e7ba74425d4dbbe3c6f76783920c08f881e2af1e0da0b6f3a616b87355d5",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "15319577723052609a8232427b09b1b811a7d4ef9fd8a0ee93098b0b2f63a491",
+        "completed.txt": "8011cf6ca000d13ed86fb65f56f31c8c9b913fcb67f704bf46b9af6c86012efa"
+      },
+      "density_sha256": "ae7df1c815fc153ae82b90f4ad410375057db4f69afe3749168594e902c5754f"
+    },
+    {
+      "path": "screen-job1120/factor100-floor/water12.json",
+      "sha256": "e46400aea6697a4c77fccd7a03eb8d7f8a0a699f0e6259807c23dc57e0d841d6",
+      "atoms": 12,
+      "policy": "factor100-floor",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "small-system-screen",
+      "iterations": 30,
+      "fock_builds": 31,
+      "energy": -305.3449861186317,
+      "energy_change": 5.998856405780309e-15,
+      "density_rms": 1.113251169093754e-13,
+      "physical_residual_rms": 1.6357818876304579e-13,
+      "prepare_seconds": 0.7557122460566461,
+      "execute_seconds": 23.20897060004063,
+      "cold_endpoint_seconds": 23.96469099202659,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 19500504,
+        "preparation_seconds": 0.009799311
+      },
+      "slurm_job_id": "1120",
+      "nonlocal_work": {
+        "provisional_focks": 25,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 1,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 6
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": true,
+      "oracle_energy_error": 2.8421709430404007e-12,
+      "oracle_force_error": 1.1874945471390674e-11,
+      "paired_energy_error": 5.684341886080802e-14,
+      "paired_force_error": 1.7434942378713458e-12,
+      "paired_density_error": 2.9869301476637133e-12,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "2a2777f54795edfb60ed1064e2a9ace4edac27db948fc350bd8a03be5dd19b78",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "00b92f2689f40ab2186a7ad6aa811c3844d890cb9558c27344b960e6a93dccd5",
+        "completed.txt": "4af447edeb613f8e7a13b5ff710e1a70d81f662eb69337d8725c072089ec0892"
+      },
+      "density_sha256": "c512104a3f536888565544fc5ca846b748b1958a7115166e524d2991e9527a45"
+    },
+    {
+      "path": "endpoint-baseline-job1121/water96.json",
+      "sha256": "17f7a0ae31976669af8de5fefdd5e2679a6cf24505d2a94a8d25ea7887b4903d",
+      "atoms": 96,
+      "policy": "baseline",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "comparison",
+      "iterations": 36,
+      "fock_builds": 36,
+      "energy": -2443.216419368964,
+      "energy_change": 1.1853779549504676e-13,
+      "density_rms": 6.668514819696501e-14,
+      "physical_residual_rms": 6.518939907616275e-14,
+      "prepare_seconds": 5.045817415928468,
+      "execute_seconds": 1160.502815989079,
+      "cold_endpoint_seconds": 1165.548656199011,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.549684412
+      },
+      "slurm_job_id": "1121",
+      "nonlocal_work": {
+        "provisional_focks": 31,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 0,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 8
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 7
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 7
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": null,
+      "paired_energy_error": 0.0,
+      "paired_force_error": 0.0,
+      "paired_density_error": 0.0,
+      "paired_gate": true,
+      "endpoint_over_baseline": 1.0,
+      "native_library_sha256": "3ab19401b3aba413f272442372f3f7868d820a9360537275016a94ee7ac671c9",
+      "native_source_identity": "4273ddfaf16abf1281e296ba95d38038e562962bb06a134f845634432b8d68ce",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "98f5341043539c8a0b9fd79c2f6d588e30440ee1816cbc51dbd1ab8c8b8133fc",
+        "library-before.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "library-after.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "slurm.txt": "9edafe13cf4ed0738a5545d1c3aa97a42c48c224c855cd912e2b3bdf65d6ad7e",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "37df6b0021af754471e7d5597e99a34203d2a326d3ef542f9cc99947ff2b9eef",
+        "completed.txt": "ddc9579bf56c7fa5ced75f829d1946b241f3e71a37b937f0d073095452140599"
+      },
+      "density_sha256": "20e4b5552a9b43a907fd5caf9a16b4fad9f53076eb58f9d13190ddf8f9ffcc36",
+      "provisional_reduction_fraction": 0.0,
+      "endpoint_reduction_fraction": 0.0
+    },
+    {
+      "path": "endpoint-factor10-job1121/water96.json",
+      "sha256": "93f4a211cb9e5e3d5824e3538788fe48fbf096d97c55ebd25386bd1fabf5b807",
+      "atoms": 96,
+      "policy": "factor10",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "comparison",
+      "iterations": 26,
+      "fock_builds": 26,
+      "energy": -2443.2164193689646,
+      "energy_change": 2.2856239607831507e-15,
+      "density_rms": 1.3497831551319734e-12,
+      "physical_residual_rms": 1.6599646917688778e-12,
+      "prepare_seconds": 5.037256910931319,
+      "execute_seconds": 1018.2732321999501,
+      "cold_endpoint_seconds": 1023.3105055929627,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.283144423
+      },
+      "slurm_job_id": "1121",
+      "nonlocal_work": {
+        "provisional_focks": 20,
+        "target_focks": 6,
+        "pair_cache_probes": 5,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 5
+      },
+      "additional_endpoint_fock_builds": 0,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 4
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 2
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 3
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 2
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": null,
+      "paired_energy_error": 4.547473508864641e-13,
+      "paired_force_error": 2.865796489004424e-11,
+      "paired_density_error": 6.796252449703388e-11,
+      "paired_gate": true,
+      "endpoint_over_baseline": 0.877964639357139,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "73eab71eee99b0038896032c7eb722293eb8222cb76dfd0b201716a7cf18863f",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "59acec9050b94ec1f058ca07c714fdd49ed1eed15845b83b2b90556ccebb3d6f",
+        "completed.txt": "337476eade35cae33fa60e1b1b74a707284615d2d07559104440842a9013b84c"
+      },
+      "density_sha256": "138d97e13f4a3bb5a22e44a66e29438975e3512c9f6541a41b91e038ebf0b599",
+      "provisional_reduction_fraction": 0.3548387096774194,
+      "endpoint_reduction_fraction": 0.12203536064286102
+    },
+    {
+      "path": "endpoint-factor100-job1121/water96.json",
+      "sha256": "a2dc522efb5ec938f04c3daea23f375512b97d1d56dde787d64db8388d57a99a",
+      "atoms": 96,
+      "policy": "factor100",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "comparison",
+      "iterations": 28,
+      "fock_builds": 28,
+      "energy": -2443.216419368965,
+      "energy_change": 3.2602488234100887e-14,
+      "density_rms": 2.2366195593152044e-13,
+      "physical_residual_rms": 2.1668220072336308e-13,
+      "prepare_seconds": 5.028723550029099,
+      "execute_seconds": 990.1207071690587,
+      "cold_endpoint_seconds": 995.1494410380255,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.275937372
+      },
+      "slurm_job_id": "1121",
+      "nonlocal_work": {
+        "provisional_focks": 23,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 0,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 4
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 5
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": null,
+      "paired_energy_error": 9.094947017729282e-13,
+      "paired_force_error": 7.8008710602262e-12,
+      "paired_density_error": 8.501092191304238e-12,
+      "paired_gate": true,
+      "endpoint_over_baseline": 0.8538034304662346,
+      "native_library_sha256": "e90d5da971128b4fc12ba82f1d8353bb852cfdfcb9fe2442d0637643ab748f3f",
+      "native_source_identity": "cfc168b18a79b101e7c7a1b043e906ea03069137f9686c3b627d3a8a31e5ec78",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "e264d73295a8e399919a4010250a1fc2a677f31df990f938530b672fc37a3f8c",
+        "library-before.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "library-after.sha256": "90a9c32f286204dd9c86aa4146adc4ca2f8605696704c0a9e4a57858c49dc97a",
+        "slurm.txt": "07aa125782270f71c2771608d09076d4ec2f35fae8a3bcfdcdf906487036ff6d",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "1694e7e2860890120c2a2b9b346c812e69a1b573b2ccec5301fc2cd2de68253d",
+        "completed.txt": "a2e75e8f4ec2b73fe91a1c1578e273667aeab17fd3ccf971a4b76ec67be01452"
+      },
+      "density_sha256": "9ce970d2655342d24b5206b911cc9093ef2f2b562a88746e723870f1af9ebbb3",
+      "provisional_reduction_fraction": 0.25806451612903225,
+      "endpoint_reduction_fraction": 0.14619656953376536
+    },
+    {
+      "path": "preflight96-job1121/water96.json",
+      "sha256": "0d017e6413eb68d9b726bf1d7b6528c703b13f204fb0ebcf6d32dc72ea86c9ce",
+      "atoms": 96,
+      "policy": "baseline",
+      "physical_gate": true,
+      "error": null,
+      "timing_role": "shape-preflight",
+      "iterations": 36,
+      "fock_builds": 36,
+      "energy": -2443.216419368965,
+      "energy_change": 6.415379083320788e-14,
+      "density_rms": 6.497451033538882e-14,
+      "physical_residual_rms": 6.52262140695315e-14,
+      "prepare_seconds": 5.028284042025916,
+      "execute_seconds": 1160.4556832680246,
+      "cold_endpoint_seconds": 1165.4839793720748,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 1.557688213
+      },
+      "slurm_job_id": "1121",
+      "nonlocal_work": {
+        "provisional_focks": 31,
+        "target_focks": 5,
+        "pair_cache_probes": 4,
+        "pair_cache_hits": 1,
+        "pair_sweeps": 4
+      },
+      "additional_endpoint_fock_builds": 0,
+      "phases": [
+        {
+          "scope": "provisional-semilocal-rsh",
+          "steps": 9
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 8
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 7
+        },
+        {
+          "scope": "full-target",
+          "steps": 1
+        },
+        {
+          "scope": "provisional-frozen-vv10",
+          "steps": 7
+        },
+        {
+          "scope": "full-target",
+          "steps": 2
+        }
+      ],
+      "oracle_gate": null,
+      "paired_energy_error": 9.094947017729282e-13,
+      "paired_force_error": 9.938716516444401e-13,
+      "paired_density_error": 1.6210921494064223e-12,
+      "paired_gate": true,
+      "endpoint_over_baseline": null,
+      "native_library_sha256": "3ab19401b3aba413f272442372f3f7868d820a9360537275016a94ee7ac671c9",
+      "native_source_identity": "4273ddfaf16abf1281e296ba95d38038e562962bb06a134f845634432b8d68ce",
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      },
+      "receipt_hashes": {
+        "source-authentication.json": "98f5341043539c8a0b9fd79c2f6d588e30440ee1816cbc51dbd1ab8c8b8133fc",
+        "library-before.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "library-after.sha256": "76983152b59d0c1e2f767362b54716bb5f04d0740fbfe46d76d4cc8ee6ed23c3",
+        "slurm.txt": "78908b365fd5ef52e49827925e0bee51fbdf7cab1e3daf3bf34c5bb65089cc4f",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "started.txt": "2f3fbe4203636bb1872bedda43ba83f5b17a212f7535bf4dac9fe82c47543ef1",
+        "completed.txt": "b234edc2f124d2c6964825b8a5e88c371a03a6f7b5292231588e45168ee89675"
+      },
+      "density_sha256": "fa0d78e14d63590cf48a05b1fa2bfb8327dd05076a1353ab13656dbdd88eead4"
+    }
+  ]
+}
