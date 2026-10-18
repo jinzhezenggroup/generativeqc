@@ -7,7 +7,8 @@ image. The default remains the original stored-density matrix consumer.
 - Source-matched control: the same frozen native image with occupied reuse `0`
   versus `1`; force overrides unset, strict FP64, unchanged scientific settings.
 - Full returned force arrays (lossless FP64 XOR deltas), independent pinned oracle geometries, every
-  repeat's actual SCF/Fock counts and provenance are in `evidence.json.xz`.
+  repeat's actual SCF/Fock counts and provenance are in the immutable history
+  packet `evidence.json.xz`, located by `evidence-source.json` as described below.
 - `python benchmarks/results/occupied-xc-certificate-20261018/verify.py` verifies
   checksums and every retained complete population against the independent
   energy/force gates (`1e-8` Eh / `1e-7` Eh/Bohr). Warm summaries are medians
@@ -22,6 +23,35 @@ compiled libraries, build logs and frozen source trees remain ignored local
 artifacts; their identities and reduced diagnostics are retained rather than
 committing transient multi-megabyte profiler/build output. Storage caps and
 historical evidence are unchanged.
+
+### Recovering the existing immutable packet
+
+The campaign packet is retained byte-for-byte in already-published Git commit
+`6c35f9ade60500f883d4ecf519b2ad9c554d6c0a`, blob
+`b4c6a655550a9e0497a53bf39d8e88f04c7fdf6c`; its SHA256 and size are pinned in
+`evidence-source.json` and `SHA256SUMS`. The verifier reads this **existing local
+Git object**, without checkout, mutation, lazy fetch or any network request.
+No new Release, external host or backup is created.
+
+A late three-way audit against master `7915dce5e89064761cfeaabfa3b27138897895b3`
+found the combined results tree would exceed the unchanged 64-MiB cap by
+173,670 bytes even though the individual branch passed. Reusing the existing
+188,680-byte history packet, rather than copying it into the current tree,
+preserves all measurements and unrelated historical evidence within that cap.
+This is storage-only; it changes no scientific input, measured image or timing.
+
+For a shallow clone or source archive missing the object, explicitly obtain
+the commit's packet first, then use the same read-only verifier:
+
+```bash
+mkdir -p .artifacts/occupied-xc-certificate-replay
+git show 6c35f9ade60500f883d4ecf519b2ad9c554d6c0a:benchmarks/results/occupied-xc-certificate-20261018/evidence.json.xz > .artifacts/occupied-xc-certificate-replay/evidence.json.xz
+python benchmarks/results/occupied-xc-certificate-20261018/verify.py --evidence .artifacts/occupied-xc-certificate-replay/evidence.json.xz
+```
+
+If the commit itself is absent, fetching that named revision is an explicit
+user step; the verifier fails clearly rather than silently fetching or
+substituting scalar receipts for the full-force accuracy checks.
 
 ## Source and execution boundary
 

@@ -214,3 +214,13 @@ review and complete-endpoint requalification, not another page-width trial.
 The [retained packet](../../../../benchmarks/results/occupied-xc-certificate-20261018/README.md)
 contains lossless full-force reconstruction, all convergence counts and
 mutually exclusive wall ledgers separately from kernel device sums.
+
+The packet was already published and verified byte-for-byte at commit
+`6c35f9ade60500f883d4ecf519b2ad9c554d6c0a`. A late three-way results-tree
+audit exposed a 173,670-byte overflow against the newly advanced master even
+though this branch individually passed. Retain that exact existing Git object
+with a checksum-pinned, offline-only recovery reader rather than copying the
+188,680 bytes into the current tree, raising the cap, deleting unrelated
+evidence or creating an unauthorized Release/external backup. All 256 force
+arrays still replay from the original bytes; storage recovery changes no
+scientific source, measured endpoint or default decision.

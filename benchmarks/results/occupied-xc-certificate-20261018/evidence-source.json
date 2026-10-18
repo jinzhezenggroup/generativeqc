@@ -1,0 +1,9 @@
+{
+  "schema": "generativeqc.existing-git-evidence.v1",
+  "git_commit": "6c35f9ade60500f883d4ecf519b2ad9c554d6c0a",
+  "git_path": "benchmarks/results/occupied-xc-certificate-20261018/evidence.json.xz",
+  "git_blob": "b4c6a655550a9e0497a53bf39d8e88f04c7fdf6c",
+  "sha256": "7d07505aa86395273194340a5948ac4f9c619c8d7fe698f9c908176d4f8dd85f",
+  "bytes": 188680,
+  "scope": "The already-published immutable packet retains all 256 full-force arrays and independent oracles. Read existing Git history without network, or supply the exact recovered packet explicitly. No Release, asset, external backup or storage-budget increase."
+}

@@ -1,22 +1,48 @@
 """Independently check retained full force arrays and print complete-population timings."""
 
+import argparse
 import hashlib
 import json
 import lzma
 import math
+import os
 import statistics
 import struct
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
 
-def verify() -> None:
-    """Verify the packet's integrity, numerical gates and actual convergence counts."""
+def _evidence_bytes(evidence: Path | None) -> bytes:
+    """Read explicit bytes or an existing Git blob, never lazily fetch a remote."""
+    if evidence is not None:
+        return evidence.read_bytes()
+    receipt = json.loads((ROOT / "evidence-source.json").read_text())
+    result = subprocess.run(
+        ["git", "cat-file", "blob", receipt["git_blob"]],
+        cwd=ROOT,
+        env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": "", "GIT_TERMINAL_PROMPT": "0"},
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "The retained evidence Git object is unavailable in this shallow/archive checkout. "
+            "Recover the exact packet from commit " + receipt["git_commit"]
+            + " as documented in README.md, then pass --evidence PATH. No network was attempted."
+        )
+    return result.stdout
+
+
+def verify(evidence: Path | None = None) -> None:
+    """Verify retained packet bytes, numerical gates and actual convergence counts."""
+    raw = _evidence_bytes(evidence)
     for row in (ROOT / "SHA256SUMS").read_text().splitlines():
         expected, name = row.split(maxsplit=1)
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected, name
-    packet = json.loads(lzma.decompress((ROOT / "evidence.json.xz").read_bytes()))
+        content = raw if name == "evidence.json.xz" else (ROOT / name).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == expected, name
+    packet = json.loads(lzma.decompress(raw))
     print("measured native identity:", packet["candidate_source"]["native_identity"])
     print("default enabled:", packet["default_enabled"])
     completed = 0
@@ -85,4 +111,6 @@ def verify() -> None:
 
 
 if __name__ == "__main__":
-    verify()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence", type=Path, help="Explicit lossless packet for a shallow/archive checkout")
+    verify(parser.parse_args().evidence)
