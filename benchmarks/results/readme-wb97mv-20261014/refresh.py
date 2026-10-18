@@ -165,6 +165,14 @@ def verify() -> None:
                 or hashlib.sha256(payload).hexdigest() != receipt["sha256"]
             ):
                 raise ValueError(f"publication checksum mismatch: {name}")
+            if "uncompressed" in receipt:
+                original = lzma.decompress(payload)
+                identity = receipt["uncompressed"]
+                if (
+                    len(original) != identity["bytes"]
+                    or hashlib.sha256(original).hexdigest() != identity["sha256"]
+                ):
+                    raise ValueError(f"historical figure identity mismatch: {name}")
     for name in ("summary.json.xz", "df-summary.json.xz"):
         summary = read_summary(ROOT / name)
         points = summary["methods"]["wb97m-v"]

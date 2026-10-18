@@ -15,6 +15,34 @@ Both README panels use the defining spherical **def2-mTZVPP** basis for
 r²SCAN-3c; other methods retain their historical def2-SVP observations.
 Changing to a smaller basis is not this optimization.
 
+The superseded README plots are retained losslessly as
+[direct](dft-cold-warm.svg.xz) and [DF](df-cold-warm.svg.xz) archives.
+Use the checksum-verified recovery below for viewable SVGs. The verifier rejects
+the retained Direct/96 moved endpoint, so `refresh.py --output` does not render.
+Observations, source identities and the acceptance hold remain unchanged.
+
+From this directory, recover both figures into a new temporary directory:
+
+```bash
+python - <<'PYCODE'
+import hashlib, json, lzma, tempfile
+from pathlib import Path
+out = Path(tempfile.mkdtemp(prefix="r2scan3c-figures-"))
+manifest = json.loads(Path("manifest.json").read_text())
+for name in ("dft-cold-warm.svg.xz", "df-cold-warm.svg.xz"):
+    entry = manifest["files"][name]
+    data = Path(name).read_bytes()
+    for receipt in (entry, entry["uncompressed"]):
+        if len(data) != receipt["bytes"] or hashlib.sha256(data).hexdigest() != receipt["sha256"]:
+            raise ValueError(name)
+        if receipt is entry:
+            data = lzma.decompress(data)
+    with (out / name[:-3]).open("xb") as stream:
+        stream.write(data)
+print(out)
+PYCODE
+```
+
 The measured implementation automatically admits strict-FP64, all-electron,
 restricted, full-range pure-J owners with at least **544 AOs**, with either
 exact-direct or density-fitted J. It reuses the existing resident final-state

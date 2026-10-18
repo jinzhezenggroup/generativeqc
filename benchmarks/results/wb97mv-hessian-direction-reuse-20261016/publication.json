@@ -1,0 +1,71 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Unchanged full raw-matrix and independent energy gates pass for every bounded endpoint; retain all first-observed and primed samples. No broad performance-promotion claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 44432,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "20e48b688c85ec6d158d66f7dfd1a0c80b0f71537337c0ac3b3f76a8ac18efcd"
+    },
+    {
+      "bytes": 13720,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "bcea96c971a9bf8da1050a0f34a56c38893aa661e1240156ee3aecbaa192f427"
+    },
+    {
+      "bytes": 2664,
+      "path": "compare-native-ab.py.xz",
+      "role": "reproduction",
+      "sha256": "7504ad71d1a7d2a125b599a3dedf5a1b9c6fcf6e7065794fb7ece31181c1087b"
+    },
+    {
+      "bytes": 3257,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "e911885cb728df4f2c23bac1848d1511f6fef35d1ec50ac853dda428be9da9fb"
+    },
+    {
+      "bytes": 8307,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "9ef38458f99d524a70f2ba707c51895255697995183fa3f636b5e47b524d35bc"
+    },
+    {
+      "bytes": 1348,
+      "path": "qualify.sh",
+      "role": "reproduction",
+      "sha256": "c75b84a08dd7280407a17db0d1c192bc506bd374876d51fe830d65b0a1e50ea0"
+    },
+    {
+      "bytes": 991,
+      "path": "qualification-env.sh",
+      "role": "reproduction",
+      "sha256": "4dc7be9cec6985225cd8255d2c39fc8c24600d9ee588a4cce271cb095836f313"
+    },
+    {
+      "bytes": 762,
+      "path": "sanitize.sh",
+      "role": "reproduction",
+      "sha256": "624c23bea7cb28b0ec425c75228e18e7b698707bd1a341d1dba92fefde825223"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/wb97mv-hessian-direction-reuse-20261016/reproduce.sh"
+    ],
+    "prerequisites": "Run on the node2 Slurm submission host. CUDA12.9.1/sm120, CMake/Ninja, verified compiler cache, build-time compiler Python dependencies, pinned GPU4PySCF/PySCF/CuPy versions from samples. Set BASELINE_CHECKOUT/CANDIDATE_CHECKOUT/REFERENCE_PYTHON and reference shared-library paths. Native children require neither Python nor compiler discovery. Standalone reproduction script syntax checked, not independently replayed.",
+    "source_restore": "Retain this bundle outside both clean source checkouts before restoring the two recorded revisions. Full default AOT closure required. For independent qualification also build generativeqc_cuda_wb97mv_nuclear_jk_probe, generativeqc_ks_wb97mv_hessian_probe and generativeqc_ks_wb97mv_grid_probe; set their GENERATIVEQC_*_PROBE paths, GENERATIVEQC_LIBRARY, PYTHONPATH=python:tests/python:. and GENERATIVEQC_STATIONARY_RECEIPTS, then run tests/python/test_native_wb97mv_nuclear_jk.py and test_native_wb97mv_stationary.py through a finite srun, preserving visibility. The latter retains both .004/.002 energy stencils and unmodified acceptance gates. Public frontend qualification uses test_wb97mv_hessian_cli_cuda.py with GENERATIVEQC_WB97MV_HESSIAN_CUDA_TEST=1, GENERATIVEQC_TEST_NATIVE_HESSIAN_FRONTEND=1 and GENERATIVEQC_WB97MV_CLI. Earlier unchanged leaf inventory qualification remains separately identified in the source17/default-fg publications, not relabeled as a new run."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "5aa703721fdce6a220838676af615d574f0fed05"
+  }
+}

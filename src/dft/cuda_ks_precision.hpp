@@ -32,8 +32,10 @@ inline constexpr std::string_view kFinalAudit = "dft.final_audit";
  * SR/LR K), tau, XC point algebra/reductions, nonlocal correlation and final
  * audits remain strict FP64 in ordinary AUTO. Budget-Fock admission additionally
  * permits full-range K to share J's FP32 recurrence, independently capable SR/LR
- * K recurrence and bounded VV10/rVV10 pair algebra. Contraction, accumulation,
- * radial moments, local scales and final physical Focks remain FP64.
+ * K recurrence, bounded VV10/rVV10 pair algebra and shared XC matrix products.
+ * The latter use FP32 inner sums with FP64 storage/inter-tile accumulation;
+ * point algebra, AO production, radial moments and final physical Focks remain
+ * FP64. Indexed AO domains and compact batches retain their existing schedules.
  * The separate application-budget XC warmup keeps
  * J/K strict and instead admits PBE correlation points, AO production and tiled
  * density/potential products with FP32 inner accumulation. Its strict phase
@@ -86,13 +88,16 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
                       experimental_point ? runtime::fp32_compute_fp64_accumulation(
                                                "experimental/pbe-correlation-point-v1")
                                          : runtime::strict_fp64_precision());
-  schedule.add_region(cuda_ks_precision_region::kXcMatrixContractions,
-                      experimental_contractions
-                          ? runtime::PrecisionDirective{runtime::PrecisionDtype::Fp64,
-                                                        runtime::PrecisionDtype::Fp32,
-                                                        runtime::PrecisionDtype::Fp32,
-                                                        "pbe-xc-warmup-v1/tiled-contractions"}
-                          : runtime::strict_fp64_precision());
+  schedule.add_region(
+      cuda_ks_precision_region::kXcMatrixContractions,
+      experimental_contractions || budget_requested
+          ? runtime::PrecisionDirective{runtime::PrecisionDtype::Fp64,
+                                        runtime::PrecisionDtype::Fp32,
+                                        runtime::PrecisionDtype::Fp32,
+                                        experimental_contractions
+                                            ? "pbe-xc-warmup-v1/tiled-contractions"
+                                            : "dft.cuda.budget/xc-matrix-products-v1"}
+          : runtime::strict_fp64_precision());
   if (nonlocal_correlation)
     schedule.add_region(
         cuda_ks_precision_region::kNonlocalCorrelation,

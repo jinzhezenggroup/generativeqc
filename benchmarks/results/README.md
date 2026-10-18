@@ -1,10 +1,18 @@
 # Published GPU benchmark artifacts
 
-The [2026-10-15 r²SCAN-3c refresh](r2scan3c-final-validation-20261015/README.md)
-retains complete Direct and DF comparisons at 3/12/48/96 atoms with canonical
-def2-mTZVPP, independent energy/force checks and explicit work-confounded
-cold/moved outcomes. It refreshes both README panels without a minimum-benefit
-enablement gate.
+The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
+separates shared J/K, nonlocal packet and native-force gains from remaining
+small-system slowdowns, with source-bound independent accuracy and work counts.
+
+The [2026-10-15 combined #2531/#2532 HF/DFT refresh](readme-refresh-20261015/README.md)
+reports native Direct/DF E+F timings against unchanged historical GPU4PySCF
+references, with independent accuracy checks, SCF work and cache-priming receipts.
+Its 2026-10-17 native-only ωB97M-V DF/96 supplement adds a complete cold endpoint
+with explicit memory allowances; the five-repeat warm population timed out.
+
+The [2026-10-15 r²SCAN-3c qualification](r2scan3c-final-validation-20261015/README.md)
+records independent Direct/DF numerics and complete 3/12/48/96-atom cold/moved
+endpoints, including work-confounded results and the limits of default enablement.
 
 The [2026-10-14 master WB97M-V refresh](readme-wb97mv-20261014/README.md)
 retains native direct cold/warm populations through 96 atoms and DF through

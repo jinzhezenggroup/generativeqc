@@ -63,6 +63,30 @@ An admitted cold seed is published directly, without warm-density normalization.
 Preparation failure keeps Hcore; seeded-target failure permits one ordinary
 DF Hcore attempt after releasing the failed arena, not an exact-HF retry.
 
+## Frozen-VV10 density proposals
+
+An admitted cold CUDA restricted VV10 solve can follow the initial guess with
+a semilocal initializer and bounded frozen-potential density proposals. This
+schedule changes neither the requested functional nor the final convergence
+criteria. It is separate from the preliminary atomic guess described above.
+Each complete target refresh evaluates VV10; intermediate frozen-potential
+steps only propose the next density.
+
+For strict solves, the inner stopping threshold is
+`clip(0.01 * maximum_residual, min(1e-12, 0.1 * min(1e-9, density_tolerance)), 1e-5)`,
+where `maximum_residual` is the latest complete target's **AO maximum** residual,
+not the normalized history diagnostic. The initial semilocal stopping rule,
+finite iteration limits and reserved ordinary full-target tail are unchanged.
+Only fresh complete-target Focks satisfying the caller's energy, density and
+physical-residual gates can authorize publication. All strict arithmetic stays
+FP64; this threshold does not select mixed precision. Budget-selected proposals
+retain their separate [application-precision policy](application_precision.md).
+
+Set both `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` and
+`GENERATIVEQC_VV10_NATIVE_SEED=0` to retain the ordinary full-target schedule.
+This disables the provisional schedule, **not VV10**. Warm/imported densities
+retain their existing precedence and admission rules.
+
 ## Providers and controls
 
 - `InitialGuessSpec("hf")` runs an ordinary restricted Hartree–Fock preparation

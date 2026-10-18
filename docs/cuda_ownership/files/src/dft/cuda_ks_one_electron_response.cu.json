@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_one_electron_response.cu",
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives",
+  "reason": "Live canonical KS adapter: reborrows exact grid/Fock owners, takes integer topology and effective charges from the actual prepared normalized System, owns an independent bounded device arena, and forwards compiler-AD S/T/effective-charge source actions without CPU numerical contraction, provider-scratch mutation or runtime Python. Residual ECP projectors and complete stationary Hessian assembly remain separate.",
+  "regions": []
+}

@@ -1,5 +1,6 @@
 """Direct-HF budget evidence; run only in a scheduler-assigned GPU job."""
 
+import ctypes
 import json
 import os
 import typing
@@ -52,6 +53,10 @@ def test_small_direct_cuda_global_budget_covers_all_ragged_caches(
             )
             assert observed["cuda_arena_samples"] >= 2
             ledger = observed["device_ledger"]
+            assert (
+                ledger["capacity_admission"]["declared_device_peak"]
+                == probe.peak_bytes["device:0"]
+            )
             assert (
                 0
                 < ledger["live_bytes"]
@@ -191,10 +196,11 @@ def test_cuda_df_common_ledger_preserves_factor_differential(
     # 80 bytes; source setup instead removes the former 32-byte inverse copy.
     peak += 2 * 80 - 80 if mode == "resident" else -32
     if mode == "recomputed":
-        # The compact source introduced in #381 reserves five sparse rows
-        # (orbital, auxiliary and dummy), each bounded by 4 + 3*12 + 7 bytes,
-        # instead of eight dense-transform doubles. Both source owners pay it.
-        peak += 2 * (5 * (4 + 3 * 12 + 7) - 8 * 8)
+        # The compact source reserves five sparse rows (orbital, auxiliary
+        # and dummy), each bounded by 4 + 6*12 + 7 bytes for the public
+        # auxiliary-g width, even for H2. Both source owners pay this bound
+        # instead of eight dense-transform doubles.
+        peak += 2 * (5 * (4 + 6 * 12 + 7) - 8 * 8)
     assert selected.peak_bytes["device"] == peak
     # The source route needs a host cap to force its selection over resident.
     budget = ResourceBudget(host_bytes=selected.peak_bytes["host"], device_bytes=peak)
@@ -220,19 +226,22 @@ def test_native_ledger_rejects_unplanned_arena_and_releases_failed_state(
         density_fitting="cuda" if fitted else "none",
         resource_budget=ResourceBudget(),
     )
+    create = calculator._library.generativeqc_resource_ledger_create_v1
+    # Native inventory admission does not bind this inactive legacy symbol.
+    # Fault injection must declare its own pointer-width return contract.
+    create.argtypes = [ctypes.c_size_t, ctypes.c_int]
+    create.restype = ctypes.c_void_p
     with calculator.prepare_batch([H2]) as batch:
         ledger = batch._resource_ledger
         ledger.close()
-        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(1, 0)
+        ledger.handle = create(1, 0)
         failed = batch.execute()
         assert not failed.items[0].succeeded
         observation = batch.resource_diagnostics["observation"]["device_ledger"]
         assert observation["rejected_allocations"] >= 1
         assert observation["live_bytes"] == 0
         ledger.close()
-        ledger.handle = calculator._library.generativeqc_resource_ledger_create_v1(
-            ledger.limit, 0
-        )
+        ledger.handle = create(ledger.limit, 0)
         result = batch.execute(strict=True)
         assert result.items[0].executed_backend == "cuda"
         # Keep the metadata handle alive while closing the native cache, so

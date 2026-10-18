@@ -164,7 +164,8 @@ No PR is merged by this qualification.
 
 ## Evidence and next step
 
-The current incremental packet is
+The original incremental packet is retained in immutable commit
+`631f0b003884094f758a349e4a0418f6b54eec6a` at
 `benchmarks/results/direct-force-reuse-20261016/`; the preceding master/incumbent
 packet is retained at the same path in immutable commit
 `4eb9fd859a69a31fa21c5fbbe9b13f7d36a9d90a`. Their 48 shared incumbent calls,
@@ -237,8 +238,30 @@ tolerance change, rollback or default change is justified by these results.
 If cold tails recur, split the packing owner into bounded subscopes before
 choosing another optimization; do not label or fix an assumed cause.
 Forty-four focused profiling/benchmark host tests pass. The new scoped packet
-retains all 124 primary/diagnostic arrays and replay inputs at the existing
-publication path. The complete preceding implementation qualification remains
-immutable at `631f0b003884094f758a349e4a0418f6b54eec6a`, same path; the older
-master/incumbent bridge remains unchanged. Only our own packet is superseded,
+retains all 124 primary/diagnostic arrays and replay inputs at
+`benchmarks/results/direct-force-response-factor-20261016/`.
+The complete preceding implementation qualification remains immutable at
+`631f0b003884094f758a349e4a0418f6b54eec6a`, at
+`benchmarks/results/direct-force-reuse-20261016/`; the older master/incumbent
+bridge remains unchanged. Only our own packet is superseded,
 without raising storage limits or deleting unrelated evidence. No PR is merged.
+
+## Lossless integration with the master evidence packet
+
+The master/incumbent campaign remains complete and unchanged at
+`benchmarks/results/direct-force-reuse-20261016/`. The distinct PBE0 cold
+follow-up is separated into
+`benchmarks/results/direct-force-response-factor-20261016/`; all eleven files
+retain their exact bytes from commit
+`11ea887b1606c67062b0542a2ac84434abf07c37`, including the original publication
+manifest, README, verifier, arrays and replay inputs. The README's historical
+"same publication path" references describe the original
+`direct-force-reuse-20261016/` path at its named immutable commits, not the new
+sibling path. No files from these two campaigns are mixed. Run each directory's
+`python verify-arrays.py` separately.
+
+This separates publication ownership only: measured source identities, original
+negative results, previous recovery commits and scientific bytes are unchanged.
+No measurements qualify the integration tree itself. Existing readers and the
+64 MiB aggregate limit remain unchanged. No historical evidence is deleted or
+recompressed, and no release, tag, external archive or GPU rerun is introduced.

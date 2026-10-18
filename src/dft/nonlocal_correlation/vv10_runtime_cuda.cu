@@ -439,8 +439,15 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
           runtime::cuda_resource_check(cudaGetLastError());
           const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
           if (!selector || !*selector || std::string_view(selector) == "parallel-packet") {
-            generated::parallel_pair_packet_kernel<Geometry>
-                <<<680, threads, 0, stream>>>(input, output);
+            // Keep the qualified strict schedule independent of FP32 admission
+            // state. Mixed packets carry each point's immutable scale proof
+            // through the existing rotation instead of retesting every pair.
+            if (mixed_pair_arithmetic)
+              generated::parallel_pair_packet_kernel<Geometry, true>
+                  <<<680, threads, 0, stream>>>(input, output);
+            else
+              generated::parallel_pair_packet_kernel<Geometry>
+                  <<<680, threads, 0, stream>>>(input, output);
           } else if (selector && std::string_view(selector) == "parallel-wide") {
             // Both kernels use the same admitted device count. Exactly one
             // executes, preserving small-domain occupancy without a host read.

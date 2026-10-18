@@ -85,6 +85,93 @@ def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
         protocol(3, basis, GridSpec(), 5, benchmark=replace(spec, density_fitting=True))
 
 
+def test_df_workspace_hint_is_explicit_in_the_benchmark_protocol() -> None:
+    """A memory-limited DF population must not be mislabeled as automatic DF."""
+    basis = load_r2scan3c_basis()
+    auxiliary = SimpleNamespace(name="explicit-jkfit", identity="auxiliary-identity")
+    fitted = replace(specification("hf"), density_fitting=True)
+    automatic = protocol(
+        3, basis, GridSpec(), 5, benchmark=fitted, auxiliary_basis=auxiliary
+    )
+    bounded = protocol(
+        3,
+        basis,
+        GridSpec(),
+        5,
+        benchmark=fitted,
+        auxiliary_basis=auxiliary,
+        density_fitting_memory_budget_bytes=12 << 30,
+    )
+    assert automatic["density_fitting_memory_budget_bytes"] == 0
+    assert bounded.pop("density_fitting_memory_budget_bytes") == 12 << 30
+    automatic.pop("density_fitting_memory_budget_bytes")
+    assert bounded == automatic
+    with pytest.raises(ValueError, match="DF workspace allowance"):
+        protocol(
+            3,
+            basis,
+            GridSpec(),
+            5,
+            benchmark=specification("hf"),
+            density_fitting_memory_budget_bytes=12 << 30,
+        )
+
+
+@pytest.mark.parametrize("budget", [-1, 1 << 41, True, 1.5])
+def test_df_workspace_hint_rejects_invalid_capacity(budget: Any) -> None:
+    """Reject unrepresentable budgets before any native or GPU preparation."""
+    with pytest.raises(ValueError, match="DF workspace allowance"):
+        protocol(
+            3,
+            load_r2scan3c_basis(),
+            GridSpec(),
+            5,
+            benchmark=replace(specification("hf"), density_fitting=True),
+            auxiliary_basis=SimpleNamespace(name="aux", identity="identity"),
+            density_fitting_memory_budget_bytes=budget,
+        )
+
+
+def test_native_df96_extension_preserves_historical_references(
+    monkeypatch: Any,
+) -> None:
+    """A new native size must not fabricate references or rewrite existing points."""
+    import runpy
+
+    publication = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/readme-refresh-20261015"
+    )
+    refresh = runpy.run_path(str(publication / "refresh.py"))
+    before = refresh["combined_summary"]("df-summary.json.xz")
+    campaign = refresh["read_summary"](publication / "native-summary.json.xz")
+    populations = campaign["populations"]["cuda"]["wb97m-v"]
+    populations[:] = [point for point in populations if point["atoms"] != 96]
+    native = {"status": "completed_unchecked", "records": []}
+    populations.append(
+        {"atoms": 96, "protocol": refresh["df96_protocol"](), "native": native}
+    )
+    monkeypatch.setitem(
+        refresh["combined_summary"].__globals__, "read_summary", lambda path: campaign
+    )
+    after = refresh["combined_summary"]("df-summary.json.xz")
+    for method, points in before["methods"].items():
+        current = {point["atoms"]: point for point in after["methods"][method]}
+        for point in points:
+            if (method, point["atoms"]) != ("wb97m-v", 96):
+                assert current[point["atoms"]] == point
+    added = after["methods"]["wb97m-v"][-1]
+    assert added["atoms"] == 96
+    assert added["protocol"]["density_fitting_memory_budget_bytes"] == 12 << 30
+    assert (
+        added["protocol"]["reference_rsh_exchange"]["long_range_correction_k"]
+        == "exact-direct"
+    )
+    assert added["engines"]["native"] == native
+    assert added["engines"]["reference"] == {"status": "not_run", "outcome": None}
+    assert "independent_references" not in added
+
+
 def test_varying_work_keeps_endpoint_median_but_failed_points_remain_gaps() -> None:
     entry = {
         "status": "measured",
@@ -628,11 +715,74 @@ def test_omission_does_not_hide_completed_native_without_reference(
     }
     render(summary, tmp_path)
     assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    assert (
+        "GPU4PySCF cold/warm unavailable: 48 atoms"
+        in (tmp_path / "df-cold-warm.svg").read_text()
+    )
     table = (tmp_path / "df-timings.md").read_text()
     assert annotation in table
     assert "10.000‡ | not run | 1.000‡ | not run" in table
     assert "| ωB97M-V | 48 |" in table
     assert "| ωB97M-V | 96 |" not in table
+
+
+def test_readme_chart_reports_missing_plotted_phases_not_moved_timeouts(
+    tmp_path: Path,
+) -> None:
+    """Direct/48 can be complete in the plot despite a later moved timeout."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": secs}
+        for phase, secs in [("cold", 20.0)] + [("warm", 2.0)] * 5
+    ]
+    native = {"status": "measured", "records": rows}
+    reference_48 = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "measured", "moved": "timeout"},
+        "records": rows,
+    }
+    reference_96 = {"status": "timeout", "records": []}
+    summary = {
+        "sizes": [48, 96],
+        "density_fitting": False,
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": atoms,
+                    "protocol": {"aos": atoms * 8},
+                    "engines": {
+                        "native": native,
+                        "reference": reference,
+                    },
+                }
+                for atoms, reference in [(48, reference_48), (96, reference_96)]
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    svg = (tmp_path / "dft-cold-warm.svg").read_text()
+    assert "GPU4PySCF cold/warm unavailable: 96 atoms" in svg
+    assert "GPU4PySCF cold/warm unavailable: 48 atoms" not in svg
+    assert "Reference sequence incomplete" not in svg
+
+
+def test_readme_chart_identifies_only_missing_warm_phase() -> None:
+    from tools.render_readme_dft import missing_plot_phase_annotations
+
+    native = {
+        "status": "measured",
+        "records": [{"phase": phase} for phase in ("cold", "warm")],
+    }
+    reference = {
+        "status": "timeout",
+        "phase_status": {"cold": "measured", "warm": "timeout"},
+        "records": [{"phase": "cold"}],
+    }
+    point = {"atoms": 96, "engines": {"native": native, "reference": reference}}
+    assert missing_plot_phase_annotations([point]) == [
+        "GPU4PySCF warm unavailable: 96 atoms"
+    ]
 
 
 @pytest.mark.parametrize("priming_fails", [False, True])

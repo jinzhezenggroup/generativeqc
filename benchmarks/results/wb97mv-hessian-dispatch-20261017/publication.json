@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Covered independent complete matrices and component/coupled fallback parity pass unchanged numerical gates. Performance remains bounded observational evidence, not a general promotion or Hessian-only parity claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 10155,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "204a88e1109e6cca32393fc6c9937552ff110faeafb4afe0f04922cccc6716dc"
+    },
+    {
+      "bytes": 19968,
+      "path": "candidate-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "27586faf10a1b82044ef88be17e8a1abc60e90b7a6ebe6429c0e1beee2c2f92e"
+    },
+    {
+      "bytes": 58892,
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "sha256": "dbf7587d0d0067c0da9492853f61278729a2433644d70937d33f8924be795042"
+    },
+    {
+      "bytes": 6328,
+      "path": "qualification.json.xz",
+      "role": "evidence",
+      "sha256": "78e163173f726ce98688e5c5784a44f5ecf988e2a0ff089ba8991d51a3585672"
+    },
+    {
+      "bytes": 1763,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "1a9535c571168d4c6b1846e4a5b9fb0c6f87afd92ca3cc05ac2a88c74f994d46"
+    },
+    {
+      "bytes": 177452,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ],
+    "notes": "Finite single-GPU Slurm required. Reuses exact prebuilt binaries and checks hashes; does not run Python inside native CLI. See README for build and qualification provenance."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "dirty_scope": "Retained native/compiler scheduling overlay; exact candidate patch and intermediate patches supplied. Matched benchmark driver unchanged from base.",
+    "revision": "4dae97170434d4fb697f721c2f1009666786ff47"
+  }
+}

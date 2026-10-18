@@ -68,6 +68,7 @@ def test_value_geometry_retains_all_live_state_and_prunes_only_dead_state(
 #include <limits>
 #include <type_traits>
 #include "integrals/execution_qualifiers.hpp"
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/integral_limits.hpp"
 #define __device__
 #define __forceinline__ inline

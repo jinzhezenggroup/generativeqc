@@ -452,6 +452,101 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(diagnostic["status"], "infeasible")
             self.assertEqual(diagnostic["selection"], least_excess.name)
 
+    def test_cuda_df_shared_source_owner_and_byte_caps_without_gpu(self) -> None:
+        """Actual CLI/DF composition; only the CUDA availability gate is synthetic."""
+        if sys.platform != "linux":
+            self.skipTest("host-only interposition fixture requires Linux")
+        sys.path.insert(0, str(SOURCE / "python"))
+        try:
+            from generativeqc.resources_hf_df import cuda_df_candidates
+        except ImportError:
+            self.skipTest("optional Python inventory dependencies are unavailable")
+        from unittest.mock import patch
+
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        orbital = {"nbf": 2, "cartesian_nbf": 2, "shells": 2, "primitives": 6}
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        for storage in ("auto", "dense", "packed", "packed-single"):
+            for exchange in ("auto", "occupied"):
+                controls = {
+                    "GENERATIVEQC_DF_VALUE_STORAGE": storage,
+                    "GENERATIVEQC_DF_EXCHANGE": exchange,
+                }
+                self.env.update(controls)
+                for method, spins in (("rhf", 1), ("uhf", 2)):
+                    item = {
+                        "atoms": 2,
+                        "orbital": orbital,
+                        "auxiliary": orbital,
+                        "electrons": {"nalpha": 1, "nbeta": 1},
+                        "spins": spins,
+                    }
+                    for batch in (1, 3):
+                        with self.subTest(
+                            storage=storage,
+                            exchange=exchange,
+                            method=method,
+                            batch=batch,
+                        ):
+                            with patch.dict(os.environ, controls):
+                                reference = cuda_df_candidates(
+                                    library,
+                                    [item] * batch,
+                                    diis_history=8,
+                                    device=0,
+                                    first_phase=0,
+                                    last_phase=0,
+                                    requested_budget=64 << 20,
+                                )
+                            arguments = (
+                                "--backend",
+                                "cuda",
+                                "--density-fitting",
+                                "cuda",
+                                "--method",
+                                method,
+                                "--batch",
+                                str(batch),
+                                "--density-fitting-memory-bytes",
+                                str(64 << 20),
+                            )
+                            result = self.resources(*arguments)
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            plan = json.loads(result.stdout)
+                            self.assertEqual(len(reference), 1)
+                            self.assertEqual(len(plan["candidates"]), 1)
+                            actual, expected = plan["candidates"][0], reference[0]
+                            self.assertEqual(actual["name"], expected.name)
+                            for key, estimate in zip(
+                                (
+                                    "retained_device",
+                                    "workspace_device",
+                                    "retained_host",
+                                    "workspace_host",
+                                    "runtime_allowance_device",
+                                ),
+                                expected.estimates,
+                                strict=True,
+                            ):
+                                self.assertEqual(actual[key], estimate.bytes)
+                            for space in ("host", "device"):
+                                peak = plan["peak_bytes"][space]
+                                for difference in (-1, 0):
+                                    checked = self.resources(
+                                        *arguments,
+                                        f"--{space}-bytes",
+                                        str(peak + difference),
+                                    )
+                                    self.assertEqual(
+                                        checked.returncode,
+                                        0 if difference == 0 else 2,
+                                        checked.stderr,
+                                    )
+                                    self.assertEqual(
+                                        json.loads(checked.stdout)["peak_bytes"],
+                                        plan["peak_bytes"],
+                                    )
+
     def test_df_and_ks_have_real_inventories(self) -> None:
         fitted = self.resources(
             "--density-fitting", "cpu", "--auxiliary-basis", "def2-svp"
@@ -524,6 +619,135 @@ class RuntimeTests(unittest.TestCase):
                         str(budget),
                     )
                     self.assertEqual(bounded.returncode, status, bounded.stderr)
+
+    def test_cuda_ks_cli_uses_shared_native_host_fleet_without_gpu(self) -> None:
+        """Synthetic device leaves retain both real native fleet owners."""
+        if sys.platform != "linux":
+            self.skipTest("host-only interposition fixture requires Linux")
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_ks_cuda_host_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.c_uint64,
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        device_query = library.generativeqc_resource_ks_cuda_fleet_v1
+        device_query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        device_query.restype = ctypes.c_int
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        for method in KS_INVENTORY_METHODS:
+            for batch in (1, 3):
+                with self.subTest(method=method, batch=batch):
+                    arguments = (
+                        "--backend",
+                        "cuda",
+                        "--method",
+                        method,
+                        "--batch",
+                        str(batch),
+                        "--max-iterations",
+                        "250",
+                    )
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    radial, polar, azimuth = plan["controls"]["grid"]
+                    item = (
+                        2,
+                        2,
+                        2,
+                        2,
+                        6,
+                        2 if method.endswith("uks") else 1,
+                        0,
+                        0,
+                        2 * radial * polar * azimuth,
+                        radial,
+                        polar,
+                        256,
+                        8,
+                        250,
+                        int(method.startswith("pbe")),
+                        0,
+                        0,
+                        0,
+                    )
+                    shapes = (ctypes.c_uint64 * (18 * batch))(*(item * batch))
+                    values = (ctypes.c_uint64 * (15 + 16 * batch))()
+                    self.assertEqual(
+                        query(shapes, len(shapes), 0, 0, values, len(values)), 0
+                    )
+                    self.assertEqual(
+                        plan["host_fleet_composition"], "native-declared-capacity"
+                    )
+                    self.assertEqual(plan["resident_bytes"]["pageable"], values[12])
+                    self.assertEqual(plan["peak_bytes"]["host"], values[14])
+                    self.assertEqual(
+                        plan["item_inventory"]["retained"] * batch, values[12]
+                    )
+                    self.assertEqual(
+                        plan["item_inventory"]["matrix_binding_host"], 16 << 10
+                    )
+                    self.assertEqual(
+                        plan["item_inventory"]["structured_binding_host"], 32 << 10
+                    )
+                    self.assertEqual(plan["item_inventory"]["ao_grid_cache"], 0)
+                    device_item = (2, 2, 2, 6, 11, 13, 17, 19, 23, 0, 1, 0, 0)
+                    device_shapes = (ctypes.c_uint64 * (13 * batch))(
+                        *(device_item * batch)
+                    )
+                    device_values = (ctypes.c_uint64 * (9 + 6 * batch))()
+                    self.assertEqual(
+                        device_query(
+                            device_shapes,
+                            len(device_shapes),
+                            device_values,
+                            len(device_values),
+                        ),
+                        0,
+                    )
+                    self.assertEqual(
+                        plan["device_fleet_composition"], "native-declared-capacity"
+                    )
+                    self.assertEqual(plan["peak_bytes"]["device"], device_values[7])
+                    self.assertEqual(
+                        plan["resident_bytes"]["device:0"],
+                        device_values[7] - device_values[4],
+                    )
+                    self.assertEqual(
+                        plan["device_inventory"]["setup"], device_values[12]
+                    )
+                    for capacity, status in (
+                        (device_values[7], 0),
+                        (device_values[7] - 1, 2),
+                    ):
+                        bounded = self.resources(
+                            *arguments, "--device-bytes", str(capacity)
+                        )
+                        self.assertEqual(bounded.returncode, status, bounded.stderr)
+                    peak = values[14]
+                    for capacity, status in ((peak, 0), (peak - 1, 2)):
+                        bounded = self.resources(
+                            *arguments, "--host-bytes", str(capacity)
+                        )
+                        self.assertEqual(bounded.returncode, status, bounded.stderr)
+                    allowance = 384 << 20
+                    self.assertEqual(
+                        query(shapes, len(shapes), allowance, 0, values, len(values)), 0
+                    )
+                    self.assertEqual(values[14], peak + allowance)
+                    self.assertEqual(
+                        values[12], plan["resident_bytes"]["pageable"] + allowance
+                    )
 
     def test_cpu_ks_cli_uses_shared_native_host_inventory(self) -> None:
         """The Python-free command exposes each authoritative host owner."""

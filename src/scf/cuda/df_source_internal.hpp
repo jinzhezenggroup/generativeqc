@@ -40,6 +40,7 @@ struct CudaDensityFittingIntegralSourceImpl {
   std::size_t cartesian_nbf{};
   std::size_t cartesian_naux{};
   std::size_t dummy_index{};
+  std::size_t orbital_shells{}, auxiliary_shells{}, basis_primitives{};
   DeviceBatch batch{};
   const DfPublicAoExpansion* orbital_to_cartesian{};
   const DfPublicAoExpansion* auxiliary_to_cartesian{};

@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import time
 import typing
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -18,6 +18,7 @@ from hashlib import sha256
 import numpy as np
 
 from . import _native
+from ._progressive_native import HFEvent, run_hf_schedule
 from .accuracy import AccuracyAssessment, ErrorEvidence, ResolvedModel, TargetAccuracy
 from .calculator import Atom
 from .fock import FockBuildSpec, FockPlan
@@ -1031,47 +1032,71 @@ def run_progressive_hf(
     physical_audit = None
     physical_audit_error = None
     physical_audit_budget_exhausted = False
-    source_setup_started = time.perf_counter()
-    with source_calculator.prepare_batch(
-        [atoms], charges=[charge], multiplicities=[multiplicity]
-    ) as source_batch:
-        source_setup_seconds = time.perf_counter() - source_setup_started
-        source_started = time.perf_counter()
-        source_result = source_batch.execute(
-            strict=False, properties=("energy",)
-        ).items[0]
-        source_execution_seconds = time.perf_counter() - source_started
-        target_setup_started = time.perf_counter()
-        with target_calculator.prepare_batch(
-            [atoms], charges=[charge], multiplicities=[multiplicity]
-        ) as target_batch:
-            target_setup_seconds = time.perf_counter() - target_setup_started
-            projection_seconds = 0.0
-            if source_result.succeeded:
-                projection_started = time.perf_counter()
-                try:
-                    projection = initialize_from(
-                        target_batch,
-                        source_batch,
-                        policy=projection_policy,
-                        strict=False,
-                        maximum_host_bytes=plan.budget.maximum_host_bytes,
-                    )
-                    item = projection["items"][0]
-                    projection["status"] = (
-                        "accepted" if item["accepted"] else "rejected"
-                    )
-                    projection["reason"] = item["reason"]
-                except (MemoryError, ProjectionRejected) as error:
-                    projection = {
-                        "schema": "generativeqc.progressive_hf.transfer",
-                        "status": "rejected",
-                        "reason": str(error),
-                    }
-                projection_seconds = time.perf_counter() - projection_started
-            else:
+    source_owner = target_owner = source_batch = target_batch = None
+    source_result = target_result = None
+    source_setup_seconds = source_execution_seconds = target_setup_seconds = 0.0
+    target_seconds = projection_seconds = verification_seconds = 0.0
+    source_cleanup_seconds = target_cleanup_seconds = 0.0
+
+    def operation(event: HFEvent, failure_info: tuple) -> int:
+        """Marshal one native-directed operation without owning stage policy."""
+        nonlocal \
+            source_owner, \
+            target_owner, \
+            source_batch, \
+            target_batch, \
+            source_result, \
+            target_result
+        nonlocal source_setup_seconds, source_execution_seconds, target_setup_seconds
+        nonlocal target_seconds, projection_seconds, verification_seconds
+        nonlocal \
+            source_cleanup_seconds, \
+            target_cleanup_seconds, \
+            projection, \
+            target_density
+        nonlocal physical_audit, physical_audit_error, physical_audit_budget_exhausted
+        operation_started = time.perf_counter()
+        if event == HFEvent.PREPARE_SOURCE:
+            source_owner = source_calculator.prepare_batch(
+                [atoms], charges=[charge], multiplicities=[multiplicity]
+            )
+            source_batch = source_owner.__enter__()
+            source_setup_seconds = time.perf_counter() - operation_started
+        elif event == HFEvent.EXECUTE_SOURCE:
+            source_result = source_batch.execute(
+                strict=False, properties=("energy",)
+            ).items[0]
+            source_execution_seconds = time.perf_counter() - operation_started
+            if not source_result.succeeded:
                 projection["status"] = "skipped_failed_source"
                 projection["reason"] = source_result.status_message
+            return int(source_result.succeeded)
+        elif event == HFEvent.PREPARE_TARGET:
+            target_owner = target_calculator.prepare_batch(
+                [atoms], charges=[charge], multiplicities=[multiplicity]
+            )
+            target_batch = target_owner.__enter__()
+            target_setup_seconds = time.perf_counter() - operation_started
+        elif event == HFEvent.PROJECT:
+            try:
+                projection = initialize_from(
+                    target_batch,
+                    source_batch,
+                    policy=projection_policy,
+                    strict=False,
+                    maximum_host_bytes=plan.budget.maximum_host_bytes,
+                )
+                item = projection["items"][0]
+                projection["status"] = "accepted" if item["accepted"] else "rejected"
+                projection["reason"] = item["reason"]
+            except (MemoryError, ProjectionRejected) as error:
+                projection = {
+                    "schema": "generativeqc.progressive_hf.transfer",
+                    "status": "rejected",
+                    "reason": str(error),
+                }
+            projection_seconds = time.perf_counter() - operation_started
+        elif event == HFEvent.EXECUTE_TARGET:
             executions.append(
                 StageExecution(
                     plan.stages[0].stage_id,
@@ -1098,39 +1123,66 @@ def run_progressive_hf(
                 strict=False, properties=requested_properties
             ).items[0]
             target_seconds = time.perf_counter() - target_started
-            if target_result.succeeded and target_result.converged:
-                target_density = _retained_density(target_batch)
-            target_cleanup_started = time.perf_counter()
-        target_cleanup_seconds = time.perf_counter() - target_cleanup_started
-        source_cleanup_started = time.perf_counter()
-    source_cleanup_seconds = time.perf_counter() - source_cleanup_started
-    cleanup_seconds = target_cleanup_seconds + source_cleanup_seconds
-    verification_started = time.perf_counter()
-    if target_density is not None:
+            return int(target_result.succeeded) | (
+                2 if target_result.succeeded and target_result.converged else 0
+            )
+        elif event == HFEvent.RETAIN_TARGET:
+            target_density = _retained_density(target_batch)
+            return int(target_density is not None)
+        elif event == HFEvent.CLOSE_TARGET:
+            target_owner.__exit__(*failure_info)
+            target_cleanup_seconds = time.perf_counter() - operation_started
+        elif event == HFEvent.CLOSE_SOURCE:
+            source_owner.__exit__(*failure_info)
+            source_cleanup_seconds = time.perf_counter() - operation_started
+        elif event == HFEvent.AUDIT_TARGET:
+            try:
+                physical_audit = _audit_target_physical_residual(
+                    plan.problem,
+                    target_calculator,
+                    atoms,
+                    target_density,
+                    target_result.energy,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    maximum_host_bytes=plan.budget.maximum_verification_host_bytes,
+                )
+            except MemoryError as error:
+                physical_audit_error = (
+                    f"physical verification host budget exhausted: {error}"
+                )
+                physical_audit_budget_exhausted = True
+            except (
+                ArithmeticError,
+                NotImplementedError,
+                RuntimeError,
+                ValueError,
+            ) as error:
+                physical_audit_error = str(error)
+            verification_seconds = time.perf_counter() - operation_started
+        else:
+            raise ValueError("unknown native progressive HF operation")
+        return 0
+
+    def guarded_operation(event: HFEvent, failure_info: tuple) -> int:
+        """Close an acquired owner if its preparation callback cannot complete."""
         try:
-            physical_audit = _audit_target_physical_residual(
-                plan.problem,
-                target_calculator,
-                atoms,
-                target_density,
-                target_result.energy,
-                charge=charge,
-                multiplicity=multiplicity,
-                maximum_host_bytes=plan.budget.maximum_verification_host_bytes,
-            )
-        except MemoryError as error:
-            physical_audit_error = (
-                f"physical verification host budget exhausted: {error}"
-            )
-            physical_audit_budget_exhausted = True
-        except (
-            ArithmeticError,
-            NotImplementedError,
-            RuntimeError,
-            ValueError,
-        ) as error:
-            physical_audit_error = str(error)
-    verification_seconds = time.perf_counter() - verification_started
+            return operation(event, failure_info)
+        except BaseException as error:
+            # Native ownership is published only after PREPARE returns. Keep
+            # acquisition and its bookkeeping exception-safe until that handoff.
+            if event in (HFEvent.PREPARE_SOURCE, HFEvent.PREPARE_TARGET):
+                owner = (
+                    source_owner if event == HFEvent.PREPARE_SOURCE else target_owner
+                )
+                if owner is not None:
+                    # Preserve the preparation failure, including cancellation.
+                    with suppress(BaseException):
+                        owner.__exit__(type(error), error, error.__traceback__)
+            raise
+
+    execution_owner = run_hf_schedule(target_calculator._library, guarded_operation)
+    cleanup_seconds = target_cleanup_seconds + source_cleanup_seconds
     target_fock_builds = target_result.fock_builds
     if physical_audit is not None and target_fock_builds is not None:
         target_fock_builds += 1
@@ -1180,6 +1232,7 @@ def run_progressive_hf(
     diagnostics = {
         "schema": "generativeqc.progressive_hf",
         "version": 1,
+        "execution_owner": execution_owner,
         "plan_identity": plan.identity,
         "source_seconds": executions[0].seconds,
         "source_setup_seconds": source_setup_seconds,

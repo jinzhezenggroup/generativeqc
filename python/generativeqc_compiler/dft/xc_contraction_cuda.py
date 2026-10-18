@@ -49,8 +49,8 @@ class XcMatrixSchedule:
 
     @property
     def potential_shared_bytes(self) -> int:
-        # Four padded FP64 panels plus the two shared tile indices.
-        return 4 * self.tile * (self.tile + 1) * 8 + 16
+        # Four FP64 panels, exact-scaling flags and two shared tile indices.
+        return (4 * 8 + 1) * self.tile * (self.tile + 1) + 16
 
     @property
     def shared_bytes(self) -> int:
@@ -176,8 +176,9 @@ def compact_panel_program(family: str) -> tuple:
     """Factor the symmetric bilinear into A*W^T + W*A^T.
 
     The value panel absorbs both gradient legs. The scalar and diagonal kinetic
-    terms get a one-half because symmetric assembly visits each twice. Derive
-    their coefficients from the canonical bilinear instead of restating them.
+    terms get a one-half because symmetric assembly visits each twice. Keep
+    that preparation order even for the one-sided consumer: moving the factor
+    of two into this graph changes its overflow and underflow domain.
     """
     graph, x, y, _coefficients, bilinear = ao_pair_bilinear(family)
 
@@ -228,7 +229,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     )
 
 
-def _emit_panels() -> str:
+def _emit_panels(*, diagonal_one_sided: bool = False) -> str:
     lines = [
         r"""
 __device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
@@ -262,7 +263,12 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
                                 work, error);
 }
 """)
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if diagonal_one_sided:
+        source = source.replace(
+            "compact_potential_panels", "compact_diagonal_potential_panels"
+        )
+    return source
 
 
 _TILED_TEMPLATE = r"""
@@ -278,6 +284,19 @@ __device__ void tiled_density_product_body(const double* density, const double* 
   const I panel = count*n;
   const double* source = ao+jet*panel;
   const double* matrix = density+spin*full_n*full_n;
+  // All AO rows for one point/jet share the same binary scale. Restoring it
+  // after the FP32 dot avoids selective tail underflow and needs no FP64 dot,
+  // additional AO panel, or change to the strict specialization.
+  int ao_exponent = 0;
+  if constexpr (std::is_same_v<Arithmetic, float>) {
+    double maximum = 0.0;
+    if (point < count)
+      for (I col = x; col < n; col += @TILE@)
+        maximum = fmax(maximum, fabs(source[point*n+col]));
+    for (I offset = @TILE@/2; offset; offset /= 2)
+      maximum = fmax(maximum, __shfl_xor_sync(0xffffffffu, maximum, offset, @TILE@));
+    if (maximum > 0.0) frexp(maximum, &ao_exponent);
+  }
   Arithmetic value = 0.0;
   for (I begin = 0; begin < n; begin += @TILE@) {
     const I row = I(blockIdx.x)*@TILE@+y, col = begin+x;
@@ -299,7 +318,11 @@ __device__ void tiled_density_product_body(const double* density, const double* 
                     : 0.0;
     } else {
       d[y][x] = row < n && col < n ? 0.5*matrix[global_row*full_n+global_col]+0.5*matrix[global_col*full_n+global_row] : 0.0;
-      a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
+      if constexpr (std::is_same_v<Arithmetic, float>)
+        a[y][x] = point < count && col < n
+                      ? scalbn(source[point*n+col], -ao_exponent) : 0.0;
+      else
+        a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
     }
     __syncthreads();
     // Only discarded outputs may skip arithmetic. Every lane still loads the
@@ -315,8 +338,14 @@ __device__ void tiled_density_product_body(const double* density, const double* 
     }
     __syncthreads();
   }
-  if (mu < n && point < count)
-    work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
+  if (mu < n && point < count) {
+    // Normalize only the FP32 operand; restore its exact power-of-two scale
+    // in FP64 storage so tiny physical AO tails do not lose their sign/domain.
+    if constexpr (std::is_same_v<Arithmetic, float>)
+      work[(spin*work_jets+jet)*panel+point*n+mu] = finite(scalbn(static_cast<double>(value), ao_exponent), error, 1);
+    else
+      work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
+  }
 }
 
 template <bool Mixed, class Arithmetic = double>
@@ -335,10 +364,11 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false, class Arithmetic = double>
+template <bool ActivePairsOnly = false, class Arithmetic = double, bool DiagonalJets = false>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
-    double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin) {
+    double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin,
+    const double* diagonal_weights = nullptr) {
   __shared__ I tile_mu, tile_nu;
   if (threadIdx.x == 0 && threadIdx.y == 0) {
     const I pair = blockIdx.x;
@@ -355,11 +385,18 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
   }
   __syncthreads();
   __shared__ Arithmetic am[@TILE@][@PAD@], an[@TILE@][@PAD@], wm[@TILE@][@PAD@], wn[@TILE@][@PAD@];
+  __shared__ unsigned char scaled_wn[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
   Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
+    // Additional panels are diagonal bilinears derived by compact_panel_program.
+    // Preserve canonical half-panel preparation. Only bounded operand tiles
+    // reuse a doubled right panel; unsafe tiles keep both original products.
+    // The upper bound prevents scaling/product overflow and amplification of
+    // preparation underflow. It is independent of the method and AO count.
+    const bool cross = !DiagonalJets || jet == 0;
     const double* a = ao+jet*panel;
     const double* w = work+(spin*work_jets+jet)*panel;
     for (I begin = 0; begin < count; begin += @TILE@) {
@@ -367,10 +404,35 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       am[y][x] = p < count && mu < n ? a[p*n+mu] : 0.0;
       an[y][x] = p < count && nu_load < n ? a[p*n+nu_load] : 0.0;
       wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
-      wn[y][x] = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
-      __syncthreads();
-      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu))
-        for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+      const Arithmetic right = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
+      bool reuse_diagonal = false;
+      if (DiagonalJets && !cross) {
+        // Keep the qualified FP64 range unchanged. FP32 needs its own bound:
+        // a finite right panel can overflow when doubled before multiplication.
+        constexpr double diagonal_limit = std::is_same_v<Arithmetic, float> ? 0x1p30 : 0x1p128;
+        const bool scaled = fabs(right) <= diagonal_limit;
+        scaled_wn[y][x] = scaled;
+        wn[y][x] = scaled ? right+right : right;
+        const bool unsafe_weight = !diagonal_weights ||
+            (p < count && fabs(diagonal_weights[p]) > diagonal_limit);
+        const bool unsafe = unsafe_weight || !scaled || fabs(am[y][x]) > diagonal_limit ||
+            fabs(an[y][x]) > diagonal_limit || fabs(wm[y][x]) > diagonal_limit;
+        reuse_diagonal = !__syncthreads_or(unsafe);
+      } else {
+        wn[y][x] = right;
+        __syncthreads();
+      }
+      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
+        if (cross)
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+        else if (reuse_diagonal)
+          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y];
+        else
+          for (I k = 0; k < @TILE@; ++k) {
+            const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];
+            value += am[k][x]*original_right+wm[k][x]*an[k][y];
+          }
+      }
       __syncthreads();
     }
   }
@@ -401,6 +463,14 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
                         accumulate, error, ao_ids, full_n, blockIdx.z);
 }
 
+template <class Arithmetic = double>
+__global__ void tiled_diagonal_potential(const double* ao, const double* work, I n, I count,
+    I work_jets, const double* point_totals, double* potential, double* totals,
+    bool accumulate, int* error, const size_t* ao_ids, I full_n, const double* weights) {
+  tiled_potential_body<false, Arithmetic, true>(ao, work, n, count, work_jets, point_totals,
+      potential, totals, accumulate, error, ao_ids, full_n, blockIdx.z, weights);
+}
+
 inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   if (n < @TILE@ || count < @TILE@ || spins < 1 || work_jets < 1 ||
       work_jets > 65535 || spins > 65535/work_jets) return false;
@@ -410,6 +480,14 @@ inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   if (tiles > 65535 || point_tiles > 65535) return false;
   const I tile_pairs = tiles*(tiles+1)/2;
   return tile_pairs <= 65535;
+}
+/** FP32 also uses the existing masked tiled body for small/tail domains.
+ * Rounding dimensions up only for admission gives the same one-tile launch
+ * bounds without changing selected AOs, points or strict-FP64 scheduling. */
+inline bool fp32_tiled_xc_admitted(I ao_count, I count, I spins, I work_jets) {
+  return ao_count > 0 && count > 0 &&
+      tiled_xc_admitted(ao_count < @TILE@ ? @TILE@ : ao_count, count < @TILE@ ? @TILE@ : count,
+                       spins, work_jets);
 }
 template <bool Mixed, bool Tiled, class Arithmetic = double>
 void launch_density_product(cudaStream_t stream, const double* density,
@@ -441,7 +519,17 @@ inline void generated_potential(cudaStream_t stream, const double* ao,
     if (point_totals) accumulate_totals<<<1,32,0,stream>>>(point_totals,count,totals,error);
     return;
   }
-  if (tiled_xc_admitted(n, count, spins, work_jets)) {
+  if (tiled_xc_admitted(n, count, spins, work_jets) ||
+      (std::is_same_v<Arithmetic, float> && fp32_tiled_xc_admitted(n, count, spins, work_jets))) {
+    if (work_jets == 4) {
+      compact_diagonal_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
+          ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
+      tiled_diagonal_potential<Arithmetic><<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
+          ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n,weights);
+      return;
+    }
     compact_potential_panels<<<generativeqc_tensor::blocks(spins*count*n,128),128,0,stream>>>(
         ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
@@ -535,11 +623,12 @@ def emit_native_xc_matrix_schedule(
     density_source: str = "",
 ) -> str:
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
+    panels = _emit_panels() + _emit_panels(diagonal_one_sided=True)
     return (
-        emit_potential_portfolio(_emit_panels() + _emit_tiled(schedule))
-        + '\n#include "tensor/cuda_panel_product.cuh"\n'
+        emit_potential_portfolio(panels + _emit_tiled(schedule))
+        + '\n#include "tensor/cuda_panel_product.cuh"\n#include <type_traits>\n'
         + "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
-        + _emit_panels()
+        + panels
         + _emit_tiled(schedule)
         + _emit_density_factor()
         + _emit_density_factor(indexed=True)

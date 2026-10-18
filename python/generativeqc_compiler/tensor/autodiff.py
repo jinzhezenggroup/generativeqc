@@ -204,7 +204,7 @@ def _validate_reference_context(program: Program) -> None:
 
     Node construction already validates view shape/type and where domains.
     The shared primitive capability set remains unchanged. Explicit generated
-    forward consumers may reuse this proof with their own narrower dtype and
+    forward/reverse consumers may reuse this proof with their own narrower dtype and
     execution qualification; this proof alone grants no native admission.
     """
     live = program.live_nodes

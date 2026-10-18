@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+from dataclasses import replace
 
 import numpy as np
 from generativeqc import response_solver
@@ -60,9 +61,8 @@ def test_xc_gradient_present_does_not_allocate_default(monkeypatch: typing.Any) 
     assert not fallback.any()
 
 
-def test_scalar_gmres_allocates_one_arnoldi_matrix_across_restarts(
-    monkeypatch: typing.Any,
-) -> None:
+def test_scalar_gmres_restart_respects_numeric_workspace_budget() -> None:
+    """Restarted solves respect admission regardless of the owner of their buffers."""
     matrix = np.diag(np.linspace(1.0, 4.0, 12))
     matrix[0, 1] = 0.2
     matrix[1, 0] = -0.1
@@ -71,29 +71,30 @@ def test_scalar_gmres_allocates_one_arnoldi_matrix_across_restarts(
     options = response_solver.GMRESOptions(
         rtol=1e-12, restart=2, max_iterations=100, stagnation_window=100
     )
-    original = np.zeros
-    arnoldi_allocations = 0
-
-    def traced_zeros(
-        shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
-    ) -> np.ndarray:
-        nonlocal arnoldi_allocations
-        caller = inspect.currentframe().f_back
-        if (
-            caller is not None
-            and caller.f_code.co_name == "_solve_single"
-            and shape == (3, 2)
-        ):
-            arnoldi_allocations += 1
-        return original(shape, *args, **kwargs)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(np, "zeros", traced_zeros)
-        result = response_solver.solve(operator, rhs, options=options)
+    result = response_solver.solve(operator, rhs, options=options)
     assert result.iterations > options.restart
-    assert arnoldi_allocations == 1
     assert result.converged
+    assert result.workspace_bytes <= options.max_workspace_bytes
+    np.testing.assert_allclose(
+        result.solution, np.linalg.solve(matrix, rhs), rtol=1e-10, atol=1e-10
+    )
     np.testing.assert_allclose(matrix @ result.solution, rhs, rtol=0, atol=1e-9)
+
+    exact_options = replace(options, max_workspace_bytes=result.workspace_bytes)
+    exact = response_solver.solve(operator, rhs, options=exact_options)
+    assert exact.converged
+    assert exact.workspace_bytes <= exact_options.max_workspace_bytes
+    np.testing.assert_allclose(matrix @ exact.solution, rhs, rtol=0, atol=1e-9)
+
+    refused = response_solver.solve(
+        operator,
+        rhs,
+        options=replace(exact_options, max_workspace_bytes=result.workspace_bytes - 1),
+    )
+    assert refused.reason == "workspace_limit"
+    assert not refused.converged
+    assert refused.operator_actions == 0
+    assert refused.workspace_bytes >= result.workspace_bytes
 
 
 def test_block_gmres_reuses_one_projected_rhs_buffer(

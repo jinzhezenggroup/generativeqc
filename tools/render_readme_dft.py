@@ -131,6 +131,34 @@ def phase_statistics(entry: dict[str, Any], phase: str) -> tuple[float, float, f
     return center, center - min(times), max(times) - center
 
 
+def missing_plot_phase_annotations(points: list[dict[str, Any]]) -> list[str]:
+    """Annotate missing plotted endpoints, not missing later benchmark phases.
+
+    A reference may time out during moved/moved-warm replay after completing
+    both cold and warm calls. Its whole-run status must not mark these visible
+    timings as unavailable.
+    """
+    notes = []
+    for engine, engine_name in (
+        ("native", "GenerativeQC"),
+        ("reference", "GPU4PySCF"),
+    ):
+        missing_by_phase: dict[tuple[str, ...], list[str]] = {}
+        for point in points:
+            missing = tuple(
+                phase
+                for phase in ("cold", "warm")
+                if not phase_rows(point["engines"][engine], phase)
+            )
+            if missing:
+                missing_by_phase.setdefault(missing, []).append(str(point["atoms"]))
+        for phases, sizes in missing_by_phase.items():
+            notes.append(
+                f"{engine_name} {'/'.join(phases)} unavailable: {', '.join(sizes)} atoms"
+            )
+    return notes
+
+
 def render(summary: dict[str, Any], destination: Path) -> None:
     """Draw complete phases with optional per-method publication annotations.
 
@@ -220,19 +248,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         ax.set_ylabel("Energy + forces (s)")
         ax.grid(axis="y", alpha=0.18)
         ax.spines[["top", "right"]].set_visible(False)
-        missing = []
-        for engine, label in (
-            ("native", "Native sequence incomplete"),
-            ("reference", "Reference sequence incomplete"),
-        ):
-            sizes = [
-                str(point["atoms"])
-                for point in points
-                if point["engines"][engine]["status"]
-                not in ("measured", "completed_unchecked")
-            ]
-            if sizes:
-                missing.append(f"{label}: {', '.join(sizes)} atoms")
+        missing = missing_plot_phase_annotations(points)
         if missing:
             ax.text(
                 0.98,
@@ -364,15 +380,18 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             )
     lines += [
         "",
-        "The [measurement report](README.md) describes the protocol and unsuccessful",
-        "points; "
-        + (
-            "[df-summary.json.xz](df-summary.json.xz)"
-            if summary.get("density_fitting")
-            else "[summary.json.xz](summary.json.xz)"
-        )
-        + " retains all scalar observations,",
-        "residuals, errors and independent cold/moved reference forces.",
+        summary.get(
+            "evidence_note",
+            "The [measurement report](README.md) describes the protocol and unsuccessful\n"
+            "points; "
+            + (
+                "[df-summary.json.xz](df-summary.json.xz)"
+                if summary.get("density_fitting")
+                else "[summary.json.xz](summary.json.xz)"
+            )
+            + " retains all scalar observations,\n"
+            "residuals, errors and independent cold/moved reference forces.",
+        ),
         "",
     ]
     (

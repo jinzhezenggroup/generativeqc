@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_df_nuclear_response.hpp",
+  "role": "runtime",
+  "subsystem": "df_derivatives",
+  "reason": "Raw ordered DF value/directional source and weighted nuclear-gradient/HVP contracts, immutable basis leases, bounded storage/work admission and explicit two-pass receipts. Declares orbital-through-f/auxiliary-through-g topology and transactional original-stream ownership without scientific equations or a stationary endpoint claim.",
+  "regions": []
+}

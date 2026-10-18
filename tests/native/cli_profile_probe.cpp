@@ -40,3 +40,30 @@ extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t nbf, std::size
   output[1] = 0;
   return 0;
 }
+
+// Only device leaves are synthetic: CLI host sizing still uses the compiled
+// shared inventory, including retained reservations and fleet lifetimes.
+extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::size_t, std::size_t,
+                                                std::size_t, std::size_t, std::size_t, std::size_t,
+                                                std::size_t, std::uint64_t* output,
+                                                std::size_t count) {
+  if (!output || count != 3) return 1;
+  output[0] = 11;
+  output[1] = 13;
+  output[2] = 17;
+  return 0;
+}
+
+extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t,
+                                                        std::uint64_t* output) {
+  if (!output) return 1;
+  *output = 19;
+  return 0;
+}
+
+extern "C" int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t,
+                                                                std::uint64_t* output) {
+  if (!output) return 1;
+  *output = 23;
+  return 0;
+}

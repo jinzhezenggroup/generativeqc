@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -9,6 +10,61 @@
 #include "generativeqc/generativeqc.h"
 
 namespace generativeqc::dft {
+
+/** Force arithmetic and SCF arithmetic have separate admission contracts.
+ * Budget-converged densities may feed the existing FP64 force consumer; only
+ * strict SCF controls may authorize independently qualified mixed gradients. */
+inline bool admit_stationary_force_controls(double energy, double density, double screening,
+                                            bool budget_stationarity) noexcept {
+  const std::array<double, 3> controls{energy, density, screening};
+  const std::array<double, 3> ceilings = budget_stationarity
+                                             ? std::array<double, 3>{1e-6, 1e-4, 1e-10}
+                                             : std::array<double, 3>{1e-10, 1e-8, 1e-12};
+  for (std::size_t index = 0; index < controls.size(); ++index)
+    if (!std::isfinite(controls[index]) || controls[index] <= 0.0 ||
+        controls[index] > ceilings[index])
+      return false;
+  return true;
+}
+
+inline constexpr unsigned nonlocal_proposal_iteration_limit = 16;
+/** Preserve the incumbent twelve-Fock warmup's eleven initializer steps.
+ * Extra mixed budget belongs to the target's frozen-potential proposal, not
+ * to a more accurate solution of the deliberately incomplete seed operator. */
+inline constexpr unsigned nonlocal_seed_iteration_limit = 11;
+
+/** Bound one initializer, one mixed target, and one frozen-potential proposal.
+ * Two iterations remain reserved for fresh strict targets. The provisional
+ * inner residual selects a precision handoff, never physical convergence. */
+inline unsigned nonlocal_mixed_proposal_limit(unsigned target_limit) noexcept {
+  const auto proposal_limit = nonlocal_seed_iteration_limit + nonlocal_proposal_iteration_limit + 2;
+  return std::min(proposal_limit, target_limit > 2 ? target_limit - 2 : 1U);
+}
+
+/** Stop proposing sub-tolerance density changes before a fresh energy check.
+ * This selects a proposal, not convergence or an observable-error certificate.
+ * Budget-Fock confirmation uses a residual one order below its 1e-4 physical
+ * publication limit; strict callers retain 1e-9. Both the normalized and AO
+ * maximum residual must pass, so the normalized diagnostic alone cannot select
+ * confirmation. The caller
+ * supplies an already-validated density tolerance, which is never weakened. */
+inline double nonlocal_confirmation_tolerance(bool budget_stationarity,
+                                              double density_tolerance) noexcept {
+  return std::min(budget_stationarity ? 1e-5 : 1e-9, density_tolerance);
+}
+
+/** Frozen operators propose densities, never accepted physical states.
+ * Use a bounded fraction of the last full-target AO residual to avoid
+ * oversolving a potential that will change at the next target refresh.
+ * The strict floor still follows tighter caller tolerances; publication
+ * requires fresh full-target checks, not this provisional stopping gate.
+ * Budget-selected proposals retain their separate confirmation policy. */
+inline double nonlocal_inner_tolerance(bool budget_stationarity, double maximum_residual,
+                                       double density_tolerance) noexcept {
+  if (budget_stationarity) return nonlocal_confirmation_tolerance(true, density_tolerance);
+  const double target_gate = std::min(1e-9, density_tolerance);
+  return std::clamp(maximum_residual * 1e-2, std::min(1e-12, target_gate * 0.1), 1e-5);
+}
 
 /** Private size-tagged Python transport. The original public KS descriptor
  * remains the prefix and retains its ABI/version. Only callers that verified

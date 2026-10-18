@@ -534,7 +534,7 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
         lambda x: xp.sum(x, axis=[0]),
         lambda x: xp.sum(x, axis=True),
         lambda x: xp.sum(x, axis=(0, 0)),
-        lambda x: xp.take(x, (-1,), axis=0),
+        lambda x: xp.take(x, (-3,), axis=0),
         lambda x: xp.take(x, (2,), axis=0),
         lambda x: xp.take(x, [0], axis=0),
         lambda x: xp.take(x, (True,), axis=0),

@@ -108,6 +108,55 @@ def test_typed_plan_reaches_exact_target_without_fabricating_accuracy(
     assert run.target_density is not None and not run.target_density.flags.writeable
 
 
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("method,charge,multiplicity", [("rhf", 0, 1), ("uhf", 1, 2)])
+def test_native_schedule_target_energy_and_forces_against_pyscf(
+    fitted: bool, method: str, charge: int, multiplicity: int
+) -> None:
+    """Qualify physical target observables, independently of callback routing."""
+    import numpy as np
+
+    pyscf = pytest.importorskip("pyscf")
+    source, target = calculators(method=method, fitted=fitted)
+    problem = TargetProblem.from_calculator(
+        target, ATOMS, charge=charge, multiplicity=multiplicity
+    )
+    plan = make_deterministic_hf_plan(
+        problem,
+        source,
+        target,
+        ATOMS,
+        charge=charge,
+        multiplicity=multiplicity,
+    )
+    result = run_progressive_hf(
+        plan, source, target, ATOMS, charge=charge, multiplicity=multiplicity
+    )
+    assert result.diagnostics["execution_owner"] == "native-v1"
+    assert result.verification.target_established
+    molecule = pyscf.gto.M(
+        atom=ATOMS,
+        basis="def2-svp",
+        unit="Bohr",
+        cart=True,
+        charge=charge,
+        spin=multiplicity - 1,
+        verbose=0,
+    )
+    reference = pyscf.scf.RHF(molecule) if method == "rhf" else pyscf.scf.UHF(molecule)
+    if fitted:
+        reference = reference.density_fit(auxbasis="def2-svp")
+    reference.conv_tol = 1.0e-12
+    reference.conv_tol_grad = 1.0e-10
+    reference.max_cycle = 100
+    reference.kernel()
+    assert reference.converged
+    assert result.target.energy == pytest.approx(reference.e_tot, abs=1.0e-8)
+    np.testing.assert_allclose(
+        result.target.forces, -reference.nuc_grad_method().kernel(), atol=1.0e-6, rtol=0
+    )
+
+
 def test_failed_source_falls_back_to_cold_exact_target() -> None:
     source, target = calculators(source_iterations=1)
     problem = TargetProblem.from_calculator(target, ATOMS)
@@ -126,6 +175,47 @@ def test_failed_source_falls_back_to_cold_exact_target() -> None:
     assert run.executions[0].transfer_status == "skipped_failed_source"
     assert run.target.converged and run.target.restart_origin == "cold"
     assert run.verification.target_established
+
+
+def test_missing_symbol_compatibility_preserves_complete_target() -> None:
+    """An old-library transport must preserve physical execution and work."""
+    import numpy as np
+
+    source, target = calculators()
+    problem = TargetProblem.from_calculator(target, ATOMS)
+    plan = make_deterministic_hf_plan(problem, source, target, ATOMS)
+    native = run_progressive_hf(plan, source, target, ATOMS)
+    selected = target._library
+
+    class OlderLibrary:
+        def __getattr__(self, name: str) -> object:
+            if name == "generativeqc_progressive_hf_run_v1":
+                raise AttributeError(name)
+            return getattr(selected, name)
+
+    target._library = OlderLibrary()
+    compatible = run_progressive_hf(plan, source, target, ATOMS)
+    assert compatible.diagnostics["execution_owner"] == "portable-compatibility"
+    assert compatible.target.energy == native.target.energy
+    np.testing.assert_array_equal(compatible.target.forces, native.target.forces)
+    np.testing.assert_array_equal(compatible.target_density, native.target_density)
+    assert compatible.verification == native.verification
+    assert [(item.iterations, item.fock_builds) for item in compatible.executions] == [
+        (item.iterations, item.fock_builds) for item in native.executions
+    ]
+
+
+def test_nonconverged_target_never_exports_density_or_audit() -> None:
+    source, target = calculators()
+    target._max_iterations = 1
+    problem = TargetProblem.from_calculator(target, ATOMS)
+    plan = make_deterministic_hf_plan(problem, source, target, ATOMS)
+    result = run_progressive_hf(plan, source, target, ATOMS)
+    assert not result.target.succeeded
+    assert not result.target.converged
+    assert result.target_density is None
+    assert not result.verification.target_established
+    assert result.diagnostics["physical_residual_audit"]["status"] == "unavailable"
 
 
 def test_projection_memory_budget_rejection_falls_back_to_target() -> None:

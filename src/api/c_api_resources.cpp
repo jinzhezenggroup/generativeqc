@@ -13,6 +13,7 @@
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
 #include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
 #include "runtime/residency_observer.hpp"
@@ -20,7 +21,9 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
+#include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
 
@@ -32,6 +35,42 @@
 #endif
 
 extern "C" {
+
+/** Private allocation-free compact topology query. Each row is an already
+ * expanded contraction, not an element template. The scalar AO rules are the
+ * same ones used by normalized systems; no coefficients, coordinates, provider
+ * or scientific arrays are accessed. Output is transactional on invalid input
+ * or count overflow. Results are public AOs, Cartesian AOs, shells, primitives
+ * and maximum angular momentum, bounded by size_t and signed-int64 metadata.
+ * Counts do not establish complete allocation authority. */
+int generativeqc_resource_basis_shape_v1(const std::uint32_t* angular_momenta,
+                                         const std::uint64_t* primitive_counts,
+                                         std::size_t shell_count, int representation,
+                                         std::uint64_t* output, std::size_t count) {
+  if (!angular_momenta || !primitive_counts || !shell_count || !output || count != 5 ||
+      (representation != GENERATIVEQC_BASIS_CARTESIAN &&
+       representation != GENERATIVEQC_BASIS_SPHERICAL))
+    return 1;
+  std::array<std::uint64_t, 5> result{0, 0, shell_count, 0, 0};
+  const auto maximum = std::min<std::uint64_t>(std::numeric_limits<std::size_t>::max(),
+                                               std::numeric_limits<std::int64_t>::max());
+  if (shell_count > maximum) return 1;
+  for (std::size_t index = 0; index < shell_count; ++index) {
+    const auto angular = angular_momenta[index];
+    const auto aos = generativeqc::molecule::shell_ao_count(angular, representation);
+    const auto cartesian = generativeqc::molecule::cartesian_count(angular);
+    const auto primitives = primitive_counts[index];
+    if (!aos || !cartesian || !primitives || aos > maximum - result[0] ||
+        cartesian > maximum - result[1] || primitives > maximum - result[3])
+      return 1;
+    result[0] += aos;
+    result[1] += cartesian;
+    result[3] += primitives;
+    result[4] = std::max(result[4], static_cast<std::uint64_t>(angular));
+  }
+  std::copy(result.begin(), result.end(), output);
+  return 0;
+}
 
 /** Private allocation-free D3 layout query, shared with D3Plan::prepare().
  * Six outputs: plan host, execution host, device, tables, workspace and total
@@ -427,6 +466,46 @@ int generativeqc_resource_quadrature_cuda_v1(std::size_t atoms, std::size_t poin
 #endif
 }
 
+/** Private shape-only CUDA fleet composition, available in CPU-only builds.
+ * Each input record has 13 slots in CudaKsDeviceResourceItem field order;
+ * slot 10 is a canonical boolean. Existing leaf queries own the supplied
+ * capacities. Nine aggregate outputs precede six diagnostic values per item.
+ * Both passes use scalar/stack storage; aliasing, malformed later records and
+ * overflow leave the complete output untouched. No device/provider is probed.
+ */
+int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 13 || !values) return -1;
+  const auto item_count = shape_count / 13;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 9) / 6 ||
+      value_count != 9 + 6 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 13 * index;
+      if (shape[10] > 1) throw std::invalid_argument("CUDA KS fleet requires a canonical boolean");
+      return scf::CudaKsDeviceResourceItem{shape[0],       shape[1],  shape[2], shape[3], shape[4],
+                                           shape[5],       shape[6],  shape[7], shape[8], shape[9],
+                                           shape[10] != 0, shape[11], shape[12]};
+    };
+    scf::CudaKsDeviceFleetResources fleet;
+    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::cuda_ks_device_item_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 9 + 6 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
 /** Private execution-scope bridge. The selected CPU plan can explicitly cap
  * fleet concurrency as well as collect samples. No device query/allocation.
  */
@@ -607,6 +686,82 @@ int generativeqc_resource_df_packed_tiles_v1(std::size_t batch, std::size_t nbf,
                                                   error_size);
 }
 
+/** Private CUDA DF numeric fleet query; available without a CUDA runtime.
+ * Thirteen slots per expanded/repeated item follow CudaDfResourceItem. A
+ * three-slot output queries bucket count, candidate count and full wire length;
+ * a full output appends each eight-slot candidate and its 66-slot buckets.
+ * Both passes validate the entire fleet. Publication is transactional, including
+ * late overflow/refusal. Input, output and error ranges must be disjoint. Only
+ * linear topology/plan metadata is allocated, never scientific/GPU storage.
+ * Status 2 preserves an unsupported-domain refusal; status 1 is invalid input,
+ * overflow or insufficient budget. Neither status permits Python fallback. */
+int generativeqc_resource_hf_df_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                              unsigned diis_history, std::uint64_t requested_budget,
+                                              unsigned storage, unsigned occupied_exchange,
+                                              std::uint64_t* values, std::size_t value_count,
+                                              char* error, std::size_t error_size) {
+  using namespace generativeqc;
+  if (!shapes || !shape_count || shape_count % scf::cuda_df_resource_item_width || !values ||
+      value_count < 3 || !error || !error_size)
+    return 1;
+  try {
+    const auto shape_bytes = runtime::size_mul(shape_count, sizeof(*shapes));
+    const auto value_bytes = runtime::size_mul(value_count, sizeof(*values));
+    if (runtime::ranges_overlap(shapes, shape_bytes, values, value_bytes) ||
+        runtime::ranges_overlap(shapes, shape_bytes, error, error_size) ||
+        runtime::ranges_overlap(values, value_bytes, error, error_size))
+      return 1;
+  } catch (const std::exception&) {
+    return 1;
+  }
+  try {
+    if (storage > 3 || occupied_exchange > 1)
+      throw std::invalid_argument("invalid CUDA DF fleet selector");
+    std::vector<scf::CudaDfResourceItem> items;
+    items.reserve(shape_count / scf::cuda_df_resource_item_width);
+    for (std::size_t offset = 0; offset < shape_count; offset += scf::cuda_df_resource_item_width) {
+      const auto* item = shapes + offset;
+      items.push_back({item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7],
+                       item[8], item[9], item[10], item[11], item[12]});
+    }
+    const auto candidates = scf::cuda_df_fleet_resources(
+        items, diis_history, requested_budget, static_cast<scf::DfPairStorageRequest>(storage),
+        occupied_exchange != 0);
+    const auto bucket_count = candidates.front().buckets.size();
+    const auto candidate_size =
+        runtime::size_add(scf::cuda_df_resource_candidate_width,
+                          runtime::size_mul(bucket_count, scf::cuda_df_resource_bucket_width));
+    const auto full_count =
+        runtime::size_add(3, runtime::size_mul(candidates.size(), candidate_size));
+    if (value_count != 3 && value_count != full_count)
+      throw std::invalid_argument("invalid CUDA DF fleet output length");
+    const std::array<std::uint64_t, 3> header{bucket_count, candidates.size(), full_count};
+    std::copy(header.begin(), header.end(), values);
+    if (value_count != 3) {
+      auto* destination = values + 3;
+      for (const auto& candidate : candidates) {
+        const auto inventory = candidate.inventory();
+        destination = std::copy(inventory.begin(), inventory.end(), destination);
+        for (const auto& bucket : candidate.buckets) {
+          destination = std::copy(bucket.values.begin(), bucket.values.end(), destination);
+          destination =
+              std::copy(bucket.energy_tiles.begin(), bucket.energy_tiles.end(), destination);
+          destination =
+              std::copy(bucket.force_tiles.begin(), bucket.force_tiles.end(), destination);
+        }
+      }
+    }
+    error[0] = '\0';
+    return 0;
+  } catch (const scf::CudaDfResourceUnsupported& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 2;
+  } catch (const std::exception& exception) {
+    std::snprintf(error, error_size, "%s", exception.what());
+    return 1;
+  }
+}
+
 int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atoms,
                                              std::size_t shells, std::size_t cartesian_aos,
                                              std::size_t primitives, std::size_t transforms,
@@ -758,6 +913,57 @@ int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size
     const auto aggregate = fleet.inventory();
     for (std::size_t index = 0; index < item_count; ++index) {
       const auto item = scf::cpu_ks_host_resources(item_at(index));
+      std::copy(item.begin(), item.end(), values + 15 + 16 * index);
+    }
+    std::copy(aggregate.begin(), aggregate.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Shape-only CUDA host lifetimes, including explicitly retained consumers.
+ * Each item contains the CPU ABI's 17 shape slots plus host-unfused XC at 17.
+ * Boolean slots 14/15/17 must be canonical. The 15 aggregate and 16/item output
+ * slots match the host fleet vocabulary; aggregate retained additionally owns
+ * retained_allowance. Neither allowance admits a force/provider capability.
+ * Two scalar passes and disjoint buffers preserve all-or-nothing publication,
+ * including malformed later items and aggregate signed-int64 overflow.
+ */
+int generativeqc_resource_ks_cuda_host_fleet_v1(const std::uint64_t* shapes,
+                                                std::size_t shape_count,
+                                                std::uint64_t retained_allowance,
+                                                std::uint64_t workspace_floor,
+                                                std::uint64_t* values, std::size_t value_count) {
+  if (!shapes || !shape_count || shape_count % 18 || !values) return -1;
+  const auto item_count = shape_count / 18;
+  if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
+      value_count != 15 + 16 * item_count)
+    return -1;
+  try {
+    using namespace generativeqc;
+    if (runtime::ranges_overlap(shapes, runtime::size_mul(shape_count, sizeof(*shapes)), values,
+                                runtime::size_mul(value_count, sizeof(*values))))
+      return -1;
+    const auto item_at = [&](std::size_t index) {
+      const auto* shape = shapes + 18 * index;
+      if (shape[14] > 1 || shape[15] > 1 || shape[17] > 1)
+        throw std::invalid_argument("CUDA KS host fleet requires canonical boolean slots");
+      return scf::KsHostResourceShape{
+          shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+          shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+          shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    };
+    const auto execution_at = [&](std::size_t index) {
+      return shapes[18 * index + 17] ? scf::KsHostExecution::cuda_host_unfused
+                                     : scf::KsHostExecution::cuda_fused;
+    };
+    scf::KsHostFleetResources fleet(workspace_floor, retained_allowance);
+    for (std::size_t index = 0; index < item_count; ++index)
+      fleet.append(item_at(index), 1, execution_at(index));
+    const auto aggregate = fleet.inventory();
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = scf::ks_host_resources(item_at(index), execution_at(index));
       std::copy(item.begin(), item.end(), values + 15 + 16 * index);
     }
     std::copy(aggregate.begin(), aggregate.end(), values);

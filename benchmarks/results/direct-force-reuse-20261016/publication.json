@@ -1,52 +1,58 @@
 {
   "archives": [],
   "decision": {
-    "reason": "All repeated primary/diagnostic arrays independently accurate; scoped cold nonregression observations without replacing historical measurements.",
+    "reason": "Independent arrays and scoped exact Direct endpoint qualification; all three source revisions explicit. Not universal interleaved performance promotion.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 34120,
+      "bytes": 47844,
       "path": "numeric-arrays.npy.xz",
       "role": "samples",
-      "sha256": "0f4d91ef3075f4111ce22440d48b36bd2be20b8ea9e483cbb9d4368d4941a503"
+      "sha256": "70ca4ade73b709a149bfc99a1e7a91e8fad4dc17e7dbdb4dab6dde38c25e0d00"
     },
     {
-      "bytes": 13552,
+      "bytes": 10436,
       "path": "numeric-index.json.xz",
       "role": "summary",
-      "sha256": "676e0b89fd3dbf2af3e9d2d53aed4d6f7c504e4e3f95363f2245e187a371193c"
+      "sha256": "2eeb604ddf281d59af73c0b89e11df7636ac841473429d8485a2b6b88000b86c"
     },
     {
-      "bytes": 3924,
-      "path": "endpoint-summary.json.xz",
-      "role": "summary",
-      "sha256": "9d6a1cfb8da0da70d86be95782795fc3a2805585ec244ac362760cf864a3b093"
-    },
-    {
-      "bytes": 17772,
+      "bytes": 3692,
       "path": "profile-summary.json.xz",
       "role": "summary",
-      "sha256": "0fb341ee8a7b9c879a39f23ae08da12f1e9bb0dc05c005ac2230511dd524e355"
+      "sha256": "78910b986fa119368dd9f23be5f9a82cb8c85bd1c4abf737ba8c59928d338955"
     },
     {
-      "bytes": 8892,
-      "path": "reproduction.json.xz",
-      "role": "reproduction",
-      "sha256": "82a7e4c7dc76a22803c76e8b3c7c72de7bb09b1c619acb8b8ab58e5f2939ae42"
+      "bytes": 3828,
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "sha256": "a1e2cbc07a43fc40cac0b54df43138697d40a4b9e49ab84573de96fe5bceabec"
     },
     {
-      "bytes": 3544,
+      "bytes": 3676,
       "path": "validation.json.xz",
       "role": "evidence",
-      "sha256": "613ab9e77e62f596defd89194cc6400d0f5046bb65bb6782c330489902ec821c"
+      "sha256": "e2aa7f9e43484d18b67d185649dc60e11f6c3996dc0610227e060b902f49ecbb"
     },
     {
-      "bytes": 1055,
-      "path": "build.sh",
+      "bytes": 7548,
+      "path": "endpoint-summary.json.xz",
+      "role": "summary",
+      "sha256": "c259a2fa029b3452ea0ddff60a004c4e761c7564bc8622a6a414f30d6af05583"
+    },
+    {
+      "bytes": 1717,
+      "path": "run-gpu.sh.gz",
       "role": "reproduction",
-      "sha256": "bec51fa29d594654e5f08f79ccefca81acc3a29f4f37b8c3f017f5bd6f9dd8e7"
+      "sha256": "66377a8de9e2a39061bedba66d87a93cb27cffa80f1c351bee4806cd36ef1d14"
+    },
+    {
+      "bytes": 503,
+      "path": "with-native-work.py.gz",
+      "role": "reproduction",
+      "sha256": "781adc8c720b9a28cca12a236078be0aa7888cdbe3c4797ce5172401b4d46a05"
     },
     {
       "bytes": 850,
@@ -55,16 +61,22 @@
       "sha256": "cc379e1c76528fb956979ffb9848b24694562bdd56a5ba9e1df33e81d3acf828"
     },
     {
-      "bytes": 2520,
-      "path": "verify-arrays.py",
+      "bytes": 1055,
+      "path": "build.sh",
       "role": "reproduction",
-      "sha256": "75d9f2314c5daa2a1469148bd99aef7e33efb8a6584da3410fd6184e2c44899e"
+      "sha256": "bec51fa29d594654e5f08f79ccefca81acc3a29f4f37b8c3f017f5bd6f9dd8e7"
     },
     {
-      "bytes": 7045,
+      "bytes": 2433,
+      "path": "verify-arrays.py",
+      "role": "reproduction",
+      "sha256": "e8dc2063e41e7646a24d54e691c7e824891f9a89c6e7ad4bff84f4fab2b41097"
+    },
+    {
+      "bytes": 7449,
       "path": "README.md",
       "role": "summary",
-      "sha256": "7fad6fc1b35543a1ee92d769b758eb8bfd58e2a0d838880ece44cec952ebfdb0"
+      "sha256": "8302f5052e665f3e8b17e9e4a09162a9832a2d8c6d07ee6b29c7de1716a5abed"
     }
   ],
   "reproduction": {
@@ -76,14 +88,18 @@
       "--ntasks=1",
       "--cpus-per-task=8",
       "--mem=28G",
-      "--time=00:25:00",
+      "--time=00:35:00",
       "bash",
-      "run.sh"
+      "run-gpu.sh",
+      "incumbent",
+      "r2scan-3c",
+      "96",
+      "endpoint"
     ]
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "00fced59f8d083839e4bc0761f91a1e94e8ccc0b"
+    "revision": "4bdffe3ceaa57e7a201f76a5687ad2d1933e6f1e"
   }
 }

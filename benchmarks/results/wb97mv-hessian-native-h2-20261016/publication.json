@@ -1,0 +1,53 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Raw fresh-process medians are retained, but a 9.326707032836223e-5 Eh/Bohr^2 inter-engine Hessian discrepancy exceeds 3e-6. No speed ratio or production promotion is qualified.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 3189,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "e852831379db3cbd5807a1a0de02517961ee81e3c644319c710bff19be76a62e"
+    },
+    {
+      "bytes": 3884,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "2b25fa4f7e86e1d9c040dca7b83faeb13bb6f3ef8710900c5c6e92d68ee8f162"
+    },
+    {
+      "bytes": 5549,
+      "path": "molecular-attempts.json.gz",
+      "role": "samples",
+      "sha256": "4b0b4ea3158074db75a8f069836d9442e0da2294ba04b65d14cf5bf5145dbb9e"
+    },
+    {
+      "bytes": 2278,
+      "path": "inventory.json.gz",
+      "role": "input",
+      "sha256": "4c014f86824c2e86f5f81338b307ed1a0650b3dea786e2143a762ede0e08062c"
+    },
+    {
+      "bytes": 2117,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "714ae9124e7b25933d29a83b9c63355cd0a875b4f7d5515bdb4b05b80560e9c0"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/wb97mv-hessian-native-h2-20261016/reproduce.sh"
+    ],
+    "prerequisites": "Run from the measured source on the node2 Slurm controller; CUDA12.9 sm120/RTX PRO6000, Ninja/CMake, verified compiler cache, build-time compiler Python dependencies, and GPU4PySCF1.8.1/PySCF2.14.0/CuPy13.6.0. Preserve Slurm visibility; set REFERENCE_PYTHON and CUDA_ROOT. Shared-library search paths must include the installed reference dependencies. The complete reproduction script was not independently replayed.",
+    "source_restore": "Keep the bundle outside the checkout before restoring source.revision; the retained inventory is a finite selected closure, not complete orbital-f/auxiliary-g coverage. The independent native H2 full-matrix values-only energy oracle is a separate test, not this comparator's acceptance authority."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "7c2a0b95a81f6db51d117dd9810ecb356e93d050"
+  }
+}

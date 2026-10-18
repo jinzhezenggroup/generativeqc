@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from generativeqc import Calculator, _generated_methods, _native
-from generativeqc._api_types import MethodCapabilities
+
+from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -55,14 +56,11 @@ def available_cc_library(monkeypatch: pytest.MonkeyPatch) -> None:
         ctypes.cast(result, ctypes.POINTER(ctypes.c_int32))[0] = 1
         return _native.STATUS_SUCCESS
 
-    def capabilities(method: str) -> MethodCapabilities:
-        return MethodCapabilities(
-            method, "coupled_cluster", True, False, frozenset({"energy", "forces"})
-        )
-
     library = SimpleNamespace(generativeqc_method_available=available)
+    install_registry_stub(
+        library, frozenset({"energy", "forces"}), supports_batch=False
+    )
     monkeypatch.setattr(_native, "load_library", lambda **_kwargs: library)
-    monkeypatch.setattr("generativeqc.calculator.method_capabilities", capabilities)
 
 
 @pytest.mark.usefixtures("available_cc_library")

@@ -12,6 +12,8 @@ ci_prioritize_posthf_files() {
     tests/python/test_dft_complete_cpu.py
     tests/python/test_hessian_directional.py
     tests/python/test_cc_complete_gradient.py
+    # Complete CBS module measured 309-329 s; retain its shared fixtures.
+    tests/python/test_ccsdt_cbs_native.py
     tests/python/test_ecp_heavy.py
     tests/python/test_ccsd_t_complete_gradient.py
     tests/python/test_ecp_stationary_cpu.py

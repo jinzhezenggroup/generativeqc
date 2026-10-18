@@ -89,3 +89,6 @@ pass without extra native storage or weaker transactional guarantees.
 `.agents/notes/implemented/architecture/2026-10-15-native-ecp-workspace-authority.md`.
 The preceding per-item decision is recorded in
 `.agents/notes/implemented/architecture/2026-10-12-shared-cpu-ks-host-sizing.md`.
+
+The later [CUDA host fleet decision](2026-10-16-native-cuda-ks-host-fleet.md)
+extends this owner with distinct retained consumer allowances and CUDA storage.

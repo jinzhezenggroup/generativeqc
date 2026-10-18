@@ -11,6 +11,7 @@ from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 
 from . import _generated_split_hybrids, libxc_bulk
+from ._generated_libxc_methods import LIBXC_METHODS
 from ._generated_split_hybrids import SPLIT_HYBRID_COMPONENTS, SPLIT_HYBRIDS
 from .b88_vwn_maple import b88_vwn_maple_provenance
 from .ityh_maple import ityh_maple_provenance
@@ -47,6 +48,34 @@ RSH_COMPONENTS = (
 PW91_COMPONENTS = ("GGA_X_PW91", "GGA_C_PW91")
 P86_COMPONENTS = ("LDA_C_PZ", "GGA_C_P86")
 WB97MV_COMPONENTS = ("MGGA_X_WB97M_V", "MGGA_C_WB97M_V")
+
+
+def _source_nonlocal_component_name(record: typing.Mapping[str, object]) -> str:
+    name = record.get("direct_semilocal_component")
+    if name is None:
+        name = record["registration"]
+    if not isinstance(name, str):
+        raise TypeError("generated Libxc nonlocal component must be a name")
+    if not name:
+        raise ValueError("generated Libxc nonlocal component must be a name")
+    return name
+
+
+# These are mathematical MethodIR components only: no point, SCF, gradient, or
+# CUDA qualification is inferred from a pinned Libxc registration.
+SOURCE_NONLOCAL_COMPONENTS = tuple(
+    sorted(
+        {
+            _source_nonlocal_component_name(record)
+            for record in LIBXC_METHODS.values()
+            if record["nonlocal_variant"] is not None
+            and (
+                record.get("direct_semilocal_component") is not None
+                or record["family"] in ("gga", "mgga")
+            )
+        }
+    )
+)
 SPECIAL_EXPRESSION_COMPONENTS = RSH_COMPONENTS + PW91_COMPONENTS + P86_COMPONENTS
 CURATED_COMPONENTS = (
     PUBLIC_COMPONENTS + SPECIAL_EXPRESSION_COMPONENTS + WB97MV_COMPONENTS
@@ -59,7 +88,10 @@ AUTO_BULK_COMPONENTS = tuple(
     name for name in POINTWISE_BULK_COMPONENTS if name not in CURATED_COMPONENTS
 )
 COMPONENTS = (
-    CURATED_COMPONENTS + AUTO_BULK_COMPONENTS + tuple(sorted(SPLIT_HYBRID_COMPONENTS))
+    CURATED_COMPONENTS
+    + AUTO_BULK_COMPONENTS
+    + tuple(sorted(SPLIT_HYBRID_COMPONENTS))
+    + SOURCE_NONLOCAL_COMPONENTS
 )
 CATALOG = {
     **{name: ((name, Fraction(1)),) for name in PUBLIC_COMPONENTS},
@@ -170,6 +202,41 @@ class FunctionalSpec:
         active_names = tuple(
             name for name, coefficient in self.components if coefficient
         )
+        source_only = tuple(
+            name for name in active_names if name in SOURCE_NONLOCAL_COMPONENTS
+        )
+        if source_only:
+            if (
+                len(source_only) != 1
+                or len(active_names) != 1
+                or self.components[0][1] != 1
+            ):
+                raise UnsupportedXC(
+                    "unqualified nonlocal method requires one intact semilocal source"
+                )
+            component = source_only[0]
+            record = next(
+                row
+                for row in LIBXC_METHODS.values()
+                if (row.get("direct_semilocal_component") or row["registration"])
+                == component
+                and row["nonlocal_variant"] is not None
+            )
+            return {
+                **payload,
+                "ingredients": self.ingredients,
+                "features": self.features,
+                "derivative_orders": [],
+                "energy": "hartree/bohr^3; e_xc=(rho_a+rho_b)*epsilon_xc",
+                "license": "MPL-2.0",
+                "expression_provenance": {
+                    "kind": "libxc-method-representation-only",
+                    "registration": record["registration"],
+                    "source_sha256": record["source_sha256"],
+                },
+                "qualification": "representation-only",
+                "production_admitted": False,
+            }
         split_only = tuple(
             name for name in active_names if name in SPLIT_HYBRID_COMPONENTS
         )

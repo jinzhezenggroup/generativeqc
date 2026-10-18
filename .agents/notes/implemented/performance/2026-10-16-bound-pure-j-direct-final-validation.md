@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-16
 
+The temporary exact-direct upper bound is superseded by
+[stationary-density energy confirmation](../numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
+and its new source-bound complete-endpoint qualification. The containment below
+did not repair the SCF tail; its original negative observation remains rejected.
+
 ## Problem
 
 PR #2532 promotes resident final validation for exact-direct and density-fitted
