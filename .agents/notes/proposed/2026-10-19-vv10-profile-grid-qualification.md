@@ -177,3 +177,9 @@ XC240×80×160 anchor: radial and angular checks differ by `2.91e-7` and
 FP64 does not. Extend the separate full-Fock twelve-atom study through
 480×160×320, with independent radial/angular checks, rather than labeling a
 three-atom pass or an unstable larger anchor as a universal grid choice.
+
+The first default-control Direct/48 Fast population (job 10337, shared
+48×16×32) completed all twelve E+F calls. Its same-grid maxima are
+`2.35e-9 Eh` / `1.27e-5 Eh/bohr` / `3.96e-6 Eh/bohr` RMS and pass Fast's
+arithmetic-only gates. Its quadrature and total endpoint budgets remain
+unchecked; preserve this distinction for the larger-size timing refresh.

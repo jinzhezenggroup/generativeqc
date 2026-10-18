@@ -124,7 +124,7 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
+**Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64 arithmetic). GenerativeQC
 Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
 #2563, #2567 and the #2558 force stack. All other native points retain the frozen
 #2531 + #2532 snapshot. GPU4PySCF ωB97M-V Direct/96 and DF/96 are supplemented
@@ -132,6 +132,14 @@ on 2026-10-18; its other timings and independent references remain historical,
 not rerun. Cold includes setup and the
 first E+F call; warm reuses converged density. The water clusters have
 3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
+
+**Precision scope:** FP64 denotes arithmetic, not quadrature convergence.
+Retaining the original grid or passing a same-grid engine comparison does not
+certify total errors below `1e-8 Eh` / `1e-7 Eh/bohr`. The
+[profile-aware grid study](benchmarks/readme_grids.md#profile-aware-accuracy-study)
+must qualify combined XC, VV10 and native arithmetic errors before replacing
+these historical results. Fast requires its own energy, maximum-force and
+RMS-force budgets; exploratory grid agreement alone does not qualify it.
 
 The figures combine explicitly frozen sources, not a timing claim for the current
 checkout. The [r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update)
