@@ -127,8 +127,9 @@ print(first.energies)
 **Complete HF/DFT energy + analytic forces** on RTX 5090 (FP64). GenerativeQC
 Direct r²SCAN-3c at 3/12/48/96 atoms uses the qualified 2026-10-16 composition of
 #2563, #2567 and the #2558 force stack. All other native points retain the frozen
-#2531 + #2532 snapshot; GPU4PySCF timings and independent references are
-historical, not rerun. Cold includes setup and the
+#2531 + #2532 snapshot. GPU4PySCF ωB97M-V Direct/96 and DF/96 are supplemented
+on 2026-10-18; its other timings and independent references remain historical,
+not rerun. Cold includes setup and the
 first E+F call; warm reuses converged density. The water clusters have
 3/12/48/96 atoms, using spherical def2-SVP except r²SCAN-3c (def2-mTZVPP).
 
@@ -149,17 +150,19 @@ Exact-direct and DF pure-J resident defaults start at 544 AOs; see the
 
 **Density fitting (DF)** — cc-pVDZ-JKFIT for both engines.
 
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
+![Cold and warm density-fitted HF and DFT energy-plus-force timings](assets/readme-dft-df-performance.svg)
 
-Native ωB97M-V DF/48 and DF/96 lack independent accuracy references. DF/96 now
-includes a complete **4717.471 s cold E+F** call with explicit resource budgets:
+Native ωB97M-V DF/48 and historical DF/96 retain their unchecked accuracy labels.
+The [GPU4PySCF/96 supplement](benchmarks/results/readme-gpu4pyscf96-20261018/README.md)
+adds independent Direct/DF timings without rerunning or relabeling native calls.
+Native DF/96 includes a complete **4717.471 s cold E+F** call with explicit resource budgets:
 12 GiB DF workspace, 4 GiB device/host force allowances each, and a 2 GiB LR
-cache ceiling. The four-hour run completed only four of five warm repeats, so
-no DF/96 warm median is plotted. Small-system compilation-cache priming is
-recorded separately, never subtracted from cold. See the
+cache ceiling. The historical four-hour native run completed only four of five
+warm repeats, so no native DF/96 warm median is plotted. Small-system
+compilation-cache priming is recorded separately, never subtracted from cold. See the
 [updated r²SCAN-3c Direct timings](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update),
-[other Direct timings](benchmarks/results/readme-refresh-20261015/timings.md),
-[DF timings](benchmarks/results/readme-refresh-20261015/df-timings.md), and
+[other Direct timings](benchmarks/results/readme-gpu4pyscf96-20261018/timings.md),
+[DF timings](benchmarks/results/readme-gpu4pyscf96-20261018/df-timings.md), and
 [protocol, accuracy and provenance](benchmarks/results/readme-refresh-20261015/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
