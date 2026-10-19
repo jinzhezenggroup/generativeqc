@@ -1,5 +1,11 @@
 # Bounded real internal UHF stability diagnostic
 
+The installed explicit CPU workflow is documented in
+[Stable unrestricted electronic roots](../user/spin_roots.md). It reuses the
+spectrum owner described here and adds native UHF/UKS/post-HF-reference recovery,
+force publication gates and cross-geometry tracking. The fixed-geometry tool
+interfaces below remain internal.
+
 `tools.generativeqc_response.stability.diagnose_uhf_stability` is an internal
 CPU/NumPy diagnostic for a tiny **complete real occupied–virtual domain** of a
 converged, real FP64 canonical UHF reference. It consumes the existing shared

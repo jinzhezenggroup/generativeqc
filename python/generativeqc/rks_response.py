@@ -407,7 +407,7 @@ class _PreparedRKSJBackend:
 
 
 class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
-    """Bind the common feature-Hessian contraction to the native SCF point model."""
+    """Bind either spin feature-Hessian contraction to its native SCF point model."""
 
     def __init__(
         self,
@@ -422,7 +422,7 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
             spec,
             basis,
             state.grid,
-            state.density[0],
+            state.density if spec.spin == "polarized" else state.density[0],
             tile_points=tile_points,
         )
         self.identity = canonical_hash(
@@ -430,7 +430,7 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
                 "kernel": self.identity,
                 "point_model": state.identity.regularization_identity,
                 "native_state": state.identity.to_payload(),
-                "derivative": "unpolarized-cartesian-directional-v1",
+                "derivative": f"{spec.spin}-cartesian-directional-v1",
             }
         )
 
@@ -447,13 +447,22 @@ class _NativeRKSXCKernel(FixedDensityXCDerivativeKernel):
         features = density_features(jets, density, ingredients=ingredients)
         delta = density_features(jets, direction, ingredients=ingredients)
         zero = np.zeros((2, jets.shape[1], 3))
-        coefficients = self.state._source.evaluate_rks_response_points(
-            "sigma" in self.spec.ingredients,
-            features["rho"].sum(axis=0),
-            features.get("gradient", zero).sum(axis=0),
-            delta["rho"].sum(axis=0),
-            delta.get("gradient", zero).sum(axis=0),
-        )
+        if self.spec.spin == "polarized":
+            coefficients = self.state._source.evaluate_uks_response_points(
+                "sigma" in self.spec.ingredients,
+                features["rho"],
+                features.get("gradient", zero),
+                delta["rho"],
+                delta.get("gradient", zero),
+            )
+        else:
+            coefficients = self.state._source.evaluate_rks_response_points(
+                "sigma" in self.spec.ingredients,
+                features["rho"].sum(axis=0),
+                features.get("gradient", zero).sum(axis=0),
+                delta["rho"].sum(axis=0),
+                delta.get("gradient", zero).sum(axis=0),
+            )
         if "sigma" not in self.spec.ingredients:
             coefficients.pop("gradient")
         return assemble_coefficients(jets, coefficients, weights)
