@@ -1236,7 +1236,7 @@ class Calculator:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method == _native.METHOD_RCCSD
+            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
             or (
                 not batch
                 and self._method == _native.METHOD_MP2

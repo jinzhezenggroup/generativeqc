@@ -6,8 +6,9 @@ The scientific equations remain owned by
 `generativeqc_compiler.mp2.equations.unrestricted_energy_program`; derivatives
 use the shared TensorIR VJP. These are **unrelaxed fixed-orbital weights**.
 UHF orbital response, AO derivative contractions, relaxed density/overlap
-weights and nuclear forces are outside this interface. The public `ump2`
-method continues to support energy only.
+weights and nuclear forces are outside this fixed-orbital interface. The
+[complete native endpoint](#complete-native-nuclear-forces) composes these
+derivative semantics with UHF response and nuclear derivative consumers.
 
 ## Tile interface
 
@@ -98,7 +99,58 @@ that pinned dependency and includes new test files in its core shards.
 Its Python coverage artifacts also retain JUnit records so molecular gate
 success can be checked explicitly, including failure/skip status, at the tested head.
 
-These checks qualify this MO derivative slice, not reconverged nuclear forces,
-CUDA execution or a complete production force endpoint. Parent issue #1823
-retains the response, relaxed-weight, derivative-consumer and nuclear-force
-acceptance work.
+These checks qualify the fixed-orbital MO derivative slice. The complete CPU
+endpoint has separate molecular gates below; CUDA is not admitted.
+
+
+## Complete native nuclear forces
+
+`mp2::unrestricted_force_cpu` consumes the exact native UHF reference and its
+live prepared conventional J/K owner. The three canonical spin equations and
+native VJPs are generated from `unrestricted_energy_program` through the shared
+TensorIR transpose and bounded CPU emitter. Runtime accumulation maps exchange
+bars to the physical same-spin ijab block and scatter-adds all epsilon bars.
+There are no restricted occupation multipliers.
+
+The runtime retains three ijab cotangents and rank-two spin Fock multipliers.
+Canonical occupied/occupied and virtual/virtual stationarity is enforced before
+the occupied/virtual solve. Exact same-space degeneracies require a vanishing
+antisymmetric gradient; unresolved nonstationarity fails closed. One packed
+alpha-then-beta Z-vector uses `response::spin_orbital_problem`, the actual native
+`J[delta-P-alpha + delta-P-beta] - K[delta-P-spin]` provider and common native
+GMRES. The physical unpreconditioned residual and the final full Lagrangian
+antisymmetric residual must pass independently. Empty rotation spaces require
+no solve. The relaxed overlap weights follow the symmetric coefficient gradient.
+
+One-electron and Pulay weights are pulled back in each spin frame and summed.
+The factorized ERI cotangent is pulled back in four bounded shell stages,
+retaining alpha/beta coefficients in their own slots, then immediately consumed
+by the existing weighted ERI derivative. Nuclear repulsion is counted once.
+Neither a molecular AO rank-four cotangent nor a coordinate-major ERI derivative
+array is materialized. The endpoint still retains dense ijab weights and streams
+O(N^3) MO blocks; this is not an arbitrary-size or performance-qualified route.
+
+The conservative numeric plan is checked before cotangent or response execution.
+It includes the provider/reference, generated VJP workspace, three ijab outputs,
+rank-two state, four MO blocks, complete Krylov storage, simultaneous shell
+staging, result storage and bounded derivative scratch. Planned and measured
+memory are distinct. No force or success diagnostic publishes after a resource,
+source, response, denominator or nonfinite failure.
+
+```sh
+PYTHONPATH=python:. python -m pytest tests/python/test_ump2_forces.py tests/python/test_ump2_public.py -q
+ctest --test-dir build/cpu-1823 -R generativeqc_ump2_contract_tests --output-on-failure
+```
+
+Independent PySCF 2.14.0 analytic UMP2 gradients use the exact native Gaussian
+shells. Their small response oracle constructs PySCF's own physical J/K matrix,
+uses a bounded NumPy SVD solve (relative cutoff 1e-12, at most 128 rotations), and
+requires a fresh residual below 1e-11. Compatible exact zero modes use the
+least-norm solution. This avoids treating iterative Krylov termination as a
+response accuracy certificate; no production coefficient/response or generated
+UMP2 graph is consumed by the oracle. H2, asymmetric open-shell H3, OH, NH2 and localized stretched H2 provide total
+force gates; reconverged central differences use multiple steps. Acceptance is
+2e-7 Hartree/Bohr against analytic/directional oracles, 1e-9 translational closure,
+2e-9 restricted-limit parity, and 1e-10 alpha/beta permutation parity. Prepared
+cold/warm/changed geometry, inclusive budget admission, source failure recovery,
+stale owners and failed-result publication have separate controls.

@@ -9,13 +9,16 @@
 
 #include "api/handles.hpp"
 #include "methods/ump2_method.hpp"
+#include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
 #include "posthf/ump2_energy.hpp"
+#include "posthf/ump2_force.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
 
 namespace {
@@ -88,9 +91,11 @@ class CountingSource final : public generativeqc::integrals::ElectronInteraction
             const std::array<std::size_t, 4>& count, double* output,
             std::size_t elements) const override {
     ++reads;
+    if (fail) throw std::runtime_error("injected source failure");
     raw_.read(op, begin, count, output, elements);
   }
   mutable std::size_t reads{};
+  bool fail{};
 
  private:
   generativeqc::posthf::RawSource raw_;
@@ -106,7 +111,114 @@ void native_equations() {
     const double expected =
         channel == 2 ? g * g / denominator : 0.25 * (g - x) * (g - x) / denominator;
     require(std::abs(value - expected) < 1e-14, "native spin TensorIR factor mismatch");
+    std::array<double, 6> bars{};
+    generativeqc::mp2::generated::ump2_adjoint_cpu_plan(channel).run(g, x, ei, ej, ea, eb,
+                                                                     bars.data());
+    const double numerator = channel == 2 ? g * g : 0.25 * (g - x) * (g - x);
+    const double dg = channel == 2 ? 2 * g / denominator : 0.5 * (g - x) / denominator;
+    require(std::abs(bars[0] - dg) < 1e-14, "native direct cotangent factor mismatch");
+    require(std::abs(bars[1] - (channel == 2 ? 0 : -dg)) < 1e-14,
+            "native exchange cotangent factor mismatch");
+    for (unsigned axis = 2; axis < 6; ++axis)
+      require(std::abs(bars[axis] - (axis < 4 ? -1 : 1) * numerator / (denominator * denominator)) <
+                  1e-14,
+              "native epsilon cotangent sign mismatch");
   }
+}
+
+void force_contract() {
+  auto system = h2();
+  system.atoms.push_back({1, {0.3, 0, 2.7}});
+  system.shells.push_back({2, 0, system.shells[0].primitives});
+  system.multiplicity = 2;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "open-shell force fixture setup failed");
+  const auto strategy = generativeqc::scf::resolve_fock_build(
+      generativeqc::methods::detail::ump2_reference_fock_spec(),
+      generativeqc::scf::FockBackend::Cpu, 0);
+  generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
+  generativeqc::scf::ScfOptions options;
+  options.export_physical_reference = true;
+  options.compute_forces = false;
+  options.energy_tolerance = options.density_tolerance = 1e-12;
+  options.max_iterations = 200;
+  options.reference_memory_budget_bytes = 256ULL << 20;
+  options.resolved_fock_build = strategy;
+  options.screening_tolerance = 0;
+  auto solved = generativeqc::scf::run_prepared_fock_strategy(plan, options);
+  require(solved.converged && solved.unrestricted_reference, "force UHF did not converge");
+  auto ref = *solved.unrestricted_reference;
+  CountingSource source(system);
+  const auto evaluate = [&](const auto& state, std::size_t budget) {
+    auto problem = generativeqc::methods::detail::unrestricted_response_problem(state, plan);
+    return generativeqc::mp2::unrestricted_force_cpu(state, &problem, source, budget, 1e-10);
+  };
+  const auto first = evaluate(ref, 256ULL << 20);
+  require(first.response.converged() && first.stationarity_residual < 1e-8,
+          "UMP2 force did not qualify full response");
+  auto swapped = ref;
+  std::swap(swapped.nocc[0], swapped.nocc[1]);
+  std::swap(swapped.fock[0], swapped.fock[1]);
+  std::swap(swapped.coefficients[0], swapped.coefficients[1]);
+  std::swap(swapped.orbital_energies[0], swapped.orbital_energies[1]);
+  std::swap(swapped.density[0], swapped.density[1]);
+  const auto permuted = evaluate(swapped, 256ULL << 20);
+  for (std::size_t k = 0; k < first.forces.size(); ++k)
+    require(std::abs(first.forces[k] - permuted.forces[k]) < 1e-10,
+            "alpha/beta permutation changed the force");
+  auto unbound_copy = ref;
+  auto old_problem = generativeqc::methods::detail::unrestricted_response_problem(ref, plan);
+  bool stale_problem = false;
+  try {
+    (void)generativeqc::mp2::unrestricted_force_cpu(unbound_copy, &old_problem, source,
+                                                    256ULL << 20, 1e-10);
+  } catch (const std::invalid_argument&) {
+    stale_problem = true;
+  }
+  require(stale_problem, "same-shape response from another reference was accepted");
+  const auto reads = source.reads;
+  bool rejected = false;
+  try {
+    (void)evaluate(ref, first.planned_endpoint_peak_bytes - 1);
+  } catch (const std::length_error&) {
+    rejected = true;
+  }
+  require(rejected && source.reads == reads, "force budget refusal read the source");
+  const auto exact = evaluate(ref, first.planned_endpoint_peak_bytes);
+  require(exact.forces == first.forces, "inclusive force capacity changed the result");
+  source.fail = true;
+  rejected = false;
+  try {
+    (void)evaluate(ref, 256ULL << 20);
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected, "source failure published a UMP2 force");
+  source.fail = false;
+  const auto recovered = evaluate(ref, 256ULL << 20);
+  require(recovered.forces == first.forces, "failed force poisoned subsequent replay");
+  auto nonstationary = ref;
+  nonstationary.commutator_residual = 1e-3;
+  rejected = false;
+  try {
+    (void)evaluate(nonstationary, 256ULL << 20);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "nonstationary force reference accepted");
+  auto changed = system;
+  changed.atoms[0].position[0] += 0.01;
+  CountingSource stale(changed);
+  rejected = false;
+  try {
+    auto problem = generativeqc::methods::detail::unrestricted_response_problem(ref, plan);
+    (void)generativeqc::mp2::unrestricted_force_cpu(ref, &problem, stale, 256ULL << 20, 1e-10);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && stale.reads == 0, "stale derivative source was read");
 }
 
 void unsupported_requests() {
@@ -316,6 +428,7 @@ int main() {
     energy_only_reference_admission();
     unsupported_requests();
     source_and_slots();
+    force_contract();
     std::cout << "native UMP2 contract passed\n";
     return 0;
   } catch (const std::exception& error) {

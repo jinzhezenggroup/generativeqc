@@ -22,6 +22,8 @@ from generativeqc_compiler.mp2.equations import (
     pair_energy_program,
     unrestricted_energy_program,
 )
+from generativeqc_compiler.tensor import transpose_program
+from generativeqc_compiler.tensor.cpu import emit_cpu as emit_bounded_cpu
 from generativeqc_compiler.tensor.cpu_emit import emit_cpu
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
@@ -77,6 +79,7 @@ def ump2_cpu_header() -> str:
         "#include <cstddef>",
         "#include <stdexcept>",
         "#include <vector>",
+        '#include "tensor/cpu_runtime.hpp"',
         "namespace generativeqc::mp2::generated {",
         "using Ump2Run = void(*)(double,double,double,double,double,double,double*);",
         "struct Ump2CpuPlan { Ump2Run run; std::size_t numeric_bytes; const char* equation_hash; };",
@@ -108,6 +111,48 @@ def ump2_cpu_header() -> str:
         "inline Ump2CpuPlan ump2_cpu_plan(unsigned channel) { switch(channel) {"
         + "".join(plans)
         + 'default: throw std::invalid_argument("unknown UMP2 spin channel"); }}'
+    )
+    # The reverse is emitted by the same TensorIR owner as the energy.
+    adjoint_plans = []
+    order = ("g", "x", "ei", "ej", "ea", "eb")
+    for channel in ("alpha_alpha", "beta_beta", "alpha_beta"):
+        primal = unrestricted_energy_program(
+            (1, 1, 1, 1), channel=channel, differentiable=True
+        )
+        reverse = prepare_for_backend(
+            transpose_program(primal, ("energy",)).program, "cpu"
+        )
+        source, resources = emit_bounded_cpu(reverse, symbol=f"ump2_reverse_{channel}")
+        source = source.replace('#include "cpu_runtime.hpp"', "").replace(
+            'extern "C" int', "inline int"
+        )
+        lines.extend((f"namespace reverse_{channel} {{", source, "}"))
+        feeds = {name: name for name in order}
+        feeds["bar_energy"] = "seed"
+        inputs = ",".join(
+            feeds[node.attrs["name"]]
+            for node in reverse.live_nodes
+            if node.op == "input"
+        )
+        copies = " ".join(
+            f"out[{order.index(name.removeprefix('bar_'))}]=bars[{k}];"
+            for k, name in enumerate(reverse.outputs)
+        )
+        lines.append(
+            f"inline void ump2_adjoint_{channel}(double g,double x,double ei,double ej,double ea,double eb,double* out) "
+            f"{{ const double seed=1.0; std::fill_n(out,6,0.0); const double inputs[]={{{inputs}}}; "
+            f"double bars[{resources['output_count']}]; "
+            f"if(reverse_{channel}::ump2_reverse_{channel}(inputs,{resources['input_count']},bars,{resources['output_count']},{resources['required_bytes']}ULL)) "
+            f'throw std::runtime_error("nonfinite UMP2 adjoint"); {copies} }}'
+        )
+        adjoint_plans.append(
+            f"case {len(adjoint_plans)}: return {{ump2_adjoint_{channel},{resources['required_bytes']}ULL,"
+            f'"{reverse.logical_hash}"}};'
+        )
+    lines.append(
+        "inline Ump2CpuPlan ump2_adjoint_cpu_plan(unsigned channel) { switch(channel) {"
+        + "".join(adjoint_plans)
+        + 'default: throw std::invalid_argument("unknown UMP2 adjoint channel"); }}'
     )
     inventory = hashlib.sha256("\n".join(hashes).encode("ascii")).hexdigest()
     lines.append(f'inline constexpr char kUmp2InventoryHash[] = "{inventory}";')

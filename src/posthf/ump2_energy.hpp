@@ -16,6 +16,11 @@ struct UnrestrictedEnergy {
   std::array<const char*, 3> equation_hashes{};
 };
 
+/** Validate source identity and every active denominator before any source read. */
+double validate_unrestricted_energy_input(const hf::UnrestrictedPhysicalReference& reference,
+                                          const integrals::ElectronInteractionSource& source,
+                                          double denominator_threshold);
+
 UnrestrictedEnergy conventional_unrestricted_energy(
     const hf::UnrestrictedPhysicalReference& reference,
     const integrals::ElectronInteractionSource& source, std::size_t budget,
