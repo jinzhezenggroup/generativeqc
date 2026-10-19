@@ -20,6 +20,7 @@ from generativeqc_compiler.dft.treutler import (
     atomic_point_count,
     default_counts,
     radial_rule,
+    radii_adjustment,
 )
 from generativeqc_compiler.xc.grid_native import NativeGridContraction
 from generativeqc_compiler.xc.grid_response import (
@@ -27,7 +28,9 @@ from generativeqc_compiler.xc.grid_response import (
     partition_response,
 )
 from test_grid_pruning import CENTERS, MOTION
-from test_grid_pruning import native_grid as native_grid  # noqa: PLC0414 -- pytest fixture export
+from test_grid_pruning import (
+    native_grid as native_grid,  # noqa: PLC0414 -- pytest fixture export
+)
 
 
 def canonical(array: Any) -> np.ndarray:
@@ -243,3 +246,50 @@ def test_level_encoding_element_bounds_and_metadata_only_counts(
             replace(spec, angular_polar=invalid)
         with pytest.raises(ValueError):
             replace(spec, angular_azimuth=invalid)
+
+
+@pytest.mark.parametrize(
+    "large,small",
+    [
+        (1e300, 1e-300),
+        (np.finfo(np.float64).max, np.nextafter(0.0, 1.0)),
+        (1.0, np.nextafter(0.0, 1.0)),
+    ],
+)
+def test_extreme_partition_radii_retain_clipped_limits(
+    large: float, small: float
+) -> None:
+    # Finite positive overrides remain valid even when their ratio underflows.
+    # NumPy inputs must not introduce floating-point warnings before clipping.
+    with np.errstate(all="raise"):
+        assert radii_adjustment(np.float64(large), np.float64(small)) == -0.5
+        assert radii_adjustment(np.float64(small), np.float64(large)) == 0.5
+        assert radii_adjustment(np.float64(large), np.float64(large)) == 0.0
+        assert radii_adjustment(np.float64(small), np.float64(small)) == 0.0
+
+
+def test_extreme_partition_radii_native_first_response(tmp_path: Path) -> None:
+    centers = np.array([[0.0, 0.0, 0.0], [1.6, 0.1, -0.2]])
+    points = np.array([[0.3, 0.5, 0.1], [0.9, -0.5, 0.2]])
+    owners = np.array([0, 1], dtype=np.int64)
+    motion = np.array([[0.2, -0.1, 0.3], [-0.1, 0.2, -0.15]])
+    radii = np.array([1e-300, 1e300])
+    seeds = np.array([0.3, -0.2])
+    executor = NativeGridContraction(
+        compiler=CppCompilerAdapter(Path("c++")), cache=tmp_path
+    )
+    for selected_radii in (radii, radii[::-1]):
+        gradient = executor.contract(
+            points, centers, owners, seeds, atomic_radii=selected_radii
+        )
+        with np.errstate(all="raise"):
+            first = partition_response(
+                points,
+                centers,
+                point_motion=motion[owners],
+                center_motion=motion,
+                atomic_radii=selected_radii,
+            )
+        expected = seeds @ first.directional[np.arange(2), owners]
+        assert np.sum(gradient * motion) == pytest.approx(expected, abs=2e-14)
+        np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=3e-15)

@@ -176,5 +176,8 @@ def radii_adjustment(first: float, second: float) -> float:
         math.isfinite(first) and math.isfinite(second) and first > 0 and second > 0
     ):
         raise ValueError("partition radii must be finite and positive")
-    ratio = math.sqrt(second / first)
+    ratio = math.sqrt(float(second) / float(first))
+    # A positive ratio can underflow before sqrt. Its clipped limit is exact.
+    if ratio == 0.0:
+        return -0.5
     return max(-0.5, min(0.5, 0.25 * (ratio - 1 / ratio)))
