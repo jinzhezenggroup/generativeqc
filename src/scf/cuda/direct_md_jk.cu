@@ -3,12 +3,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include "generated_md_j_masked.cuh"
 #include "scf/cuda/coulomb_auxiliary.cuh"
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/md_hermite_index.cuh"
 #include "scf/cuda/md_source_tiles.cuh"
-
-#include "generated_md_j_masked.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -44,13 +43,13 @@ __host__ __device__ constexpr unsigned source_components(unsigned angular) {
 
 template <unsigned BraAngular, unsigned KetAngular, bool Masked, bool Preprojected = false>
 __host__ __device__ constexpr unsigned source_workspace_width() {
-  constexpr unsigned incumbent =
-      CoulombAuxiliary<double, BraAngular + KetAngular>::kStateCount +
-      source_components(BraAngular) * md_j_hermite_count(KetAngular) +
-      source_components(BraAngular) * source_components(KetAngular) + 1;
+  constexpr unsigned incumbent = CoulombAuxiliary<double, BraAngular + KetAngular>::kStateCount +
+                                 source_components(BraAngular) * md_j_hermite_count(KetAngular) +
+                                 source_components(BraAngular) * source_components(KetAngular) + 1;
   if constexpr (Masked) {
     constexpr unsigned masked =
-        (sizeof(MdMaskedWorkspace<BraAngular, KetAngular, Preprojected>) + sizeof(double) - 1) / sizeof(double);
+        (sizeof(MdMaskedWorkspace<BraAngular, KetAngular, Preprojected>) + sizeof(double) - 1) /
+        sizeof(double);
     return incumbent > masked ? incumbent : masked;
   }
   return incumbent;
@@ -258,20 +257,21 @@ struct MdMaskedTileFallback {
     const auto system = md.pairs[bra].system;
     if (system < system_begin || system >= system_end || system != md.pairs[ket].system ||
         !(md.maximum_bounds[bra] * md.maximum_bounds[ket] >= screening) ||
-        !(md.minimum_bounds[bra] * md.minimum_bounds[ket] < screening)) return false;
+        !(md.minimum_bounds[bra] * md.minimum_bounds[ket] < screening))
+      return false;
     const double allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
     const double bound = __dmul_ru(md.maximum_bounds[bra], md.maximum_bounds[ket]);
     return !((md.density_bounds[bra] == 0.0 && md.density_bounds[ket] == 0.0) ||
-        (__dmul_ru(bound, md.density_bounds[bra]) < allowance &&
-         __dmul_ru(bound, md.density_bounds[ket]) < allowance));
+             (__dmul_ru(bound, md.density_bounds[bra]) < allowance &&
+              __dmul_ru(bound, md.density_bounds[ket]) < allowance));
   }
 
-  __device__ void operator()(DeviceBatch batch, MdJView md, MdSourceTask task,
-                             bool unrestricted, double screening, const double* bounds,
-                             const double* density, const double* beta, double* coulomb,
-                             double* workspace) const {
-    contract_source_task<2, 1, false, false>(batch, md, task, true, false, unrestricted,
-        screening, bounds, density, beta, coulomb, nullptr, nullptr, workspace);
+  __device__ void operator()(DeviceBatch batch, MdJView md, MdSourceTask task, bool unrestricted,
+                             double screening, const double* bounds, const double* density,
+                             const double* beta, double* coulomb, double* workspace) const {
+    contract_source_task<2, 1, false, false>(batch, md, task, true, false, unrestricted, screening,
+                                             bounds, density, beta, coulomb, nullptr, nullptr,
+                                             workspace);
   }
 };
 
@@ -436,7 +436,8 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
     __syncthreads();
     constexpr auto group_threads = SourceSchedule<BraAngular, KetAngular>::group_threads;
     constexpr auto groups = SourceSchedule<BraAngular, KetAngular>::groups;
-    constexpr auto workspace_width = source_workspace_width<BraAngular, KetAngular, Masked, Preprojected>();
+    constexpr auto workspace_width =
+        source_workspace_width<BraAngular, KetAngular, Masked, Preprojected>();
     const unsigned group_index = threadIdx.x / group_threads;
     for (unsigned task_index = group_index; task_index < task_count; task_index += groups) {
       const auto task = tasks[task_index];
@@ -457,16 +458,16 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
 template <unsigned BraAngular, unsigned KetAngular, bool Tiled, bool Masked,
           bool Preprojected = false>
 void launch_source_kernel(cudaStream_t stream, DeviceBatch batch, MdJView md,
-                         std::size_t system_begin, std::size_t system_count, bool want_j,
-                         bool want_k, bool unrestricted, double screening, const double* bounds,
-                         const double* density, const double* beta, double* coulomb,
-                         double* alpha_exchange, double* beta_exchange) {
+                          std::size_t system_begin, std::size_t system_count, bool want_j,
+                          bool want_k, bool unrestricted, double screening, const double* bounds,
+                          const double* density, const double* beta, double* coulomb,
+                          double* alpha_exchange, double* beta_exchange) {
   if (md.active_pair_offsets[BraAngular + 1] == md.active_pair_offsets[BraAngular] ||
       md.active_pair_offsets[KetAngular + 1] == md.active_pair_offsets[KetAngular])
     return;
   constexpr auto shared_bytes =
-      source_workspace_width<BraAngular, KetAngular, Masked, Preprojected>() *
-      sizeof(double) * SourceSchedule<BraAngular, KetAngular>::groups;
+      source_workspace_width<BraAngular, KetAngular, Masked, Preprojected>() * sizeof(double) *
+      SourceSchedule<BraAngular, KetAngular>::groups;
   const auto bra_count = static_cast<unsigned long long>(md.active_pair_offsets[BraAngular + 1] -
                                                          md.active_pair_offsets[BraAngular]);
   const auto ket_count = static_cast<unsigned long long>(md.active_pair_offsets[KetAngular + 1] -
@@ -500,28 +501,30 @@ void launch_masked_tile_source(cudaStream_t stream, DeviceBatch batch, MdJView m
   const auto ket_count = md.active_pair_offsets[2] - md.active_pair_offsets[1];
   const auto tiles = (bra_count + 1ULL) / 2 * ((ket_count + 3ULL) / 4);
   if (!tiles) return;
-  const unsigned workers = static_cast<unsigned>(std::min<unsigned long long>(kSourceWorkers, tiles));
+  const unsigned workers =
+      static_cast<unsigned>(std::min<unsigned long long>(kSourceWorkers, tiles));
   check_md_j_cuda(cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream));
   if (md.work_counts)
-    md_masked_tiles<true, MdMaskedTileFallback<Coarse>, Primitive><<<workers, 128, 0, stream>>>(
-        batch, md, system_begin, system_begin + system_count, unrestricted, screening,
-        bounds, density, beta, coulomb);
+    md_masked_tiles<true, MdMaskedTileFallback<Coarse>, Primitive>
+        <<<workers, 128, 0, stream>>>(batch, md, system_begin, system_begin + system_count,
+                                      unrestricted, screening, bounds, density, beta, coulomb);
   else
-    md_masked_tiles<false, MdMaskedTileFallback<Coarse>, Primitive><<<workers, 128, 0, stream>>>(
-        batch, md, system_begin, system_begin + system_count, unrestricted, screening,
-        bounds, density, beta, coulomb);
+    md_masked_tiles<false, MdMaskedTileFallback<Coarse>, Primitive>
+        <<<workers, 128, 0, stream>>>(batch, md, system_begin, system_begin + system_count,
+                                      unrestricted, screening, bounds, density, beta, coulomb);
   check_md_j_cuda(cudaGetLastError());
 }
 
 /** A scalar fallback owns private scratch and names only its own sync lane. */
 template <unsigned KetAngular>
 struct MdMaskedPackedFallback : MdMaskedTileFallback<false> {
-  __device__ static void scalar(DeviceBatch batch, MdJView md, MdSourceTask task,
-                                bool unrestricted, double screening, const double* bounds,
-                                const double* density, const double* beta, double* coulomb) {
+  __device__ static void scalar(DeviceBatch batch, MdJView md, MdSourceTask task, bool unrestricted,
+                                double screening, const double* bounds, const double* density,
+                                const double* beta, double* coulomb) {
     double scratch[source_workspace_width<2, KetAngular, false>()];
-    contract_source_task<2, KetAngular, false, false, false, 1>(batch, md, task, true, false,
-        unrestricted, screening, bounds, density, beta, coulomb, nullptr, nullptr, scratch);
+    contract_source_task<2, KetAngular, false, false, false, 1>(
+        batch, md, task, true, false, unrestricted, screening, bounds, density, beta, coulomb,
+        nullptr, nullptr, scratch);
   }
 };
 
@@ -531,18 +534,23 @@ void launch_masked_packed_source(cudaStream_t stream, DeviceBatch batch, MdJView
                                  bool unrestricted, double screening, const double* bounds,
                                  const double* density, const double* beta, double* coulomb) {
   const auto bra_count = md.active_pair_offsets[3] - md.active_pair_offsets[2];
-  const auto ket_count = md.active_pair_offsets[KetAngular + 1] - md.active_pair_offsets[KetAngular];
-  const auto candidates = KetAngular == 2 ? static_cast<unsigned long long>(bra_count) * (bra_count + 1ULL) / 2
-      : static_cast<unsigned long long>(bra_count) * ket_count;
+  const auto ket_count =
+      md.active_pair_offsets[KetAngular + 1] - md.active_pair_offsets[KetAngular];
+  const auto candidates = KetAngular == 2
+                              ? static_cast<unsigned long long>(bra_count) * (bra_count + 1ULL) / 2
+                              : static_cast<unsigned long long>(bra_count) * ket_count;
   if (!candidates) return;
-  const unsigned workers = static_cast<unsigned>(std::min<unsigned long long>(kSourceWorkers, (candidates + 1023) / 1024));
+  const unsigned workers = static_cast<unsigned>(
+      std::min<unsigned long long>(kSourceWorkers, (candidates + 1023) / 1024));
   check_md_j_cuda(cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream));
   if (md.work_counts)
-    md_masked_packed_sources<KetAngular, true, MdMaskedPackedFallback<KetAngular>><<<workers, 128, 0, stream>>>(
-        batch, md, system_begin, system_begin + system_count, unrestricted, screening, bounds, density, beta, coulomb);
+    md_masked_packed_sources<KetAngular, true, MdMaskedPackedFallback<KetAngular>>
+        <<<workers, 128, 0, stream>>>(batch, md, system_begin, system_begin + system_count,
+                                      unrestricted, screening, bounds, density, beta, coulomb);
   else
-    md_masked_packed_sources<KetAngular, false, MdMaskedPackedFallback<KetAngular>><<<workers, 128, 0, stream>>>(
-        batch, md, system_begin, system_begin + system_count, unrestricted, screening, bounds, density, beta, coulomb);
+    md_masked_packed_sources<KetAngular, false, MdMaskedPackedFallback<KetAngular>>
+        <<<workers, 128, 0, stream>>>(batch, md, system_begin, system_begin + system_count,
+                                      unrestricted, screening, bounds, density, beta, coulomb);
   check_md_j_cuda(cudaGetLastError());
 }
 
@@ -555,14 +563,15 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
   if constexpr (BraAngular == 2 && KetAngular == 1) {
     if (md.masked_tiles == 2 && want_j && !want_k) {
       launch_masked_packed_source<KetAngular>(stream, batch, md, system_begin, system_count,
-          unrestricted, screening, bounds, density, beta, coulomb);
+                                              unrestricted, screening, bounds, density, beta,
+                                              coulomb);
       return;
     }
   }
   if constexpr (BraAngular == 2 && KetAngular == 1) {
     if (md.masked_tiles == 1 && want_j && !want_k) {
       launch_masked_tile_source<Tiled>(stream, batch, md, system_begin, system_count, unrestricted,
-          screening, bounds, density, beta, coulomb);
+                                       screening, bounds, density, beta, coulomb);
       return;
     }
     if (md.masked_pairs && want_j && !want_k) {
@@ -611,7 +620,8 @@ void launch_md_source_jk(cudaStream_t stream, DeviceBatch batch, MdJView md,
   if (!want_k && !md.residual_candidate_count) return;
   if (want_j && !want_k && md.masked_pairs) {
     md_masked_refresh<<<static_cast<unsigned>(md.pair_count), 128, 0, stream>>>(
-        batch, md, system_begin, system_begin + system_count, unrestricted, screening, bounds, density, beta);
+        batch, md, system_begin, system_begin + system_count, unrestricted, screening, bounds,
+        density, beta);
     check_md_j_cuda(cudaGetLastError());
   }
 #define MD_SOURCE_CLASS(bra, ket)                                                                \

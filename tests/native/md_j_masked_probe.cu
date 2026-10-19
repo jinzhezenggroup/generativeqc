@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <vector>
 
-#include "scf/cuda/direct_md_j.hpp"
 #include "generated_md_j_masked.cuh"
+#include "scf/cuda/direct_md_j.hpp"
 
 using namespace generativeqc::scf::cuda_execution;
 
@@ -28,8 +28,10 @@ struct Storage {
     Value* pointer{};
     check(cudaMalloc(&pointer, count * sizeof(Value)));
     pointers.push_back(pointer);
-    if (source) check(cudaMemcpy(pointer, source, count * sizeof(Value), cudaMemcpyHostToDevice));
-    else check(cudaMemset(pointer, 0, count * sizeof(Value)));
+    if (source)
+      check(cudaMemcpy(pointer, source, count * sizeof(Value), cudaMemcpyHostToDevice));
+    else
+      check(cudaMemset(pointer, 0, count * sizeof(Value)));
     return pointer;
   }
 };
@@ -50,13 +52,14 @@ void attach_transform_slots(View& md, std::vector<Pair>& pairs, Storage& storage
 }
 }  // namespace
 
-extern "C" int run_masked_gpu(
-    unsigned ket_hermites, unsigned bra_pairs, unsigned ket_pairs,
-    const unsigned* descriptors, bool same_pair, bool unrestricted,
-    double screening, const double* bounds, const double* density, const double* beta,
-    unsigned bra_primitives, unsigned ket_primitives, const double* bra_transform,
-    const double* ket_transform, const double* bra_parameters, const double* ket_parameters,
-    bool masked, bool counted, unsigned preprojected, double* result, unsigned long long* counts) {
+extern "C" int run_masked_gpu(unsigned ket_hermites, unsigned bra_pairs, unsigned ket_pairs,
+                              const unsigned* descriptors, bool same_pair, bool unrestricted,
+                              double screening, const double* bounds, const double* density,
+                              const double* beta, unsigned bra_primitives, unsigned ket_primitives,
+                              const double* bra_transform, const double* ket_transform,
+                              const double* bra_parameters, const double* ket_parameters,
+                              bool masked, bool counted, unsigned preprojected, double* result,
+                              unsigned long long* counts) {
   try {
     constexpr unsigned nbf = 20, elements = 3 * nbf * nbf;
     Storage storage;
@@ -70,10 +73,11 @@ extern "C" int run_masked_gpu(
       const unsigned local_index = bra_side ? pair_index : pair_index - bra_pairs;
       const unsigned hermites = bra_side ? 10 : ket_hermites;
       const unsigned primitive_count = bra_side ? bra_primitives : ket_primitives;
-      const double* parameters = (bra_side ? bra_parameters : ket_parameters) + local_index * primitive_count * 4;
+      const double* parameters =
+          (bra_side ? bra_parameters : ket_parameters) + local_index * primitive_count * 4;
       const unsigned components = descriptor[2] * descriptor[3];
       const double* coefficients = (bra_side ? bra_transform : ket_transform) +
-                                  local_index * primitive_count * components * hermites;
+                                   local_index * primitive_count * components * hermites;
       MdJPair pair{};
       pair.system = 1;
       pair.first_ao = descriptor[0];
@@ -137,8 +141,7 @@ extern "C" int run_masked_gpu(
     md.active_pairs = storage.copy(active.data(), pair_count);
     for (unsigned angular = 0; angular < 5; ++angular) {
       md.active_pair_offsets[angular + 1] = md.active_pair_offsets[angular];
-      for (const auto& pair : pairs)
-        md.active_pair_offsets[angular + 1] += pair.angular == angular;
+      for (const auto& pair : pairs) md.active_pair_offsets[angular + 1] += pair.angular == angular;
     }
     auto* device_bounds = storage.copy(bounds, elements);
     auto* device_density = storage.copy(density, elements);

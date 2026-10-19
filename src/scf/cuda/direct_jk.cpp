@@ -183,8 +183,10 @@ struct MdJHost {
     if (tiled_mask && std::strcmp(tiled_mask, "0") != 0 && std::strcmp(tiled_mask, "1") != 0 &&
         std::strcmp(tiled_mask, "2") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_MASKED_TILES must be 0, 1 or 2");
-    masked_tiles = !tiled_mask ? 0 : std::strcmp(tiled_mask, "2") == 0 ? 2 :
-        static_cast<unsigned>(std::strcmp(tiled_mask, "1") == 0);
+    masked_tiles = !tiled_mask ? 0
+                   : std::strcmp(tiled_mask, "2") == 0
+                       ? 2
+                       : static_cast<unsigned>(std::strcmp(tiled_mask, "1") == 0);
     const char* projection = std::getenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT");
     if (projection && std::strcmp(projection, "0") != 0 && std::strcmp(projection, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_MASKED_PREPROJECT must be 0 or 1");
@@ -311,8 +313,8 @@ struct MdJHost {
           const auto& pair = pairs[index];
           const auto components = direct_jk_product(pair.first_count, pair.second_count);
           if (pair.angular != angular || components > 9) continue;
-          const auto slots = direct_jk_product(
-              pair.primitive_end - pair.primitive_begin, (2 * components + 1) * pair.hermites);
+          const auto slots = direct_jk_product(pair.primitive_end - pair.primitive_begin,
+                                               (2 * components + 1) * pair.hermites);
           if (!slots || slots > (available - masked_bytes) / sizeof(double)) continue;
           masked_pairs[index].suffix_offset = masked_suffixes;
           masked_suffixes += slots;
@@ -1273,12 +1275,13 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
       direct_jk_optional_storage(
           *plan, true, detail,
           [&] {
-            const auto available = std::min(budget - plan->device_bytes,
-                                            kMdJResidentCap - md_host.bytes);
+            const auto available =
+                std::min(budget - plan->device_bytes, kMdJResidentCap - md_host.bytes);
             if (!md_host.prepare_masked_cache(available)) return;
             auto& md = plan->md_j;
-            md.masked_pairs = static_cast<MdMaskedResidentPair*>(upload(
-                md_host.masked_pairs.data(), md_host.masked_pairs.size() * sizeof(MdMaskedResidentPair)));
+            md.masked_pairs = static_cast<MdMaskedResidentPair*>(
+                upload(md_host.masked_pairs.data(),
+                       md_host.masked_pairs.size() * sizeof(MdMaskedResidentPair)));
             md.masked_suffixes = scratch(md_host.masked_suffixes * sizeof(double));
             md.masked_suffix_count = md_host.masked_suffixes;
             direct_jk_check(prepare_md_j_masked(plan->stream, plan->batch, md, plan->bounds));
@@ -1749,19 +1752,22 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         direct_jk_check(cudaStreamSynchronize(plan->stream));
         if (plan->md_j.masked_pairs || plan->md_j.masked_tiles)
           for (unsigned angular = 1; angular <= 2; ++angular)
-            std::fprintf(stderr, "MD_J_PREPROJECT angular=%u primitives=%llu summands=%llu suffix_bytes=%zu pair_bytes=%zu\n",
-                         angular, counts.preproject_primitives[angular],
-                         counts.preproject_summands[angular],
-                         plan->md_j.masked_suffix_count * sizeof(double),
-                         plan->md_j.masked_pairs
-                             ? plan->md_j.pair_count * sizeof(MdMaskedResidentPair) : 0);
+            std::fprintf(
+                stderr,
+                "MD_J_PREPROJECT angular=%u primitives=%llu summands=%llu suffix_bytes=%zu "
+                "pair_bytes=%zu\n",
+                angular, counts.preproject_primitives[angular], counts.preproject_summands[angular],
+                plan->md_j.masked_suffix_count * sizeof(double),
+                plan->md_j.masked_pairs ? plan->md_j.pair_count * sizeof(MdMaskedResidentPair) : 0);
         if (plan->md_j.masked_tiles == 1)
-          std::fprintf(stderr, "MD_J_TILE bra=2 ket=1 tile_bra=2 tile_ket=4 primitive_chunk=%u "
+          std::fprintf(stderr,
+                       "MD_J_TILE bra=2 ket=1 tile_bra=2 tile_ket=4 primitive_chunk=%u "
                        "output_summands=%llu unfused_output_summands=%llu\n",
-                       plan->md_j.masked_tiles == 2 ? 4U : 2U,
-                       counts.masked_output_summands[11], counts.masked_unfused_output_summands[11]);
+                       plan->md_j.masked_tiles == 2 ? 4U : 2U, counts.masked_output_summands[11],
+                       counts.masked_unfused_output_summands[11]);
         if (plan->md_j.masked_tiles == 2)
-          std::fprintf(stderr, "MD_J_PACKED bra=2 ket=1 threads=128 queue=256 "
+          std::fprintf(stderr,
+                       "MD_J_PACKED bra=2 ket=1 threads=128 queue=256 "
                        "output_summands=%llu unfused_output_summands=%llu\n",
                        counts.masked_output_summands[11],
                        counts.masked_unfused_output_summands[11]);
@@ -1780,10 +1786,10 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                        counts.residual_roots[angular]);
         if (plan->md_j.masked_residual || plan->md_j.masked_pairs || plan->md_j.masked_tiles)
           for (unsigned angular = 0; angular < 25; ++angular)
-            std::fprintf(stderr,
-                         "MD_J_MASKED fock=%zu bra=%u ket=%u tasks=%llu groups=%llu summands=%llu\n",
-                         plan->md_j_calls, angular / 5, angular % 5, counts.masked_tasks[angular],
-                         counts.masked_groups[angular], counts.masked_summands[angular]);
+            std::fprintf(
+                stderr, "MD_J_MASKED fock=%zu bra=%u ket=%u tasks=%llu groups=%llu summands=%llu\n",
+                plan->md_j_calls, angular / 5, angular % 5, counts.masked_tasks[angular],
+                counts.masked_groups[angular], counts.masked_summands[angular]);
       }
     }
     if (dispatch.generated_coulomb) {

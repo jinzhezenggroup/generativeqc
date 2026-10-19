@@ -476,5 +476,7 @@ def emit_md_j_masked_header() -> str:
     """Return deterministic header bytes without importing/probing the runtime."""
     return _SOURCE.lstrip().replace(
         "\n#endif\n\n#undef GQC_MASKED_HD",
-        emit_md_j_masked_tile() + emit_md_j_masked_packed() + "\n#endif\n\n#undef GQC_MASKED_HD",
+        emit_md_j_masked_tile()
+        + emit_md_j_masked_packed()
+        + "\n#endif\n\n#undef GQC_MASKED_HD",
     )
