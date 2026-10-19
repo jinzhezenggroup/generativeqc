@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -37,9 +35,9 @@ REFERENCE_SCHEDULE = "md-j-reference/"
 @pytest.fixture(scope="module", autouse=True)
 def _cached_resident_bridge() -> None:
     """The inherited bridge must never silently compile without its cache."""
-    cache = shutil.which("ccache")
-    assert cache, "resident MD qualification requires ccache on PATH"
-    subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=15)
+    from generativeqc_compiler.common.compiler_cache import resolve_compiler_cache
+
+    resolve_compiler_cache(timeout=15)
 
 
 def _spec(spin: str, exchange: bool = False) -> Any:
@@ -468,3 +466,187 @@ def test_reference_pinned_gpu4pyscf_differential(
     )
     record_property("upstream_commit", commit)
     record_property("upstream_entrypoint", "gpu4pyscf.scf.j_engine.get_j(hermi=0)")
+
+
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
+@pytest.mark.parametrize("basis_kind", ["general-contractions", "one-primitive-tail"])
+@pytest.mark.parametrize("cutoff", [0.0, 0.02])
+def test_reference_graph_capture_changed_density(
+    representation: str,
+    spin: str,
+    basis_kind: str,
+    cutoff: float,
+    monkeypatch: Any,
+    record_property: Any,
+) -> None:
+    """Replay actual captured native resident J with fresh hierarchy/input data.
+
+    Capture contains kernels, memsets and verified device copies. Density upload,
+    final result readback, and the publishing owner-stream fence are outside the captured
+    region. This is a scientific/capture gate, not an end-to-end timing claim.
+    """
+    import cupy as cp
+    from generativeqc import Primitive, Shell
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    pytest.importorskip("pyscf")
+    _select(monkeypatch, "reference")
+    monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
+    atoms, shells = general_contraction_basis()
+    if basis_kind == "one-primitive-tail":
+        atoms = [("He", (0.0, 0.0, 0.0))]
+        shells = tuple(
+            Shell(0, angular, (Primitive(0.6 + 0.2 * angular, 1.0),))
+            for angular in range(3)
+        )
+    with NativeAO(atoms, shells, representation=representation) as basis:
+        _, _, eri, bounds = public_ao_oracle(basis)
+        density = np.random.default_rng(2609).normal(size=(basis.nao, basis.nao)) * 0.04
+        if spin == "unrestricted":
+            density = np.stack((density, -0.31 * density.T))
+        tail = np.zeros_like(density)
+        tail[..., -1, -2] = 0.83
+        cases = [
+            ("changed", -0.7 * np.swapaxes(density, -1, -2)),
+            ("zero", np.zeros_like(density)),
+            ("one-density-tail", tail),
+            ("original-after-tail", density),
+        ]
+        if spin == "unrestricted":
+            cases.append(("spin-cancellation", np.stack((density[0], -density[0]))))
+        with ResidentMdJProbe(basis, _spec(spin), screening_tolerance=cutoff) as plan:
+            _assert_selected(plan)
+            plan.evaluate(density)  # Finish lazy runtime setup outside capture.
+            with pytest.raises(RuntimeError, match="has not been captured"):
+                plan.evaluate_graph(density)
+            plan.capture_graph()
+            assert (
+                plan.diagnostics["graph_nodes"]
+                >= plan.diagnostics["graph_kernel_nodes"]
+                > 0
+            )
+            errors = {}
+            # Also exercise ordering from a nondefault upload stream. Native
+            # capture/replay remains on the retained Fock owner's own stream.
+            with cp.cuda.Stream(non_blocking=True):
+                for label, changed in cases:
+                    observed = plan.evaluate_graph(changed).coulomb
+                    ordinary = plan.evaluate(changed).coulomb
+                    expected = screened_j(eri, bounds, changed, cutoff)
+                    np.testing.assert_allclose(
+                        observed, ordinary, atol=3e-11, rtol=3e-11
+                    )
+                    np.testing.assert_allclose(
+                        observed, expected, atol=3e-11, rtol=3e-11
+                    )
+                    if label in ("zero", "spin-cancellation"):
+                        np.testing.assert_allclose(observed, 0.0, atol=3e-12, rtol=0)
+                    errors[label] = {
+                        "graph_vs_ordinary": float(np.max(np.abs(observed - ordinary))),
+                        "graph_vs_oracle": float(np.max(np.abs(observed - expected))),
+                    }
+            # A rejected native request must end capture while preserving the
+            # previous executable and leaving ordinary execution available.
+            invalid = list(plan._buffer_arguments())
+            invalid[3] = basis.nao**2 - 1
+            assert plan._probe.md_j_probe_capture(*invalid) != 0
+            assert "dimensions" in plan._probe.md_j_probe_error().decode()
+            np.testing.assert_allclose(
+                plan.evaluate_graph(cases[0][1]).coulomb,
+                plan.evaluate(cases[0][1]).coulomb,
+                atol=3e-11,
+                rtol=3e-11,
+            )
+            # Replacing a graph cannot release borrowed owner/buffer state or
+            # leave the owner stream in capture mode.
+            plan.capture_graph()
+            np.testing.assert_allclose(
+                plan.evaluate_graph(cases[0][1]).coulomb,
+                screened_j(eri, bounds, cases[0][1], cutoff),
+                atol=3e-11,
+                rtol=3e-11,
+            )
+            record_property("selected_schedule", plan.diagnostics["direct_schedule"])
+            record_property("graph_nodes", plan.diagnostics["graph_nodes"])
+            record_property(
+                "graph_kernel_nodes", plan.diagnostics["graph_kernel_nodes"]
+            )
+            record_property(
+                "graph_node_policy", "kernels, memsets and verified device copies only"
+            )
+            record_property("graph_replay_errors", json.dumps(errors, sort_keys=True))
+            record_property(
+                "capture_scope", "native resident enqueue on prepared owner stream"
+            )
+        with pytest.raises(RuntimeError, match="closed"):
+            plan.evaluate_graph(density)
+
+
+def test_reference_graph_capture_diagnostics_fail_closed(monkeypatch: Any) -> None:
+    """Reject opt-in host polling before capture and preserve ordinary execution."""
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    _select(monkeypatch, "reference")
+    monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    with (
+        NativeAO(WATER, "def2-svp", representation="spherical") as basis,
+        ResidentMdJProbe(basis, _spec("restricted"), screening_tolerance=0) as plan,
+    ):
+        _assert_selected(plan)
+        density = np.eye(basis.nao)
+        expected = plan.evaluate(density).coulomb
+        # The native plan froze diagnostic storage at construction; changing
+        # the environment later cannot make that plan graph-safe.
+        monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS")
+        with pytest.raises(RuntimeError, match="WORK_COUNTS disabled"):
+            plan.capture_graph()
+        np.testing.assert_allclose(
+            plan.evaluate(-0.7 * density).coulomb,
+            -0.7 * expected,
+            atol=3e-11,
+            rtol=3e-11,
+        )
+
+
+@pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
+def test_reference_graph_capture_preserves_retained_k(
+    spin: str, monkeypatch: Any, record_property: Any
+) -> None:
+    """Capture complete J/K, including native device-side spin/AO staging."""
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    _select(monkeypatch, "reference")
+    monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
+    with NativeAO(WATER, "def2-svp", representation="spherical") as basis:
+        density = np.random.default_rng(911).normal(size=(basis.nao, basis.nao)) * 0.04
+        if spin == "unrestricted":
+            density = np.stack((density, -0.3 * density.T))
+        with ResidentMdJProbe(basis, _spec(spin, True), screening_tolerance=0) as plan:
+            _assert_selected(plan)
+            plan.evaluate(density)
+            plan.capture_graph()
+            for changed in (
+                -0.7 * np.swapaxes(density, -1, -2),
+                np.zeros_like(density),
+                density,
+            ):
+                observed = plan.evaluate_graph(changed)
+                expected = plan.evaluate(changed)
+                np.testing.assert_allclose(
+                    observed.coulomb, expected.coulomb, atol=3e-11, rtol=3e-11
+                )
+                np.testing.assert_allclose(
+                    observed.exchange, expected.exchange, atol=3e-11, rtol=3e-11
+                )
+            record_property("selected_schedule", plan.diagnostics["direct_schedule"])
+            record_property("graph_nodes", plan.diagnostics["graph_nodes"])
+            record_property(
+                "graph_kernel_nodes", plan.diagnostics["graph_kernel_nodes"]
+            )
+            record_property(
+                "graph_device_copy_nodes", plan.diagnostics["graph_device_copy_nodes"]
+            )

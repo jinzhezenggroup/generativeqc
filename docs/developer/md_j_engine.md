@@ -105,6 +105,9 @@ Slurm allocation policy. Set `GENERATIVEQC_LIBRARY` to that build's native
 library, `CUDA_PATH` to its toolkit, and record the exact source revision:
 
 ```sh
+export GENERATIVEQC_LIBRARY=/absolute/path/to/native/libgenerativeqc.so
+export CUDA_PATH=/absolute/path/to/cuda
+export LD_LIBRARY_PATH="$CUDA_PATH/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export GENERATIVEQC_BENCHMARK_SOURCE="$(git rev-parse HEAD)"
 srun --gres=gpu:1 --ntasks=1 --cpus-per-task=4 --time=00:30:00 \
   python benchmarks/md_j_engine_acceptance.py --gpu --timeout 1500 \
@@ -121,6 +124,20 @@ tight-budget fallback, K preservation and HF/UHF/PBE0 RKS/UKS strict/Fast energy
 and force endpoints. JSON retains gate statuses, source hashes, raw logs, JUnit
 properties and timing scope. Host-only success leaves CUDA gates `not-run`.
 
+The required `cuda_graph_replay` gate captures the actual prepared resident
+enqueue on its owner's stream, instantiates the graph, and replays it against
+stable device buffers. It compares ordinary execution and independent AO
+references after changed, zero and tail densities. Density upload and result
+publication remain outside capture. Diagnostic work-count downloads must be
+disabled: those deliberately synchronize with the host and are not part of the
+captured production region. A skipped or missing graph test fails CUDA
+qualification rather than silently passing it.
+The inspected node set permits kernels, memsets and verified same-device copies;
+host transfers and callbacks are rejected. Retained-K replay and failed-capture
+recovery are covered as well. Compile-only NVIDIA CI builds and links the same
+bridge through `generativeqc_md_j_resident_probe`, while host doubles test cleanup
+and error behavior without representing device execution.
+
 Run device memory/synchronization qualification separately in the same finite
 allocation, retaining exit codes and logs, for example:
 
@@ -129,15 +146,89 @@ export GENERATIVEQC_TEST_MD_J_ENGINE=1
 for tool in memcheck initcheck racecheck synccheck; do
   compute-sanitizer --tool "$tool" --error-exitcode 99 \
     python -m pytest -q tests/python/test_md_j_engine_cuda.py \
-    -k 'pair_factors_and_one_density_tail or residual_mask' \
+    -k 'pair_factors_and_one_density_tail or residual_mask or graph_capture' \
     > ".artifacts/md-j-${tool}.log" 2>&1 || exit "$?"
 done
 ```
 
+### Full-size cold, warm and moved measurements
+
+`benchmarks/md_j_engine_benchmark.py` is the bounded measurement entrypoint. It
+supplies deterministic 96-atom water clusters in STO-3G (224 spherical AO) and
+def2-SVP (768 spherical AO), freezes explicit contracted shells and records the
+scientific settings before running. No custom molecular input or driver is
+required. Inspect the prescription without loading CUDA:
+
+```sh
+python benchmarks/md_j_engine_benchmark.py --scope all --dry-run \
+  --output .artifacts/md-j-prescription.json
+```
+
+In a prepared, finite allocation, run both scopes with the same source and
+library environment as the correctness suite. Performance runs require a
+Release build with `GENERATIVEQC_CUDA_FAST_COMPILE=OFF`; the driver verifies the
+loaded build's device metadata and source identity. Compile-only CI's fast-build
+artifact is not a performance-qualified substitute:
+
+```sh
+srun --gres=gpu:1 --ntasks=1 --cpus-per-task=4 --time=03:00:00 \
+  python benchmarks/md_j_engine_benchmark.py --scope all \
+  --upstream-root /path/to/clean/pinned/gpu4pyscf --require-upstream \
+  --cold-repeats 3 --warm-repeats 5 --timeout 1800 --total-timeout 10500 \
+  --output .artifacts/md-j-performance.json
+```
+
+The explicit time limits are ceilings, not predictions. Exhausting either
+limit produces retained failure evidence and does not qualify the case. Use
+`--cases water32-sto-3g` or `--cases water32-def2-svp` to measure a case separately;
+`--scope j` and `--scope energy-force` likewise isolate the two scopes. The
+upstream option applies to J; native incumbent/reference energy-force runs use
+identical fixed scientific settings.
+
+- **J:** Fresh subprocesses measure one complete raw-J adapter call, including
+  its preparation, upload and publication. Warm samples retain the owner and
+  record both complete adapter wall time and separate resident device-event
+  time. Test-bridge loading/provenance overhead is identified rather than
+  relabelled as production preparation. A separate direct PySCF contraction
+  checks numerical results without an in-core four-index ERI tensor. The
+  optional pinned GPU4PySCF comparison uses the documented near-unscreened
+  threshold representations and includes public-AO phase conversion.
+- **SCF energy and forces:** Fresh subprocesses construct a Calculator and
+  prepared owner, then execute a complete strict PBE0-RKS energy/analytic-force
+  solve. The same owner performs repeated unchanged-geometry solves and one
+  deterministic moved-geometry solve. Geometry transfer, invalidation and
+  rebuilding are inside the moved timer. Both engines use FP64, the same
+  explicit basis, fixed grid, SCF tolerances and screening; converged-density
+  reuse is disabled. Synthetic J benchmark densities never enter these solves.
+- **Execution evidence:** Separate instrumented endpoint workers retain actual
+  native source counters and must reproduce the clean workers' energy/forces.
+  Instrumented timings do not enter performance summaries. Every clean phase
+  must converge on CUDA and pass energy, force and physical-residual gates.
+- **Provenance and evidence:** Receipts retain the source manifest identity
+  checked against the loaded native library ABI, source/library hashes, upstream
+  pin/binary hash, complete raw repetitions, process logs, matrix/force data,
+  input hashes and memory observations. Sampled GPU memory is identified as a
+  lower bound on peak, not an exact peak measurement. Keep the JSON and its
+  unique adjacent artifact directory together.
+
+Benchmark workers remove inherited experimental/diagnostic `GENERATIVEQC_*`
+controls, retain the explicit library and force `GENERATIVEQC_PROFILE=off`.
+The driver records the effective controls and removed names; unknown environment
+values and remote-cache credentials are not copied into receipts. Timing rejects
+`CUDA_LAUNCH_BLOCKING=1`. These rules keep local tuning caches and diagnostic
+downloads from silently changing the measured prescription.
+
+The full-size energy/force comparison is incumbent/reference regression parity
+at a declared fixed grid. It is not an independent grid-converged production
+accuracy ranking. The driver reports cold, warm and moved medians and variability;
+any minimum-speedup threshold is declared before measurement. Neither J timing
+nor successful receipt collection authorizes default promotion.
+
 Real CUDA compilation/execution, sanitizer receipts, graph-capture replay and
 source-matched full-size cold/warm endpoint performance are separate outstanding
-qualification gates until actual evidence is recorded. The scoped runner exposes
-graph capture and complete performance as `not-run`; it cannot authorize default
+qualification gates until actual evidence is recorded. The correctness runner
+executes graph capture when `--gpu` is selected; full-size measurements use the
+separate bounded benchmark driver above. Neither runner authorizes default
 promotion. Compare upstream and GenerativeQC with the same basis phase,
 contraction, density, screening contract and cold/warm timing boundary, including
 preparation and peak memory. No speedup or completed GPU acceptance follows from

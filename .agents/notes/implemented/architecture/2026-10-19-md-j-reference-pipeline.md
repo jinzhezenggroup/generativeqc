@@ -75,6 +75,23 @@ these complement, not replace, real device sanitizers. Tile shapes are deliberat
 conservative and untuned. Full qualification procedures and the exact upstream
 correspondence matrix live in `docs/developer/md_j_engine.md`.
 
+## Executable acceptance boundary
+
+The acceptance entrypoints include actual resident CUDA graph capture/replay and
+full-size cold/warm/moved measurements. Graphs borrow the retained prepared
+owner and stable device buffers; capture excludes input upload, result publication
+and opt-in host work-count downloads. Failed capture must leave ordinary execution
+and any previous graph usable. Device-only copies are permitted, host transfers
+and callbacks are rejected. The same test bridge is compiled against the real
+CUDA SDK in compile-only CI; host doubles exercise resource/failure behavior but
+are not device execution evidence.
+
+The bounded benchmark separates complete J from complete SCF energy/force costs,
+retains fresh cold processes and all warm/moved repeats, and compares identical
+scientific settings across incumbent/reference engines. Instrumented selection
+proofs are separate from clean timings. Hardware execution remains a qualification
+step; executable harness availability cannot substitute for its receipts.
+
 ## Revisit when
 
 Real-device measurements support better tile/warp allocation or safe default

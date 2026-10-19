@@ -210,13 +210,62 @@ def test_acceptance_all_scientific_gates_still_does_not_promote_default() -> Non
     report = summarize(
         {
             name: {"status": "passed"}
-            for name in ("host", "raw_j_cuda", "endpoints_cuda")
+            for name in ("host", "raw_j_cuda", "endpoints_cuda", "cuda_graph_replay")
         }
     )
     assert report["correctness_qualified"]
     assert not report["default_promotion_qualified"]
     report["gates"]["source_provenance"] = {"status": "failed"}
     assert not summarize(report["gates"])["correctness_qualified"]
+
+
+@pytest.mark.parametrize("status", ["not-run", "skipped", "failed"])
+def test_acceptance_requires_executed_graph_capture(status: str) -> None:
+    from benchmarks.md_j_engine_acceptance import REQUIRED_GATES, summarize
+
+    gates = {name: {"status": "passed"} for name in REQUIRED_GATES}
+    gates["cuda_graph_replay"] = {"status": status}
+    assert not summarize(gates)["correctness_qualified"]
+
+
+@pytest.mark.parametrize("graph_status", ["passed", "skipped", "failed"])
+def test_gpu_acceptance_executes_and_enforces_graph_gate(
+    graph_status: str, tmp_path: Path, monkeypatch: Any
+) -> None:
+    from benchmarks import md_j_engine_acceptance as acceptance
+
+    output = tmp_path / "acceptance.json"
+    executed: dict[str, list[str]] = {}
+
+    def run_gate(
+        name: str,
+        selection: list[str],
+        output: Path,
+        environment: dict[str, str],
+        timeout: int,
+    ) -> dict[str, str]:
+        executed[name] = selection
+        assert environment["GENERATIVEQC_PROFILE"] == "off"
+        return {"status": graph_status if name == "cuda_graph_replay" else "passed"}
+
+    monkeypatch.setattr(acceptance, "ROOT", tmp_path)
+    monkeypatch.setattr(acceptance, "_run_gate", run_gate)
+    monkeypatch.setattr(acceptance, "_cuda_preflight", lambda: {"test_double": True})
+    monkeypatch.setenv("GENERATIVEQC_PROFILE", "unrelated-cached-profile")
+    monkeypatch.setattr(
+        acceptance.sys, "argv", ["acceptance", "--gpu", "--output", str(output)]
+    )
+    if graph_status == "passed":
+        acceptance.main()
+    else:
+        with pytest.raises(SystemExit) as error:
+            acceptance.main()
+        assert error.value.code == 1
+    report = json.loads(output.read_text())
+    assert report["gates"]["cuda_graph_replay"]["status"] == graph_status
+    assert report["correctness_qualified"] == (graph_status == "passed")
+    assert "graph_capture" in executed["cuda_graph_replay"]
+    assert "not graph_capture" in executed["raw_j_cuda"][-1]
 
 
 def test_acceptance_rejects_stale_xml_and_retains_distinct_gate_paths(

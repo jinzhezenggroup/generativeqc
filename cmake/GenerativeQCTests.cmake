@@ -145,6 +145,15 @@ macro(generativeqc_add_native_tests)
     add_executable(generativeqc_df_value_probe tests/native/df_value_probe.cpp)
     target_link_libraries(generativeqc_df_value_probe PRIVATE generativeqc CUDA::cudart)
     target_include_directories(generativeqc_df_value_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Compile and link the acceptance bridge against the real CUDA SDK even
+      # in compile-only CI; its captured execution still requires a real GPU.
+      add_library(generativeqc_md_j_resident_probe SHARED tests/native/md_j_resident_probe.cpp)
+      target_link_libraries(generativeqc_md_j_resident_probe PRIVATE generativeqc CUDA::cudart)
+      target_include_directories(generativeqc_md_j_resident_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+      target_link_options(generativeqc_md_j_resident_probe PRIVATE
+                          "$<$<PLATFORM_ID:Linux>:-Wl,--no-undefined>")
+    endif()
   endif()
 
   generativeqc_native_test(generativeqc_tracked_allocator_tests tests/native/test_tracked_allocator.cpp

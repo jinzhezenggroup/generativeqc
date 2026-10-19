@@ -39,7 +39,7 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM_COMMIT = "9af748a71ca8f4881c604332c2f0cc1632e033ac"
-REQUIRED_GATES = ("host", "raw_j_cuda", "endpoints_cuda")
+REQUIRED_GATES = ("host", "raw_j_cuda", "endpoints_cuda", "cuda_graph_replay")
 
 
 def junit_gate(path: Path, *, returncode: int) -> dict[str, Any]:
@@ -161,8 +161,8 @@ def _cuda_preflight() -> dict[str, Any]:
         value = os.environ.get(name)
         if not value or not Path(value).exists():
             raise RuntimeError(f"{name} must name an existing CUDA build dependency")
-    # The existing test-only ResidentMdJProbe uses ccache for its host bridge.
-    # Require it explicitly instead of silently allowing an uncached compile.
+    # The complete acceptance suite's NativeCxx host fixtures require ccache.
+    # The resident bridge uses the repository's sccache-first/ccache resolver.
     cache = shutil.which("ccache")
     if cache is None:
         raise RuntimeError("the resident test bridge requires verified ccache on PATH")
@@ -170,9 +170,13 @@ def _cuda_preflight() -> dict[str, Any]:
         [cache, "--version"], check=True, capture_output=True, text=True, timeout=15
     ).stdout.splitlines()[0]
     library = Path(os.environ["GENERATIVEQC_LIBRARY"])
+    digest = hashlib.sha256()
+    with library.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
     record.update(
         library=str(library.resolve()),
-        library_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
+        library_sha256=digest.hexdigest(),
         cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES", ""),
     )
     return record
@@ -265,6 +269,9 @@ def main() -> None:
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
+    # Qualify the explicitly supplied binary, not a compatible local profile
+    # selected from an unrelated on-disk tuning cache.
+    environment["GENERATIVEQC_PROFILE"] = "off"
     environment.setdefault("OMP_NUM_THREADS", "1")
     environment.setdefault("OPENBLAS_NUM_THREADS", "1")
     environment["PYTHONPATH"] = os.pathsep.join(
@@ -280,11 +287,11 @@ def main() -> None:
         },
         "cuda_graph_replay": {
             "status": "not-run",
-            "reason": "resident probe exposes changed-density replay but no graph-capture entrypoint",
+            "reason": "--gpu was not requested",
         },
         "complete_cold_performance": {
             "status": "not-run",
-            "reason": "no full-size uninstrumented performance campaign requested",
+            "reason": "run the separate bounded benchmarks/md_j_engine_benchmark.py driver for full-size cold/warm J endpoint evidence",
         },
     }
     provenance: dict[str, Any] = {
@@ -294,6 +301,7 @@ def main() -> None:
             "GENERATIVEQC_BENCHMARK_SOURCE", "unrecorded"
         ),
         "upstream_pin": UPSTREAM_COMMIT,
+        "local_profile_policy": "off: use the explicitly supplied native library",
     }
 
     evidence_sources = (
@@ -312,6 +320,13 @@ def main() -> None:
         "tests/python/test_md_j_engine_reference.py",
         "tests/python/_md_j_engine_oracle.py",
         "tests/python/_md_j_engine_pipeline_probe.py",
+        "tests/native/md_j_resident_probe.cpp",
+        "tests/python/md_j_resident_probe.py",
+        "tests/python/test_md_j_resident_probe.py",
+        "benchmarks/md_j_engine_benchmark.py",
+        "tests/python/test_md_j_engine_benchmark.py",
+        "benchmarks/_md_j_engine_endpoints.py",
+        "tests/python/test_md_j_engine_endpoints.py",
         "benchmarks/md_j_engine_acceptance.py",
     )
     provenance["source_sha256"] = {
@@ -351,6 +366,9 @@ def main() -> None:
         "tests/python/test_md_j_engine_reference.py",
         "tests/python/test_md_j_engine_runtime.py",
         "tests/python/test_md_j_resources.py",
+        "tests/python/test_md_j_resident_probe.py",
+        "tests/python/test_md_j_engine_benchmark.py",
+        "tests/python/test_md_j_engine_endpoints.py",
     ]
     gates["host"] = _run_gate(
         "host", [*host_tests, "-k", "not asan_ubsan"], output, environment, args.timeout
@@ -371,7 +389,7 @@ def main() -> None:
                 provenance["upstream_commit"] = verify_upstream(args.upstream_root)
         except (RuntimeError, ValueError, OSError, subprocess.SubprocessError) as error:
             gates["cuda_preflight"] = {"status": "failed", "reason": str(error)}
-            for name in ("raw_j_cuda", "endpoints_cuda"):
+            for name in ("raw_j_cuda", "endpoints_cuda", "cuda_graph_replay"):
                 gates[name] = {"status": "not-run", "reason": "CUDA preflight failed"}
             save()
             print(f"CUDA qualification blocked: {error}", file=sys.stderr)
@@ -383,7 +401,7 @@ def main() -> None:
             [
                 source,
                 "-k",
-                "not complete_energy_force_endpoint and not pinned_gpu4pyscf",
+                "not complete_energy_force_endpoint and not pinned_gpu4pyscf and not graph_capture",
             ],
             output,
             environment,
@@ -393,6 +411,14 @@ def main() -> None:
         gates["endpoints_cuda"] = _run_gate(
             "endpoints_cuda",
             [source, "-k", "complete_energy_force_endpoint"],
+            output,
+            environment,
+            args.timeout,
+        )
+        save()
+        gates["cuda_graph_replay"] = _run_gate(
+            "cuda_graph_replay",
+            [source, "-k", "graph_capture"],
             output,
             environment,
             args.timeout,
