@@ -185,7 +185,12 @@ class UserExpression:
         """Revalidate the declaration and its canonical relation on replay."""
         if type(value) is not str or len(value) > 65536:
             raise ValueError("serialized declaration exceeds budget")
-        payload = json.loads(value)
+        try:
+            payload = json.loads(value)
+        except RecursionError as exc:
+            raise ValueError(
+                "serialized declaration exceeds JSON nesting budget"
+            ) from exc
         if type(payload) is not dict or set(payload) != {
             "source",
             "name",

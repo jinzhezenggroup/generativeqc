@@ -211,3 +211,11 @@ def test_canonical_coefficient_budget_and_compiler_only_import() -> None:
         timeout=30,
     )
     assert result.returncode == 0
+
+
+@pytest.mark.parametrize("depth", [1000, 10000])
+def test_deep_replay_envelopes_have_public_validation_error(depth: int) -> None:
+    # Both inputs fit the envelope length bound; decoder depth limits vary by
+    # Python version, but unsupported replay shapes have one error contract.
+    with pytest.raises(ValueError):
+        xc.UserExpression.loads("[" * depth + "]" * depth)
