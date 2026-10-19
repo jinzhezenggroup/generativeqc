@@ -1728,7 +1728,7 @@
         "dft-policy:GENERATIVEQC_MD_J_ENGINE"
       ],
       "owner_issues": [
-        1598
+        2609
       ],
       "sources": [
         "src/scf/cuda/direct_jk.cpp",
