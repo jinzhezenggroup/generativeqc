@@ -209,3 +209,54 @@ SCF tolerances. Their observed XC-only differences reach `3.94e-5 Eh` /
 exceeded by this two-grid difference. It does not establish that XC64 is a
 converged anchor or select a final Fast grid; complete the separate 48/96-atom
 reference sweeps and the combined/native gates before a timing recommendation.
+
+## Joint endpoint gate and common-anchor controls
+
+The endpoint qualifier `tools.qualify_vv10_endpoint_precision` now compares
+every native or GPU4PySCF timing endpoint directly with a joint dense, low-screen
+reference. Five reconverged controls share that anchor: XC radial/angular, NLC
+radial/angular and a lower density threshold. Sum all observed control norms and
+anchor replay drift into one empirical reference allowance, reserve at most 10%
+of the total budget for it, and add it to each candidate error. Do not add
+independently passing full-budget component gates, reuse different fixed-axis
+anchors, or treat this empirical allowance as a rigorous tail bound. Require
+tight full-Fock SCF controls and all twelve timing endpoints; native Fast must
+use application-selected public controls. GPU4PySCF timing candidates are checked
+independently too, without relabeling their arithmetic as native Fast.
+
+On 2026-10-19 at 08:07 +08, finite eight-hour n1 Slurm jobs 10358 (Direct) and
+10359 (DF) started new **accuracy-only three-atom** common-anchor controls. Their
+experimental anchor is XC240×80×160 / NLC240×40×80 at rho1e-12, with XC192×80×160,
+XC240×64×128, NLC192×40×80, NLC240×32×64 controls and a separate rho1e-14 replay.
+These dimensions are not a recommendation, and no result is yet accepted.
+They use the source-frozen full-Fock reference package and supplemental runtime
+data from the n2 study, with matching SHA-256 receipts. Native production
+screening and shared-grid ownership are unchanged. Raw data lives under
+`n1:/data/jzzeng/vv10-precision-study-20261019/joint-full-fock`; do not pool these
+accuracy-only phases with timing populations, or extrapolate them to larger
+sizes. Larger full-Fock XC and NLC studies and the all-method timing refresh
+remain in progress; a joint gate implementation is not goal completion.
+
+The subsequently collected 48-atom DF full-Fock probe confirms the same XC
+problem: XC48×16×32 versus XC64×24×48, at fixed NLC48×12×24, differs by
+`3.93866e-5 Eh` / `3.50008e-5 Eh/bohr` / `1.94598e-5 Eh/bohr` RMS across the two
+geometries. Its energy difference also exceeds the Fast budget. The three-atom
+DF screening control gives `1.05011e-8 Eh` / `1.30898e-8 Eh/bohr` for rho1e-8
+versus rho1e-12, and only `1.59318e-10 Eh` / `1.86715e-10 Eh/bohr` for rho1e-10
+versus rho1e-12. Neither is a claim about the exact unscreened limit. The old
+twelve-atom extended XC sweep has now completed both Direct and DF: both
+XC240×80×160 anchors fail the FP64 stability allowance, while their XC-only Fast
+checks pass. The all-original-method rerun audit is 139 measured / 1 incomplete /
+4 not run, using the explicit `aot-fixed` attempt; this remains a same-grid
+timing/oracle audit, not qualification of total quadrature precision.
+
+At 08:17 +08, n1 jobs 10360 (48 atoms, finite 16 hours) and 10361 (96 atoms,
+finite 24 hours) also started reference-only full-Fock NLC sweeps, Direct then
+DF. XC is fixed at 144×48×96, screening at the current native rho1e-8 domain;
+NLC varies over 48×12×24, 48×16×32, 64×16×32, 96×24×48, 96×32×64,
+120×24×48 and 120×32×64. The final three provide radial/angular controls if
+stable. Save under `n1:/data/jzzeng/vv10-precision-study-20261019/nlc-fast-full-fock`.
+They use the same source-frozen package as the joint three-atom study. This
+closes a measurement-coverage gap, not the qualification itself: the anchor may
+still require refinement, low-screening controls remain separate, and these
+accuracy-only runs cannot replace complete cold/warm benchmark timings.

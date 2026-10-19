@@ -288,3 +288,41 @@ the fitted operator. The analyzer separates different Fock policies, and failed
 SCF journals retain the last convergence diagnostics without accepting an E+F
 endpoint. Preserve older attempts; do not loosen the accuracy gates to hide a
 reference convergence failure.
+
+### Joint total-error qualification
+
+`tools.qualify_vv10_endpoint_precision` checks the complete timed endpoint
+against a **joint** independent reference, not a sum of separately accepted
+XC/NLC/arithmetic passes. Supply one dense, low-screening anchor and five
+independently reconverged controls: XC radial/angular, NLC radial/angular and a
+lower density threshold. Every grid control holds the other grid and screening
+fixed at the anchor; the screening control holds both grids fixed. Reference
+SCF, full-density Fock, response, geometry, basis and source controls must agree.
+
+The tool sums the measured control differences and anchor replay drift for each
+norm. That sum must fit the reserved 10% reference allowance, **and** the observed
+candidate error plus that sum must fit the single profile budget. This is an
+empirical stability check, not a rigorous integration-tail bound. It covers all
+twelve original/moved cold/warm E+F calls and Fast's RMS force gate. Missing,
+failed, mixed-control or incomplete evidence cannot pass.
+
+For example, with explicit files from one qualified reference cohort:
+
+```bash
+PYTHONPATH=.:python python -m tools.qualify_vv10_endpoint_precision \
+  --candidate "$CANDIDATE_JSON" --profile fp64 \
+  --anchor "$ANCHOR_JSON" \
+  --xc-radial "$XC_RADIAL_JSON" --xc-angular "$XC_ANGULAR_JSON" \
+  --nlc-radial "$NLC_RADIAL_JSON" --nlc-angular "$NLC_ANGULAR_JSON" \
+  --screening "$LOWER_SCREENING_JSON" --output "$QUALIFICATION_JSON"
+```
+
+Run this separately for the native **and GPU4PySCF** timing journals, for both
+Direct and DF and every README size. `--profile fast` selects the Fast total
+budget; it does not label GPU4PySCF's FP64 arithmetic as native Fast. Native
+Fast candidates must use the actual public application-selected controls, not
+the older tight-control pilot or private force experiments; actual effective
+precision counts remain visible, including all-FP64 executions. Successful
+process, source, build and reference-byte receipts are retained. The tool does
+not rewrite measurement-time gates or qualify latency publication. No final
+FP64/Fast grid combination is certified by adding this tooling.
