@@ -120,6 +120,10 @@ def validate_cc_census(
     phases = inventory["phases"]
     plans = inventory["plans"]
     o, v, q = geometry
+    require(
+        all(type(value) is int and value > 0 for value in geometry),
+        "unsupported finite positive geometry",
+    )
     cc = [(identity, row) for identity, row in plans.items() if row[0] == CC_PLAN]
     tp = [(identity, row) for identity, row in plans.items() if row[0] == T_PLAN]
     require(len(cc) == len(tp) == 1, "missing/extra prepared plan facts")
@@ -156,6 +160,11 @@ def validate_cc_census(
     }
     require(len(groups[2]) == semantic["df_source_scans"] == 1, "DF source scan census")
     require(len(groups[3]) == semantic["df_source_reads"] == o + v, "DF raw row census")
+    n = o + v
+    # Prove cardinality against the bounded decoded inventory before building
+    # any range from an untrusted geometry or prepared plan.
+    require(len(groups[22]) == n + 2, "DF orbital/metric projection cardinality")
+    require(len(groups[27]) == 5, "DF independent block cardinality")
     require(
         len(groups[22]) + len(groups[27]) == semantic["df_transform_stages"],
         "DF projection/block census",
@@ -174,6 +183,44 @@ def validate_cc_census(
         o**3 * v,
         o**4,
     ]
+    source = groups[2][0]["words"]
+    require(
+        len(groups[1]) == 1
+        and source[3] == groups[1][0]["words"][2]
+        and source[5:7] == (n, q),
+        "DF source parent/shape domain",
+    )
+    df_sites = frozenset((3, 22, 23, 24, 25, 26, 27))
+    require(
+        all(
+            phase["words"][3] == source[2] and phase["words"][7:9] == (0, 0)
+            for site in df_sites
+            for phase in groups[site]
+        ),
+        "DF operation outside actual source parent/domain",
+    )
+    # Each AO row is projected once, then the second orbital and metric
+    # projections execute. Publication follows three factors and five blocks.
+    # These dimensions come from molecular geometry, never observed counts.
+    expected_df = [item for mu in range(n) for item in ((3, mu, q), (22, mu, n))]
+    expected_df += [(22, n, n), (22, n + 1, q), (23, o, v)]
+    for index, count in enumerate(copies):
+        if index >= 3:
+            expected_df.append((27, index - 3, q))
+        expected_df += [(26, 0, count), (24, 0, 8 * count), (25, 0, count)]
+    actual_df = [
+        tuple(phases[identity]["words"][4:7])
+        for identity in inventory["begin_order"]
+        if phases[identity]["words"][4] in df_sites
+    ]
+    require(
+        actual_df == expected_df, "DF row/projection/block/publication domain/order"
+    )
+    df_work = 2 * q * n**3 + q * q * n * n + q * (3 * (o * v) ** 2 + o**3 * v + o**4)
+    require(
+        semantic["df_transform_fmas"] == df_work,
+        "independent DF geometry/source work differs",
+    )
     require(
         [phase["words"][6] for phase in groups[24]] == [8 * count for count in copies],
         "independent DF publication bytes",
@@ -333,6 +380,10 @@ def validate_cc_census(
     )
     return {
         "source_coverage": "PASS_FINITE_STRICT_FP64_DOMAIN",
+        "df_observed_domains": "PASS_SOURCE_PARENT_ROW_PROJECTION_INNER_K_BLOCK_AND_PUBLICATION",
+        "df_independent_semantic_work": df_work,
+        "df_independent_raw_values": n * n * q,
+        "df_per_call_outer_matrix_dimensions": "UNAVAILABLE_NOT_RECORDED; geometry/source-derived total checked separately",
         "q_tiles": len(expected_tiles),
         "triples_tiles": len(model["tiles"]),
         "logical_w_products": model["logical_w_products"],

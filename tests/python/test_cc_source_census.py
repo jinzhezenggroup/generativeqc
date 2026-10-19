@@ -68,12 +68,13 @@ def fixture() -> tuple[dict[str, Any], dict[str, int], tuple[int, int, int]]:
     for i in range(o + v):
         begin(3, i, q)
         end()
-    begin(22)
-    end()
-    for i in range(5):
-        begin(27, i)
+        begin(22, i, o + v)
         end()
-    begin(23)
+    begin(22, o + v, o + v)
+    end()
+    begin(22, o + v + 1, q)
+    end()
+    begin(23, o, v)
     end()
     copies = [
         q * o * o,
@@ -85,7 +86,10 @@ def fixture() -> tuple[dict[str, Any], dict[str, int], tuple[int, int, int]]:
         o**3 * v,
         o**4,
     ]
-    for count in copies:
+    for index, count in enumerate(copies):
+        if index >= 3:
+            begin(27, index - 3, q)
+            end()
         for site, detail in ((26, count), (24, 8 * count), (25, count)):
             begin(site, 0, detail)
             end()
@@ -139,9 +143,12 @@ def fixture() -> tuple[dict[str, Any], dict[str, int], tuple[int, int, int]]:
     semantic = {
         "df_source_scans": 1,
         "df_source_reads": o + v,
-        "df_transform_stages": 6,
+        "df_transform_stages": o + v + 7,
         "df_block_gemms": 5,
         "df_cuda_transform_calls": 1,
+        "df_transform_fmas": 2 * q * (o + v) ** 3
+        + q**2 * (o + v) ** 2
+        + q * (3 * (o * v) ** 2 + o**3 * v + o**4),
         "ccsd_evaluations": 2,
         "ccsd_replay_evaluations": 1,
         "ccsd_q_tiles": tile_count,
@@ -249,13 +256,65 @@ def test_logical_vendor_and_kernel_layers_remain_distinct() -> None:
     assert model["panel_probes"] == 405
 
 
+@pytest.mark.parametrize("site", [3, 22, 23, 24, 25, 26, 27])
+@pytest.mark.parametrize("corruption", ["index", "shape", "parent"])
+def test_df_domains_reject_count_preserving_corruption(
+    site: int, corruption: str
+) -> None:
+    inventory, semantic, geometry = fixture()
+    phase = next(p for p in inventory["phases"].values() if p["words"][4] == site)
+    words = list(phase["words"])
+    if corruption == "index":
+        # Replacing one row/projection/block by a duplicate keeps all counts.
+        words[5] = 1
+    elif corruption == "shape":
+        words[6] += 1
+    else:
+        words[3] = next(i for i, p in inventory["phases"].items() if p["words"][4] == 1)
+    phase["words"] = tuple(words)
+    with pytest.raises(InvalidTrace):
+        validate_cc_census(inventory, semantic, geometry)
+
+
+def test_df_domain_checks_bound_huge_ao_before_enumeration() -> None:
+    inventory, semantic, (_, v, q) = fixture()
+    o = 2**52
+    for identity, original in inventory["plans"].items():
+        if original[0] == T_PLAN:
+            words = list(original)
+            words[4] = o
+            inventory["plans"][identity] = tuple(words)
+    with pytest.raises(InvalidTrace):
+        validate_cc_census(inventory, semantic, (o, v, q))
+
+
+def test_df_raw_values_are_not_contraction_work() -> None:
+    inventory, semantic, geometry = fixture()
+    o, v, q = geometry
+    raw_values = (o + v) ** 2 * q
+    result = validate_cc_census(inventory, semantic, geometry)
+    assert result["df_independent_raw_values"] == raw_values
+    semantic["df_transform_fmas"] += raw_values
+    with pytest.raises(InvalidTrace, match="independent DF geometry/source work"):
+        validate_cc_census(inventory, semantic, geometry)
+
+
 def test_huge_q_domain_is_rejected_before_materializing_tiles() -> None:
     inventory, semantic, (o, v, old_q) = fixture()
     q = 2**52
+    n = o + v
+    semantic["df_transform_fmas"] = (
+        2 * q * n**3 + q * q * n * n + q * (3 * (o * v) ** 2 + o**3 * v + o**4)
+    )
     for identity, original in inventory["plans"].items():
         words = list(original)
         words[5 if words[0] == CC_PLAN else 6] = q
         inventory["plans"][identity] = tuple(words)
+    for phase in inventory["phases"].values():
+        words = list(phase["words"])
+        if words[4] in (2, 3, 27) or (words[4] == 22 and words[5] == o + v + 1):
+            words[6] = q
+            phase["words"] = tuple(words)
     for site in (24, 25, 26):
         copies = [p for p in inventory["phases"].values() if p["words"][4] == site]
         for phase in copies[:3]:

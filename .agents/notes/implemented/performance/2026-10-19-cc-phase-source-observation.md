@@ -235,3 +235,31 @@ an independent finite guard to acknowledge the held child before releasing exec.
 CPU controls exercise normal drain, timeout with a native descendant, unrelated
 session preservation, reused leader rejection and postspawn identity failure.
 That repaired protocol is a different version from the actual historical run.
+
+## Post-run consumer and failure-path repairs
+
+Review found that matching DF event totals alone admitted duplicate raw-row,
+projection or block indices. The consumer now checks the independently derived
+AO row and projection domains, recorded inner dimensions, packing shape,
+five block indices, publication order and immediate source parent. Cardinality
+must agree with the bounded decoded inventory before any geometry-driven range
+is built. The original raw packet passes these stronger checks unchanged.
+
+Raw values (`n*n*q`) and contraction work have different units. The existing
+`df_transform_fmas` field sums projection and block contraction summands:
+`2*q*n^3 + q*q*n*n + q*(3*(o*v)^2 + o^3*v + o^4)`.
+For the frozen230-AO case this is30346393704; its25815200 raw values are
+reported separately. An initial post-run checker incorrectly added those raw
+values and refused the original packet. That checker failure is retained and
+corrected; it is not a scientific endpoint failure. These are logical work
+counts, not measured SASS instructions. Per-call outer matrix dimensions were
+not recorded and remain UNAVAILABLE rather than being inferred as observations.
+
+Failure injection also demonstrated that a kill/reap/join, log-close, input
+verification or receipt-publication error could replace an earlier attestation
+failure and skip later cleanup. Each owned cleanup step now gets a separate
+finite attempt; terminal evidence records secondary errors and the original
+exception is preserved. Permanent controls inject by failure/evidence events,
+not helper invocation counts. Normal log close retains its existing position
+before the caller's final clock sample. These future failure-path changes do
+not retroactively qualify execution supervision of the measured campaign.

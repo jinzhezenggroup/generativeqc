@@ -179,25 +179,29 @@ def run(spec: dict[str, Any], output: Path, *, diagnostic: bool) -> dict[str, An
     }
     process = None
     supervisor = None
+    log = None
+    failure = None
     try:
-        with (output / "native.log").open("wb") as log:
-            deadline = time.monotonic() + 1800
-            process = subprocess.Popen(
-                launch, stdout=log, stderr=subprocess.STDOUT, env=native_environment
-            )
-            supervisor = NativeSupervisor(process, deadline)
-            supervisor.start()
-            native = process_identity(process.pid)
-            receipt["native_process"] = native
-            atomic_json(output / "receipt.json", receipt)
-            receipt["native_bindings"] = observe_native(
-                process.pid, Path(spec["executable"]), libraries
-            )
-            supervisor.join(max(0, deadline - time.monotonic()) + 10)
-            if not supervisor.finished.is_set() or supervisor.failure is not None:
-                raise RuntimeError("native supervisor did not complete cleanly")
-            receipt["native_exit"] = supervisor.returncode
-            receipt["supervised_child_wall_ns"] = supervisor.ended_ns - started
+        log = (output / "native.log").open("wb")
+        deadline = time.monotonic() + 1800
+        process = subprocess.Popen(
+            launch, stdout=log, stderr=subprocess.STDOUT, env=native_environment
+        )
+        supervisor = NativeSupervisor(process, deadline)
+        supervisor.start()
+        native = process_identity(process.pid)
+        receipt["native_process"] = native
+        atomic_json(output / "receipt.json", receipt)
+        receipt["native_bindings"] = observe_native(
+            process.pid, Path(spec["executable"]), libraries
+        )
+        supervisor.join(max(0, deadline - time.monotonic()) + 10)
+        if not supervisor.finished.is_set() or supervisor.failure is not None:
+            raise RuntimeError("native supervisor did not complete cleanly")
+        receipt["native_exit"] = supervisor.returncode
+        receipt["supervised_child_wall_ns"] = supervisor.ended_ns - started
+        log.close()
+        log = None
         receipt["parent_after"] = clock.sample()
         if supervisor.returncode != 0:
             raise ValueError("native endpoint did not complete with exit zero")
@@ -229,27 +233,75 @@ def run(spec: dict[str, Any], output: Path, *, diagnostic: bool) -> dict[str, An
         )
         return receipt
     except BaseException as error:
+        failure = error
         receipt["failure_type"] = type(error).__name__
         raise
     finally:
-        if process is not None and process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
-        if supervisor is not None:
-            supervisor.join(10)
-            receipt["cleanup_errors"] = [
+        cleanup_failures = []
+        receipt["cleanup_errors"] = []
+
+        def retain_cleanup(stage: str, error: BaseException) -> None:
+            cleanup_failures.append(error)
+            receipt["cleanup_errors"].append(
                 {"stage": stage, "type": type(error).__name__}
-                for stage, error in supervisor.cleanup_errors
-            ]
+            )
+
+        if process is not None:
+            running = True
+            try:
+                running = process.poll() is None
+            except BaseException as error:  # noqa: BLE001 -- cleanup must continue
+                retain_cleanup("child poll", error)
+            actions = []
+            if running:
+                actions.append(("child kill", process.kill))
+            actions.append(("child reap", lambda: process.wait(timeout=10)))
+            for stage, action in actions:
+                try:
+                    action()
+                except BaseException as error:  # noqa: BLE001 -- preserve primary
+                    retain_cleanup(stage, error)
+        if supervisor is not None:
+            try:
+                if not supervisor.join(10):
+                    raise TimeoutError(
+                        "child wait did not finish after bounded cleanup"
+                    )
+            except BaseException as error:  # noqa: BLE001 -- still finalize evidence
+                retain_cleanup("child supervisor", error)
+            for stage, error in supervisor.cleanup_errors:
+                retain_cleanup(stage, error)
+            if supervisor.failure is not None and supervisor.failure is not failure:
+                retain_cleanup("child wait", supervisor.failure)
+        if log is not None:
+            try:
+                log.close()
+            except BaseException as error:  # noqa: BLE001 -- preserve primary
+                retain_cleanup("native log close", error)
         try:
             receipt["inputs_after"] = frozen_inputs(spec)
             receipt["frozen_inputs_unchanged"] = (
                 receipt["inputs_after"] == inputs_before
             )
-        except (OSError, ValueError) as error:
+        except BaseException as error:  # noqa: BLE001 -- retain terminal evidence
             receipt["input_verification_error"] = type(error).__name__
             receipt["frozen_inputs_unchanged"] = False
+            retain_cleanup("frozen input verification", error)
         if not receipt["frozen_inputs_unchanged"]:
             receipt["science"] = "INCOMPLETE_INPUT_CHANGED"
             receipt["capture"] = "INCOMPLETE"
-        atomic_json(output / "receipt.json", receipt)
+        if cleanup_failures:
+            receipt["science"] = "INCOMPLETE_CLEANUP"
+            receipt["capture"] = "INCOMPLETE"
+            if failure is None:
+                receipt["failure_type"] = type(cleanup_failures[0]).__name__
+        try:
+            atomic_json(output / "receipt.json", receipt)
+        except BaseException as error:  # noqa: BLE001 -- prior receipt remains durable
+            retain_cleanup("terminal receipt publication", error)
+            if failure is not None:
+                failure.add_note(
+                    "Terminal receipt publication failed: " + type(error).__name__
+                )
+        if failure is None and cleanup_failures:
+            raise cleanup_failures[0]

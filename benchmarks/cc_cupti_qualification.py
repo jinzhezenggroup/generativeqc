@@ -83,6 +83,7 @@ EXTRA_WORK = (
     "df_transform_stages",
     "df_block_gemms",
     "df_cuda_transform_calls",
+    "df_transform_fmas",
     "triples_panel_calls",
     "triples_epilogue_kernels",
     "triples_panel_capacity",
