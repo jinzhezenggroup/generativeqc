@@ -429,12 +429,12 @@ Run `generativeqc methods --compositions --json` to see `cpu`, `cuda` and
 `reason` for each canonical name or generated alias; `--backend` mismatches
 fail **before** molecular execution.
 
-The default version-1 small-grid quadrature is a **reference** prescription
-(64 radial x 12 polar x 24 azimuth points per atom), not a converged
-production-grid policy. Positive `--grid-radial-points`,
-`--grid-polar-points` and `--grid-azimuth-points` are available only for
-compiler-generated compositions; the existing stable native-manifest method
-paths preserve their established controls.
+KS defaults to level-3 Treutler/Lebedev + NWChem quadrature; see
+[grid options](ks_options.md) for its partition and accuracy contract.
+Compiler-generated compositions accept `--grid-level 0..9`. Their existing
+`--grid-radial-points`, `--grid-polar-points` and `--grid-azimuth-points`
+select an explicit legacy version-1 tensor grid and cannot be combined with
+`--grid-level`. Native-manifest methods use the common native default.
 
 **Representation is not execution qualification.** Methods requiring
 unrepresented range-separated exchange, VV10/rVV10 nonlocal correlation,

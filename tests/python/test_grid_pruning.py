@@ -58,7 +58,7 @@ def test_versioned_opt_in_identity_and_exact_work() -> None:
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
 def test_qualified_pruned_default_retains_explicit_unpruned_policy(method: str) -> None:
     """The new default changes identity/work without rewriting legacy v2 grids."""
-    default = GridPolicy().resolve(method)
+    default = GridPolicy(pruning="radial-v1").resolve(method)
     previous = GridPolicy(pruning="none").resolve(method)
     assert default.version == 3 and default.pruning == "radial-v1"
     assert default.radial_points == 64
@@ -66,7 +66,7 @@ def test_qualified_pruned_default_retains_explicit_unpruned_policy(method: str) 
     assert previous.radial_points == 54
     assert default.points_per_atom < previous.points_per_atom
     assert default.element_radii == previous.element_radii
-    assert grid_policy_provenance(default) == GridPolicy().provenance
+    assert grid_policy_provenance(default) == GridPolicy(pruning="radial-v1").provenance
     assert grid_policy_provenance(previous) == GridPolicy(pruning="none").provenance
     assert default != previous
 
@@ -77,9 +77,9 @@ def test_benchmark_automatic_pruning_respects_qualified_method_boundaries() -> N
 
     atoms = (("O", (0, 0, 0)), ("H", (0, 0, 1.4)))
     for method in ("lda", "pbe"):
-        assert benchmark_grid_spec(None, atoms, method=method) == GridPolicy().resolve(
-            method
-        )
+        assert benchmark_grid_spec(None, atoms, method=method) == GridPolicy(
+            pruning="radial-v1"
+        ).resolve(method)
         assert benchmark_grid_spec(None, atoms, "none", method=method) == GridPolicy(
             pruning="none"
         ).resolve(method)
@@ -172,6 +172,9 @@ def test_pruned_gaussian_volume_and_second_moments_have_independent_exact_values
 @pytest.fixture(scope="module")
 def native_grid(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> object:
     directory = tmp_path_factory.mktemp("pruned-native-grid")
+    from generativeqc_compiler.xc.atomic_grid_native import emit_atomic_grid_header
+
+    (directory / "generated_atomic_grid.hpp").write_text(emit_atomic_grid_header())
     library = directory / "grid.so"
     native_cxx.build_shared(
         (ROOT / "src/dft/grid.cpp", ROOT / "tests/native/grid_pruning_probe.cpp"),
@@ -183,6 +186,8 @@ def native_grid(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) ->
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(directory),
         ),
     )
     function = ctypes.CDLL(str(library)).grid_pruning_probe

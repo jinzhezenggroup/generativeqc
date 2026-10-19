@@ -458,6 +458,8 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     component_packing_host_bytes = 8 * (48 * 4096 + 7 * aos)
     host = host_without_binding + grid_binding_host_bytes + component_packing_host_bytes
     assert plan["host"] == host < 256 << 20
+    # The grid owner retains (natom + 1) prefix offsets and natom partition radii.
+    source += 8 * ((atoms + 1) + atoms)
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
     assert plan["grid"].peak_bytes + source + reserve < 512 << 20

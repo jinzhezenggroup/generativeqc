@@ -40,6 +40,15 @@ expose registry information, not support for every basis/device/precision and
 derivative combination. A prepared execution can apply stricter checks.
 See [capability sources](capabilities.md).
 
+## Native KS grid descriptor
+
+The `generativeqc_ks_options` descriptor keeps the same layout across grid
+versions. The [KS grid contract](../user/ks_options.md#prepared-semilocal-ks-model-options)
+documents the version-4 defaults, supported elements, level encoding and
+radius-table behavior for native callers as well as Python. It governs the
+`grid_version`, `radial_points`, `angular_polar`, `angular_azimuth` and
+`element_radii` fields when constructing the C descriptor directly.
+
 ## Core C handles and ownership
 
 | Entry points | Contract |

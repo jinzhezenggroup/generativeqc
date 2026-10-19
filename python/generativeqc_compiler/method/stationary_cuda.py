@@ -624,7 +624,7 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                double* phase_seeds, bool bound_point) {
+                                double* phase_seeds, bool bound_point, const double* atomic_radii) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -742,13 +742,13 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                 view.points + 3 * p, centers, na, owner, float(control.seed), point_gradient,
                 typed_ws, typed_ws + na, typed_ws + 2 * na, typed_ws + 3 * na, zeros, distances,
                 states, GeometryBlockTeam{}, local_norm_fp32, local_ratio_fp32, local_log_fp32,
-                local_becke_fp32, center_pairs, local_ratio_prepared_fp32)
+                local_becke_fp32, center_pairs, local_ratio_prepared_fp32, atomic_radii)
             : generativeqc_grid_adjoint::contract_point_tiled_cooperative(
                 view.points + 3 * p, centers, na, owner, float(control.seed), point_gradient,
                 typed_ws, typed_ws + na, typed_ws + 2 * na, typed_ws + 3 * na, zeros, distances,
                 states, stationary_becke_pair_tile_rows, GeometryBlockTeam{&control.collective_valid},
                 local_norm_fp32, local_ratio_fp32, local_log_fp32, local_becke_fp32,
-                center_pairs, local_ratio_prepared_fp32);
+                center_pairs, local_ratio_prepared_fp32, atomic_radii);
         if (valid && threadIdx.x == 0)
           for (size_t atom = 0; atom < na; ++atom) {
             if (atom == size_t(owner)) continue;
@@ -764,12 +764,12 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
           ? generativeqc_grid_adjoint::contract_point_cooperative(
               view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
               ws + 2 * na, ws + 3 * na, zeros, distances, states, GeometryBlockTeam{},
-              local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)
+              local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared, atomic_radii)
           : generativeqc_grid_adjoint::contract_point_tiled_cooperative(
               view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
               ws + 2 * na, ws + 3 * na, zeros, distances, states, stationary_becke_pair_tile_rows,
               GeometryBlockTeam{&control.collective_valid}, local_norm, local_ratio, local_log, local_becke,
-              center_pairs, local_ratio_prepared);
+              center_pairs, local_ratio_prepared, atomic_radii);
       }
       if (!valid) {
         if (threadIdx.x == 0) atomicExch(error, 1);
@@ -788,7 +788,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                bool bound_point) {
+                                bool bound_point, const double* atomic_radii) {
   const size_t lane = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= geometry_lanes) return;
   // Same-stream consumers may receive a resident grid tile before a host
@@ -832,7 +832,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
       valid = generativeqc_grid_adjoint::contract_point_prepared(view.points + 3 * p, centers, na, owner,
           float(becke_seed), point_gradient, typed_ws, typed_ws + na, typed_ws + 2 * na,
           typed_ws + 3 * na, zeros, distances, local_norm_fp32, local_ratio_fp32,
-          local_log_fp32, local_becke_fp32, center_pairs, local_ratio_prepared_fp32);
+          local_log_fp32, local_becke_fp32, center_pairs, local_ratio_prepared_fp32, atomic_radii);
       if (valid)
         for (size_t atom = 0; atom < na; ++atom) {
           if (atom == size_t(owner)) continue;
@@ -846,7 +846,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
       valid = generativeqc_grid_adjoint::contract_point_prepared(view.points + 3 * p, centers, na, owner,
           becke_seed, grad + 6 * na, typed_ws, typed_ws + na, typed_ws + 2 * na,
           typed_ws + 3 * na, zeros, distances, local_norm, local_ratio,
-          local_log, local_becke, center_pairs, local_ratio_prepared);
+          local_log, local_becke, center_pairs, local_ratio_prepared, atomic_radii);
     }
     if (!valid) {
       atomicExch(error, 1);

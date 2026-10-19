@@ -52,6 +52,9 @@ def grid_response_primal(
         for _ in range(iterations):
             coordinate = 0.5 * coordinate * (3 - coordinate * coordinate)
         return 0.5 * (1 - coordinate)
+    if kind == "treutler_adjust":
+        mu = variables["mu"]
+        return mu + variables["adjustment"] * (1 - mu * mu)
     raise ValueError("unknown grid response primitive")
 
 
@@ -102,6 +105,8 @@ def grid_response_program(kind: typing.Any, iterations: typing.Any = 3) -> typin
         names = ("p",)
     elif kind == "becke":
         names = ("mu",)
+    elif kind == "treutler_adjust":
+        names = ("mu", "adjustment")
     else:
         raise ValueError("unknown grid response primitive")
     primal = grid_response_primal(
@@ -139,6 +144,8 @@ def grid_mixed_response_program(
         names = ("p",)
     elif kind == "becke":
         names = ("mu",)
+    elif kind == "treutler_adjust":
+        names = ("mu", "adjustment")
     else:
         raise ValueError("unknown grid response primitive")
     primal = grid_response_primal(

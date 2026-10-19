@@ -246,9 +246,13 @@ macro(generativeqc_register_host_generated_sources target)
     ADD_TO_TARGET
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_quadrature_cuda.py"
     OUTPUTS "${GENERATIVEQC_QUADRATURE_HEADER}"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_atomic_grid.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/quadrature_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/grid_response_ir.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/treutler.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/atomic_grid_native.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/data/treutler-lebedev.json"
     ARGS --output "${GENERATIVEQC_QUADRATURE_HEADER}"
     COMMENT "Generating bounded CUDA molecular quadrature")
   set(GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER

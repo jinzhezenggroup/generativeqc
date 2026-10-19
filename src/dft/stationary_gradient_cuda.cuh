@@ -25,6 +25,12 @@ struct Owner {
       max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
       geometry_peak_lanes{}, center_geometry_bytes{}, becke_threads_per_point{1},
       becke_shared_bytes{}, byte_budget{}, phased_bytes{};
+  // Fixed molecular topology is independent of moving centers. Versioned
+  // grids may have different shell populations on every atom.
+  bool adjusted_partition = false;
+  size_t molecular_points{};
+  size_t* atom_offsets{};
+  double* atomic_radii{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
   bool becke_primitive_requested = false, becke_primitive = false,
@@ -59,12 +65,12 @@ struct Owner {
       general_point_count{};
   uint64_t fp32_geometry_batches{}, fp32_geometry_points{};
   bool retains_becke_pair_state() const {
-    return bool(phased_storage) ||
+    return (bool(phased_storage) && !adjusted_partition) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
   }
   bool binary_scaled_becke_active() const {
     static_assert(generativeqc_grid_scaled::maximum_scaled_atoms == 128);
-    return becke_binary_scaled_requested &&
+    return !adjusted_partition && becke_binary_scaled_requested &&
            (!becke_binary_scaled_automatic ||
             generativeqc::dft::binary_scaled_becke_automatic(atoms)) &&
            generativeqc::dft::binary_scaled_becke_eligible(
@@ -120,7 +126,7 @@ size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntas
   // Three center coordinates, two planned nine-coordinate lane panels,
   // and one three-coordinate panel per compiler-owned gradient source.
   return 8 * (2 * nprimitive + 4 * n + 22 * ntask +
-              (3 + 18 * geometry_lanes + 3 * stationary_source_count) * na + 3 * np +
+              (5 + 18 * geometry_lanes + 3 * stationary_source_count) * na + 1 + 3 * np +
               2 * ns * n * n) +
          (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
 }
@@ -244,7 +250,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs,
-                                int* error, bool bound_point);
+                                int* error, bool bound_point, const double* atomic_radii);
 template <bool restricted_point>
 __global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view, const int64_t* owners,
                                       size_t owner_offset, size_t points_per_atom, size_t na,
@@ -259,7 +265,7 @@ __global__ void geometry_cooperative_kernel(
     size_t na, const double* weights, const double* raw, const double* external,
     size_t external_stride, size_t external_offset, size_t geometry_lanes, double* partial,
     double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-    double* phase_seeds, bool bound_point);
+    double* phase_seeds, bool bound_point, const double* atomic_radii);
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
 #if !defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
@@ -280,6 +286,26 @@ void launch_phased_becke_normalize(PhasedBeckeInput input, bool cooperative, cud
   }
   phased_becke_normalize<BinaryScaled><<<blocks(input.work.points, 128), 128, 0, stream>>>(input);
 }
+bool stationary_grid_span(const Owner& owner, size_t begin, size_t count, size_t points_per_atom) {
+  if (points_per_atom > SIZE_MAX / owner.atoms) return false;
+  const size_t total = points_per_atom ? points_per_atom * owner.atoms : owner.molecular_points;
+  return total && begin <= total && count <= total - begin;
+}
+__global__ void stationary_grid_owners(const size_t* offsets, size_t atoms, size_t begin,
+                                       size_t count, int64_t* owners) {
+  for (size_t p = blockIdx.x * blockDim.x + threadIdx.x; p < count;
+       p += size_t(blockDim.x) * gridDim.x) {
+    size_t low = 0, high = atoms;
+    while (low + 1 < high) {
+      const size_t middle = (low + high) / 2;
+      if (offsets[middle] <= begin + p)
+        low = middle;
+      else
+        high = middle;
+    }
+    owners[p] = low;
+  }
+}
 void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridTaskView view,
                      const double* work, const int64_t* ao_atoms, const int64_t* owners,
                      size_t owner_offset, size_t points_per_atom, const double* centers, size_t na,
@@ -288,6 +314,15 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      double* partial, double* scratch,
                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
                      bool restricted_point = false, bool fp32_geometry = false) {
+  if (!owners && !points_per_atom && owner.molecular_points) {
+    stationary_grid_owners<<<blocks(view.npoint, 128), 128, 0, stream>>>(
+        owner.atom_offsets, na, owner_offset, view.npoint, owner.point_atoms);
+    cuda_check(cudaPeekAtLastError());
+    owners = owner.point_atoms;
+    ++owner.launches;
+  }
+  const double* radii = owner.adjusted_partition ? owner.atomic_radii : nullptr;
+  const bool phased_active = owner.phased_storage && !owner.adjusted_partition;
   if (fp32_geometry) {
     if (external || !stationary_fp32_point_capable)
       throw std::invalid_argument("unsupported FP32 stationary geometry point contract");
@@ -297,18 +332,18 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
              owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
               view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights,
               raw, external, external_stride, external_offset, geometry_lanes, partial, scratch,
-              center_pairs, error, nullptr, false);
+              center_pairs, error, nullptr, false, radii);
     else
       geometry_kernel<float>
           <<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0, stream>>>(
               view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights,
               raw, external, external_stride, external_offset, geometry_lanes, partial, scratch,
-              center_pairs, error, false);
+              center_pairs, error, false, radii);
     cuda_check(cudaPeekAtLastError());
     return;
   }
   PhasedBeckeInput phased{};
-  if (owner.phased_storage) {
+  if (phased_active) {
     if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
       throw std::invalid_argument("phased Becke lane/cache contract changed");
     phased = phased_input(owner, view.npoint);
@@ -327,7 +362,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
   // routes on the original evaluator; no new resident-storage requirement.
   static_assert(alignof(StationaryPointValue) <= alignof(double));
   const bool precomputed_point =
-      owner.phased_storage &&
+      phased_active &&
       na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double));
   if (precomputed_point) {
     // Preserve incoming launch status and stop before any consumer can observe
@@ -358,7 +393,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
            owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
             view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
             external, external_stride, external_offset, geometry_lanes, partial, scratch,
-            center_pairs, error, phased.seeds, false);
+            center_pairs, error, phased.seeds, false, radii);
     cuda_check(cudaPeekAtLastError());
   } else if (owner.becke_threads_per_point > 1)
     geometry_cooperative_kernel<false, double>
@@ -367,14 +402,14 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
             view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
             external, external_stride, external_offset, geometry_lanes, partial, scratch,
             center_pairs, error, phased.seeds,
-            !external && stationary_restricted_point_selected(restricted_point));
+            !external && stationary_restricted_point_selected(restricted_point), radii);
   else
     geometry_kernel<double>
         <<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0, stream>>>(
             view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
             external, external_stride, external_offset, geometry_lanes, partial, scratch,
             center_pairs, error,
-            !external && stationary_restricted_point_selected(restricted_point));
+            !external && stationary_restricted_point_selected(restricted_point), radii);
   if (!external && stationary_restricted_point_selected(restricted_point)) {
     if (!precomputed_point) {
       ++owner.restricted_point_batches;
@@ -384,7 +419,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     ++owner.general_point_batches;
     owner.general_point_count += view.npoint;
   }
-  if (owner.phased_storage) {
+  if (phased_active) {
     const dim3 atom_blocks(blocks(view.npoint, 128), na);
     const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
     // These events follow the AO/XC seed producer on its borrowed stream.
@@ -523,6 +558,8 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->task_charges = take(ntask);
     p->task_values = take(12 * ntask);
     p->centers = take(3 * na);
+    p->atomic_radii = take(na);
+    p->atom_offsets = reinterpret_cast<size_t*>(take(na + 1));
     if (center_bytes)
       p->center_pairs = reinterpret_cast<generativeqc_grid_adjoint::CenterPair*>(
           take(center_bytes / sizeof(double)));
@@ -546,6 +583,29 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     *output = p.release();
   });
 }
+/** Copy only O(natom) immutable topology, with a setup fence before borrowed
+ * streams may use it. The equal-radius phased witnesses do not authorize the
+ * adjusted graph; its bounded shared-adjoint route remains available. */
+int stationary_grid_topology_v1(void* pointer, const size_t* offsets, const double* radii,
+                                size_t atoms, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* p = static_cast<Owner*>(pointer);
+  return guarded(p, error, size, [&] {
+    if (!p || atoms != p->atoms || !offsets || offsets[0] || p->geometry_pending)
+      throw std::invalid_argument("invalid stationary molecular grid topology");
+    for (size_t a = 0; a < atoms; ++a)
+      if (offsets[a + 1] <= offsets[a] || (radii && (!std::isfinite(radii[a]) || radii[a] <= 0)))
+        throw std::invalid_argument("invalid stationary atom extent or radius");
+    p->context.check_device();
+    upload(*p, p->atom_offsets, offsets, atoms + 1, p->context.stream);
+    if (radii) upload(*p, p->atomic_radii, radii, atoms, p->context.stream);
+    cuda_check(cudaStreamSynchronize(p->context.stream));
+    ++p->synchronizations;
+    p->molecular_points = offsets[atoms];
+    p->adjusted_partition = radii != nullptr;
+  });
+}
+
 int stationary_configure_becke(void* pointer, size_t threads, size_t shared_bytes, char* error,
                                size_t size) {
   using namespace generativeqc_stationary_cuda;
@@ -1209,9 +1269,8 @@ int stationary_geometry_external_device_molecular_enqueue(
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao || !view->points || !external_device || !points_per_atom ||
-        points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
-        view->npoint > p->atoms * points_per_atom - owner_offset ||
+        !view->ao || !view->points || !external_device ||
+        !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom) ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid implicit-owner nonlocal geometry lease");
     check(*p);
@@ -1257,9 +1316,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !device_weights || !device_raw || !external_device ||
-        !points_per_atom || points_per_atom > SIZE_MAX / p->atoms ||
-        owner_offset > p->atoms * points_per_atom ||
-        view->npoint > p->atoms * points_per_atom - owner_offset ||
+        !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom) ||
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident-weight nonlocal geometry lease");
     check(*p);
@@ -1302,9 +1359,8 @@ static int stationary_geometry_molecular_resident_weights_enqueue_impl(
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao || !view->points || !device_weights || !device_raw || !points_per_atom ||
-        points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
-        view->npoint > p->atoms * points_per_atom - owner_offset)
+        !view->ao || !view->points || !device_weights || !device_raw ||
+        !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom))
       throw std::invalid_argument("invalid resident-weight geometry task lease");
     // Bit zero witnesses all requested paired features, including tau: the owned
     // producer copies the contracted panels before identical spin reductions.
@@ -1412,9 +1468,8 @@ int stationary_geometry_molecular_enqueue(void* pointer,
   return guarded(p, error, size, [&] {
     if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
-        !view->ao || !view->points || !points_per_atom || points_per_atom > SIZE_MAX / p->atoms ||
-        owner_offset > p->atoms * points_per_atom ||
-        view->npoint > p->atoms * points_per_atom - owner_offset)
+        !view->ao || !view->points ||
+        !stationary_grid_span(*p, owner_offset, view->npoint, points_per_atom))
       throw std::invalid_argument("invalid implicit-owner geometry task lease");
     check(*p);
     if (!view->npoint) return;

@@ -2949,8 +2949,11 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
                                                          shape[5] == 0 && shape[6] == 0, shape[4],
                                                          shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    const auto points = runtime::size_mul(shape[0], dft::grid_points_per_atom(grid));
-    if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // This shape-only query has no element inventory. V4's exact count is
+    // checked by the prepared grid/controller; never invent a uniform count.
+    if (grid.version != 4 &&
+        runtime::size_mul(shape[0], dft::grid_points_per_atom(grid)) != shape[3])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
         dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,

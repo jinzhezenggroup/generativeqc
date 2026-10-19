@@ -246,6 +246,7 @@ void print_usage(std::ostream& out) {
          "  --density-tolerance X    Positive finite SCF density tolerance\n"
          "  --screening-tolerance X  Positive finite Gaussian integral screening threshold\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
+         "  --grid-level N          Treutler/Lebedev + NWChem level 0..9 (default 3)\n"
          "  --grid-radial-points N  Radial count for explicit MethodIR reference grid\n"
          "  --grid-polar-points N   Polar count for explicit MethodIR reference grid\n"
          "  --grid-azimuth-points N Azimuth count for explicit MethodIR reference grid\n"
@@ -627,13 +628,31 @@ RunOptions parse_run(int argc, char** argv) {
         options.input_angstrom = false;
       else
         throw UsageError("--units must be angstrom or bohr");
+    } else if (option == "--grid-level") {
+      if (options.grid_explicit && options.grid.version != 4)
+        throw UsageError("--grid-level cannot be combined with legacy tensor-grid counts");
+      const auto text = value();
+      const auto level = text == "0" ? 0u : parse_positive_u32(text, "grid level");
+      if (level > 9) throw UsageError("grid level must be in 0..9");
+      options.grid = generativeqc::KsGrid{};
+      options.grid.radial_points = level;
+      options.grid_explicit = true;
     } else if (option == "--grid-radial-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.radial_points = parse_positive_u32(value(), "grid radial points");
       options.grid_explicit = true;
     } else if (option == "--grid-polar-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.angular_polar = parse_positive_u32(value(), "grid polar points");
       options.grid_explicit = true;
     } else if (option == "--grid-azimuth-points") {
+      if (options.grid_explicit && options.grid.version == 4)
+        throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
+      if (!options.grid_explicit) options.grid = {1, 64, 12, 24};
       options.grid.angular_azimuth = parse_positive_u32(value(), "grid azimuth points");
       options.grid_explicit = true;
     } else if (optimizing && option == "--stages") {
@@ -684,7 +703,8 @@ RunOptions parse_run(int argc, char** argv) {
   if (is_dft(options) && !options.composition) {
     // Registered methods leave ks_options null, so native preparation owns
     // their grid defaults. Keep the metadata-only inventory on that same grid.
-    const generativeqc::dft::GridSpec native_grid;
+    const auto native_grid = generativeqc::dft::default_grid_spec();
+    options.grid.version = native_grid.version;
     options.grid.radial_points = native_grid.radial_points;
     options.grid.angular_polar = native_grid.angular_polar;
     options.grid.angular_azimuth = native_grid.angular_azimuth;

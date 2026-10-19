@@ -1028,7 +1028,19 @@ class NativeKsSnapshot:
             raise ValueError("native nonlocal grid point count mismatch")
         actual_spec = GridSpec(
             version=int(version),
-            pruning="radial-v1" if int(version) == 3 else "none",
+            **(
+                {
+                    "radial_rule": "treutler-ahlrichs",
+                    "angular_rule": "lebedev",
+                    "partition": "becke-treutler",
+                    "pruning": "nwchem",
+                    "ordering": "atom-radial-lebedev",
+                }
+                if int(version) == 4
+                else {
+                    "pruning": "radial-v1" if int(version) == 3 else "none",
+                }
+            ),
             radial_points=int(radial),
             angular_polar=int(polar),
             angular_azimuth=int(azimuth),
@@ -1128,7 +1140,19 @@ class NativeKsSnapshot:
             radii = take((119,))
             self.grid_spec = GridSpec(
                 version=int(version),
-                pruning="radial-v1" if int(version) == 3 else "none",
+                **(
+                    {
+                        "radial_rule": "treutler-ahlrichs",
+                        "angular_rule": "lebedev",
+                        "partition": "becke-treutler",
+                        "pruning": "nwchem",
+                        "ordering": "atom-radial-lebedev",
+                    }
+                    if int(version) == 4
+                    else {
+                        "pruning": "radial-v1" if int(version) == 3 else "none",
+                    }
+                ),
                 radial_points=int(radial),
                 angular_polar=int(polar),
                 angular_azimuth=int(azimuth),

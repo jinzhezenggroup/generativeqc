@@ -10,6 +10,7 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
+#include "dft/grid.hpp"
 #include "runtime/resource_planning.hpp"
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
@@ -138,10 +139,24 @@ Json hf_inventory(const std::array<Bytes, 4>& inventory) {
   return result;
 }
 
-scf::KsHostResourceShape ks_host_shape(const Topology& shape, Bytes atoms, Bytes spins,
+/** Count element-local shells without constructing quadrature or probing CUDA. */
+Bytes ks_grid_points(std::span<const generativeqc_atom> atoms, const RunOptions& options) {
+  auto spec = options.grid.version == 4 ? dft::default_grid_spec() : dft::GridSpec{};
+  spec.version = options.grid.version;
+  spec.radial_points = options.grid.radial_points;
+  spec.angular_polar = options.grid.angular_polar;
+  spec.angular_azimuth = options.grid.angular_azimuth;
+  Bytes points = 0;
+  for (const auto& atom : atoms)
+    points = sum({points, dft::grid_atom_point_count(spec, atom.atomic_number)});
+  return points;
+}
+
+scf::KsHostResourceShape ks_host_shape(const Topology& shape,
+                                       std::span<const generativeqc_atom> atom_values, Bytes spins,
                                        const RunOptions& options, Bytes ecp_terms,
                                        Bytes ecp_workspace) {
-  return {atoms,
+  return {atom_values.size(),
           shape.nbf,
           shape.cartesian_nbf,
           shape.shells,
@@ -149,8 +164,7 @@ scf::KsHostResourceShape ks_host_shape(const Topology& shape, Bytes atoms, Bytes
           spins,
           shape.angular,
           ecp_terms,
-          product({atoms, options.grid.radial_points, options.grid.angular_polar,
-                   options.grid.angular_azimuth}),
+          ks_grid_points(atom_values, options),
           options.grid.radial_points,
           options.grid.angular_polar,
           options.backend == GENERATIVEQC_BACKEND_CUDA ? options.grid.tile_points : 256,
@@ -353,6 +367,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       {"screening_tolerance", options.screening_tolerance.value_or(1e-14)},
       {"density_fitting", options.density_fitting},
       {"density_fitting_threshold", options.density_fitting_threshold},
+      {"grid_version", options.grid.version},
       {"grid",
        {options.grid.radial_points, options.grid.angular_polar, options.grid.angular_azimuth}}};
   plan["orbital"] = topology_json(orbital);
@@ -417,7 +432,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   } else if (cpu && ks) {
     scf::CpuKsHostFleetResources fleet;
     plan["item_inventory"] = ks_inventory(fleet.append(
-        ks_host_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace),
         options.batch));
     const auto aggregate = fleet.inventory();
     retained = aggregate[12];
@@ -476,8 +491,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     }
     return emit();
   } else if (ks) {
-    const Bytes points = product({atoms.size(), options.grid.radial_points,
-                                  options.grid.angular_polar, options.grid.angular_azimuth});
+    const Bytes points = ks_grid_points(atoms, options);
     std::array<Bytes, 3> capacities{};
     Bytes quadrature = 0, matrix_provider = 0;
     if (generativeqc_resource_ks_cuda_v1(
@@ -492,7 +506,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     }
     scf::KsHostFleetResources host_fleet;
     plan["item_inventory"] = ks_inventory(host_fleet.append(
-        ks_host_shape(orbital, atoms.size(), spins, options, basis.ecp_terms.size(), ecp_workspace),
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace),
         options.batch, scf::KsHostExecution::cuda_fused));
     const auto host_inventory = host_fleet.inventory();
     retained = host_inventory[12];

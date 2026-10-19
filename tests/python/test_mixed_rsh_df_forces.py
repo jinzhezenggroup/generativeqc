@@ -360,7 +360,7 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
         calc.prepare_batch([atoms]) as batch,
         pytest.raises(ValueError, match="dense-export"),
     ):
-        batch._public_dft_cpu_force(0, atoms)
+        batch._public_dft_cpu_force(0, tuple(Atom.from_value(atom) for atom in atoms))
 
 
 @pytest.mark.parametrize(

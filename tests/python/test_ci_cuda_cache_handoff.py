@@ -72,6 +72,7 @@ def _assert_transport(workflow: str) -> None:
     producer = _job(workflow, "cuda-compile")
     consumer = _job(workflow, "native-cli-artifact")
     compile_step = _step(producer, "Compile production CUDA and runtime CTest")
+    prerequisite = _step(producer, "Compile production CUDA prerequisite archive")
     upload = _step(producer, UPLOAD)
     bound = _step(producer, BOUND)
     download = _step(consumer, DOWNLOAD)
@@ -79,6 +80,8 @@ def _assert_transport(workflow: str) -> None:
     assert 'CCACHE_NORESHARE: "true"' in compile_step
     assert "continue-on-error" not in compile_step
     assert "--target generativeqc_cuda_runtime_tests --parallel 3" in compile_step
+    assert 'CCACHE_NORESHARE: "true"' in prerequisite
+    assert "continue-on-error" not in prerequisite
     for step, minutes in ((bound, 1), (upload, 2), (download, 2)):
         assert _field(step, "continue-on-error") == "true"
         assert _field(step, "timeout-minutes") == str(minutes)
@@ -119,7 +122,7 @@ def _assert_transport(workflow: str) -> None:
         < consumer.index("Build monolithic C++ CUDA CLI (release or fast PR)")
     )
     for forbidden in ("CCACHE_SLOPPINESS", "CCACHE_REMOTE_ONLY", "CCACHE_RESHARE:"):
-        assert forbidden not in compile_step + seed
+        assert forbidden not in prerequisite + compile_step + seed
 
     events = (
         ("push", "refs/heads/master"),
@@ -142,6 +145,10 @@ def _assert_transport(workflow: str) -> None:
         }
         assert (
             bool(_expression(_field(compile_step, "CCACHE_REMOTE_STORAGE"), context))
+            == trusted
+        )
+        assert (
+            bool(_expression(_field(prerequisite, "CCACHE_REMOTE_STORAGE"), context))
             == trusted
         )
         assert _expression(_field(bound, "if"), context) == trusted

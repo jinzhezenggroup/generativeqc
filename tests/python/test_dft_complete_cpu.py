@@ -161,9 +161,19 @@ def independent_gradient(
     )
     mf = dft.RKS(mol)
     mf.xc = "PBE" if method == "pbe-rks" else "LDA_X,LDA_C_PW"
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for z, radius in spec.element_radii:
+            radii[z] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -179,6 +189,8 @@ def independent_gradient(
     mf.max_cycle = 150
     mf.kernel()
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     grad = mf.nuc_grad_method()
     grad.grid_response = True
     total = grad.kernel()
@@ -423,7 +435,8 @@ def test_production_grid_transition_metal_energy_and_force() -> None:
     ):
         energy = batch.execute(strict=True).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
-        assert state._source.grid_spec.version == 3
+        assert state._source.grid_spec.version == 4
+        assert state._source.grid_spec.level == 3
         assert dict(state._source.grid_spec.element_radii)[26] > 0
         assert max(shell.angular_momentum for shell in basis.shells) == 1
         assert basis_definition.provenance.source.startswith("inline issue-596")
