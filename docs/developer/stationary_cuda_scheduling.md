@@ -50,6 +50,40 @@ canonical scalar-AD denominator order and its separate resource admission.
 Neither schedule changes XC expressions, derivative formulas, grid weights,
 precision or the SCF iteration/convergence contract.
 
+## Compiled Stationary Geometry
+
+The compiled native controller also admits the existing phased Becke geometry
+executor for 48–128 atoms across its complete admitted RKS/UKS profile catalog.
+The schedule has no functional-name whitelist: partition response is independent
+of the XC point model and spin channels. It requires full point lanes,
+retained center geometry and the executor's actual-device sm_120 checks.
+This is an execution-policy change, not a new partition formula or a pruning
+rule; the grid, screening thresholds and arithmetic policies are unchanged.
+Mixed geometry retains its existing executor. Composite/nonlocal owners already
+use the generic phase policy; this change does not expand their scientific
+admission or enable pruning defaults for additional functionals.
+
+The pair panels are optional storage charged to the published **cached**
+stationary capacity, alongside the retained center cache. They do not enlarge
+the mandatory minimum arena. Complete-owner byte admission must fit the cached
+tier before construction; a minimum-tier owner, reduced point lanes, unsupported
+hardware or an optional allocation miss retains the bounded geometry path.
+At 96 atoms and a 256-point tile, the additional phased reservation is
+39,755,392 bytes. This is a per-owner tile workspace, not a whole-grid panel.
+
+`tests/python/test_native_stationary_phased_budget.py` executes the generated
+capacity/admission contracts on the host. Its allocation-gated GPU cases cover
+all compiled profiles at 48/96/128 atoms, genuinely spin-polarized UKS,
+moved geometries and reconverged energy differences. Admitted native contexts
+also check explicit minimum-tier force parity. Large M06-2X contexts retain
+their existing packaged Python consumer: the tests check that native admission
+remains closed and that the existing generic phased geometry executes there.
+These cases require the matching packaged stationary-force AOT artifacts as
+well as the native library. Set `GENERATIVEQC_DFT_CUDA_TEST=1`
+inside a finite Slurm allocation to enable those cases;
+`GENERATIVEQC_TEST_DEVICE_ID` selects a device within the assigned visibility
+without changing `CUDA_VISIBLE_DEVICES`.
+
 ## Qualification
 
 `python -m benchmarks.qualify_cuda_schedule native ...` runs the standard complete

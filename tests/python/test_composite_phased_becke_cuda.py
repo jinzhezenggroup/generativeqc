@@ -35,6 +35,7 @@ def test_composite_phased_becke_matches_reconverged_energy_derivatives(
         basis="sto-3g",
         basis_representation="spherical",
         device="cuda",
+        device_id=int(os.environ.get("GENERATIVEQC_TEST_DEVICE_ID", "0")),
         ks_options=KsOptions(grid=grid),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
