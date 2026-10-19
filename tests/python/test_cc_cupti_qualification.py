@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import copy
+import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import pytest
 from test_cc_source_census import fixture
@@ -20,6 +25,48 @@ from benchmarks.cc_tile_environment import (
 )
 from benchmarks.cc_tile_pipeline_campaign import CONTROLS
 from benchmarks.cc_trace_reader import PHASE, InvalidTrace
+
+
+@pytest.mark.parametrize("traversal", [False, True])
+def test_audit_output_refuses_retained_evidence_before_reading_campaign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, traversal: bool
+) -> None:
+    from benchmarks import _retention, cc_cupti_qualification
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results/previous.json"
+    retained.parent.mkdir(parents=True)
+    retained.write_text("original reviewed evidence")
+    destination = (
+        tmp_path / ".artifacts/../benchmarks/results/previous.json"
+        if traversal
+        else retained
+    )
+
+    def forbidden(*args: object) -> None:
+        pytest.fail("invalid output reached campaign/raw evidence reads")
+
+    monkeypatch.setattr(cc_cupti_qualification, "audit_campaign", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "qualify",
+            "--campaign",
+            str(tmp_path / "missing"),
+            "--spec-sha256",
+            "frozen",
+            "--worker-sha256",
+            "frozen",
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        cc_cupti_qualification.main()
+    assert error.value.code == 2
+    assert retained.read_text() == "original reviewed evidence"
+    assert not (tmp_path / ".artifacts").exists()
 
 
 @pytest.mark.parametrize("role", ["clean-1", "clean-2", "diagnostic"])

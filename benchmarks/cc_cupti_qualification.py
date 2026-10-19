@@ -11,6 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from benchmarks._retention import raw_output_path
 from benchmarks.cc_cupti_report import OBSERVER_FENCE_ID, exclusive_ledger
 from benchmarks.cc_source_census import validate_cc_census
 from benchmarks.cc_tile_environment import (
@@ -549,7 +550,7 @@ def main() -> int:
     parser.add_argument("--campaign", required=True, type=Path)
     parser.add_argument("--spec-sha256", required=True)
     parser.add_argument("--worker-sha256", required=True)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     args = parser.parse_args()
     result = audit_campaign(args.campaign, args.spec_sha256, args.worker_sha256)
     atomic_json(args.output, result)
