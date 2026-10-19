@@ -6,6 +6,7 @@ import inspect
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, NoReturn
+
 from generativeqc import Calculator, InitialGuessSpec
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
