@@ -4703,14 +4703,15 @@ Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 struct KsGrid
 ```
 
-Caller-selected molecular quadrature; no implicit production grid is promised.
+Versioned molecular quadrature, defaulting to Treutler/Lebedev + NWChem level 3.
 
-**Behavior.** Value descriptor for caller-selected molecular quadrature; defaults form a small
-reference grid and do not promise production convergence.
+**Behavior.** Value descriptor for molecular quadrature; defaults select level-3
+Treutler/Ahlrichs radial, Lebedev angular, NWChem pruning and Treutler-adjusted Becke.
 
 **Outputs.** version selects reference (1), explicit-radius unpruned (2), or
-explicit-radius radial-v1 pruned (3) grid semantics;
-radial_points, angular_polar, and angular_azimuth set quadrature counts;
+explicit-radius radial-v1 pruned (3), or Treutler/Lebedev/NWChem (4) semantics;
+v4 encodes level 0..9 in radial_points and requires zero angular fields;
+earlier versions use radial_points, angular_polar and angular_azimuth as counts;
 partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
 coincident-center threshold; tile_points bounds the grid tile size.
 

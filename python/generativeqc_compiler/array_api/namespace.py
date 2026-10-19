@@ -332,6 +332,65 @@ def where(condition: object, x1: object, x2: object) -> VibeArray:
     return VibeArray(tensor_ir.where(predicate.node, left.node, right.node))
 
 
+def _extremum(x1: object, x2: object, *, name: str) -> VibeArray:
+    arrays = tuple(value for value in (x1, x2) if isinstance(value, VibeArray))
+    if not arrays:
+        raise TypeError(f"{name} requires at least one symbolic VibeArray")
+    for value in arrays:
+        if value.dtype not in ("float32", "float64"):
+            raise TypeError(f"{name} requires real float32 or float64 arrays")
+        if (
+            not _is_generic_array(value)
+            or value.node.spec.representation != "general"
+            or value.node.spec.symmetries
+            or any(index.space.spin is not None for index in value.node.spec.indices)
+        ):
+            raise TypeError(
+                f"{name} supports only generic arrays without scientific annotations"
+            )
+    dtype = (
+        "float64" if any(value.dtype == "float64" for value in arrays) else "float32"
+    )
+    operands = []
+    for value in (x1, x2):
+        if isinstance(value, VibeArray):
+            operands.append(value)
+        else:
+            factor = _generic_scalar(value, f"{name} scalar")
+            try:
+                rounded = float(factor)
+                if dtype == "float32":
+                    rounded = unpack("f", pack("f", rounded))[0]
+            except (ValueError, OverflowError) as error:
+                raise ValueError(f"{name} scalar must be finite in {dtype}") from error
+            if not isfinite(rounded):
+                raise ValueError(f"{name} scalar must be finite in {dtype}")
+            operands.append(
+                _generic_exact_scalar(value, dtype=dtype, name=f"{name} scalar")
+            )
+    left, right = _promote_generic_arrays(*operands)
+    # Share the broadcast values between predicate and branches. Materializing
+    # duplicate broadcasts would consume the reference retained-byte budget.
+    left, right = broadcast_arrays(left, right)
+    predicate = less(right, left) if name == "minimum" else greater(right, left)
+    return where(predicate, right, left)
+
+
+def minimum(x1: object, x2: object) -> VibeArray:
+    """Select the finite generic minimum; equality retains the first operand.
+
+    Signed-zero order is implementation-defined by Array API 2025.12. The
+    comparison-selector AD opt-in follows this branch at ties, without claiming
+    mathematical differentiability there.
+    """
+    return _extremum(x1, x2, name="minimum")
+
+
+def maximum(x1: object, x2: object) -> VibeArray:
+    """Select the finite generic maximum with the same tie policy as minimum."""
+    return _extremum(x1, x2, name="maximum")
+
+
 def clip(x: object, /, min: object = None, max: object = None) -> VibeArray:
     """Clamp finite generic real arrays using existing comparisons and selection.
 

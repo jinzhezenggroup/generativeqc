@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
+
+#include "tensor/cpu_runtime.hpp"
 namespace generativeqc::mp2::generated {
 using Ump2Run = void (*)(double, double, double, double, double, double, double*);
 struct Ump2CpuPlan {
@@ -289,6 +291,1662 @@ inline Ump2CpuPlan ump2_cpu_plan(unsigned channel) {
               "90e184b88ef49d9965c5ea7e4c9c27174ea82d0060dfb3709b139b5209247288"};
     default:
       throw std::invalid_argument("unknown UMP2 spin channel");
+  }
+}
+namespace reverse_alpha_alpha {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR 5dd17a7b38d64dafcfb158959d95d92753a4b2af9dcf8cd88cbd07f39758e245; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_reverse_alpha_alpha(const double* input, size_t ni, double* output, size_t no,
+                                    size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 7ULL, 6ULL, 36ULL, 544ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = input[6ULL + z];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[2ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[5ULL + (z)];
+          p[7ULL + (z)] = value;
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[8ULL + (z)] = p[6ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-2 * p[3ULL + (z)];
+          p[9ULL + (z)] = value;
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[10ULL + (z)] = p[4ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[11ULL + (z)] = p[0ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[12ULL + (z)] = p[1ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[13ULL + (z)] = p[9ULL + (0LL)];
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[11ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[8ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[12ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[10ULL + (z)];
+          p[14ULL + (z)] = value;
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[14ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[15ULL + (z)] = p[7ULL + (z)] / denominator;
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[16ULL + (z)] = p[13ULL + (z)] * p[7ULL + (z)];
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[16ULL + (z)];
+          value += 0x0.0p+0 * p[16ULL + (z)];
+          p[17ULL + (z)] = value;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[14ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[18ULL + (z)] = p[16ULL + (z)] / denominator;
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[19ULL + (z)] = p[13ULL + (z)] * p[15ULL + (z)];
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[19ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[18ULL + (z)];
+          p[20ULL + (z)] = value;
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[17ULL + (z)], p[17ULL + (z)], p[16ULL + (z)], p[7ULL + (z)],
+                                      p[14ULL + (z)], p[14ULL + (z)], value))
+            return false;
+          p[21ULL + (z)] = value;
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[20ULL + (z)];
+          p[22ULL + (z)] = value;
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[21ULL + (z)];
+          p[23ULL + (z)] = value;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[20ULL + (z)];
+          p[24ULL + (z)] = value;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[21ULL + (z)];
+          p[25ULL + (z)] = value;
+          if (!std::isfinite(p[25ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[23ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[26ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[26ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[23ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[27ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[27ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[28ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[28ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[29ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[29ULL + (z)])) return false;
+        }
+        std::copy_n(p + 28, 1, p + 30);
+        std::copy_n(p + 29, 1, p + 31);
+        std::copy_n(p + 26, 1, p + 32);
+        std::copy_n(p + 27, 1, p + 33);
+        std::copy_n(p + 24, 1, p + 34);
+        std::copy_n(p + 22, 1, p + 35);
+        return true;
+      });
+}
+
+}  // namespace reverse_alpha_alpha
+inline void ump2_adjoint_alpha_alpha(double g, double x, double ei, double ej, double ea, double eb,
+                                     double* out) {
+  const double seed = 1.0;
+  std::fill_n(out, 6, 0.0);
+  const double inputs[] = {ei, ea, g, seed, eb, x, ej};
+  double bars[6];
+  if (reverse_alpha_alpha::ump2_reverse_alpha_alpha(inputs, 7, bars, 6, 544ULL))
+    throw std::runtime_error("nonfinite UMP2 adjoint");
+  out[4] = bars[0];
+  out[5] = bars[1];
+  out[2] = bars[2];
+  out[3] = bars[3];
+  out[0] = bars[4];
+  out[1] = bars[5];
+}
+namespace reverse_beta_beta {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR 3dd08045cb27486d92839a085a176b9987ad5efdac4f9b70c42f08975d35202a; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_reverse_beta_beta(const double* input, size_t ni, double* output, size_t no,
+                                  size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 7ULL, 6ULL, 36ULL, 544ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = input[6ULL + z];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[7ULL + (z)] = p[2ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-2 * p[4ULL + (z)];
+          p[8ULL + (z)] = value;
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[9ULL + (z)] = p[1ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[10ULL + (z)] = p[6ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[11ULL + (z)] = p[5ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[0ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[3ULL + (z)];
+          p[12ULL + (z)] = value;
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[11ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[10ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[7ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[9ULL + (z)];
+          p[13ULL + (z)] = value;
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[14ULL + (z)] = p[8ULL + (0LL)];
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[13ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[15ULL + (z)] = p[12ULL + (z)] / denominator;
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[16ULL + (z)] = p[14ULL + (z)] * p[12ULL + (z)];
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[13ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[17ULL + (z)] = p[16ULL + (z)] / denominator;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[18ULL + (z)] = p[14ULL + (z)] * p[15ULL + (z)];
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[16ULL + (z)];
+          value += 0x0.0p+0 * p[16ULL + (z)];
+          p[19ULL + (z)] = value;
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[18ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[17ULL + (z)];
+          p[20ULL + (z)] = value;
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[19ULL + (z)], p[19ULL + (z)], p[16ULL + (z)],
+                                      p[12ULL + (z)], p[13ULL + (z)], p[13ULL + (z)], value))
+            return false;
+          p[21ULL + (z)] = value;
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[20ULL + (z)];
+          p[22ULL + (z)] = value;
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[21ULL + (z)];
+          p[23ULL + (z)] = value;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[20ULL + (z)];
+          p[24ULL + (z)] = value;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[21ULL + (z)];
+          p[25ULL + (z)] = value;
+          if (!std::isfinite(p[25ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[26ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[26ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[27ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[27ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[23ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[28ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[28ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[23ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[29ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[29ULL + (z)])) return false;
+        }
+        std::copy_n(p + 26, 1, p + 30);
+        std::copy_n(p + 27, 1, p + 31);
+        std::copy_n(p + 28, 1, p + 32);
+        std::copy_n(p + 29, 1, p + 33);
+        std::copy_n(p + 24, 1, p + 34);
+        std::copy_n(p + 22, 1, p + 35);
+        return true;
+      });
+}
+
+}  // namespace reverse_beta_beta
+inline void ump2_adjoint_beta_beta(double g, double x, double ei, double ej, double ea, double eb,
+                                   double* out) {
+  const double seed = 1.0;
+  std::fill_n(out, 6, 0.0);
+  const double inputs[] = {g, eb, ea, x, seed, ei, ej};
+  double bars[6];
+  if (reverse_beta_beta::ump2_reverse_beta_beta(inputs, 7, bars, 6, 544ULL))
+    throw std::runtime_error("nonfinite UMP2 adjoint");
+  out[4] = bars[0];
+  out[5] = bars[1];
+  out[2] = bars[2];
+  out[3] = bars[3];
+  out[0] = bars[4];
+  out[1] = bars[5];
+}
+namespace reverse_alpha_beta {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR a8a92e46464e11c3d8cfb6d14cc5a2e2f7c50568ceb5bbce7cb898368d4b9010; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_reverse_alpha_beta(const double* input, size_t ni, double* output, size_t no,
+                                   size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 6ULL, 5ULL, 30ULL, 456ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = p[0ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[7ULL + (z)] = p[3ULL + (0LL)];
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[8ULL + (z)] = p[4ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[9ULL + (z)] = p[1ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[10ULL + (z)] = p[2ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[11ULL + (z)] = p[7ULL + (z)] * p[5ULL + (z)];
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[9ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[8ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[10ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[6ULL + (z)];
+          p[12ULL + (z)] = value;
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[12ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[13ULL + (z)] = p[5ULL + (z)] / denominator;
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[11ULL + (z)];
+          value += 0x0.0p+0 * p[11ULL + (z)];
+          p[14ULL + (z)] = value;
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          const double denominator = p[12ULL + (z)];
+          if (denominator == 0.0) return false;
+          p[15ULL + (z)] = p[11ULL + (z)] / denominator;
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[16ULL + (z)] = p[7ULL + (z)] * p[13ULL + (z)];
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[14ULL + (z)], p[14ULL + (z)], p[11ULL + (z)], p[5ULL + (z)],
+                                      p[12ULL + (z)], p[12ULL + (z)], value))
+            return false;
+          p[17ULL + (z)] = value;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[17ULL + (z)];
+          p[18ULL + (z)] = value;
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[17ULL + (z)];
+          p[19ULL + (z)] = value;
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[16ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[15ULL + (z)];
+          p[20ULL + (z)] = value;
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[18ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[21ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[19ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[22ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[19ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[23ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[18ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[24ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        std::copy_n(p + 24, 1, p + 25);
+        std::copy_n(p + 21, 1, p + 26);
+        std::copy_n(p + 23, 1, p + 27);
+        std::copy_n(p + 22, 1, p + 28);
+        std::copy_n(p + 20, 1, p + 29);
+        return true;
+      });
+}
+
+}  // namespace reverse_alpha_beta
+inline void ump2_adjoint_alpha_beta(double g, double x, double ei, double ej, double ea, double eb,
+                                    double* out) {
+  const double seed = 1.0;
+  std::fill_n(out, 6, 0.0);
+  const double inputs[] = {eb, ei, ea, seed, ej, g};
+  double bars[5];
+  if (reverse_alpha_beta::ump2_reverse_alpha_beta(inputs, 6, bars, 5, 456ULL))
+    throw std::runtime_error("nonfinite UMP2 adjoint");
+  out[4] = bars[0];
+  out[5] = bars[1];
+  out[2] = bars[2];
+  out[3] = bars[3];
+  out[0] = bars[4];
+}
+inline Ump2CpuPlan ump2_adjoint_cpu_plan(unsigned channel) {
+  switch (channel) {
+    case 0:
+      return {ump2_adjoint_alpha_alpha, 544ULL,
+              "5dd17a7b38d64dafcfb158959d95d92753a4b2af9dcf8cd88cbd07f39758e245"};
+    case 1:
+      return {ump2_adjoint_beta_beta, 544ULL,
+              "3dd08045cb27486d92839a085a176b9987ad5efdac4f9b70c42f08975d35202a"};
+    case 2:
+      return {ump2_adjoint_alpha_beta, 456ULL,
+              "a8a92e46464e11c3d8cfb6d14cc5a2e2f7c50568ceb5bbce7cb898368d4b9010"};
+    default:
+      throw std::invalid_argument("unknown UMP2 adjoint channel");
+  }
+}
+using Ump2DensityRun = void (*)(double, double, double*);
+struct Ump2DensityCpuPlan {
+  Ump2DensityRun run;
+  std::size_t numeric_bytes;
+  const char* equation_hash;
+};
+namespace density_alpha_alpha {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR 4cf0836ceabc78863bffd6238e7bc2b72d56a5c5f0c2e2e070529131a012430b; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_density_tile_alpha_alpha(const double* input, size_t ni, double* output, size_t no,
+                                         size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 9ULL, 4ULL, 46ULL, 608ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = input[6ULL + z];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[7ULL + (z)] = input[7ULL + z];
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[8ULL + (z)] = input[8ULL + z];
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[1ULL + (z)];
+          p[9ULL + (z)] = value;
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[0ULL + (z)];
+          p[10ULL + (z)] = value;
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[4ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[7ULL + (z)];
+          p[11ULL + (z)] = value;
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[12ULL + (z)] = p[8ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-2 * p[5ULL + (z)];
+          p[13ULL + (z)] = value;
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[14ULL + (z)] = p[6ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[15ULL + (z)] = p[2ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[16ULL + (z)] = p[3ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[10ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[9ULL + (z)];
+          p[17ULL + (z)] = value;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[18ULL + (z)] = p[13ULL + (0LL)];
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[15ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[12ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[16ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[14ULL + (z)];
+          p[19ULL + (z)] = value;
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[20ULL + (z)] = p[18ULL + (z)] * p[11ULL + (z)];
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[21ULL + (z)] = p[18ULL + (z)] * p[17ULL + (z)];
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[17ULL + (z)];
+          value += 0x0.0p+0 * p[17ULL + (z)];
+          p[22ULL + (z)] = value;
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          p[23ULL + (z)] = value;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[22ULL + (z)], p[22ULL + (z)], p[17ULL + (z)],
+                                      p[20ULL + (z)], p[19ULL + (z)], p[19ULL + (z)], value))
+            return false;
+          p[24ULL + (z)] = value;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[20ULL + (z)];
+          value += 0x0.0p+0 * p[20ULL + (z)];
+          p[25ULL + (z)] = value;
+          if (!std::isfinite(p[25ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          p[26ULL + (z)] = value;
+          if (!std::isfinite(p[26ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[26ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[26ULL + (z)];
+          p[27ULL + (z)] = value;
+          if (!std::isfinite(p[27ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[23ULL + (z)], p[23ULL + (z)], p[21ULL + (z)],
+                                      p[11ULL + (z)], p[19ULL + (z)], p[19ULL + (z)], value))
+            return false;
+          p[28ULL + (z)] = value;
+          if (!std::isfinite(p[28ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[27ULL + (z)];
+          value += 0x0.0p+0 * p[27ULL + (z)];
+          p[29ULL + (z)] = value;
+          if (!std::isfinite(p[29ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[27ULL + (z)], p[25ULL + (z)], p[29ULL + (z)],
+                                      p[29ULL + (z)], p[19ULL + (z)], p[19ULL + (z)], value))
+            return false;
+          p[30ULL + (z)] = value;
+          if (!std::isfinite(p[30ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[30ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[30ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[28ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[24ULL + (z)];
+          p[31ULL + (z)] = value;
+          if (!std::isfinite(p[31ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[31ULL + (z)];
+          p[32ULL + (z)] = value;
+          if (!std::isfinite(p[32ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[31ULL + (z)];
+          p[33ULL + (z)] = value;
+          if (!std::isfinite(p[33ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[32ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[34ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[34ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[33ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[35ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[35ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[33ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[36ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[36ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[32ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[37ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[37ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[34ULL + (z)];
+          p[38ULL + (z)] = value;
+          if (!std::isfinite(p[38ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[35ULL + (z)];
+          p[39ULL + (z)] = value;
+          if (!std::isfinite(p[39ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[36ULL + (z)];
+          p[40ULL + (z)] = value;
+          if (!std::isfinite(p[40ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[37ULL + (z)];
+          p[41ULL + (z)] = value;
+          if (!std::isfinite(p[41ULL + (z)])) return false;
+        }
+        std::copy_n(p + 39, 1, p + 42);
+        std::copy_n(p + 40, 1, p + 43);
+        std::copy_n(p + 41, 1, p + 44);
+        std::copy_n(p + 38, 1, p + 45);
+        return true;
+      });
+}
+
+}  // namespace density_alpha_alpha
+inline void ump2_density_alpha_alpha(double left, double right, double* out) {
+  const double inputs[] = {right / (-0x1.0000000000000p+1),
+                           -right / (-0x1.0000000000000p+1),
+                           -1.0,
+                           0.0,
+                           left / (-0x1.0000000000000p+1),
+                           1.0,
+                           0.0,
+                           -left / (-0x1.0000000000000p+1),
+                           0.0};
+  double bars[4];
+  if (density_alpha_alpha::ump2_density_tile_alpha_alpha(inputs, 9, bars, 4, 608ULL))
+    throw std::runtime_error("nonfinite UMP2 density adjoint");
+  out[2] = bars[0];
+  out[3] = bars[1];
+  out[0] = bars[2];
+  out[1] = bars[3];
+}
+namespace density_beta_beta {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR 84272dd85ce76c7b5d26d4f141f11948ba9e644d85e8327c402e132de74bbc59; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_density_tile_beta_beta(const double* input, size_t ni, double* output, size_t no,
+                                       size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 9ULL, 4ULL, 46ULL, 608ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = input[6ULL + z];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[7ULL + (z)] = input[7ULL + z];
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[8ULL + (z)] = input[8ULL + z];
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[9ULL + (z)] = p[3ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[2ULL + (z)];
+          p[10ULL + (z)] = value;
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-2 * p[6ULL + (z)];
+          p[11ULL + (z)] = value;
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[12ULL + (z)] = p[1ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[5ULL + (z)];
+          p[13ULL + (z)] = value;
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[14ULL + (z)] = p[8ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[15ULL + (z)] = p[7ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[0ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[4ULL + (z)];
+          p[16ULL + (z)] = value;
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[15ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[14ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[9ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[12ULL + (z)];
+          p[17ULL + (z)] = value;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[18ULL + (z)] = p[11ULL + (0LL)];
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[13ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[10ULL + (z)];
+          p[19ULL + (z)] = value;
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[19ULL + (z)];
+          value += 0x0.0p+0 * p[19ULL + (z)];
+          p[20ULL + (z)] = value;
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[21ULL + (z)] = p[18ULL + (z)] * p[19ULL + (z)];
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[22ULL + (z)] = p[18ULL + (z)] * p[16ULL + (z)];
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          p[23ULL + (z)] = value;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[20ULL + (z)], p[20ULL + (z)], p[19ULL + (z)],
+                                      p[22ULL + (z)], p[17ULL + (z)], p[17ULL + (z)], value))
+            return false;
+          p[24ULL + (z)] = value;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          p[25ULL + (z)] = value;
+          if (!std::isfinite(p[25ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[22ULL + (z)];
+          value += 0x0.0p+0 * p[22ULL + (z)];
+          p[26ULL + (z)] = value;
+          if (!std::isfinite(p[26ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[23ULL + (z)], p[23ULL + (z)], p[21ULL + (z)],
+                                      p[16ULL + (z)], p[17ULL + (z)], p[17ULL + (z)], value))
+            return false;
+          p[27ULL + (z)] = value;
+          if (!std::isfinite(p[27ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[25ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[25ULL + (z)];
+          p[28ULL + (z)] = value;
+          if (!std::isfinite(p[28ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[28ULL + (z)];
+          value += 0x0.0p+0 * p[28ULL + (z)];
+          p[29ULL + (z)] = value;
+          if (!std::isfinite(p[29ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[28ULL + (z)], p[26ULL + (z)], p[29ULL + (z)],
+                                      p[29ULL + (z)], p[17ULL + (z)], p[17ULL + (z)], value))
+            return false;
+          p[30ULL + (z)] = value;
+          if (!std::isfinite(p[30ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[30ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[30ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[27ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[24ULL + (z)];
+          p[31ULL + (z)] = value;
+          if (!std::isfinite(p[31ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[31ULL + (z)];
+          p[32ULL + (z)] = value;
+          if (!std::isfinite(p[32ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[31ULL + (z)];
+          p[33ULL + (z)] = value;
+          if (!std::isfinite(p[33ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[32ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[34ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[34ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[32ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[35ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[35ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[33ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[36ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[36ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[33ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[37ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[37ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[37ULL + (z)];
+          p[38ULL + (z)] = value;
+          if (!std::isfinite(p[38ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[35ULL + (z)];
+          p[39ULL + (z)] = value;
+          if (!std::isfinite(p[39ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[36ULL + (z)];
+          p[40ULL + (z)] = value;
+          if (!std::isfinite(p[40ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[34ULL + (z)];
+          p[41ULL + (z)] = value;
+          if (!std::isfinite(p[41ULL + (z)])) return false;
+        }
+        std::copy_n(p + 41, 1, p + 42);
+        std::copy_n(p + 39, 1, p + 43);
+        std::copy_n(p + 38, 1, p + 44);
+        std::copy_n(p + 40, 1, p + 45);
+        return true;
+      });
+}
+
+}  // namespace density_beta_beta
+inline void ump2_density_beta_beta(double left, double right, double* out) {
+  const double inputs[] = {left / (-0x1.0000000000000p+1),
+                           0.0,
+                           -right / (-0x1.0000000000000p+1),
+                           0.0,
+                           -left / (-0x1.0000000000000p+1),
+                           right / (-0x1.0000000000000p+1),
+                           1.0,
+                           -1.0,
+                           0.0};
+  double bars[4];
+  if (density_beta_beta::ump2_density_tile_beta_beta(inputs, 9, bars, 4, 608ULL))
+    throw std::runtime_error("nonfinite UMP2 density adjoint");
+  out[2] = bars[0];
+  out[3] = bars[1];
+  out[0] = bars[2];
+  out[1] = bars[3];
+}
+namespace density_alpha_beta {
+
+using I = long long;
+
+static inline bool tensor_scaled_bilinear(double a, double b, double c, double d, double e,
+                                          double f, double& out) {
+  if (e == 0.0 || f == 0.0) return false;
+  int ea, eb, ec, ed, ee, ef;
+  const double ma = std::frexp(a, &ea), mb = std::frexp(b, &eb);
+  const double mc = std::frexp(c, &ec), md = std::frexp(d, &ed);
+  const double me = std::frexp(e, &ee), mf = std::frexp(f, &ef);
+  double p = ma * mb, q = mc * md;
+  double pe = std::fma(ma, mb, -p), qe = std::fma(mc, md, -q);
+  const int ep = ea + eb, eq = ec + ed;
+  const int exponent = p == 0.0 ? eq : (q == 0.0 ? ep : std::max(ep, eq));
+  constexpr int limit = 110;
+  const int dp = ep - exponent, dq = eq - exponent;
+  if (dp < -limit) {
+    p = 0.0;
+    pe = 0.0;
+  } else {
+    p = std::scalbn(p, dp);
+    pe = std::scalbn(pe, dp);
+  }
+  if (dq < -limit) {
+    q = 0.0;
+    qe = 0.0;
+  } else {
+    q = std::scalbn(q, dq);
+    qe = std::scalbn(qe, dq);
+  }
+  const double difference = p - q;
+  const double tail = difference - p;
+  const double residual = (p - (difference - tail)) - (q + tail);
+  const double numerator = difference + ((pe - qe) + residual);
+  out = std::scalbn(numerator / (me * mf), exponent - ee - ef);
+  return std::isfinite(out);
+}
+
+// TensorIR 9d5327bc146efe32ace5579bc54dab78175dc63e9c2ea56b713121594118d5f1; codegen-policy
+// 104550dfa19bf4e13b8ffde83ed6e2dffeef02c1338cdb8b26514a5c54ea65fe
+inline int ump2_density_tile_alpha_beta(const double* input, size_t ni, double* output, size_t no,
+                                        size_t budget) noexcept {
+  return generativeqc_tensor_cpu::run(
+      input, ni, output, no, budget, 7ULL, 4ULL, 39ULL, 520ULL, [](const double* input, double* p) {
+        for (I z = 0; z < 1LL; ++z) {
+          p[0ULL + (z)] = input[0ULL + z];
+          if (!std::isfinite(p[0ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[1ULL + (z)] = input[1ULL + z];
+          if (!std::isfinite(p[1ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[2ULL + (z)] = input[2ULL + z];
+          if (!std::isfinite(p[2ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[3ULL + (z)] = input[3ULL + z];
+          if (!std::isfinite(p[3ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[4ULL + (z)] = input[4ULL + z];
+          if (!std::isfinite(p[4ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[5ULL + (z)] = input[5ULL + z];
+          if (!std::isfinite(p[5ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[6ULL + (z)] = input[6ULL + z];
+          if (!std::isfinite(p[6ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[0ULL + (z)];
+          value += 0x0.0p+0 * p[0ULL + (z)];
+          p[7ULL + (z)] = value;
+          if (!std::isfinite(p[7ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[8ULL + (z)] = p[1ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[8ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[9ULL + (z)] = p[4ULL + (0LL)];
+          if (!std::isfinite(p[9ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[10ULL + (z)] = p[5ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[10ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[11ULL + (z)] = p[2ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[11ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[12ULL + (z)] = p[3ULL + ((((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(p[12ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[13ULL + (z)] = p[9ULL + (z)] * p[6ULL + (z)];
+          if (!std::isfinite(p[13ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          p[14ULL + (z)] = p[9ULL + (z)] * p[0ULL + (z)];
+          if (!std::isfinite(p[14ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[11ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[10ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[12ULL + (z)];
+          value += -0x1.0000000000000p+0 * p[8ULL + (z)];
+          p[15ULL + (z)] = value;
+          if (!std::isfinite(p[15ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[14ULL + (z)];
+          value += 0x0.0p+0 * p[14ULL + (z)];
+          p[16ULL + (z)] = value;
+          if (!std::isfinite(p[16ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[13ULL + (z)];
+          value += 0x0.0p+0 * p[13ULL + (z)];
+          p[17ULL + (z)] = value;
+          if (!std::isfinite(p[17ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[7ULL + (z)], p[7ULL + (z)], p[0ULL + (z)], p[13ULL + (z)],
+                                      p[15ULL + (z)], p[15ULL + (z)], value))
+            return false;
+          p[18ULL + (z)] = value;
+          if (!std::isfinite(p[18ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[14ULL + (z)];
+          p[19ULL + (z)] = value;
+          if (!std::isfinite(p[19ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[16ULL + (z)], p[16ULL + (z)], p[14ULL + (z)], p[6ULL + (z)],
+                                      p[15ULL + (z)], p[15ULL + (z)], value))
+            return false;
+          p[20ULL + (z)] = value;
+          if (!std::isfinite(p[20ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[19ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[19ULL + (z)];
+          p[21ULL + (z)] = value;
+          if (!std::isfinite(p[21ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          value += 0x0.0p+0 * p[21ULL + (z)];
+          p[22ULL + (z)] = value;
+          if (!std::isfinite(p[22ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          if (!tensor_scaled_bilinear(p[21ULL + (z)], p[17ULL + (z)], p[22ULL + (z)],
+                                      p[22ULL + (z)], p[15ULL + (z)], p[15ULL + (z)], value))
+            return false;
+          p[23ULL + (z)] = value;
+          if (!std::isfinite(p[23ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[23ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[23ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[20ULL + (z)];
+          value += 0x1.0000000000000p+0 * p[18ULL + (z)];
+          p[24ULL + (z)] = value;
+          if (!std::isfinite(p[24ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += -0x1.0000000000000p+0 * p[24ULL + (z)];
+          p[25ULL + (z)] = value;
+          if (!std::isfinite(p[25ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p+0 * p[24ULL + (z)];
+          p[26ULL + (z)] = value;
+          if (!std::isfinite(p[26ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[26ULL + ((((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[27ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[27ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[28ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[28ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[25ULL + ((((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((z) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[29ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[29ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          for (I r = 0; r < 1LL; ++r)
+            value += p[26ULL + ((((z) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL +
+                                (((r) / 1LL % 1LL)) * 1LL + (((r) / 1LL % 1LL)) * 1LL)];
+          if (!std::isfinite(value)) return false;
+          p[30ULL + (z)] = value * 1.0;
+          if (!std::isfinite(p[30ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[30ULL + (z)];
+          p[31ULL + (z)] = value;
+          if (!std::isfinite(p[31ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[29ULL + (z)];
+          p[32ULL + (z)] = value;
+          if (!std::isfinite(p[32ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[27ULL + (z)];
+          p[33ULL + (z)] = value;
+          if (!std::isfinite(p[33ULL + (z)])) return false;
+        }
+        for (I z = 0; z < 1LL; ++z) {
+          double value = 0.0;
+          value += 0x1.0000000000000p-1 * p[28ULL + (z)];
+          p[34ULL + (z)] = value;
+          if (!std::isfinite(p[34ULL + (z)])) return false;
+        }
+        std::copy_n(p + 34, 1, p + 35);
+        std::copy_n(p + 32, 1, p + 36);
+        std::copy_n(p + 31, 1, p + 37);
+        std::copy_n(p + 33, 1, p + 38);
+        return true;
+      });
+}
+
+}  // namespace density_alpha_beta
+inline void ump2_density_alpha_beta(double left, double right, double* out) {
+  const double inputs[] = {right / (-0x1.0000000000000p+1), 0.0, -1.0, 0.0, 1.0, 0.0,
+                           left / (-0x1.0000000000000p+1)};
+  double bars[4];
+  if (density_alpha_beta::ump2_density_tile_alpha_beta(inputs, 7, bars, 4, 520ULL))
+    throw std::runtime_error("nonfinite UMP2 density adjoint");
+  out[2] = bars[0];
+  out[3] = bars[1];
+  out[0] = bars[2];
+  out[1] = bars[3];
+}
+inline Ump2DensityCpuPlan ump2_density_cpu_plan(unsigned channel) {
+  switch (channel) {
+    case 0:
+      return {ump2_density_alpha_alpha, 608ULL,
+              "4cf0836ceabc78863bffd6238e7bc2b72d56a5c5f0c2e2e070529131a012430b"};
+    case 1:
+      return {ump2_density_beta_beta, 608ULL,
+              "84272dd85ce76c7b5d26d4f141f11948ba9e644d85e8327c402e132de74bbc59"};
+    case 2:
+      return {ump2_density_alpha_beta, 520ULL,
+              "9d5327bc146efe32ace5579bc54dab78175dc63e9c2ea56b713121594118d5f1"};
+    default:
+      throw std::invalid_argument("unknown UMP2 density channel");
   }
 }
 inline constexpr char kUmp2InventoryHash[] =

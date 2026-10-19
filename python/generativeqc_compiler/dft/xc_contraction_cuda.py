@@ -429,9 +429,14 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
         if (cross)
           for (I k = 0; k < @TILE@; ++k) {
-            if constexpr (std::is_same_v<Arithmetic, double>)
+            if constexpr (std::is_same_v<Arithmetic, double>) {
+              const double prior = value;
               value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
-            else
+              // Fusion must not lose a finite grouped cross term when its
+              // first addition overflows before the opposite leg cancels it.
+              if (!(fabs(value) <= 0x1.fffffffffffffp1023))
+                value = prior + (am[k][x]*wn[k][y]+wm[k][x]*an[k][y]);
+            } else
               value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
           }
         else if (reuse_diagonal)

@@ -68,7 +68,7 @@ def angular_rule(count: int) -> tuple[tuple[float, float, float, float], ...]:
         orbits = tables()["orbits"][str(count)]
     except KeyError as error:
         raise ValueError(f"unsupported Lebedev point count: {count}") from error
-    result = []
+    result: list[tuple[float, float, float, float]] = []
     for code, a, b, weight in orbits:
         base = {
             0: lambda: (1.0, 0.0, 0.0),
@@ -85,7 +85,7 @@ def angular_rule(count: int) -> tuple[tuple[float, float, float, float], ...]:
             for perm in itertools.permutations(base)
             for signs in itertools.product((-1, 1), repeat=3)
         }
-        result.extend((*point, weight) for point in sorted(points))
+        result.extend((x, y, z, weight) for x, y, z in sorted(points))
     if len(result) != count:
         raise ValueError("Lebedev orbit inventory has an inconsistent point count")
     return tuple(result)

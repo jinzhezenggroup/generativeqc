@@ -57,6 +57,8 @@ runs in production.
 `ump2` uses the same controller on its actual native UHF
 reference. Restarts seed the existing native correlated batch, and the reference
 returned by that batch is requalified before its correlated result is published.
+Explicit `properties=("energy", "forces")` uses the same qualified reference for
+[complete native CPU UMP2 analytic forces](methods.md#conventional-cpu-ump2-energy-and-analytic-forces).
 `root.reference.energy` is the UHF reference energy; `root.energy` is the requested
 method's total energy. UCCSD(T) is not admitted by this endpoint because it
 does not expose the required CPU prepared-batch contract. This qualifies the electronic reference, not coupled-cluster

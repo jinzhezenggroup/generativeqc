@@ -222,10 +222,9 @@ __global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::
           norm, __dmul_ru(coefficient,
                           md_engine_hermite_norm(primitive.exponent, pair.angular, component)));
     }
-    // Either independently conservative certificate may admit less work.
-    norm =
-        fmin(md_j_nonnegative_bound(norm),
-             md_j_bound_product_up(md.primitive_bounds[index], md.density_bounds[primitive.pair]));
+    // Bound the stored source: the uncontracted Q*D envelope does not cover
+    // relative rounding amplification when precontraction becomes subnormal.
+    norm = md_j_nonnegative_bound(norm);
   }
   const auto position =
       (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;

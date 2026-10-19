@@ -642,6 +642,8 @@ class MolecularGrid:
         radial_weights: ClassVar[np.ndarray]
         shell_offsets: ClassVar[np.ndarray]
         shell_direction_offsets: ClassVar[np.ndarray]
+        atomic_rules: ClassVar[typing.Mapping[int, np.ndarray]]
+        atom_offsets: ClassVar[np.ndarray]
         resolved_radii: ClassVar[tuple[float, ...]]
         npoint: ClassVar[int]
         identity: ClassVar[str]

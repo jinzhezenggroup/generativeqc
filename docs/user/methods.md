@@ -39,9 +39,9 @@ the separate build-time-generated MethodIR catalog and backend qualification.
 Neither command imports Python; see the [native CLI guide](native_cli.md) for
 the execution boundary.
 
-## Conventional CPU UMP2 energy
+## Conventional CPU UMP2 energy and analytic forces
 
-`ump2` evaluates canonical unrestricted MP2 energy from a converged, physically
+`ump2` evaluates canonical unrestricted MP2 energy and analytic nuclear forces from a converged, physically
 validated UHF reference. The initial public domain is all-electron, unscreened
 conventional Gaussian integrals on CPU with real FP64 arithmetic. The two spin
 occupations and orbital frames remain distinct, including for equal occupations.
@@ -55,8 +55,35 @@ print(result.energy)       # UHF reference plus UMP2 correlation, Hartree
 print(result.correlation)  # opposite-spin and combined same-spin contributions
 ```
 
-The method provides energy only. Force, RI/DF, frozen-core, mixed-precision and
-CUDA requests fail explicitly. The native diagnostic groups alpha-alpha and
+The default remains energy only. Request `properties=("energy", "forces")`
+explicitly for complete native CPU analytic forces, including orbital relaxation,
+Pulay/overlap and all three spin correlation channels. For example:
+
+```python
+calc = Calculator(method="ump2", basis="sto-3g", device="cpu", initial_guess=None)
+result = calc.singlepoint(
+    [("O", (0.0, 0.0, 0.0)), ("H", (0.2, 0.0, 1.8))],
+    multiplicity=2,
+    properties=("energy", "forces"),
+)
+print(result.forces)  # negative energy derivative, Hartree/Bohr
+```
+
+RI/DF, frozen-core, mixed-precision, ECP and CUDA requests fail explicitly.
+The energy and force use the same reconverged UHF state. Root selection remains
+a reference policy: convergence alone does not guarantee a stable or intended
+broken-symmetry determinant. Forces do not silently perform finite differences
+or call a reference package. A nonconverged response, unresolved nonstationary
+same-space degeneracy, small denominator, stale source or insufficient numeric
+budget returns no force or correlation diagnostic. Prepared force replay retains
+the last successful warm state across failures.
+
+`result.correlation` reports the physical UHF residual, true coupled-response
+residual, response workspace, planned whole-endpoint numeric capacity and response
+operator identity. The byte plan includes live reference/provider storage, MO
+weights, Krylov arrays and bounded shell staging. It excludes allocator/object
+and compiler-stack overhead. A zero measured-endpoint field means unmeasured;
+the capacity plan is not an RSS observation or a speed claim. The native diagnostic groups alpha-alpha and
 beta-beta into `same_spin_energy` and reports alpha-beta as
 `opposite_spin_energy`; its equation hash identifies the complete three-channel
 compiler inventory. The public selector currently starts UHF from the ordinary

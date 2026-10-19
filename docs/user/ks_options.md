@@ -81,6 +81,48 @@ the schedule, capacity and FP64 reduction order. With local-AO maps, larger
 block unions can also admit additional AO tail work; complete numerical gates
 remain necessary even though the grid and cutoff are unchanged.
 
+(treutler-grid-values)=
+## Grid descriptor helper values
+
+`GridSpec.treutler(level=3)` returns a frozen version-4 descriptor with pinned
+partition radii for H--Lr. Its level must be a Python integer from 0 through 9.
+The `level` property returns that integer for version 4 and `None` for legacy
+descriptors; it is not a radial-node count.
+
+`spec.point_count(atomic_numbers)` consumes an iterable and returns the total
+integer point count without constructing quadrature. Version 4 uses each
+element's shell sizes; legacy versions count the entries with their uniform
+per-atom prescription. `spec.atom_offsets(atoms)` consumes atom objects exposing
+`atomic_number` and returns an immutable tuple of atom-major prefix offsets,
+starting at zero and ending at the total point count. Empty inputs yield zero
+points and the offset tuple `(0,)`.
+
+`spec.partition_radii(atoms)` returns an immutable tuple of per-atom partition
+radii in Bohr for version 4, preserving atom order and explicit radius overrides.
+It returns `None` for legacy equal-radius partitions. These helpers do not use
+coordinates, charge or spin, and do not construct a molecular grid.
+
+(treutler-grid-errors)=
+## Grid descriptor helper errors
+
+The Treutler constructor rejects non-integer levels, including booleans, and
+levels outside 0--9 with `ValueError`. Version-4 point counting and offsets
+likewise reject atomic numbers that are not Python integers in 1--103 with
+`ValueError`. Atom-based helpers require objects exposing `atomic_number`.
+For an explicitly constructed version-4 descriptor with an incomplete radius
+table, `partition_radii` raises `KeyError` when a requested element is absent;
+it does not invent a radius. The `level` property has no additional validation
+or failure branch after descriptor construction.
+
+(treutler-grid-ownership)=
+## Grid descriptor helper ownership
+
+The constructor returns an independent frozen descriptor. Counts, levels,
+offsets and per-atom radii are immutable Python values with no borrowed native
+storage or device lifetime. Input iterables are consumed by the corresponding
+helper but are not retained or mutated. The helpers require no native library,
+GPU, or PySCF installation; numerical tables belong to the installed package.
+
 (angular-pruning)=
 ## Angular pruning
 
