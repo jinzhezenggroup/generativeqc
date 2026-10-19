@@ -358,6 +358,7 @@ def main() -> int:
     atomic_json(plan_path, plan)
     launch_command = [
         sys.executable,
+        "-B",
         str(args.output.resolve() / "cc_tile_child.py"),
         str(plan_path.resolve()),
         str(child_path.resolve()),

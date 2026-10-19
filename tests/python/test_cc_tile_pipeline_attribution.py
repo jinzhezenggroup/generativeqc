@@ -2494,3 +2494,35 @@ def test_campaign_retains_predeclared_parent_source_or_fails_closed(
         assert (output / "nsys_parent.py").read_bytes() == source.read_bytes()
     receipt = json.loads((output / "receipt.json").read_text())
     assert receipt["outcome"] == ("FAIL" if lost else "PASS")
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="same-PID exec and immutable run-directory contract is Linux-specific",
+)
+def test_real_child_launcher_keeps_immutable_run_directory_free_of_bytecode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Use real Python exec with synthetic data and explicitly mocked native bindings."""
+    import base64
+
+    from benchmarks.cc_tile_pipeline_campaign_report import read_run
+
+    paths, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+    paths["input"].write_text(
+        "import base64,sys\nfrom pathlib import Path\n"
+        f"Path(sys.argv[1]).write_bytes(base64.b64decode({base64.b64encode(endpoint).decode()!r}))\n"
+    )
+    identity_path = tmp_path / "identity.json"
+    identity = json.loads(identity_path.read_text())
+    identity["input_sha256"] = checksum(paths["input"])
+    identity["oracle_input_sha256"] = identity["input_sha256"]
+    identity["executable_sha256"] = checksum(Path(sys.executable))
+    atomic_json(identity_path, identity)
+    arguments = list(sys.argv)
+    arguments[arguments.index("--executable") + 1] = sys.executable
+    monkeypatch.setattr(sys, "argv", arguments)
+    assert campaign_main() == 0
+    assert not (output / "__pycache__").exists()
+    assert all(path.is_file() and not path.is_symlink() for path in output.iterdir())
+    assert read_run(output)["receipt"]["outcome"] == "PASS"

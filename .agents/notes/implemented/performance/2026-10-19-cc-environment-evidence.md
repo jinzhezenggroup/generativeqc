@@ -138,3 +138,17 @@ must be frozen before any of the three samples. The campaign copies that source 
 run; declared parent/binding artifacts missing at finalization fail closed.
 The reader rehashes the retained source. It cannot replace independent review of
 the wrapper's NVTX-only source contract with a self-reported role or hash label.
+
+## Actual frozen-launcher bytecode failure
+
+The first source-matched host ELF plumbing campaign reached the synthetic
+endpoint with verified process/environment/library bindings, then correctly
+failed artifact finalization: importing the copied helper generated
+`__pycache__` inside the immutable run directory. This retained host-fake failure
+is not a physical/scientific failure and did not trigger a GPU run. The launcher
+now disables bytecode writes only for its own Python interpreter invocation.
+The scientific child environment and native argv do not change. The regular-file
+inventory and all directory/symlink negative controls remain strict; no generated
+subdirectory is ignored or deleted to manufacture PASS. A real Linux Python exec
+regression exercises this boundary with explicitly synthetic data/mocked native
+bindings, requiring a complete regular-file run directory and successful replay.
