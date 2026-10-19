@@ -878,6 +878,7 @@ def independent_global_hybrid_gradient(
     density_fitting: bool = False,
     auxiliary_shells: typing.Any = None,
     return_mean_field: bool = False,
+    initial_density: typing.Any = None,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
@@ -939,7 +940,7 @@ def independent_global_hybrid_gradient(
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, 1e-10, 200
-    energy = mf.kernel()
+    energy = mf.kernel(dm0=initial_density)
     assert mf.converged
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True

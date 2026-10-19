@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .spin_roots import SpinRootPolicy, SpinRootResult
+
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
@@ -2710,6 +2712,49 @@ class Calculator:
                 _public_calculator_endpoint=True,
             ),
         )
+
+    def stable_singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+        policy: SpinRootPolicy | None = None,
+        previous: SpinRootResult | None = None,
+    ) -> SpinRootResult:
+        """Require a stable real-internal UHF/UKS root before publishing E/forces.
+
+        This explicit CPU FP64 all-electron workflow certifies unscreened J/K
+        with SCF screening at most 1e-12. It reuses
+        native SCF, J/K, SCF-domain XC and the shared coupled response action.
+        ``SpinRootPolicy`` bounds the full spectrum/restarts and failure gates.
+        ``previous`` is a completed ``SpinRootResult`` for the same model; its
+        occupied spaces are projected as a seed and the new root is independently
+        requalified. Root switches reject unless the policy explicitly allows
+        them. Stable states pass through; unstable states need a lower, stationary,
+        fully stable restart. Failure publishes no energy or force result.
+
+        Coordinates are Bohr, energies Hartree and analytic forces Hartree/Bohr.
+        UHF, native UMP2 UHF references and qualified semilocal polarized LDA/PBE
+        are admitted; CUDA, fitting,
+        ECP, mixed precision, complex/spin-flip stability and unqualified XC fail
+        closed. Install ``generativeqc[stability]`` for the bounded CPU linear
+        algebra. This is not a global-minimum or arbitrary spatial-symmetry proof.
+        """
+        from ._spin_root_workflow import stable_singlepoint
+
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return stable_singlepoint(
+                self,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                policy=policy,
+                previous=previous,
+            )
 
     def singlepoint(
         self,

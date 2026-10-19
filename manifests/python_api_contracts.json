@@ -377,10 +377,8 @@
     "generativeqc.extensions.xc.Coefficient": "generativeqc/extensions/xc.py:Coefficient",
     "generativeqc.extensions.xc.FunctionalSpec": "generativeqc_compiler/xc/spec.py:FunctionalSpec",
     "generativeqc.extensions.xc.UnsupportedXC": "generativeqc_compiler/xc/spec.py:UnsupportedXC",
-    "generativeqc.extensions.xc.UserExpression": "generativeqc_compiler/xc/user_expression.py:UserExpression",
     "generativeqc.extensions.xc.capability": "generativeqc/extensions/xc.py:capability",
     "generativeqc.extensions.xc.compose": "generativeqc/extensions/xc.py:compose",
-    "generativeqc.extensions.xc.expression": "generativeqc/extensions/xc.py:expression",
     "generativeqc.extensions.xc.inspect": "generativeqc/extensions/xc.py:inspect",
     "generativeqc.extensions.xc.named": "generativeqc/extensions/xc.py:named",
     "generativeqc.finalize_hf_verification": "generativeqc/progressive_controller.py:finalize_hf_verification",
@@ -429,7 +427,13 @@
     "generativeqc.stationary_nuclear.solve_stationary_nuclear_perturbation": "generativeqc/stationary_nuclear.py:solve_stationary_nuclear_perturbation",
     "generativeqc.stationary_nuclear.solve_stationary_nuclear_perturbations": "generativeqc/stationary_nuclear.py:solve_stationary_nuclear_perturbations",
     "generativeqc.torch.batched_energy": "generativeqc/torch.py:batched_energy",
-    "generativeqc.torch.energy": "generativeqc/torch.py:energy"
+    "generativeqc.torch.energy": "generativeqc/torch.py:energy",
+    "generativeqc.SpinRootUnqualified": "generativeqc/spin_roots.py:SpinRootUnqualified",
+    "generativeqc.SpinRootPolicy": "generativeqc/spin_roots.py:SpinRootPolicy",
+    "generativeqc.SpinRootReference": "generativeqc/spin_roots.py:SpinRootReference",
+    "generativeqc.SpinRootResult": "generativeqc/spin_roots.py:SpinRootResult",
+    "generativeqc.extensions.xc.UserExpression": "generativeqc_compiler/xc/user_expression.py:UserExpression",
+    "generativeqc.extensions.xc.expression": "generativeqc/extensions/xc.py:expression"
   },
   "declarations": {
     "generativeqc/_api_types.py:Atom": {
@@ -4609,16 +4613,6 @@
         "errors": "docs/reference/python_contracts.md#python-method-errors",
         "ownership": "docs/reference/python_contracts.md#python-method-ownership",
         "values": "docs/reference/python_contracts.md#python-method-values"
-      }
-    },
-    "generativeqc/extensions/xc.py:expression": {
-      "kind": "function",
-      "profile": "transformation",
-      "facets": {
-        "behavior": "docstring",
-        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
-        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
-        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
       }
     },
     "generativeqc/extensions/xc.py:inspect": {
@@ -8896,6 +8890,121 @@
       "profile": "exception",
       "facets": {
         "behavior": "docstring"
+      }
+    },
+    "generativeqc/calculator.py:Calculator.stable_singlepoint": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "errors": "docs/user/spin_roots.md#spin-root-errors",
+        "ownership": "docs/user/spin_roots.md#spin-root-ownership",
+        "backends": "docs/user/spin_roots.md#spin-root-backends"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootUnqualified": {
+      "kind": "class",
+      "profile": "exception",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootPolicy": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "ownership": "docs/user/spin_roots.md#spin-root-ownership"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootPolicy.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "errors": "docs/user/spin_roots.md#spin-root-errors"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootPolicy.identity": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootReference": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "ownership": "docs/user/spin_roots.md#spin-root-ownership"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootReference.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "errors": "docs/user/spin_roots.md#spin-root-errors"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootReference.occupied": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootReference.numeric_bytes": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootResult": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/spin_roots.md#spin-root-values",
+        "ownership": "docs/user/spin_roots.md#spin-root-ownership"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootResult.energy": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootResult.forces": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/spin_roots.py:SpinRootResult.diagnostics": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/extensions/xc.py:expression": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
       }
     },
     "generativeqc_compiler/xc/user_expression.py:UserExpression": {
