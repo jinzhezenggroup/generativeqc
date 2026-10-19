@@ -34,6 +34,12 @@ and convergence metrics differ. Same-density/same-cutoff XC is 1.797135 s
 native versus 1.918083 s upstream occupied-factor / 2.444948 s upstream dense.
 J remains the principal residual gap; per-round parity is not claimed.
 
+After rebasing onto the updated PR head, n4:1191 repeats all 18 E/F gates with
+the same work counts. Integrated r2SCAN-3c cold/warm/moved/moved-warm are
+125.866900 / 24.619059 / 80.190273 / 24.625029 s; PBE0 cold/warm are
+57.833701 / 10.109733 s. Source identities and every sample are retained in the
+record's `integrated` section; the table above remains the isolated comparison.
+
 ## Retained records
 
 - `evidence.json.gz` (deterministic gzip JSON): full-precision comparison samples, component event samples,
@@ -41,7 +47,7 @@ J remains the principal residual gap; per-round parity is not claimed.
   qualification setup failures. Complete force vectors and CUPTI streams remain
   in ignored run storage; this record is a performance report, not a permanent
   scientific reference fixture.
-- `measured-source.patch`: reconstruct the measured production sources on
+- `measured-source.patch.gz`: decompress and apply to reconstruct the measured production sources on
   `992c744575b2953390fb4b54b41096dc12666988`. Source identity is
   `cb3cee83afc8d8f066b89ceb1548b5605a17ee7e329dbb10436427b4e69f3888`;
   library SHA256 is

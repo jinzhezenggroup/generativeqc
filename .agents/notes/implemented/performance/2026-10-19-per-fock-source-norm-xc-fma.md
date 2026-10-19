@@ -169,3 +169,37 @@ solver policy are not justified by these measurements.
 Revisit J scheduling and tighter rigorous omission budgets using counted work
 and independent matrices. Revisit XC factorization only when complete
 same-density XC and E/F improve on the now faster generated baseline.
+
+## Integration with the updated PR head
+
+Before push, the remote PR merged master and advanced through
+`f4a8a4c7cf820399fb09199780b6617fa539aa27`. The optimization was rebased without
+conflicts, preserving the incoming SCF, force, compiler and CI changes. Those
+changes required a fresh cached build and all six matching force manifests.
+The measured integrated revision is
+`f365a65904f0874f523afffe1d1e1ba41c5f5bd0`; production source identity is
+`f41cbbbfc267a8ee3d346d1572c21b83756f99495749e56b9d562bca0a22768a`, and library
+SHA256 is `275f4b3b4362a0c7cd1a7390b6148c3cd4f625ce16e121de39724e767128d87a`.
+These identities supplement, rather than replace, the isolated comparison above.
+
+n4:1191 repeats all 18 clean E/F points. r2SCAN-3c cold/warm/moved/moved-warm
+are 125.866900 / 24.619059 / 80.190273 / 24.625029 s; PBE0 cold/warm are
+57.833701 / 10.109733 s. Counts and per-Fock AO work remain unchanged. Maximum
+errors are 1.01e-11 Eh / 4.76e-11 Eh/bohr, within the original gates. This
+confirms the retained speedup on the integrated source, without attributing
+incoming force changes to this patch.
+
+Integrated qualification: 1,010 host MD/policy/harness tests, 123 host XC tests,
+116 GPU MD tests and 133 GPU arithmetic/cancellation follow-ups. Native XC
+suites and all eight small sanitizer invocations pass on n2:3492. The host
+invocation skips 36 standalone phase-force GPU cases; it is not their device
+qualification. The full method E/F and existing small strict/fast endpoints
+provide the stated device scope. A missing declared `defusedxml` test dependency
+was installed into ignored test dependencies; the one affected case then passed.
+Shared compiler-cache observations show 98 hits, 157 misses and no new errors.
+
+The final n4:1192 profile independently confirms 24 Focks with median J
+1.456577 s, XC 1.774034 s and elapsed J+XC 3.257345 s. No trace records were
+dropped and no callback errors occurred. It agrees with the isolated candidate's
+3.257288 s, while the complete instrumented E/F gate also passes. Per-Fock
+samples are retained alongside the clean integration samples.
