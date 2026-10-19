@@ -363,3 +363,27 @@ def test_empty_real_rotation_domain_still_qualifies_stationarity(
     assert root.diagnostics["status"] == "EMPTY"
     assert root.diagnostics["lowest_curvature"] is None
     assert not root.recovered
+
+
+@pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
+def test_retained_native_density_drift_cannot_publish(
+    properties: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc import _spin_root_native
+
+    calc = calculator("uhf")
+    good = execute(calc, h2(1.4), monkeypatch, properties=("energy",))
+    read_density = _spin_root_native._read_density
+
+    def drifted_density(batch: typing.Any, nbf: int) -> np.ndarray:
+        density = np.array(read_density(batch, nbf))
+        # Preserve exact electron counts/idempotency and the native convergence
+        # flag, but move the actual occupied space beyond the physical gate.
+        c = good.reference.coefficients[0]
+        occupied = c[:, 0] * np.cos(4e-8) + c[:, 1] * np.sin(4e-8)
+        density[0] = np.outer(occupied, occupied)
+        return density
+
+    monkeypatch.setattr(_spin_root_native, "_read_density", drifted_density)
+    with pytest.raises(SpinRootUnqualified, match="actual model"):
+        execute(calc, h2(1.4), monkeypatch, properties=properties)

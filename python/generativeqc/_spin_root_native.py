@@ -308,6 +308,12 @@ class _NativeSpinModel:
                 else sum(
                     np.asarray(value).nbytes
                     for value in (
+                        # The exported wire owns its grid and atomic weights;
+                        # ExplicitGrid separately detaches points and weights.
+                        # Snapshot _arrays are views into this wire, so do not
+                        # count those views again. Both owners remain retained
+                        # after close() until the workflow releases the model.
+                        self._snapshot.values,
                         self.state.grid.points,
                         self.state.grid.weights,
                         self.state.grid.owners,

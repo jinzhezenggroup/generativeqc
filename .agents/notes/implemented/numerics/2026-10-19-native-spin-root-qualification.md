@@ -60,3 +60,28 @@ resource/lifetime and independent scientific gates.
 
 - Issue #1826; earlier fixed-geometry UHF PR #2338.
 - `docs/user/spin_roots.md` and `docs/developer/uhf_stability.md`.
+
+## Retained-state qualification guards
+
+Recanonicalizing a rebuilt UHF Fock matrix does not make the original retained
+density stationary. Construction admits small projector/canonicality errors,
+whereas each call can request a tighter stationarity gate. Check the retained
+density through `C.T @ (F @ D @ S - S @ D @ F) @ C` as well as the existing
+Fock/orbital checks. Its unscaled Frobenius norm is invariant under nonsingular
+AO changes and orthogonal orbital gauges; dimension-dependent RMS normalization
+would weaken the gate on larger spaces. Two-level analytic and native-density
+failure-injection tests distinguish this guard from a repeated eigensolve.
+Also gate the dimensionless occupied-projector difference
+`C.T @ S @ D @ S @ C - diag(occupations)` at the requested tolerance: exactly
+degenerate Fock blocks commute with multiple projectors and cannot establish
+that the response/root orbitals describe the retained density. The analytic
+controls cover degeneracy, correct projectors and nonsingular AO changes.
+
+The native KS snapshot keeps an immutable numeric wire containing its original
+grid, while the explicit grid separately owns points and weights. Charge the
+wire once alongside those independent copies, without charging its array views
+again. Closing the native snapshot handle does not release these Python buffers;
+continuation and discarded-model reservations must last until their Python owners
+are released. Live/closed storage and public low/high-budget regressions preserve
+this distinction. The retained-workspace reservation remains distinct from
+native arenas and process RSS.

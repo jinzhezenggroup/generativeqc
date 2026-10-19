@@ -31,6 +31,16 @@ An empty rotation space still requires the nonlinear stationary-reference gates.
 This is a local internal-stability certificate, without a global-minimum,
 complex-orbital or spin-flip stability claim.
 
+For each retained spin density `D`, physical stationarity also requires the
+Frobenius norm of `C.T @ (F @ D @ S - S @ D @ F) @ C` to satisfy
+`stationarity_tolerance`, where `F` is rebuilt from the actual density and
+`C.T @ S @ C = I`. This metric-normalized norm is not divided by the number
+of orbitals. Recanonicalizing `F` alone does not qualify a different retained
+occupied projector.
+The dimensionless Frobenius norm of
+`C.T @ S @ D @ S @ C - diag(occupations)` must also satisfy the same tolerance;
+this binds the density to the occupied columns even when `F` is degenerate.
+
 (spin-root-backends)=
 ## Spin root backends
 
@@ -109,6 +119,8 @@ including failed and discarded attempts. Each restart has an independent native
 owner so it cannot invalidate retained XC/state leases. Receipt numeric arrays
 are backed by immutable bytes; diagnostic access returns a detached copy. The
 nested ordinary `Result` retains its standard metadata ownership contract.
+The retained numeric reservation includes the KS snapshot wire and its independent
+grid copies, including closed models whose Python buffers remain live.
 A previous receipt is detached evidence and a seed, never an executable provider
 or a certificate for the next geometry. Do not mutate a Calculator concurrently
 with this workflow.

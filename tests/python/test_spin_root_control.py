@@ -250,3 +250,65 @@ def test_closed_continuation_staging_buffers_remain_in_controller_budget(
         _recover_spin_root(
             model, solve, SpinRootPolicy(), retained_numeric_bytes=1 << 40
         )
+
+
+@pytest.mark.parametrize("angle", [0.0, 2e-8])
+@pytest.mark.parametrize("transformed", [False, True])
+@pytest.mark.parametrize("degenerate", [False, True])
+def test_actual_density_stationarity_uses_the_physical_ao_metric(
+    angle: float, transformed: bool, degenerate: bool
+) -> None:
+    # A fixed two-level Hamiltonian has an exactly known stationary projector.
+    # The drift is below snapshot construction's 1e-7 admission, but exceeds
+    # this call's stationarity policy. Recanonicalizing its Fock cannot fix D.
+    q = np.array([[2.0, 0.4], [-0.2, 0.7]]) if transformed else np.eye(2)
+    inverse = np.linalg.inv(q)
+    occupied = np.array([np.cos(angle), np.sin(angle)])
+    density = inverse @ np.outer(occupied, occupied) @ inverse.T
+    energies = np.zeros(2) if degenerate else np.array([-1.0, 1.0])
+    fock = q.T @ np.diag(energies) @ q
+    overlap = q.T @ q
+    reference = SpinRootReference(
+        (Atom(1, (0.0, 0.0, 0.0)), Atom(1, (0.0, 0.0, 2.0))),
+        overlap,
+        np.array([density, density]),
+        np.array([inverse, inverse]),
+        np.array([energies, energies]),
+        np.array([[1.0, 0.0], [1.0, 0.0]]),
+        np.array([fock, fock]),
+        float(2 * np.sum(density * fock)),
+        0.0,
+        "fixed-two-level-hamiltonian",
+        "independent-projector-drift-control",
+    )
+    physical = (
+        inverse.T @ (fock @ density @ overlap - overlap @ density @ fock) @ inverse
+    )
+    np.testing.assert_allclose(
+        np.linalg.norm(physical),
+        0.0 if degenerate else np.sqrt(2) * abs(np.sin(2 * angle)),
+        rtol=0,
+        atol=1e-15,
+    )
+    projector = inverse.T @ overlap @ density @ overlap @ inverse - np.diag([1.0, 0.0])
+    np.testing.assert_allclose(
+        np.linalg.norm(projector), np.sqrt(2) * abs(np.sin(angle)), rtol=0, atol=1e-15
+    )
+    model = SimpleNamespace(
+        reference=reference,
+        workspace_bytes=1024,
+        validate_current=lambda: None,
+        operator=SimpleNamespace(
+            dimension=2, apply=lambda vector: (0 if degenerate else 2) * vector
+        ),
+        evaluate=lambda trial: SimpleNamespace(
+            energy=float(np.sum(trial * reference.fock)), fock=reference.fock
+        ),
+    )
+    policy = SpinRootPolicy(recover=False, stationarity_tolerance=1e-10)
+    if angle:
+        with pytest.raises(SpinRootUnqualified, match="actual model"):
+            _certify(model, policy, _Work(100))
+    else:
+        expected = "NEAR_SINGULAR" if degenerate else "STABLE"
+        assert _certify(model, policy, _Work(100)).status == expected

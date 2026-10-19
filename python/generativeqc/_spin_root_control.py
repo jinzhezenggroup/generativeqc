@@ -147,8 +147,25 @@ def _certify(model: typing.Any, policy: SpinRootPolicy, work: _Work) -> _RealSpe
     for spin in range(2):
         c = reference.coefficients[spin]
         energies = reference.orbital_energies[spin]
+        f, d, s = actual.fock[spin], reference.density[spin], reference.overlap
+        # Recanonicalizing F can hide drift of the retained occupied projector.
+        # C is S-orthonormal: this is [F, P] in an orthonormal frame, invariant
+        # under nonsingular AO changes and orthogonal orbital gauges. Use its
+        # unscaled Frobenius norm, without dimension-dependent RMS dilution.
+        density_stationarity = float(np.linalg.norm(c.T @ (f @ d @ s - s @ d @ f) @ c))
+        # A degenerate Fock commutes with different projectors. The actual D
+        # must also match the occupied columns used by response/root diagnostics.
+        projector_drift = float(
+            np.linalg.norm(c.T @ s @ d @ s @ c - np.diag(reference.occupations[spin]))
+        )
+        if not all(
+            math.isfinite(value) for value in (density_stationarity, projector_drift)
+        ):
+            raise SpinRootUnqualified("nonfinite physical density qualification")
         defect = max(
             defect,
+            density_stationarity,
+            projector_drift,
             float(
                 np.max(np.abs(actual.fock[spin] @ c - reference.overlap @ c * energies))
             ),
