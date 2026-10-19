@@ -9,6 +9,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+struct MdMaskedResidentPair;
+
 inline constexpr std::size_t kMdJResidentCap = 128U << 20;
 inline constexpr double kMdJDensityErrorCap = 1e-12;
 
@@ -42,13 +44,18 @@ struct MdJPrimitive {
  * actually contracted after shell and density admission, not queue capacity.
  * residual_candidates counts individual tests; screened_candidates counts
  * candidates bypassed by tile bounds, so their sum retains the search domain.
- * All arrays use the index 5 * bra_angular + ket_angular.
+ * Output summands count logical AO/Hermite back-projection terms and the
+ * equivalent unfused per-product work, excluding rejected output directions.
+ * Angular-pair arrays use the index 5 * bra_angular + ket_angular.
  */
 struct MdJWorkCounts {
   unsigned long long uniform_roots[25]{}, uniform_directions[25]{}, uniform_summands[25]{};
   unsigned long long residual_candidates[25]{}, residual_tasks[25]{}, residual_roots[25]{};
   unsigned long long residual_tiles[25]{}, residual_screened_tiles[25]{};
   unsigned long long residual_screened_candidates[25]{};
+  unsigned long long masked_tasks[25]{}, masked_groups[25]{}, masked_summands[25]{};
+  unsigned long long masked_output_summands[25]{}, masked_unfused_output_summands[25]{};
+  unsigned long long preproject_primitives[5]{}, preproject_summands[5]{};
 };
 
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.
@@ -74,6 +81,14 @@ struct MdJView {
   /** J-only residual tiles are the default; K retains its incumbent traversal. */
   bool residual_tiled{true};
   bool profile{};
+  bool masked_residual{};
+  /** 0: incumbent; 1: shared-recurrence tile; 2: compacted scalar sources. */
+  unsigned masked_tiles{};
+  /** Optional geometry-bound ordering and per-replay suffix cache. Null retains
+   * the incumbent; failed optional allocation never displaces existing MD-J. */
+  MdMaskedResidentPair* masked_pairs{};
+  double* masked_suffixes{};
+  std::size_t masked_suffix_count{};
   std::size_t active_pair_count{};
   std::size_t residual_candidate_count{};
   /** Compact angular segments let each source kernel retain a fixed recurrence
@@ -97,6 +112,9 @@ __host__ __device__ constexpr unsigned md_j_hermite_count(unsigned angular) {
 
 cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, const double* bounds,
                          double screening);
+
+cudaError_t prepare_md_j_masked(cudaStream_t stream, DeviceBatch batch, MdJView md,
+                                const double* bounds);
 
 /** Refresh conservative total-density bounds before the J-only residual source.
  * K never consumes this density-dependent screening state. */

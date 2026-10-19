@@ -1104,6 +1104,21 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
 
+  set(GENERATIVEQC_MD_J_MASKED_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_masked.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_md_j_masked_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_md_j_masked.py"
+    OUTPUTS "${GENERATIVEQC_MD_J_MASKED_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_masked_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_masked_tile_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_masked_packed_cuda.py"
+    ARGS --output "${GENERATIVEQC_MD_J_MASKED_HEADER}"
+    COMMENT "Generating compiler-owned masked-Hermite residual Coulomb consumer")
+
   set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")
   generativeqc_register_generated_sources(

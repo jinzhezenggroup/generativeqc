@@ -14,6 +14,7 @@ from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc import ResourceBudget, resources_ks
 from generativeqc.resources_native import NativeDeviceLedger
 from generativeqc_compiler.common.resources import plan_resources
+from generativeqc_compiler.integral.md_j_masked_cuda import emit_md_j_masked_header
 from test_direct_jk_optional_allocation import STUBS
 
 if TYPE_CHECKING:
@@ -97,6 +98,7 @@ MD_STUBS = r"""
 #include <type_traits>
 #define __host__
 #define __device__
+#include "generated_md_j_masked.cuh"
 using cudaEvent_t=void*;
 // Use actual MD-J types, constants and Vec3/DeviceBatch ABI from production.
 #include "scf/cuda/direct_md_j.hpp"
@@ -129,9 +131,12 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return a*b; }
 int allocation_index=0, failure_stage=-1, failure_kind=1;
 void allocation_fault() { if(allocation_index++==failure_stage) fault(failure_kind); }
 cudaError_t prepare_md_j(cudaStream_t, int, MdJView&, double*, double) { return cudaSuccess; }
+
+cudaError_t prepare_md_j_masked(cudaStream_t, int, MdJView, double*) { return cudaSuccess; }
 """
 
 MD_DRIVER = r"""
+int baseline_allocations=0;
 int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char* disabled) {
   assert(live.empty());
   runtime::active_device_resource_ledger=ledger;
@@ -162,11 +167,15 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
     const bool eligible=!resident_source_only && !ledger &&
                         !(disabled && std::strcmp(disabled,"1")==0);
     const bool faulted=stage>=0 && allocation_index>stage;
+    const bool cache_fault=faulted && stage>=baseline_allocations;
     assert(eligible || allocation_index==0);
-    if(!eligible || (faulted && kind<=2)) {
+    if(!eligible || (faulted && kind<=2 && !cache_fault)) {
       assert(!propagated && !owner.md_j.minimum_bounds);
       assert(owner.allocations.size()==1 && owner.device_bytes==8);
       direct_jk_check(cudaGetLastError());
+    } else if(cache_fault && kind<=2) {
+      assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
+      assert(!owner.md_j.masked_pairs && !owner.md_j.masked_suffixes);
     } else if(!faulted) {
       assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
       const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
@@ -179,6 +188,26 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       assert(owner.md_j.profile==bool(profile && std::strcmp(profile,"1")==0));
       assert(owner.md_j.reciprocal_high==bool((!reuse || std::strcmp(reuse,"1")==0) &&
                                              (!high || std::strcmp(high,"1")==0)));
+      const char* masked=std::getenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL");
+      const bool selected=masked && std::strcmp(masked,"1")==0;
+      const bool configured=masked!=nullptr;
+      assert(owner.md_j.masked_residual==selected);
+      const char* coarse=std::getenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+      const bool coarse_selected=!coarse || std::strcmp(coarse,"1")==0;
+      const bool coarse_configured=coarse!=nullptr;
+      assert(owner.md_j.residual_tiled==coarse_selected);
+      setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",coarse_selected ? "0" : "1",1);
+      assert(owner.md_j.residual_tiled==coarse_selected);
+      if(coarse_configured) setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",coarse_selected ? "1" : "0",1);
+      else unsetenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+      const char* projection=std::getenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT");
+      const bool cached=projection && std::strcmp(projection,"1")==0;
+      assert(bool(owner.md_j.masked_pairs)==cached);
+      assert(bool(owner.md_j.masked_suffixes)==cached);
+      setenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL",selected ? "0" : "1",1);
+      assert(owner.md_j.masked_residual==selected);
+      if(configured) setenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL",selected ? "1" : "0",1);
+      else unsetenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL");
     } else {
       assert(propagated);
     }
@@ -224,6 +253,89 @@ int main() {
   setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",initial_tiled.c_str(),1);
   setenv("GENERATIVEQC_MD_J_PROFILE",initial_profile.c_str(),1);
   setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH",initial_high.c_str(),1);
+  unsetenv("GENERATIVEQC_DISABLE_MD_J");
+  const char* projection=std::getenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT");
+  const std::string original_projection=projection ? projection : "";
+  unsetenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT");
+  exercise(false,false,-1,1,nullptr);
+  baseline_allocations=allocation_index;
+  for(const char* tiled:{"0","1","2"}) {
+    setenv("GENERATIVEQC_MD_J_MASKED_TILES",tiled,1);
+    MdJHost metadata; HostBatch host;
+    assert(metadata.prepare(host,128U<<20));
+    assert(metadata.masked_tiles==static_cast<unsigned>(std::atoi(tiled)));
+    exercise(false,false,-1,1,nullptr);
+  }
+  setenv("GENERATIVEQC_MD_J_MASKED_TILES","invalid",1);
+  bool tiled_rejected=false;
+  try { MdJHost metadata; HostBatch host; metadata.prepare(host,128U<<20); }
+  catch(const std::invalid_argument&) { tiled_rejected=true; }
+  assert(tiled_rejected);
+  unsetenv("GENERATIVEQC_MD_J_MASKED_TILES");
+  for(const char* coarse:{"0","1"}) {
+    setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",coarse,1);
+    MdJHost metadata; HostBatch host;
+    assert(metadata.prepare(host,128U<<20));
+    assert(metadata.residual_tiled==bool(std::atoi(coarse)));
+    exercise(false,false,-1,1,nullptr);
+  }
+  setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES","invalid",1);
+  bool coarse_rejected=false;
+  try { MdJHost metadata; HostBatch host; metadata.prepare(host,128U<<20); }
+  catch(const std::invalid_argument&) { coarse_rejected=true; }
+  assert(coarse_rejected);
+  unsetenv("GENERATIVEQC_MD_J_RESIDUAL_TILES");
+  setenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT","invalid",1);
+  bool cache_rejected=false;
+  try { MdJHost metadata; HostBatch host; metadata.prepare(host,128U<<20); }
+  catch(const std::invalid_argument&) { cache_rejected=true; }
+  assert(cache_rejected);
+  if(original_projection.empty()) unsetenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT");
+  else setenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT",original_projection.c_str(),1);
+  if(original_projection=="1") {
+    MdJHost metadata; HostBatch host; assert(metadata.prepare(host,128U<<20));
+    assert(!metadata.prepare_masked_cache(0));
+    assert(metadata.masked_pairs.empty());
+    assert(metadata.prepare_masked_cache((128U<<20)-metadata.bytes));
+    assert(metadata.masked_bytes+metadata.bytes<=(128U<<20));
+    metadata.pairs.push_back(metadata.pairs[0]);
+    const auto pair=metadata.pairs[0];
+    const auto slots=(pair.primitive_end-pair.primitive_begin)*
+                     (2*pair.first_count*pair.second_count+1)*pair.hermites;
+    const auto limited=metadata.pairs.size()*sizeof(MdMaskedResidentPair)+slots*sizeof(double);
+    assert(metadata.prepare_masked_cache(limited));
+    assert(metadata.masked_bytes<=limited);
+    assert(metadata.masked_suffixes==slots);
+    unsigned cached_pairs=0;
+    for(const auto& cached:metadata.masked_pairs)
+      if(cached.suffix_offset!=static_cast<std::size_t>(-1)) ++cached_pairs;
+    assert(cached_pairs==1);
+    MdJHost balanced; balanced.preproject=true;
+    auto input=pair;
+    input.angular=1; input.hermites=4; input.first_count=3; input.second_count=1;
+    balanced.pairs={input,input,pair,pair};
+    const auto input_slots=(input.primitive_end-input.primitive_begin)*28;
+    const auto balanced_limit=balanced.pairs.size()*sizeof(MdMaskedResidentPair)+
+                              (input_slots+slots)*sizeof(double);
+    assert(balanced.prepare_masked_cache(balanced_limit));
+    assert(balanced.masked_bytes<=balanced_limit);
+    assert(balanced.masked_pairs[0].suffix_offset==0);
+    assert(balanced.masked_pairs[2].suffix_offset==input_slots);
+    assert(balanced.masked_pairs[1].suffix_offset==static_cast<std::size_t>(-1));
+    assert(balanced.masked_pairs[3].suffix_offset==static_cast<std::size_t>(-1));
+  }
+  const char* policy=std::getenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL");
+  const std::string original=policy ? policy : "";
+  setenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL","invalid",1);
+  bool rejected=false;
+  try { MdJHost metadata; HostBatch host; metadata.prepare(host,128U<<20); }
+  catch(const std::invalid_argument&) { rejected=true; }
+  assert(rejected);
+  if(original.empty()) unsetenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL");
+  else setenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL",original.c_str(),1);
+  setenv("GENERATIVEQC_MD_J_RESIDUAL_TILES",initial_tiled.c_str(),1);
+  setenv("GENERATIVEQC_MD_J_PROFILE",initial_profile.c_str(),1);
+  setenv("GENERATIVEQC_MD_J_RECIPROCAL_HIGH",initial_high.c_str(),1);
   // Resident-only sources must not allocate optional MD storage either.
   for(bool resident_source_only:{false,true}) {
     for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
@@ -241,12 +353,16 @@ int main() {
 
 @pytest.mark.parametrize("counted", [False, True])
 @pytest.mark.parametrize("diagnostics", [False, True])
+@pytest.mark.parametrize("masked", [None, "0", "1"])
+@pytest.mark.parametrize("preproject", [None, "0", "1"])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
     native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
     counted: bool,
     diagnostics: bool,
+    masked: str | None,
+    preproject: str | None,
 ) -> None:
     """Optional diagnostic storage obeys the same admission and rollback cap."""
     if counted:
@@ -259,6 +375,14 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         "GENERATIVEQC_MD_J_RECIPROCAL_HIGH",
     ):
         monkeypatch.setenv(control, "1" if diagnostics else "0")
+    if masked is None:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_MASKED_RESIDUAL", masked)
+    if preproject is None:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_MASKED_PREPROJECT", preproject)
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     # Reuse the existing failure/ownership runtime, adding the real MD layout.
     stubs = STUBS.replace(
@@ -284,6 +408,7 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     # The host compiler has no CUDA SDK; only its runtime type declarations
     # are supplied by the controlled shim. All MD-J structs are real headers.
     (tmp_path / "cuda_runtime_api.h").write_text("#pragma once\n")
+    (tmp_path / "generated_md_j_masked.cuh").write_text(emit_md_j_masked_header())
     cpp, binary = tmp_path / "md.cpp", tmp_path / "md"
     cpp.write_text(stubs + "\n".join(definitions) + driver)
     native_cxx.build_executable(
@@ -331,6 +456,7 @@ def test_canonical_transform_storage_retains_existing_cap(
                     shells.append((shell["angular_momentum"], len(shell["exponents"])))
     shapes = ",".join(f"{{{angular},{primitives}}}" for angular, primitives in shells)
     source, binary = tmp_path / "inventory.cpp", tmp_path / "inventory"
+    (tmp_path / "generated_md_j_masked.cuh").write_text(emit_md_j_masked_header())
     (tmp_path / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t=void*; using cudaError_t=int;\n"
     )

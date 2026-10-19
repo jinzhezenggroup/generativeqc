@@ -52,6 +52,140 @@ no enable flag is needed for the default. `GENERATIVEQC_MD_J_COUNTS=1` reports
 native execution and geometry-candidate censuses when the owner is released.
 Candidate counts are upper bounds on probes, not executed primitive products.
 
+### Masked residual prototype
+
+`GENERATIVEQC_MD_J_MASKED_RESIDUAL=1` opts into compiler-generated masked-Hermite
+contraction for J-only residual pair-angular classes `(2,1)` and `(2,2)`. Unset/0
+retains the incumbent; other active values fail plan preparation. The owner
+freezes this setting at creation, independently of reciprocal uniform-J policy.
+This is an experimental route, not a qualified default or a speedup claim.
+The source-matched 96-atom r2SCAN-3c complete-J comparison currently regresses,
+so this prototype remains off by default. See the
+[masked-Hermite decision and measurements](../../.agents/notes/implemented/performance/2026-10-18-masked-hermite-residual-prototype.md).
+
+The three paths are uniform Hermite contraction, grouped masked contraction,
+and the original AO-component residual fallback. The masked planner expands
+canonical AO pairs into directed entries, sorts their nonnegative finite
+Schwarz bounds, and locates each output's input suffix with the original FP64
+`output_bound * input_bound < screening` comparison. It never divides the
+threshold or presumes symmetric AO bounds or density. Equal cutoffs share a
+density/R projection; primitive-local suffix sums reuse Hermite density work.
+Canonical E transforms and directed publication preserve diagonal pairs and
+duplicate-orbit exclusion, including identical shell-pair tasks and UKS.
+The consumer uses native E accessors rather than assuming dense storage strides.
+
+Invalid bounds, capacity misses, too many distinct suffixes or an unfavorable
+estimate of grouped radial terms select the incumbent before any publication.
+The estimate excludes setup and sparse-E effects; only endpoint measurements
+can establish profitability. Scratch is block-local, bounded by these small
+classes, and adds no resident allocation. K, density admission, uniform-J and
+Schwarz thresholds remain unchanged.
+
+`GENERATIVEQC_MD_J_MASKED_PREPROJECT=1` independently enables an experimental
+resident suffix cache for `(2,1)` J-only tasks. Unset/0 disables it; other active
+values reject preparation. Geometry preparation caches stable directed AO
+permutations, not an AO-quartet mask matrix. Each density replay overwrites the
+admitted pairs' Hermite suffixes on the owner stream before residual contraction.
+Input ordering and output cutoffs still use the original directional AO bounds.
+The planner alternates angular-one and angular-two pairs in stable class-local
+owner order so one input class cannot exhaust the cache before the other is
+considered. It skips pairs that do not fit the remaining original MD byte
+allowance and request budget. It does not increase that allowance. Uncached or
+invalid pairs and unfavorable masks retain the AO-component fallback; cache
+allocation failure retains the already-prepared incumbent MD owner. This switch
+does not enable masked `(2,2)` contraction. The original masked switch still
+controls that separate experiment, and neither switch is enabled by default.
+See the [bounded preprojection decision and qualification](../../.agents/notes/implemented/performance/2026-10-19-bounded-residual-density-preprojection.md)
+for resource tradeoffs and evidence; enabling a cache is not itself a speedup.
+
+`GENERATIVEQC_MD_J_MASKED_TILES=1` selects a separate experimental `(2,1)`
+J-only consumer ahead of the other masked switches for that class. Unset/0
+disables it. Value 2 selects a compacted scalar-source variant; other values reject
+preparation. The value-1 frozen owner policy
+uses two bra and four ket shell pairs with two-primitive chunks and four warps.
+Input directions, density suffixes and the small Hermite R matrix are shared
+within their reuse scopes. Opposing primitive contributions accumulate in
+Hermite space before AO back-projection, and AO values survive all chunks
+before publication. Scratch is fixed-size shared storage, with no additional
+resident allocation or change to the original MD memory allowance. The native
+shell/density admission, exact directional FP64 Schwarz comparisons and
+AO-component fallback remain authoritative. Invalid bounds, unsupported masks
+or unfavorable grouped work select that fallback before publication.
+Zero-density coarse tiles retain the native residual-prefilter policy.
+This route is not enabled by default or qualified as a performance improvement.
+See the [bounded tiled experiment](../../.agents/notes/implemented/performance/2026-10-19-bounded-tiled-masked-hermite.md)
+for source-matched measurements and remaining limitations.
+
+Value 2 handles the `(2,1)` residual class by compacting admitted shell
+tasks across multiple candidate batches into a fixed 256-entry shared queue.
+A 128-thread block consumes at most 128 tasks,
+one complete task per thread, retaining leftovers for the next refill. Sparse
+admission and short contractions therefore do not reserve whole half warps
+for missing work. Thread-private contraction computes only requested density
+tails and accumulates bra Hermite potentials across the entire ket primitive
+contraction before AO projection. The existing Coulomb recurrence, exact mask
+planner and native admission remain authoritative. A rejected mask uses the
+native AO fallback with private scratch and single-lane synchronization. No
+molecular-size queue or additional resident allocation exists. Both schedules
+remain default-off until complete-endpoint performance qualification.
+The compacted schedule honors the resident owner's frozen
+`GENERATIVEQC_MD_J_RESIDUAL_TILES=0/1` policy. Enabled coarse admission uses
+the incumbent's 8-by-8 tile bounds and outward-rounded density allowance before
+individual candidate tests; it does not replace any directional AO comparison.
+Two scanning warps retain the tile pair IDs in registers and compact accepted
+tasks with warp ballots before the block consumes the queue. With other
+experimental residual selectors disabled, the `(2,2)` class retains the
+incumbent source consumer; the generated primitive remains available
+to the numerical test seam but is not selected by production dispatch.
+
+Reverse density channels are computed once per bra primitive in unused slots
+of the admitted combined-group workspace. Angular-specialized scalar
+projections reuse the native radial helper without a materialized R matrix.
+See the [compacted-source qualification](../../.agents/notes/implemented/performance/2026-10-19-compacted-masked-hermite-sources.md)
+for the independent upstream comparison and class-specific promotion limits.
+The [coarse-policy follow-up](../../.agents/notes/implemented/performance/2026-10-19-warp-coarse-masked-hermite.md)
+records the current class fallback and its source-specific validation.
+
+With `GENERATIVEQC_MD_J_WORK_COUNTS=1`, the opt-in path additionally prints
+`MD_J_MASKED` rows: admitted masked shell tasks, nonempty directed suffix groups
+per task, and executed grouped density/R summands over primitive products.
+Suffix setup, AO projection and atomic publication are not included in that
+summand count. `MD_J_WORK` retains its existing meaning and format.
+An admitted resident cache also prints `MD_J_PREPROJECT`: refreshed primitives,
+density/E summands by angular class, and total suffix/metadata bytes. These rows
+and nonzero `(2,1)` masked tasks are required to distinguish a real cache timing
+from successful fallback. Include density refresh in complete-J timings; the
+grouped radial summands alone do not measure total work.
+The tiled route also emits `MD_J_TILE`, recording its tile/chunk dimensions and
+logical AO/Hermite output terms with and without primitive-chunk fusion.
+These semantic terms are not hardware instructions or a predicted speedup.
+Its `MD_J_PREPROJECT` rows describe strip refreshes, with zero resident suffix
+and metadata bytes. Pair compaction order can change tile reuse and refresh
+counts without changing the admitted integral domain.
+The compacted route instead emits `MD_J_PACKED`, recording its bounded queue
+and block sizes plus the same logical output-term census. Its selected tails
+are private, not a resident suffix cache or strip refresh.
+
+The standalone device gate compiles the real residual owner and compares it
+with the incumbent and an independent closed-form Hermite/Boys oracle:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 env GENERATIVEQC_TEST_MD_J_MASKED=1 \
+  PYTHONPATH=.:python:tests/python python -m pytest -q \
+  tests/python/test_md_j_masked_cuda.py
+```
+
+Use a permitted, available machine with CUDA and a verified compiler cache on
+`PATH`; preserve Slurm's device visibility. Native-library molecular qualification
+also runs both policies through `test_md_j_normal_cuda.py`. Before default
+promotion, require independent molecular J/energy/force gates, sanitizer checks,
+same-density work/timing comparisons, and complete SCF endpoint timings and
+histories. Standalone synthetic-density tests do not establish molecular
+endpoint performance or SCF convergence behavior.
+
+### Uniform policy and endpoint qualification
+
 `GENERATIVEQC_MD_J_RECIPROCAL=0` selects the incumbent oriented contraction at
 plan creation; unset/1 selects reciprocal tiles. Other values reject an active
 MD request. The selector is frozen with the resident owner, not polled during

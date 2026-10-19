@@ -22,6 +22,12 @@ def _host_probe(cuda_source: str, adapter_source: str) -> str:
     definitions = [
         cpp_function_definition(cuda_source, "check_md_j_cuda"),
         cpp_function_definition(
+            cuda_source, "source_workspace_width", include_template=True
+        ),
+        cpp_function_definition(
+            cuda_source, "launch_source_kernel", include_template=True
+        ),
+        cpp_function_definition(
             cuda_source, "launch_source_class", include_template=True
         ),
         cpp_function_definition(cuda_source, "launch_md_source_jk"),
@@ -30,6 +36,18 @@ def _host_probe(cuda_source: str, adapter_source: str) -> str:
             adapter_source, "direct_jk_guard", include_template=True
         ),
     ]
+    definitions.insert(
+        3,
+        cpp_function_definition(
+            cuda_source, "launch_masked_packed_source", include_template=True
+        ),
+    )
+    definitions.insert(
+        3,
+        cpp_function_definition(
+            cuda_source, "launch_masked_tile_source", include_template=True
+        ),
+    )
     # Forward the actual launch configuration to the recording kernel double.
     # No branch, status operation, or return statement is replaced.
     production = re.sub(r"<<<([^;]+?)>>>\s*\(", r"(\1, ", "\n".join(definitions))
@@ -76,14 +94,21 @@ struct MdJView {
   unsigned active_pair_offsets[6]{0,1,2,3,4,5};
   unsigned long long* source_cursor=nullptr;
   void* work_counts=nullptr;
-  unsigned long long residual_candidate_count=15;
   bool residual_tiled=false;
+  bool masked_residual=false;
+  unsigned masked_tiles=0;
+  void* masked_pairs=nullptr;
+  std::size_t pair_count=1;
+  unsigned long long residual_candidate_count=15;
 };
 template<unsigned A,unsigned B> struct SourceSchedule {
   static constexpr unsigned groups=A+B<=2?16:1, block_threads=A+B<=2?128:32;
 };
 template<class T,unsigned A> struct CoulombAuxiliary {
   static constexpr unsigned kStateCount=100;
+};
+template<unsigned BraAngular,unsigned KetAngular,bool Cached=false> struct MdMaskedWorkspace {
+  double storage[1024];
 };
 constexpr unsigned source_components(unsigned a) { return a==0?1:a==1?3:a==2?9:a==3?18:36; }
 constexpr unsigned md_j_hermite_count(unsigned a) { return (a+1)*(a+2)*(a+3)/6; }
@@ -110,11 +135,31 @@ cudaError_t cudaMemsetAsync(void* pointer,int value,std::size_t bytes,cudaStream
 cudaError_t cudaGetLastError() {
   auto error=sticky;sticky=cudaSuccess;return error;
 }
-template<unsigned A,unsigned B,bool Count,bool Tiled,class... Args>
+template<unsigned A,unsigned B,bool Count,bool Tiled,bool Masked,bool Cached=false,class... Args>
 void consume_source_tasks(unsigned workers,unsigned threads,std::size_t shared_bytes,
                           cudaStream_t stream,Args...) {
   assert(workers>0 && threads>0 && shared_bytes>0 && stream==7);
   if(submit('k')) sticky=cudaErrorLaunchFailure;
+}
+template<class... Args>
+void md_masked_refresh(unsigned workers,unsigned threads,std::size_t shared_bytes,
+                       cudaStream_t stream,Args...) {
+  assert(workers && threads && stream==7);
+  if(submit('k'))sticky=cudaErrorLaunchFailure;
+}
+template<bool Coarse> struct MdMaskedTileFallback {};
+template<unsigned KetAngular> struct MdMaskedPackedFallback {};
+template<unsigned KetAngular,bool Count,class Fallback,class... Args>
+void md_masked_packed_sources(unsigned workers,unsigned threads,std::size_t shared_bytes,
+                              cudaStream_t stream,Args...) {
+  assert(workers && threads==128 && shared_bytes==0 && stream==7);
+  if(submit('k'))sticky=cudaErrorLaunchFailure;
+}
+template<bool Count,class Fallback,bool Primitive=false,class... Args>
+void md_masked_tiles(unsigned workers,unsigned threads,std::size_t shared_bytes,
+                     cudaStream_t stream,Args...) {
+  assert(workers && threads==128 && shared_bytes==0 && stream==7);
+  if(submit('k'))sticky=cudaErrorLaunchFailure;
 }
 using generativeqc_status=int;
 constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_OUT_OF_MEMORY=3;
@@ -143,9 +188,12 @@ int main() {
   };
   for(bool want_j:{false,true})for(bool want_k:{false,true})
   for(bool unrestricted:{false,true})for(bool counted:{false,true})
-  for(bool tiled:{false,true}) {
+  for(bool coarse:{false,true})for(bool masked:{false,true})for(bool cached:{false,true})for(unsigned tiled:{0U,1U,2U}) {
     md.work_counts=counted?&cursor:nullptr;
-    md.residual_tiled=tiled;
+    md.residual_tiled=coarse;
+    md.masked_residual=masked;
+    md.masked_tiles=tiled;
+    md.masked_pairs=cached?&cursor:nullptr;
     reset();assert(run(want_j,want_k,unrestricted)==cudaSuccess);
     assert(drains==0 && detail.empty());
     const auto successful=submissions;
