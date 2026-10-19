@@ -344,7 +344,7 @@ def test_native_operations_preserve_inner_typed_status(
 struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 struct Context { void check_device() {} };
-struct Owner { bool failed{}; Context context; uint64_t synchronizations{}; };
+struct Owner { bool failed{}; Context context; uint64_t synchronizations{}, bytes{}; };
 int live_owners{}, inner_status{}, destroyed_owners{};
 bool fail_creation=true;
 struct NativeOwner {
@@ -370,6 +370,8 @@ void error_text(char* output, size_t capacity, const char* text) {
 }
 template <class... Arguments> int stationary_create(Arguments&&...) { return fail_creation?inner_status:0; }
 template <class... Arguments> int stationary_configure_becke(Arguments&&...) { return inner_status; }
+size_t native_phased_becke_bytes(size_t, size_t, size_t) { return 0; }
+template <class... Arguments> int stationary_configure_phased_becke_v1(Arguments&&...) { return inner_status; }
 void stationary_destroy(void*) { ++destroyed_owners; }
 template <class... Arguments> int stationary_geometry_reset(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_nuclear_all(Arguments&&...) { return inner_status; }

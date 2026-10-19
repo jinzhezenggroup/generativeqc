@@ -713,7 +713,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
         "native_phased_becke_admission_sha256": (
-            "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"

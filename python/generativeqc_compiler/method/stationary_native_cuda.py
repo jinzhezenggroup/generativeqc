@@ -164,6 +164,8 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     )
     if functional != selected.functional:
         raise ValueError("stationary profile and native point selector disagree")
+    # Partition response has no XC or spin dependence. Every admitted native
+    # profile shares the existing large-system crossover and resource guards.
     metadata = f"""
 namespace generativeqc_stationary_cuda {{
 constexpr size_t native_one_electron_slot = {slots["one_electron"]};
@@ -174,6 +176,7 @@ constexpr size_t native_exchange_storage_slot = {max(exchange_slot, 0)};
 constexpr uint64_t native_exchange_mask = {0 if exchange_slot < 0 else 1 << exchange_slot};
 constexpr uint64_t native_required_integral_mask = {integral_mask};
 constexpr unsigned native_nuclear_kind = {nuclear_kind};
+constexpr size_t native_phased_becke_min_atoms = 48;
 }}
 #include "dft/native_stationary_runtime.cuh"
 namespace generativeqc::dft {{
