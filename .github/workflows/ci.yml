@@ -695,7 +695,7 @@ jobs:
             --basetemp build/grid-wheel-compile
       # PR/queue consumers never publish compiler snapshots. The master-only
       # miss handoff is not a full cache; CLI still owns final publication.
-      - name: Check Fock, proposal and ordered-Gram admission without a GPU
+      - name: Check Fock and proposal preflight without a GPU
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CUDA_VISIBLE_DEVICES: ""

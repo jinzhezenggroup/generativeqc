@@ -37,6 +37,9 @@ The existing CUDA compile job explicitly builds and runs this target alongside
 both existing Fock/proposal tests, retaining `CUDA_VISIBLE_DEVICES=""`, parallel
 2, their selections and time limits. There is no skip-77 result for this gate.
 If its target is absent or its recorder is missed, required CI fails.
+The existing step identifier is retained: an initial title change broke seven
+unchanged cache-policy anchor tests. Their reproduced RED is retained; restoring
+that identifier keeps both the old policy coverage and the added host gate.
 
 The original 13 rejected and three valid/disabled bindings remain in the public
 launcher driver. Coverage expands to 37 independent rejections, every required
