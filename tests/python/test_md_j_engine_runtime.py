@@ -111,12 +111,13 @@ def engine_runtime_probe(
             for name, templated in (
                 ("md_j_primitive_allowance", False),
                 ("md_j_engine_pair_loc", False),
+                ("md_j_engine_source_threshold", False),
                 ("md_j_engine_hierarchy", False),
                 ("md_j_engine_direction", False),
                 ("md_j_engine_primitive_direction", False),
                 ("md_j_engine_tile_admitted", False),
-                ("md_j_engine_source_threshold", False),
                 ("md_j_engine_cached_pair", False),
+                ("md_j_engine_resident_blocks", True),
                 ("md_j_engine_potential", True),
             )
         )
@@ -161,7 +162,7 @@ def engine_runtime_probe(
 
 @pytest.mark.parametrize(
     "section",
-    range(6),
+    range(7),
     ids=(
         "packed_locations_and_all_hierarchy_levels",
         "all_fifteen_angular_pairs",
@@ -169,6 +170,7 @@ def engine_runtime_probe(
         "asymmetric_density_masks_and_windows",
         "rejected_tiles_and_uncounted_replay",
         "exact_leaf_and_tile_screening_boundaries",
+        "primitive_threshold_hierarchy_and_replay",
     ),
 )
 def test_native_md_j_engine_host_semantics(
@@ -205,6 +207,7 @@ _CUDA_DOUBLES = r"""
 #define __host__
 #define __device__
 #define __global__
+#define __launch_bounds__(...)
 #define __shared__ static
 #define __constant__
 #define __forceinline__ inline
@@ -691,6 +694,86 @@ void evaluate(Block& block, unsigned nb, unsigned nk, unsigned mode = 0,
   ++completed;
 }
 
+/** Exercise the actual primitive hierarchy across tails, windows and replay.
+ * Independent long-double Cauchy products identify potentially significant
+ * leaves. Neither a prefix nor a coarse node may discard any such direction. */
+void primitive_hierarchy(Block& block) {
+  Fixture f({33, 0, 0, 0, 0}, 4);
+  f.pack(block);
+  std::vector<double> q(f.primitives.size());
+  MdJPrimitiveScreenState state{};
+  f.md.primitive_bounds=q.data(); f.md.primitive_screen=&state;
+  f.md.maximum_pair_primitives=2;
+  for (unsigned pair=0;pair<f.pairs.size();++pair) {
+    f.pairs[pair].primitive_begin=0;
+    f.pairs[pair].primitive_end=pair+1==f.pairs.size()?1:2;
+  }
+  const auto layout=f.md.hierarchy_layout.buckets[0];
+  auto* nodes=f.md.hierarchy;
+  for (double cutoff:{0.,1e-12,0.02}) for (unsigned mode:{0U,1U,2U,0U,3U})
+  for (auto window:{std::pair{0U,3U},std::pair{1U,2U},std::pair{1U,1U},std::pair{8U,9U}}) {
+    const auto [begin,end]=window;
+    state={}; f.md.primitive_maximum_bound=0.;
+    std::vector<double> sources(q.size());
+    for (unsigned position=0;position<q.size();++position) {
+      const auto id=f.ordered[position], pair=f.primitives[id].pair;
+      q[id]=position%7==0?0.:0.125*(1+position%11);
+      if (mode==3 && position==31) q[id]=INFINITY;
+      f.md.primitive_maximum_bound=std::max(f.md.primitive_maximum_bound,q[id]);
+      const auto system=unsigned(f.pairs[pair].system);
+      sources[position]=mode==1 || system<begin || system>=end?0.:
+          mode==2?(position==32?2e-14:0.):(position%4)*1e-14;
+      if (mode==3 && position==30 && system>=begin && system<end) sources[position]=INFINITY;
+      nodes[position].qd=sources[position];
+      state.maximum_source_norm=std::max(state.maximum_source_norm,sources[position]);
+    }
+    block.run([&] {md_j_engine_hierarchy(f.md,0,begin,end,cutoff);});
+    for (unsigned level=0;level<6;++level) {
+      const auto width=1U<<level;
+      for (unsigned group=0;group<layout.aligned/width;++group) {
+        const auto node=nodes[layout.offsets[level]+group];
+        double minimum=INFINITY, maximum=0.;
+        for (unsigned j=group*width;j<(group+1)*width;++j) {
+          minimum=std::min(minimum,nodes[j].minimum);
+          maximum=std::max(maximum,nodes[j].qd);
+        }
+        assert(node.minimum==minimum && node.qd==maximum);
+      }
+    }
+    for (unsigned j=q.size();j<layout.aligned;++j)
+      assert(nodes[j].minimum==INFINITY && nodes[j].qd==0.);
+    auto significant=[&](unsigned output,unsigned input) {
+      const auto id=f.ordered[output], pair=f.primitives[id].pair;
+      const auto source_pair=f.primitives[f.ordered[input]].pair;
+      const auto system=unsigned(f.pairs[pair].system);
+      if (system<begin || system>=end || f.pairs[source_pair].system!=int(system) || sources[input]==0.)
+        return false;
+      if (!std::isfinite(q[id]) || !std::isfinite(sources[input])) return true;
+      const long double allowance=std::min(cutoff,1e-12)/
+          static_cast<long double>(f.pairs[pair].primitive_end)/q.size();
+      return static_cast<long double>(q[id])*sources[input]>=allowance;
+    };
+    const auto schedule=md_j_tile_schedule(0,0);
+    const auto inventory=md_j_tile_inventory(q.size(),q.size(),schedule.bra_width,schedule.ket_width,true);
+    bool saw_significant=false;
+    for (unsigned long long index=0;index<inventory.tasks;++index) {
+      MdJTileTask task{}; assert(md_j_decode_tile(inventory,index,task));
+      const bool admitted=md_j_engine_tile_admitted(f.md,0,0,schedule,task,cutoff);
+      for (unsigned i=task.bra_begin;i<task.bra_begin+task.bra_count;++i)
+      for (unsigned j=task.ket_begin;j<task.ket_begin+task.ket_count;++j)
+        if (significant(i,j) || significant(j,i)) {
+          saw_significant=true;
+          assert(admitted);
+          assert(state.active[0]>i && state.active[0]>j);
+        }
+    }
+    if (mode==0 && begin==0 && end==3) assert(saw_significant);
+    if (mode==1 || begin==end || begin==8) assert(state.active[0]==0);
+    f.check();
+  }
+  ++completed;
+}
+
 void layouts(Block& block) {
   for (unsigned n : {0U, 1U, 15U, 16U, 17U, 31U, 32U, 33U, 127U, 129U}) {
     Fixture f({n, n ? n + 1 : 0, n / 2, n, n ? 3U : 0U}, 4);
@@ -749,6 +832,7 @@ int main(int argc, char** argv) {
       evaluate<2, 3>(block, 1, 17, 6);
       break;
     case 5: screening_boundaries(); break;
+    case 6: primitive_hierarchy(block); break;
     default: assert(false);
   }
   std::printf("PASS actual MD-J kernels, 128 host threads, %u cases, %s; not GPU qualification\n",

@@ -36,7 +36,7 @@ or screening equivalence with upstream.
 | Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity plus every ordered primitive product. Resident sparse weighted E transforms factor the contraction, normalization and Cartesian/spherical maps without materializing dense C. This reuses the established transform pipeline. |
 | Pair layout | `j_engine.py`: `(li,lj)` pair mappings sorted by `q_cond`, packed `pair_loc` | Within total-angular classes 0–4, a deterministic active-prefix, descending-q, primitive-ID permutation drives packed Hermite intervals. `md_j_engine_pair_loc` rewrites only Hermite offsets. Original shell/primitive identities and transform slots stay valid. Total-angular grouping is sufficient after the separate bra/ket E transforms; it is not upstream's raw-shell ordering. |
 | Density precontraction | `lib/gvhf-md/contract_Et.cu`: `Et_dot_dm` | Existing `md_j_density` contracts the actual public density into resident primitive Hermite density using cached E. UKS uses alpha+beta; nonsymmetric density retains both AO directions. |
-| Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, maximum leaf minimum, and density. The reference recipe preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. The complete primitive recipe uses the precontracted source norm described below at both coarse and leaf decisions. |
+| Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, a recipe-specific minimum field, and density. Reference nodes maximize leaf Schwarz minima; primitive nodes minimize target source thresholds. The reference recipe preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. The complete primitive recipe uses the precontracted source norm described below at both coarse and leaf decisions. |
 | Exact admission | Upstream applies its own shell-pair cutoff contract | `md_j_engine_direction` retains the existing public-AO minimum-product and directional density allowance. Partially masked pairs still use the established exact residual source. Thus upstream log thresholds and half factors are not silently imported. |
 | Task/tile scheduling | `j_engine.py` scheme selection; `md_j.cuh` and `md_contract_j.cu` hierarchical task consumers | Checked 64-bit rectangular/triangular inventories and an atomic device cursor feed 128-thread tiles. Adjacent source lanes evaluate independent primitive quartets; larger angular domains reserve power-of-two component lanes using upstream's single-density shape targets. Interleaved radial scratch, register bra accumulation and shuffle/single-writer ket reduction avoid per-source shared floating-point atomics. Angular/workspace-aware tile widths respect a conservative 32-KiB target and 48-KiB hard cap. All 15 canonical angular class pairs, including (4,4), use this backend. |
 | Generated recurrence and contraction | `md_indices.cu`, `md_pairdata.c`, `md_contract_j.cu`: compact Cartesian indexing, MD radial recurrence and two directions | Compiler-owned `md_j_engine_cuda.py` emits compact descending in-place R simplexes through order 8 and lane-owned forward/reverse contractions from the existing scalar IR and Boys seeds. One radial source supplies both admitted directions. |
@@ -77,8 +77,9 @@ being copied from its contracted parent.
 Each directed primitive product receives an omission allowance of
 `min(screening_tolerance, 1e-12) / (target_pair_primitives * primitive_count)`.
 The target multiplicity is the actual number of ordered primitive products in
-that output's original shell pair. Coarse hierarchy and prefix decisions retain
-the smaller allowance based on the global maximum target multiplicity.
+that output's original shell pair. Source-prefix admission retains the smaller
+allowance based on the global maximum target multiplicity. Target-prefix and
+coarse tile admission use the actual-target thresholds described below.
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
 the represented Hermite source and is stored in the existing hierarchy's `qD`
@@ -86,9 +87,12 @@ field. It is not capped by the uncontracted primitive norm times the shell
 density envelope: precontraction rounding near underflow can make that envelope
 smaller than the norm of the stored source. The output primitive norm times
 this source bound bounds the directed contribution to any output AO. A tile
-stages the source norm and the downward-rounded ratio `allowance / output_norm`
-once per target; the inner loop retains nonzero source norms at or above this
-threshold. This avoids repeated allowance divisions and bound products for
+stages the source norm and a cached downward-rounded ratio
+`allowance / output_norm`. The hierarchy computes this threshold once per
+primitive per replay, reduces its minimum across each node, and uses infinity
+for inactive/padded targets. A tile is rejected only when neither direction
+has a nonzero maximum source norm at or above the opposite minimum target
+threshold. The inner loop applies the same leaf threshold. This avoids repeated allowance divisions and bound products for
 every directed source. Zero output norms, unknown bounds and zero allowance
 have explicit conservative branches. The division may retain additional work
 at rounding boundaries.
@@ -101,7 +105,9 @@ work, and zero density produces zero source work.
 Preparation sorts primitive bounds within angular classes. Every replay computes
 the current maximum source norm and five device-only active prefixes. A
 primitive remains in the prefix if it can contribute as either an output or a
-source, using the corresponding global maximum norm. The rectangular/triangular
+source. Target admission compares the global maximum source norm with its
+actual threshold; source admission uses the global maximum output norm and
+maximum target multiplicity. The rectangular/triangular
 work inventory is constructed from those prefixes.
 Small geometry bounds cannot restore a quadratic traversal over the entire
 unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
@@ -162,8 +168,17 @@ that leaves most of its own quartet lanes idle. This utilization invariant
 applies to both hierarchy recipes; it does not change mathematical screening.
 The [complete primitive decision](../../.agents/notes/implemented/performance/2026-10-19-primitive-complete-md-j.md)
 records its scientific bound, schedule rationale and qualification evidence.
+On sm_120, a shape-derived launch bound targets the resident blocks that fit
+in a 96-KiB shared-memory envelope, capped at eight blocks. It lets the compiler
+trade registers against occupancy according to each angular shape. Other
+architectures retain the compiler default. The hint does not change tile sizes,
+storage admission, or scientific screening. Qualification must check register
+spills and complete endpoint performance, not just nominal occupancy.
+
 The [target-budget decision](../../.agents/notes/implemented/performance/2026-10-20-md-j-target-budget.md)
-records the actual-target allowance and staged threshold qualification.
+records the actual-target allowance and staged threshold qualification. The
+[threshold/residency decision](../../.agents/notes/implemented/performance/2026-10-20-md-j-threshold-residency.md)
+records hierarchy reuse and architecture-specific launch-bound qualification.
 
 ## Validation and reproducible acceptance
 
