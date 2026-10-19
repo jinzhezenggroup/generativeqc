@@ -581,6 +581,25 @@ compilation, dynamic indexing/shapes and arbitrary Python control flow are not
 implied by eager support. Unsupported capture functions, including linalg/fft,
 raise instead of evaluating a NumPy fallback during tracing.
 
+Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
+arrays. Each bound can be absent, a finite static scalar under the existing exact
+scalar contract, or a same-dtype generic array. All three shapes must broadcast;
+mixed array dtypes, scientific annotations and nonfinite live operands are
+rejected. Both absent bounds give a detached numerical identity at execution.
+Static negative-zero literals remain unsupported; array signed zeros are retained
+by selection. Clamping applies the lower bound and then the upper bound, keeping
+the current value on equality. Reversed bounds therefore select the upper bound;
+the [2025.12 standard](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.clip.html)
+leaves reversed bounds and mixed array dtypes unspecified. These capture limits
+do not restrict the existing eager standard `clip`, including its NaN behavior.
+Reference first-order JVP/VJP use the existing explicit
+`allow_comparison_where=True` option. Interior derivatives follow the selected
+input or bound, including broadcast adjoint reduction. At a tie, the selected
+current branch is only a convention, not a differentiability claim. No new AD
+engine or TensorIR primitive is introduced. The clip capability entry keeps
+native CPU/CUDA qualification unset; successful capture alone does not qualify
+either backend, performance, or full standard compliance.
+
 Captured `where(condition, x1, x2)` supports a genuine Boolean condition and
 finite generic float32/float64 branches. The branches use explicit casts for
 float promotion; condition and values each broadcast explicitly, including
