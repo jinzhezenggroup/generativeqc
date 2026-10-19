@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from benchmarks._retention import raw_output_path
 from tools.audit_replay_allocations import _require
 from tools.capture_prepared_allocations import write_new
 from tools.residency_allocation import SCHEMA, validate_qz
@@ -123,7 +124,7 @@ def main() -> None:
     parser.add_argument(
         "--python", required=True, help="absolute interpreter in the Job"
     )
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     args = parser.parse_args()
     _require(args.python.startswith("/"), "remote interpreter must be absolute")
     # SDK config loading does not load a dotenv file; never bootstrap the CLI.
