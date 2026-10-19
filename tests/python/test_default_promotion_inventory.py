@@ -901,6 +901,16 @@ def test_new_response_option_must_be_registered(
         ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
         (
             "src/scf/cuda/direct_jk.cpp",
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE")',
+            "nullptr",
+        ),
+        (
+            "src/scf/cuda/direct_jk.cpp",
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE")',
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE_RENAMED")',
+        ),
+        (
+            "src/scf/cuda/direct_jk.cpp",
             "md_ready = !resident_source_only && !runtime::active_device_resource_ledger",
             "md_ready = !resident_source_only",
         ),

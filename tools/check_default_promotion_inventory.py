@@ -295,6 +295,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     source = _read(root / relative)
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
+        or 'std::getenv("GENERATIVEQC_MD_J_ENGINE")' not in source
         or 'std::strcmp(disabled, "1") == 0' not in source
         or "host.nbf < 8" not in source
         or "return angular > 2;" not in source

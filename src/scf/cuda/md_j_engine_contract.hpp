@@ -215,7 +215,7 @@ GENERATIVEQC_ERI_SHARED_HD constexpr unsigned md_j_component_lanes(unsigned bra_
     const auto sources = kMdJSourceThreads / lanes;
     unsigned width = 1;
     while (width * width < sources) width *= 2;
-    const auto required = radial * sources * sizeof(double) +
+    const auto required = sizeof(double) * radial * sources +
                           2 * sizeof(double) * width * (bra + ket) +
                           2 * width * kMdJPrimitiveDescriptorBytes + kMdJSourceControlBytes;
     if (required <= kMdJSharedOccupancyTarget) break;
