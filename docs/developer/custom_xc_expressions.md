@@ -73,6 +73,8 @@ Limits are 4096 source characters, 256 AST nodes (including operator/context
 nodes), depth 32 with the expression root at depth zero, 512 pre-canonical Graph
 nodes, and 256 bits for each exact constant numerator and denominator. These
 limits are fixed by the schema. Replay envelopes are limited to 65536 characters.
+Generated constants are checked before parent operations can erase or convert
+them, including input-dependent syntax that folds to constants.
 Nonfinite literals are rejected even in eliminated branches such as `0*1e309`.
 Invalid syntax, ingredients, domains, budgets and mismatched replay envelopes
 raise `ValueError`; non-string declarations and unsupported point input types

@@ -277,3 +277,36 @@ def test_near_unity_coefficients_survive_sealed_graph_exports(denominator: int) 
         assert (
             xc.UserExpression.loads(expression.dumps()).identity == expression.identity
         )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        f"((((rho_a**0)*{2**80})**4)**4)*rho_b",
+        f"0*(((rho_a**0)*{2**80})**4)",
+        f"0*((rho_a*{2**130})*{2**130}*(9007199254740993/9007199254740992))",
+    ],
+)
+def test_generated_coefficients_obey_budget_before_elimination(source: str) -> None:
+    # Input-dependent syntax can fold to constants; enclosing operations must not
+    # erase an oversized intermediate or reach FP64 conversion before refusal.
+    with pytest.raises(ValueError, match="coefficient.*budget"):
+        xc.expression(source)
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        ("rho_a**0", 1),
+        (f"(rho_a**0)*{2**50}", 2**50),
+        (f"((rho_a**0)*{2**50})**4", 2**200),
+    ],
+)
+def test_bounded_folded_constants_remain_replayable(source: str, expected: int) -> None:
+    expression = xc.expression(source)
+    assert expression.evaluate(rho_a=2, rho_b=3) == float(expected)
+    assert expression.identity == xc.expression(str(expected)).identity
+    assert (
+        xc.UserExpression.loads(expression.dumps()).to_payload()
+        == expression.to_payload()
+    )

@@ -40,6 +40,14 @@ compatibility is checked separately. Erroneous old capture envelopes fail replay
 instead of being reinterpreted. This does not repair or qualify generic research
 Graph AD's existing simplification limits; that remains a later qualification.
 
+Coefficient budgets cover actual generated nodes, not only syntactically
+constant subexpressions. For example, `rho_a**0` folds to a constant even though
+the declaration mentions an input; repeated powers can otherwise grow an
+unchecked exact integer before the final canonicalization gate. Validate each
+new constant in the append-only capture graph and validate the canonical graph
+again, directly from Fraction bit lengths. This also rejects oversized constants
+that a parent would later eliminate, while retaining bounded folded formulas.
+
 ## Rejected alternatives
 
 - Python decorators/callback tracing: cannot reliably reject hidden global state,

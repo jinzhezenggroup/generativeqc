@@ -48,6 +48,17 @@ def _capture(source: str) -> tuple[Graph, Expr]:
             raise ValueError("expression exceeds AST node/depth budget")
         pending.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
     graph = Graph()
+    checked_nodes = 0
+
+    def check_constants() -> None:
+        """Bound generated coefficients even when syntax was input-dependent."""
+        nonlocal checked_nodes
+        for node in graph.nodes[checked_nodes:]:
+            if node.operation == "constant":
+                if not isinstance(node.payload, Fraction):
+                    raise ValueError("unsupported scalar coefficient payload")
+                _coefficient(node.payload)
+        checked_nodes = len(graph.nodes)
 
     def product(left: Expr, right: Expr) -> Expr:
         # Preserve ordinary binary construction and its canonical identity. Only
@@ -119,15 +130,15 @@ def _capture(source: str) -> tuple[Graph, Expr]:
             raise ValueError("expression exceeds degree/graph budget")
         if constant is not None:
             _coefficient(constant)
+        check_constants()
         return result, degree, constant
 
     root, _, _ = visit(tree.body)
     graph, (root,) = graph.canonicalize_associative((root,))
     if len(graph.nodes) > MAX_GRAPH:
         raise ValueError("expression exceeds canonical graph budget")
-    for node in graph.nodes:
-        if node.operation == "constant":
-            _coefficient(Fraction(str(node.payload)))
+    checked_nodes = 0
+    check_constants()
     return graph, root
 
 
