@@ -306,11 +306,20 @@ generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
   --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
 ```
 
-The unchanged defaults are 100 SCF iterations, energy tolerance `1e-12`
-Hartree for Gaussian methods (`1e-10` for GFN2-xTB), density tolerance
-`1e-10` for Gaussian methods (`1e-8` for GFN2-xTB), and screening
-tolerance `1e-14` for Gaussian methods. A larger iteration limit does not
-relax strict convergence or guarantee success.
+For ordinary Gaussian HF/KS methods, `run` and geometry `optimize` now use
+the same SCF stopping defaults as Python `Calculator`: 100 iterations,
+energy change `1e-10` Hartree and density RMS `1e-8`. The `resources`
+dry-run reports these same effective convergence controls. Explicit
+`--energy-tolerance` and `--density-tolerance` options take precedence
+in all three commands.
+
+Canonical correlated methods retain their stricter SCF reference-orbital
+defaults (`1e-12` Hartree / `1e-10` density). GFN2-xTB keeps its SCC
+defaults (`1e-10` / `1e-8`); the dedicated Hessian/HVP path retains
+its own stricter SCF controls. Gaussian CLI integral screening is unchanged
+at `1e-14` (distinct from the Python `Calculator` default of `1e-12`).
+These are solver stopping thresholds, not proven absolute energy/force errors.
+A larger iteration limit does not relax convergence or guarantee success.
 
 ## Run RHF/UHF with bundled Gaussian bases
 

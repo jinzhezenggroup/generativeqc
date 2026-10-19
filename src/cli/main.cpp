@@ -411,13 +411,13 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.method = options.method;
   descriptor.max_iterations = 100;
   descriptor.diis_history = options.diis_history;
-  descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
-  descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
+  const auto convergence =
+      generativeqc::cli::resolve_scf_convergence(options, is_correlated(options));
+  descriptor.energy_tolerance = convergence.energy_tolerance;
+  descriptor.density_tolerance = convergence.density_tolerance;
   // Canonical correlated methods require the unscreened reference operator.
   descriptor.screening_tolerance = is_gfn2(options) || is_correlated(options) ? 0.0 : 1.0e-14;
   if (options.max_iterations) descriptor.max_iterations = *options.max_iterations;
-  if (options.energy_tolerance) descriptor.energy_tolerance = *options.energy_tolerance;
-  if (options.density_tolerance) descriptor.density_tolerance = *options.density_tolerance;
   if (options.screening_tolerance) descriptor.screening_tolerance = *options.screening_tolerance;
   descriptor.density_fitting_mode = options.density_fitting;
   descriptor.density_fitting_auxiliary_basis =

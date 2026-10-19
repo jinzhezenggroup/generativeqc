@@ -267,6 +267,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["diagnostic"] = "native resource inventory requires RHF/UHF or LDA/PBE RKS/UKS";
     return emit();
   }
+  // This inventory admits only mean-field methods, never correlated references.
+  const auto convergence = resolve_scf_convergence(options, false);
   if (ks) {
     const auto incremental_requested = [](const char* name) {
       const auto control = scf::classify_incremental_direct_jk_control(std::getenv(name));
@@ -348,8 +350,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       {"diis_history", options.diis_history},
       {"max_iterations", options.max_iterations.value_or(100)},
       {"precision", "fp64"},
-      {"energy_tolerance", options.energy_tolerance.value_or(1e-12)},
-      {"density_tolerance", options.density_tolerance.value_or(1e-10)},
+      {"energy_tolerance", convergence.energy_tolerance},
+      {"density_tolerance", convergence.density_tolerance},
       {"screening_tolerance", options.screening_tolerance.value_or(1e-14)},
       {"density_fitting", options.density_fitting},
       {"density_fitting_threshold", options.density_fitting_threshold},
@@ -431,7 +433,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     if (generativeqc_resource_small_hf_cuda_v2(
             orbital.nbf, orbital.cartesian_nbf, atoms.size(), orbital.shells,
             orbital.angular_values.data(), orbital.primitive_counts.data(), options.diis_history,
-            spins, 0, options.energy_tolerance.value_or(1e-12),
+            spins, 0, convergence.energy_tolerance,
             options.screening_tolerance.value_or(1e-14), ordinary.data(), ordinary.size())) {
       plan["diagnostic"] =
           "CUDA DF inventory requires a CUDA library and ordinary <=16-AO topology";
@@ -523,7 +525,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     if (generativeqc_resource_small_hf_cuda_v2(
             orbital.nbf, orbital.cartesian_nbf, atoms.size(), orbital.shells,
             orbital.angular_values.data(), orbital.primitive_counts.data(), options.diis_history,
-            spins, 0, options.energy_tolerance.value_or(1e-12),
+            spins, 0, convergence.energy_tolerance,
             options.screening_tolerance.value_or(1e-14), values.data(), values.size())) {
       plan["diagnostic"] =
           "CUDA HF inventory requires a CUDA library and ordinary <=16-AO s/p/d/f topology";
