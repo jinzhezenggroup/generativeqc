@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 from generativeqc import Calculator, InitialGuessSpec
 from generativeqc_compiler.dft.nonlocal_policy import (
-    MOLECULAR_VV10_DENSITY_POLICY, MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_DENSITY_POLICY,
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,9 +27,17 @@ def test_native_defaults_match_public_values():
     scf = (ROOT / "src/scf/types.hpp").read_text()
     common = (ROOT / "src/methods/scf_common_options.hpp").read_text()
     fock = (ROOT / "src/scf/fock_build.hpp").read_text()
-    for needle in ("max_iterations{50}", "energy_tolerance{1.0e-9}", "screening_tolerance{1.0e-13}"):
+    for needle in (
+        "max_iterations{50}",
+        "energy_tolerance{1.0e-9}",
+        "screening_tolerance{1.0e-13}",
+    ):
         assert needle in scf
-    for needle in ("descriptor.max_iterations == 0 ? 50", "descriptor.energy_tolerance : 1.0e-9", "descriptor.screening_tolerance : 1.0e-13"):
+    for needle in (
+        "descriptor.max_iterations == 0 ? 50",
+        "descriptor.energy_tolerance : 1.0e-9",
+        "descriptor.screening_tolerance : 1.0e-13",
+    ):
         assert needle in common
     assert "screening_tolerance = 1.0e-13" in fock
 
@@ -44,9 +53,12 @@ def test_cuda_ao_and_vv10_cutoffs():
 
 def test_auto_guess_prefers_minao(monkeypatch):
     import generativeqc.initial_guess as guess
+
     monkeypatch.setattr(guess, "_automatic_minao_model_eligible", lambda *a, **kw: True)
+
     def fail(*a, **kw):
         raise AssertionError("must select MINAO before querying Huckel")
+
     monkeypatch.setattr(guess, "supports_automatic_huckel", fail)
     assert guess.automatic_initial_guess_candidate(
         SimpleNamespace(_library=object()), restricted=True, has_ecp=False
@@ -55,12 +67,20 @@ def test_auto_guess_prefers_minao(monkeypatch):
 
 def test_auto_guess_fallback_remains_guarded(monkeypatch):
     import generativeqc.initial_guess as guess
-    monkeypatch.setattr(guess, "_automatic_minao_model_eligible", lambda *a, **kw: False)
+
+    monkeypatch.setattr(
+        guess, "_automatic_minao_model_eligible", lambda *a, **kw: False
+    )
     monkeypatch.setattr(guess, "supports_automatic_huckel", lambda *a, **kw: True)
-    monkeypatch.setattr(guess, "_native_automatic_minao_eligible", lambda *a, **kw: True)
-    obj = SimpleNamespace(_library=object(), _device_name="cuda",
-                          _method=guess._native.METHOD_RHF,
-                          _density_fitting_mode=guess._native.DENSITY_FITTING_NONE)
+    monkeypatch.setattr(
+        guess, "_native_automatic_minao_eligible", lambda *a, **kw: True
+    )
+    obj = SimpleNamespace(
+        _library=object(),
+        _device_name="cuda",
+        _method=guess._native.METHOD_RHF,
+        _density_fitting_mode=guess._native.DENSITY_FITTING_NONE,
+    )
     assert guess.automatic_initial_guess_candidate(
         obj, restricted=True, has_ecp=False
     ) == InitialGuessSpec("huckel")
