@@ -112,6 +112,63 @@ def test_primitive_source_cancellation_and_restoration(
 
 
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
+@pytest.mark.parametrize("cutoff", [1e-12, 0.02])
+def test_primitive_cumulative_omission_with_unequal_contractions(
+    monkeypatch: pytest.MonkeyPatch, spin: str, cutoff: float
+) -> None:
+    """The absolute omission cap survives unequal target sizes and sparse replay.
+
+    Scale independent unscreened libcint results around the omission cap, so
+    ordinary FP64 accumulation error is negligible compared with the gate.
+    Signed contractions of one, two and three primitives forbid substituting
+    one convenient shell's multiplicity for the output's actual multiplicity.
+    """
+    from generativeqc import Primitive, Shell
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    atoms, shells = general_contraction_basis()
+    shells = (
+        *shells,
+        Shell(
+            0, 0, (Primitive(3.2, 0.41), Primitive(0.82, -0.18), Primitive(0.23, 0.6))
+        ),
+        Shell(1, 2, (Primitive(0.28, 0.7),)),
+    )
+    # The independent converter deliberately rejects implicit PySCF shell
+    # reordering. Supply both engines the same explicit atom/angular order.
+    shells = tuple(
+        sorted(shells, key=lambda shell: (shell.atom_index, shell.angular_momentum))
+    )
+    cap = min(cutoff, 1e-12)
+    with NativeAO(atoms, shells, representation="spherical") as basis:
+        _, _, eri, _ = public_ao_oracle(basis)
+        dense = np.random.default_rng(20261020).normal(size=(basis.nao, basis.nao))
+        sparse = np.zeros_like(dense)
+        sparse[-1, 0] = 1.0
+        with ResidentMdJProbe(basis, _spec(spin), screening_tolerance=cutoff) as plan:
+            assert plan.diagnostics["direct_schedule"].startswith("md-j-primitive/")
+            plan.capture_graph()
+            for raw in (dense, sparse, np.zeros_like(dense), dense):
+                density = (
+                    np.stack((raw, -0.6 * raw.T)) if spin == "unrestricted" else raw
+                )
+                total = density.sum(axis=0) if density.ndim == 3 else density
+                oracle = np.einsum("ijkl,kl->ij", eri, total, optimize=True)
+                norm = max(float(np.max(np.abs(oracle))), 1e-100)
+                for factor in (0.01, 1.0, 20.0, 1e4):
+                    scale = cap * factor / norm
+                    actual = plan.evaluate_graph(density * scale).coulomb
+                    np.testing.assert_allclose(
+                        actual, oracle * scale, atol=cap * 1.0001, rtol=0
+                    )
+                    if not np.any(raw):
+                        np.testing.assert_array_equal(actual, 0.0)
+
+
+@pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 def test_primitive_capacity_fallback_and_independent_k(
     monkeypatch: pytest.MonkeyPatch, spin: str
 ) -> None:

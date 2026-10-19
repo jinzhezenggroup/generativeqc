@@ -75,14 +75,23 @@ signed/general contractions. The bound belongs to each primitive, rather than
 being copied from its contracted parent.
 
 Each directed primitive product receives an omission allowance of
-`min(screening_tolerance, 1e-12) / (maximum_pair_primitives * primitive_count)`.
+`min(screening_tolerance, 1e-12) / (target_pair_primitives * primitive_count)`.
+The target multiplicity is the actual number of ordered primitive products in
+that output's original shell pair. Coarse hierarchy and prefix decisions retain
+the smaller allowance based on the global maximum target multiplicity.
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
 the represented Hermite source and is stored in the existing hierarchy's `qD`
 field. It is not capped by the uncontracted primitive norm times the shell
 density envelope: precontraction rounding near underflow can make that envelope
-smaller than the norm of the stored source. Multiplying the output primitive norm by this source
-bound, rounded upward, bounds the directed contribution to any output AO.
+smaller than the norm of the stored source. The output primitive norm times
+this source bound bounds the directed contribution to any output AO. A tile
+stages the source norm and the downward-rounded ratio `allowance / output_norm`
+once per target; the inner loop retains nonzero source norms at or above this
+threshold. This avoids repeated allowance divisions and bound products for
+every directed source. Zero output norms, unknown bounds and zero allowance
+have explicit conservative branches. The division may retain additional work
+at rounding boundaries.
 The complete omitted absolute contribution to each J entry is thus
 bounded by `min(screening_tolerance, 1e-12)`; this bounds screening, not floating
 point accumulation error. No old per-AO integral mask is applied. Zero tolerance
@@ -153,6 +162,8 @@ that leaves most of its own quartet lanes idle. This utilization invariant
 applies to both hierarchy recipes; it does not change mathematical screening.
 The [complete primitive decision](../../.agents/notes/implemented/performance/2026-10-19-primitive-complete-md-j.md)
 records its scientific bound, schedule rationale and qualification evidence.
+The [target-budget decision](../../.agents/notes/implemented/performance/2026-10-20-md-j-target-budget.md)
+records the actual-target allowance and staged threshold qualification.
 
 ## Validation and reproducible acceptance
 

@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _cpp_source_support import cpp_function_definition
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc_compiler.integral.md_j_engine_cuda import emit_md_j_engine_header
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -103,16 +103,22 @@ def engine_runtime_probe(
     )
     (folder / "generated_md_j_engine.cuh").write_text(emit_md_j_engine_header())
     native = (ROOT / "src/scf/cuda/md_j_engine.cuh").read_text()
-    kernels = "\n".join(
-        cpp_function_definition(native, name, include_template=templated)
-        for name, templated in (
-            ("md_j_primitive_allowance", False),
-            ("md_j_engine_pair_loc", False),
-            ("md_j_engine_hierarchy", False),
-            ("md_j_engine_direction", False),
-            ("md_j_engine_primitive_direction", False),
-            ("md_j_engine_tile_admitted", False),
-            ("md_j_engine_potential", True),
+    kernels = (
+        cpp_record_definition(native, "MdJEngineCachedPair")
+        + ";\n"
+        + "\n".join(
+            cpp_function_definition(native, name, include_template=templated)
+            for name, templated in (
+                ("md_j_primitive_allowance", False),
+                ("md_j_engine_pair_loc", False),
+                ("md_j_engine_hierarchy", False),
+                ("md_j_engine_direction", False),
+                ("md_j_engine_primitive_direction", False),
+                ("md_j_engine_tile_admitted", False),
+                ("md_j_engine_source_threshold", False),
+                ("md_j_engine_cached_pair", False),
+                ("md_j_engine_potential", True),
+            )
         )
     )
     source, obj, binary = folder / "probe.cpp", folder / "probe.o", folder / "probe"
@@ -553,6 +559,33 @@ void screening_boundaries() {
   assert(tile(screening));
   assert(md_j_engine_direction(md, 1, 0, screening));
   assert(!md_j_engine_direction(md, 0, 1, screening));
+
+  // The primitive recipe has an absolute cumulative cap, independent of the
+  // legacy exact mask above. Probe divisions at normal/subnormal extremes and
+  // neighboring source norms against a wider independent product.
+  for (double q : {0.0, 0x1p-1022, 0x1p-400, 0.1, 1.0, 0x1p400, 0x1p1023}) {
+    for (double share : {0.0, 0x1p-1074, 0x1p-60, 1e-12}) {
+      const double threshold = md_j_engine_source_threshold(q, share);
+      assert(threshold >= 0.0);
+      for (double source : {0.0, std::nextafter(threshold, 0.0), threshold,
+                            std::nextafter(threshold, INFINITY)}) {
+        if (!md_j_engine_primitive_direction(source, threshold) && source != 0.0)
+          assert(static_cast<long double>(q) * source < static_cast<long double>(share));
+      }
+      if (share == 0.0) assert(threshold == 0.0);
+    }
+  }
+  for (double q : {-1.0, kMdJBoundInfinity, std::numeric_limits<double>::quiet_NaN()})
+    assert(md_j_engine_source_threshold(q, 1e-12) == 0.0);
+  assert(md_j_engine_primitive_direction(INFINITY,
+                                       md_j_engine_source_threshold(0.0, 1e-12)));
+  md.maximum_pair_primitives = 81;
+  md.primitive_count = 100003;
+  for (unsigned targets : {1, 2, 6, 9, 81}) {
+    const double share = md_j_primitive_allowance(md, 0.02, targets);
+    assert(static_cast<long double>(share) * targets * md.primitive_count <= 1e-12L);
+    assert(share >= md_j_primitive_allowance(md, 0.02));
+  }
   ++completed;
 }
 template <unsigned B, unsigned K, bool Count = true>
