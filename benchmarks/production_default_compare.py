@@ -142,7 +142,8 @@ def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
                 "policy": MOLECULAR_VV10_DENSITY_POLICY,
                 "threshold": float(MOLECULAR_VV10_DENSITY_THRESHOLD),
             }
-            if method == "wb97m-v" else None
+            if method == "wb97m-v"
+            else None
         ),
     }
     sample = {
@@ -171,8 +172,13 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
     cp.cuda.runtime.deviceSynchronize()
     start = perf_counter()
     mol = gto.M(
-        atom=atoms, basis="def2-svp", cart=False,
-        charge=0, spin=0, unit="Bohr", verbose=0,
+        atom=atoms,
+        basis="def2-svp",
+        cart=False,
+        charge=0,
+        spin=0,
+        unit="Bohr",
+        verbose=0,
     )
     engine = rks.RKS(mol)
     engine.xc = METHODS[method][1]
@@ -181,8 +187,7 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
         "max_iterations": int(engine.max_cycle),
         "energy_tolerance": float(engine.conv_tol),
         "orbital_gradient_tolerance": (
-            float(engine.conv_tol_grad)
-            if engine.conv_tol_grad is not None else None
+            float(engine.conv_tol_grad) if engine.conv_tol_grad is not None else None
         ),
         "diis_history": int(engine.diis_space),
         "direct_scf": bool(engine.direct_scf),
@@ -289,15 +294,16 @@ def compare(native: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]
         "gpu4pyscf_initial_guess": right[0]["settings"]["initial_guess"],
         "same_moving_grid_response": n_response == g_response,
         "force_definition_warning": (
-            None if n_response == g_response
+            None
+            if n_response == g_response
             else "Different analytic-force definitions under stock defaults; "
-                 "performance ratio is not an equal-work force speedup."
+            "performance ratio is not an equal-work force speedup."
         ),
         "accuracy": "unverified: no independent grid-converged E/F oracle",
         "science_equivalence_proved": False,
         "equal_fock_work_proved": False,
         "runtime_scope": "fresh owner, initialized CUDA context, "
-                         "constructor + SCF + forces + host export",
+        "constructor + SCF + forces + host export",
         "native_settings": left[0]["settings"],
         "gpu4pyscf_settings": right[0]["settings"],
     }
@@ -314,7 +320,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--method", choices=tuple(METHODS))
     parser.add_argument("--atoms", type=int, choices=SIZES, default=3)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--force-policy", choices=FORCE_POLICIES, default="engine-default")
+    parser.add_argument(
+        "--force-policy", choices=FORCE_POLICIES, default="engine-default"
+    )
     parser.add_argument("--native", type=Path)
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--output", required=True, type=raw_output_path)
@@ -327,8 +335,17 @@ def main(argv: list[str] | None = None) -> None:
             json.loads(args.reference.read_text()),
         )
         _save(args.output, receipt)
-        print(json.dumps({"runtime_ratio": receipt["observed_default_runtime_ratio_gpu4_over_native"],
-                          "accuracy": receipt["accuracy"]}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "runtime_ratio": receipt[
+                        "observed_default_runtime_ratio_gpu4_over_native"
+                    ],
+                    "accuracy": receipt["accuracy"],
+                }
+            ),
+            flush=True,
+        )
         return
     if args.method is None:
         parser.error("--method is required to measure a GPU engine")
@@ -384,9 +401,15 @@ def main(argv: list[str] | None = None) -> None:
         raise
     finally:
         _save(args.output, record)
-    print(json.dumps({"engine": args.engine,
-                      "seconds": [s["seconds"] for s in record["samples"]]}),
-          flush=True)
+    print(
+        json.dumps(
+            {
+                "engine": args.engine,
+                "seconds": [s["seconds"] for s in record["samples"]],
+            }
+        ),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

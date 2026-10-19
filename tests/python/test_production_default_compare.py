@@ -26,18 +26,20 @@ def receipt(engine: str, *, response: bool = True) -> dict:
         "samples": [],
     }
     for i in (0, 1):
-        data["samples"].append({
-            "seconds": 1.0 + i if engine == "generativeqc" else 3.0 + i,
-            "energy": -1.0,
-            "forces": [[0.0, 0.0, 0.0]],
-            "converged": True,
-            "iterations": 10 + i,
-            "grid_response": response,
-            "settings": {
-                "initial_guess": "huckel" if engine == "generativeqc" else "minao",
-                "xc_grid": {"rule": engine, "points": 100 * (i + 1)},
-            },
-        })
+        data["samples"].append(
+            {
+                "seconds": 1.0 + i if engine == "generativeqc" else 3.0 + i,
+                "energy": -1.0,
+                "forces": [[0.0, 0.0, 0.0]],
+                "converged": True,
+                "iterations": 10 + i,
+                "grid_response": response,
+                "settings": {
+                    "initial_guess": "huckel" if engine == "generativeqc" else "minao",
+                    "xc_grid": {"rule": engine, "points": 100 * (i + 1)},
+                },
+            }
+        )
     return data
 
 
@@ -67,10 +69,19 @@ def test_full_response_is_separate_mode() -> None:
     assert result["science_equivalence_proved"] is False
 
 
-@pytest.mark.parametrize("change", [
-    "geometry", "method", "force_policy", "missing_sample", "failed",
-    "nonconverged", "nonfinite", "mismatched_backend",
-])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "geometry",
+        "method",
+        "force_policy",
+        "missing_sample",
+        "failed",
+        "nonconverged",
+        "nonfinite",
+        "mismatched_backend",
+    ],
+)
 def test_comparator_rejects_unmatched_or_incomplete_receipts(change: str) -> None:
     left, right = receipt("generativeqc"), receipt("gpu4pyscf")
     if change == "geometry":
@@ -111,8 +122,12 @@ def test_native_builder_does_not_force_scf_defaults(
     hybrid = runner.native_constructor_kwargs("pbe0")
     assert hybrid["ks_options"].grid == "native-default-grid"
     assert not {
-        "energy_tolerance", "density_tolerance", "screening_tolerance",
-        "max_iterations", "initial_guess", "precision",
+        "energy_tolerance",
+        "density_tolerance",
+        "screening_tolerance",
+        "max_iterations",
+        "initial_guess",
+        "precision",
     }.intersection(hybrid)
 
 
@@ -122,29 +137,38 @@ def test_unsupported_composite_is_not_relabelled_r2scan() -> None:
 
 
 def test_combine_receipts_needs_no_gpu(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     native, gpu = tmp_path / "native.json", tmp_path / "gpu.json"
     native.write_text(json.dumps(receipt("generativeqc")))
     gpu.write_text(json.dumps(receipt("gpu4pyscf", response=False)))
     out = tmp_path / "report.json"
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    runner.main([
-        "compare", "--native", str(native), "--reference", str(gpu),
-        "--output", str(out),
-    ])
+    runner.main(
+        [
+            "compare",
+            "--native",
+            str(native),
+            "--reference",
+            str(gpu),
+            "--output",
+            str(out),
+        ]
+    )
     result = json.loads(out.read_text())
     assert "unverified" in result["accuracy"]
 
 
 def test_gpu_measurement_refuses_unscheduled_execution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     with pytest.raises(SystemExit) as error:
-        runner.main([
-            "gpu4pyscf", "--method", "pbe", "--output", str(tmp_path / "x.json")
-        ])
+        runner.main(
+            ["gpu4pyscf", "--method", "pbe", "--output", str(tmp_path / "x.json")]
+        )
     assert error.value.code == 2
 
 
