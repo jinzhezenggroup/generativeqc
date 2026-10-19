@@ -120,7 +120,9 @@ void accounting(const System& system, GridSpec spec) {
   require(ledger->live == retained, "borrowed grid lease lost its retained allocation");
   lease = {};
   require(ledger->live == 0, "resident CUDA grid outlived its final lease");
-  ledger->limit = expected - 1;
+  // The shape-only query is a conservative bound across grid families. Inject
+  // failure just below the observed live peak, not below that upper bound.
+  ledger->limit = ledger->peak - 1;
   bool rejected = false;
   try {
     (void)MolecularGrid::from_cuda(system, spec, 0);

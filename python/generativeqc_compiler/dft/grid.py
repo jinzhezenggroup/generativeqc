@@ -83,6 +83,11 @@ def molecular_grid_identity(
                 + ", ".join(map(str, missing))
             )
         resolved = tuple(radii[a.atomic_number] for a in atoms)
+    rule_identity = {}
+    if spec.version == 4:
+        from .treutler import table_identity
+
+        rule_identity["quadrature_table_identity"] = table_identity()
     return canonical_hash(
         {
             "atoms": [asdict(a) for a in atoms],
@@ -91,6 +96,7 @@ def molecular_grid_identity(
             "charge": charge,
             "multiplicity": multiplicity,
             "charge_spin_policy": "independent-v1",
+            **rule_identity,
         }
     )
 
@@ -133,6 +139,8 @@ class GridSpec:
         checked_int(self.version, "grid version", high=4)
         if self.version == 4:
             checked_int(self.radial_points, "Treutler grid level", low=0, high=9)
+            checked_int(self.angular_polar, "Treutler polar field", low=0, high=0)
+            checked_int(self.angular_azimuth, "Treutler azimuth field", low=0, high=0)
             if (self.angular_polar, self.angular_azimuth) != (0, 0) or (
                 self.radial_rule,
                 self.angular_rule,
@@ -510,7 +518,7 @@ class GridPolicy:
 def grid_policy_provenance(spec: GridSpec) -> dict[str, typing.Any]:
     """Describe the exact origin of a resolved grid without over-claiming policy provenance."""
     if spec.version == 4:
-        from .treutler import tables
+        from .treutler import table_identity, tables
 
         return {
             "policy_version": 4,
@@ -518,6 +526,7 @@ def grid_policy_provenance(spec: GridSpec) -> dict[str, typing.Any]:
             "level": spec.level,
             "upstream": tables()["upstream"],
             "source_sha256": dict(tables()["source_sha256"]),
+            "quadrature_table_identity": table_identity(),
             "partition": spec.partition,
             "pruning": spec.pruning,
             "screening": "none",

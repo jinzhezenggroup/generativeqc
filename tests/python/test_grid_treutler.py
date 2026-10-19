@@ -238,5 +238,8 @@ def test_level_encoding_element_bounds_and_metadata_only_counts(
             spec.point_count((z,))
     with pytest.raises(ValueError, match="element"):
         _ = spec.points_per_atom
-    with pytest.raises(ValueError):
-        replace(spec, angular_polar=8)
+    for invalid in (8, False, 0.0):
+        with pytest.raises(ValueError):
+            replace(spec, angular_polar=invalid)
+        with pytest.raises(ValueError):
+            replace(spec, angular_azimuth=invalid)

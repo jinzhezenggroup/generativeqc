@@ -16,6 +16,8 @@ import typing
 from functools import lru_cache
 from pathlib import Path
 
+from generativeqc_compiler.common.provenance import canonical_hash
+
 
 @lru_cache(maxsize=1)
 def tables() -> dict:
@@ -23,6 +25,17 @@ def tables() -> dict:
     return json.loads(
         Path(__file__).with_name("data").joinpath("treutler-lebedev.json").read_text()
     )
+
+
+@lru_cache(maxsize=1)
+def table_identity() -> str:
+    """Include retained numeric inputs in scientific identities, not just a label.
+
+    Tables are immutable for the lifetime of an installed compiler. Updating
+    their contents must invalidate prepared identities even if a future import
+    accidentally retains the old upstream/version strings.
+    """
+    return canonical_hash(tables())
 
 
 def validate_element_level(atomic_number: int, level: int) -> None:
