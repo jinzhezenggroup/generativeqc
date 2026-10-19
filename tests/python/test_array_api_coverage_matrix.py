@@ -86,7 +86,7 @@ def test_coverage_distinguishes_boolean_data_and_reference_execution() -> None:
     assert matrix["sum"]["audited_keywords"]["keepdims"] == "generic-arrays-only"
     assert matrix["astype"]["audited_keywords"]["device"] == "None-only"
     assert matrix["where"]["ad"] == (
-        "fixed-external-mask-only; reference-AD; generated-fp64-first-order-opt-in"
+        "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in"
     )
     assert matrix["where"]["native_cpu"] is True
     assert matrix["where"]["native_cpu_dtypes"] == ("float64",)

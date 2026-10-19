@@ -414,7 +414,16 @@ case "${GENERATIVEQC_CI_SHARD}" in
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0 ;;
       core-b) target_bucket=1 ;;
-      core-c) target_bucket=2; fresh_frontier_paths+=("${core_fresh_frontier_c[@]}") ;;
+      core-c)
+        target_bucket=2
+        # Run 39207592326 left the uncached order-five host probe until
+        # minute 27. Start its complete numerical/adapter gate early too;
+        # changing only priority preserves all owners, cases and time limits.
+        fresh_frontier_paths+=(
+          "${core_fresh_frontier_c[@]}"
+          tests/python/test_direct_order5_sources.py
+        )
+        ;;
     esac
     test_targets=()
     declare -A selected_core=()

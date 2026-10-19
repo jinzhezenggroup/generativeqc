@@ -78,7 +78,12 @@ def _seed(value: Any, spec: Any, name: str) -> np.ndarray:
 def _combine(primal: Program, derivative: Program) -> Program:
     if any(
         derivative.provenance.get(key)
-        for key in ("external_mask_where_jvp", "external_mask_where_vjp")
+        for key in (
+            "external_mask_where_jvp",
+            "external_mask_where_vjp",
+            "comparison_where_jvp",
+            "comparison_where_vjp",
+        )
     ):
         # Fixed-mask derivatives freeze real feeds as non-differentiable execution
         # data. Rebuild the primal against those same canonical inputs before
@@ -125,14 +130,20 @@ class _GradientFunction:
         *,
         with_value: bool,
         allow_external_mask_where: bool = False,
+        allow_comparison_where: bool = False,
     ) -> None:
         if type(allow_external_mask_where) is not bool:
             raise TypeError("allow_external_mask_where must be Boolean")
+        if type(allow_comparison_where) is not bool:
+            raise TypeError("allow_comparison_where must be Boolean")
         base = _compiled(function, backend, options)
-        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+        if (
+            allow_external_mask_where or allow_comparison_where
+        ) and base._backend not in ("reference", "cpu"):
             base.close()
             raise ValueError("external-mask gradients require reference or CPU backend")
         self.allow_external_mask_where = allow_external_mask_where
+        self.allow_comparison_where = allow_comparison_where
         self.names, self.single = _arguments(base, argnums)
         self.function = base._variant(self.names)
         self.with_value = with_value
@@ -158,6 +169,7 @@ class _GradientFunction:
                 ("output",),
                 inputs=self.names,
                 allow_external_mask_where=self.allow_external_mask_where,
+                allow_comparison_where=self.allow_comparison_where,
             )
             program = (
                 _combine(primal, reverse.program)
@@ -210,9 +222,12 @@ def _jvp(
     options: dict[str, Any],
     *,
     allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> tuple[Any, Any]:
     if type(allow_external_mask_where) is not bool:
         raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     if (
         not isinstance(primals, tuple)
         or not isinstance(tangents, tuple)
@@ -222,19 +237,25 @@ def _jvp(
     positions = tuple(
         position
         for position, tangent in enumerate(tangents)
-        if not allow_external_mask_where or tangent is not None
+        if not (allow_external_mask_where or allow_comparison_where)
+        or tangent is not None
     )
-    if allow_external_mask_where and not positions:
+    if (allow_external_mask_where or allow_comparison_where) and not positions:
         raise ValueError("external-mask JVP requires at least one real tangent")
     base = _compiled(function, backend, options)
     try:
-        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+        if (
+            allow_external_mask_where or allow_comparison_where
+        ) and base._backend not in ("reference", "cpu"):
             raise ValueError("external-mask JVP requires reference or CPU backend")
         names, _ = _arguments(base, positions)
         base = base._variant(names)
         primal, feeds = base._prepare(*primals)
         forward = linearize(
-            primal, names, allow_external_mask_where=allow_external_mask_where
+            primal,
+            names,
+            allow_external_mask_where=allow_external_mask_where,
+            allow_comparison_where=allow_comparison_where,
         )
         inputs = {
             node.attrs["name"]: node for node in primal.nodes if node.op == "input"
@@ -266,6 +287,7 @@ class _Pullback:
         names: tuple[str, ...],
         *,
         allow_external_mask_where: bool = False,
+        allow_comparison_where: bool = False,
     ) -> None:
         self.function, self.primal, self.feeds, self.names = (
             function,
@@ -278,6 +300,7 @@ class _Pullback:
             tuple(primal.outputs),
             inputs=names,
             allow_external_mask_where=allow_external_mask_where,
+            allow_comparison_where=allow_comparison_where,
         )
 
     def __call__(self, cotangents: Any) -> tuple[Any, ...]:
@@ -315,12 +338,17 @@ def _vjp(
     *,
     argnums: int | tuple[int, ...] | None = None,
     allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> tuple[Any, _Pullback]:
     if type(allow_external_mask_where) is not bool:
         raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     base = _compiled(function, backend, options)
     try:
-        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+        if (
+            allow_external_mask_where or allow_comparison_where
+        ) and base._backend not in ("reference", "cpu"):
             raise ValueError("external-mask VJP requires reference or CPU backend")
         names, _ = _arguments(
             base,
@@ -337,6 +365,7 @@ def _vjp(
             feeds,
             names,
             allow_external_mask_where=allow_external_mask_where,
+            allow_comparison_where=allow_comparison_where,
         )
         values = base._execution.execute(primal, feeds)
         return _outputs(primal, values), pullback
