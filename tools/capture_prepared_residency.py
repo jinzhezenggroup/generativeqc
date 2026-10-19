@@ -189,7 +189,18 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
                 )
             )
     fence()
-    profiler = CuptiCapture(arguments.collector, capacity=arguments.capacity)
+    allocation_options = (
+        {
+            "native_library": arguments.library,
+            "qz_receipt": arguments.qz_receipt,
+            "qz_receipt_sha256": arguments.qz_receipt_sha256,
+        }
+        if getattr(arguments, "qz_receipt", None) is not None
+        else {}
+    )
+    profiler = CuptiCapture(
+        arguments.collector, capacity=arguments.capacity, **allocation_options
+    )
     results = []
     prepared = None
     source_profiler = None
@@ -209,6 +220,7 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
             capacity=arguments.capacity,
             node_limit=arguments.graph_node_limit,
             depth_limit=arguments.graph_depth_limit,
+            **allocation_options,
         )
         with profiler.region(1):
             calculator = Calculator(device="cuda", resource_budget=budget, **config)

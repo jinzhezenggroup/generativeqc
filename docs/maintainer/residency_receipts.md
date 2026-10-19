@@ -204,6 +204,11 @@ the actual PCI-selected full GPU UUID against both the snapshot and container
 visibility. It also requires the snapshot's API instance name to equal the
 actual container hostname.
 
+Activity, graph and source-observer constructors independently validate the qz
+receipt before enabling capture. They require the qualified native library
+separately from the collector DSO; graph/source handles must identify that same
+native library. A platform label or Boolean bypass is not an allocation proof.
+
 Copy the reviewed receipt to the same project shared path without changing its
 bytes. Add `--qz-receipt /absolute/path/allocation.json` and the independently
 retained `--qz-receipt-sha256 <digest printed by snapshot>` to **both** `--pin`

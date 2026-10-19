@@ -42,6 +42,17 @@ existing prepared and CUPTI protocol/error/lifetime tests retained. Device
 qualification must retain its own source/build/artifact and platform receipts;
 host doubles do not qualify a device or the whole parent issue.
 
+The initial `20ed0f239` adapter reached a live qz snapshot but omitted three
+Slurm-only constructor guards in activity, graph and source capture. A direct
+call in its allocated H200 container rejected with `CUPTI capture requires
+Slurm` before activity initialization. Constructor regressions reproduce the
+old interfaces' refusal and then exercise complete qz proof and negative
+controls against the real Python constructors. All three gates now share the
+same receipt/native-runtime validation; source/graph observers additionally
+check the bound native handle. This is admission coverage, not GPU numerical
+acceptance. The old source snapshot and failure evidence remain separate from
+the corrected qualification run.
+
 ## References
 
 Refs #1629; docs/maintainer/residency_receipts.md.

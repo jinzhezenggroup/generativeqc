@@ -13,15 +13,46 @@ import os
 import socket
 import subprocess
 import time
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 from tools.audit_replay_allocations import _require
 from tools.capture_prepared_allocations import digest, load, visible_device_uuid
 
 SCHEMA = "generativeqc.qz-allocation.v1"
+
+
+def require_cupti_allocation(
+    collector: Path,
+    *,
+    native_library: Path | None = None,
+    qz_receipt: Path | None = None,
+    qz_receipt_sha256: str | None = None,
+    native: Any = None,
+) -> None:
+    """Reject invalid allocation before enabling any activity/source observer."""
+    if all(value is None for value in (native_library, qz_receipt, qz_receipt_sha256)):
+        _require(bool(os.environ.get("SLURM_JOB_ID")), "CUPTI capture requires Slurm")
+        return
+    _require(
+        isinstance(native_library, Path)
+        and isinstance(qz_receipt, Path)
+        and type(qz_receipt_sha256) is str
+        and len(qz_receipt_sha256) == 64
+        and all(c in "0123456789abcdef" for c in qz_receipt_sha256),
+        "incomplete or invalid qz CUPTI allocation inputs",
+    )
+    _require(
+        native_library.resolve() != collector.resolve(),
+        "collector cannot substitute for the qualified native library",
+    )
+    if native is not None:
+        _require(
+            isinstance(getattr(native, "_name", None), str)
+            and Path(native._name).resolve() == native_library.resolve(),
+            "observer native handle/library mismatch",
+        )
+    allocation_identity(native_library, qz_receipt, qz_receipt_sha256)
 
 
 def validate_qz(

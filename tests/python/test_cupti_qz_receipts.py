@@ -15,6 +15,9 @@ import pytest
 from benchmarks.qualify_residency_qz import snapshot
 from tools import residency_allocation
 from tools.audit_replay_allocations import InvalidReceipt
+from tools.cupti_graph_inventory import GraphInventory
+from tools.cupti_residency_capture import CuptiCapture
+from tools.cupti_source_capture import SourceInventory
 from tools.residency_allocation import SCHEMA, validate_qz
 
 
@@ -227,3 +230,175 @@ def test_live_snapshot_rejects_instance_move_during_probe(
     )
     with pytest.raises(InvalidReceipt, match="assignment changed"):
         snapshot(client, "qualification", "workspace", "/usr/bin/python")
+
+
+@pytest.fixture
+def constructor_environment(
+    receipt: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Any:
+    """ABI doubles exercise real Python admission; they never load CUDA/CUPTI."""
+    from tools import cupti_graph_inventory
+
+    native_path, collector_path, proof_path = (
+        tmp_path / name for name in ("native-double", "collector-double", "proof.json")
+    )
+    native_path.write_bytes(b"not a native library")
+    collector_path.write_bytes(b"not a CUPTI collector")
+    state = {
+        "uuid": "GPU-test",
+        "hostname": "pod-test",
+        "now": 1010,
+        "runtime": 12090,
+        "driver": 13020,
+        "enabled": False,
+    }
+
+    class LibraryDouble:
+        def __init__(self, name: str) -> None:
+            self._name = name
+
+        def __getattr__(self, name: str) -> Any:
+            def function(*args: Any) -> int:
+                if name == "cudaRuntimeGetVersion":
+                    args[0]._obj.value = state["runtime"]
+                elif name == "cudaDriverGetVersion":
+                    args[0]._obj.value = state["driver"]
+                elif name.startswith("generativeqc_cupti_") and "begin" in name:
+                    state["enabled"] = True
+                return 0
+
+            setattr(self, name, function)
+            return function
+
+    native, collector = (
+        LibraryDouble(str(native_path)),
+        LibraryDouble(str(collector_path)),
+    )
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setenv("NVIDIA_VISIBLE_DEVICES", "GPU-test")
+    monkeypatch.setattr(residency_allocation, "native_uuid", lambda _: state["uuid"])
+    monkeypatch.setattr(
+        residency_allocation.socket, "gethostname", lambda: state["hostname"]
+    )
+    monkeypatch.setattr(residency_allocation.time, "time", lambda: state["now"])
+    monkeypatch.setattr(
+        residency_allocation.ctypes,
+        "CDLL",
+        lambda path: native if str(path) == str(native_path) else collector,
+    )
+    monkeypatch.setattr(cupti_graph_inventory, "OBSERVER", lambda *_: object())
+
+    def options() -> dict[str, Any]:
+        proof_path.write_text(json.dumps(receipt))
+        return {
+            "native_library": native_path,
+            "qz_receipt": proof_path,
+            "qz_receipt_sha256": residency_allocation.digest(proof_path),
+        }
+
+    def construct(kind: str, **kwargs: Any) -> Any:
+        if kind == "activity":
+            return CuptiCapture(collector_path, capacity=64, **kwargs)
+        cls = GraphInventory if kind == "graph" else SourceInventory
+        return cls(collector_path, native, capacity=64, **kwargs)
+
+    return SimpleNamespace(
+        state=state,
+        options=options,
+        construct=construct,
+        collector_path=collector_path,
+        native=native,
+    )
+
+
+@pytest.mark.parametrize("kind", ["activity", "graph", "source"])
+def test_real_constructor_accepts_verified_qz_without_slurm(
+    constructor_environment: Any, kind: str
+) -> None:
+    env = constructor_environment
+    assert env.construct(kind, **env.options()) is not None
+    assert env.state["enabled"]
+
+
+@pytest.mark.parametrize("kind", ["activity", "graph", "source"])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing",
+        "hash",
+        "gpu",
+        "container",
+        "stale",
+        "mixed",
+        "driver",
+        "runtime",
+        "collector_as_native",
+        "bool_receipt",
+        "bool_native",
+        "bool_hash",
+        "schema",
+        "native_handle",
+    ],
+)
+def test_real_constructor_rejects_bad_proof_before_enabling_cupti(
+    constructor_environment: Any,
+    receipt: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    fault: str,
+) -> None:
+    env = constructor_environment
+    if fault == "schema":
+        receipt["schema"] = "old"
+    options = env.options()
+    if fault == "missing":
+        options["qz_receipt"] = None
+    elif fault == "hash":
+        options["qz_receipt_sha256"] = "0" * 64
+    elif fault == "gpu":
+        env.state["uuid"] = "GPU-other"
+    elif fault == "container":
+        env.state["hostname"] = "other"
+    elif fault == "stale":
+        env.state["now"] = 9000
+    elif fault == "mixed":
+        monkeypatch.setenv("SLURM_JOB_ID", "fabricated")
+    elif fault in ("driver", "runtime"):
+        env.state[fault] = 12080
+    elif fault == "collector_as_native":
+        options["native_library"] = env.collector_path
+    elif fault.startswith("bool_"):
+        options[
+            {
+                "bool_receipt": "qz_receipt",
+                "bool_native": "native_library",
+                "bool_hash": "qz_receipt_sha256",
+            }[fault]
+        ] = True
+    elif fault == "native_handle":
+        env.native._name = "different-native-library"
+        if kind == "activity":
+            # Activity admission has no existing handle; its distinct-library
+            # contract is checked by the collector_as_native case instead.
+            options["native_library"] = env.collector_path
+    with pytest.raises(InvalidReceipt):
+        env.construct(kind, **options)
+    assert not env.state["enabled"]
+
+
+@pytest.mark.parametrize("kind", ["activity", "graph", "source"])
+def test_existing_direct_slurm_constructors_remain_supported(
+    constructor_environment: Any, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    monkeypatch.setenv("SLURM_JOB_ID", "host-ABI-double")
+    assert constructor_environment.construct(kind) is not None
+
+
+def test_self_reported_platform_is_not_a_constructor_authorization(
+    constructor_environment: Any,
+) -> None:
+    env = constructor_environment
+    with pytest.raises(TypeError):
+        env.construct("activity", platform="qz")
+    assert not env.state["enabled"]

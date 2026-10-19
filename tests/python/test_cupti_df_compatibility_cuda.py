@@ -46,8 +46,17 @@ def capture_case(name: str, output: Path) -> None:
     runtime.cudaDeviceSynchronize.restype = ctypes.c_int
     runtime.cudaDeviceSynchronize.argtypes = []
     assert runtime.cudaDeviceSynchronize() == 0
-    profiler = CuptiCapture(collector)
-    inventory = SourceInventory(collector, native)
+    allocation_options = (
+        {
+            "native_library": library,
+            "qz_receipt": Path(receipt),
+            "qz_receipt_sha256": receipt_hash,
+        }
+        if receipt
+        else {}
+    )
+    profiler = CuptiCapture(collector, **allocation_options)
+    inventory = SourceInventory(collector, native, **allocation_options)
     regions = {
         1: {"name": "source-prepare", "role": "prepare"},
         2: {"name": "host-df-mp2", "role": "replay"},
