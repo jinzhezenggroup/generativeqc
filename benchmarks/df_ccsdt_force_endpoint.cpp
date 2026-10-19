@@ -2,6 +2,7 @@
 // The input contains no orbitals, Fock matrix, factors or amplitudes from an oracle.
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -9,6 +10,7 @@
 #include <string>
 
 #include "cc/df_triples.hpp"
+#include "cc_source_session.hpp"
 #include "methods/df_ccsdt_force.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/execution_context.hpp"
@@ -33,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 }  // namespace
 
-int main(int argc, char** argv) {
+static int run_scientific_endpoint(int argc, char** argv) {
   try {
     if (argc < 4 || argc > 33)
       throw std::invalid_argument(
@@ -295,6 +297,7 @@ int main(int argc, char** argv) {
       work_field("ccsd_pair_capacity_bytes", result.solver.df_pair_capacity_bytes);
       work_field("ccsd_pair_binding_host_bytes", result.solver.df_pair_binding_host_bytes);
       work_field("ccsd_evaluations", result.solver.iteration_graph_calls);
+      work_field("ccsd_replay_evaluations", result.solver.replay_graph_calls);
       work_field("ccsd_capacity", result.solver.numeric_capacity_bytes);
       work_field("ccsd_device_bytes", result.solver.owned_device_bytes);
       work_field("ccsd_setup_h2d_bytes", result.solver.setup_h2d_bytes);
@@ -529,6 +532,27 @@ int main(int argc, char** argv) {
       previous_endpoint_seconds += result.total_seconds;
     }
     return 0;
+  } catch (const std::exception& error) {
+    std::cerr << error.what() << std::endl;
+    return 1;
+  }
+}
+
+int main(int argc, char** argv) {
+  const char* backend = nullptr;
+  const char* output = nullptr;
+  if (argc >= 7 && std::strcmp(argv[argc - 3], "--cc-cupti-v1") == 0) {
+    backend = argv[argc - 2];
+    output = argv[argc - 1];
+    argc -= 3;
+  }
+  try {
+    generativeqc::benchmarks::cc_trace::Session observation(backend, output);
+    // All scientific locals/resource owners die on return before the explicit
+    // observer-only fence/export. Original scientific timing stays inside.
+    const int scientific_status = run_scientific_endpoint(argc, argv);
+    const bool captured = observation.finish(static_cast<std::uint64_t>(scientific_status));
+    return scientific_status ? scientific_status : captured ? 0 : 2;
   } catch (const std::exception& error) {
     std::cerr << error.what() << std::endl;
     return 1;
