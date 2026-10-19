@@ -553,6 +553,11 @@ macro(generativeqc_add_native_tests)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_cuda_runtime_tests tests/native/test_cuda_runtime.cu
                        LIBRARIES CUDA::cudart CUDA::cublas)
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Preserve the established mandatory CI target and its bounded command;
+      # its dependency graph also compiles the acceptance bridge against CUDA.
+      add_dependencies(generativeqc_cuda_runtime_tests generativeqc_md_j_resident_probe)
+    endif()
     generativeqc_add_ordered_history_cuda_compile_check()
     generativeqc_native_test(generativeqc_df_eigensystem_tests tests/native/test_df_eigensystem.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)

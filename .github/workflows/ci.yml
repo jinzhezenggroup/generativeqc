@@ -662,7 +662,7 @@ jobs:
         # method adapter as part of this existing integration gate.
         run: >-
           cmake --build --preset cuda-release-sm120
-          --target generativeqc_cuda_runtime_tests generativeqc_md_j_resident_probe --parallel 3
+          --target generativeqc_cuda_runtime_tests --parallel 3
         # File-backed secondary storage records misses, not the restored cache.
         # Only trusted master pushes hand this delta to the ordered CLI job.
         env:
