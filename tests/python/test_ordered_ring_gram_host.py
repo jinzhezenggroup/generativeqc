@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -139,24 +140,8 @@ int main() {
 def test_ordered_launch_admission(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
-    import re
-
-    # Compile the production host admission body with the CUDA launch replaced
-    # by a recorder. This proves rejection occurs before launch; it is not a
-    # compilation or execution test of the CUDA kernel.
-    source_text = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
-    wrapper = source_text.split("void launch_update_diis_cached_gram(", 1)[1]
-    wrapper = (
-        "void launch_update_diis_cached_gram("
-        + wrapper.split("}  // namespace generativeqc::scf::cuda_execution", 1)[0]
-    )
-    wrapper, replacements = re.subn(
-        r"update_diis_kernel<false, false, true><<<.*?>>>\(.*?\);",
-        "++launches;",
-        wrapper,
-        flags=re.DOTALL,
-    )
-    assert replacements == 1
+    # Compile the callable production preflight without slicing or rewriting
+    # CUDA source. The continuation is a host recorder, not device execution.
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\nusing cudaStream_t = void*; using cudaError_t = int;\n"
         "struct dim3 { unsigned x, y, z; "
@@ -164,24 +149,23 @@ def test_ordered_launch_admission(
     )
     source = tmp_path / "ordered_admission.cpp"
     source.write_text(
-        "#include <limits>\n#include <stdexcept>\n#include <climits>\n"
+        "#include <limits>\n#include <stdexcept>\n#include <climits>\n#include <cmath>\n"
+        "#include <iostream>\n"
         '#include "scf/cuda/scf_diis_kernels.hpp"\n'
         "unsigned launches = 0;\n"
-        "namespace generativeqc::scf::cuda_execution {\n"
-        + wrapper
         + r"""
-}
 int main() {
-  using namespace generativeqc::scf::cuda_execution;
+  using generativeqc::scf::cuda_execution::detail::validate_ordered_gram_launch;
   double fock{}, residual{}, fock_history{}, residual_history{}, solve{}, rhs{}, effective{}, cache{};
   std::uint8_t active = 1;
   std::uint32_t count{}, head{};
   auto call = [&](dim3 grid, dim3 block, int batch, int n, int spins, unsigned history,
                   bool alias, bool missing_cache, bool missing_history) {
-    launch_update_diis_cached_gram(
-        grid, block, 0, nullptr, batch, n, spins, history, &fock, &residual, &active,
+    validate_ordered_gram_launch(
+        grid, block, batch, n, spins, history, &fock, &residual, &active,
         missing_history ? nullptr : &fock_history, &residual_history, &solve, &rhs,
         &count, &head, &effective, missing_cache ? nullptr : alias ? &solve : &cache);
+    ++launches;
   };
   unsigned refused = 0;
   auto reject = [&](auto action) {
@@ -203,11 +187,75 @@ int main() {
   reject([&] { call(1, 32, 1, 3, 1, 65, false, false, false); });
   reject([&] { call(INT_MAX, 32, INT_MAX, INT_MAX, 2, 64, false, false, false); });
   if (refused != 13 || launches) throw std::runtime_error("missing admission rejection");
-  for (unsigned history : {0U, 1U})
-    launch_update_diis_cached_gram(1, 32, 0, nullptr, 1, 3, 1, history, &fock, nullptr,
+  for (unsigned history : {0U, 1U}) {
+    validate_ordered_gram_launch(1, 32, 1, 3, 1, history, &fock, nullptr,
         &active, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &effective, nullptr);
+    ++launches;
+  }
   call(1, 32, 1, 3, 1, 64, false, false, false);
   if (launches != 3) throw std::runtime_error("valid or disabled binding was rejected");
+
+  // Each required binding is independently absent. Disabled history still
+  // requires input/output/activity; all other device bindings may be absent.
+  auto binding = [&](unsigned history, unsigned missing) {
+    validate_ordered_gram_launch(1, 32, 1, 3, 1, history,
+        missing == 0 ? nullptr : &fock, missing == 1 ? nullptr : &residual,
+        missing == 2 ? nullptr : &active, missing == 3 ? nullptr : &fock_history,
+        missing == 4 ? nullptr : &residual_history, missing == 5 ? nullptr : &solve,
+        missing == 6 ? nullptr : &rhs, missing == 7 ? nullptr : &count,
+        missing == 8 ? nullptr : &head, missing == 9 ? nullptr : &effective,
+        missing == 10 ? nullptr : &cache);
+    ++launches;
+  };
+  for (unsigned missing = 0; missing < 11; ++missing) {
+    reject([&] { binding(2, missing); });
+    for (unsigned history : {0U, 1U}) {
+      if (missing == 0 || missing == 2 || missing == 9)
+        reject([&] { binding(history, missing); });
+      else
+        binding(history, missing);
+    }
+  }
+  reject([&] { call(1, dim3(32, 1, 2), 1, 3, 1, 4, false, false, false); });
+  reject([&] { call(1, 32, -1, 3, 1, 4, false, false, false); });
+  reject([&] { call(1, 32, 1, -1, 1, 4, false, false, false); });
+  for (int spins : {-1, 0})
+    reject([&] { call(1, 32, 1, 3, spins, 4, false, false, false); });
+  reject([&] { call(1, 32, 2, 3, 1, 4, false, false, false); });
+  reject([&] { call(1, 32, 1, 3, 1, UINT_MAX, false, false, false); });
+  if (refused != 37) throw std::runtime_error("missing extended rejection");
+
+  // Poisoned state is borrowed, not read or modified by host admission.
+  fock = residual = fock_history = residual_history = solve = rhs = effective = cache =
+      std::numeric_limits<double>::quiet_NaN();
+  active = 0;
+  count = head = UINT_MAX;
+  call(2, 32, 1, 3, 2, 2, false, false, false);
+  if (!std::isnan(fock) || !std::isnan(residual) || !std::isnan(fock_history) ||
+      !std::isnan(residual_history) || !std::isnan(solve) || !std::isnan(rhs) ||
+      !std::isnan(effective) || !std::isnan(cache) || active || count != UINT_MAX || head != UINT_MAX)
+    throw std::runtime_error("host admission touched borrowed device state");
+
+  // Device addresses need not be host-readable or backed by host lifetimes.
+  // Low non-null sentinels catch accidental dereferences without a GPU runtime.
+  auto* device = reinterpret_cast<double*>(std::uintptr_t{4096});
+  validate_ordered_gram_launch(1, 32, 1, 3, 1, 2, device, device,
+      reinterpret_cast<std::uint8_t*>(std::uintptr_t{8192}), device, device, device, device,
+      reinterpret_cast<std::uint32_t*>(std::uintptr_t{12288}),
+      reinterpret_cast<std::uint32_t*>(std::uintptr_t{16384}), device,
+      reinterpret_cast<double*>(std::uintptr_t{20480}));
+  for (unsigned history : {0U, 1U}) call(1, 32, 1, 3, 1, history, true, false, false);
+
+  // Shape expectations arrive from Python's unbounded-integer byte oracle.
+  std::cout << std::numeric_limits<std::size_t>::max() << ' ' << sizeof(double) << '\n';
+  int batch, n, spins, expected;
+  unsigned history;
+  while (std::cin >> batch >> n >> spins >> history >> expected) {
+    bool accepted = true;
+    try { call(static_cast<unsigned>(batch), 32, batch, n, spins, history, false, false, false); }
+    catch (const std::invalid_argument&) { accepted = false; }
+    if (accepted != bool(expected)) throw std::runtime_error("addressability oracle mismatch");
+  }
 }
 """
     )
@@ -217,6 +265,36 @@ int main() {
         executable,
         compile_args=("-std=c++20", "-I" + str(tmp_path), "-I" + str(ROOT / "src")),
     )
-    subprocess.run(
+    result = subprocess.run(
         [str(executable)], check=True, capture_output=True, text=True, timeout=30
     )
+    maximum_bytes, scalar_bytes = map(int, result.stdout.split())
+    cases = []
+    for batch in (1, 2, 65, 1048576, 2**31 - 1):
+        for spins in (1, 2):
+            for history in (0, 1, 2, 3, 32, 64):
+                slots = max(1, history)
+                boundary = math.isqrt(
+                    maximum_bytes // (scalar_bytes * batch * slots * spins)
+                )
+                for n in sorted({1, boundary - 1, boundary, boundary + 1, 2**31 - 1}):
+                    if not 1 <= n <= 2**31 - 1:
+                        continue
+                    # Products use Python integers, independently of the C++
+                    # division-based overflow guard. Copy-only histories need
+                    # one matrix, and enabled DIIS also needs the solve square.
+                    history_bytes = batch * n * n * spins * slots * scalar_bytes
+                    solve_bytes = batch * (history + 1) ** 2 * scalar_bytes
+                    admitted = history_bytes <= maximum_bytes and (
+                        history < 2 or solve_bytes <= maximum_bytes
+                    )
+                    cases.append(f"{batch} {n} {spins} {history} {int(admitted)}\n")
+    checked = subprocess.run(
+        [str(executable)],
+        input="".join(cases),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert checked.stdout == result.stdout
