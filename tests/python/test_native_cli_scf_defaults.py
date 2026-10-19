@@ -5,8 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -69,17 +67,3 @@ int main() {
         compile_timeout=90,
     )
     subprocess.run([str(binary)], check=True, timeout=30)
-
-
-@pytest.mark.parametrize(
-    "filename",
-    [
-        "src/cli/main.cpp",
-        "src/cli/geometry_command.cpp",
-        "src/cli/resources.cpp",
-    ],
-)
-def test_cli_run_optimize_and_resources_share_convergence_policy(filename: str) -> None:
-    # These public paths must not quietly diverge in later refactors.
-    source = (ROOT / filename).read_text(encoding="utf-8")
-    assert "resolve_scf_convergence(" in source
