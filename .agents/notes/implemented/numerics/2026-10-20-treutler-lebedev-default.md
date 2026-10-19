@@ -29,6 +29,8 @@ file hashes and retains the Apache license and NOTICE. Production and source
 generation read repository-owned tables without importing PySCF. The native
 radial transform and partition adjustment derivatives use the common scalar
 Graph; a second symbolic algebra is not introduced.
+The complete retained table content participates in grid identities and
+provenance, so stale version labels cannot preserve a cache across a table change.
 
 Each element retains its real shell sizes. Atom-major prefix offsets replace
 uniform `point / points_per_atom` ownership for this family. Legitimate signed
@@ -75,9 +77,32 @@ independent values/finite differences. Legacy grid tests remain in place.
 `test_treutler_endpoints.py` qualifies default-grid energy and analytic forces
 against independently generated PySCF grids (2e-8 Hartree energy and 3e-7
 Hartree/Bohr force gates), including Direct/DF and separate VV10 prescriptions.
+CUDA checks complete forces for PBE, PBE0, r2SCAN and WB97M-V; CPU checks
+energies for all four and public forces for PBE/PBE0. Existing CPU meta-GGA
+force admission is not expanded. The WB97M-V DF oracle retains exact long-range
+exchange and zero long-range auxiliary response, matching the existing native
+operator; PySCF's ordinary all-range DF default is a different approximation.
 `test_native_grid_geometry.py` checks first/mixed moving-grid responses against
 long-double finite differences with ragged ownership and signed weights.
 Native quadrature tests check allocation bounds and release of retained storage.
+
+Qualification on n1, using Slurm-assigned RTX 5090 devices, passed all 18
+endpoint oracle cases, both native quadrature executables, 36 native geometry
+checks, 202 API/resource regressions, and 14 CLI checks. Four separate
+WB97M-V prepared-owner geometry probe tests were not enabled; the generic
+moving-grid probe covered adjusted ragged/signed rules. This is not a complete
+Hessian endpoint qualification. Local grid, response, ownership and packaging
+checks also passed; the compiler audit checked 571 modules with no dependency
+errors. The installed Python wheel payload retained the JSON and licenses and
+generated native quadrature without importing a reference/runtime package.
+
+The measured code is `57f1b7d80`, based on #2609 at `0721ef3f6`, with a CUDA
+12.9 sm_120 build and the explicit development Hessian leaf inventory used
+for the standalone geometry probe. Native library SHA-256:
+`ec278e2d771b534a4d34ba5db1ee8bee7684e7c291f3336e3fa83d9a9ab7b381`.
+Build and JIT compilers used verified sccache 0.16.0; shared-cache statistics
+were retained before/after compilation. Raw qualification logs are retained
+locally under `.artifacts/receipts/`.
 
 This change makes no performance claim and does not refresh README benchmarks
 or CBS results. Before publishing timings, qualify complete endpoints with the

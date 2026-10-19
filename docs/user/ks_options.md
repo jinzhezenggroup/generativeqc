@@ -138,14 +138,14 @@ This CPU oracle checks LDA/PBE energy and grid-responsive analytic gradients
 against a dense grid whose stability is checked against a denser grid. Pruned
 standard/tight profiles must meet the unchanged unpruned accuracy gates while
 reducing point counts. It is not a VV10, large-system or GPU performance claim.
-The matched-grid runners default to `--grid-pruning auto`: LDA/PBE select the
-production policy for both native and GPU4PySCF; other methods retain unpruned
-diagnostic grids until independently qualified. `--grid-pruning none` selects
+The existing matched-grid runners retain `--grid-pruning auto`: LDA/PBE select
+the legacy `radial-v1` policy for both native and GPU4PySCF; other methods use
+unpruned diagnostic grids. `--grid-pruning none` selects
 the retained unpruned policy. Explicit `--grid NR NP NA` counts preserve the
 historical one-Bohr radial scales. `README_BENCHMARK_GRID_PRUNING` forwards this
 choice through `benchmarks/run_readme_dft_benchmarks.sh`.
 
-For an independent production-grid comparison, use
+For the legacy angular-pruning comparison, use
 `python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
 inside a finite Slurm GPU allocation with a source-matched Release library and
 GPU4PySCF installed. This runner uses GPU4PySCF's **own NWChem-pruned grids**,
