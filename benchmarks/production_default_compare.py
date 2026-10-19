@@ -119,9 +119,18 @@ def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
     forces = _finite_endpoint(float(result.energy), result.forces, len(atoms), seconds)
     grid = calculator.ks_options.grid
     seed = calculator.initial_guess
+    diagnostic = result.initial_guess if isinstance(result.initial_guess, dict) else None
     settings = {
         "initial_guess": seed.kind if seed is not None else "hcore",
         "initial_guess_policy": "auto",
+        "initial_guess_executed": (
+            diagnostic.get("kind")
+            if diagnostic is not None and diagnostic.get("outcome") == "used"
+            else "hcore-or-existing-density"
+        ),
+        "initial_guess_outcome": (
+            diagnostic.get("outcome") if diagnostic is not None else None
+        ),
         "max_iterations": calculator._max_iterations,
         "energy_tolerance": calculator._energy_tolerance,
         "density_tolerance": calculator._density_tolerance,
@@ -182,6 +191,18 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
     )
     engine = rks.RKS(mol)
     engine.xc = METHODS[method][1]
+    energy = float(engine.kernel())
+    if not engine.converged:
+        raise RuntimeError("GPU4PySCF default SCF did not converge")
+    gradient = engine.nuc_grad_method()
+    gradient_default = bool(getattr(gradient, "grid_response", False))
+    if force_policy == "full-moving-grid":
+        gradient.grid_response = True
+    actual_response = bool(getattr(gradient, "grid_response", False))
+    forces = -cp.asnumpy(gradient.kernel())
+    cp.cuda.runtime.deviceSynchronize()
+    seconds = perf_counter() - start
+    forces = _finite_endpoint(energy, forces, len(atoms), seconds)
     settings = {
         "initial_guess": str(getattr(engine, "init_guess", "unavailable")),
         "max_iterations": int(engine.max_cycle),
@@ -201,18 +222,6 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
             "becke": _function_name(engine.grids.becke_scheme),
         },
     }
-    energy = float(engine.kernel())
-    if not engine.converged:
-        raise RuntimeError("GPU4PySCF default SCF did not converge")
-    gradient = engine.nuc_grad_method()
-    gradient_default = bool(getattr(gradient, "grid_response", False))
-    if force_policy == "full-moving-grid":
-        gradient.grid_response = True
-    actual_response = bool(getattr(gradient, "grid_response", False))
-    forces = -cp.asnumpy(gradient.kernel())
-    cp.cuda.runtime.deviceSynchronize()
-    seconds = perf_counter() - start
-    forces = _finite_endpoint(energy, forces, len(atoms), seconds)
     settings["xc_grid"]["points"] = _grid_point_count(engine.grids)
     settings["nonlocal_grid_points"] = (
         _grid_point_count(engine.nlcgrids) if method == "wb97m-v" else None
@@ -232,7 +241,9 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
         "energy": energy,
         "forces": forces,
         "converged": True,
-        "iterations": getattr(engine, "cycles", None),
+        "iterations": (
+            int(engine.cycles) if getattr(engine, "cycles", None) is not None else None
+        ),
         "grid_response": actual_response,
         "settings": settings,
     }
