@@ -343,6 +343,16 @@ class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
     ]
 
 
+class NonlocalGridKsOptionsDescriptor(ApplicationPrecisionKsOptionsDescriptor):
+    """Private exact-layout extension, discovered before passing borrowed pointers."""
+
+    _fields_ = [
+        ("nonlocal_grid_version", ctypes.c_uint32),
+        ("nonlocal_grid_reserved", ctypes.c_uint32),
+        ("nonlocal_grid", ctypes.POINTER(KsOptionsDescriptor)),
+    ]
+
+
 class InitialGuessOptionsDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),

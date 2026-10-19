@@ -45,12 +45,8 @@ def test_cuda_ks_incremental_direct_jk_only_changes_linear_fock_inputs() -> None
     assert "provider, *range_correction, jk_density" in ks
     assert "finalize_incremental_jk_components();" in ks
 
-    # XC/nonlocal correlation remain nonlinear full-density functionals and
-    # must never consume the anchor-relative delta.
-    assert "xc->enqueue(density, elements, next_generation, phase);" in ks
-    assert "xc->enqueue_density_features(density, elements, next_generation" in ks
-    assert "xc->enqueue(incremental_delta_density" not in ks
-    assert "xc->enqueue_density_features(incremental_delta_density" not in ks
+    # Full-density XC/NLC inputs are executed and checked for both quadrature
+    # paths by test_ks_mixed_retry_handoff, including a distinct delta sentinel.
 
 
 def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:

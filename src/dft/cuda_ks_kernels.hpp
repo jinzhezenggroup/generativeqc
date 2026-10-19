@@ -27,6 +27,11 @@ struct Control {
 
 void reset_control(cudaStream_t stream, unsigned spins, int occupied_alpha, int occupied_beta,
                    Control* control, std::uint8_t* enabled, std::uint8_t* spin_enabled);
+/** Merge independently integrated AO potentials and energies. Electron counts
+ * remain those of the primary quadrature; either numerical error invalidates it. */
+void merge_grid_contributions(cudaStream_t stream, std::size_t elements, double* potential,
+                              double* totals, int* error, const double* nonlocal_potential,
+                              const double* nonlocal_totals, const int* nonlocal_error);
 void assemble_fock(cudaStream_t stream, std::size_t n, unsigned spins, const double* hcore,
                    const double* coulomb, const double* exchange, double exchange_coefficient,
                    const double* range_exchange, double range_exchange_coefficient,

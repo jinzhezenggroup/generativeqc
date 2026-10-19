@@ -420,6 +420,10 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
                                                  const CudaKsWb97mvHessianOptions& options,
                                                  std::string& detail) {
   impl_.reset();
+  if (expected.identity.model.nonlocal_grid) {
+    detail = "independent XC/VV10 grids do not yet support Hessians";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   try {
     require(options.max_device_bytes && options.max_assembly_terms &&
                 std::isfinite(options.symmetry_absolute_tolerance) &&

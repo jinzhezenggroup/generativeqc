@@ -76,6 +76,16 @@ struct ApplicationPrecisionKsOptions {
 };
 static_assert(offsetof(ApplicationPrecisionKsOptions, base) == 0);
 
+/** Private additive transport for an independently prescribed VV10 grid.
+ * The borrowed descriptor contributes only its grid fields; preparation copies
+ * them before returning. Keeping the precision prefix preserves both old ABIs. */
+struct NonlocalGridKsOptions {
+  ApplicationPrecisionKsOptions base;
+  std::uint32_t version{1}, reserved{};
+  const generativeqc_ks_options* grid{};
+};
+static_assert(offsetof(NonlocalGridKsOptions, base) == 0);
+
 /** Recognize the private request without reading past a legacy descriptor.
  * Full allowance validation remains with KS preparation. This early query
  * admits the unchanged strict seed provider, not any mixed target operator. */

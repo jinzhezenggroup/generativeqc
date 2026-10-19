@@ -20,6 +20,9 @@ generativeqc_progressive_hf_run_v1(generativeqc::scf::ProgressiveHFCallback call
 
 uint32_t generativeqc_ks_options_version(void) { return 1; }
 
+/** Independent XC/VV10 quadrature with an unchanged public KS descriptor. */
+GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void) { return 1; }
+
 /** Private Python bridge: distinguish support for the optional size-tagged
  * precision extension from the unchanged scientific KS descriptor version. */
 GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { return 1; }

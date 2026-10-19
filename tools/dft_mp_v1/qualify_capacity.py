@@ -293,8 +293,11 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
+# Reviewed independent-grid reader: real-header ABI and mutation tests cover
+# legacy160/184, private200 and malformed/unsupported requests. Retain this
+# source-only preflight refusal; updating the pin requires those controls.
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
-    "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
+    "9ed33ad79768b17ed480eda116897aa127705d24f73ebc429933e18c2c5a077c"
 )
 # The additional native static wrappers reuse the existing primitive objects.
 # The compiler now supplies the inventory and grouped native generation; retain
@@ -3095,9 +3098,9 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
-    # Preserve the original frozen ABI digest: the exact ks_grid_options
-    # source span (including its trailing blank line) is now in preparation.
-    # Changing to _cpp_block_sha256 would silently alter the audit oracle.
+    # Preserve the complete reviewed-reader span as both provenance and a
+    # fail-closed source-only preflight. Executable real-header ABI controls
+    # additionally protect field transport and malformed extension rejection.
     preparation_source = (
         repository / "src/methods/dft_method_preparation.cpp"
     ).read_text(encoding="utf-8")
