@@ -13,12 +13,17 @@ inline constexpr unsigned kMdJAngularBuckets = 5;
 inline constexpr unsigned kMdJHierarchyLevels = 6;
 inline constexpr std::uint64_t kMdJSharedCapacity = 48U << 10;
 
+// Materialize standard-library constants outside HD functions: NVCC treats
+// numeric_limits member functions as host-only without relaxed constexpr.
+inline constexpr std::uint64_t kMdJIndexMaximum = std::numeric_limits<std::uint64_t>::max();
+inline constexpr double kMdJBoundInfinity = std::numeric_limits<double>::infinity();
+
 /** Checked arithmetic has no partially usable result after failure. */
 GENERATIVEQC_ERI_SHARED_HD constexpr bool md_j_checked_add(std::uint64_t first,
                                                            std::uint64_t second,
                                                            std::uint64_t& result) {
   result = 0;
-  if (second > std::numeric_limits<std::uint64_t>::max() - first) return false;
+  if (second > kMdJIndexMaximum - first) return false;
   result = first + second;
   return true;
 }
@@ -27,7 +32,7 @@ GENERATIVEQC_ERI_SHARED_HD constexpr bool md_j_checked_mul(std::uint64_t first,
                                                            std::uint64_t second,
                                                            std::uint64_t& result) {
   result = 0;
-  if (first && second > std::numeric_limits<std::uint64_t>::max() / first) return false;
+  if (first && second > kMdJIndexMaximum / first) return false;
   result = first * second;
   return true;
 }
@@ -101,13 +106,13 @@ struct MdJScreenBound {
 /** Invalid bounds fail open for screening (retain work). A finite zero is
  * exact, including underflow of nonzero factors, which is rounded upward. */
 GENERATIVEQC_ERI_SHARED_HD inline double md_j_nonnegative_bound(double value) {
-  return value >= 0.0 ? value : std::numeric_limits<double>::infinity();
+  return value >= 0.0 ? value : kMdJBoundInfinity;
 }
 
 GENERATIVEQC_ERI_SHARED_HD inline double md_j_bound_product_up(double first, double second) {
   first = md_j_nonnegative_bound(first);
   second = md_j_nonnegative_bound(second);
-  const double infinity = std::numeric_limits<double>::infinity();
+  const double infinity = kMdJBoundInfinity;
   // Unknown/infinite bounds must not become zero via 0 * infinity.
   if (first == infinity || second == infinity) return infinity;
   if (first == 0.0 || second == 0.0) return 0.0;
@@ -154,7 +159,7 @@ struct MdJHierarchyStorage {
 
 GENERATIVEQC_ERI_SHARED_HD constexpr MdJHierarchyStorage md_j_hierarchy_storage(
     const std::uint64_t* counts,
-    std::uint64_t byte_capacity = std::numeric_limits<std::uint64_t>::max()) {
+    std::uint64_t byte_capacity = kMdJIndexMaximum) {
   if (!counts) return {};
   MdJHierarchyStorage storage{};
   for (unsigned bucket = 0; bucket < kMdJAngularBuckets; ++bucket) {
