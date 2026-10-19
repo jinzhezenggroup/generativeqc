@@ -16,7 +16,8 @@ be repurposed for this check.
 
 Maintain a separate thread-local, nonwrapping binding epoch. Only successful
 canonical bind/unbind operations advance it. Failed replacement, foreign-context
-detach, null arguments and mutation during dispatch leave it unchanged. The
+detach, null callback/error destinations and mutation during dispatch leave it
+unchanged. A non-null callback may still use a null context. The
 observer object layout, callback signature, existing scalar layouts and graph
 identity remain unchanged.
 

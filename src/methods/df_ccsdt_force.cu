@@ -7,6 +7,7 @@
 #include <string_view>
 #include <utility>
 
+#include "cc/phase_observation.hpp"
 #include "integrals/electron_interaction_source.hpp"
 #include "methods/df_ccsdt_force.hpp"
 #include "molecule/nuclear_gradient.hpp"
@@ -138,6 +139,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
     DFCorrelationDemand demand = {}) {
   const auto started = Clock::now();
+  cc::phase_observation::Scope observed_endpoint(cc::phase_observation::Site::endpoint_inclusive);
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
   runtime::df_progress::Scope trace(replay_state ? "df_ccsdt_response_replay" : "df_ccsdt_native");
