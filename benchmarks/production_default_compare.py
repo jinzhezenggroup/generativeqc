@@ -30,6 +30,7 @@ METHODS = {
     "pbe": ("pbe-rks", "PBE"),
     "pbe0": ("pbe0-rks", "PBE0"),
     "r2scan": ("r2scan-rks", "R2SCAN"),
+    "r2scan-3c": ("r2scan-3c-rks", "R2SCAN"),
     "wb97m-v": ("wb97m-v-rks", "WB97M_V"),
 }
 REQUIRED_NATIVE_GRID = frozenset(("pbe0", "wb97m-v"))
@@ -44,7 +45,8 @@ def problem_identity(method: str, atoms: Any) -> dict[str, Any]:
         raise ValueError("unsupported default-comparison method")
     return {
         "method": method,
-        "basis": "def2-svp",
+        "basis": "def2-mTZVPP" if method == "r2scan-3c" else "def2-svp",
+        "composite_corrections": ["D4", "gCP"] if method == "r2scan-3c" else [],
         "basis_representation": "spherical",
         "charge": 0,
         "spin": 0,
@@ -62,10 +64,12 @@ def native_constructor_kwargs(method: str) -> dict[str, Any]:
         raise ValueError("unknown native method")
     kwargs: dict[str, Any] = {
         "method": METHODS[method][0],
-        "basis": "def2-svp",
         "basis_representation": "spherical",
         "device": "cuda",
     }
+    if method != "r2scan-3c":
+        kwargs["basis"] = "def2-svp"
+    # Canonical r2SCAN-3c selects its pinned def2-mTZVPP internally.
     if method in REQUIRED_NATIVE_GRID:
         from generativeqc import GridSpec, KsOptions
 
@@ -84,6 +88,34 @@ def make_native_calculator(method: str, arm: str) -> Any:
     if arm == "fast":
         return PrecisionCalculator(policy="fast", **options)
     raise ValueError("native arm must be standard or fast")
+
+
+def reference_r2scan3c_basis() -> dict[str, list[list[Any]]]:
+    """Convert canonical def2-mTZVPP snapshot to independent PySCF basis."""
+    from generativeqc import load_r2scan3c_basis
+    from generativeqc.elements import SYMBOLS
+
+    basis = load_r2scan3c_basis()
+    return {
+        SYMBOLS[element.atomic_number - 1]: [
+            [
+                shell.angular_momentum,
+                *[
+                    [float(exponent), *(float(column[i]) for column in shell.coefficients)]
+                    for i, exponent in enumerate(shell.exponents)
+                ],
+            ]
+            for shell in element.shells
+        ]
+        for element in basis.elements
+    }
+
+
+def reference_r2scan3c_correction(atoms: Any) -> Any:
+    """Use the existing independent, qualified CPU D4+gCP reference."""
+    from benchmarks.readme_omol25 import reference_correction
+
+    return reference_correction(atoms)
 
 
 def _finite_endpoint(
@@ -134,6 +166,14 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     if result.forces is None:
         raise RuntimeError(f"GenerativeQC {arm} force endpoint unavailable")
     forces = _finite_endpoint(float(result.energy), result.forces, len(atoms), seconds)
+    dispersion = getattr(result, "dispersion", None)
+    if method == "r2scan-3c" and not (
+        dispersion is not None
+        and getattr(dispersion, "ok", False)
+        and getattr(dispersion.d4, "ok", False)
+        and getattr(dispersion.gcp, "ok", False)
+    ):
+        raise RuntimeError("native r2SCAN-3c omitted D4/gCP corrections")
 
     # Fast is a public PrecisionCalculator wrapper; its internally selected
     # Calculator may have DIFFERENT default controls and may perform an FP64
@@ -218,6 +258,16 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
         "grid_response": True,
         "settings": settings,
         "precision_validation": validation_info,
+        "composite_corrections": (
+            {
+                "provider": "native-canonical-D4+gCP",
+                "complete": True,
+                "included_in_timing": True,
+                "energy_hartree": float(dispersion.energy),
+            }
+            if method == "r2scan-3c"
+            else None
+        ),
         "mixed_fock_builds": work.get("mixed_stage_fock_builds")
         if isinstance(work, dict)
         else None,
@@ -239,9 +289,12 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
 
     cp.cuda.runtime.deviceSynchronize()
     started = perf_counter()
+    orbital_basis = (
+        reference_r2scan3c_basis() if method == "r2scan-3c" else "def2-svp"
+    )
     mol = gto.M(
         atom=atoms,
-        basis="def2-svp",
+        basis=orbital_basis,
         cart=False,
         charge=0,
         spin=0,
@@ -257,6 +310,13 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
     # Important: even grid_response remains at GPU4PySCF's REAL default.
     grid_response = bool(getattr(gradient, "grid_response", False))
     forces = -cp.asnumpy(gradient.kernel())
+    # GPU4PySCF owns default electronic r2SCAN; independent CPU D4+gCP
+    # provides the other two canonical 3c contributions, entirely IN time.
+    correction_energy = None
+    if method == "r2scan-3c":
+        correction_energy, correction_gradient = reference_r2scan3c_correction(atoms)()
+        energy += float(correction_energy)
+        forces -= correction_gradient
     cp.cuda.runtime.deviceSynchronize()
     seconds = perf_counter() - started
     forces = _finite_endpoint(energy, forces, len(atoms), seconds)
@@ -285,6 +345,18 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
         ),
         "force_grid_response_default": grid_response,
         "force_grid_response_executed": grid_response,
+        "composite_corrections": (
+            {
+                "provider": "independent-CPU-dftd4+gCP",
+                "d4": {
+                    "s6": 1.0, "s8": 0.0, "s9": 2.0,
+                    "a1": 0.42, "a2": 5.65, "ga": 2.0, "gc": 1.0,
+                },
+                "included_in_timing": True,
+                "energy_hartree": float(correction_energy),
+            }
+            if method == "r2scan-3c" else None
+        ),
     }
     if method == "wb97m-v":
         from gpu4pyscf.dft import numint
