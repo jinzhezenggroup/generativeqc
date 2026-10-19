@@ -183,3 +183,25 @@ not an end-user Python runtime dependency.
 This is a transitional scientific owner: compiler-generated GFN2 pieces from
 #504/#505 are intended to replace duplicated handwritten equations after
 independent qualification, while the GenerativeQC-owned SCC/runtime boundary remains.
+
+## GPU4PySCF-aligned MD Coulomb engine
+
+The compact MD radial lowering in
+`python/generativeqc_compiler/integral/md_j_engine_cuda.py` and its generated
+CUDA header adapts the Apache-2.0 GPU4PySCF MD engine, Copyright 2021-2025
+The PySCF Developers. All Rights Reserved. The pinned source is
+`pyscf/gpu4pyscf@9af748a71ca8f4881c604332c2f0cc1632e033ac`; source paths and
+hashes are in the `gpu4pyscf-md-j` entry of `upstream/manifest.json`.
+
+The modification notice in both generator and emitted header identifies the
+compact dependency-ordered lowering, retained GenerativeQC Boys implementation,
+and explicit density/symmetry compatibility adapter. Native scheduling follows
+the upstream decontracted pair/Hermite/hierarchy dataflow while retaining
+GenerativeQC's exact public-AO screening and bounded native ownership. No
+GPU4PySCF or PySCF runtime dependency is introduced into production.
+
+The complete Apache-2.0 license is retained in
+`LICENSES/gpu4pyscf-Apache-2.0.txt`, distributed in wheels and native SDK/CLI
+installs. The pinned upstream tree has no NOTICE file; this attribution is
+GenerativeQC's notice, not an invented upstream NOTICE. The overall project
+continues to be distributed under GPL-3.0-or-later.

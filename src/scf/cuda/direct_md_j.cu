@@ -7,6 +7,7 @@
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/hermite_recurrence.cuh"
 #include "scf/cuda/md_hermite_index.cuh"
+#include "scf/cuda/md_j_engine.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -324,6 +325,13 @@ cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, co
     if (error != cudaSuccess) return error;
   }
   md.active_pair_count = md.active_pair_offsets[5];
+  if (md.reference_engine) {
+    // Reference pair_loc covers the complete decontracted inventory. The
+    // hierarchy performs conservative pruning without mutating pair identity.
+    md.residual_candidate_count =
+        screening > 0.0 ? md.active_pair_count * (md.active_pair_count + 1ULL) / 2 : 0;
+    return cudaSuccess;
+  }
   error = cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream);
   if (error != cudaSuccess) return error;
   md.class_offsets[0] = 0;
@@ -363,6 +371,12 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
       batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
+  if (md.reference_engine) {
+    launch_md_j_engine(stream, md, system_begin, end, screening);
+    md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
+        batch, md, system_begin, end, coulomb);
+    return;
+  }
   if (md.reciprocal) {
     launch_md_reciprocal_potential<0, 0>(stream, md, system_begin, end, screening);
     launch_md_reciprocal_potential<0, 1>(stream, md, system_begin, end, screening);

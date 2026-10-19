@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "scf/cuda/md_j_engine_contract.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -45,6 +46,7 @@ struct MdJPrimitive {
 struct MdJWorkCounts {
   unsigned long long uniform_roots[25]{}, uniform_directions[25]{}, uniform_summands[25]{};
   unsigned long long residual_candidates[25]{}, residual_tasks[25]{}, residual_roots[25]{};
+  unsigned long long engine_tiles[25]{}, engine_screened_tiles[25]{};
 };
 
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.
@@ -65,6 +67,12 @@ struct MdJView {
   MdJWorkCounts* work_counts{};
   /** Freeze the schedule with the resident owner; replay never polls policy. */
   bool reciprocal{};
+  /** Selected once, after the entire reference-engine workspace is admitted.
+   * The original AO-pair mask and residual owner remain authoritative. */
+  bool reference_engine{};
+  MdJHierarchyStorage hierarchy_layout{};
+  MdJScreenBound* hierarchy{};
+  std::size_t pair_loc_offsets[6]{};
   std::size_t active_pair_count{};
   std::size_t residual_candidate_count{};
   /** Compact angular segments let each source kernel retain a fixed recurrence
@@ -88,6 +96,10 @@ __host__ __device__ constexpr unsigned md_j_hermite_count(unsigned angular) {
 
 cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, const double* bounds,
                          double screening);
+
+/** Complete the sorted primitive pair_loc map after preparation-only upload.
+ * No allocation, host integral evaluation or replay-time host poll. */
+cudaError_t prepare_md_j_engine_layout(cudaStream_t stream, MdJView md);
 
 /** Refresh conservative total-density bounds before the J-only residual source.
  * K never consumes this density-dependent screening state. */

@@ -128,6 +128,17 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return a*b; }
 int allocation_index=0, failure_stage=-1, failure_kind=1;
 void allocation_fault() { if(allocation_index++==failure_stage) fault(failure_kind); }
 cudaError_t prepare_md_j(cudaStream_t, int, MdJView&, double*, double) { return cudaSuccess; }
+constexpr int cudaMemcpyDeviceToHost=0,cudaMemcpyHostToDevice=1;
+cudaError_t cudaMemcpyAsync(void* destination,const void* source,std::size_t bytes,int kind,cudaStream_t) {
+  allocation_fault();
+  pending.push_back({destination,source,bytes,kind==cudaMemcpyHostToDevice});
+  return cudaSuccess;
+}
+namespace generativeqc::scf::cuda_execution {
+cudaError_t prepare_md_j_engine_layout(cudaStream_t,MdJView) {
+  allocation_fault(); return cudaSuccess;
+}
+}
 """
 
 MD_DRIVER = r"""
@@ -155,6 +166,7 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
     bool propagated=false;
     try {
       MD_PREPARATION
+      assert(pending.empty()); // No preparation staging may outlive this scope.
     } catch(const DirectJkFailure& f) {
       propagated=true; assert(f.status!=GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
@@ -170,6 +182,11 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
       const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
       assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
+      const auto engine=std::getenv("GENERATIVEQC_MD_J_ENGINE");
+      const bool reference=engine && std::strcmp(engine,"reference")==0;
+      assert(owner.md_j.reference_engine==reference);
+      assert(bool(owner.md_j.hierarchy)==reference);
+      assert(!reference || owner.md_j.hierarchy_layout.valid);
     } else {
       assert(propagated);
     }
@@ -193,14 +210,17 @@ int main() {
 """
 
 
+@pytest.mark.parametrize("engine", ["incumbent", "reference"])
 @pytest.mark.parametrize("counted", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
     native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
     counted: bool,
+    engine: str,
 ) -> None:
     """Optional diagnostic storage obeys the same admission and rollback cap."""
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", engine)
     if counted:
         monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
     else:
@@ -219,6 +239,7 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         "struct HostBatch" + MD_STUBS.split("struct HostBatch", 1)[1],
         cpp_record_definition(source, "MdJHost") + ";",
         cpp_function_definition(source, "direct_jk_check"),
+        cpp_record_definition(source, "DirectJkDownloadFence") + ";",
         cpp_function_definition(
             source, "direct_jk_optional_storage", include_template=True
         ),
@@ -263,6 +284,7 @@ def test_canonical_transform_storage_retains_existing_cap(
     monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
     monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL", raising=False)
     monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
     basis = json.loads(
         (ROOT / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json").read_text()
     )
@@ -359,3 +381,68 @@ int main() {
         ],
     )
     subprocess.run([str(binary)], check=True, timeout=30)
+
+
+def test_reference_hierarchy_admission_preserves_incumbent_cap(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Insufficient optional hierarchy capacity keeps the complete old owner."""
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaStream_t=void*; using cudaError_t=int;\n"
+    )
+    production = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
+    cpp, binary = tmp_path / "capacity.cpp", tmp_path / "capacity"
+    cpp.write_text(
+        "#include <cassert>\n#include <cstdlib>\n#include <cstring>\n"
+        "#include <stdexcept>\n#include <vector>\n"
+        + MD_STUBS.split("namespace runtime", 1)[0]
+        + "\nstd::size_t direct_jk_product(std::size_t a,std::size_t b) {"
+        "if(b && a>std::numeric_limits<std::size_t>::max()/b) throw std::bad_alloc();"
+        "return a*b;}\n"
+        + cpp_record_definition(production, "MdJHost")
+        + r""";
+int main() {
+  unsetenv("GENERATIVEQC_DISABLE_MD_J");
+  unsetenv("GENERATIVEQC_MD_J_WORK_COUNTS");
+  unsetenv("GENERATIVEQC_MD_J_RECIPROCAL");
+  unsetenv("GENERATIVEQC_MD_J_ENGINE");
+  HostBatch host;
+  MdJHost incumbent;
+  assert(incumbent.prepare(host,kMdJResidentCap));
+  assert(!incumbent.reference_engine);
+  setenv("GENERATIVEQC_MD_J_ENGINE","reference",1);
+  MdJHost complete;
+  assert(complete.prepare(host,kMdJResidentCap) && complete.reference_engine);
+  assert(complete.bytes==incumbent.bytes+complete.hierarchy_layout.bytes);
+  assert(complete.pair_loc_offsets[5]==complete.hermites);
+  for(auto capacity:{incumbent.bytes,complete.bytes-1}) {
+    MdJHost bounded;
+    assert(bounded.prepare(host,capacity));
+    assert(!bounded.reference_engine && bounded.bytes==incumbent.bytes);
+    assert(bounded.primitives.size()==incumbent.primitives.size());
+    assert(bounded.ordered==incumbent.ordered);
+    assert(bounded.transform_slots==incumbent.transform_slots);
+  }
+  MdJHost exact;
+  assert(exact.prepare(host,complete.bytes) && exact.reference_engine);
+  MdJHost insufficient;
+  assert(!insufficient.prepare(host,incumbent.bytes-1));
+  setenv("GENERATIVEQC_MD_J_ENGINE","unknown",1);
+  bool failed=false;
+  try { MdJHost invalid; invalid.prepare(host,kMdJResidentCap); }
+  catch(const std::invalid_argument&) { failed=true; }
+  assert(failed);
+}
+"""
+    )
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)

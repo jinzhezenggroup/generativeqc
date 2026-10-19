@@ -304,6 +304,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_MD_J_ENGINE": relative.as_posix(),
     }
 
 

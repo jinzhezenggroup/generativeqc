@@ -86,8 +86,12 @@
       "controls": [
         "ks-runtime:GENERATIVEQC_KS_FAST_ANCHOR_DELTA"
       ],
-      "owner_issues": [1598],
-      "sources": ["src/dft/cuda_ks.cpp"],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
       "rationale": "Unset admits fixed FP64 J/K/range-K anchors at 192 or more AOs for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves, without a fixed upper AO limit. Shared budget-Fock admission also has no fixed AO or atom-count ceiling; native dimensions, actual resources and all other scientific conditions remain checked. Explicit 1 opts in smaller scientifically eligible owners; 0 disables. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged, then retired at a pressured force handoff without revoking D/W/XC or the final token; later solves use ordinary Fast. Numerical acceptance thresholds are unchanged. Historical measurements do not qualify every newly admitted larger shape.",
       "revisit_condition": "Require profitable complete-endpoint evidence before lowering the 192-AO automatic floor: retained water-12 observations are adverse. Removing count ceilings is not a new large-size accuracy or speed qualification. Record independent large-system energy/force gates and actual work/resource failures separately. Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger anchor domains independently; preserve strict full-target audits, explicit rollback and force-phase optional-memory fallback.",
       "evidence": [
@@ -1715,6 +1719,33 @@
       "evidence": [
         "tests/python/test_tensor_where_jvp_program.py",
         "docs/developer/tensor_ir.md"
+      ]
+    },
+    {
+      "id": "dft.md-j-reference-engine",
+      "classification": "needs-qualification",
+      "controls": [
+        "dft-policy:GENERATIVEQC_MD_J_ENGINE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/md_j_engine.cuh",
+        "python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+      ],
+      "rationale": "Explicit reference selects the integrated GPU4PySCF-aligned J-value backend for the existing strict-FP64 s/p/d domain. Sorted primitive pair_loc, conservative FP64 six-level hierarchy and generated compact reciprocal contraction retain the exact public-AO mask and native residual source. Unset/incumbent keeps the previously qualified default; optional cap, ledger, K, mixed and derivative policies remain unchanged. Host mathematics and lifecycle checks do not qualify CUDA execution or performance.",
+      "revisit_condition": "Require source-identified independent raw J and complete HF/DFT energy+force integration, CUDA sanitizer/tail/graph replay, exact-mask work accounting, and matched full-size cold/warm endpoint comparisons before default promotion or expansion to higher angular/multiple independent densities.",
+      "evidence": [
+        "docs/developer/md_j_engine.md",
+        "tests/python/test_md_j_engine_math.py",
+        "tests/python/test_md_j_engine_contract.py",
+        "tests/python/test_md_j_engine_reference.py",
+        "tests/python/test_md_j_engine_runtime.py",
+        "tests/python/test_md_j_engine_cuda.py",
+        "tests/python/test_md_j_resources.py",
+        "benchmarks/md_j_engine_acceptance.py"
       ]
     }
   ]

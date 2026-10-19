@@ -105,6 +105,10 @@ struct MdJHost {
   std::size_t transforms{}, hermites{}, bytes{};
   bool work_counts{};
   bool reciprocal{};
+  bool reference_engine{};
+  MdJHierarchyStorage hierarchy_layout{};
+  std::array<std::size_t, 6> pair_loc_offsets{};
+  std::size_t preparation_bytes{};
 
   bool prepare(const HostBatch& host, std::size_t available) {
     const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
@@ -120,6 +124,10 @@ struct MdJHost {
     if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
       throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL must be 0 or 1");
     reciprocal = !reuse || std::strcmp(reuse, "1") == 0;
+    const char* engine = std::getenv("GENERATIVEQC_MD_J_ENGINE");
+    if (engine && std::strcmp(engine, "incumbent") != 0 && std::strcmp(engine, "reference") != 0)
+      throw std::invalid_argument("GENERATIVEQC_MD_J_ENGINE must be incumbent or reference");
+    const bool request_reference = engine && std::strcmp(engine, "reference") == 0;
     const auto total_pairs = host.shell_pair_first.size();
     if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
         host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
@@ -210,6 +218,22 @@ struct MdJHost {
           ordered.push_back(static_cast<std::uint32_t>(index));
     }
     class_offsets[5] = ordered.size();
+    if (request_reference) {
+      std::uint64_t counts[5]{};
+      for (unsigned angular = 0; angular < 5; ++angular) {
+        counts[angular] = class_offsets[angular + 1] - class_offsets[angular];
+        pair_loc_offsets[angular + 1] =
+            pair_loc_offsets[angular] + counts[angular] * md_j_hermite_count(angular);
+      }
+      // Extra hierarchy never raises the existing optional 128-MiB allowance.
+      // Insufficient capacity retains the admitted incumbent MD pipeline.
+      hierarchy_layout = md_j_hierarchy_storage(counts, available - bytes);
+      reference_engine = hierarchy_layout.valid;
+      if (reference_engine) {
+        bytes += hierarchy_layout.bytes;
+        preparation_bytes = direct_jk_product(pairs.size(), 2 * sizeof(double));
+      }
+    }
     return true;
   }
 };
@@ -1139,6 +1163,13 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             if (md_host.work_counts)
               md.work_counts = reinterpret_cast<MdJWorkCounts*>(scratch(sizeof(MdJWorkCounts)));
             md.reciprocal = md_host.reciprocal;
+            md.reference_engine = md_host.reference_engine;
+            if (md.reference_engine) {
+              md.hierarchy_layout = md_host.hierarchy_layout;
+              md.hierarchy = reinterpret_cast<MdJScreenBound*>(scratch(md.hierarchy_layout.bytes));
+              std::copy(md_host.pair_loc_offsets.begin(), md_host.pair_loc_offsets.end(),
+                        md.pair_loc_offsets);
+            }
             md.transforms = scratch(md_host.transforms * sizeof(double));
             md.density = scratch(md_host.hermites * sizeof(double));
             md.potential = scratch(md_host.hermites * sizeof(double));
@@ -1147,7 +1178,49 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
             std::copy(md_host.class_offsets.begin(), md_host.class_offsets.end(), md.class_offsets);
             direct_jk_check(prepare_md_j(plan->stream, plan->batch, md, plan->bounds,
                                          plan->screening_tolerance));
-            plan->diagnostic.schedule = "md-j-hermite-public-ao-with-source-ordered-jk";
+            if (md.reference_engine) {
+              // Sort decontracted pair descriptors by descending public-pair q
+              // inside each angular bucket. This preparation-only metadata read
+              // performs no integral work; replay remains entirely on device.
+              std::vector<double> q(md.pair_count), minimum(md.pair_count);
+              DirectJkDownloadFence fence{plan->stream};
+              direct_jk_check(cudaMemcpyAsync(q.data(), md.maximum_bounds,
+                                              q.size() * sizeof(double), cudaMemcpyDeviceToHost,
+                                              plan->stream));
+              direct_jk_check(cudaMemcpyAsync(minimum.data(), md.minimum_bounds,
+                                              minimum.size() * sizeof(double),
+                                              cudaMemcpyDeviceToHost, plan->stream));
+              fence.complete();
+              const auto maximum = *std::max_element(q.begin(), q.end());
+              const auto active = [&](std::uint32_t index) {
+                return !(minimum[md_host.primitives[index].pair] * maximum <
+                         plan->screening_tolerance);
+              };
+              for (unsigned angular = 0; angular < 5; ++angular) {
+                auto first = md_host.ordered.begin() + md.class_offsets[angular];
+                auto last = md_host.ordered.begin() + md.class_offsets[angular + 1];
+                std::sort(first, last, [&](std::uint32_t a, std::uint32_t b) {
+                  if (active(a) != active(b)) return active(a);
+                  const auto aq = q[md_host.primitives[a].pair];
+                  const auto bq = q[md_host.primitives[b].pair];
+                  return aq > bq || (aq == bq && a < b);
+                });
+                // Keep the incumbent's geometry-only active census. Storage
+                // remains fully packed, but known-ineligible primitives do not
+                // restore a quadratic source search in sparse systems.
+                md.hierarchy_layout.buckets[angular].count =
+                    static_cast<std::size_t>(std::count_if(first, last, active));
+              }
+              DirectJkDownloadFence upload_fence{plan->stream};
+              direct_jk_check(cudaMemcpyAsync(md.ordered_primitives, md_host.ordered.data(),
+                                              md_host.ordered.size() * sizeof(std::uint32_t),
+                                              cudaMemcpyHostToDevice, plan->stream));
+              direct_jk_check(prepare_md_j_engine_layout(plan->stream, md));
+              upload_fence.complete();
+            }
+            plan->diagnostic.schedule = md.reference_engine
+                                            ? "md-j-reference-public-ao-with-source-ordered-jk"
+                                            : "md-j-hermite-public-ao-with-source-ordered-jk";
           },
           [&] { plan->md_j = {}; });
     }
@@ -1209,10 +1282,12 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                                  ? "canonical-public-ao-jk/screened-rows/automatic"
                                  : "canonical-public-ao-jk/dense-angular-bucketed/automatic");
     if (plan->md_j.minimum_bounds) {
-      info.schedule = "md-j-hermite/retained-k";
+      info.schedule =
+          plan->md_j.reference_engine ? "md-j-reference/retained-k" : "md-j-hermite/retained-k";
       info.host_preparation_bytes +=
-          sizeof(md_host) + runtime::vector_capacities(md_host.pairs, md_host.primitives,
-                                                       md_host.ordered, md_host.transform_slots);
+          sizeof(md_host) + md_host.preparation_bytes +
+          runtime::vector_capacities(md_host.pairs, md_host.primitives, md_host.ordered,
+                                     md_host.transform_slots);
     }
     info.derivative_order = derivative_order;
     info.screening_tolerance = screening_tolerance;
@@ -1612,6 +1687,20 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                        counts.uniform_directions[angular], counts.uniform_summands[angular],
                        counts.residual_candidates[angular], counts.residual_tasks[angular],
                        counts.residual_roots[angular]);
+        if (plan->md_j.reference_engine)
+          for (unsigned bra = 0; bra < 5; ++bra)
+            for (unsigned ket = bra; ket < 5; ++ket) {
+              const auto index = 5 * bra + ket;
+              std::fprintf(
+                  stderr,
+                  "MD_J_ENGINE_WORK fock=%zu bra=%u ket=%u source_tiles=%llu "
+                  "screened_tiles=%llu bra_active_primitives=%llu "
+                  "ket_active_primitives=%llu\n",
+                  plan->md_j_calls, bra, ket, counts.engine_tiles[index],
+                  counts.engine_screened_tiles[index],
+                  static_cast<unsigned long long>(plan->md_j.hierarchy_layout.buckets[bra].count),
+                  static_cast<unsigned long long>(plan->md_j.hierarchy_layout.buckets[ket].count));
+            }
       }
     }
     if (dispatch.generated_coulomb) {
