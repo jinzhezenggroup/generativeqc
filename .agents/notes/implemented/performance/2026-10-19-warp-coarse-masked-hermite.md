@@ -7,9 +7,21 @@ Date: 2026-10-19
 
 The retained opt-in implementation is packaged on PR #2600 commit
 `aacbccc275274cb70e36b76a646750fe667acf3e`, not the original investigation's
-older dense-E checkout. Both measured native/compiler source inventories match
-this packaging exactly. The historical checkout warnings below refer to that
-original investigation. A machine-readable evidence summary is retained under
+older dense-E checkout. The six measured native/compiler SHA256 entries in
+`summary.json` match the original packaging commit
+`45b2a4111a989d216e5f730a1f127f5ff7e32ea8` exactly. Subsequent pre-commit commit
+`79008964f373ddc47b174e843afe6f2fe54fdd77` reformats
+`src/scf/cuda/direct_jk.cpp`, `src/scf/cuda/direct_md_jk.cu` and
+`python/generativeqc_compiler/integral/md_j_masked_cuda.py`; their source bytes
+no longer match the measured hashes. It also reformats the native test probe.
+The original and formatted compiler modules emit the same 74,031-byte masked-J
+header, SHA256
+`7cc1fc29f3a6f2a08269d34e5fb3e30ca1d74bc194e9ca18d130ecd9a02ee999`.
+This one-off comparison establishes emitted-header equivalence only; it does
+not requalify the formatted native/library or stationary-AOT source closure.
+All recorded measured hashes and receipts remain unchanged. The historical
+checkout warnings below refer to the original investigation. A machine-readable
+evidence summary is retained under
 `benchmarks/results/2026-10-19-md-j-compacted-residual/`. The unmeasured later
 primitive-strip prototype is excluded; no new default is promoted.
 

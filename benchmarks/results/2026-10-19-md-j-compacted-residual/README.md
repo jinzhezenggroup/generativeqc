@@ -4,7 +4,13 @@ This is historical evidence for the opt-in `(2,1)` compacted residual consumer,
 not default-promotion evidence or a claim of GPU4PySCF-equivalent performance.
 The implementation is stacked on PR #2600, commit
 `aacbccc275274cb70e36b76a646750fe667acf3e`. The native source and compiler module
-SHA256 inventories in `summary.json` match the submitted implementation.
+SHA256 inventories in `summary.json` match the original packaging commit
+`45b2a4111a989d216e5f730a1f127f5ff7e32ea8`. The later pre-commit commit
+`79008964f373ddc47b174e843afe6f2fe54fdd77` changes three of those six source
+files, so the inventories do not match that formatted head byte-for-byte.
+Its generated masked-J header is byte-identical; the decision note below records
+that narrower equivalence. The recorded library and stationary-AOT receipts
+remain tied to the measured source, not a requalification of the formatted head.
 This packaging deliberately excludes the later primitive-strip prototype.
 
 ## Scope and measurements
@@ -42,8 +48,8 @@ This is not a repeated endpoint distribution or a GPU4PySCF full-SCF comparison.
 
 ## Qualification and unchanged contracts
 
-- PR packaging: 110 focused host tests pass, including the parent compact-E
-  capacity and diagnostic contracts; compiler structure checks 568 modules
+- Original PR packaging: 110 focused host tests pass, including the parent
+  compact-E capacity and diagnostic contracts; compiler structure checks 568 modules
   with zero dependency errors, and Ruff lint passes.
 - Slurm 10352: 76 real-CUDA oracle cases ordinarily and under each of memcheck,
   racecheck and synccheck; no reported errors or hazards.
@@ -67,7 +73,7 @@ The PR is a draft: the parent is not merged, larger-size/fallback qualification
 and repeated complete-endpoint cohorts remain necessary before promotion.
 Changes to the native or compiler source invalidate transfer of these receipts
 unless independently requalified. No new GPU timing was run merely to package
-the already-qualified source into a PR.
+the measured source into the original PR commit.
 
 ## Receipts
 
