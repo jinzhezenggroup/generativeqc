@@ -28,6 +28,7 @@ try:
         execution_environment,
         file_identity,
         observe_native,
+        process_identity,
         validate_child,
         validate_execution,
         validate_observation,
@@ -43,6 +44,7 @@ except ModuleNotFoundError:
         execution_environment,
         file_identity,
         observe_native,
+        process_identity,
         validate_child,
         validate_execution,
         validate_observation,
@@ -211,18 +213,30 @@ def main() -> int:
     )
     parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--diagnostic", action="store_true")
+    parser.add_argument(
+        "--nsys-binding",
+        type=Path,
+        help="sealed owned outer-launch and actual profiler-parent session evidence",
+    )
     args = parser.parse_args()
     identity = json.loads(args.identity.read_text())
     check_identity(identity)
     # These are the only environment values recorded; never serialize credentials.
     environment = execution_environment(os.environ)
     native_environment = validate_execution(environment, identity["environment_sha256"])
+    binding_bytes = args.nsys_binding.read_bytes() if args.nsys_binding else None
+    binding = json.loads(binding_bytes) if binding_bytes is not None else None
+    binding_hash = canonical_hash(binding) if binding is not None else None
+    parent_process = process_identity(os.getpid()) if binding is not None else None
     validate_observation(
         environment,
         identity["observation_policy"],
         identity["observation_policy_sha256"],
         args.diagnostic,
         str(args.output.resolve()),
+        binding,
+        binding_hash,
+        parent_process,
     )
     if any(
         native_environment.get(key) != "1"
@@ -246,6 +260,8 @@ def main() -> int:
     oracle = json.loads(oracle_bytes)
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "oracle.json").write_bytes(oracle_bytes)
+    if binding_bytes is not None:
+        (args.output / "nsys_binding.json").write_bytes(binding_bytes)
     # Resolve the actual loader choice before timing, using this frozen executable.
     loader = subprocess.run(
         ["ldd", str(args.executable.resolve())],
@@ -299,6 +315,9 @@ def main() -> int:
         "loader_libraries": loader_libraries,
         "execution_environment": environment,
         "execution_environment_sha256": canonical_hash(environment),
+        "profiler_session_binding": binding,
+        "profiler_session_binding_sha256": binding_hash,
+        "parent_process": parent_process,
     }
     # Freeze the launcher dependencies in this immutable run directory. Its
     # Python imports resolve beside the copied script, not an ambient package.
@@ -370,6 +389,8 @@ def main() -> int:
                 supervisor = NativeSupervisor(process, deadline)
                 supervisor.start()
                 receipt["native_pid"] = process.pid
+                if binding is not None:
+                    receipt["native_process"] = process_identity(process.pid)
                 write_receipt()
                 attestation_started = True
                 attestation_start = time.perf_counter_ns()
@@ -435,7 +456,7 @@ def main() -> int:
             receipt["outcome"] = "FAIL"
             return 2
         child = json.loads(child_path.read_text())
-        validate_child(child, plan, process.pid)
+        validate_child(child, plan, process.pid, receipt.get("native_process"))
         receipt["child_environment_verified"] = True
         record = json.loads(output.read_text())
         receipt["science"] = check_science(record, oracle)

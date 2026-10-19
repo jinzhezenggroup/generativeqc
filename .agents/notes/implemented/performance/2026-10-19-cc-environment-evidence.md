@@ -70,3 +70,42 @@ NVIDIA CUDA 12.9.1 cuBLAS section 2.1.4 documents :16:8 as a debug reproducibili
 setting that may limit performance. The cuSolverDN create documentation describes
 an initial workspace on SM >=9; it does not prove ownership of the full observed
 354 MiB. These are diagnostic hypotheses, not automatic scientific acceptance.
+
+## Nsight session-control follow-up
+
+The first actual CPU NVTX parent/exec-child control failed with `Invalid session
+ID format`: the finite child environment retained the injection libraries but
+omitted `NSYS_PROFILING_SESSION_ID`. Adding only this named field in an ignored
+prototype preserved the same-PID witness and produced the two expected nested
+parent/child NVTX ranges with successful SQLite export. The negative capture
+remains separate. This is CPU instrumentation evidence, not CUDA activity or
+scientific qualification.
+
+Execution/child and observation-policy schemas now explicitly advance to v2.
+Semantic profile identity remains v1 and excludes this diagnostic control.
+The prelaunch policy declares one profiler-generated placeholder and source;
+clean and disabled roles require absence, including rejection of an empty
+present value. The actual opaque value is sealed separately in the parent,
+execution and same-PID child evidence. The 1024-character limit is our bounded
+admission policy; no NVIDIA UUID/numeric format is assumed.
+
+Enabled diagnostics require the original policy hash, outer absence record,
+PID/starttime identities, actual profiler executable identity and frozen
+version/argv, parent captured value, and a successful retained session query.
+The reporter revalidates the binding and copied artifact; the attribution reader
+also requires its capture tool metadata and both packets' bindings to agree.
+The outer controller must reject a preset value before spawning Nsight. It must
+independently verify the actual tool/launch and raw outputs: self-consistent
+hashes and variable presence alone do not prove that profiling occurred.
+
+The user's `--session-new` name and the injected session ID are distinct.
+Session listing evidence binds only the owned name; the ID mapping remains
+explicitly UNAVAILABLE. No relation is invented from apparent formatting.
+Actual CPU exporter diagnostics were Info only, with no CUDA capture claim.
+
+CPU lifecycle controls additionally showed that targeted shutdown after a
+controller timeout can return profiler exit 0. Original timeout/native errors
+must survive teardown. An owned session row may briefly outlive target reap;
+bounded settlement cannot convert query failure or unknown state into success.
+The formal outer controller still needs all-exception cleanup qualification,
+new-head validation/review and prelaunch audit before another GPU submission.

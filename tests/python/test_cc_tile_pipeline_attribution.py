@@ -1811,3 +1811,313 @@ def test_attribution_rejects_missing_observer_field_with_fresh_hash(side: int) -
     )
     with pytest.raises(ValueError):
         summarize(*packets)
+
+
+def session_fixture() -> tuple[dict, dict, dict, dict]:
+    from benchmarks.cc_tile_environment import SESSION_KEY, SESSION_SCHEMA
+
+    clean = execution_environment({})
+    profiler = {
+        "path": "/owned/nsys",
+        "sha256": "a" * 64,
+        "version": "fixture-nsys",
+        "argv": [
+            "/owned/nsys",
+            "profile",
+            "--session-new=owned-capture",
+            "/owned/parent",
+        ],
+        "session_name": "owned-capture",
+    }
+    policy = observation_policy(
+        clean["observation"], clean["observation"], nsys_profiler=profiler
+    )
+    execution = execution_environment({SESSION_KEY: "opaque-ID-1"})
+    parent = {"pid": 44, "starttime": "12000"}
+    query = "42 owned-capture Running\n"
+    binding = {
+        "schema": SESSION_SCHEMA,
+        "policy_sha256": canonical_hash(policy),
+        "profiler": profiler,
+        "outer_process": {"pid": 22, "starttime": "11000"},
+        "outer_session": {"present": False, "value": None},
+        "profiler_process": {
+            "process": {"pid": 33, "starttime": "11900"},
+            "executable": "/owned/nsys",
+            "sha256": "a" * 64,
+        },
+        "parent": {"process": parent, "session_id": "opaque-ID-1"},
+        "session_query": {
+            "argv": ["/owned/nsys", "sessions", "list", "--show-header=false"],
+            "exit_code": 0,
+            "stdout": query,
+            "stdout_sha256": hashlib.sha256(query.encode()).hexdigest(),
+        },
+        "id_mapping": "UNAVAILABLE",
+    }
+    return policy, execution, binding, parent
+
+
+def validate_session_fixture(
+    policy: dict, execution: dict, binding: dict | None, parent: dict
+) -> None:
+    from benchmarks.cc_tile_environment import validate_execution, validate_observation
+
+    validate_execution(execution, canonical_hash(execution["profile"]))
+    validate_observation(
+        execution,
+        policy,
+        canonical_hash(policy),
+        True,
+        "/owned/run",
+        binding,
+        canonical_hash(binding) if binding is not None else None,
+        parent,
+    )
+
+
+def test_nsys_dynamic_id_retains_original_policy_and_semantic_profile() -> None:
+    from benchmarks.cc_tile_environment import SESSION_KEY
+
+    policy, execution, binding, parent = session_fixture()
+    original = deepcopy(policy)
+    validate_session_fixture(policy, execution, binding, parent)
+    execution["observation"][SESSION_KEY]["value"] = "different.opaque.session"
+    binding["parent"]["session_id"] = "different.opaque.session"
+    validate_session_fixture(policy, execution, binding, parent)
+    assert policy == original
+    assert execution["profile"] == execution_environment({})["profile"]
+
+
+@pytest.mark.parametrize("value", ["", "\0", "a" * 1025, "$NSYS_GENERATED_SESSION"])
+def test_nsys_session_rejects_invalid_actual_values(value: str) -> None:
+    from benchmarks.cc_tile_environment import SESSION_KEY
+
+    policy, execution, binding, parent = session_fixture()
+    execution["observation"][SESSION_KEY]["value"] = value
+    binding["parent"]["session_id"] = value
+    with pytest.raises(ValueError):
+        validate_session_fixture(policy, execution, binding, parent)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing-key",
+        "missing-binding",
+        "wrong-source",
+        "extra-rule",
+        "not-bool",
+        "disabled-tool",
+        "disabled-present",
+        "literal",
+        "clean-empty",
+        "other-key",
+        "parent-id",
+        "parent-pid",
+        "parent-starttime",
+        "profiler-exe",
+        "profiler-sha",
+        "profiler-argv",
+        "query-exit",
+        "query-hash",
+        "query-name",
+        "query-substring",
+        "mapping-claim",
+        "preset-empty",
+        "preset-id",
+        "missing-starttime",
+        "old-schema",
+    ],
+)
+def test_nsys_session_rejects_consistently_rehashed_invalid_evidence(
+    defect: str,
+) -> None:
+    from benchmarks.cc_tile_environment import SESSION_KEY
+
+    policy, execution, binding, parent = session_fixture()
+    if defect == "missing-key":
+        del execution["observation"][SESSION_KEY]
+    elif defect == "missing-binding":
+        binding = None
+    elif defect == "wrong-source":
+        policy["session_control"]["source"] = "manual"
+    elif defect == "extra-rule":
+        policy["session_control"]["other"] = "NSYS_*"
+    elif defect == "not-bool":
+        policy["session_control"]["enabled"] = 1
+    elif defect == "disabled-tool":
+        policy["session_control"]["enabled"] = False
+    elif defect == "disabled-present":
+        policy["session_control"].update(enabled=False, profiler=None)
+    elif defect == "literal":
+        policy["diagnostic"][SESSION_KEY]["value"] = "opaque-ID-1"
+    elif defect == "clean-empty":
+        policy["clean"][SESSION_KEY] = {"present": True, "value": ""}
+    elif defect == "other-key":
+        policy["diagnostic"]["LANG"] = deepcopy(policy["diagnostic"][SESSION_KEY])
+    elif defect == "parent-id":
+        binding["parent"]["session_id"] = "mismatch"
+    elif defect == "parent-pid":
+        parent = dict(parent, pid=45)
+    elif defect == "parent-starttime":
+        parent = dict(parent, starttime="12001")
+    elif defect == "profiler-exe":
+        binding["profiler_process"]["executable"] = "/wrong/nsys"
+    elif defect == "profiler-sha":
+        binding["profiler_process"]["sha256"] = "b" * 64
+    elif defect == "profiler-argv":
+        binding["profiler"] = dict(binding["profiler"], argv=["wrong"])
+    elif defect == "query-exit":
+        binding["session_query"]["exit_code"] = 1
+    elif defect == "query-hash":
+        binding["session_query"]["stdout_sha256"] = "b" * 64
+    elif defect in ("query-name", "query-substring"):
+        text = (
+            "42 other Running\n"
+            if defect == "query-name"
+            else "42 owned-capture-extra Running\n"
+        )
+        binding["session_query"].update(
+            stdout=text, stdout_sha256=hashlib.sha256(text.encode()).hexdigest()
+        )
+    elif defect == "mapping-claim":
+        binding["id_mapping"] = "ASSUMED_FROM_NAME"
+    elif defect in ("preset-empty", "preset-id"):
+        binding["outer_session"] = {
+            "present": True,
+            "value": "" if defect == "preset-empty" else "manual",
+        }
+    elif defect == "missing-starttime":
+        del binding["outer_process"]["starttime"]
+    elif defect == "old-schema":
+        execution["schema"] = "generativeqc.cc-execution-environment.v1"
+    if binding is not None:
+        binding["policy_sha256"] = canonical_hash(policy)
+    with pytest.raises(ValueError):
+        validate_session_fixture(policy, execution, binding, parent)
+
+
+@pytest.mark.parametrize("value", ["", "manual-ID"])
+def test_outer_launcher_rejects_preset_session_even_empty(value: str) -> None:
+    from benchmarks.cc_tile_environment import SESSION_KEY, require_unprofiled_launch
+
+    require_unprofiled_launch({})
+    with pytest.raises(ValueError, match="preset session"):
+        require_unprofiled_launch({SESSION_KEY: value})
+
+
+def test_dynamic_session_still_requires_same_pid_child_value() -> None:
+    from benchmarks.cc_tile_environment import SESSION_KEY, validate_child
+
+    _, execution, _, _ = session_fixture()
+    plan = {
+        "argv": ["/owned/native"],
+        "environment": execution,
+        "profile_sha256": canonical_hash(execution["profile"]),
+    }
+    child = {
+        "schema": CHILD_SCHEMA,
+        "status": "PREPARED_FOR_EXEC",
+        "pid": 50,
+        "process": {"pid": 50, "starttime": "22000"},
+        "argv": plan["argv"],
+        "environment": deepcopy(execution),
+        "environment_sha256": canonical_hash(execution),
+    }
+    validate_child(child, plan, 50, {"pid": 50, "starttime": "22000"})
+    child["environment"]["observation"][SESSION_KEY]["value"] = "wrong"
+    child["environment_sha256"] = canonical_hash(child["environment"])
+    with pytest.raises(ValueError):
+        validate_child(child, plan, 50, {"pid": 50, "starttime": "22000"})
+
+
+def session_packets() -> tuple[dict, dict]:
+    packets = fixture()
+    policy, execution, binding, parent = session_fixture()
+    capture = deepcopy(packets[0]["capture"])
+    capture.update(
+        profiler_version=binding["profiler"]["version"],
+        profiler_sha256=binding["profiler"]["sha256"],
+        profiler_argv=binding["profiler"]["argv"],
+    )
+    for packet in packets:
+        packet["identity"]["observation_policy"] = deepcopy(policy)
+        packet["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+        packet["execution_environment"] = deepcopy(execution)
+        packet["execution_environment_sha256"] = canonical_hash(execution)
+        packet["profiler_session_binding"] = deepcopy(binding)
+        packet["profiler_session_binding_sha256"] = canonical_hash(binding)
+        packet["parent_process"] = deepcopy(parent)
+        packet["capture"] = deepcopy(capture)
+    return packets
+
+
+@pytest.mark.parametrize("side", [0, 1])
+@pytest.mark.parametrize(
+    "defect",
+    ["missing-binding", "tool-version", "tool-hash", "tool-argv", "binding-hash"],
+)
+def test_attribution_independently_requires_actual_profiler_binding(
+    side: int, defect: str
+) -> None:
+    packets = session_packets()
+    summarize(*packets)
+    packet = packets[side]
+    if defect == "missing-binding":
+        del packet["profiler_session_binding"]
+    elif defect == "tool-version":
+        packet["capture"]["profiler_version"] = "wrong"
+    elif defect == "tool-hash":
+        packet["capture"]["profiler_sha256"] = "b" * 64
+    elif defect == "tool-argv":
+        packet["capture"]["profiler_argv"] = ["wrong"]
+    elif defect == "binding-hash":
+        packet["profiler_session_binding_sha256"] = "0" * 64
+    with pytest.raises(ValueError):
+        summarize(*packets)
+
+
+def test_attribution_rejects_two_individually_valid_different_session_bindings() -> (
+    None
+):
+    trace, receipt = session_packets()
+    # Use a different valid process starttime, preserving each local hash/schema.
+    receipt["profiler_session_binding"]["outer_process"]["starttime"] = "11001"
+    receipt["profiler_session_binding_sha256"] = canonical_hash(
+        receipt["profiler_session_binding"]
+    )
+    with pytest.raises(ValueError, match="session bindings differ"):
+        summarize(trace, receipt)
+
+
+@pytest.mark.parametrize("defect", ["missing", "different-starttime", "different-pid"])
+def test_profiled_child_requires_actual_parent_observed_process_identity(
+    defect: str,
+) -> None:
+    from benchmarks.cc_tile_environment import validate_child
+
+    _, execution, _, _ = session_fixture()
+    plan = {
+        "argv": ["/owned/native"],
+        "environment": execution,
+        "profile_sha256": canonical_hash(execution["profile"]),
+    }
+    observed = {"pid": 50, "starttime": "22000"}
+    child = {
+        "schema": CHILD_SCHEMA,
+        "status": "PREPARED_FOR_EXEC",
+        "pid": 50,
+        "process": dict(observed),
+        "argv": plan["argv"],
+        "environment": execution,
+        "environment_sha256": canonical_hash(execution),
+    }
+    if defect == "missing":
+        del child["process"]
+    elif defect == "different-starttime":
+        child["process"]["starttime"] = "22001"
+    else:
+        child["process"]["pid"] = 51
+    with pytest.raises(ValueError):
+        validate_child(child, plan, 50, observed)

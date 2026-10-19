@@ -14,6 +14,7 @@ from cc_tile_environment import (
     atomic_json,
     canonical_hash,
     execution_environment,
+    process_identity,
     validate_execution,
 )
 
@@ -39,6 +40,7 @@ def main() -> None:
                 "schema": CHILD_SCHEMA,
                 "status": "PREPARED_FOR_EXEC",
                 "pid": os.getpid(),
+                "process": process_identity(os.getpid()),
                 "argv": plan["argv"],
                 "environment": environment,
                 "environment_sha256": canonical_hash(environment),

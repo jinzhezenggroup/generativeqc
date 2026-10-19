@@ -20,9 +20,14 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 PROFILE_SCHEMA = "generativeqc.cc-profile-environment.v1"
-EXECUTION_SCHEMA = "generativeqc.cc-execution-environment.v1"
-CHILD_SCHEMA = "generativeqc.cc-child-environment.v1"
-OBSERVATION_SCHEMA = "generativeqc.cc-observation-policy.v1"
+EXECUTION_SCHEMA = "generativeqc.cc-execution-environment.v2"
+CHILD_SCHEMA = "generativeqc.cc-child-environment.v2"
+OBSERVATION_SCHEMA = "generativeqc.cc-observation-policy.v2"
+SESSION_SCHEMA = "generativeqc.cc-nsys-session.v1"
+SESSION_KEY = "NSYS_PROFILING_SESSION_ID"
+SESSION_PLACEHOLDER = "$NSYS_GENERATED_SESSION"
+# Local admission bound, not a vendor-specified session identifier format.
+SESSION_LIMIT = 1024
 SEMANTIC_KEYS = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -44,6 +49,7 @@ SEMANTIC_KEYS = (
     "GENERATIVEQC_RHF_RESIDENT_VALUES",
 )
 OBSERVATION_KEYS = (
+    SESSION_KEY,
     "PATH",
     "LD_LIBRARY_PATH",
     "LANG",
@@ -136,26 +142,206 @@ def execution_environment(environment: Mapping[str, str]) -> dict:
     }
 
 
-def observation_policy(clean: dict, diagnostic: dict) -> dict:
+def observation_policy(
+    clean: dict, diagnostic: dict, *, nsys_profiler: dict | None = None
+) -> dict:
     """Freeze two explicit observation roles without collapsing their differences."""
-    return {
+    if diagnostic.get(SESSION_KEY) != {"present": False, "value": None}:
+        raise ValueError("declare the session source before launch, not a literal ID")
+    result = {
         "schema": OBSERVATION_SCHEMA,
         "clean": deepcopy(clean),
         "diagnostic": deepcopy(diagnostic),
+        "session_control": {
+            "key": SESSION_KEY,
+            "source": "nsight-systems-parent",
+            "enabled": nsys_profiler is not None,
+            "profiler": deepcopy(nsys_profiler),
+        },
     }
+    if nsys_profiler is not None:
+        result["diagnostic"][SESSION_KEY] = {
+            "present": True,
+            "value": SESSION_PLACEHOLDER,
+        }
+    return result
+
+
+def _session_value(value: Any) -> None:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > SESSION_LIMIT
+        or "\0" in value
+        or SESSION_PLACEHOLDER in value
+    ):
+        raise ValueError("bounded nonempty opaque profiler session required")
+
+
+def require_unprofiled_launch(environment: Mapping[str, str]) -> None:
+    """Reject a pre-existing session before an owned outer profiler spawn."""
+    if SESSION_KEY in environment:
+        raise ValueError("outer launch cannot inherit a manually preset session")
+
+
+def _process_identity(value: Any) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"pid", "starttime"}
+        or type(value["pid"]) is not int
+        or value["pid"] <= 0
+        or not isinstance(value["starttime"], str)
+        or not value["starttime"].isascii()
+        or not value["starttime"].isdigit()
+        or len(value["starttime"]) > 32
+    ):
+        raise ValueError("PID and Linux process starttime binding required")
+
+
+def process_identity(pid: int) -> dict:
+    """Bind a live Linux process without reading its environment."""
+    stat = Path(f"/proc/{pid}/stat").read_text()
+    result = {"pid": pid, "starttime": stat[stat.rindex(")") + 2 :].split()[19]}
+    _process_identity(result)
+    return result
+
+
+def _profiler_recipe(value: Any) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"path", "sha256", "version", "argv", "session_name"}
+        or not isinstance(value["path"], str)
+        or not value["path"].startswith("/")
+        or "\0" in value["path"]
+        or not isinstance(value["sha256"], str)
+        or len(value["sha256"]) != 64
+        or any(c not in "0123456789abcdef" for c in value["sha256"])
+        or not isinstance(value["version"], str)
+        or not value["version"]
+        or len(value["version"]) > 512
+        or "\0" in value["version"]
+        or not isinstance(value["session_name"], str)
+        or not value["session_name"]
+        or len(value["session_name"]) > 64
+        or any(c.isspace() or c == "\0" for c in value["session_name"])
+        or not isinstance(value["argv"], list)
+        or not 2 <= len(value["argv"]) <= 256
+        or any(
+            not isinstance(arg, str) or not arg or "\0" in arg or len(arg) > 32768
+            for arg in value["argv"]
+        )
+        or value["argv"][:2] != [value["path"], "profile"]
+        or "--session-new=" + value["session_name"] not in value["argv"]
+    ):
+        raise ValueError("frozen Nsight executable/version/argv/session name required")
+
+
+def validate_session_binding(
+    binding: Any, binding_hash: Any, policy: dict, execution: dict, parent: Any
+) -> None:
+    """Check the retained launch chain; this alone cannot prove a real capture.
+
+    The owned outer controller must independently qualify the actual tool and
+    retain its raw outputs. The user session name and opaque injected ID are
+    separate identities; a session listing does not establish their mapping.
+    """
+    if (
+        not isinstance(binding, dict)
+        or set(binding)
+        != {
+            "schema",
+            "policy_sha256",
+            "profiler",
+            "outer_process",
+            "outer_session",
+            "profiler_process",
+            "parent",
+            "session_query",
+            "id_mapping",
+        }
+        or binding["schema"] != SESSION_SCHEMA
+        or binding["policy_sha256"] != canonical_hash(policy)
+        or canonical_hash(binding) != binding_hash
+        or binding["profiler"] != policy["session_control"]["profiler"]
+        or binding["outer_session"] != {"present": False, "value": None}
+        or binding["id_mapping"] != "UNAVAILABLE"
+    ):
+        raise ValueError("bound prelaunch policy and outer profiler evidence required")
+    _process_identity(binding["outer_process"])
+    _process_identity(parent)
+    actual_parent = binding["parent"]
+    if (
+        not isinstance(actual_parent, dict)
+        or set(actual_parent) != {"process", "session_id"}
+        or actual_parent["process"] != parent
+        or actual_parent["session_id"] != execution["observation"][SESSION_KEY]["value"]
+    ):
+        raise ValueError("actual parent profiler session binding mismatch")
+    _session_value(actual_parent["session_id"])
+    profiler = binding["profiler_process"]
+    recipe = binding["profiler"]
+    if (
+        not isinstance(profiler, dict)
+        or set(profiler) != {"process", "executable", "sha256"}
+        or profiler["executable"] != recipe["path"]
+        or profiler["sha256"] != recipe["sha256"]
+    ):
+        raise ValueError("actual profiler executable binding required")
+    _process_identity(profiler["process"])
+    query = binding["session_query"]
+    if (
+        not isinstance(query, dict)
+        or set(query) != {"argv", "exit_code", "stdout", "stdout_sha256"}
+        or query["argv"] != [recipe["path"], "sessions", "list", "--show-header=false"]
+        or type(query["exit_code"]) is not int
+        or query["exit_code"] != 0
+        or not isinstance(query["stdout"], str)
+        or len(query["stdout"]) > 65536
+        or not any(
+            recipe["session_name"] in line.split()
+            for line in query["stdout"].splitlines()
+        )
+        or hashlib.sha256(query["stdout"].encode()).hexdigest()
+        != query["stdout_sha256"]
+    ):
+        raise ValueError("successful retained owned-session query required")
 
 
 def validate_observation_policy(policy: Any, expected_hash: str) -> None:
     """Require declared complete roles and forbid injection into clean samples."""
     if (
         not isinstance(policy, dict)
-        or set(policy) != {"schema", "clean", "diagnostic"}
+        or set(policy) != {"schema", "clean", "diagnostic", "session_control"}
         or policy["schema"] != OBSERVATION_SCHEMA
     ):
         raise ValueError("explicit clean/diagnostic observation policy required")
+    control = policy["session_control"]
+    if (
+        not isinstance(control, dict)
+        or set(control) != {"key", "source", "enabled", "profiler"}
+        or control["key"] != SESSION_KEY
+        or control["source"] != "nsight-systems-parent"
+        or type(control["enabled"]) is not bool
+    ):
+        raise ValueError("explicit named profiler session source required")
+    if control["enabled"]:
+        _profiler_recipe(control["profiler"])
+    elif control["profiler"] is not None:
+        raise ValueError("disabled profiler session cannot declare a tool")
     for role in ("clean", "diagnostic"):
         _validate(policy[role], OBSERVATION_KEYS)
         for key, item in policy[role].items():
+            if (
+                item["present"]
+                and SESSION_PLACEHOLDER in item["value"]
+                and (
+                    role != "diagnostic"
+                    or key != SESSION_KEY
+                    or not control["enabled"]
+                    or item["value"] != SESSION_PLACEHOLDER
+                )
+            ):
+                raise ValueError("only the declared diagnostic session may be dynamic")
             if (
                 item["present"]
                 and "$RUN_DIR" in item["value"]
@@ -166,6 +352,16 @@ def validate_observation_policy(policy: Any, expected_hash: str) -> None:
                 )
             ):
                 raise ValueError("invalid run-specific observation path template")
+    absent = {"present": False, "value": None}
+    if policy["clean"][SESSION_KEY] != absent:
+        raise ValueError("clean samples require an absent profiler session")
+    expected_session = (
+        {"present": True, "value": SESSION_PLACEHOLDER}
+        if control["enabled"]
+        else absent
+    )
+    if policy["diagnostic"][SESSION_KEY] != expected_session:
+        raise ValueError("diagnostic session must match its prelaunch source rule")
     if any(
         policy["clean"][key]["present"] and policy["clean"][key]["value"]
         for key in INJECTION_KEYS
@@ -181,12 +377,24 @@ def validate_observation(
     policy_hash: str,
     diagnostic: bool,
     run_directory: str | None,
+    session_binding: Any = None,
+    session_binding_hash: Any = None,
+    parent_process: Any = None,
 ) -> None:
     """Match actual controls to a prior declaration, resolving only owned log paths."""
     validate_observation_policy(policy, policy_hash)
     if type(diagnostic) is not bool:
         raise ValueError("explicit observation role required")
     expected = deepcopy(policy["diagnostic" if diagnostic else "clean"])
+    if diagnostic and policy["session_control"]["enabled"]:
+        validate_session_binding(
+            session_binding, session_binding_hash, policy, execution, parent_process
+        )
+        expected[SESSION_KEY] = deepcopy(execution["observation"][SESSION_KEY])
+        if expected[SESSION_KEY]["present"] is not True:
+            raise ValueError("diagnostic profiler session must be present")
+    elif session_binding is not None or session_binding_hash is not None:
+        raise ValueError("unexpected profiler session evidence")
     for item in expected.values():
         if item["present"] and "$RUN_DIR" in item["value"]:
             if not isinstance(run_directory, str) or not run_directory:
@@ -206,6 +414,8 @@ def validate_execution(environment: Any, profile_hash: str) -> dict[str, str]:
         raise ValueError("bound execution environment required")
     validate_profile(environment["profile"], profile_hash)
     _validate(environment["observation"], OBSERVATION_KEYS)
+    if environment["observation"][SESSION_KEY]["present"]:
+        _session_value(environment["observation"][SESSION_KEY]["value"])
     return {
         key: item["value"]
         for group in (environment["profile"]["variables"], environment["observation"])
@@ -221,7 +431,9 @@ def atomic_json(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def validate_child(child: Any, plan: dict, pid: int) -> None:
+def validate_child(
+    child: Any, plan: dict, pid: int, native_process: Any = None
+) -> None:
     """Recompute the child's retained inheritance proof independently of flags."""
     argv = plan.get("argv")
     if (
@@ -245,6 +457,10 @@ def validate_child(child: Any, plan: dict, pid: int) -> None:
     ):
         raise ValueError("actual child environment/argv/PID binding mismatch")
     validate_execution(child["environment"], plan["profile_sha256"])
+    if child["environment"]["observation"][SESSION_KEY]["present"]:
+        _process_identity(native_process)
+        if native_process["pid"] != pid or child.get("process") != native_process:
+            raise ValueError("profiled child PID/starttime binding mismatch")
 
 
 def observe_native(pid: int, executable: Path, libraries: dict[str, dict]) -> dict:

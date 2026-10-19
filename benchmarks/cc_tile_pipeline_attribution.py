@@ -269,6 +269,11 @@ def read_nsys(database: Path, receipt: dict) -> dict:
         "execution_environment_sha256": receipt.get("execution_environment_sha256"),
         "diagnostic": receipt.get("diagnostic"),
         "run_directory": receipt.get("run_directory"),
+        "profiler_session_binding": receipt.get("profiler_session_binding"),
+        "profiler_session_binding_sha256": receipt.get(
+            "profiler_session_binding_sha256"
+        ),
+        "parent_process": receipt.get("parent_process"),
     }
     host_wait_segments = partition(host_waits, start, end)
     trace["extraction"] = {
@@ -348,7 +353,20 @@ def _validate_environment(packet: dict) -> None:
         packet["identity"]["observation_policy_sha256"],
         packet.get("diagnostic"),
         packet.get("run_directory"),
+        packet.get("profiler_session_binding"),
+        packet.get("profiler_session_binding_sha256"),
+        packet.get("parent_process"),
     )
+    control = packet["identity"]["observation_policy"]["session_control"]
+    if packet.get("diagnostic") and control["enabled"]:
+        capture = packet.get("capture", {})
+        profiler = control["profiler"]
+        if (
+            capture.get("profiler_version") != profiler["version"]
+            or capture.get("profiler_sha256") != profiler["sha256"]
+            or capture.get("profiler_argv") != profiler["argv"]
+        ):
+            raise ValueError("capture differs from bound profiler recipe")
     if canonical_hash(execution) != packet.get("execution_environment_sha256"):
         raise ValueError("actual execution environment hash mismatch")
 
@@ -395,6 +413,15 @@ def summarize(trace: dict, receipt: dict) -> dict:
         _validate_environment(packet)
     if trace["execution_environment"] != receipt["execution_environment"]:
         raise ValueError("trace and independent execution environments differ")
+    if any(
+        trace.get(key) != receipt.get(key)
+        for key in (
+            "profiler_session_binding",
+            "profiler_session_binding_sha256",
+            "parent_process",
+        )
+    ):
+        raise ValueError("trace and receipt profiler session bindings differ")
     window = trace["endpoint"]
     if window != receipt.get("endpoint"):
         raise ValueError("endpoint boundary differs from independent receipt")

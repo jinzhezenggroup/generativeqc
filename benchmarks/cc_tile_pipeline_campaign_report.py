@@ -113,7 +113,16 @@ def read_run(directory: Path) -> dict[str, Any]:
         identity["observation_policy_sha256"],
         receipt.get("diagnostic"),
         str(Path(command[2]).parent),
+        receipt.get("profiler_session_binding"),
+        receipt.get("profiler_session_binding_sha256"),
+        receipt.get("parent_process"),
     )
+    binding = receipt.get("profiler_session_binding")
+    if binding is not None and (
+        "nsys_binding.json" not in artifacts
+        or json.loads((directory / "nsys_binding.json").read_text()) != binding
+    ):
+        raise ValueError("retained outer profiler binding artifact mismatch")
     plan = json.loads((directory / "execution_plan.json").read_text())
     if plan != {
         "argv": receipt.get("command"),
@@ -122,7 +131,9 @@ def read_run(directory: Path) -> dict[str, Any]:
     }:
         raise ValueError("execution plan differs from frozen receipt")
     child = json.loads((directory / "child_environment.json").read_text())
-    validate_child(child, plan, receipt.get("native_pid"))
+    validate_child(
+        child, plan, receipt.get("native_pid"), receipt.get("native_process")
+    )
     if receipt.get("launcher_sha256") != {
         name: checksum(directory / name)
         for name in ("cc_tile_child.py", "cc_tile_environment.py")
