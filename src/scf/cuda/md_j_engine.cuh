@@ -13,19 +13,21 @@
 namespace generativeqc::scf::cuda_execution {
 namespace {
 
-/** Each output AO pair sums at most max_pair_primitives target primitives and
- * primitive_count source primitives. Giving each directed product this share
- * bounds their total omitted absolute J contribution by min(tolerance,1e-12).
- * The bound concerns screening error, independently of FP64 summation error. */
-__host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening) {
+/** Each output AO pair has target_count primitive products and at most
+ * primitive_count sources. Apportioning by that actual target multiplicity
+ * bounds the sum of omitted absolute contributions by min(tolerance,1e-12).
+ * Coarse nodes and active prefixes use the global maximum multiplicity, so
+ * their smaller allowance remains valid for every leaf. This bounds
+ * screening error, independently of FP64 accumulation error. */
+__host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening,
+                                                           std::size_t target_count = 0) {
+  if (!target_count) target_count = md.maximum_pair_primitives;
 #ifdef __CUDA_ARCH__
-  return __ddiv_rd(
-      __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.maximum_pair_primitives)),
-      double(md.primitive_count));
+  return __ddiv_rd(__ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(target_count)),
+                   double(md.primitive_count));
 #else
   return std::nextafter(
-      std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(md.maximum_pair_primitives),
-                     0.0) /
+      std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(target_count), 0.0) /
           double(md.primitive_count),
       0.0);
 #endif
@@ -103,11 +105,9 @@ __device__ inline bool md_j_engine_direction(MdJView md, std::uint32_t output, s
 
 /** The complete primitive recipe bypasses the public-AO mask explicitly.
  * Both signed density orientations already occur in density_bounds and E D. */
-__device__ inline bool md_j_engine_primitive_direction(MdJView md, const MdJScreenBound& output,
-                                                       const MdJScreenBound& input,
-                                                       double screening) {
-  return input.qd != 0.0 &&
-         md_j_bound_product_up(output.q, input.qd) >= md_j_primitive_allowance(md, screening);
+__device__ inline bool md_j_engine_primitive_direction(double source_norm,
+                                                       double source_threshold) {
+  return source_norm != 0.0 && source_norm >= source_threshold;
 }
 
 __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angular,
@@ -135,6 +135,52 @@ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angula
          (bra.density != 0.0 && md_j_screen_density_bound(ket, bra) >= allowance);
 }
 
+/** Tile-local source metadata. The last double pads each record to nine
+ * double words: adjacent bra lanes then visit distinct shared-memory banks
+ * instead of the eight-word stride aliasing their coordinate/bound loads.
+ * Transform identity and all original descriptors remain in the owner. */
+struct MdJEngineCachedPair {
+  double exponent;
+  Vec3<double> product;
+  std::size_t hermite_offset;
+  std::uint32_t pair;
+  std::int32_t system;
+  double source_norm, source_threshold, bank_padding;
+};
+
+/** Divide outward once per target. A rejected source has q_source below a
+ * downward-rounded allowance/q_target, so its contribution is below allowance.
+ * Zero tolerance and unknown output norms retain every nonzero source. */
+__device__ inline double md_j_engine_source_threshold(double output_norm, double allowance) {
+  if (allowance == 0.0 || !(output_norm >= 0.0) || output_norm == kMdJBoundInfinity) return 0.0;
+  if (output_norm == 0.0) return INFINITY;
+  return __ddiv_rd(allowance, output_norm);
+}
+
+/** Stage the fields consumed by every source/component lane once per tile.
+ * Original primitive/transform identity remains in its resident owner. */
+__device__ inline MdJEngineCachedPair md_j_engine_cached_pair(MdJView md, unsigned angular,
+                                                              std::size_t position,
+                                                              double screening) {
+  const auto primitive = md.primitives[md.ordered_primitives[md.class_offsets[angular] + position]];
+  const auto pair = md.pairs[primitive.pair];
+  const auto bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[angular] + position];
+  const auto threshold =
+      md.primitive_bounds
+          ? md_j_engine_source_threshold(
+                bound.q,
+                md_j_primitive_allowance(md, screening, pair.primitive_end - pair.primitive_begin))
+          : 0.0;
+  return {primitive.exponent,
+          primitive.product,
+          primitive.hermite_offset,
+          primitive.pair,
+          pair.system,
+          bound.qd,
+          threshold,
+          0.0};
+}
+
 /** Bounded reciprocal consumer with upstream-style quartet/component lanes.
  * Adjacent lanes evaluate different primitive sources; only larger angular
  * domains reserve additional lanes for output components. A bra accumulator
@@ -154,15 +200,15 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
   constexpr auto bra_lanes = md_j_bra_lanes(sources), ket_lanes = sources / bra_lanes;
   constexpr auto bra_outputs = (bra_components + components - 1) / components;
   constexpr auto ket_outputs = (ket_components + components - 1) / components;
-  static_assert(schedule.valid && sizeof(MdJPrimitive) <= kMdJPrimitiveDescriptorBytes);
-  static_assert(std::is_trivially_default_constructible_v<MdJPrimitive> &&
+  static_assert(schedule.valid && sizeof(MdJEngineCachedPair) <= kMdJPrimitiveDescriptorBytes);
+  static_assert(std::is_trivially_default_constructible_v<MdJEngineCachedPair> &&
                 std::is_trivially_default_constructible_v<MdJTileTask>);
   static_assert(schedule.shared_bytes <= kMdJSharedCapacity);
   if (md.primitive_screen)
     inventory = md_j_tile_inventory(md.primitive_screen->active[BraAngular],
                                     md.primitive_screen->active[KetAngular], bra_width, ket_width,
                                     BraAngular == KetAngular);
-  __shared__ MdJPrimitive bra_cache[bra_width], ket_cache[ket_width];
+  __shared__ MdJEngineCachedPair bra_cache[bra_width], ket_cache[ket_width];
   __shared__ double bra_density[bra_width * bra_components],
       ket_density[ket_width * ket_components];
   __shared__ double ket_potential[ket_width * ket_components];
@@ -194,25 +240,23 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
       continue;
     }
     for (unsigned slot = threadIdx.x; slot < task.bra_count; slot += blockDim.x)
-      bra_cache[slot] = md.primitives[md.ordered_primitives[md.class_offsets[BraAngular] +
-                                                            task.bra_begin + slot]];
+      bra_cache[slot] = md_j_engine_cached_pair(md, BraAngular, task.bra_begin + slot, screening);
     for (unsigned slot = threadIdx.x; slot < task.ket_count; slot += blockDim.x)
-      ket_cache[slot] = md.primitives[md.ordered_primitives[md.class_offsets[KetAngular] +
-                                                            task.ket_begin + slot]];
+      ket_cache[slot] = md_j_engine_cached_pair(md, KetAngular, task.ket_begin + slot, screening);
     __syncthreads();
     for (unsigned i = threadIdx.x; i < bra_width * bra_components; i += blockDim.x) {
       const auto slot = i / bra_components;
-      bra_density[i] = slot < task.bra_count && md.pairs[bra_cache[slot].pair].system >= begin &&
-                               md.pairs[bra_cache[slot].pair].system < end
-                           ? md.density[bra_cache[slot].hermite_offset + i % bra_components]
-                           : 0.0;
+      bra_density[i] =
+          slot < task.bra_count && bra_cache[slot].system >= begin && bra_cache[slot].system < end
+              ? md.density[bra_cache[slot].hermite_offset + i % bra_components]
+              : 0.0;
     }
     for (unsigned i = threadIdx.x; i < ket_width * ket_components; i += blockDim.x) {
       const auto slot = i / ket_components;
-      ket_density[i] = slot < task.ket_count && md.pairs[ket_cache[slot].pair].system >= begin &&
-                               md.pairs[ket_cache[slot].pair].system < end
-                           ? md.density[ket_cache[slot].hermite_offset + i % ket_components]
-                           : 0.0;
+      ket_density[i] =
+          slot < task.ket_count && ket_cache[slot].system >= begin && ket_cache[slot].system < end
+              ? md.density[ket_cache[slot].hermite_offset + i % ket_components]
+              : 0.0;
       ket_potential[i] = 0.0;
     }
     __syncthreads();
@@ -225,21 +269,15 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
         double prefactor = 0.0;
         if (md_j_tile_source_valid(inventory, task, bra_slot, ket_slot)) {
           const auto bra = bra_cache[bra_slot], ket = ket_cache[ket_slot];
-          const auto bra_pair = md.pairs[bra.pair], ket_pair = md.pairs[ket.pair];
-          if (bra_pair.system >= begin && bra_pair.system < end &&
-              bra_pair.system == ket_pair.system) {
-            const auto bra_bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[BraAngular] +
-                                                task.bra_begin + bra_slot];
-            const auto ket_bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[KetAngular] +
-                                                task.ket_begin + ket_slot];
+          if (bra.system >= begin && bra.system < end && bra.system == ket.system) {
             forward = md.primitive_bounds
-                          ? md_j_engine_primitive_direction(md, bra_bound, ket_bound, screening)
+                          ? md_j_engine_primitive_direction(ket.source_norm, bra.source_threshold)
                           : md_j_engine_direction(md, bra.pair, ket.pair, screening);
             const bool distinct =
                 BraAngular != KetAngular || task.bra_begin + bra_slot != task.ket_begin + ket_slot;
             reverse = distinct &&
                       (md.primitive_bounds
-                           ? md_j_engine_primitive_direction(md, ket_bound, bra_bound, screening)
+                           ? md_j_engine_primitive_direction(bra.source_norm, ket.source_threshold)
                            : md_j_engine_direction(md, ket.pair, bra.pair, screening));
             if (forward || reverse) {
               if (component_lane == 0) {

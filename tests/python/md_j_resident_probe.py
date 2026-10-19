@@ -87,7 +87,19 @@ def _probe_library() -> Any:
             if result.returncode:
                 raise RuntimeError(result.stderr or "resident probe link failed")
             linked.replace(binary)
+    # Load the selected backend before the bridge's SONAME dependency. An
+    # experimental snapshot may contain an older versioned sibling beside an
+    # explicitly selected .so; letting the loader search that sibling first
+    # would time a different backend from the one whose bytes keyed this probe.
+    native_handle = ct.CDLL(str(native))
     library = ct.CDLL(str(binary))
+    symbol = "generativeqc_get_source_identity"
+    if (
+        ct.cast(getattr(library, symbol), ct.c_void_p).value
+        != ct.cast(getattr(native_handle, symbol), ct.c_void_p).value
+    ):
+        raise RuntimeError("resident probe resolved a different native backend")
+    library._selected_native_handle = native_handle
     library.md_j_probe_create.argtypes = [
         ct.c_void_p,
         ct.c_int,

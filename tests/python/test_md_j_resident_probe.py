@@ -97,8 +97,9 @@ def probe_artifact(tmp_path: Path, monkeypatch: Any) -> Any:
     bridge._probe_library.cache_clear()
 
 
+@pytest.mark.parametrize("backend_matches", [True, False])
 def test_resident_bridge_artifact_hit_needs_no_compiler_cache(
-    probe_artifact: Any, monkeypatch: Any
+    probe_artifact: Any, monkeypatch: Any, backend_matches: bool
 ) -> None:
     from generativeqc_compiler.common import compiler_cache
 
@@ -106,6 +107,7 @@ def test_resident_bridge_artifact_hit_needs_no_compiler_cache(
     binary.parent.mkdir()
     binary.write_bytes(b"completed artifact")
     library = SimpleNamespace(
+        generativeqc_get_source_identity=ct.c_void_p(17 if backend_matches else 18),
         **{
             "md_j_probe_" + name: SimpleNamespace()
             for name in (
@@ -121,15 +123,22 @@ def test_resident_bridge_artifact_hit_needs_no_compiler_cache(
                 "device_bytes",
                 "destroy",
             )
-        }
+        },
     )
+    native = SimpleNamespace(generativeqc_get_source_identity=ct.c_void_p(17))
 
     def reject_discovery(**arguments: Any) -> Any:
         raise AssertionError("artifact hit attempted compiler-cache discovery")
 
     monkeypatch.setattr(compiler_cache, "resolve_compiler_cache", reject_discovery)
-    monkeypatch.setattr(bridge.ct, "CDLL", lambda path: library)
-    assert bridge._probe_library() is library
+    monkeypatch.setattr(
+        bridge.ct, "CDLL", lambda path: library if path == str(binary) else native
+    )
+    if backend_matches:
+        assert bridge._probe_library() is library
+    else:
+        with pytest.raises(RuntimeError, match="different native backend"):
+            bridge._probe_library()
 
 
 @pytest.mark.parametrize("stage", ["discovery", "compile", "link"])
