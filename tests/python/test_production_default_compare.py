@@ -207,9 +207,17 @@ def test_hybrid_grid_is_mandatory_api_input_not_reference_grid(
     }.intersection(args)
 
 
-def test_unsupported_composite_is_not_labeled_r2scan() -> None:
-    with pytest.raises(ValueError, match="unsupported"):
-        runner.problem_identity("r2scan-3c", ())
+def test_r2scan3c_has_canonical_basis_and_full_corrections() -> None:
+    model = runner.problem_identity("r2scan-3c", [("H", (0, 0, 0))])
+    assert model["method"] == "r2scan-3c"
+    assert model["basis"] == "def2-mTZVPP"
+    assert model["composite_corrections"] == ["D4", "gCP"]
+    assert runner.METHODS["r2scan-3c"] == ("r2scan-3c-rks", "R2SCAN")
+    options = runner.native_constructor_kwargs("r2scan-3c")
+    assert options["method"] == "r2scan-3c-rks"
+    assert "basis" not in options  # Native canonical method supplies def2-mTZVPP.
+    assert "ks_options" not in options
+    assert runner.problem_identity("r2scan", [("H", (0, 0, 0))]) != model
 
 
 def test_offline_compare_and_render_without_gpu(
@@ -451,3 +459,93 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
     assert sample["precision_validation"]["status"] == "observed_met"
     assert sample["gradient_arithmetic"] == "fp64"
     assert sample["mixed_fock_builds"] == 0
+
+
+def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Independent CPU D4/gCP must be *inside* the full GPU4 E+F call."""
+    import numpy as np
+
+    executed: list[str] = []
+    canonical_basis = {"H": [[0, [1.0, 1.0]]]}
+    monkeypatch.setattr(
+        runner, "reference_r2scan3c_basis", lambda: canonical_basis
+    )
+
+    def reference_correction(atoms: Any) -> Any:
+        assert len(atoms) == 1
+        executed.append("prepare-D4-gCP")
+
+        def evaluate() -> tuple[float, np.ndarray]:
+            executed.append("evaluate-D4-gCP")
+            return 0.125, np.array([[0.25, 0.5, 0.75]])
+
+        return evaluate
+
+    monkeypatch.setattr(
+        runner, "reference_r2scan3c_correction", reference_correction
+    )
+    grad = SimpleNamespace(
+        grid_response=False,
+        kernel=lambda: np.array([[1.0, 2.0, 3.0]]),
+    )
+    grids = SimpleNamespace(
+        level=3,
+        coords=np.zeros((2, 3)),
+        radi_method=lambda: None,
+        prune=lambda: None,
+        radii_adjust=None,
+        becke_scheme=lambda: None,
+    )
+    model = SimpleNamespace(
+        xc=None,
+        converged=True,
+        cycles=10,
+        grids=grids,
+        max_cycle=50,
+        conv_tol=1e-9,
+        conv_tol_grad=None,
+        diis_space=8,
+        direct_scf=True,
+        direct_scf_tol=1e-13,
+        init_guess="minao",
+        nuc_grad_method=lambda: grad,
+    )
+
+    def kernel() -> float:
+        executed.append("electronic-R2SCAN")
+        assert model.xc == "R2SCAN"
+        return -2.0
+
+    model.kernel = kernel
+
+    def molecule(**kwargs: Any) -> Any:
+        assert kwargs["basis"] == canonical_basis
+        return SimpleNamespace(**kwargs)
+
+    cp = SimpleNamespace(
+        cuda=SimpleNamespace(
+            runtime=SimpleNamespace(deviceSynchronize=lambda: None)
+        ),
+        asnumpy=np.asarray,
+    )
+    dft = SimpleNamespace(rks=SimpleNamespace(RKS=lambda mol: model))
+    monkeypatch.setitem(sys.modules, "cupy", cp)
+    monkeypatch.setitem(sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=molecule)))
+    monkeypatch.setitem(sys.modules, "gpu4pyscf", SimpleNamespace(dft=dft))
+    monkeypatch.setitem(sys.modules, "gpu4pyscf.dft", dft)
+
+    result = runner.gpu4_sample("r2scan-3c", [("H", (0.0, 0.0, 0.0))])
+    assert executed == [
+        "electronic-R2SCAN",
+        "prepare-D4-gCP",
+        "evaluate-D4-gCP",
+    ]
+    assert result["energy"] == pytest.approx(-1.875)
+    np.testing.assert_allclose(
+        result["forces"], [[-1.25, -2.5, -3.75]], atol=0, rtol=0
+    )
+    assert result["settings"]["composite_corrections"]["included_in_timing"]
+    assert result["settings"]["composite_corrections"]["energy_hartree"] == 0.125
+    assert result["grid_response"] is False
