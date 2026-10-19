@@ -7968,6 +7968,24 @@
         "values": "docs/reference/python_contracts.md#python-options-values"
       }
     },
+    "generativeqc_compiler/dft/grid.py:GridSpec.angular_shells": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/reference/python_contracts.md#python-options-ownership",
+        "values": "docs/user/ks_options.md#angular-pruning"
+      }
+    },
+    "generativeqc_compiler/dft/grid.py:GridSpec.points_per_atom": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/reference/python_contracts.md#python-options-ownership",
+        "values": "docs/user/ks_options.md#angular-pruning"
+      }
+    },
     "generativeqc_compiler/method/dispersion.py:D3Spec": {
       "kind": "class",
       "profile": "record",

@@ -61,6 +61,21 @@ def current_grid_abi_identity() -> str:
     return qualify_capacity._source_node_sha256(source, lowerer)
 
 
+def current_grid_layout_identity() -> str:
+    """Report the emitted layout's current source provenance, not a frozen pin."""
+    source = (ROOT / "python/generativeqc_compiler/xc/quadrature_cuda.py").read_text()
+    assignment = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_LAYOUT"
+            for target in node.targets
+        )
+    )
+    return qualify_capacity._source_node_sha256(source, assignment)
+
+
 def current_python_owner_identity(
     relative: str,
     name: str,
@@ -394,18 +409,21 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
     )
     assert result["grid"] == {
-        "source_only_molecular_grid_sha256": (
-            "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
+        "source_only_molecular_grid_sha256": current_python_owner_identity(
+            "python/generativeqc_compiler/dft/grid.py",
+            "__post_init__",
+            owner="MolecularGrid",
         ),
         "public_grid_abi_sha256": (current_grid_abi_identity()),
         "native_grid_abi_sha256": (
             "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
         ),
-        "generated_quadrature_layout_sha256": (
-            "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
-        ),
-        "native_cuda_grid_sha256": (
-            "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
+        "generated_quadrature_layout_sha256": current_grid_layout_identity(),
+        "native_cuda_grid_sha256": qualify_capacity._source_span_sha256(
+            (ROOT / "src/dft/cuda_quadrature.cu").read_text(),
+            begin="MolecularGrid MolecularGrid::from_cuda(",
+            end="}  // namespace generativeqc::dft",
+            label="native CUDA grid",
         ),
         "native_cuda_grid_route_sha256": (
             "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
@@ -739,8 +757,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "init_sha256": current_python_owner_identity(
             "python/generativeqc/_ks_snapshot.py", "__init__", owner="NativeKsSnapshot"
         ),
-        "decode_sha256": (
-            "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
+        "decode_sha256": current_python_owner_identity(
+            "python/generativeqc/_ks_snapshot.py", "decode", owner="NativeKsSnapshot"
         ),
         "grid_cache_sha256": (
             "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
@@ -2592,51 +2610,42 @@ def test_prepared_precision_mode_binds_replay_identity_and_source_owner(
         qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
-def test_grid_count_fails_closed_when_native_cuda_shape_moves(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "relative,marker,addition,key",
+    (
+        (
+            "python/generativeqc_compiler/dft/grid.py",
+            "        atoms = owned_atoms(self.atoms)",
+            "\n        # Harmless grid-owner provenance change.",
+            "source_only_molecular_grid_sha256",
+        ),
+        (
+            "python/generativeqc_compiler/xc/quadrature_cuda.py",
+            "inline Layout layout(size_t atoms, size_t points) {",
+            "\n  // Harmless layout-owner provenance change.",
+            "generated_quadrature_layout_sha256",
+        ),
+        (
+            "src/dft/cuda_quadrature.cu",
+            "MolecularGrid MolecularGrid::from_cuda(",
+            "/* Harmless CUDA-owner provenance change. */",
+            "native_cuda_grid_sha256",
+        ),
+    ),
+)
+def test_grid_implementation_changes_are_recorded_as_provenance(
+    tmp_path: Path, relative: str, marker: str, addition: str, key: str
 ) -> None:
+    """Actual point/layout execution is tested separately from source provenance."""
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "src/dft/cuda_quadrature.cu"
+    before = qualify_capacity._grid_count_contract(tmp_path)
+    target = tmp_path / relative
     source = target.read_text(encoding="utf-8")
-    old = "q::product(system.atoms.size(), per_atom)"
-    assert old in source
-    target.write_text(
-        source.replace(old, "q::product(system.atoms.size() + 1, per_atom)", 1),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
-
-
-def test_grid_count_fails_closed_when_source_only_shape_moves(
-    tmp_path: Path,
-) -> None:
-    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/generativeqc_compiler/dft/grid.py"
-    source = target.read_text(encoding="utf-8")
-    old = "len(atoms) * len(r) * len(angular)"
-    assert old in source
-    target.write_text(source.replace(old, "len(r) * len(angular)", 1), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
-
-
-def test_grid_count_fails_closed_when_generated_layout_moves(
-    tmp_path: Path,
-) -> None:
-    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/generativeqc_compiler/xc/quadrature_cuda.py"
-    source = target.read_text(encoding="utf-8")
-    old = "l.points = points;"
-    assert old in source
-    target.write_text(
-        source.replace(old, "l.points = points + 1;", 1), encoding="utf-8"
-    )
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
+    assert source.count(marker) == 1
+    target.write_text(source.replace(marker, marker + addition, 1), encoding="utf-8")
+    after = qualify_capacity._grid_count_contract(tmp_path)
+    assert before[key] != after[key]
+    assert before["point_count_definition"] == after["point_count_definition"]
 
 
 @pytest.mark.parametrize(
@@ -4588,6 +4597,7 @@ def test_capacity_provenance_tracks_benign_owner_source_changes(tmp_path: Path) 
     route_before = qualify_capacity._source_public_route(tmp_path)
     for relative, class_name, name in (
         ("python/generativeqc/_ks_snapshot.py", "NativeKsSnapshot", "__init__"),
+        ("python/generativeqc/_ks_snapshot.py", "NativeKsSnapshot", "decode"),
         ("python/generativeqc/batch.py", "PreparedBatch", "_public_dft_cuda_force"),
         (
             "python/generativeqc/_stationary_cuda.py",
@@ -4627,7 +4637,7 @@ def test_capacity_provenance_tracks_benign_owner_source_changes(tmp_path: Path) 
         route_before["cuda_force_method_sha256"]
         != route_after["cuda_force_method_sha256"]
     )
-    assert snapshot_before["decode_sha256"] == snapshot_after["decode_sha256"]
+    assert snapshot_before["decode_sha256"] != snapshot_after["decode_sha256"]
     assert (
         route_before["whole_grid_work_limits"] == route_after["whole_grid_work_limits"]
     )

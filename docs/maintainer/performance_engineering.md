@@ -4,6 +4,68 @@ GenerativeQC performance work must optimize scientific work and data movement, n
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
+## README production comparisons
+
+The README's headline HF/DFT comparison measures the cost of reaching a common
+scientific accuracy target with each engine's best qualified production
+configuration, not the cost of executing an artificially identical amount of
+work. Here, "best" means the fastest configuration among the documented,
+independently qualified candidates that were actually measured for the declared
+workload, not a claim of a global optimum or the fastest individual sample.
+
+Publication requires:
+
+- **A shared scientific task.** Keep geometry, charge, spin, Hamiltonian,
+  functional, orbital basis, method-defined corrections and requested outputs
+  fixed. Declare direct versus density-fitted treatment and auxiliary bases;
+  do not silently compare different approximation contracts. Use the same
+  hardware and declared resource limits. Different execution plans are allowed.
+- **Independent accuracy qualification.** Declare common energy and force gates
+  before choosing configurations. Each engine must pass against an independent
+  reference whose grid convergence is established for the method. Agreement
+  between two coarse-grid calculations is insufficient. Validate analytic forces
+  with the selected moving quadrature, including grid/partition response, and
+  include displaced geometries rather than qualifying only one stationary point.
+- **Independent production configuration.** Let each engine select supported
+  radial/angular grids, pruning, screening, precision and solver settings that
+  meet those gates. Do not disable a reference engine's supported optimization
+  solely because GenerativeQC lacks it. Likewise, do not enable unqualified
+  pruning or a lower precision in GenerativeQC to make the comparison look
+  symmetric. Record exact settings and engine versions for every selected case.
+- **Complete endpoint measurements.** Measure setup plus the first complete
+  energy-and-analytic-force call for cold results. Apply the same declared
+  initialization and reuse policy to both engines, retain all required warm
+  repeats, and report their median and variability rather than selecting the
+  fastest observation. Retain source/binary identities, compilation-cache state,
+  resource settings, SCF iterations and Fock-build counts. Reference densities or
+  oracle work must not silently enter a production endpoint.
+- **Visible grid and nonlocal work.** Record semilocal and nonlocal grid sizes
+  separately, pruning rules, density thresholds and active point-domain sizes.
+  Record actual VV10 pair work when available; otherwise identify any pair-count
+  estimate as an estimate. A smaller constructed grid need not reduce the
+  already density-screened pair domain by the same fraction, and neither ratio
+  establishes a complete-endpoint speedup.
+
+Matched-grid runs remain useful implementation diagnostics and regression
+evidence under `benchmarks/results/`, but are not the headline production
+ranking unless their configurations independently satisfy this policy. Existing
+fixed-grid drivers and renderers do not by themselves establish production
+qualification. Missing references, incomplete endpoints, failed gates and
+timeouts stay visible in retained evidence, not as ranked performance results.
+If selected production configurations have not yet been qualified and measured
+for both engines, mark the README comparison pending rather than relabelling
+historical timings or publishing estimated speedups.
+
+The LDA/PBE pruning qualification entry point is
+`python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
+inside a finite Slurm allocation. It measures fresh complete native and
+GPU4PySCF energy/force owners, with process/artifact caches warmed and without
+cross-sample converged-density reuse. Native uses its versioned policy;
+GPU4PySCF uses its own NWChem-pruned radial/Lebedev grids. Shared dense-reference
+gates, reference-stability margins, raw samples and physical work counts decide
+which measured candidates qualify. This limited water/STO-3G qualification is
+not a general VV10, basis-set or whole-README production ranking.
+
 ## Optimization method taxonomy
 
 Treat performance as a stack of optimization opportunities rather than as a

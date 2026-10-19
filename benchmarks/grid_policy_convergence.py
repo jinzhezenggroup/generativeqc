@@ -150,15 +150,16 @@ def _spec(
     )
 
 
-def qualify() -> dict[str, typing.Any]:
+def qualify(*, include_pruning: bool = False) -> dict[str, typing.Any]:
+    """Qualify explicit profiles; opt-in pruning must meet the unchanged gates."""
     import pyscf
 
-    radii = GridPolicy().resolve("pbe-rks").element_radii
+    radii = GridPolicy(pruning="none").resolve("pbe-rks").element_radii
     dense_spec = _spec(DENSE_SHAPE, radii)
     ultra_spec = _spec(ULTRA_SHAPE, radii)
     result: dict[str, typing.Any] = {
         "schema": "generativeqc.production-grid-convergence",
-        "version": 2,
+        "version": 3 if include_pruning else 2,
         "molecule": {"atoms_bohr": ATOMS, "basis": "sto-3g"},
         "pyscf_version": pyscf.__version__,
         "numpy_version": np.__version__,
@@ -186,16 +187,21 @@ def qualify() -> dict[str, typing.Any]:
         references[family] = dense
 
     production_specs = {
-        "lda-standard": GridPolicy().resolve("lda-rks"),
-        "lda-tight": GridPolicy("tight").resolve("lda-rks"),
-        "pbe-standard": GridPolicy().resolve("pbe-rks"),
-        "pbe-tight": GridPolicy("tight").resolve("pbe-rks"),
+        "lda-standard": GridPolicy(pruning="none").resolve("lda-rks"),
+        "lda-tight": GridPolicy("tight", pruning="none").resolve("lda-rks"),
+        "pbe-standard": GridPolicy(pruning="none").resolve("pbe-rks"),
+        "pbe-tight": GridPolicy("tight", pruning="none").resolve("pbe-rks"),
         # This isolates the radial count while holding v2 radii constant; it
         # must not be described as the historical unit-radius public default.
         "pbe-radial48": _spec((48, 16, 32), radii),
         "lda-legacy-v1": GridSpec(),
         "pbe-legacy-v1": GridSpec(),
     }
+    if include_pruning:
+        for name in ("lda-standard", "lda-tight", "pbe-standard", "pbe-tight"):
+            production_specs[f"{name}-pruned"] = GridPolicy(
+                "tight" if name.endswith("tight") else "standard"
+            ).resolve("lda-rks" if name.startswith("lda-") else "pbe-rks")
     for name, spec in production_specs.items():
         family = name.split("-", 1)[0]
         xc = "LDA_X,LDA_C_PW" if family == "lda" else "PBE"
@@ -208,8 +214,9 @@ def qualify() -> dict[str, typing.Any]:
             "point_fraction_of_dense": endpoint["npoint"]
             / references[family]["npoint"],
         }
-        gate = GATES.get(name)
+        gate = GATES.get(name.removesuffix("-pruned"))
         if gate is not None:
+            profile["gate"] = gate
             profile["passed"] = (
                 error["energy_hartree"] <= gate["energy"]
                 and error["force_hartree_per_bohr"] <= gate["force"]
@@ -242,6 +249,16 @@ def qualify() -> dict[str, typing.Any]:
             pbe_standard["endpoint"]["npoint"] / pbe_radial["endpoint"]["npoint"]
         ),
     }
+    if include_pruning:
+        for name in ("lda-standard", "lda-tight", "pbe-standard", "pbe-tight"):
+            original = result["profiles"][name]["endpoint"]["npoint"]
+            pruned = result["profiles"][f"{name}-pruned"]["endpoint"]["npoint"]
+            result["accuracy_cost_checks"][f"{name}_pruning_reduces_points"] = (
+                pruned < original
+            )
+            result["profiles"][f"{name}-pruned"]["point_fraction_of_unpruned"] = (
+                pruned / original
+            )
     failures = [
         f"reference/{family}"
         for family, row in result["reference_stability"].items()
@@ -267,8 +284,9 @@ def qualify() -> dict[str, typing.Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=raw_output_path)
+    parser.add_argument("--include-pruning", action="store_true")
     args = parser.parse_args()
-    result = qualify()
+    result = qualify(include_pruning=args.include_pruning)
     try:
         root = Path(__file__).resolve().parents[1]
         result["git_head"] = subprocess.check_output(

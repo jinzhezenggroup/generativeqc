@@ -137,6 +137,11 @@ def source_hashes() -> dict[str, str]:
         "src/scf/cuda/direct_force_diagnostic.hpp",
         "src/scf/cuda/direct_spd_force_schedule.hpp",
         "src/dft/cuda_ks.cpp",
+        "src/dft/grid.hpp",
+        "src/dft/grid.cpp",
+        "src/dft/cuda_quadrature.cu",
+        "python/generativeqc_compiler/dft/grid.py",
+        "python/generativeqc_compiler/xc/quadrature_cuda.py",
         "src/dft/cuda_ks_final_validation_policy.hpp",
         "python/generativeqc/resources_hf.py",
         "src/scf/cuda/packed_basis.hpp",
@@ -665,7 +670,10 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         help="Explicit native DF workspace hint; zero preserves automatic selection",
     )
     parser.add_argument("--auxiliary-basis-file", type=Path)
-    parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
+    parser.add_argument("--grid", type=int, nargs=3)
+    parser.add_argument(
+        "--grid-pruning", choices=("auto", "none", "radial-v1"), default="auto"
+    )
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
     parser.add_argument(
@@ -719,7 +727,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         )
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
-    if args.repeats < 1 or min(args.grid) < 1:
+    if args.repeats < 1 or (args.grid is not None and min(args.grid) < 1):
         parser.error("repeats and grid dimensions must be positive")
     if (
         args.engine == "native"
@@ -759,7 +767,6 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     import cupy as cp
     from generativeqc import (
         Calculator,
-        GridSpec,
         KsOptions,
         PrecisionCalculator,
         PrecisionPolicy,
@@ -796,10 +803,10 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         raise ValueError(
             f"this benchmark requires the complete {benchmark.basis} basis"
         )
-    spec = GridSpec(
-        radial_points=args.grid[0],
-        angular_polar=args.grid[1],
-        angular_azimuth=args.grid[2],
+    from benchmarks.readme_wb97mv import benchmark_grid_spec
+
+    spec = benchmark_grid_spec(
+        args.grid, case.atoms, args.grid_pruning, method=benchmark.method
     )
     scientific = protocol(
         args.atoms,

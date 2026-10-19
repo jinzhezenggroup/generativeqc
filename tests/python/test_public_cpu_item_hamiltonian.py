@@ -58,7 +58,9 @@ def test_cpu_force_checks_current_item_ecp_inventory(
         _density_fitting_mode=0,
         _representation_name="cartesian",
         _ks_options=SimpleNamespace(
-            grid=SimpleNamespace(radial_points=1, angular_polar=1, angular_azimuth=1),
+            grid=SimpleNamespace(
+                radial_points=1, angular_polar=1, angular_azimuth=1, points_per_atom=1
+            ),
             execution_plan=SimpleNamespace(exchange=(), nonlocal_correlation=None),
         ),
     )

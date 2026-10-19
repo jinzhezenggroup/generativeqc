@@ -9,8 +9,11 @@ from generativeqc_compiler.dft.grid import GridPolicy, grid_policy_provenance
 
 @pytest.mark.parametrize("method", ["lda", "pbe"])
 @pytest.mark.parametrize("accuracy", ["standard", "tight"])
-def test_exact_policy_keeps_canonical_provenance(method: str, accuracy: str) -> None:
-    policy = GridPolicy(accuracy)
+@pytest.mark.parametrize("pruning", ["none", "radial-v1"])
+def test_exact_policy_keeps_canonical_provenance(
+    method: str, accuracy: str, pruning: str
+) -> None:
+    policy = GridPolicy(accuracy, pruning=pruning)
     assert grid_policy_provenance(policy.resolve(method)) == policy.provenance
 
 
@@ -18,8 +21,11 @@ def test_exact_policy_keeps_canonical_provenance(method: str, accuracy: str) -> 
     "field",
     ["radial_points", "element_radii", "partition_iterations", "coincident_tolerance"],
 )
-def test_custom_grid_cannot_claim_upstream_policy(field: str) -> None:
-    spec = GridPolicy().resolve("pbe")
+@pytest.mark.parametrize("pruning,version", [("none", 2), ("radial-v1", 3)])
+def test_custom_grid_cannot_claim_upstream_policy(
+    field: str, pruning: str, version: int
+) -> None:
+    spec = GridPolicy(pruning=pruning).resolve("pbe")
     changes = {
         "radial_points": spec.radial_points + 1,
         "element_radii": ((1, 2.0),),
@@ -27,7 +33,11 @@ def test_custom_grid_cannot_claim_upstream_policy(field: str) -> None:
         "coincident_tolerance": 1e-10,
     }
     provenance = grid_policy_provenance(replace(spec, **{field: changes[field]}))
-    assert provenance == {"policy_version": 2, "contract": "explicit-grid-v2"}
+    assert provenance == {
+        "policy_version": version,
+        "contract": f"explicit-grid-v{version}",
+        **({"pruning": pruning} if version == 3 else {}),
+    }
 
 
 def test_snapshot_has_write_once_grid_provenance_storage() -> None:

@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-15
 
+The upper AO/atom-count admission limits below are superseded by
+[the size-cap removal decision](2026-10-19-fast-fock-size-cap-removal.md).
+The module-selected arithmetic and other scientific exclusions remain unchanged.
+
 ## Problem
 
 The initial budget-Fock implementation unnecessarily required canonical PBE0 in

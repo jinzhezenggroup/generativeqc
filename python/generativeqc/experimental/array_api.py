@@ -1352,17 +1352,33 @@ def vjp(
     function: typing.Callable[..., object],
     *primals: object,
     backend: str | None = None,
+    argnums: int | tuple[int, ...] | None = None,
+    allow_external_mask_where: bool = False,
     **options: typing.Any,
 ) -> typing.Any:
     """Return native primal outputs and a reusable compiled cotangent pullback.
 
     The pullback snapshots its primal inputs, validates cotangent shapes/dtypes,
-    and returns gradients in positional argument order. Close it to release its
-    execution owner, especially for CUDA.
+    and always returns a tuple of gradients. With argnums=None, differentiate all
+    supplied positional primals; otherwise return the selected gradients in
+    argnums order. Negative positions index the supplied primals, including when
+    the function has omitted defaults. Close the pullback to release its owner.
+
+    ``allow_external_mask_where=True`` admits fixed external Boolean selectors on
+    generic finite FP64 arrays for reference/CPU execution. Use argnums to select
+    only real primals. Selector values and non-selected real inputs are snapshotted
+    too; no Boolean cotangent or higher-order selection transform is admitted.
     """
     from ._array_api_autodiff import _vjp
 
-    return _vjp(function, primals, backend, options)
+    return _vjp(
+        function,
+        primals,
+        backend,
+        options,
+        argnums=argnums,
+        allow_external_mask_where=allow_external_mask_where,
+    )
 
 
 def capabilities() -> dict[str, object]:
@@ -1417,6 +1433,14 @@ def capabilities() -> dict[str, object]:
                 "real_dtype": "float64",
                 "non_differentiated_primal": "explicit-None-tangent-in-matching-tuple",
                 "scope": "first-order-generic-fixed-external-mask; at-least-one-real-direction; eager-all-live-domains",
+            },
+            "external_mask_vjp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "argnums": "explicit-real-primals; supplied-positional-order; tuple-result",
+                "scope": "first-order-generic-fixed-external-mask; snapshot-all-primals; eager-all-live-domains",
             },
             "compiled_differentiability": "explicit-parameter-names",
             "external_mask_gradients": {

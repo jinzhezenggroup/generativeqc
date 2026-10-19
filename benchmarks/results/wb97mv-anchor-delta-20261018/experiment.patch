@@ -1,0 +1,168 @@
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -346,6 +346,8 @@
+   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
+   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
+       incremental_energy_refinement{};
++  bool experimental_anchor_delta{}, experimental_anchor_ready{}, pending_experimental_delta{};
++  unsigned experimental_anchor_builds{}, experimental_delta_builds{};
+   unsigned incremental_energy_full_builds{};
+   unsigned incremental_delta_updates{};
+   double host_incremental_max_abs_delta_density{};
+@@ -1429,6 +1431,18 @@
+     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
+       throw std::invalid_argument(
+           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
++    if (const auto* selected = std::getenv("GENERATIVEQC_EXPERIMENT_ANCHOR_DELTA")) {
++      if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
++        throw std::invalid_argument("experimental anchor delta accepts 0 or 1");
++      experimental_anchor_delta = std::strcmp(selected, "1") == 0;
++    }
++    if (experimental_anchor_delta &&
++        (spins != 1 || fitted_coulomb || fitted_exchange || !nonlocal_correlation ||
++         !fock_binding || !scf::direct_jk_incremental_exact_eligible(strategy) ||
++         !range_incremental_eligible || incremental_direct_jk ||
++         runtime::active_device_resource_ledger))
++      throw std::invalid_argument(
++          "experimental anchor delta requires unbudgeted restricted exact Direct nonlocal KS");
+     const bool host_unfused =
+         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
+     // Automatic local-AO requests use the XC owner's execution capability.
+@@ -1509,7 +1523,8 @@
+             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
+     }
+     ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
+-                               incremental_direct_jk, incremental_diis_gram, nullptr);
++                               incremental_direct_jk || experimental_anchor_delta,
++                               incremental_diis_gram, nullptr);
+     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
+     resource.xc_device_bytes =
+         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
+@@ -1547,8 +1562,8 @@
+           sum(resource.retained_host_numeric_bytes, ao_selection_bound.host_peak_bytes);
+     try {
+       check(runtime::resource_cuda_malloc(&arena, ks_arena_bytes));
+-      partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
+-                incremental_diis_gram, arena);
++      partition(n, spins, history, has_exchange, has_range_correction,
++                incremental_direct_jk || experimental_anchor_delta, incremental_diis_gram, arena);
+       if (nonlocal_arena_bytes) {
+         bool host_oom = false;
+         auto status =
+@@ -1826,6 +1841,9 @@
+     output.incremental_direct_jk.requested = incremental_direct_jk_policy.requested;
+     output.incremental_direct_jk.active = incremental_direct_jk;
+     incremental_anchored = false;
++    experimental_anchor_ready = false;
++    pending_experimental_delta = false;
++    experimental_anchor_builds = experimental_delta_builds = 0;
+     pending_incremental_delta = false;
+     incremental_energy_refinement = false;
+     incremental_energy_full_builds = 0;
+@@ -1923,7 +1941,7 @@
+       }
+       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+-      if (incremental_direct_jk)
++      if (incremental_direct_jk || experimental_anchor_delta)
+         check(cudaMemsetAsync(incremental_max_abs_delta_density, 0, sizeof(double), stream));
+       cuda_ks_detail::reset_control(stream, spins, static_cast<int>(occupations[0]),
+                                     static_cast<int>(occupations[1]), control, enabled,
+@@ -2577,6 +2595,52 @@
+     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
+   }
+ 
++  /** Fixed strict anchors accelerate only provisional nonlocal solves. Physical
++   * targets always use full-density FP64 J/K and refresh the accepted anchor.
++   * Total anchor-relative deltas avoid a running chain of omitted updates. */
++  const double* prepare_experimental_anchor_density() {
++    pending_experimental_delta = experimental_anchor_ready && !final_closure &&
++                                 (nonlocal_seed_stage || nonlocal_frozen_stage);
++    if (!pending_experimental_delta) {
++      pending_mixed_coulomb = false;
++      pending_mixed_exchange = false;
++      pending_mixed_range_exchange = false;
++      return density;
++    }
++    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
++    launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, elements, density,
++                                              incremental_anchor_density, incremental_delta_density,
++                                              incremental_max_abs_delta_density);
++    check(cudaGetLastError());
++    return incremental_delta_density;
++  }
++
++  /** Reconstruct linear J/K before nonlinear XC. Only successful full builds
++   * become anchors; finish_iteration commits or invalidates their lifetime. */
++  void finalize_experimental_anchor_components() {
++    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
++    if (pending_experimental_delta) {
++      launch_add_matrix_kernel(blocks, 128, 0, stream, matrix, incremental_anchor_j, j);
++      if (has_exchange)
++        launch_add_matrix_kernel(blocks, 128, 0, stream, elements,
++                                 incremental_anchor_exchange, exchange);
++      if (has_range_correction)
++        launch_add_matrix_kernel(blocks, 128, 0, stream, elements,
++                                 incremental_anchor_range_exchange, range_exchange);
++    } else {
++      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, density,
++                                incremental_anchor_density);
++      launch_copy_matrix_kernel(blocks, 128, 0, stream, matrix, j, incremental_anchor_j);
++      if (has_exchange)
++        launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, exchange,
++                                  incremental_anchor_exchange);
++      if (has_range_correction)
++        launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, range_exchange,
++                                  incremental_anchor_range_exchange);
++    }
++    check(cudaGetLastError());
++  }
++
+   bool incremental_delta_admitted() const noexcept {
+     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
+         final_closure || strict_refinement)
+@@ -2737,7 +2801,9 @@
+       runtime::cuda_trace::TraceRegion jk_trace("ks_jk", stream);
+       pending_fitted_occupied = use_occupied_fitted;
+       pending_fitted_projection_scratch_generation = 0;
+-      const double* jk_density = prepare_incremental_jk_density();
++      const double* jk_density = experimental_anchor_delta
++                                     ? prepare_experimental_anchor_density()
++                                     : prepare_incremental_jk_density();
+       generativeqc_status jk_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+       bool fused_rsh_values = false;
+       if (has_range_correction && !range_source_active() && !pending_mixed_coulomb &&
+@@ -2786,7 +2852,10 @@
+       if (has_range_correction && !fused_rsh_values)
+         enqueue_range_correction(jk_density, spins == 2 ? jk_density + matrix : nullptr, detail,
+                                  true, pending_mixed_range_exchange);
+-      finalize_incremental_jk_components();
++      if (experimental_anchor_delta)
++        finalize_experimental_anchor_components();
++      else
++        finalize_incremental_jk_components();
+       jk_trace.finish();
+       mixed_precision_executed = mixed_precision_executed || pending_mixed_coulomb ||
+                                  pending_mixed_density || pending_mixed_point ||
+@@ -2990,6 +3059,21 @@
+     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
+     for (unsigned s = 0; s < 2; ++s)
+       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
++    if (experimental_anchor_delta) {
++      experimental_anchor_ready = !is_failed;
++      if (pending_experimental_delta)
++        ++experimental_delta_builds;
++      else
++        ++experimental_anchor_builds;
++      std::fprintf(stderr,
++                   "anchor-delta iteration=%u kind=%s scope=%s j_fp32=%d k_fp32=%d "
++                   "range_fp32=%d anchors=%u deltas=%u failed=%d state_bytes=%zu\n",
++                   output.iterations, pending_experimental_delta ? "delta" : "full",
++                   pending_nonlocal_seed ? "seed" : pending_nonlocal_frozen ? "frozen" : "target",
++                   pending_mixed_coulomb, pending_mixed_exchange, pending_mixed_range_exchange,
++                   experimental_anchor_builds, experimental_delta_builds, is_failed,
++                   ks_arena_bytes);
++    }
+     if (!is_failed && incremental_direct_jk && pending_incremental_delta)
+       ++output.incremental_direct_jk.anchor_updates;
+     if (is_failed) {

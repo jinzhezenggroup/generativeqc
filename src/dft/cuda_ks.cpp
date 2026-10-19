@@ -346,6 +346,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
+  bool fast_anchor_eligible{}, fast_anchor_active{}, fast_anchor_ready{}, pending_fast_delta{};
+  void* fast_anchor_arena{};
+  double *fast_anchor_density{}, *fast_delta_density{}, *fast_anchor_j{}, *fast_anchor_exchange{},
+      *fast_anchor_range_exchange{}, *fast_delta_maximum{};
   unsigned incremental_energy_full_builds{};
   unsigned incremental_delta_updates{};
   double host_incremental_max_abs_delta_density{};
@@ -1429,6 +1433,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
+    fast_anchor_eligible = admit_fast_anchor_delta(
+        budget_fock, budget_stationarity, functional,
+        static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
+            has_range_correction && scf::direct_jk_incremental_exact_eligible(strategy) &&
+            range_incremental_eligible && !incremental_direct_jk,
+        spins,
+        nonlocal_correlation &&
+            nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10,
+        runtime::active_device_resource_ledger != nullptr, configured_chunk_width());
+    if (fast_anchor_eligible) {
+      if (const auto* selected = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) {
+        if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
+          throw std::invalid_argument("Fast anchor delta accepts 0 or 1");
+        fast_anchor_eligible = std::strcmp(selected, "1") == 0;
+      } else {
+        fast_anchor_eligible = default_fast_anchor_delta(n);
+      }
+    }
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     // Automatic local-AO requests use the XC owner's execution capability.
@@ -1702,6 +1724,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         }
       }
       prepare_initial_state();
+      prepare_fast_anchor_storage();
     } catch (...) {
       cleanup();
       throw;
@@ -1724,10 +1747,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc.reset();
     eigensolver.reset();
     matrix_products.reset();
+    if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
     nonlocal_arena = xc_arena = arena = nullptr;
+    fast_anchor_arena = nullptr;
     cudaSetDevice(previous);
   }
   ~Impl() { cleanup(); }
@@ -1784,6 +1809,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!precision_schedule.any_lower_precision() || budget_fock) && !incremental_direct_jk &&
         !use_warm && options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    fast_anchor_active = fast_anchor_arena && nonlocal_outer_active &&
+                         configured_chunk_width() == 1 && !runtime::active_device_resource_ledger;
+    fast_anchor_ready = pending_fast_delta = false;
+    if (fast_anchor_active) check(cudaMemsetAsync(fast_delta_maximum, 0, sizeof(double), stream));
     if (budget_fock && budget_stationarity) {
       // Finish one bounded mixed proposal before paying for the strict anchor.
       // Application budgets reject explicit warmup overrides at preparation;
@@ -2577,6 +2606,95 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
   }
 
+  /** Allocate only after mandatory preparation. Refusing this optional lease
+   * must retain the ordinary Fast solve, not turn memory pressure into a new
+   * endpoint failure. A host reservation or non-allocation error still fails. */
+  void prepare_fast_anchor_storage() {
+    if (!fast_anchor_eligible) return;
+    const auto bytes = sum(product(matrix, 5 * sizeof(double)), sizeof(double));
+    bool host_oom = false;
+    const auto status = runtime::resource_cuda_malloc(&fast_anchor_arena, bytes, &host_oom);
+    if (status == cudaErrorMemoryAllocation && !host_oom) {
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+      fast_anchor_eligible = false;
+      ++movement.fast_anchor_allocation_fallbacks;
+      return;
+    }
+    check(status);
+    auto* storage = static_cast<double*>(fast_anchor_arena);
+    fast_anchor_density = storage;
+    fast_delta_density = storage + matrix;
+    fast_anchor_j = storage + 2 * matrix;
+    fast_anchor_exchange = storage + 3 * matrix;
+    fast_anchor_range_exchange = storage + 4 * matrix;
+    fast_delta_maximum = storage + 5 * matrix;
+    resource.state_device_bytes = sum(resource.state_device_bytes, bytes);
+  }
+
+  /** The idle force consumer never borrows the optional cold-SCF anchor.
+   * Release it only after the producer stream is drained. A later cold solve
+   * keeps the ordinary Fast path; cumulative execution evidence is unchanged. */
+  std::size_t retire_fast_anchor_storage() {
+    if (!fast_anchor_arena) return 0;
+    const auto bytes = sum(product(matrix, 5 * sizeof(double)), sizeof(double));
+    check(runtime::resource_cuda_free(fast_anchor_arena));
+    fast_anchor_arena = nullptr;
+    fast_anchor_density = fast_delta_density = fast_anchor_j = fast_anchor_exchange =
+        fast_anchor_range_exchange = fast_delta_maximum = nullptr;
+    fast_anchor_eligible = fast_anchor_active = fast_anchor_ready = pending_fast_delta = false;
+    resource.state_device_bytes -= bytes;
+    return bytes;
+  }
+
+  /** Reconstruct linear operators from one fixed strict anchor. Full targets
+   * always refresh FP64 J/K; nonlinear XC continues to consume total density.
+   * Keeping the anchor fixed avoids chaining screened or rounded updates. */
+  const double* prepare_fast_anchor_jk_density() {
+    pending_fast_delta =
+        fast_anchor_ready && !final_closure && (nonlocal_seed_stage || nonlocal_frozen_stage);
+    if (!pending_fast_delta) {
+      pending_mixed_coulomb = pending_mixed_exchange = pending_mixed_range_exchange = false;
+      return density;
+    }
+    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
+    launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, elements, density,
+                                              fast_anchor_density, fast_delta_density,
+                                              fast_delta_maximum);
+    check(cudaGetLastError());
+    return fast_delta_density;
+  }
+
+  void finalize_fast_anchor_jk_components() {
+    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
+    if (pending_fast_delta) {
+      launch_add_matrix_kernel(blocks, 128, 0, stream, matrix, fast_anchor_j, j);
+      launch_add_matrix_kernel(blocks, 128, 0, stream, elements, fast_anchor_exchange, exchange);
+      launch_add_matrix_kernel(blocks, 128, 0, stream, elements, fast_anchor_range_exchange,
+                               range_exchange);
+    } else {
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, density, fast_anchor_density);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, matrix, j, fast_anchor_j);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, exchange, fast_anchor_exchange);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, range_exchange,
+                                fast_anchor_range_exchange);
+    }
+    check(cudaGetLastError());
+  }
+
+  /** Enqueued copies are not accepted anchors until physical validation
+   * succeeds. A failed attempt must not lend stale buffers to the next one. */
+  void finish_fast_anchor_iteration() {
+    if (!fast_anchor_active) return;
+    fast_anchor_ready = !is_failed;
+    if (is_failed)
+      ++movement.fast_anchor_invalidations;
+    else if (pending_fast_delta)
+      ++movement.fast_delta_builds;
+    else
+      ++movement.fast_anchor_builds;
+  }
+
   bool incremental_delta_admitted() const noexcept {
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
         final_closure || strict_refinement)
@@ -2607,6 +2725,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   const double* prepare_incremental_jk_density() {
+    if (fast_anchor_active) return prepare_fast_anchor_jk_density();
     pending_incremental_delta = false;
     if (!incremental_direct_jk) return density;
     pending_incremental_delta = incremental_delta_admitted();
@@ -2639,6 +2758,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   void finalize_incremental_jk_components() {
+    if (fast_anchor_active) {
+      finalize_fast_anchor_jk_components();
+      return;
+    }
     if (!incremental_direct_jk || final_closure) return;
     const auto matrix_blocks = static_cast<unsigned>((matrix + 127) / 128);
     const auto element_blocks = static_cast<unsigned>((elements + 127) / 128);
@@ -2990,6 +3113,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
     for (unsigned s = 0; s < 2; ++s)
       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
+    finish_fast_anchor_iteration();
     if (!is_failed && incremental_direct_jk && pending_incremental_delta)
       ++output.incremental_direct_jk.anchor_updates;
     if (is_failed) {
@@ -4001,7 +4125,7 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
         throw std::logic_error("CUDA KS moving-grid source is not its actual XC quadrature");
       const auto& spec = impl_->grid.spec();
       candidate.atomic_weights = quadrature.atomic_weights;
-      candidate.points_per_atom = spec.radial_points * spec.angular_polar * spec.angular_azimuth;
+      candidate.points_per_atom = grid_points_per_atom(spec);
       candidate.partition_iterations = spec.partition_iterations;
       candidate.coincident_tolerance = spec.coincident_tolerance;
       candidate.quadrature_owner = quadrature.owner;
@@ -4261,15 +4385,22 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before && impl_->phase_source) {
+    if (additional_device_bytes > free_before &&
+        (impl_->fast_anchor_arena || impl_->phase_source)) {
       // The final-state token excludes active/pending SCF work. Drain its
-      // producer before invalidating graph borrowers and freeing immutable ERIs;
-      // downstream D/W/XC leases do not borrow this independently owned source.
+      // producer before freeing optional cold-SCF storage. Downstream D/W/XC
+      // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      retired = impl_->phase_device_bytes;
-      impl_->retire_phase_source(false);  // Successful SCF already audited it.
-      check(cudaMemGetInfo(&free_after, &total));
+      if (impl_->fast_anchor_arena) {
+        retired = impl_->retire_fast_anchor_storage();
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if (additional_device_bytes > free_after && impl_->phase_source) {
+        retired += impl_->phase_device_bytes;
+        impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
     }
     receipt = {additional_device_bytes, free_before, free_after, retired};
     return GENERATIVEQC_STATUS_SUCCESS;

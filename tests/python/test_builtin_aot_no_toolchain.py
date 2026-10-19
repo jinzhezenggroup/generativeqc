@@ -10,11 +10,18 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("method", ("rhf", "pbe-rks"))
+@pytest.mark.parametrize(
+    "method,legacy_grid,expected_energy",
+    (
+        ("rhf", False, -1.11671432506255),
+        ("pbe-rks", False, -1.1520643723572155),
+        ("pbe-rks", True, -1.1520643753396715),
+    ),
+)
 def test_builtin_method_runs_without_toolchain_activation(
-    tmp_path: Path, method: str
+    tmp_path: Path, method: str, legacy_grid: bool, expected_energy: float
 ) -> None:
-    """A qualified AOT built-in must not probe or launch a compiler."""
+    """Default and legacy-grid built-ins need no compiler and retain oracle energies."""
 
     root = Path(__file__).resolve().parents[2]
     guard = tmp_path / "sitecustomize.py"
@@ -70,13 +77,13 @@ subprocess.Popen = _forbid_subprocess
         pythonpath.append(existing_pythonpath)
     missing = tmp_path / "missing-toolchain"
 
-    expected_energy = -1.11671432506255 if method == "rhf" else -1.1520643753396715
     properties = ("energy", "forces") if method == "rhf" else ("energy",)
     code = f"""
-from generativeqc import Calculator
+from generativeqc import Calculator, GridPolicy, KsOptions
 
 atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-result = Calculator(method={method!r}, basis="sto-3g", device="cpu").singlepoint(atoms, properties={properties!r})
+options = KsOptions(grid=GridPolicy(pruning="none").resolve("pbe-rks")) if {legacy_grid!r} else None
+result = Calculator(method={method!r}, basis="sto-3g", device="cpu", ks_options=options).singlepoint(atoms, properties={properties!r})
 assert result.converged
 assert result.executed_backend == "cpu_reference"
 assert abs(result.energy - ({expected_energy!r})) < 2.0e-9

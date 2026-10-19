@@ -4708,7 +4708,8 @@ Caller-selected molecular quadrature; no implicit production grid is promised.
 **Behavior.** Value descriptor for caller-selected molecular quadrature; defaults form a small
 reference grid and do not promise production convergence.
 
-**Outputs.** version selects reference (1) or resolved production (2) grid semantics;
+**Outputs.** version selects reference (1), explicit-radius unpruned (2), or
+explicit-radius radial-v1 pruned (3) grid semantics;
 radial_points, angular_polar, and angular_azimuth set quadrature counts;
 partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
 coincident-center threshold; tile_points bounds the grid tile size.
