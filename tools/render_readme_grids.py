@@ -94,6 +94,12 @@ def compact_summary(summary: dict[str, Any]) -> dict[str, Any]:
 
 def render(summary: dict[str, Any], destination: Path) -> None:
     """Plot complete cold/warm phases with separate grid and engine identities."""
+    qualified = summary.get("precision_qualification") is not None
+    profile = summary.get("profile", "fp64")
+    if qualified:
+        from tools.render_qualified_vv10_grids import validate_summary
+
+        validate_summary(summary)
     import matplotlib
 
     matplotlib.use("Agg")
@@ -117,12 +123,28 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         "# Matched-grid complete energy + analytic forces",
         "",
         "Warm values retain all requested fixed-density replays. Columns show median seconds and observed SCF iterations/builds.",
-        "Same-grid engine parity and cross-grid convergence are separate gates; see grid-convergence.md.",
-        "Exploratory grids: FP64 quadrature accuracy is not certified.",
+        (
+            "Joint XC/NLC/screening reference and complete endpoint precision gates are replayed for both engines. Refinement allowances are empirical, not rigorous tail bounds."
+            if qualified
+            else "Same-grid engine parity and cross-grid convergence are separate gates; see grid-convergence.md."
+        ),
+        (
+            f"Qualified against the {profile.upper()} total-error budget; GPU4PySCF arithmetic remains FP64."
+            if qualified
+            else "Exploratory grids: FP64 quadrature accuracy is not certified."
+        ),
         "",
         "| Mode | Grid | Atoms | Engine | Cold (s) | Warm (s) | Cold work | Warm work |",
         "| --- | --- | ---: | --- | ---: | ---: | --- | --- |",
     ]
+    if qualified:
+        if profile == "fast":
+            lines.insert(
+                5,
+                "Effective precision counts cover all twelve E+F calls; operator dtypes and refinement/fallback work remain in the archive.",
+            )
+        lines[-2] += " Effective precision |"
+        lines[-1] += " --- |"
     grid_handles = []
     for column, (mode, grids) in enumerate(modes.items()):
         for index, population in enumerate(grids):
@@ -154,8 +176,18 @@ def render(summary: dict[str, Any], destination: Path) -> None:
                     )
                 for point in population["points"]:
                     entry = point["engines"][engine]
+                    precision = "FP64"
+                    if qualified and engine == "native" and profile == "fast":
+                        counts = entry["endpoint_precision_qualification"][
+                            "actual_fast_precision_counts"
+                        ]
+                        precision = ", ".join(
+                            f"{bits}-bit: {count}"
+                            for bits, count in sorted(counts.items())
+                        )
+                    suffix = f" {precision} |" if qualified else ""
                     lines.append(
-                        f"| {mode} | {dimensions} | {point['atoms']} | {engine} | {timing_cell(entry, 'cold')} | {timing_cell(entry, 'warm')} | {work_cell(entry, 'cold')} | {work_cell(entry, 'warm')} |"
+                        f"| {mode} | {dimensions} | {point['atoms']} | {engine} | {timing_cell(entry, 'cold')} | {timing_cell(entry, 'warm')} | {work_cell(entry, 'cold')} | {work_cell(entry, 'warm')} |{suffix}"
                     )
         for row, phase in enumerate(("cold", "warm")):
             axis = axes[row, column]
@@ -168,13 +200,35 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             axis.set_yscale("log")
             axis.grid(axis="y", alpha=0.2)
             axis.spines[["top", "right"]].set_visible(False)
+    native_label = "GenerativeQC"
+    if qualified and profile == "fast":
+        only_fp64 = all(
+            set(
+                point["engines"]["native"]["endpoint_precision_qualification"][
+                    "actual_fast_precision_counts"
+                ]
+            )
+            == {"64"}
+            for grids in modes.values()
+            for population in grids
+            for point in population["points"]
+        )
+        native_label = (
+            "GenerativeQC Fast request (FP64 execution)"
+            if only_fp64
+            else "GenerativeQC Fast request (actual precision in table)"
+        )
     handles = [
         Line2D([], [], color=color, label=label)
         for (engine, color), label in zip(
-            colors.items(), ("GenerativeQC", "GPU4PySCF"), strict=True
+            colors.items(), (native_label, "GPU4PySCF"), strict=True
         )
     ] + grid_handles
-    figure.suptitle("ωB97M-V / def2-SVP · exploratory grids (not FP64-qualified)")
+    figure.suptitle(
+        f"ωB97M-V / def2-SVP · {profile.upper()} total-error gates (empirical reference)"
+        if qualified
+        else "ωB97M-V / def2-SVP · exploratory grids (not FP64-qualified)"
+    )
     figure.legend(
         handles=handles,
         loc="lower center",

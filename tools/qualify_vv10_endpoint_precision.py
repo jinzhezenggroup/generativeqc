@@ -194,6 +194,7 @@ def qualify_endpoint(
         != SCHEMA + (".fast.v1" if is_native and profile == "fast" else "")
         or candidate["engine"] not in ("native", "reference")
         or candidate["stage"] != "complete"
+        or candidate.get("status") not in ("measured", "completed_unchecked")
         or protocol["method"] != "WB97M-V/RKS"
         or protocol["basis"] != "def2-SVP"
         or protocol["representation"] != "spherical"
@@ -257,13 +258,18 @@ def qualify_endpoint(
     if seen != required:
         raise ValueError("all twelve E+F endpoints are required")
     rows = _differences(candidate, anchor)
-    for row in rows:
+    for row, measured in zip(rows, candidate["records"], strict=True):
+        row["measurement_gate"] = measured.get("gate")
         row["with_reference_allowance"] = {
             norm: row[norm] + uncertainty[norm] for norm in NORMS
         }
-        row["gate"] = stability_gate and all(
-            limit is None or row["with_reference_allowance"][norm] <= limit
-            for norm, limit in budget.items()
+        row["gate"] = (
+            measured.get("gate") is not False
+            and stability_gate
+            and all(
+                limit is None or row["with_reference_allowance"][norm] <= limit
+                for norm, limit in budget.items()
+            )
         )
     return {
         "schema": "generativeqc.vv10-endpoint-precision.v1",
@@ -289,6 +295,65 @@ def qualify_endpoint(
     }
 
 
+def load_candidate(path: Path) -> dict[str, Any]:
+    """Bind either timing engine to successful process and source/build bytes."""
+    payload = path.read_bytes()
+    candidate = json.loads(payload)
+    outcome = path.with_suffix(".outcome").read_bytes()
+    if json.loads(outcome)["exit_code"] != 0:
+        raise ValueError("candidate process did not complete successfully")
+    if not (candidate["scheduler"]["SLURM_JOB_ID"] and candidate["source_file_sha256"]):
+        raise ValueError("candidate scheduler/source receipts are missing")
+    candidate["receipt"] = {
+        "file": str(path),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "outcome_sha256": hashlib.sha256(outcome).hexdigest(),
+        "scheduler": candidate["scheduler"],
+        "source_file_sha256": candidate["source_file_sha256"],
+    }
+    if candidate["engine"] == "native":
+        if not candidate["native_build"]["library_sha256"]:
+            raise ValueError("native build receipt is missing")
+        candidate["receipt"]["native_build"] = candidate["native_build"]
+    return candidate
+
+
+def replay_qualification(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Recompute publication gates; a saved true flag is not scientific evidence.
+
+    Receipt paths are the exact paths used by the original invocation, relative
+    to its working directory when not absolute. Retain that working directory
+    when replaying a report. Every reference force, outcome and source receipt
+    is checked again, including the native candidate's actual Fast controls.
+    """
+    saved = json.loads(path.read_bytes())
+    if saved.get("schema") != "generativeqc.vv10-endpoint-precision.v1":
+        raise ValueError("not a complete endpoint precision report")
+    reference_controls = saved["reference_controls"]
+    if set(reference_controls) != {*CONTROLS, "anchor_replay"}:
+        raise ValueError("joint reference controls are missing")
+    candidate = load_candidate(Path(saved["candidate_receipt"]["file"]))
+    anchor = load_population(
+        Path(reference_controls["anchor_replay"]["receipt"]["file"])
+    )
+    controls = {
+        name: load_population(Path(reference_controls[name]["receipt"]["file"]))
+        for name in CONTROLS
+    }
+    observed = qualify_endpoint(
+        candidate,
+        anchor,
+        controls,
+        profile=saved["profile"],
+        anchor_fraction=saved["reference_allowance_fraction"],
+    )
+    if observed != saved:
+        raise ValueError(
+            "qualification differs from the current endpoint/reference bytes"
+        )
+    return candidate, observed
+
+
 def main() -> None:
     """Keep missing evidence distinct from a measured failing precision gate."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -302,26 +367,7 @@ def main() -> None:
     args = parser.parse_args()
     result: dict[str, Any]
     try:
-        payload = args.candidate.read_bytes()
-        candidate = json.loads(payload)
-        outcome = args.candidate.with_suffix(".outcome").read_bytes()
-        if json.loads(outcome)["exit_code"] != 0:
-            raise ValueError("candidate process did not complete successfully")
-        if not (
-            candidate["scheduler"]["SLURM_JOB_ID"] and candidate["source_file_sha256"]
-        ):
-            raise ValueError("candidate scheduler/source receipts are missing")
-        candidate["receipt"] = {
-            "file": str(args.candidate),
-            "sha256": hashlib.sha256(payload).hexdigest(),
-            "outcome_sha256": hashlib.sha256(outcome).hexdigest(),
-            "scheduler": candidate["scheduler"],
-            "source_file_sha256": candidate["source_file_sha256"],
-        }
-        if candidate["engine"] == "native":
-            if not candidate["native_build"]["library_sha256"]:
-                raise ValueError("native build receipt is missing")
-            candidate["receipt"]["native_build"] = candidate["native_build"]
+        candidate = load_candidate(args.candidate)
         result = qualify_endpoint(
             candidate,
             load_population(args.anchor),

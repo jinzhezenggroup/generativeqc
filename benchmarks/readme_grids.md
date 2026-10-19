@@ -326,3 +326,52 @@ precision counts remain visible, including all-FP64 executions. Successful
 process, source, build and reference-byte receipts are retained. The tool does
 not rewrite measurement-time gates or qualify latency publication. No final
 FP64/Fast grid combination is certified by adding this tooling.
+
+### Publishing a qualified grid cohort
+
+`tools.render_qualified_vv10_grids` is separate from the exploratory renderer.
+Its manifest identifies one profile and a native/GPU4PySCF report pair for every
+requested grid, size and Direct/DF combination. For example, one *illustrative*
+record has this shape; 64×24×48 here is not a final grid recommendation:
+
+```json
+{
+  "schema": "generativeqc.readme-qualified-grid-inputs.v1",
+  "profile": "fast",
+  "points": [{
+    "mode": "none",
+    "grid": [64, 24, 48],
+    "atoms": 3,
+    "reports": {
+      "native": "reports/native-direct-3.json",
+      "reference": "reports/gpu4pyscf-direct-3.json"
+    }
+  }]
+}
+```
+
+The full manifest must include all requested populations. The default command
+requires **3/12/48/96 atoms, both Direct and DF, and both engines** for every
+selected grid; a one-record manifest fails instead of silently omitting results:
+
+```bash
+PYTHONPATH=.:python python -m tools.render_qualified_vv10_grids \
+  --manifest "$QUALIFIED_MANIFEST" --grids "$SELECTED_GRID" \
+  --output .artifacts/vv10-grid/qualified-publication
+```
+
+Report filenames are relative to the manifest directory; receipt filenames
+inside reports retain the original qualification working directory. Run from
+that directory. The reader recomputes every report from its current raw bytes,
+including all reference controls, rather than trusting a saved success flag.
+Known measurement failures are not erased. It rejects differing source/build
+cohorts, changed physical cases and missing native or GPU4PySCF populations.
+
+The retained reduction preserves all twelve force/timing samples, independent
+accuracy oracles, SCF/force work and traffic, plus the original measurement gates.
+Its numerical gates are replayed again when rendering the archive without the
+raw files. Fast plots retain actual effective-precision counts; an all-FP64
+execution is explicitly labeled **Fast request (FP64 execution)**, not sold as
+mixed precision. Use the separate source/package rerun audit too: this renderer
+does not certify a current-HEAD build or replace the all-eight-method overview
+rerun. No existing README results or assets are removed by this publication path.

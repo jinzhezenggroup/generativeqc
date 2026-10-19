@@ -260,3 +260,79 @@ They use the same source-frozen package as the joint three-atom study. This
 closes a measurement-coverage gap, not the qualification itself: the anchor may
 still require refinement, low-screening controls remain separate, and these
 accuracy-only runs cannot replace complete cold/warm benchmark timings.
+
+## Larger XC result and pending shared-grid performance pilot
+
+The completed Direct/48 XC controls can now use the independently reconverged
+XC144×48×96 / NLC48×12×24 endpoint from job 10360 as their common anchor. The
+n4 refinements and this n1 anchor have identical source, full-Fock, screening,
+geometry and integration prescriptions; they remain accuracy-only data, not
+pooled timing populations. Their radial and angular differences are respectively
+`2.13407e-7 Eh` / `6.76559e-7 Eh/bohr` / `3.53374e-7 Eh/bohr` RMS, and
+`1.76259e-7 Eh` / `2.13114e-6 Eh/bohr` / `6.34962e-7 Eh/bohr` RMS. They pass the
+reserved Fast reference allowance but not FP64. XC64×24×48 differs from that
+anchor by `1.36095e-7 Eh` / `1.00739e-5 Eh/bohr` / `4.07770e-6 Eh/bohr` RMS,
+passing **XC-only Direct/48 Fast**. XC48×16×32 still differs by `3.92490e-5 Eh`
+and fails Fast's energy budget. NLC, screening and native errors remain to be
+jointly qualified; no final grid is selected. Receipts and the explicit analysis
+are in `.artifacts/vv10-grid/precision-study/fast-xc48-combined-receipts-analysis.json`.
+
+At 09:00 +08, n1 jobs 10362 (DF) and 10363 (Direct) were submitted for a prospective
+shared64×24×48 performance pilot, with 12-hour finite allocations. They execute
+independent reference then actual public native Fast on 3/12/48 atoms, **one**
+warm replay per geometry (four calls), not the final twelve-call publication
+contract. No private Fast force controls or density seeds are injected. Verify
+compiler launchers before possible cache misses, retain the stationary package
+and frozen library/consumer identities, and preserve actual dtype/fallback work.
+Raw output is `n1:/data/jzzeng/readme-full-grid-rerun-20261019/pilot-fast-candidate64`.
+The pilot can inform whether shared-grid work is practical; it cannot stand in
+for the requested 96-atom coverage or final complete benchmark rerun.
+
+Both initial pilot jobs completed the independent three-atom reference, then
+the native parser rejected a missing explicit `--reference` argument before
+native GPU work. Keep the original driver, successful reference files, parser
+logs/outcomes and scheduler receipt; this is a setup failure, not a numerical
+failure. The fixed driver binds that reference and uses the distinct
+`pilot-fast-candidate64-reference-bound` population. Jobs 10364 (Direct, started
+09:08:31 +08) and 10365 (DF, queued) use finite twelve-hour, 48-GiB allocations.
+Do not overwrite or count the prior attempts as successful native runs.
+
+The fixed Direct/3 pilot has completed all four calls with same-grid Fast
+maxima `8.00924e-11 Eh` / `5.52031e-6 Eh/bohr` / `3.80874e-6 Eh/bohr` RMS.
+Every call reports effective bits 32; the cold call records twelve mixed-stage
+and two strict-stage Fock builds, not an all-FP32 endpoint. Cold and the single
+warm endpoint are approximately 8.3644 s and 4.6267 s. These prove this grid can
+execute the actual public Fast profile on that small case; they do not qualify
+total quadrature precision, five warm repeats, 48/96 atoms, or a timing speedup.
+
+## Precision-qualified publication path
+
+The separate `tools.render_qualified_vv10_grids` reader replays both engines'
+qualification reports, refuses incomplete requested cohorts, preserves original
+measurement failures and keeps every force/timing sample and the common
+independent accuracy oracles. Archived reductions replay their numerical gates
+without the raw filesystem. Fast figures explicitly distinguish all-FP64
+execution and preserve per-operator dtype/work metadata. Legacy exploratory
+plots remain labeled exploratory. Do not mistake this implemented publication
+path for a qualified scientific result: the actual final grid/endpoint cohorts
+and all-eight-method timing update remain pending.
+
+## Native numerical-policy constraints before the FP64 refresh
+
+Native public KS currently has only one grid and no requested VV10 density
+threshold. Both CPU integration and CUDA ordinary/graph/physical-final-density
+paths consume the generated `kMolecularVv10DensityThreshold`; the response kernel
+also uses a compiled threshold. The force kernel already accepts a runtime
+threshold, but its Python stationary consumer still supplies the global default.
+Changing only that consumer would mismatch SCF and derivatives. Split-grid
+reference observations do not implement native split-grid ownership.
+
+`generativeqc_ks_snapshot_nonlocal_model_v1` proves nine model values, including
+the domain enum, **not the actual threshold**. A configurable native threshold
+needs a matching model/snapshot proof and cache identity, in addition to correct
+propagation through preparation, SCF (including strict refinement), force and
+response. Do not relabel an old frozen binary by editing Python's constant.
+The public KS ABI also has a size-tagged private application-precision extension;
+blindly appending a scalar to the base layout can interpret an old extension's
+energy budget as the new field. Any layout change must explicitly validate the
+schema/complete sizes and fail closed for unsupported source/library pairs.
