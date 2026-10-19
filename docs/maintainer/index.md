@@ -14,6 +14,7 @@ validation
 array_api_conformance
 oh_uhf_comparison
 performance_engineering
+production_default_comparison
 gfn2_density_work_diagnostics
 gfn2_mixer_endpoint_qualification
 evidence_retention
