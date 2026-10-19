@@ -29,6 +29,7 @@ _SHIM = r"""
 #include <vector>
 #include "runtime/execution_precision.hpp"
 #include "cc/solver.hpp"
+#include "cc/phase_observation.hpp"
 namespace cc = generativeqc::cc;
 __DF_CORRELATION_DEMAND__
 DFCorrelationDemand expected_demand;
