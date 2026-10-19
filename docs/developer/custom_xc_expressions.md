@@ -116,6 +116,11 @@ from semantic identity, so equal mathematics may retain different declarations.
 (xc-expression-backends)=
 ## Capability boundary
 
+The sealed declaration's `evaluate` endpoint is a diagnostic CPU scalar call.
+It neither compiles code nor grants native SCF, force, response or CUDA admission.
+Explicit compiled CPU point/batch programs use the separate API below;
+compilation alone does not qualify a formula scientifically.
+
 ### Explicit native CPU point/batch programs
 
 `xc.expression_program(formula, order=0|1|2)` builds a separate immutable scalar
