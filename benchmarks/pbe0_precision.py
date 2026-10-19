@@ -78,6 +78,7 @@ def reference(
     auxiliary_basis: Any = None,
     backend: str = "pyscf",
     case_snapshot: Any = None,
+    vv10_density_threshold: float = 1e-8,
 ) -> dict[str, Any]:
     """PySCF owns SCF, integrals, XC, partition and analytic moving-grid response.
 
@@ -87,8 +88,10 @@ def reference(
     Other RKS qualification consumers may select the XC functional, an explicit
     moved geometry and shared basis inputs. Nonlocal functionals use the same
     independent atomic rules for their second grid, including its full moving
-    response. PySCF's VV10 energy and gradient use the molecular 1e-8 density
-    threshold. The default PBE0 protocol keeps the original geometry and basis.
+    response. The default VV10 threshold remains 1e-8 for existing protocols;
+    GPU4PySCF callers may explicitly select a matched SCF/gradient threshold.
+    CPU PySCF retains its fixed 1e-8 domain. The default PBE0 protocol keeps the
+    original geometry and basis.
     An explicit PySCF auxiliary basis selects its independent density-fitted
     Hamiltonian, including auxiliary-center and metric response in the forces.
     The optional ``gpu4pyscf`` oracle retains independent grids and complete
@@ -98,6 +101,10 @@ def reference(
     """
     if backend not in ("pyscf", "gpu4pyscf"):
         raise ValueError("reference backend must be pyscf or gpu4pyscf")
+    if not np.isfinite(vv10_density_threshold) or vv10_density_threshold <= 0:
+        raise ValueError("VV10 density threshold must be finite and positive")
+    if backend == "pyscf" and vv10_density_threshold != 1e-8:
+        raise NotImplementedError("custom VV10 density thresholds require GPU4PySCF")
     if backend == "gpu4pyscf" and not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU reference requires a finite Slurm allocation")
     if (
@@ -208,10 +215,10 @@ def reference(
         cp.cuda.Stream.null.synchronize()
     started = perf_counter()
     with (
-        reference_vv10_domain(1e-8)
+        reference_vv10_domain(vv10_density_threshold)
         if backend == "gpu4pyscf" and engine.do_nlc()
         else nullcontext()
-    ):
+    ) as vv10_domain:
         energy = float(engine.kernel())
         if not engine.converged:
             raise RuntimeError(f"independent {functional} SCF did not converge")
@@ -234,6 +241,15 @@ def reference(
             else {}
         ),
         "functional": functional,
+        **(
+            {
+                "vv10_density_threshold": vv10_domain
+                if vv10_domain is not None
+                else {"scf": 1e-8, "forces": 1e-8}
+            }
+            if engine.do_nlc()
+            else {}
+        ),
         "density_fitting": auxiliary_basis is not None,
         "aos": molecule.nao,
         "grid_points": len(engine.grids.weights),

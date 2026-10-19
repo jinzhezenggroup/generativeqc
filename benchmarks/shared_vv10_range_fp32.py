@@ -26,7 +26,10 @@ from generativeqc._model_resolution import snapshot_basis
 from generativeqc.autotune import source_identity
 from generativeqc.elements import SYMBOLS
 from generativeqc.ks import resolve_ks_options
-from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_POLICY,
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks._retention import raw_output_path
@@ -34,7 +37,7 @@ from benchmarks.pbe0_fast_fock import portable_report
 from benchmarks.pbe0_precision import errors, native_sample, reference
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = "generativeqc.shared-vv10-range-fp32.v1"
+SCHEMA = "generativeqc.shared-vv10-range-fp32.v2"
 GATES = {"fp64": [1e-7, 1e-5, 3e-6], "fast": [1e-5, 1e-4, 3e-5]}
 ERRORS = ("energy_Eh", "max_force_Eh_per_bohr", "rms_force_Eh_per_bohr")
 
@@ -54,8 +57,7 @@ def protocol(
         else basis_snapshot
     )
     ks = resolve_ks_options("wb97m-v-rks", KsOptions(grid=grid))
-    if float(MOLECULAR_VV10_DENSITY_THRESHOLD) != 1e-8:
-        raise ValueError("native and reference VV10 density domains differ")
+    density_threshold = float(MOLECULAR_VV10_DENSITY_THRESHOLD)
     return json.loads(
         json.dumps(
             {
@@ -90,9 +92,10 @@ def protocol(
                 "semilocal_grid": asdict(grid),
                 "nonlocal_grid": asdict(grid),
                 "grid_response": True,
+                "vv10_density_policy": MOLECULAR_VV10_DENSITY_POLICY,
                 "vv10_density_threshold": {
-                    "native_scf_and_forces": float(MOLECULAR_VV10_DENSITY_THRESHOLD),
-                    "reference_scf_and_forces": 1e-8,
+                    "native_scf_and_forces": density_threshold,
+                    "reference_scf_and_forces": density_threshold,
                 },
                 "scf_domain": ks.scf_domain,
                 "xc_schedule": ks.xc_schedule,
@@ -157,6 +160,10 @@ def validate_reference(oracle: dict, science: dict) -> None:
         "conv_tol": 1e-12,
         "conv_tol_grad": 1e-10,
         "direct_scf_tol": 1e-14,
+        "vv10_density_threshold": {
+            "scf": science["vv10_density_threshold"]["reference_scf_and_forces"],
+            "forces": science["vv10_density_threshold"]["reference_scf_and_forces"],
+        },
         "aos": science["ao_count"],
         "grid_points": len(science["atoms"])
         * science["semilocal_grid"]["radial_points"]
@@ -264,6 +271,9 @@ def _run(args: argparse.Namespace, output: TextIO) -> None:
                 atoms=case.atoms,
                 basis=basis,
                 case_snapshot=case,
+                vv10_density_threshold=science["vv10_density_threshold"][
+                    "reference_scf_and_forces"
+                ],
             )
             save()
             validate_reference(report["reference"], science)

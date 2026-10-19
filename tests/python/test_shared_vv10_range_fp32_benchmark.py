@@ -31,6 +31,10 @@ def oracle(science: dict) -> dict:
         "conv_tol": 1e-12,
         "conv_tol_grad": 1e-10,
         "direct_scf_tol": 1e-14,
+        "vv10_density_threshold": {
+            "scf": science["vv10_density_threshold"]["reference_scf_and_forces"],
+            "forces": science["vv10_density_threshold"]["reference_scf_and_forces"],
+        },
         "aos": science["ao_count"],
         "grid_points": len(science["atoms"]) * 48 * 16 * 32,
         "energy": -1.0,
@@ -49,6 +53,11 @@ def test_protocol_retains_actual_science(science: dict) -> None:
         assert science[grid]["partition_iterations"] == 3
         assert science[grid]["pruning"] == "none"
     assert science["gates_Eh_maxF_RMS_Eh_per_bohr"] == runner.GATES
+    assert science["vv10_density_policy"] == "vv10-molecular-rho-ge-1e-10-v2"
+    assert science["vv10_density_threshold"] == {
+        "native_scf_and_forces": 1e-10,
+        "reference_scf_and_forces": 1e-10,
+    }
 
 
 @pytest.mark.parametrize(
@@ -70,6 +79,7 @@ def test_protocol_retains_actual_science(science: dict) -> None:
         "nonlocal_grid",
         "grid_response",
         "vv10_density_threshold",
+        "vv10_density_policy",
         "native_recipe",
         "reference_recipe",
         "gates_Eh_maxF_RMS_Eh_per_bohr",
@@ -117,6 +127,41 @@ def test_reference_rejects_contradictory_inner_metadata(
     invalid[field] = value
     with pytest.raises(ValueError):
         runner.validate_reference(invalid, science)
+
+
+@pytest.mark.parametrize("leg", ["scf", "forces", "missing"])
+def test_reference_rejects_unmatched_vv10_domains(science: dict, leg: str) -> None:
+    invalid = oracle(science)
+    if leg == "missing":
+        del invalid["vv10_density_threshold"]
+    else:
+        invalid["vv10_density_threshold"][leg] = 1e-8
+    with pytest.raises(ValueError, match="contradicts protocol"):
+        runner.validate_reference(invalid, science)
+
+
+def test_old_vv10_receipt_is_rejected_without_modification(
+    tmp_path: Path, science: dict
+) -> None:
+    old = copy.deepcopy(science)
+    old.pop("vv10_density_policy")
+    old["vv10_density_threshold"] = {
+        "native_scf_and_forces": 1e-8,
+        "reference_scf_and_forces": 1e-8,
+    }
+    path = tmp_path / "old-oracle.json"
+    payload = json.dumps(
+        {
+            "schema": "generativeqc.shared-vv10-range-fp32.v1",
+            "status": "reference-completed",
+            "protocol": old,
+            "reference": oracle(old),
+        }
+    ).encode()
+    path.write_bytes(payload)
+    with pytest.raises(ValueError, match="exact complete protocol"):
+        runner.load_oracle(path, science)
+    assert path.read_bytes() == payload
 
 
 def setup_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, science: dict) -> tuple:
@@ -209,6 +254,35 @@ def test_success_attests_each_actual_owner(
     assert [r["mode"] for r in report["records"]] == ["fp64", "fast", "fast", "fp64"]
     assert [r["first_call"] for r in report["records"]] == [True, True, False, False]
     assert all(r["native_build"] == build for r in report["records"])
+
+
+def test_live_reference_receives_the_declared_vv10_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, science: dict
+) -> None:
+    output, _, _, _ = setup_run(tmp_path, monkeypatch, science)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "runner",
+            "--engine",
+            "reference",
+            "--case",
+            "fixture",
+            "--output",
+            str(output),
+        ],
+    )
+
+    def reference(*args: object, **kwargs: object) -> dict:
+        assert kwargs["vv10_density_threshold"] == 1e-10
+        return oracle(science)
+
+    monkeypatch.setattr(runner, "reference", reference)
+    runner.main()
+    report = json.loads(output.read_text())
+    assert report["schema"] == "generativeqc.shared-vv10-range-fp32.v2"
+    assert report["status"] == "reference-completed"
 
 
 @pytest.mark.parametrize(

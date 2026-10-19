@@ -99,3 +99,115 @@ def test_summary_excludes_first_calls_and_preserves_audit_slowdowns() -> None:
     records[-1]["oracle_gate"] = False
     with pytest.raises(ValueError, match="rejected"):
         summarize(records)
+
+
+@pytest.mark.parametrize("threshold", [0.0, -1.0, float("nan"), float("inf")])
+def test_reference_rejects_invalid_vv10_thresholds(threshold: float) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        reference(CASES[0], GridSpec(), 1, vv10_density_threshold=threshold)
+
+
+def test_cpu_reference_keeps_its_fixed_vv10_domain() -> None:
+    with pytest.raises(NotImplementedError, match="require GPU4PySCF"):
+        reference(CASES[0], GridSpec(), 1, vv10_density_threshold=1e-10)
+
+
+@pytest.mark.parametrize("threshold", [None, 1e-10])
+@pytest.mark.parametrize("fail", [None, "scf", "forces"])
+def test_gpu_reference_scopes_both_vv10_legs_and_restores_defaults(
+    threshold: float | None, fail: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the real adapter and scoping helper without numerical engines."""
+    expected = 1e-8 if threshold is None else threshold
+    numint = SimpleNamespace(NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD=6e-9)
+    grad_rks = SimpleNamespace(NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD=7e-9)
+    observed = []
+
+    def record(stage: str) -> None:
+        observed.append(stage)
+        assert numint.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD == expected
+        assert grad_rks.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD == expected
+
+    def kernel() -> float:
+        record("scf")
+        if fail == "scf":
+            raise RuntimeError("synthetic scf failure")
+        return -1.0
+
+    def gradient_kernel() -> np.ndarray:
+        record("forces")
+        if fail == "forces":
+            raise RuntimeError("synthetic forces failure")
+        return np.zeros((3, 3))
+
+    molecule = SimpleNamespace(natm=3, nao=24, atom_symbol=lambda i: ("O", "H", "H")[i])
+    engine = SimpleNamespace(
+        grids=SimpleNamespace(weights=np.ones(2)),
+        nlcgrids=SimpleNamespace(weights=np.ones(2)),
+        do_nlc=lambda: True,
+        get_veff=lambda *a, **k: None,
+        kernel=kernel,
+        converged=True,
+        cycles=1,
+        nuc_grad_method=lambda: SimpleNamespace(kernel=gradient_kernel),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "pyscf",
+        SimpleNamespace(
+            __version__="host-fixture",
+            dft=SimpleNamespace(),
+            gto=SimpleNamespace(M=lambda **k: molecule),
+            lib=SimpleNamespace(num_threads=lambda _: None),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "cupy",
+        SimpleNamespace(
+            asarray=np.asarray,
+            asnumpy=np.asarray,
+            cuda=SimpleNamespace(
+                Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+            ),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules, "gpu4pyscf", SimpleNamespace(__version__="host-fixture")
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "gpu4pyscf.dft",
+        SimpleNamespace(
+            gen_grid=SimpleNamespace(original_becke=object()),
+            rks=SimpleNamespace(RKS=lambda _: engine),
+            numint=numint,
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "gpu4pyscf.grad", SimpleNamespace(rks=grad_rks))
+    monkeypatch.setenv("SLURM_JOB_ID", "host-only-adapter-test")
+    options = {} if threshold is None else {"vv10_density_threshold": threshold}
+    if fail:
+        with pytest.raises(RuntimeError, match=f"synthetic {fail} failure"):
+            reference(
+                CASES[0],
+                GridSpec(2, 2, 4),
+                1,
+                functional="WB97M-V",
+                backend="gpu4pyscf",
+                **options,
+            )
+        assert observed == (["scf"] if fail == "scf" else ["scf", "forces"])
+    else:
+        result = reference(
+            CASES[0],
+            GridSpec(2, 2, 4),
+            1,
+            functional="WB97M-V",
+            backend="gpu4pyscf",
+            **options,
+        )
+        assert result["vv10_density_threshold"] == {"scf": expected, "forces": expected}
+        assert observed == ["scf", "forces"]
+    assert numint.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD == 6e-9
+    assert grad_rks.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD == 7e-9
