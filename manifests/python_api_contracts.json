@@ -377,8 +377,10 @@
     "generativeqc.extensions.xc.Coefficient": "generativeqc/extensions/xc.py:Coefficient",
     "generativeqc.extensions.xc.FunctionalSpec": "generativeqc_compiler/xc/spec.py:FunctionalSpec",
     "generativeqc.extensions.xc.UnsupportedXC": "generativeqc_compiler/xc/spec.py:UnsupportedXC",
+    "generativeqc.extensions.xc.UserExpression": "generativeqc_compiler/xc/user_expression.py:UserExpression",
     "generativeqc.extensions.xc.capability": "generativeqc/extensions/xc.py:capability",
     "generativeqc.extensions.xc.compose": "generativeqc/extensions/xc.py:compose",
+    "generativeqc.extensions.xc.expression": "generativeqc/extensions/xc.py:expression",
     "generativeqc.extensions.xc.inspect": "generativeqc/extensions/xc.py:inspect",
     "generativeqc.extensions.xc.named": "generativeqc/extensions/xc.py:named",
     "generativeqc.finalize_hf_verification": "generativeqc/progressive_controller.py:finalize_hf_verification",
@@ -4607,6 +4609,16 @@
         "errors": "docs/reference/python_contracts.md#python-method-errors",
         "ownership": "docs/reference/python_contracts.md#python-method-ownership",
         "values": "docs/reference/python_contracts.md#python-method-values"
+      }
+    },
+    "generativeqc/extensions/xc.py:expression": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
       }
     },
     "generativeqc/extensions/xc.py:inspect": {
@@ -8884,6 +8896,94 @@
       "profile": "exception",
       "facets": {
         "behavior": "docstring"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression": {
+      "kind": "class",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.__post_init__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.capability": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.dumps": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.evaluate": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-backends",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.identity": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.loads": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.scalar_graph": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression.py:UserExpression.to_payload": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
       }
     }
   }
