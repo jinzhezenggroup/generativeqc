@@ -262,14 +262,31 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
         raise ValueError("missing timed samples")
     if len(samples) != record.get("repeats"):
         raise ValueError("missing or extra repetitions")
+    atoms = record.get("problem", {}).get("atoms")
+    if not isinstance(atoms, int) or atoms <= 0:
+        raise ValueError("invalid atom count in measured scientific input")
     for sample in samples:
         seconds = sample.get("seconds")
+        energy = sample.get("energy")
+        forces = sample.get("forces")
         if (
             not sample.get("converged")
             or not isinstance(seconds, (int, float))
             or not math.isfinite(seconds)
             or seconds <= 0
-            or not isinstance(sample.get("forces"), list)
+            or not isinstance(energy, (int, float))
+            or not math.isfinite(energy)
+            or not isinstance(forces, list)
+            or len(forces) != atoms
+            or any(
+                not isinstance(row, list)
+                or len(row) != 3
+                or any(
+                    not isinstance(value, (int, float)) or not math.isfinite(value)
+                    for value in row
+                )
+                for row in forces
+            )
         ):
             raise ValueError("failed or partial default benchmark sample")
     return samples

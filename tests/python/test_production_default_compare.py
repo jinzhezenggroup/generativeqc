@@ -80,6 +80,8 @@ def test_full_response_is_separate_mode() -> None:
         "nonconverged",
         "nonfinite",
         "mismatched_backend",
+        "bad_energy",
+        "bad_forces",
     ],
 )
 def test_comparator_rejects_unmatched_or_incomplete_receipts(change: str) -> None:
@@ -98,6 +100,10 @@ def test_comparator_rejects_unmatched_or_incomplete_receipts(change: str) -> Non
         right["samples"][0]["converged"] = False
     elif change == "nonfinite":
         right["samples"][0]["seconds"] = float("nan")
+    elif change == "bad_energy":
+        right["samples"][0]["energy"] = float("nan")
+    elif change == "bad_forces":
+        right["samples"][0]["forces"] = [[float("nan"), 0.0, 0.0]]
     else:
         right["engine"] = "generativeqc"
     with pytest.raises(ValueError):
