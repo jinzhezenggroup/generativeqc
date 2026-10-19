@@ -139,7 +139,9 @@ def test_primitive_cumulative_omission_with_unequal_contractions(
     )
     # The independent converter deliberately rejects implicit PySCF shell
     # reordering. Supply both engines the same explicit atom/angular order.
-    shells = tuple(sorted(shells, key=lambda shell: (shell.atom_index, shell.angular_momentum)))
+    shells = tuple(
+        sorted(shells, key=lambda shell: (shell.atom_index, shell.angular_momentum))
+    )
     cap = min(cutoff, 1e-12)
     with NativeAO(atoms, shells, representation="spherical") as basis:
         _, _, eri, _ = public_ao_oracle(basis)

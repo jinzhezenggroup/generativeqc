@@ -52,6 +52,8 @@ The generated recurrence and arithmetic are unchanged.
 
 ## Controlled experiments
 
+These ablations precede the final #2609 represented-source and XC finite-range
+repairs; their base is `0721ef3f6`, not the repaired head qualified below.
 Jobs use finite Slurm allocations on n4, with assigned GPU visibility preserved.
 Clean samples exclude counters and profiling; separate calls collect semantic
 work. Local data and immutable snapshots are under
@@ -85,18 +87,117 @@ separate evidence, not replacements for unavailable hardware counters.
 
 ## Qualification
 
-Final source/binary identities, complete endpoints, actual per-Fock timing,
-independent numerical gates and test results are recorded in the follow-up
-qualification entry. Intermediate matrix comparisons pass atol=1e-9, rtol=1e-10
-against the independently mapped upstream result. The target-budget candidate
-changes J by at most 1.92e-13 versus baseline; upstream disagreement remains at
-most 1.62e-10. No complete endpoint speedup is inferred from these raw-J samples.
+The final comparison includes #2609's subsequent represented-source underflow
+repair and XC finite-range repair on **both** arms. The baseline is
+`9ceac708d60dccf55c2275d977f5767ce75ba1e0`, source identity
+`c4c842c16cc24a5a4d81b462fbb6cec4858b2191644f12e7cdff52962345328c`.
+The measured candidate is `e10337b1161f735fd061c458d5a37f6865d3d6a1`, source
+identity `e2c40e30e095bb81f8c4dae4deb08a9d5176ffd5646f77a55da4cfeaec4d568d`.
+Neither arm restores the invalid old source-norm cap. Earlier cold results
+125.756/118.957 s exclude these repairs and are not final-head measurements.
+
+After #2609 merged, the two commits were rebased onto master `14928e2c3` as
+`cc2245307` and `19e4cee0f`. The measured and rebased SCF, DFT and integral
+source trees are byte-identical; unrelated merged MP2/array API changes are
+present in the new tree. The rebuilt integration binary authenticates source
+`502d9ec71531e58317116c9918ab72ef1ae7cb9fe455618864b3af6a2b25f1fb` and has its
+own n2:3496 numerical gates. Its PRO 6000 times are not pooled with RTX 5090
+timings. Full library/force-library hashes, raw-output hashes, all clean endpoint
+rows, fixed-J samples/work, profile summaries and validation receipts are in
+the compact [qualification record](../../../../benchmarks/results/md-j-target-budget-20261020/qualification.json.xz).
+
+The r2SCAN-3c endpoint uses 96 atoms, 1088 spherical AO, direct/noDF FP64,
+48×16×32 unpruned moving grid (2,359,296 points), E/D convergence 1e-12/1e-10,
+screening 1e-12 and eight CPU threads. It includes analytic forces and native
+D4/gCP corrections. The independent E/F gates are 1e-8 Eh and 1e-7 Eh/bohr.
+This is a matched-grid implementation diagnostic, not a grid-converged
+production ranking. Fixed-density PBE0 J uses 768 AO/def2-SVP.
+
+| r2SCAN-3c complete E/F, n4:1207 | Baseline (s) | Candidate (s) | Fock builds, each |
+| --- | ---: | ---: | ---: |
+| Cold, including preparation | 135.933645 | 128.912433 | 24 |
+| Warm median, five samples | 25.038682 | 24.763745 | 1 |
+| Moved geometry | 89.566342 | 88.121349 | 14 |
+| Moved-warm median, five samples | 25.044566 | 24.768912 | 1 |
+
+Cold is 5.17% shorter; moved is 1.61% shorter. These are single cold/moved
+observations with unchanged Fock-build counts, not confidence intervals. Complete
+E/F time is never divided by iterations to estimate J or Fock cost. Warm
+complete endpoints still include force work and improve only about 1.1%.
+
+Separate cold CUPTI runs each capture 24 actual Fock intervals, from density
+bounds to folded XC totals. Median J kernel time falls 1.456442 → 1.170433 s
+(19.64%), while median XC is 2.191487 → 2.191691 s. Median elapsed J+XC interval
+falls 3.674611 → 3.388732 s (7.78%). Summed J kernels fall 35.118139 →
+28.230150 s, accounting for about 6.89 s of the 7.02 s clean cold difference.
+Both preparation/cold traces have zero dropped events and callback errors.
+These intervals are direct profiles, not endpoint/iteration quotients, and are
+kept separate from clean endpoint samples.
+
+Fresh fixed-density J medians use five clean complete samples per arm, with
+source-matched native baseline n4:1206 and candidate/upstream n4:1208:
+
+| 96-atom J, complete publication | Native baseline (s) | Native candidate (s) | Pinned GPU4 MD (s) |
+| --- | ---: | ---: | ---: |
+| r2SCAN-3c basis | 1.438274 | 1.159571 | 0.629193 |
+| PBE0 basis | 0.450472 | 0.358460 | 0.347533 |
+
+Native J time falls 19.38% and 20.43%, respectively. Candidate ranges are
+1.159328–1.161031 s and 0.358381–0.358478 s; upstream ranges are
+0.628234–0.631823 s and 0.347382–0.349490 s. Thus r2 J is still 1.843× upstream
+(84.3% slower), and PBE0 J is 3.14% slower. The different omission contracts
+remain; these results do not establish J parity or prove the remaining gap is
+unavoidable. Ancillary upstream controls from n4:1206 remain in the local raw
+archive; the table and retained receipt use the freshly paired n4:1208 arm.
+
+Final r2 roots fall 2,176,376,338 → 2,003,901,808, directed products
+4,108,320,392 → 3,766,588,912 and Hermite summands
+119,130,181,760 → 108,322,370,192. PBE0 roots fall
+877,443,546 → 811,922,712, directions 1,648,377,816 → 1,522,688,792 and
+summands 24,808,667,616 → 22,695,676,456. Tile inventories/coarse screening are
+unchanged; all residual work is zero. Owner device bytes stay unchanged.
+Matrices differ from baseline by at most 3.20e-14/4.27e-14 (r2/PBE0), and from
+the independently mapped upstream matrices by at most 1.614e-10/1.346e-10;
+all pass atol=1e-9, rtol=1e-10.
+
+All 30 clean E/F records pass: the 24 r2 baseline/candidate records above and
+candidate PBE0 cold plus five warm replays. Maximum r2 candidate errors are
+1.00045e-11 Eh and 4.36343e-11 Eh/bohr; PBE0 errors are at most 4.54748e-12 Eh
+and 2.44187e-11 Eh/bohr. PBE0 cold is 61.408158 s/17 Focks; its five warm
+samples have median 10.333104 s/1 Fock. There is no paired PBE0 complete-endpoint
+baseline in this repaired-head campaign, so no PBE0 E/F speedup is claimed.
+
+Validation includes 999 host MD/math/contract/runtime/resource/harness checks,
+two host XC finite-range checks, 120 MD GPU tests (one unavailable fully pinned
+GPU4PySCF package case deselected), 131 XC GPU tests, and four native XC suites.
+MD and XC each pass memcheck, initcheck, racecheck and synccheck with zero
+errors/hazards/warnings. The pinned-MD/released-helper comparator is separately
+matrix-gated; it is not relabeled as the missing fully pinned package test.
+The rebased integration build passes another 120 MD GPU tests and four complete
+r2/PBE0 cold/warm E/F gates; no GPU test ran outside Slurm.
 
 New tests place unequal signed contractions and nonsymmetric/UKS densities near
 the absolute omission cap, replay dense/sparse/zero/dense sources through one
 captured owner, and compare against unscreened libcint. Executed host boundary
 checks cover subnormal division, threshold neighbors, zero/infinite/invalid bounds
 and independent wider-precision omitted-product inequalities.
+
+Compilation reused verified ccache 4.5.1 through explicit CXX/CUDA launchers.
+Across the repaired baseline/candidate build sequence the shared cache counters
+increased by 30 hits/15 misses; the master integration build added 13 hits/8
+misses. These are shared-server counter deltas, not attribution of every cache
+operation to this task. Cache statistics and executed launcher provenance are
+retained locally and checksum-bound by the qualification record.
+
+Reproduction uses the repository's `benchmarks.readme_dft` native command with
+`--method r2scan-3c --atoms 96 --density-fitting none --grid 48 16 32
+--grid-pruning none --repeats 5`, the def2-mTZVPP basis JSON, and the same
+independent reference identified in the receipt. Exact command ordering,
+environment, fixed-D AO mapping and profile parser are retained in
+`.artifacts/j-optimization-20261020/` and the immutable snapshot roots named
+above, with script hashes in the receipt. Every GPU job uses finite Slurm
+allocations and preserves assigned device visibility. Clean fixed-J samples
+include D upload and host J publication; counter/profiler calls are separate.
 
 ## Revisit
 
