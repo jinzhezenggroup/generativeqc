@@ -36,7 +36,7 @@ J remains the principal residual gap; per-round parity is not claimed.
 
 ## Retained records
 
-- `evidence.json`: full-precision comparison samples, component event samples,
+- `evidence.json.gz` (deterministic gzip JSON): full-precision comparison samples, component event samples,
   semantic work counts, numerical errors, source/binary identities and resolved
   qualification setup failures. Complete force vectors and CUPTI streams remain
   in ignored run storage; this record is a performance report, not a permanent

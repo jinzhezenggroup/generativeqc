@@ -144,6 +144,15 @@ well as unfused emitted terms; n2's default gcc lacked `cc1plus`. Corrected
 invocations pass, with `NVCC_CCBIN=/usr/bin/g++-11` for the n2 fixture builds.
 No numerical gate or semantic work assertion was relaxed.
 
+The existing 64-MiB aggregate evidence budget had only 244 bytes free. The new
+record uses deterministic gzip, retaining all endpoint/component timing samples
+and aggregate semantic work; detailed per-class census stays in ignored logs.
+The historical `retention-checkout/snapshot.manifest.json` uses one file record
+per line, saving 35,657 bytes without changing its parsed JSON tree. All 955
+original path/size/checksum records remain; its reviewed byte identity is updated
+and 47 restoration/retention tests pass. No scientific fixture is removed and
+no external archive, Release or tag is created.
+
 ## Consequences and rejected alternatives
 
 This closes a large XC arithmetic gap without relaxing AO screening, but J
