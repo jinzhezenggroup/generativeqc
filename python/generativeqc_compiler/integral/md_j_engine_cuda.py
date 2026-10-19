@@ -67,7 +67,7 @@ def _emit_radial_stage(stage: int) -> list[str]:
         axis = next(axis for axis, power in enumerate(powers) if power)
         source = list(powers)
         source[axis] -= 1
-        first = previous[tuple(source)]
+        first = previous[(source[0], source[1], source[2])]
         if first >= destination:
             raise ValueError("MD radial stage would overwrite a live dependency")
         graph = Graph()
@@ -78,7 +78,7 @@ def _emit_radial_stage(stage: int) -> list[str]:
         expression = graph.variable("coordinate") * graph.variable("first")
         if powers[axis] > 1:
             source[axis] -= 1
-            second = previous[tuple(source)]
+            second = previous[(source[0], source[1], source[2])]
             if second >= destination:
                 raise ValueError("MD radial stage would overwrite a live dependency")
             variables["second"] = f"output[{second}]"
@@ -104,7 +104,13 @@ def _emit_contraction_tables() -> str:
                 state: slot for slot, state in enumerate(_hermite_states(bra + ket))
             }
             mappings.extend(
-                radial[tuple(a + b for a, b in zip(first, second, strict=True))]
+                radial[
+                    (
+                        first[0] + second[0],
+                        first[1] + second[1],
+                        first[2] + second[2],
+                    )
+                ]
                 for first in _hermite_states(bra)
                 for second in _hermite_states(ket)
             )
