@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -83,6 +83,34 @@ def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
     assert fitted["reference_auxbasis_response"]
     with pytest.raises(ValueError, match="auxiliary basis identity"):
         protocol(3, basis, GridSpec(), 5, benchmark=replace(spec, density_fitting=True))
+
+
+def test_independent_vv10_grid_is_part_of_the_benchmark_identity() -> None:
+    """A point-count collision must not pool scientifically distinct protocols."""
+    basis = load_r2scan3c_basis()
+    primary = GridSpec(8, 4, 8)
+    secondary = GridSpec(4, 8, 8)
+    benchmark = specification("wb97m-v")
+    original = protocol(3, basis, primary, 5, benchmark=benchmark)
+    for shared in (primary, replace(primary, element_radii=((1, 1.0),))):
+        assert (
+            protocol(3, basis, primary, 5, benchmark=benchmark, nonlocal_grid=shared)
+            == original
+        )
+    distinct = protocol(
+        3, basis, primary, 5, benchmark=benchmark, nonlocal_grid=secondary
+    )
+    assert distinct.pop("nonlocal_grid") == asdict(secondary) | {"element_radii": []}
+    assert distinct == original
+    with pytest.raises(ValueError, match="requires a VV10"):
+        protocol(
+            3,
+            basis,
+            primary,
+            5,
+            benchmark=specification("pbe"),
+            nonlocal_grid=secondary,
+        )
 
 
 def test_df_workspace_hint_is_explicit_in_the_benchmark_protocol() -> None:

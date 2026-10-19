@@ -35,6 +35,8 @@ struct KsModelIdentity {
   std::optional<scf::ResolvedFockBuild> range_correction{};
   std::optional<nlc::Vv10Parameters> nonlocal_correlation{};
   nlc::Vv10DensityDomain nonlocal_density_domain{nlc::Vv10DensityDomain::StrictPositive};
+  /** Distinct full quadrature prescription, never just a total point count. */
+  std::optional<GridSpec> nonlocal_grid{};
   bool operator==(const KsModelIdentity&) const = default;
 };
 

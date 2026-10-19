@@ -981,9 +981,12 @@ def _external_mask_validation(values: typing.Iterable[Node]) -> Node:
 
 def _external_mask_zero_forward(program: Program) -> list[Node]:
     """Reuse forward rules with zero directions to check every live AD domain."""
+    from .autodiff import _real_derivative_nodes
+
+    needed = _real_derivative_nodes(program)
     tangents: dict[Node, Node] = {}
     for node in program.live_nodes:
-        if node.spec.dtype == "bool":
+        if node not in needed:
             continue
         if node.op in ("input", "constant"):
             tangent = _zero_like(node)
@@ -1003,7 +1006,11 @@ def _external_mask_zero_forward(program: Program) -> list[Node]:
 
 
 def _validate_external_mask_inputs(
-    program: Program, inputs: Mapping[str, Node], mode: str
+    program: Program,
+    inputs: Mapping[str, Node],
+    mode: str,
+    *,
+    allow_comparison_where: bool = False,
 ) -> None:
     """Qualify requested real inputs even when disconnected from primal outputs."""
     from .autodiff import _validate_reference_context
@@ -1020,7 +1027,8 @@ def _validate_external_mask_inputs(
                 **{f"input_{i}": node for i, node in enumerate(inputs.values())},
             },
             program.definitions,
-        )
+        ),
+        allow_comparison_where=allow_comparison_where,
     )
 
 
@@ -1032,12 +1040,17 @@ def linearize(
     packed: typing.Any = None,
     max_elements: int = DEFAULT_MAX_ELEMENTS,
     allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> JVPProgram:
     """Generate a demand-driven forward derivative :class:`Program`.
 
     The generated program takes the original inputs plus ``d_<name>`` tangent
     inputs and returns ``d_<output>`` tangents.  Only requested tangent inputs
     and output tangents are generated.
+
+    ``allow_comparison_where`` also admits primal comparison selectors without
+    differentiating Boolean edges. At switches the selected branch defines the
+    reported value; no differentiability claim is made.
 
     ``allow_external_mask_where`` explicitly admits first-order fixed external
     Boolean selectors on generic FP64 arrays. This domain retains every live
@@ -1050,13 +1063,15 @@ def linearize(
         raise ValueError("max_elements must be a nonnegative integer")
     if type(allow_external_mask_where) is not bool:
         raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     primal_hash = program.logical_hash
     program, _layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
     )
     selected_outputs = _select_names(program.outputs, outputs, "output")
     needed = _ancestors(selected_outputs.values())
-    external_where = allow_external_mask_where and any(
+    external_where = (allow_external_mask_where or allow_comparison_where) and any(
         node.op == "where" for node in program.live_nodes
     )
     if external_where:
@@ -1064,7 +1079,9 @@ def linearize(
         # restrict this consumer to the actually qualified FP64 generation domain.
         from .autodiff import _validate_reference_context
 
-        _validate_reference_context(program)
+        _validate_reference_context(
+            program, allow_comparison_where=allow_comparison_where
+        )
         if any(
             node.spec.dtype not in ("bool", "float64") for node in program.live_nodes
         ):
@@ -1075,7 +1092,12 @@ def linearize(
             )
         if any(
             program.provenance.get(key)
-            for key in ("external_mask_where_jvp", "external_mask_where_vjp")
+            for key in (
+                "external_mask_where_jvp",
+                "external_mask_where_vjp",
+                "comparison_where_jvp",
+                "comparison_where_vjp",
+            )
         ):
             raise ValueError("higher-order external-mask generation is unsupported")
         needed = set(program.live_nodes)
@@ -1090,7 +1112,9 @@ def linearize(
     if external_where and not requested:
         raise ValueError("external-mask JVP requires a declared differentiable input")
     if external_where:
-        _validate_external_mask_inputs(program, requested, "JVP")
+        _validate_external_mask_inputs(
+            program, requested, "JVP", allow_comparison_where=allow_comparison_where
+        )
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -1099,12 +1123,17 @@ def linearize(
                 f"generated tangent name collides with input/output: {generated}"
             )
         tangent_nodes[name] = _derivative_input(node, generated)
+    derivative_nodes = needed
+    if external_where:
+        from .autodiff import _real_derivative_nodes
+
+        derivative_nodes = _real_derivative_nodes(program)
     tangents: dict[Node, Node | None] = {}
     generated_nodes = []
     for node in program.nodes:
         if node not in needed:
             continue
-        if external_where and node.spec.dtype == "bool":
+        if external_where and node not in derivative_nodes:
             continue
         if node.op == "input":
             tangent = tangent_nodes.get(node.attrs["name"])
@@ -1137,6 +1166,10 @@ def linearize(
         # Attach validation with an exact +1 multiplier. Adding a zero guard
         # to the tangent would turn a selected -0.0 into +0.0; multiplication
         # preserves every finite FP64 value, including signed zero/subnormals.
+        if allow_comparison_where:
+            # Even predicate-only and disconnected requested directions must be
+            # checked when replaying a serialized derivative without the facade.
+            validation_values.extend(tangent_nodes.values())
         validation = _external_mask_validation(validation_values)
     derivative_outputs = {}
     output_map = {}
@@ -1171,9 +1204,17 @@ def linearize(
             **derivative_precision_provenance(program),
             **(
                 {
-                    "external_mask_where_jvp": {
+                    (
+                        "comparison_where_jvp"
+                        if allow_comparison_where
+                        else "external_mask_where_jvp"
+                    ): {
                         "version": 1,
-                        "domain": "fixed-external-mask-generic-finite-fp64",
+                        "domain": (
+                            "primal-comparison-generic-finite-fp64"
+                            if allow_comparison_where
+                            else "fixed-external-mask-generic-finite-fp64"
+                        ),
                         "native_qualification": "materializing-cpu-only",
                         "validation": "all-live-primal-and-forward-domains",
                     }
@@ -1215,6 +1256,7 @@ def transpose_program(
     packed: typing.Any = None,
     max_elements: int = DEFAULT_MAX_ELEMENTS,
     allow_external_mask_where: bool = False,
+    allow_comparison_where: bool = False,
 ) -> VJPProgram:
     """Generate a demand-driven reverse derivative :class:`Program`.
 
@@ -1222,6 +1264,9 @@ def transpose_program(
     cotangent inputs and returns ``bar_<input>`` cotangents.  Reverse programs
     are generated only for primal nodes on a path from a requested input to a
     requested output.
+
+    ``allow_comparison_where`` additionally admits primal comparison selectors,
+    propagating adjoints only through real branch edges.
 
     ``allow_external_mask_where`` admits first-order fixed external Boolean
     selectors on generic finite FP64 arrays. It preserves all live primal and
@@ -1234,6 +1279,8 @@ def transpose_program(
         raise ValueError("max_elements must be a nonnegative integer")
     if type(allow_external_mask_where) is not bool:
         raise TypeError("allow_external_mask_where must be Boolean")
+    if type(allow_comparison_where) is not bool:
+        raise TypeError("allow_comparison_where must be Boolean")
     primal_hash = program.logical_hash
     program, layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
@@ -1242,13 +1289,15 @@ def transpose_program(
         program.outputs, cotangent_outputs, "cotangent output"
     )
     needed = _ancestors(selected_outputs.values())
-    external_where = allow_external_mask_where and any(
+    external_where = (allow_external_mask_where or allow_comparison_where) and any(
         node.op == "where" for node in program.live_nodes
     )
     if external_where:
         from .autodiff import _validate_reference_context
 
-        _validate_reference_context(program)
+        _validate_reference_context(
+            program, allow_comparison_where=allow_comparison_where
+        )
         if any(
             node.spec.dtype not in ("bool", "float64") for node in program.live_nodes
         ):
@@ -1259,7 +1308,12 @@ def transpose_program(
             )
         if any(
             program.provenance.get(key)
-            for key in ("external_mask_where_jvp", "external_mask_where_vjp")
+            for key in (
+                "external_mask_where_jvp",
+                "external_mask_where_vjp",
+                "comparison_where_jvp",
+                "comparison_where_vjp",
+            )
         ):
             raise ValueError("higher-order external-mask generation is unsupported")
         needed = set(program.live_nodes)
@@ -1272,7 +1326,12 @@ def transpose_program(
     }
     selected_inputs = _select_names(differentiable, inputs, "input")
     if external_where:
-        _validate_external_mask_inputs(program, selected_inputs, "VJP")
+        _validate_external_mask_inputs(
+            program,
+            selected_inputs,
+            "VJP",
+            allow_comparison_where=allow_comparison_where,
+        )
     groups = _input_groups(program)
     roots = (node for name in selected_inputs for node in groups[name])
     relevant = needed & _descendants_of(program, roots)
@@ -1364,9 +1423,17 @@ def transpose_program(
             **derivative_precision_provenance(program),
             **(
                 {
-                    "external_mask_where_vjp": {
+                    (
+                        "comparison_where_vjp"
+                        if allow_comparison_where
+                        else "external_mask_where_vjp"
+                    ): {
                         "version": 1,
-                        "domain": "fixed-external-mask-generic-finite-fp64",
+                        "domain": (
+                            "primal-comparison-generic-finite-fp64"
+                            if allow_comparison_where
+                            else "fixed-external-mask-generic-finite-fp64"
+                        ),
                         "native_qualification": "materializing-cpu-only",
                         "validation": "all-live-primal-and-forward-domains-and-cotangent-feeds",
                     }

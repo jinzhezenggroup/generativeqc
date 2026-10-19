@@ -223,11 +223,33 @@ float32/float64 graphs with external Boolean input/constant masks. Masks may
 pass through validated transpose, reshape, slice, static gather and broadcast
 views; they never receive tangent/cotangent storage. JVP selects the real branch
 tangents with the actual Boolean mask; VJP routes real bars to the branches and
-uses the existing broadcast/scatter adjoints. Computed comparison conditions,
-Boolean outputs, scientific annotations and differentiation with respect to
-masks remain unsupported. This context-specific contract appears in
+uses the existing broadcast/scatter adjoints. Without the comparison-selector option below, computed comparison conditions
+remain unsupported. Boolean outputs, scientific annotations and differentiation
+with respect to masks remain unsupported in either mode. This context-specific contract appears in
 `autodiff.capabilities()["reference_external_mask_where"]`, rather than the
 unrestricted `AD_PRIMITIVES`/generated/native capability set.
+
+The explicit `allow_comparison_where=True` option additionally admits conditions
+from the six real comparison primitives and their typed Boolean views. It is
+available on reference `jvp/vjp/dot_test` (generic finite FP32/FP64), generated
+`linearize/transpose_program` and public `jvp/vjp/grad/value_and_grad` (generic
+finite FP64; reference/materializing CPU). Comparison and Boolean-output
+*differentiation* remains unsupported. Derivative dependency traversal stops at
+Boolean edges: a predicate-only `sqrt(p)` is a checked primal, not a derivative
+request, even when `p` is a requested real input. Reused branch values retain
+their derivative-domain checks. Requested predicate-only input directions remain
+validated and their cotangents are zero. The generated JVP retains requested
+direction validation as live graph edges, including after serialization/CSE/DCE.
+No Boolean derivative storage is allocated.
+
+The selector is evaluated at the primal, including at equality. The selected
+branch is the derivative convention at a switch; no differentiability or
+finite-difference assertion is made at a jump or kink. Independent finite
+differences use perturbations that preserve selectors. VJP replay uses the
+forward snapshot, including all predicate inputs. The new option preserves
+default and external-mask-only admission and the typed first-order boundary.
+Its generated provenance uses `comparison_where_jvp/vjp`; real execution inputs
+remain non-differentiable even if descriptive provenance is removed.
 
 All live primal operands remain finite/domain checked, including unselected
 branches. Existing derivative-domain/finiteness checks and VJP requested-input
@@ -266,7 +288,8 @@ backend-independent TensorIR `Program` DAGs:
   never receive tangent/cotangent storage; the canonical `where` selects real
   tangents or routes real cotangents to the selected branches. Existing view
   adjoints perform broadcast reductions and repeated-gather scatter additions.
-  Computed comparisons, Boolean outputs, scientific/control annotations,
+  Without the comparison-selector option, computed comparisons also reject.
+  Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
   CUDA, portable/scalar and HVP are outside this slice. The public scalar

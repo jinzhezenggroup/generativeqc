@@ -596,6 +596,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
         "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
         "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-c"),
+        "order5": ("tests/python/test_direct_order5_sources.py", "core-c"),
     }
     owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
     ordinary = [

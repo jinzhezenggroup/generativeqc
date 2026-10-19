@@ -2425,6 +2425,10 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
+        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+            )
         if endpoint not in self._capabilities.supported_second_order:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "

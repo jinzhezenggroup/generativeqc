@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "dft/density_source.hpp"
+#include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
@@ -101,6 +102,10 @@ struct PrecisionProvenance {
 
 /** Numerical controls shared by the implemented mean-field solvers. */
 struct ScfOptions {
+  /** Copied prescription plus a preparation-owned immutable source. A null
+   * source retains the incumbent shared-grid path, including explicit equality. */
+  std::optional<dft::GridSpec> nonlocal_grid_spec;
+  const dft::MolecularGrid* nonlocal_grid{};
   unsigned max_iterations{100};
   unsigned diis_history{8};
   double energy_tolerance{1.0e-10};

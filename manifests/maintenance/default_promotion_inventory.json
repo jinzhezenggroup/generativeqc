@@ -86,8 +86,12 @@
       "controls": [
         "ks-runtime:GENERATIVEQC_KS_FAST_ANCHOR_DELTA"
       ],
-      "owner_issues": [1598],
-      "sources": ["src/dft/cuda_ks.cpp"],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
       "rationale": "Unset admits fixed FP64 J/K/range-K anchors at 192 or more AOs for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves, without a fixed upper AO limit. Shared budget-Fock admission also has no fixed AO or atom-count ceiling; native dimensions, actual resources and all other scientific conditions remain checked. Explicit 1 opts in smaller scientifically eligible owners; 0 disables. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged, then retired at a pressured force handoff without revoking D/W/XC or the final token; later solves use ordinary Fast. Numerical acceptance thresholds are unchanged. Historical measurements do not qualify every newly admitted larger shape.",
       "revisit_condition": "Require profitable complete-endpoint evidence before lowering the 192-AO automatic floor: retained water-12 observations are adverse. Removing count ceilings is not a new large-size accuracy or speed qualification. Record independent large-system energy/force gates and actual work/resource failures separately. Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger anchor domains independently; preserve strict full-target audits, explicit rollback and force-phase optional-memory fallback.",
       "evidence": [
@@ -1715,6 +1719,29 @@
       "evidence": [
         "tests/python/test_tensor_where_jvp_program.py",
         "docs/developer/tensor_ir.md"
+      ]
+    },
+    {
+      "id": "tensor.primal-comparison-where-ad",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:_validate_external_mask_inputs.allow_comparison_where",
+        "tensor-ad:linearize.allow_comparison_where",
+        "tensor-ad:transpose_program.allow_comparison_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generic finite FP64 selected-branch derivatives with primal comparison selectors require explicit selection. Boolean edges stop derivative ancestry; predicate-only computations retain primal checks, while real branches retain forward-domain checks. Only reference/materializing native CPU is qualified. The external-mask-only default remains unchanged.",
+      "revisit_condition": "Preserve explicit selector and switching-point semantics. Broader dtype/backend, scientific or higher-order admission requires independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_array_api_comparison_where_ad.py",
+        "docs/developer/tensor_ir.md",
+        ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
       ]
     }
   ]
