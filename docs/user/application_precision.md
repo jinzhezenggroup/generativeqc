@@ -1,7 +1,15 @@
 # Application precision and explicit audits
 
-`PrecisionCalculator(policy="fast")` selects FP32 arithmetic from an application
-error budget, without asking users to select kernels.
+`PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
+while `PrecisionCalculator(policy="fast")` selects qualified FP32 arithmetic
+from an application error budget, without asking users to select kernels.
+
+`policy="fp64"` remains a backward-compatible name for Standard: both use
+identical controls and execution, and the serialized `profile` preserves the
+name requested by the caller for compatibility. The native CLI
+`--precision fp64|auto` and low-level `Calculator(precision="fp64"|"auto")`
+select arithmetic rather than these application profiles; `auto` is **not**
+an alias for Fast. Neither profile changes the molecular model.
 
 ## Module-selected Fast Fock
 
@@ -346,7 +354,7 @@ mean that its intermediate arithmetic was FP64. For a **measured per-call**
 energy/force allowance, supply `target=TargetAccuracy(...)`: the full FP64
 comparison and, if necessary, verified fallback are included in its cost.
 
-`PrecisionCalculator(policy="fp64")` runs **one strict FP64 endpoint**, without
+`PrecisionCalculator(policy="standard")` runs **one strict FP64 endpoint**, without
 an unconditional second SCF/force solve. The CUDA KS scheduler can retain
 geometry-invariant J/K integrals and reuse them across SCF iterations, within
 the existing memory/lifetime guards. This exact optimization also benefits
@@ -357,7 +365,7 @@ calculations retain their faster phased executor. Fast comparisons must use this
 already-optimized strict baseline, not withhold scheduling improvements from it.
 It does not imply FP32 execution or promise a speedup for every workload.
 
-FP64 without `target` reports `strict_fp64`, with `target=None` and no measured
+Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
 observable-budget audit is claimed**. Its solver controls are at least as strict
 as `1e-10` energy, `1e-8` density and `1e-12` screening; stricter caller settings
@@ -373,7 +381,7 @@ behavior remains unchanged.
 from generativeqc import PrecisionCalculator
 
 calculator = PrecisionCalculator(
-    method="pbe0-rks", basis="def2-svp", device="cuda", policy="fp64",
+    method="pbe0-rks", basis="def2-svp", device="cuda", policy="standard",
 )
 ```
 
@@ -395,7 +403,8 @@ result = calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 print(result.precision_validation.to_dict())
 ```
 
-The preset names are case-insensitive. Balanced is the facade default.
+The preset names are case-insensitive. Balanced remains the facade default;
+this naming change does not alter default calculations or audit behavior.
 Providing `target` replaces all preset audit requirements, so energy-only audits
 use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.
@@ -422,7 +431,7 @@ with calculator.prepare_batch([atoms], warm_start=True) as batch:
     print(warm.precision_validation)
 ```
 
-Qualified Fast and untargeted FP64 retain the native plan and its own warm
+Qualified Fast and untargeted Standard (FP64) retain the native plan and its own warm
 densities, without seed exports or extra audits. Audited items trigger bounded
 host staging of **candidate-owned** seeds and release the candidate device plan
 before constructing independent, cold FP64 auditors. The next call lazily
@@ -466,7 +475,7 @@ unknown work counts remain `None`.
 | Preset | Energy allowance (Eh) | Max force-component allowance (Eh/bohr) | RMS force-component allowance (Eh/bohr) | Candidate SCF |
 | --- | ---: | ---: | ---: | --- |
 | Fast | `1e-5` | `1e-4` | `3e-5` | Shared Direct-module FP32 J/K with budget-controlled physical gates, or strict-density XC/gradient routes; FP64 audit fallback |
-| FP64 | No implicit budget audit | No implicit budget audit | No implicit budget audit | FP64, one endpoint unless an explicit target is supplied |
+| Standard (`fp64` alias) | No implicit budget audit | No implicit budget audit | No implicit budget audit | Optimized FP64, one endpoint unless an explicit target is supplied |
 | `audit_auto` | `1e-5` | `1e-4` | `3e-5` | Native AUTO on admitted CUDA models; FP64 otherwise |
 | Balanced | `1e-7` | `1e-5` | `3e-6` | FP64 |
 | Strict | `1e-9` | `1e-7` | `3e-8` | FP64 |

@@ -139,8 +139,10 @@ def test_presets_are_immutable_allowances(profile: str) -> None:
         policy.profile = "audit_auto"
 
 
-@pytest.mark.parametrize("profile", ["fp64", "FP64", "Fp64"])
-def test_fp64_executes_once_without_inventing_budget_evidence(
+@pytest.mark.parametrize(
+    "profile", ["standard", "Standard", "STANDARD", "fp64", "FP64", "Fp64"]
+)
+def test_standard_executes_once_without_inventing_budget_evidence(
     backend: SimpleNamespace, profile: str
 ) -> None:
     """Single strict execution is distinct from a measured observable agreement."""
@@ -155,29 +157,31 @@ def test_fp64_executes_once_without_inventing_budget_evidence(
     assert "no-observable-audit" in report.reference
     assert report.solves[0].requested_precision == "fp64"
     assert backend.live is None
-    assert calculator.policy.to_dict() == {"profile": "fp64", "target": None}
+    assert calculator.policy.to_dict() == {"profile": profile.lower(), "target": None}
     assert json.loads(json.dumps(report.to_dict(), allow_nan=False))["target"] is None
     np.testing.assert_array_equal(output.forces, native.forces)
 
 
-def test_fp64_explicit_target_retains_the_complete_budget_audit(
-    backend: SimpleNamespace,
+@pytest.mark.parametrize("profile", ("standard", "fp64"))
+def test_standard_explicit_target_retains_the_complete_budget_audit(
+    backend: SimpleNamespace, profile: str
 ) -> None:
     """A caller's requested error proof cannot disappear inside a speed preset."""
     backend.outputs = [result(), result(energy=-1 + 1e-8)]
     output = PrecisionCalculator(
-        policy=PrecisionPolicy("fp64", target=ENERGY)
+        policy=PrecisionPolicy(profile, target=ENERGY)
     ).singlepoint(ATOMS, properties=("energy",))
     report = output.precision_validation
     assert report.status == "observed_met" and report.solve_count == 2
     assert report.target == ENERGY and report.errors[0].difference > 0
 
 
-def test_fp64_tightens_loose_controls_without_loosening_explicit_strict_ones(
-    backend: SimpleNamespace,
+@pytest.mark.parametrize("profile", ("standard", "fp64"))
+def test_standard_tightens_loose_controls_without_loosening_explicit_strict_ones(
+    backend: SimpleNamespace, profile: str
 ) -> None:
     calculator = PrecisionCalculator(
-        policy="fp64",
+        policy=profile,
         energy_tolerance=1e-4,
         density_tolerance=1e-12,
         screening_tolerance=None,
