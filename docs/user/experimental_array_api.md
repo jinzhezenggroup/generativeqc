@@ -581,6 +581,29 @@ compilation, dynamic indexing/shapes and arbitrary Python control flow are not
 implied by eager support. Unsupported capture functions, including linalg/fft,
 raise instead of evaluating a NumPy fallback during tracing.
 
+Captured `minimum(x1, x2)` and `maximum(x1, x2)` accept generic finite
+float32/float64 arrays, with at least one array operand. Array operands broadcast
+and use existing float32/float64 promotion; static real scalars follow the weak,
+exact scalar contract of the array dtype. Scalar overflow is rejected even for
+empty arrays. Scientific indices, representation/symmetry/spin annotations,
+other dtypes, implicit device transfers and nonfinite live inputs remain
+unsupported. The existing eager standard operations retain their IEEE behavior,
+including NaN propagation. Capture is a bounded subset, not full conformance.
+
+Both captured operations retain the first operand on equality, including its
+array signed zero. The [minimum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.minimum.html)
+and [maximum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.maximum.html)
+specifications leave signed-zero order implementation-defined, so equal numerical
+results need not have the same zero sign as an eager backend. Static negative-zero
+literals remain unsupported. Direct `xp.compile(xp.minimum)` / `xp.compile(xp.maximum)`
+accept two concrete array arguments; put static scalar operands inside a function.
+First-order JVP/VJP require `allow_comparison_where=True` and use the selected
+branch, with broadcast adjoint reduction. Interior derivatives are qualified
+separately from the tie selection convention; no mathematical differentiability
+at ties or Hessian qualification is claimed. The operations reuse comparisons and
+`where`, with shared broadcast values and unchanged resource budgets. Their
+capability entries retain native CPU/CUDA qualification unset.
+
 Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
 arrays. Each bound can be absent, a finite static scalar under the existing exact
 scalar contract, or a same-dtype generic array. All three shapes must broadcast;

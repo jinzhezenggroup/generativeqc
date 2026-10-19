@@ -227,6 +227,16 @@ def where(condition: object, x1: object, x2: object) -> typing.Any:
     return _eager_compute(np.where, predicate, *_eager_operands(x1, x2, scalars=True))
 
 
+def minimum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real minimum, including named compiler inputs."""
+    return _namespace.minimum(x1, x2)
+
+
+def maximum(x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real maximum, including named compiler inputs."""
+    return _namespace.maximum(x1, x2)
+
+
 def clip(x: object, min: object = None, max: object = None) -> VibeArray:
     """Capture bounded finite generic real clamping without changing eager clip."""
     return _namespace.clip(x, min, max)

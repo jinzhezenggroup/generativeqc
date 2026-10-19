@@ -12,6 +12,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-selection": ("where",),
     "real-elementwise": (
         "clip",
+        "minimum",
+        "maximum",
         "add",
         "subtract",
         "multiply",
@@ -82,6 +84,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 SUPPORTED_FUNCTIONS = frozenset(
     {
         "clip",
+        "minimum",
+        "maximum",
         "where",
         "add",
         "equal",
@@ -162,6 +166,13 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    **{
+        name: {
+            "capture": "finite-generic-real-only; at-least-one-array; first-operand-selected-on-ties",
+            "operands": "broadcast-arrays; float32/float64-promotion; weak-exact-static-scalars",
+        }
+        for name in ("minimum", "maximum")
+    },
     "clip": {
         "min": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
         "max": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
@@ -239,6 +250,12 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    **{
+        name: {
+            "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+        }
+        for name in ("minimum", "maximum")
+    },
     "clip": {
         "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
     },
