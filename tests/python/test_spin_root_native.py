@@ -115,7 +115,9 @@ def oracle(
             rtol=0,
             atol=3e-8,
         )
-    if root.forces is not None:
+    # This helper certifies the mean-field reference. The correlated caller
+    # separately checks the complete correlated force against its own oracle.
+    if root.forces is not None and root.result.correlation is None:
         np.testing.assert_allclose(root.forces, -derivative, rtol=0, atol=3e-7)
     return mf
 
@@ -277,13 +279,14 @@ def test_ordinary_open_shell_li_independent_reference(
 
 
 @pytest.mark.parametrize("method", ["ump2"])
+@pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
 def test_unrestricted_posthf_uses_actual_qualified_reference(
-    method: str, monkeypatch: pytest.MonkeyPatch
+    method: str, properties: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from pyscf import cc, mp
 
     calc = calculator(method)
-    root = execute(calc, h2(4.0), monkeypatch, properties=("energy",))
+    root = execute(calc, h2(4.0), monkeypatch, properties=properties)
     assert root.recovered
     assert root.result.correlation.reference_energy == root.reference.energy
     with NativeAO(h2(4.0), basis="sto-3g") as basis:
@@ -295,13 +298,20 @@ def test_unrestricted_posthf_uses_actual_qualified_reference(
         if method == "uccsd(t)":
             energy += correlated.ccsd_t()
         np.testing.assert_allclose(root.energy, energy, rtol=0, atol=3e-8)
+        if "forces" in properties:
+            from _ump2_force_reference import analytic_gradient
+
+            np.testing.assert_allclose(
+                root.forces, -analytic_gradient(correlated), rtol=2e-7, atol=2e-7
+            )
 
 
 @pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
+@pytest.mark.parametrize("method", ["uhf", "ump2"])
 def test_failed_qualification_blocks_requested_publication(
-    properties: typing.Any, monkeypatch: pytest.MonkeyPatch
+    properties: typing.Any, method: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calc = calculator("uhf")
+    calc = calculator(method)
     with pytest.raises(SpinRootUnqualified, match="UNSTABLE"):
         execute(
             calc,
