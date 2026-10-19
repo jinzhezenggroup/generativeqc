@@ -74,8 +74,8 @@ struct ScfConvergenceControls {
   double density_tolerance;
 };
 
-[[nodiscard]] inline ScfConvergenceControls resolve_scf_convergence(
-    const RunOptions& options, bool correlated) noexcept {
+[[nodiscard]] inline ScfConvergenceControls resolve_scf_convergence(const RunOptions& options,
+                                                                    bool correlated) noexcept {
   const double default_energy = correlated ? 1.0e-12 : 1.0e-10;
   const double default_density = correlated ? 1.0e-10 : 1.0e-8;
   return {options.energy_tolerance.value_or(default_energy),

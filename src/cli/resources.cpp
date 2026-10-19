@@ -433,8 +433,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     if (generativeqc_resource_small_hf_cuda_v2(
             orbital.nbf, orbital.cartesian_nbf, atoms.size(), orbital.shells,
             orbital.angular_values.data(), orbital.primitive_counts.data(), options.diis_history,
-            spins, 0, convergence.energy_tolerance,
-            options.screening_tolerance.value_or(1e-14), ordinary.data(), ordinary.size())) {
+            spins, 0, convergence.energy_tolerance, options.screening_tolerance.value_or(1e-14),
+            ordinary.data(), ordinary.size())) {
       plan["diagnostic"] =
           "CUDA DF inventory requires a CUDA library and ordinary <=16-AO topology";
       return emit();
@@ -525,8 +525,8 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     if (generativeqc_resource_small_hf_cuda_v2(
             orbital.nbf, orbital.cartesian_nbf, atoms.size(), orbital.shells,
             orbital.angular_values.data(), orbital.primitive_counts.data(), options.diis_history,
-            spins, 0, convergence.energy_tolerance,
-            options.screening_tolerance.value_or(1e-14), values.data(), values.size())) {
+            spins, 0, convergence.energy_tolerance, options.screening_tolerance.value_or(1e-14),
+            values.data(), values.size())) {
       plan["diagnostic"] =
           "CUDA HF inventory requires a CUDA library and ordinary <=16-AO s/p/d/f topology";
       return emit();
