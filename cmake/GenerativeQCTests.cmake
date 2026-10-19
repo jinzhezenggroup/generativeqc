@@ -60,6 +60,36 @@ function(generativeqc_add_ordered_history_cuda_compile_check)
   add_dependencies(generativeqc_cuda_runtime_tests generativeqc_ordered_history_cuda_compile_check)
 endfunction()
 
+function(generativeqc_add_ordered_gram_host_admission_test)
+  if(NOT GENERATIVEQC_ENABLE_CUDA OR
+     NOT GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" OR
+     NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    return()
+  endif()
+  get_target_property(_ordered_gram_library_type generativeqc TYPE)
+  if(NOT _ordered_gram_library_type STREQUAL "SHARED_LIBRARY")
+    # This gate exercises ELF interposition through the production DSO. The
+    # monolithic CLI has its separate archive/package qualification.
+    return()
+  endif()
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_executable(generativeqc_ordered_gram_host_admission_tests
+                 tests/native/test_ordered_gram_host_admission.cpp)
+  target_link_libraries(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                        generativeqc CUDA::cudart)
+  target_include_directories(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(generativeqc_ordered_gram_host_admission_tests PRIVATE cxx_std_20)
+  target_link_options(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel")
+  add_test(NAME generativeqc_ordered_gram_host_admission_tests
+           COMMAND "${Python3_EXECUTABLE}"
+                   "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/ordered_gram_host_admission.py"
+                   "$<TARGET_FILE:generativeqc_ordered_gram_host_admission_tests>")
+  set_tests_properties(generativeqc_ordered_gram_host_admission_tests PROPERTIES
+                       TIMEOUT 60 ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
+endfunction()
+
 macro(generativeqc_add_native_tests)
   enable_testing()
   # Algorithmic tests need no CUDA, native solver, Python, or external oracle.
@@ -610,4 +640,5 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_aot_profile_tests tests/native/test_aot_profile.cpp
                        LIBRARIES CUDA::cudart)
   endif()
+  generativeqc_add_ordered_gram_host_admission_test()
 endmacro()

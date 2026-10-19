@@ -1,107 +1,117 @@
-# Decision: call the ordered-Gram host admission contract directly
+# Decision: test ordered-Gram admission through the production launch ABI
 
 Status: implemented
 Date: 2026-10-19
 
 ## Problem and decision
 
-Refs #2296. The ordered-Gram host test sliced the production CUDA wrapper by
-signature/namespace spelling and replaced a particular kernel launch with a
-regular-expression recorder. Harmless CUDA source refactoring could break the
-test without changing admission behavior.
+Refs #2296. The original host test sliced a CUDA wrapper by signature/namespace
+spelling and replaced one kernel launch with a regular expression. This could
+reject harmless implementation refactoring without exercising the real public
+launcher. The first replacement called the extracted production preflight
+normally, but its permanent test still could not observe wrapper misrouting.
 
-The existing internal `scf/cuda/scf_diis_kernels.hpp` now holds the inline host
-preflight in its private `ordered_gram_admission` namespace.
-The production wrapper calls it immediately before its unchanged kernel launch.
-The host test includes and calls this function normally. The existing native
-CUDA test also calls the public launcher with each required binding absent,
-before its existing Slurm/device gate, so bypassing the helper is observable.
-No public signature, exception category/message, kernel, template instantiation,
-stream, shared-memory, normalization, allocation or reduction policy changes.
+The required admission gate now calls `launch_update_diis_cached_gram` linked to
+the actual `generativeqc` shared library. Its executable exports a process-local
+`cudaLaunchKernel` recorder with ELF dynamic-symbol interposition. This records
+calls originating inside the production DSO, rather than using `--wrap` only on
+test objects. Every admitted call must reach the recorder exactly once; every
+rejected call must throw `std::invalid_argument` with zero submissions. A missing
+interposer therefore fails instead of silently accepting a no-device refusal.
+The recorder validates the compiled launch payload and public argument routing,
+without naming a kernel's private function or reading its implementation body.
 
-Pointers are borrowed device addresses. Host preflight checks nullness and exact
-cache/solve aliasing without reading or writing their contents. Partial overlap,
-actual allocation extents, live-ring identity and stream ordering remain caller
-preconditions, as documented by the public interface. Disabled histories zero
-and one retain their copy-only/null-history/null-cache exception.
+The existing internal header retains the unchanged ordered-Gram preflight. The
+permanent driver does not reference its private name: implementations may rename,
+move or inline it while preserving the production launch ABI. No installed API,
+exception semantics, kernel/template dispatch, math, default, allocation or
+stream-ordering policy changes.
 
-## Behavior replacing the removed source guards
+## Required execution and retained coverage
+
+`generativeqc_ordered_gram_host_admission_tests` is a Linux/NVIDIA shared-library
+test registered in `cmake/GenerativeQCTests.cmake`. A standard-library Python
+runner supplies independent, unbounded integer byte products around native
+storage limits. It checks that the executable consumes every supplied case.
+The existing CUDA compile job explicitly builds and runs this target alongside
+both existing Fock/proposal tests, retaining `CUDA_VISIBLE_DEVICES=""`, parallel
+2, their selections and time limits. There is no skip-77 result for this gate.
+If its target is absent or its recorder is missed, required CI fails.
+
+The original 13 rejected and three valid/disabled bindings remain in the public
+launcher driver. Coverage expands to 37 independent rejections, every required
+pointer, both dimension signs, geometry/history bounds, exact cache/solve alias,
+copy-only nullable/aliased storage, NaN/inactive/invalid-count borrowed state,
+non-host-readable addresses, public defaults and non-default stream/shared/work
+routing. Partial overlap, actual allocation extents, live-ring identity and
+stream ordering remain the original caller preconditions.
+
+`tests/python/test_ordered_ring_gram_host.py` retains the original 378 arithmetic
+cases unchanged: capacities 2 through 64, bitwise ordered results, independent
+long-double oracle, wrap, retirement, uncleared resets, inactive neighbors and
+work counters. Its helper-only admission probe migrates to the mandatory native
+host gate rather than becoming an optional or skipped test. No production guard
+implementation is copied into a test.
+
+## Replaced source assumptions
 
 | Removed assumption | Executable replacement |
 | --- | --- |
-| Wrapper signature/namespace must delimit a source slice | Compile and call the production header; public-launcher negative cases in the existing native test |
-| A regex must recognize exactly one launch | Real full-translation-unit NVCC compile and host launch interception; rejected calls submit no work, admitted calls preserve the launch packet |
-| Extracted guard text must compile with an inserted recorder | Original 13 rejections and three valid/disabled cases retained; 37 rejections now cover each required pointer, both shape signs, geometry, history and alias errors |
-| Addressability guard spelling | Python unbounded-integer byte products determine acceptance around exact storage boundaries, including copy-only histories |
-| Host validation may inspect borrowed state | NaN/inactive/invalid-count state remains untouched; non-host-readable sentinel addresses are admitted without dereferencing |
-| The launch header composes with the HF consumer's namespace context | Compile the launch header under a test-owned SCF detail scope and nested consumer import, without depending on scheduler helper names |
+| Signature and namespace spelling delimit the wrapper body | Link and invoke the existing production launcher ABI |
+| One regex match identifies the CUDA launch | Real DSO API interception, zero submissions on rejection, mandatory positive recording and argument-routing checks |
+| Extracted guard text compiles with an inserted recorder | The unchanged public driver survives a private-helper rename while wrapper bypass, misrouting and guard removal fail |
+| Addressability guard spelling | Independent Python byte products and consumed-input counts; 300 native 64-bit boundary cases |
+| Namespace composition requires a private scheduler helper | A test-owned client tag models the HF import; an empty exported CUDA detail namespace reproduces ambiguity |
 
-The original 378 arithmetic cases remain intact: capacities 2 through 64,
-bitwise ordered results, independent long-double oracle, wrap, retirement,
-uncleared resets, inactive neighbors and work counters.
+## Evidence and limitations
 
-## Source-matched evidence
-
-Baseline upstream: `bc311645f797614e6e4985808696f7d2cc2220db`.
-The LF Git archive SHA-256 is
+Clean baseline upstream: `bc311645f797614e6e4985808696f7d2cc2220db`.
+The LF archive SHA-256 is
 `2d2e02728c1301aa2e240e78a7e43d7651fde2cf76674c57f76bf1d7c958dc32`.
-The original focused suite passed two tests before production edits. The new
-focused suite passed 29 tests across ordered-ring host, endpoint contract,
-ordered-history oracle and host DIIS symmetry tests.
+The original focused baseline passed two tests. After admission migration the
+related CPU suite passes 28 tests, including all 378 arithmetic cases, and the
+new native host CTest passes the 37/3 cases plus 300 independent byte cases.
 
-On the slice-owned CPU notebook, GCC and NVCC 12.9.86 compiled through verified
-sccache 0.16.0. Full `scf_diis_kernels.cu` compilation succeeded for `sm_90`.
-A host linker interception of `cudaLaunchKernel` exercised the actual compiled
-wrapper: all 37 invalid cases submitted no work, valid/disabled/poison cases
-reached the launch recorder, and stream/shared-memory/normalization/work and
-optional kernel arguments retained their values. This is host wiring evidence,
-not execution of the kernel.
-The recorder qualification requires each admitted public-wrapper call to reach
-the recorder exactly once; removing its submission increment fails a separate
-negative control. A test-driver adaptation miss or silent runtime refusal cannot
-therefore masquerade as successful packet qualification.
+Local controls use verified sccache 0.16.0, GCC and NVCC 12.9.86. The exact
+production DIIS translation unit is compiled into a shared-library control;
+the real CMake helper builds, links and executes the unchanged permanent driver.
+Dynamic symbols confirm the launch entry is in that DSO and the recorder is
+exported from the executable. This local component DSO is distinct from the
+complete production DSO exercised by the required CUDA CI lane.
 
-Opt-in qualification removed each of the 13 shape/geometry/input conditions,
-eight enabled-history pointer conditions, exact alias rejection, history extent,
-the disabled-history exception and double-byte scaling: all 25 mutations were
-rejected by the behavior test. A real `-m32` build passed 260 independent byte
-boundary cases. Deleting the solve-square upper bound then failed on
-`batch=1048576, nbf=1, spins=1, history=64`: history bytes fit while solve bytes
-exceed 32-bit addressability. The solve bound cannot be reached by the admitted
-32-bit shape parameters on a 64-bit address space, so the 64-bit run alone does
-not qualify that branch.
+Renaming the private preflight in its header and production caller, then
+recompiling the permanent driver unchanged, passes. Producer-DSO mutations of
+25 guard conditions, public-wrapper bypass, admission-shape misrouting and
+kernel-argument misrouting all fail. Removing the executable's CUDA API hook
+also fails. These 29 negative controls exercise the real public launcher rather
+than a copied or extracted guard. An auxiliary real `-m32` guard control passed
+260 byte-boundary cases and rejected deletion of the solve-square bound. That
+branch is unreachable with admitted 32-bit shape parameters in a 64-bit address
+space; the 64-bit run alone does not qualify it.
 
-The existing native test compiled/linked against the real CUDA translation unit,
-completed its 11 public-launcher rejection cases, then returned its established
-device-gate code 77. No GPU execution, synchronization, complete SCF endpoint,
-scientific acceptance or performance improvement is inferred from these checks.
-CI/review/merge status must be read from the current PR separately.
+The initial PR head's full CUDA package build exposed a generic nested `detail`
+namespace collision in the HF consumer. The dedicated ordered-Gram namespace
+fix preserves that consumer unchanged; retain the original CI RED. A later
+formal delta COMMENT (review 5572545147) identified the missing permanent DSO
+routing gate. Its body was initially not fully read, and supplementary helper
+controls did not resolve that gap. The required public-launcher gate above is
+the correction. Discovery supplies explicit EOF; a live attached PTY reproduced
+the former blocked child and passed after repair.
 
-The first PR head's complete CUDA package build exposed a namespace-composition
-failure that the isolated DIIS translation unit did not cover. A generic nested
-`cuda_execution::detail` became ambiguous with existing `scf::detail` after the
-HF consumer imported `cuda_execution`. The header-composition probe reproduced
-that exact compile failure. A dedicated ordered-Gram namespace resolves it
-without changing the HF consumer or scientific implementation. Keep this
-composition regression and the failed-head CI receipt; an isolated successful
-CUDA compile does not replace the complete package build gate.
-The retained composition fixture declares its own client tag rather than naming
-a private scheduler helper. Exporting even an empty CUDA `detail` namespace
-reproduces the ambiguity in its compile negative control.
-The discovery subprocess supplies explicit empty input so its integer-width
-query sees EOF under `pytest -s` as well as captured pytest. An attached live
-PTY reproduced the blocked child before this repair and passed afterward.
+The existing device test also retains its added 11 public-launcher pointer
+rejections, but its device-gate return 77 is supplementary evidence, not a PASS
+for the required host gate or scientific device acceptance. No kernel executes
+in the API-recorder process. No GPU synchronization, complete SCF endpoint,
+scientific acceptance or performance improvement is inferred. Read required CI,
+latest-head review and merge status from the current PR separately.
 
-Local qualification scripts and raw logs are opt-in ignored artifacts, not
-permanent required-CI source-spelling/fingerprint checks. Remote receipts are
-under `/inspire/hdd/project/chemicalreaction/ordered-host-2296-1019/` on the
-slice-owned `i2296-ordered-host-1019` CPU notebook. Do not use another owner's
-resource to rerun them.
+Opt-in mutation scripts and raw receipts remain ignored artifacts under
+`/inspire/hdd/project/chemicalreaction/ordered-host-2296-1019/` on the slice-owned
+CPU notebook. They are not permanent source-spelling or fingerprint gates.
 
 ## Revisit when
 
-Change the host contract when the public launcher deliberately changes admission
-or storage semantics. Extend real-device tests for any kernel, synchronization,
-math, cache lifetime or dispatch change; host preflight evidence cannot qualify
-those changes. Preserve the historical reducer decision in
+Extend real-device qualification for any kernel, synchronization, math, cache
+lifetime or dispatch change. Host recording cannot qualify those changes.
+Preserve the reducer rationale in
 [the endpoint integration note](2026-10-10-ordered-diis-endpoint-integration.md).
