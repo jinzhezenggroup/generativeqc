@@ -119,7 +119,9 @@ def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
     forces = _finite_endpoint(float(result.energy), result.forces, len(atoms), seconds)
     grid = calculator.ks_options.grid
     seed = calculator.initial_guess
-    diagnostic = result.initial_guess if isinstance(result.initial_guess, dict) else None
+    diagnostic = (
+        result.initial_guess if isinstance(result.initial_guess, dict) else None
+    )
     settings = {
         "initial_guess": seed.kind if seed is not None else "hcore",
         "initial_guess_policy": "auto",
