@@ -39,7 +39,7 @@ def _capture(source: str) -> tuple[Graph, Expr]:
         tree = ast.parse(source.strip(), mode="eval")
     except (SyntaxError, RecursionError) as exc:
         raise ValueError("invalid bounded scalar declaration") from exc
-    pending = [(tree, 0)]
+    pending: list[tuple[ast.AST, int]] = [(tree, 0)]
     count = 0
     while pending:
         node, depth = pending.pop()
