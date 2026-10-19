@@ -1,7 +1,10 @@
 """Exact coefficient identities must survive symbolic multiplication and AD."""
 
 import math
+import subprocess
+import sys
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 from generativeqc_compiler.integral.expr import Expr, Graph
@@ -153,3 +156,40 @@ def test_custom_boys_leaf_rule_retains_exact_multiplier(q: Fraction) -> None:
     derivative = graph.differentiate(c * boys, argument, {"F_n": -next_boys})
     coefficient = graph.differentiate(derivative, next_boys)
     assert graph.node(coefficient).payload == -q
+
+
+@pytest.mark.parametrize("value", (0.1, 0.3))
+@pytest.mark.parametrize("seed", ("predicate", "float", "rational"))
+def test_normalization_preserves_distinct_float_and_fraction_inputs(
+    value: float, seed: str
+) -> None:
+    # A fresh process prevents other tests from determining cache seed order.
+    # Reference values come directly from Fraction, not Graph normalization.
+    source = f"""
+import sys
+sys.path.insert(0, {str(Path(__file__).resolve().parents[2] / "python")!r})
+from fractions import Fraction
+from generativeqc_compiler.integral.expr import Graph
+value = {value!r}
+binary = Fraction.from_float(value)
+decimal = Fraction(str(value))
+assert binary != decimal
+g = Graph()
+if {seed!r} == 'predicate':
+    assert not g.is_constant(g.constant(0), value)
+elif {seed!r} == 'float':
+    assert g.node(g.constant(value)).payload == decimal
+else:
+    assert g.node(g.constant(binary)).payload == binary
+for graph in (g, Graph()):
+    exact = graph.constant(binary)
+    literal = graph.constant(value)
+    assert graph.node(exact).payload == binary
+    assert graph.node(literal).payload == decimal
+    assert exact.identifier != literal.identifier
+    assert graph.is_constant(exact, binary)
+    assert graph.is_constant(literal, value)
+    assert not graph.is_constant(exact, value)
+    assert not graph.is_constant(literal, binary)
+"""
+    subprocess.run([sys.executable, "-c", source], check=True, timeout=30)

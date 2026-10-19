@@ -17,13 +17,25 @@ These are exact-payload/symbolic errors, before native FP64 rounding.
 
 ## Decision and compatibility
 
-Only the shared constant predicate changes. Fraction payloads compare with
-the query normalized through the existing source-literal coefficient rule;
+The shared constant predicate and normalization cache keys change. Fraction
+payloads compare with the query normalized through the existing source-literal
+coefficient rule;
 this preserves `is_constant(constant(0.1), 0.1)`. Approximate float payloads
 compare directly against the query, so an approximate 0.1 is equal to the
 float 0.1 but not to exact Fraction(1, 10). No tolerance is used. Binary and
 n-ary arithmetic, interning, derivatives, rebuilds, hash algorithms and
 emitters keep their existing owners and mechanisms.
+
+Normalization uses a type-aware unbounded cache. A float 0.1 and
+`Fraction.from_float(0.1)` compare equal in Python, but the former is a source
+decimal literal and the latter is an explicitly supplied binary rational.
+The previous untyped cache could return the first interpretation for either
+input. An automatic review of the first fix identified that predicate queries
+also seeded this cache: `is_constant(constant(0), 0.1)` changed a subsequent
+binary Fraction constant to decimal 1/10, even in another Graph. This was
+independently reproduced and corrected; the same alias was also reachable
+through constant construction before this PR. Typed keys preserve each
+input's existing interpretation without changing the graph interning key.
 
 The complete call-site audit found add's two zero checks, multiply's zero/one
 checks, and the exact-one branch-boundary test in `xc.libxc_bulk`.
@@ -53,6 +65,10 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   and allocation orders, exported/rebuilt graphs, repeated differentiation,
   constant folding/cancellation, distinct equal-double rationals, true float
   controls, exact zero/one and the custom Boys leaf rule.
+- Six fresh-process regression cases independently failed on the first fix
+  for predicate/float/rational cache-seeding orders at 0.1 and 0.3. They check
+  both the original and a second Graph against direct Fraction constructors;
+  no test clears or inspects the production cache.
 - A bounded one-off audit replayed the baseline predicate extracted from the
   committed source in an isolated process. All 14 legacy fixtures retained
   reachable mathematics and scalar-emitter source bytes: three PSSS axes,
@@ -65,12 +81,13 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   artifact identities that include generator source hashes must invalidate.
   This audit compares scalar emission and mathematical identity, not an
   assertion that all build artifact identities remain unchanged.
-- Local validation: 46 Graph tests, 294 shared XC/Maple/UserExpression/
+- Local validation: 52 Graph tests, 295 shared XC/Maple/UserExpression/
   derivative-IR/structure tests, 51 weighted-ERI independent finite-difference
-  tests, and seven selected one-electron derivative tests passed. The remaining
-  structure import test initially failed because Microsoft Store Python's
-  isolated mode could not import user-installed NumPy; it passed in an isolated
-  dependency environment. Compiler structure checked 568 modules with zero
+  tests, and seven selected one-electron derivative tests passed. The shared
+  suite initially had 294 passes and one structure import failure because
+  Microsoft Store Python's isolated mode could not import user-installed
+  NumPy; the complete 295-test suite passed in an isolated dependency
+  environment. Compiler structure checked 568 modules with zero
   dependency errors. Ruff 0.17.0 and CI-pinned ty 0.0.82 (NumPy/Tomli, Linux
   target) passed. Initial unpinned/type-tool environment failures were retained
   separately and do not represent scientific failures.

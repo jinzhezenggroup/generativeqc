@@ -13,7 +13,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
-from functools import cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING, cast
 
 from generativeqc_compiler.common.compiler_work import charge_symbolic_intern
@@ -409,9 +409,9 @@ class Graph:
         return self.nodes[expression.identifier]
 
     @staticmethod
-    @cache
+    @lru_cache(maxsize=None, typed=True)
     def _exact_coefficient(value: Scalar) -> Coefficient:
-        """Return an exact rational for every finite source-level scalar."""
+        """Normalize source scalars without aliasing float and Fraction keys."""
 
         if isinstance(value, Fraction):
             return value
