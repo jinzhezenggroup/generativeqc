@@ -700,9 +700,9 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ""
         run: |
-          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests --parallel 2
+          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests generativeqc_ordered_gram_host_admission_tests --parallel 2
           ctest --test-dir build/cuda-release-sm120 \
-            -R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure
+            -R '^generativeqc_(fock_build|scf_proposal|ordered_gram_host_admission)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats

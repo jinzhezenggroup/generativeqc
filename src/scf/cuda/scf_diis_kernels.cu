@@ -414,22 +414,10 @@ void launch_update_diis_cached_gram(
     double* residual_history, double* linear_system, double* coefficients,
     std::uint32_t* history_count, std::uint32_t* history_head, double* effective_fock,
     double* gram_cache, bool normalize_metric, tensor::RingGramWork* work) {
-  if (batch_size <= 0 || nbf <= 0 || (matrices_per_system != 1 && matrices_per_system != 2) ||
-      history_capacity > 64 || !fock || !active || !effective_fock || block.x != 32 ||
-      block.y != 1 || block.z != 1 || grid.y != 1 || grid.z != 1 ||
-      grid.x < static_cast<unsigned>(batch_size))
-    throw std::invalid_argument("invalid ordered Gram shape or launch geometry");
-  if (history_capacity >= 2 &&
-      (!residual || !fock_history || !residual_history || !linear_system || !coefficients ||
-       !history_count || !history_head || !gram_cache || gram_cache == linear_system))
-    throw std::invalid_argument("cached Gram requires independent history and solve storage");
-  const auto maximum = std::numeric_limits<std::size_t>::max() / sizeof(double);
-  const auto history_slots = history_capacity >= 2 ? history_capacity : 1U;
-  const auto per_system = maximum / static_cast<std::size_t>(batch_size);
-  if (static_cast<std::size_t>(nbf) >
-          per_system / history_slots / static_cast<std::size_t>(nbf) / matrices_per_system ||
-      (history_capacity >= 2 && history_capacity + 1U > per_system / (history_capacity + 1U)))
-    throw std::invalid_argument("ordered Gram history size exceeds addressable storage");
+  ordered_gram_admission::validate_ordered_gram_launch(
+      grid, block, batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
+      fock_history, residual_history, linear_system, coefficients, history_count, history_head,
+      effective_fock, gram_cache);
   update_diis_kernel<false, false, true><<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active, fock_history,
       residual_history, linear_system, coefficients, history_count, history_head, effective_fock,
