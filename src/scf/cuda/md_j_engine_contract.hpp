@@ -158,8 +158,7 @@ struct MdJHierarchyStorage {
 };
 
 GENERATIVEQC_ERI_SHARED_HD constexpr MdJHierarchyStorage md_j_hierarchy_storage(
-    const std::uint64_t* counts,
-    std::uint64_t byte_capacity = kMdJIndexMaximum) {
+    const std::uint64_t* counts, std::uint64_t byte_capacity = kMdJIndexMaximum) {
   if (!counts) return {};
   MdJHierarchyStorage storage{};
   for (unsigned bucket = 0; bucket < kMdJAngularBuckets; ++bucket) {
