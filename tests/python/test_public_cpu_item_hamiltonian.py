@@ -59,13 +59,13 @@ def test_cpu_force_checks_current_item_ecp_inventory(
         _representation_name="cartesian",
         _ks_options=SimpleNamespace(
             grid=SimpleNamespace(
-                radial_points=1, angular_polar=1, angular_azimuth=1, points_per_atom=1
+                point_count=lambda atomic_numbers: len(tuple(atomic_numbers))
             ),
             execution_plan=SimpleNamespace(exchange=(), nonlocal_correlation=None),
         ),
     )
     batch = SimpleNamespace(_calculator=calculator, _charges=[0], _multiplicities=[1])
-    atoms = (object(), object())
+    atoms = (SimpleNamespace(atomic_number=3), SimpleNamespace(atomic_number=1))
     if accepted:
         forces, _ = PreparedBatch._public_dft_cpu_force(batch, 0, atoms)
         np.testing.assert_array_equal(forces, -gradient)

@@ -56,6 +56,14 @@ void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); 
 
 namespace {
 
+// Independent PySCF 2.14.0 / Libxc 7.0.0, the exact Fixture basis below,
+// H2 at +/-0.7 Bohr, level 3 Treutler-Ahlrichs/NWChem, original Becke with
+// Treutler radii adjustment, no density pruning, conv_tol=1e-14 and
+// conv_tol_grad=1e-11. Each H contributes 9808 grid points.
+constexpr std::size_t kDefaultH2GridPoints = 2 * 9808;
+constexpr double kDefaultH2LdaEnergy = -1.1210178610540238;
+constexpr double kDefaultH2PbeEnergy = -1.1520643724196136;
+
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -405,9 +413,33 @@ void pbe0_composition_snapshot() {
             0,
             GENERATIVEQC_BACKEND_CPU_REFERENCE};
   require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
-              result.converged && std::abs(result.energy - (-1.1520643753396715)) < 2e-12,
+              result.converged && std::abs(result.energy - kDefaultH2PbeEnergy) < 2e-12,
           "plain PBE carrier inferred a hybrid composition without a semantic plan");
   generativeqc_calculation_destroy(calculation);
+  // Explicit v1 grids retain the historical LDA/PBE independent snapshots;
+  // changing the omitted default must not erase legacy numerical coverage.
+  auto legacy_options = options;
+  legacy_options.radial_points = 48;
+  legacy_options.angular_polar = 16;
+  legacy_options.angular_azimuth = 32;
+  legacy_options.exchange_terms = nullptr;
+  legacy_options.exchange_term_count = 0;
+  for (bool pbe : {false, true}) {
+    const std::array<generativeqc_ks_semilocal_component, 2> legacy_components{
+        {{pbe ? "GGA_X_PBE" : "LDA_X", 1.0}, {pbe ? "GGA_C_PBE" : "LDA_C_PW", 1.0}}};
+    legacy_options.semilocal_components = legacy_components.data();
+    method.method = pbe ? GENERATIVEQC_METHOD_PBE_RKS : GENERATIVEQC_METHOD_LDA_RKS;
+    method.ks_options = &legacy_options;
+    calculation = nullptr;
+    require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                             &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+            "legacy v1 semilocal preparation failed");
+    const double expected = pbe ? -1.1520643753396715 : -1.121017859421488;
+    require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+                result.converged && std::abs(result.energy - expected) < 2e-12,
+            "explicit legacy v1 semilocal energy changed");
+    generativeqc_calculation_destroy(calculation);
+  }
   calculation = nullptr;
   method.ks_options = &options;
   exchange[0].fock_coefficient = -0.25;
@@ -457,7 +489,7 @@ void force_preparation_failure_recovery() {
   }
   inputs[1].coordinates = changed.data();
   inputs[1].coordinate_count = changed.size();
-  fail_allocation_bytes = 2 * 48 * 16 * 32 * 3 * sizeof(double);
+  fail_allocation_bytes = 3 * kDefaultH2GridPoints * sizeof(double);
   require(execute(inputs.data()) == GENERATIVEQC_STATUS_SUCCESS && !fail_allocation_bytes &&
               results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
               results[1].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY,
@@ -535,9 +567,9 @@ void warm_preparation_failure(bool retained_plan) {
   require(generativeqc_batch_restore_hf_warm_states(target, seeds.data(), seeds.size()) ==
               GENERATIVEQC_STATUS_SUCCESS,
           "warm failure seed import failed");
-  // H2's default quadrature has two atoms times 48*16*32 points. Its xyz
-  // vector is allocated inside preparation, after the imported seed is ready.
-  fail_allocation_bytes = 3 * 2 * 48 * 16 * 32 * sizeof(double);
+  // The default H2 xyz vector is allocated inside preparation, after the
+  // imported seed is ready. Keep the independent point-count oracle above.
+  fail_allocation_bytes = 3 * kDefaultH2GridPoints * sizeof(double);
   const auto status = execute(target, true);
   const bool injected = fail_allocation_bytes == 0;
   fail_allocation_bytes = 0;
@@ -858,7 +890,7 @@ int main() {
                 result.converged == 1 && std::isfinite(result.energy) &&
                 result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
             "LDA RKS energy-only execution failed");
-    require(std::abs(result.energy - (-1.121017859421488)) < 2.0e-12,
+    require(std::abs(result.energy - kDefaultH2LdaEnergy) < 2.0e-12,
             "LDA RKS H2 regression energy changed");
 
     std::array<double, 6> forces{};
@@ -892,7 +924,7 @@ int main() {
                 result.converged == 1 && std::isfinite(result.energy) &&
                 result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
             "PBE RKS energy-only execution failed");
-    require(std::abs(result.energy - (-1.1520643753396715)) < 2.0e-12,
+    require(std::abs(result.energy - kDefaultH2PbeEnergy) < 2.0e-12,
             "PBE RKS H2 implementation regression energy changed");
     const double pbe_energy = result.energy;
     std::cout << std::setprecision(17) << "PBE RKS H2 energy: " << result.energy << "\n";
@@ -1113,8 +1145,8 @@ int main() {
           "UKS singlet execution failed");
       const double expected =
           spin_method == GENERATIVEQC_METHOD_LDA_UKS
-              ? -1.121017859421488
-              : (spin_method == GENERATIVEQC_METHOD_PBE_UKS ? -1.1520643753396715
+              ? kDefaultH2LdaEnergy
+              : (spin_method == GENERATIVEQC_METHOD_PBE_UKS ? kDefaultH2PbeEnergy
                                                             : r2scan_rks_energy);
       require(std::abs(result.energy - expected) < 2.0e-12,
               "equal-spin UKS and RKS energies disagree");

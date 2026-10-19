@@ -113,3 +113,45 @@ new discrete quadrature and report their actual work counts.
 An adjusted phased derivative is implemented and independently qualified, an
 upstream source supplies heavier-element parameters, or a public descriptor
 revision warrants replacing the level encoding with a dedicated field.
+
+## 2026-10-19 review addendum: independent reference integration
+
+The earlier qualification above is retained as originally scoped. The old
+`c99a43fb8` CI run exposed four additional energy-oracle failures, reproduced
+against the exact `33db6b018` source composition on a freshly built CPU core.
+These were reference-setup/branch-selection defects; no production numerical
+formula or acceptance tolerance was changed to repair them.
+
+The DF force oracle assigned explicit coordinates/weights before changing
+PySCF's `radii_adjust`. PySCF 2.14.0 invalidates those arrays on that assignment,
+so it rebuilt an unadjusted partition instead of the native v4 prescription.
+The oracle now sets the sourced radii/adjustment first, then installs the exact
+quadrature and checks that SCF retained both arrays. Replaying the old order
+still fails the 1e-8 Hartree energy gate (PBE: 8.07e-7; r2SCAN: 2.55e-6).
+Correcting the order while omitting the v4 adjustment still fails the unchanged
+3e-7 Hartree/Bohr force gate (PBE: 1.25e-5; r2SCAN: 5.24e-5).
+
+Axial OH has continuum-degenerate pi orientations, but finite Lebedev angular
+quadrature separates the axis and diagonal C2v stationary branches. The original
+axis-only PBE reference differs from native by 2.098e-7 Hartree for STO-3G and
+1.012e-7 Hartree for def2-SVP. Independently enumerating the predetermined 0 and
+45 degree subgroups finds the diagonal branch within 1.14e-13 Hartree of native
+for both bases. Both branches and their original differences remain evidence;
+ordinary SCF convergence does not promise a lowest or unique root. Stability is
+a separate public workflow, as documented in the SCF proposal/root contracts.
+
+The repaired comparison converges independent `minao` and `1e` starts for each
+predetermined branch, requires their agreement within each branch, retains the
+full unrestricted AO residual gate of 1e-9, and requires native energy to match
+one complete branch within 1e-8 Hartree. Neither reference start uses native
+density/orbitals. A separate post-convergence PySCF E[D]/commutator check validates
+the native PBE density after independently checked Cartesian normalization.
+Off-branch energy and perturbed-density controls remain rejected.
+
+Local CPU-only validation passed 35 tests across the two affected SCF/DF modules;
+one existing CUDA-only allocation-budget case was skipped for its CPU parameter.
+Both OH basis sizes and LDA/PBE controls, DF PBE/r2SCAN complete forces, translation
+and warm replay, and explicit legacy global-hybrid controls passed. The four
+negative DF controls above fail as intended. This addendum supplies no new GPU,
+performance, whole-Hessian, or global-minimum qualification and does not replace
+the original failed CI evidence or the earlier author receipts.
