@@ -205,8 +205,7 @@ extern "C" int md_j_probe_capture(void* handle, const double* density, const dou
         throw std::runtime_error("resident graph contains a non-device operation");
     }
     if (!candidate->kernels) throw std::runtime_error("resident graph contains no kernels");
-    require_cuda(
-        cudaGraphInstantiate(&candidate->executable, candidate->graph, nullptr, nullptr, 0));
+    require_cuda(cudaGraphInstantiateWithFlags(&candidate->executable, candidate->graph, 0));
     probe.captured = std::move(candidate);
     last_error.clear();
     return 0;

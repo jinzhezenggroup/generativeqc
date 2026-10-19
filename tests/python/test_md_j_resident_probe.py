@@ -315,9 +315,9 @@ inline cudaError_t cudaPointerGetAttributes(cudaPointerAttributes* attributes, c
   attributes->device = fake::copy_device;
   return cudaSuccess;
 }
-inline cudaError_t cudaGraphInstantiate(cudaGraphExec_t* executable, cudaGraph_t graph,
-                                      cudaGraphNode_t*, char*, std::size_t) {
-  assert(!fake::stream.capturing);
+inline cudaError_t cudaGraphInstantiateWithFlags(cudaGraphExec_t* executable, cudaGraph_t graph,
+                                               unsigned long long flags) {
+  assert(!fake::stream.capturing && flags == 0);
   if (fake::fail("instantiate")) return 1;
   *executable = new FakeExec{graph->nodes}; ++fake::executables; return cudaSuccess;
 }
