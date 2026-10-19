@@ -5,14 +5,15 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
-from typing import NoReturn
-
-import pytest
+from typing import TYPE_CHECKING, NoReturn
 from generativeqc import Calculator, InitialGuessSpec
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
