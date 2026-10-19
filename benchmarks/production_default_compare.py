@@ -101,7 +101,10 @@ def reference_r2scan3c_basis() -> dict[str, list[list[Any]]]:
             [
                 shell.angular_momentum,
                 *[
-                    [float(exponent), *(float(column[i]) for column in shell.coefficients)]
+                    [
+                        float(exponent),
+                        *(float(column[i]) for column in shell.coefficients),
+                    ]
                     for i, exponent in enumerate(shell.exponents)
                 ],
             ]
@@ -289,9 +292,7 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
 
     cp.cuda.runtime.deviceSynchronize()
     started = perf_counter()
-    orbital_basis = (
-        reference_r2scan3c_basis() if method == "r2scan-3c" else "def2-svp"
-    )
+    orbital_basis = reference_r2scan3c_basis() if method == "r2scan-3c" else "def2-svp"
     mol = gto.M(
         atom=atoms,
         basis=orbital_basis,
@@ -349,13 +350,19 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
             {
                 "provider": "independent-CPU-dftd4+gCP",
                 "d4": {
-                    "s6": 1.0, "s8": 0.0, "s9": 2.0,
-                    "a1": 0.42, "a2": 5.65, "ga": 2.0, "gc": 1.0,
+                    "s6": 1.0,
+                    "s8": 0.0,
+                    "s9": 2.0,
+                    "a1": 0.42,
+                    "a2": 5.65,
+                    "ga": 2.0,
+                    "gc": 1.0,
                 },
                 "included_in_timing": True,
                 "energy_hartree": float(correction_energy),
             }
-            if method == "r2scan-3c" else None
+            if method == "r2scan-3c"
+            else None
         ),
     }
     if method == "wb97m-v":
