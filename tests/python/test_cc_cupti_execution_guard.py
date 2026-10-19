@@ -12,11 +12,12 @@ import pytest
 
 from benchmarks import cc_cupti_execution_guard as execution
 
-pytestmark = pytest.mark.skipif(
+linux_only = pytest.mark.skipif(
     sys.platform != "linux", reason="Linux PID/start/session ownership"
 )
 
 
+@linux_only
 def test_guard_is_ready_before_exec_and_normal_exit_drains(tmp_path: Path) -> None:
     process, guard, identity = execution.launch_owned(
         [sys.executable, "-c", "pass"], tmp_path / "normal", dict(os.environ), 10
@@ -30,6 +31,7 @@ def test_guard_is_ready_before_exec_and_normal_exit_drains(tmp_path: Path) -> No
     assert receipt["guard_pgid"] == receipt["guard_pid"] != identity["pgid"]
 
 
+@linux_only
 def test_timeout_drains_worker_and_native_descendant_preserving_other_session(
     tmp_path: Path,
 ) -> None:
@@ -52,6 +54,7 @@ def test_timeout_drains_worker_and_native_descendant_preserving_other_session(
         sentinel.wait(timeout=5)
 
 
+@linux_only
 def test_wrong_leader_start_is_rejected_without_signal(tmp_path: Path) -> None:
     process = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
@@ -77,6 +80,7 @@ def test_wrong_leader_start_is_rejected_without_signal(tmp_path: Path) -> None:
         process.wait(timeout=5)
 
 
+@linux_only
 def test_postspawn_identity_failure_never_releases_exec_or_leaks_actor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -108,3 +112,74 @@ def test_postspawn_identity_failure_never_releases_exec_or_leaks_actor(
             10,
         )
     assert not marker.exists() and actors and all(p.poll() is not None for p in actors)
+
+
+@pytest.mark.parametrize("defect", ["missing_ack", "wrong_session", "errors"])
+def test_unacknowledged_guard_never_releases_exec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, defect: str
+) -> None:
+    class Gate:
+        closed = False
+        writes = b""
+
+        def write(self, data: bytes) -> None:
+            self.writes += data
+
+        def flush(self) -> None:
+            pass
+
+        def close(self) -> None:
+            self.closed = True
+
+    class Actor:
+        def __init__(self, pid: int) -> None:
+            self.pid = pid
+            self.stdin = Gate()
+            self.returncode = None
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.returncode = -15
+
+        def wait(self, timeout: float) -> int | None:
+            return self.returncode
+
+    worker, guard = Actor(101), Actor(202)
+    spawned = iter((worker, guard))
+    leader = {"pid": 101, "starttime": "123", "pgid": 101, "session": 101}
+    ack = dict(leader)
+    if defect == "wrong_session":
+        ack["session"] = 999
+    receipt = {
+        "leader": leader,
+        "guard_pid": 202,
+        "guard_pgid": 202,
+        "attached_after_launch": False,
+        "timed_out": False,
+        "errors": ["controlled failure"] if defect == "errors" else [],
+        "seen": {} if defect == "missing_ack" else {"101:123": ack},
+        "current": [ack],
+    }
+    real_read = Path.read_text
+
+    def read(path: Path, *args: object, **kwargs: object) -> str:
+        if str(path).replace("\\", "/").startswith("/proc/"):
+            fields = ["S", "0", "101", "101"] + ["0"] * 15 + ["123"]
+            return "101 (held) " + " ".join(fields)
+        if path.name == "outer-guard.json":
+            return json.dumps(receipt)
+        return real_read(path, *args, **kwargs)
+
+    ticks = iter((0.0, 1.0, 11.0))
+    monkeypatch.setattr(execution.subprocess, "Popen", lambda *a, **k: next(spawned))
+    monkeypatch.setattr(Path, "read_text", read)
+    monkeypatch.setattr(Path, "is_file", lambda path: True)
+    monkeypatch.setattr(execution.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(execution.time, "sleep", lambda _: None)
+    monkeypatch.setattr(execution, "current", lambda _: True)
+    with pytest.raises(RuntimeError, match="not ready"):
+        execution.launch_owned(["held"], tmp_path / defect, {}, 20)
+    assert worker.stdin.writes == b"" and worker.stdin.closed
+    assert worker.poll() is not None and guard.poll() is not None

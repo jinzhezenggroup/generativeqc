@@ -204,34 +204,50 @@ def launch_owned(
                 start_new_session=True,
             )
         until = time.monotonic() + 10
-        ready = None
+        acknowledged = False
         while time.monotonic() < until and guard.poll() is None:
             if receipt.is_file():
                 ready = json.loads(receipt.read_text())
-                if any(
-                    item["pid"] == process.pid
-                    and item["starttime"] == leader["starttime"]
-                    for item in ready["seen"].values()
+                if (
+                    ready.get("leader") == leader
+                    and ready.get("guard_pid") == guard.pid
+                    and ready.get("guard_pgid") == guard.pid
+                    and ready.get("attached_after_launch") is False
+                    and ready.get("timed_out") is False
+                    and ready.get("errors") == []
+                    and ready.get("seen", {}).get(
+                        str(process.pid) + ":" + leader["starttime"]
+                    )
+                    == leader
+                    and leader in ready.get("current", [])
                 ):
+                    acknowledged = True
                     break
             time.sleep(0.01)
-        if ready is None or guard.poll() is not None or not current(leader):
+        if not acknowledged or guard.poll() is not None or not current(leader):
             raise RuntimeError("independent guard was not ready before exec")
         process.stdin.write(b"G")
         process.stdin.flush()
         process.stdin.close()
         return process, guard, leader
-    except BaseException:
-        if process is not None:
-            if process.stdin is not None and not process.stdin.closed:
-                process.stdin.close()
-            if process.poll() is None:
-                process.terminate()
+    except BaseException as primary:
+        # The gate has not been released on admission failure. Reap both actors
+        # owned by this launch, retaining the admission failure if cleanup fails.
+        for actor in (process, guard):
+            if actor is None:
+                continue
             try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+                if actor.stdin is not None and not actor.stdin.closed:
+                    actor.stdin.close()
+                if actor.poll() is None:
+                    actor.terminate()
+                try:
+                    actor.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    actor.kill()
+                    actor.wait(timeout=5)
+            except BaseException as error:  # noqa: BLE001 - retain primary on interrupted cleanup
+                primary.add_note("owned launch cleanup failed: " + repr(error))
         raise
 
 

@@ -7,9 +7,83 @@ import copy
 import pytest
 from test_cc_source_census import fixture
 
-from benchmarks.cc_cupti_qualification import GPU_SITES, qualify_targets
+from benchmarks.cc_cupti_qualification import (
+    GPU_SITES,
+    qualify_targets,
+    validate_frozen_child,
+)
 from benchmarks.cc_cupti_report import OBSERVER_FENCE_ID
+from benchmarks.cc_tile_environment import (
+    CHILD_SCHEMA,
+    canonical_hash,
+    execution_environment,
+)
+from benchmarks.cc_tile_pipeline_campaign import CONTROLS
 from benchmarks.cc_trace_reader import PHASE, InvalidTrace
+
+
+@pytest.mark.parametrize("role", ["clean-1", "clean-2", "diagnostic"])
+@pytest.mark.parametrize(
+    "mutation", [None, "extra_argument", "workspace", "starttime", "injection"]
+)
+def test_child_documents_bind_frozen_recipe(role: str, mutation: str | None) -> None:
+    spec = {
+        "run": {
+            "executable": "/compute/endpoint",
+            "input": "/campaign/input.input",
+            "backend": "/compute/observer.so",
+        },
+        "library_path": "/compute/runtime:/cuda/lib64",
+    }
+    argv = [
+        "/compute/endpoint",
+        "/campaign/input.input",
+        f"/campaign/{role}/endpoint.json",
+        *CONTROLS,
+    ]
+    if role == "diagnostic":
+        argv += ["--cc-cupti-v1", "/compute/observer.so", f"/campaign/{role}/capture"]
+    environment = {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "CUBLAS_WORKSPACE_CONFIG": ":16:8",
+        "PATH": "/opt/generativeqc-reuse/venv/bin:/opt/generativeqc-reuse/cuda-12.9/bin:/usr/bin:/bin",
+        "LD_LIBRARY_PATH": spec["library_path"],
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "LC_CTYPE": "C.UTF-8",
+    }
+    if mutation == "extra_argument":
+        argv += ["--unadmitted-rebound-argument"]
+    elif mutation == "workspace":
+        del environment["CUBLAS_WORKSPACE_CONFIG"]
+    elif mutation == "injection":
+        environment["LD_PRELOAD"] = "/unadmitted/inject.so"
+    plan = {"argv": argv, "environment": execution_environment(environment)}
+    plan["profile_sha256"] = canonical_hash(plan["environment"]["profile"])
+    process = {"pid": 101, "starttime": "123"}
+    receipt = {
+        "command": argv,
+        "native_process": process,
+        "diagnostic": role == "diagnostic",
+    }
+    witness = {
+        "schema": CHILD_SCHEMA,
+        "status": "PREPARED_FOR_EXEC",
+        "pid": 101,
+        "argv": argv,
+        "environment": plan["environment"],
+        "environment_sha256": canonical_hash(plan["environment"]),
+        "process": {**process, "starttime": "999999999999"}
+        if mutation == "starttime"
+        else process,
+    }
+    if mutation is None:
+        validate_frozen_child(spec, role, receipt, plan, witness)
+    else:
+        with pytest.raises(InvalidTrace):
+            validate_frozen_child(spec, role, receipt, plan, witness)
 
 
 def protocol_case() -> tuple:

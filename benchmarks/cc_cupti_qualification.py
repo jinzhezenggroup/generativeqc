@@ -7,13 +7,17 @@ import hashlib
 import json
 import struct
 from collections import Counter, defaultdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from benchmarks.cc_cupti_report import OBSERVER_FENCE_ID, exclusive_ledger
 from benchmarks.cc_source_census import validate_cc_census
-from benchmarks.cc_tile_environment import canonical_hash, validate_child
-from benchmarks.cc_tile_pipeline_campaign import WORK, check_science
+from benchmarks.cc_tile_environment import (
+    canonical_hash,
+    execution_environment,
+    validate_child,
+)
+from benchmarks.cc_tile_pipeline_campaign import CONTROLS, WORK, check_science
 from benchmarks.cc_trace_reader import (
     activity_inventory,
     open_trace,
@@ -60,6 +64,61 @@ EXTRA_WORK = (
     "triples_moment_products",
     "triples_fp64_gemms",
 )
+
+
+def validate_frozen_child(
+    spec: dict, role: str, receipt: dict, plan: dict, witness: dict
+) -> None:
+    """Bind self-consistent child documents to the external frozen recipe.
+
+    This consumer covers the declared strict-FP64 three-role recipe, not an
+    arbitrary campaign whose three children merely agree with each other.
+    """
+    require(role in ("clean-1", "clean-2", "diagnostic"), "unknown child role")
+    run = spec["run"]
+    directory = PurePosixPath(run["input"]).parent / role
+    argv = [
+        run["executable"],
+        run["input"],
+        str(directory / "endpoint.json"),
+        *CONTROLS,
+    ]
+    diagnostic = role == "diagnostic"
+    if diagnostic:
+        argv += ["--cc-cupti-v1", run["backend"], str(directory / "capture")]
+    require(
+        plan["argv"] == receipt["command"] == argv
+        and receipt["diagnostic"] is diagnostic,
+        "child differs from complete frozen role argv",
+    )
+    expected_environment = execution_environment(
+        {
+            "OMP_NUM_THREADS": "1",
+            "OPENBLAS_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "CUBLAS_WORKSPACE_CONFIG": ":16:8",
+            "PATH": "/opt/generativeqc-reuse/venv/bin:/opt/generativeqc-reuse/cuda-12.9/bin:/usr/bin:/bin",
+            "LD_LIBRARY_PATH": spec["library_path"],
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "LC_CTYPE": "C.UTF-8",
+        }
+    )
+    require(
+        plan["environment"] == expected_environment,
+        "child differs from frozen semantic/observation environment",
+    )
+    process = receipt["native_process"]
+    require(
+        type(process.get("pid")) is int
+        and process["pid"] > 0
+        and isinstance(process.get("starttime"), str)
+        and process["starttime"].isdigit()
+        and int(process["starttime"]) > 0
+        and witness.get("process") == process,
+        "child witness native PID/start identity mismatch",
+    )
+    validate_child(witness, plan, process["pid"], process)
 
 
 def audit_campaign(root: Path, spec_sha256: str, worker_sha256: str) -> dict[str, Any]:
@@ -118,7 +177,7 @@ def audit_campaign(root: Path, spec_sha256: str, worker_sha256: str) -> dict[str
         witness, _ = json_record(directory / "child_environment.json")
         plan, _ = json_record(directory / "execution_plan.json")
         process = receipt["native_process"]
-        validate_child(witness, plan, process["pid"], process)
+        validate_frozen_child(spec, role, receipt, plan, witness)
         require(
             receipt["native_exit"] == 0 and receipt["cleanup_errors"] == [],
             "native process/lifetime failed",
@@ -131,12 +190,6 @@ def audit_campaign(root: Path, spec_sha256: str, worker_sha256: str) -> dict[str
         require(
             receipt["semantic_record"] == endpoint,
             "receipt differs from actual endpoint bytes",
-        )
-        require(
-            plan["argv"] == receipt["command"]
-            and plan["argv"][0] == spec["run"]["executable"]
-            and plan["argv"][1] == spec["run"]["input"],
-            "native argv identity mismatch",
         )
         require(
             receipt["allocation_receipt_sha256"]
