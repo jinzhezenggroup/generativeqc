@@ -13,7 +13,7 @@ namespace nlc {
 class Vv10Plan;
 
 /** StrictPositive preserves the raw fixed-grid contract. MolecularV1 removes
- * rho < 1e-8 from BOTH pair domains; it never floors an active density. */
+ * rho < 1e-10 from BOTH pair domains; it never floors an active density. */
 enum class Vv10DensityDomain : unsigned { StrictPositive = 0, MolecularV1 = 1 };
 
 struct Vv10Integral {
