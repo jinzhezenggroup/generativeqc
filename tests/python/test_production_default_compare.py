@@ -276,7 +276,8 @@ def test_render_rejects_old_and_incomplete_records(
 
 
 def test_all_mode_runs_exactly_three_isolated_public_arms(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The user-facing all command must never substitute AUTO for Fast."""
     monkeypatch.setenv("SLURM_JOB_ID", "host-fixture")
@@ -285,7 +286,9 @@ def test_all_mode_runs_exactly_three_isolated_public_arms(
     def fake_run(arguments: list[str], *, check: bool) -> SimpleNamespace:
         assert check
         assert arguments[:3] == [
-            sys.executable, "-m", "benchmarks.production_default_compare"
+            sys.executable,
+            "-m",
+            "benchmarks.production_default_compare",
         ]
         arm = arguments[3]
         assert arm in runner.ARMS
@@ -296,10 +299,19 @@ def test_all_mode_runs_exactly_three_isolated_public_arms(
 
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
     combined = tmp_path / "all.json"
-    runner.main([
-        "all", "--method", "pbe", "--atoms", "3",
-        "--repeats", "2", "--output", str(combined),
-    ])
+    runner.main(
+        [
+            "all",
+            "--method",
+            "pbe",
+            "--atoms",
+            "3",
+            "--repeats",
+            "2",
+            "--output",
+            str(combined),
+        ]
+    )
     assert launched == list(runner.ARMS)
     result = json.loads(combined.read_text())
     assert len(result["main_table"]) == 1
@@ -377,8 +389,11 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
     import numpy as np
 
     grid = SimpleNamespace(
-        version=1, radial_points=48, angular_polar=16,
-        angular_azimuth=32, pruning="none",
+        version=1,
+        radial_points=48,
+        angular_polar=16,
+        angular_azimuth=32,
+        pruning="none",
     )
     candidate = SimpleNamespace(
         ks_options=SimpleNamespace(grid=grid),
@@ -391,26 +406,36 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
         _library=SimpleNamespace(_name="/tmp/fake-native-library.so"),
     )
     solve = SimpleNamespace(
-        role="fp64_audit", requested_precision="fp64",
-        iterations=11, fock_builds=12, seconds=0.1,
+        role="fp64_audit",
+        requested_precision="fp64",
+        iterations=11,
+        fock_builds=12,
+        seconds=0.1,
     )
     validation = SimpleNamespace(
-        profile="fast", status="observed_met", scope="relaxed_target",
-        solve_count=2, gradient_admission="fp64-after-budget-rejection",
+        profile="fast",
+        status="observed_met",
+        scope="relaxed_target",
+        solve_count=2,
+        gradient_admission="fp64-after-budget-rejection",
         fallback_reasons=("candidate_exceeded_observable_budget",),
-        budget=None, solves=(solve, solve),
+        budget=None,
+        solves=(solve, solve),
     )
     result = SimpleNamespace(
-        converged=True, executed_backend="cuda",
-        energy=-1.5, forces=np.zeros((1, 3)),
-        iterations=11, initial_guess={"kind": "huckel", "outcome": "used"},
+        converged=True,
+        executed_backend="cuda",
+        energy=-1.5,
+        forces=np.zeros((1, 3)),
+        iterations=11,
+        initial_guess={"kind": "huckel", "outcome": "used"},
         precision_validation=validation,
-        precision={"mixed_stage_fock_builds": 0,
-                   "gradient": {"returned_mode": "fp64"}},
+        precision={"mixed_stage_fock_builds": 0, "gradient": {"returned_mode": "fp64"}},
         ks_diagnostic=SimpleNamespace(grid_points=24576),
     )
     precision_calculator = SimpleNamespace(
-        _candidate=candidate, _candidate_precision="fp64",
+        _candidate=candidate,
+        _candidate_precision="fp64",
         singlepoint=lambda atoms, properties: result,
     )
     cp = SimpleNamespace(
@@ -420,9 +445,7 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
     monkeypatch.setattr(
         runner, "make_native_calculator", lambda method, arm: precision_calculator
     )
-    sample = runner.native_sample(
-        "pbe", [("H", (0.0, 0.0, 0.0))], "fast"
-    )
+    sample = runner.native_sample("pbe", [("H", (0.0, 0.0, 0.0))], "fast")
     assert sample["settings"]["selected_candidate_precision"] == "fp64"
     assert sample["precision_validation"]["solve_count"] == 2
     assert sample["precision_validation"]["status"] == "observed_met"
