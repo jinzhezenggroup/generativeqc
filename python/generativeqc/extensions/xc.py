@@ -10,6 +10,7 @@ from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capabili
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.spec import COMPONENTS, FunctionalSpec, UnsupportedXC
 from generativeqc_compiler.xc.spec import functional as _functional
+from generativeqc_compiler.xc.user_expression import UserExpression
 
 API_VERSION = 1
 Coefficient = int | str | Fraction
@@ -73,8 +74,21 @@ def named(identifier: str, *, spin: str = "unpolarized") -> FunctionalSpec:
     return _functional(identifier, spin=spin)
 
 
-def inspect(spec: FunctionalSpec) -> dict:
+def expression(source: str, *, name: str = "user-expression") -> UserExpression:
+    """Seal a bounded spin-resolved LDA polynomial string; no native admission."""
+    return UserExpression(source, name=name)
+
+
+def inspect(spec: FunctionalSpec | UserExpression) -> dict:
     """Return a detached, versioned description of a public XC extension."""
+    if isinstance(spec, UserExpression):
+        return {
+            "extension_api_version": API_VERSION,
+            "kind": "xc-expression",
+            "identity": spec.identity,
+            "spec": spec.to_payload(),
+            "capability": spec.capability(),
+        }
     if not isinstance(spec, FunctionalSpec):
         raise TypeError("XC inspection requires FunctionalSpec")
     return {
@@ -138,8 +152,10 @@ __all__ = [
     "Coefficient",
     "FunctionalSpec",
     "UnsupportedXC",
+    "UserExpression",
     "capability",
     "compose",
+    "expression",
     "inspect",
     "named",
 ]
