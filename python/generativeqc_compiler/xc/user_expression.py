@@ -187,6 +187,7 @@ class UserExpression:
             raise ValueError("serialized declaration exceeds budget")
         try:
             payload = json.loads(value)
+            envelope_hash = canonical_hash(payload)
         except RecursionError as exc:
             raise ValueError(
                 "serialized declaration exceeds JSON nesting budget"
@@ -199,7 +200,8 @@ class UserExpression:
         }:
             raise ValueError("invalid expression envelope")
         result = cls(payload["source"], name=payload["name"])
-        if result.to_payload() != payload:
+        # JSON identity preserves index types; Python equality aliases True/1/1.0.
+        if canonical_hash(result.to_payload()) != envelope_hash:
             raise ValueError("expression declaration/canonical identity mismatch")
         return result
 

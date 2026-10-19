@@ -219,3 +219,16 @@ def test_deep_replay_envelopes_have_public_validation_error(depth: int) -> None:
     # Python version, but unsupported replay shapes have one error contract.
     with pytest.raises(ValueError):
         xc.UserExpression.loads("[" * depth + "]" * depth)
+
+
+@pytest.mark.parametrize("field", ["boolean-root", "float-root", "boolean-argument"])
+def test_replay_rejects_canonical_index_type_aliases(field: str) -> None:
+    payload = xc.expression("rho_a**2").to_payload()
+    if field == "boolean-root":
+        payload["canonical"]["root"] = True
+    elif field == "float-root":
+        payload["canonical"]["root"] = 1.0
+    else:
+        payload["canonical"]["nodes"][1][1][0] = False
+    with pytest.raises(ValueError, match="mismatch"):
+        xc.UserExpression.loads(json.dumps(payload))

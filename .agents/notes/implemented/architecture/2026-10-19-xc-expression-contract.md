@@ -26,6 +26,10 @@ operation payload spelling as existing XC graph provenance does; hash through th
 canonical provenance owner. Preserve original source separately from semantic
 identity and revalidate that relationship on replay. Graph and inspection exports
 are detached, preventing mutation of a sealed formula through retained handles.
+Replay compares canonical JSON hashes of the complete envelope, preserving JSON
+index types rather than Python's coercive `True == 1 == 1.0` equality. Decoder or
+encoder recursion failures inside the length budget become the public validation
+exception; they do not escape through a separate runtime-error contract.
 
 ## Rejected alternatives
 
