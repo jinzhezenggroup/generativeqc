@@ -79,9 +79,10 @@ def test_native_rks_adapter_consumes_production_cpks_owner() -> None:
         native_ks.NativeRKSResponse,
         production_operator.CPKSResponseOperator,
     )
-    assert (
-        native_ks.FixedDensityXCDerivativeKernel
-        is production_xc.FixedDensityXCDerivativeKernel
+    assert native_ks._NativeKSXCKernel is production_rks._NativeRKSXCKernel
+    assert issubclass(
+        native_ks._NativeKSXCKernel,
+        production_xc.FixedDensityXCDerivativeKernel,
     )
 
 
