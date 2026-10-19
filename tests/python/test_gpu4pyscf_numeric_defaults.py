@@ -1,9 +1,13 @@
-"""The public/native GPU4PySCF-compatible *numerical* defaults, not benchmark flags."""
+"""The public/native GPU4PySCF-compatible numerical defaults, not benchmark flags."""
+
+from __future__ import annotations
 
 import inspect
 from pathlib import Path
 from types import SimpleNamespace
+from typing import NoReturn
 
+import pytest
 from generativeqc import Calculator, InitialGuessSpec
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
@@ -13,7 +17,7 @@ from generativeqc_compiler.dft.nonlocal_policy import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_public_default_controls():
+def test_public_default_controls() -> None:
     p = inspect.signature(Calculator).parameters
     assert p["max_iterations"].default == 50
     assert p["energy_tolerance"].default == 1e-9
@@ -23,7 +27,7 @@ def test_public_default_controls():
     assert "else 1e-13" in (ROOT / "python/generativeqc/calculator.py").read_text()
 
 
-def test_native_defaults_match_public_values():
+def test_native_defaults_match_public_values() -> None:
     scf = (ROOT / "src/scf/types.hpp").read_text()
     common = (ROOT / "src/methods/scf_common_options.hpp").read_text()
     fock = (ROOT / "src/scf/fock_build.hpp").read_text()
@@ -42,7 +46,7 @@ def test_native_defaults_match_public_values():
     assert "screening_tolerance = 1.0e-13" in fock
 
 
-def test_cuda_ao_and_vv10_cutoffs():
+def test_cuda_ao_and_vv10_cutoffs() -> None:
     src = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     assert "ao_selection_cutoff = 1.0e-10" in src
     assert "select_local_ao(ao_selection_cutoff," in src
@@ -51,12 +55,12 @@ def test_cuda_ao_and_vv10_cutoffs():
     assert MOLECULAR_VV10_DENSITY_POLICY == "vv10-molecular-rho-ge-1e-10-v2"
 
 
-def test_auto_guess_prefers_minao(monkeypatch):
+def test_auto_guess_prefers_minao(monkeypatch: pytest.MonkeyPatch) -> None:
     import generativeqc.initial_guess as guess
 
     monkeypatch.setattr(guess, "_automatic_minao_model_eligible", lambda *a, **kw: True)
 
-    def fail(*a, **kw):
+    def fail(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("must select MINAO before querying Huckel")
 
     monkeypatch.setattr(guess, "supports_automatic_huckel", fail)
@@ -65,7 +69,7 @@ def test_auto_guess_prefers_minao(monkeypatch):
     ) == InitialGuessSpec("minao")
 
 
-def test_auto_guess_fallback_remains_guarded(monkeypatch):
+def test_auto_guess_fallback_remains_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
     import generativeqc.initial_guess as guess
 
     monkeypatch.setattr(
