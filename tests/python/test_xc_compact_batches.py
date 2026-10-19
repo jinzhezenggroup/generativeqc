@@ -76,19 +76,31 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
     matrices = _emit_tiled(DEFAULT_XC_MATRIX_SCHEDULE).split(
         "// The compiler owns schedule admission"
     )[0]
-    # Count executed reduction steps without replacing their scientific math.
-    density_step = "value += d[x][k]*a[y][k];"
-    potential_step = "value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];"
-    assert density_step in matrices and potential_step in matrices
-    matrices = matrices.replace(
-        density_step,
-        "{density_terms.fetch_add(1,std::memory_order_relaxed);" + density_step + "}",
-    ).replace(
-        potential_step,
-        "{potential_terms.fetch_add(1,std::memory_order_relaxed);"
-        + potential_step
-        + "}",
-    )
+    # Count semantic reduction terms in either arithmetic specialization, not
+    # individual multiply/add instructions. The independent bilinear below
+    # remains the numerical oracle for the actual generated expressions.
+    for counter, expressions in (
+        (
+            "density_terms",
+            ("value += d[x][k]*a[y][k];", "value = fma(d[x][k], a[y][k], value);"),
+        ),
+        (
+            "potential_terms",
+            (
+                "value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];",
+                "value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));",
+            ),
+        ),
+    ):
+        for expression in expressions:
+            matrices = matrices.replace(
+                expression,
+                "{"
+                + counter
+                + ".fetch_add(1,std::memory_order_relaxed);"
+                + expression
+                + "}",
+            )
     batch = emit_native_xc_tile_batches().split(
         "template <class Arithmetic>\ninline void launch_batch_density_typed"
     )[0]

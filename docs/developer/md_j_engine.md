@@ -36,7 +36,7 @@ or screening equivalence with upstream.
 | Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity plus every ordered primitive product. Resident sparse weighted E transforms factor the contraction, normalization and Cartesian/spherical maps without materializing dense C. This reuses the established transform pipeline. |
 | Pair layout | `j_engine.py`: `(li,lj)` pair mappings sorted by `q_cond`, packed `pair_loc` | Within total-angular classes 0–4, a deterministic active-prefix, descending-q, primitive-ID permutation drives packed Hermite intervals. `md_j_engine_pair_loc` rewrites only Hermite offsets. Original shell/primitive identities and transform slots stay valid. Total-angular grouping is sufficient after the separate bra/ket E transforms; it is not upstream's raw-shell ordering. |
 | Density precontraction | `lib/gvhf-md/contract_Et.cu`: `Et_dot_dm` | Existing `md_j_density` contracts the actual public density into resident primitive Hermite density using cached E. UKS uses alpha+beta; nonsymmetric density retains both AO directions. |
-| Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, maximum leaf minimum, and density. Coarse rejection preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. Precomputed qD is retained as hierarchy metadata but is not substituted at rounded boundaries. |
+| Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, maximum leaf minimum, and density. The reference recipe preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. The complete primitive recipe uses the precontracted source norm described below at both coarse and leaf decisions. |
 | Exact admission | Upstream applies its own shell-pair cutoff contract | `md_j_engine_direction` retains the existing public-AO minimum-product and directional density allowance. Partially masked pairs still use the established exact residual source. Thus upstream log thresholds and half factors are not silently imported. |
 | Task/tile scheduling | `j_engine.py` scheme selection; `md_j.cuh` and `md_contract_j.cu` hierarchical task consumers | Checked 64-bit rectangular/triangular inventories and an atomic device cursor feed 128-thread tiles. Adjacent source lanes evaluate independent primitive quartets; larger angular domains reserve power-of-two component lanes using upstream's single-density shape targets. Interleaved radial scratch, register bra accumulation and shuffle/single-writer ket reduction avoid per-source shared floating-point atomics. Angular/workspace-aware tile widths respect a conservative 32-KiB target and 48-KiB hard cap. All 15 canonical angular class pairs, including (4,4), use this backend. |
 | Generated recurrence and contraction | `md_indices.cu`, `md_pairdata.c`, `md_contract_j.cu`: compact Cartesian indexing, MD radial recurrence and two directions | Compiler-owned `md_j_engine_cuda.py` emits compact descending in-place R simplexes through order 8 and lane-owned forward/reverse contractions from the existing scalar IR and Boys seeds. One radial source supplies both admitted directions. |
@@ -76,17 +76,23 @@ being copied from its contracted parent.
 
 Each directed primitive product receives an omission allowance of
 `min(screening_tolerance, 1e-12) / (maximum_pair_primitives * primitive_count)`.
-The upward-rounded product of the two primitive bounds and the input shell
-pair's absolute density envelope bounds that product's contribution to any
-output AO. The complete omitted absolute contribution to each J entry is thus
+After density precontraction, each source gets the outward-rounded triangle
+bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
+the represented Hermite source. Its minimum with the independently conservative
+primitive norm times the shell density envelope is stored in the existing
+hierarchy's `qD` field. Multiplying the output primitive norm by this source
+bound, rounded upward, bounds the directed contribution to any output AO.
+The complete omitted absolute contribution to each J entry is thus
 bounded by `min(screening_tolerance, 1e-12)`; this bounds screening, not floating
 point accumulation error. No old per-AO integral mask is applied. Zero tolerance
 disables omission of nonzero terms. Nonrepresentable bound arithmetic retains
 work, and zero density produces zero source work.
 
 Preparation sorts primitive bounds within angular classes. Every replay computes
-the current maximum density envelope and five device-only active prefixes,
-then constructs its rectangular/triangular work inventory from those prefixes.
+the current maximum source norm and five device-only active prefixes. A
+primitive remains in the prefix if it can contribute as either an output or a
+source, using the corresponding global maximum norm. The rectangular/triangular
+work inventory is constructed from those prefixes.
 Small geometry bounds cannot restore a quadratic traversal over the entire
 unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
 changing density magnitude never relies on pointer identity. All ordinary E,

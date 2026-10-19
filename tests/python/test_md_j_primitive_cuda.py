@@ -75,6 +75,43 @@ def test_primitive_complete_j_and_changed_density_graph(
 
 
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
+def test_primitive_source_cancellation_and_restoration(
+    monkeypatch: pytest.MonkeyPatch, spin: str
+) -> None:
+    """Replay must refresh cancellation-sensitive bounds, even at similar |D|.
+
+    Antisymmetric density and opposing spin densities cancel in the Coulomb
+    source. Restoring the original density through the same captured owner
+    must restore its work as well; a stale zero source bound would omit J.
+    """
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    atoms, shells = general_contraction_basis()
+    with NativeAO(atoms, shells, representation="spherical") as basis:
+        _, _, eri, _ = public_ao_oracle(basis)
+        d = np.random.default_rng(1743).normal(size=(basis.nao, basis.nao)) * 0.03
+        if spin == "unrestricted":
+            ordinary = np.stack((d, 0.6 * d.T))
+            cancelled = np.stack((d, -d))
+            nearly_cancelled = np.stack((d, -d + 1e-10 * d.T))
+        else:
+            ordinary = d
+            cancelled = d - d.T
+            nearly_cancelled = cancelled + 1e-10 * (d + d.T)
+        with ResidentMdJProbe(basis, _spec(spin), screening_tolerance=1e-12) as plan:
+            assert plan.diagnostics["direct_schedule"].startswith("md-j-primitive/")
+            plan.capture_graph()
+            for changed in (ordinary, cancelled, nearly_cancelled, ordinary):
+                total = changed.sum(axis=0) if changed.ndim == 3 else changed
+                expected = np.einsum("ijkl,kl->ij", eri, total, optimize=True)
+                actual = plan.evaluate_graph(changed).coulomb
+                np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=3e-12)
+
+
+@pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 def test_primitive_capacity_fallback_and_independent_k(
     monkeypatch: pytest.MonkeyPatch, spin: str
 ) -> None:

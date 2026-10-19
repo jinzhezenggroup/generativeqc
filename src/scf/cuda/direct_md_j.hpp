@@ -57,6 +57,7 @@ struct MdJWorkCounts {
  * after the current density bound, including every captured graph replay. */
 struct MdJPrimitiveScreenState {
   double maximum_density;
+  double maximum_source_norm;
   std::uint32_t active[5];
 };
 

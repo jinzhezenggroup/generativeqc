@@ -199,3 +199,19 @@ ordered156.680948s and cooperative154.634718s, each24Fock; both cold and one
 warm E/F pass, n4:1179. These are separate candidates, not the retained spatial
 endpoint's timings or default policy. Fresh GPU4PySCF1.8.1 cold n4:1180 is
 153.314540s/60JK and passes E/F, consistent with the prior153.635193s sample.
+
+## Per-Fock follow-up
+
+The [source-norm/XC arithmetic decision](2026-10-19-per-fock-source-norm-xc-fma.md)
+confirms that similar cold totals concealed slower native rounds. It records
+24 native Focks versus 60 upstream `get_veff` calls in the clean campaign, and
+separate actual component profiles rather than dividing E/F by iteration count.
+
+X02's earlier phrase "scalar-FMA" described matrix-product structure too
+loosely: the emitted multiply/add expressions were not fused under production
+`--fmad=false`. Explicit FP64 XC fusion now reduces same-input complete XC by
+40.4%. A tighter precontracted Hermite source certificate reduces J work while
+preserving its cumulative omission allowance. Combined native J+XC per round
+falls from 4.587006 to 3.257288 s; clean r2 cold falls from 158.655704 to
+125.702913 s with the same 24 Focks. Upstream normal-cutoff per round remains
+2.173046 s, so the remaining per-round gap is explicitly retained.

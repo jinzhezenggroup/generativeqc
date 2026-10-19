@@ -201,6 +201,39 @@ __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, s
   }
 }
 
+/** Bound the represented Hermite source after density precontraction. Taking
+ * absolute values here preserves cancellation within one primitive's source,
+ * while the triangle inequality still bounds its Coulomb norm. Cauchy-Schwarz
+ * with an output AO-pair norm therefore bounds each omitted directed product.
+ * This pass initializes every hierarchy leaf, including inactive windows,
+ * before the hierarchy/prefix kernels read it; captured replay refreshes all
+ * source norms. No additional per-primitive allocation is required. */
+__global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::size_t end) {
+  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= md.primitive_count) return;
+  const auto primitive = md.primitives[index];
+  const auto pair = md.pairs[primitive.pair];
+  double norm = 0.0;
+  if (pair.system >= begin && pair.system < end) {
+    for (unsigned component = 0; component < pair.hermites; ++component) {
+      const auto coefficient = fabs(md.density[primitive.hermite_offset + component]);
+      if (coefficient == 0.0) continue;
+      norm = __dadd_ru(
+          norm, __dmul_ru(coefficient,
+                          md_engine_hermite_norm(primitive.exponent, pair.angular, component)));
+    }
+    // Either independently conservative certificate may admit less work.
+    norm =
+        fmin(md_j_nonnegative_bound(norm),
+             md_j_bound_product_up(md.primitive_bounds[index], md.density_bounds[primitive.pair]));
+  }
+  const auto position =
+      (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;
+  md.hierarchy[md.hierarchy_layout.bucket_offsets[pair.angular] + position].qd = norm;
+  atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_source_norm),
+            static_cast<unsigned long long>(__double_as_longlong(norm)));
+}
+
 /** Reuse the existing MD/Boys mathematics, contracting density before any AO
  * output expansion. Every ordered bra/ket primitive product is evaluated once.
  */
@@ -410,6 +443,9 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
       batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
+  if (md.primitive_screen)
+    md_j_primitive_source_norms<<<static_cast<unsigned>((md.primitive_count + 127) / 128), 128, 0,
+                                  stream>>>(md, system_begin, end);
   if (md.reference_engine) {
     launch_md_j_engine(stream, md, system_begin, end, screening);
     md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(

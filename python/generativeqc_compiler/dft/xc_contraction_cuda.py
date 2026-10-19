@@ -333,6 +333,10 @@ __device__ void tiled_density_product_body(const double* density, const double* 
         value = __dadd_rn(
             value, static_cast<double>(__fmul_rn(__double2float_rn(d[x][k]),
                                                   __double2float_rn(a[y][k]))));
+      else if constexpr (std::is_same_v<Arithmetic, double>)
+        // Explicit FP64 fusion keeps the k order and single accumulator, but
+        // avoids a separately rounded multiply under global --fmad=false.
+        value = fma(d[x][k], a[y][k], value);
       else
         value += d[x][k]*a[y][k];
     }
@@ -424,9 +428,19 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
       }
       if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
         if (cross)
-          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+          for (I k = 0; k < @TILE@; ++k) {
+            if constexpr (std::is_same_v<Arithmetic, double>)
+              value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
+            else
+              value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+          }
         else if (reuse_diagonal)
-          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y];
+          for (I k = 0; k < @TILE@; ++k) {
+            if constexpr (std::is_same_v<Arithmetic, double>)
+              value = fma(am[k][x], wn[k][y], value);
+            else
+              value += am[k][x]*wn[k][y];
+          }
         else
           for (I k = 0; k < @TILE@; ++k) {
             const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];

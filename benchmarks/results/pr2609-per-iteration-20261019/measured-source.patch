@@ -1,0 +1,185 @@
+diff --git a/python/generativeqc_compiler/dft/xc_contraction_cuda.py b/python/generativeqc_compiler/dft/xc_contraction_cuda.py
+index 46b444609..96cf98537 100644
+--- a/python/generativeqc_compiler/dft/xc_contraction_cuda.py
++++ b/python/generativeqc_compiler/dft/xc_contraction_cuda.py
+@@ -333,6 +333,10 @@ __device__ void tiled_density_product_body(const double* density, const double*
+         value = __dadd_rn(
+             value, static_cast<double>(__fmul_rn(__double2float_rn(d[x][k]),
+                                                   __double2float_rn(a[y][k]))));
++      else if constexpr (std::is_same_v<Arithmetic, double>)
++        // Explicit FP64 fusion keeps the k order and single accumulator, but
++        // avoids a separately rounded multiply under global --fmad=false.
++        value = fma(d[x][k], a[y][k], value);
+       else
+         value += d[x][k]*a[y][k];
+     }
+@@ -424,9 +428,19 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n,
+       }
+       if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu)) {
+         if (cross)
+-          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
++          for (I k = 0; k < @TILE@; ++k) {
++            if constexpr (std::is_same_v<Arithmetic, double>)
++              value = fma(wm[k][x], an[k][y], fma(am[k][x], wn[k][y], value));
++            else
++              value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
++          }
+         else if (reuse_diagonal)
+-          for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y];
++          for (I k = 0; k < @TILE@; ++k) {
++            if constexpr (std::is_same_v<Arithmetic, double>)
++              value = fma(am[k][x], wn[k][y], value);
++            else
++              value += am[k][x]*wn[k][y];
++          }
+         else
+           for (I k = 0; k < @TILE@; ++k) {
+             const Arithmetic original_right = scaled_wn[k][y] ? wn[k][y]*0.5 : wn[k][y];
+diff --git a/src/scf/cuda/direct_md_j.cu b/src/scf/cuda/direct_md_j.cu
+index 5a1dcd9a4..cdc596184 100644
+--- a/src/scf/cuda/direct_md_j.cu
++++ b/src/scf/cuda/direct_md_j.cu
+@@ -201,6 +201,39 @@ __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, s
+   }
+ }
+ 
++/** Bound the represented Hermite source after density precontraction. Taking
++ * absolute values here preserves cancellation within one primitive's source,
++ * while the triangle inequality still bounds its Coulomb norm. Cauchy-Schwarz
++ * with an output AO-pair norm therefore bounds each omitted directed product.
++ * This pass initializes every hierarchy leaf, including inactive windows,
++ * before the hierarchy/prefix kernels read it; captured replay refreshes all
++ * source norms. No additional per-primitive allocation is required. */
++__global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::size_t end) {
++  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (index >= md.primitive_count) return;
++  const auto primitive = md.primitives[index];
++  const auto pair = md.pairs[primitive.pair];
++  double norm = 0.0;
++  if (pair.system >= begin && pair.system < end) {
++    for (unsigned component = 0; component < pair.hermites; ++component) {
++      const auto coefficient = fabs(md.density[primitive.hermite_offset + component]);
++      if (coefficient == 0.0) continue;
++      norm = __dadd_ru(
++          norm, __dmul_ru(coefficient,
++                          md_engine_hermite_norm(primitive.exponent, pair.angular, component)));
++    }
++    // Either independently conservative certificate may admit less work.
++    norm =
++        fmin(md_j_nonnegative_bound(norm),
++             md_j_bound_product_up(md.primitive_bounds[index], md.density_bounds[primitive.pair]));
++  }
++  const auto position =
++      (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;
++  md.hierarchy[md.hierarchy_layout.bucket_offsets[pair.angular] + position].qd = norm;
++  atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_source_norm),
++            static_cast<unsigned long long>(__double_as_longlong(norm)));
++}
++
+ /** Reuse the existing MD/Boys mathematics, contracting density before any AO
+  * output expansion. Every ordered bra/ket primitive product is evaluated once.
+  */
+@@ -410,6 +443,9 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
+       batch, md, system_begin, end, unrestricted, density, beta);
+   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
+       batch, md, system_begin, end, unrestricted, density, beta);
++  if (md.primitive_screen)
++    md_j_primitive_source_norms<<<static_cast<unsigned>((md.primitive_count + 127) / 128), 128, 0,
++                                  stream>>>(md, system_begin, end);
+   if (md.reference_engine) {
+     launch_md_j_engine(stream, md, system_begin, end, screening);
+     md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
+diff --git a/src/scf/cuda/direct_md_j.hpp b/src/scf/cuda/direct_md_j.hpp
+index d99d78026..02a54bd49 100644
+--- a/src/scf/cuda/direct_md_j.hpp
++++ b/src/scf/cuda/direct_md_j.hpp
+@@ -57,6 +57,7 @@ struct MdJWorkCounts {
+  * after the current density bound, including every captured graph replay. */
+ struct MdJPrimitiveScreenState {
+   double maximum_density;
++  double maximum_source_norm;
+   std::uint32_t active[5];
+ };
+ 
+diff --git a/src/scf/cuda/md_j_engine.cuh b/src/scf/cuda/md_j_engine.cuh
+index dac40057e..99056c433 100644
+--- a/src/scf/cuda/md_j_engine.cuh
++++ b/src/scf/cuda/md_j_engine.cuh
+@@ -61,13 +61,17 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t
+           md.primitive_bounds ? md.primitive_bounds[index] : md.maximum_bounds[primitive.pair],
+           md.density_bounds[primitive.pair], md.minimum_bounds[primitive.pair]);
+       if (md.primitive_screen) {
+-        // A q-sorted prefix encloses both directions for any density in this
+-        // replay. Recompute it on device; pointer identity is not a cache key.
+-        const auto limit =
+-            md_j_bound_product_up(md_j_bound_product_up(bound.q, md.primitive_maximum_bound),
+-                                  md.primitive_screen->maximum_density);
+-        if (md.primitive_screen->maximum_density != 0.0 &&
+-            limit >= md_j_primitive_allowance(md, screening))
++        // The preceding source-norm pass has initialized every leaf. qD now
++        // bounds the actual precontracted Hermite source, not q times a shell
++        // density envelope. Either direction can keep this q-sorted position.
++        bound.qd = output[position].qd;
++        const auto allowance = md_j_primitive_allowance(md, screening);
++        const bool target =
++            md.primitive_screen->maximum_source_norm != 0.0 &&
++            md_j_bound_product_up(bound.q, md.primitive_screen->maximum_source_norm) >= allowance;
++        const bool source = bound.qd != 0.0 && md_j_bound_product_up(md.primitive_maximum_bound,
++                                                                     bound.qd) >= allowance;
++        if (target || source)
+           atomicMax(md.primitive_screen->active + angular, static_cast<unsigned>(position + 1));
+       }
+     }
+@@ -99,12 +103,11 @@ __device__ inline bool md_j_engine_direction(MdJView md, std::uint32_t output, s
+ 
+ /** The complete primitive recipe bypasses the public-AO mask explicitly.
+  * Both signed density orientations already occur in density_bounds and E D. */
+-__device__ inline bool md_j_engine_primitive_direction(MdJView md, std::uint32_t output,
+-                                                       std::uint32_t input, double screening) {
+-  const auto density = md.density_bounds[md.primitives[input].pair];
+-  const auto contribution = md_j_bound_product_up(
+-      md_j_bound_product_up(md.primitive_bounds[output], md.primitive_bounds[input]), density);
+-  return density != 0.0 && contribution >= md_j_primitive_allowance(md, screening);
++__device__ inline bool md_j_engine_primitive_direction(MdJView md, const MdJScreenBound& output,
++                                                       const MdJScreenBound& input,
++                                                       double screening) {
++  return input.qd != 0.0 &&
++         md_j_bound_product_up(output.q, input.qd) >= md_j_primitive_allowance(md, screening);
+ }
+ 
+ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angular,
+@@ -125,6 +128,9 @@ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angula
+   const auto allowance =
+       md.primitive_bounds ? md_j_primitive_allowance(md, screening)
+                           : __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
++  if (md.primitive_bounds)
++    return (ket.qd != 0.0 && md_j_bound_product_up(bra.q, ket.qd) >= allowance) ||
++           (bra.qd != 0.0 && md_j_bound_product_up(ket.q, bra.qd) >= allowance);
+   return (ket.density != 0.0 && md_j_screen_density_bound(bra, ket) >= allowance) ||
+          (bra.density != 0.0 && md_j_screen_density_bound(ket, bra) >= allowance);
+ }
+@@ -222,18 +228,18 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
+           const auto bra_pair = md.pairs[bra.pair], ket_pair = md.pairs[ket.pair];
+           if (bra_pair.system >= begin && bra_pair.system < end &&
+               bra_pair.system == ket_pair.system) {
+-            const auto bra_index =
+-                md.ordered_primitives[md.class_offsets[BraAngular] + task.bra_begin + bra_slot];
+-            const auto ket_index =
+-                md.ordered_primitives[md.class_offsets[KetAngular] + task.ket_begin + ket_slot];
++            const auto bra_bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[BraAngular] +
++                                                task.bra_begin + bra_slot];
++            const auto ket_bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[KetAngular] +
++                                                task.ket_begin + ket_slot];
+             forward = md.primitive_bounds
+-                          ? md_j_engine_primitive_direction(md, bra_index, ket_index, screening)
++                          ? md_j_engine_primitive_direction(md, bra_bound, ket_bound, screening)
+                           : md_j_engine_direction(md, bra.pair, ket.pair, screening);
+             const bool distinct =
+                 BraAngular != KetAngular || task.bra_begin + bra_slot != task.ket_begin + ket_slot;
+             reverse = distinct &&
+                       (md.primitive_bounds
+-                           ? md_j_engine_primitive_direction(md, ket_index, bra_index, screening)
++                           ? md_j_engine_primitive_direction(md, ket_bound, bra_bound, screening)
+                            : md_j_engine_direction(md, ket.pair, bra.pair, screening));
+             if (forward || reverse) {
+               if (component_lane == 0) {
