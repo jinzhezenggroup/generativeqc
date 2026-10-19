@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import struct
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
@@ -21,18 +22,43 @@ from benchmarks.cc_tile_pipeline_campaign import CONTROLS, WORK, check_science
 from benchmarks.cc_trace_reader import (
     activity_inventory,
     open_trace,
+    regular_stream,
     require,
     source_inventory,
 )
 
 
+def closed_bytes(path: Path) -> bytes:
+    """Read a finite, stable opened regular object without following or blocking."""
+    with regular_stream(path) as stream:
+        before = os.fstat(stream.fileno())
+        raw = stream.read(512 * 1024 + 1)
+        after = os.fstat(stream.fileno())
+    require(len(raw) <= 512 * 1024, "JSON evidence exceeds admission bound")
+    require(
+        (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        )
+        == (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        and len(raw) == before.st_size,
+        "closed evidence changed during read",
+    )
+    return raw
+
+
 def json_record(path: Path, expected_hash: str | None = None) -> tuple[dict, str]:
     """Bind finite closed JSON bytes; expected hashes come from the frozen packet."""
-    from benchmarks.cc_trace_reader import regular_stream
-
-    with regular_stream(path) as stream:
-        raw = stream.read(512 * 1024 + 1)
-    require(len(raw) <= 512 * 1024, "JSON evidence exceeds admission bound")
+    raw = closed_bytes(path)
     digest = hashlib.sha256(raw).hexdigest()
     require(
         expected_hash is None or digest == expected_hash, "JSON evidence hash mismatch"
@@ -130,11 +156,10 @@ def audit_campaign(root: Path, spec_sha256: str, worker_sha256: str) -> dict[str
     DSO rehash or retroactively repair execution supervision.
     """
     spec, _ = json_record(root / "spec.json", spec_sha256)
-    with (root / "worker.py").open("rb") as stream:
-        require(
-            hashlib.file_digest(stream, "sha256").hexdigest() == worker_sha256,
-            "worker differs from frozen source",
-        )
+    require(
+        hashlib.sha256(closed_bytes(root / "worker.py")).hexdigest() == worker_sha256,
+        "worker differs from frozen source",
+    )
     require(
         spec["roles"] == ["clean-1", "clean-2", "diagnostic"]
         and spec["scientific_sample_limit"] == 3
@@ -154,12 +179,11 @@ def audit_campaign(root: Path, spec_sha256: str, worker_sha256: str) -> dict[str
         == "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
         "frozen scientific input changed",
     )
-    with (root / "input.input").open("rb") as stream:
-        require(
-            hashlib.file_digest(stream, "sha256").hexdigest()
-            == spec["run"]["sha256"]["input"],
-            "actual molecular input differs",
-        )
+    require(
+        hashlib.sha256(closed_bytes(root / "input.input")).hexdigest()
+        == spec["run"]["sha256"]["input"],
+        "actual molecular input differs",
+    )
     campaign, campaign_hash = json_record(root / "campaign-result.json")
     require(len(campaign["children"]) == 3, "missing/extra scientific children")
     rows = []

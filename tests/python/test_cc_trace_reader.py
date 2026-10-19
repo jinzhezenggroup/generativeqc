@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 import pytest
 
+from benchmarks.cc_cupti_qualification import closed_bytes
 from benchmarks.cc_trace_reader import InvalidTrace, open_trace
 
 pytestmark = pytest.mark.skipif(
@@ -72,3 +73,24 @@ def test_unsupported_abi_and_short_metadata(tmp_path: Path) -> None:
     path.write_bytes(struct.pack("<5Q", 0x434354494D453031, 1, 20, 14, 0))
     with pytest.raises(InvalidTrace, match="short metadata"):
         open_trace(path)
+
+
+@pytest.mark.parametrize("name", ["worker.py", "input.input"])
+def test_closed_campaign_inputs_refuse_links_fifo_and_nonregular(
+    tmp_path: Path, name: str
+) -> None:
+    original = tmp_path / "original"
+    original.write_bytes(b"closed input")
+    assert closed_bytes(original) == b"closed input"
+    path = tmp_path / name
+    path.symlink_to(original)
+    with pytest.raises(InvalidTrace, match="open refused"):
+        closed_bytes(path)
+    path.unlink()
+    os.mkfifo(path)
+    with pytest.raises(InvalidTrace, match="regular"):
+        closed_bytes(path)
+    path.unlink()
+    path.mkdir()
+    with pytest.raises(InvalidTrace, match="regular"):
+        closed_bytes(path)
