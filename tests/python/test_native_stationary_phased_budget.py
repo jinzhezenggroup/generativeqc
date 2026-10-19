@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -320,5 +321,295 @@ int main() {
     )
     executable = native_cxx.build_executable(
         [source], tmp_path / "phase_creation", compile_args=["-std=c++20", "-O0"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_phase_allocation_driver_fault_is_not_a_seed_retry(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute real allocation/error boundaries against inert CUDA operations.
+
+    CUDA launch syntax becomes ordinary no-op calls. Allocation admission,
+    native cleanup, method status mapping and the retry predicate remain real.
+    OOM keeps the bounded path; a CUDA runtime failure must not request a new SCF.
+    """
+    runtime = (ROOT / "src/dft/native_stationary_runtime.cuh").read_text()
+    executor = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    owner = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
+    stub = r"""
+
+#pragma once
+#include <cstddef>
+using cudaError_t = int;
+using cudaStream_t = void *;
+constexpr int cudaSuccess = 0, cudaErrorMemoryAllocation = 2, cudaErrorInvalidDevice = 3;
+inline int alloc_status = 0, property_status = 0, scope_status = 0, select_status = 0,
+           allocations = 0, live_allocations = 0;
+inline int cudaGetDevice(int *d) {
+  *d = 0;
+  return scope_status;
+}
+inline int cudaSetDevice(int) { return select_status; }
+inline const char *cudaGetErrorString(int) { return "injected CUDA failure"; }
+inline int cudaGetLastError() { return 0; }
+inline int cudaStreamSynchronize(void *) { return 0; }
+"""
+    (tmp_path / "cuda_runtime_api.h").write_text(stub)
+    prefix = r"""
+
+#include "cuda_runtime_api.h"
+#include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_device_scope.hpp"
+#include "tensor/cuda_error.hpp"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+using namespace generativeqc_tensor;
+using std::size_t;
+namespace generativeqc::runtime {
+template <class T> int resource_cuda_malloc(T **p, size_t) {
+  ++allocations;
+  if (alloc_status)
+    return alloc_status;
+  *p = reinterpret_cast<T *>(4096);
+  ++live_allocations;
+  return 0;
+}
+inline int resource_cuda_free(void *) {
+  --live_allocations;
+  return 0;
+}
+"""
+    for sig in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
+        prefix += "template<class T>\n" + _definition(owner, sig) + ";\n"
+    prefix += "}\n"
+    prefix += r"""
+
+struct uint2 {
+  unsigned a, b;
+};
+constexpr size_t native_phased_becke_min_atoms = 48, stationary_spin_blocks = 1,
+                 stationary_source_count = 8;
+constexpr size_t stationary_becke_retained_max_atoms = 32, stationary_becke_max_atoms = 128;
+constexpr size_t stationary_becke_pair_tile_rows = 4, stationary_becke_control_bytes = 16,
+                 stationary_becke_threads = 32;
+constexpr bool stationary_becke_cooperative_normalize = false;
+constexpr size_t stationary_becke_normalize_max_atoms = 128,
+                 stationary_becke_normalize_point_lanes = 1;
+constexpr size_t stationary_geometry_max_lanes = 1024,
+                 stationary_geometry_max_scratch_bytes = 64U << 20;
+namespace generativeqc_grid_adjoint {
+struct PointPair {
+  double values[8];
+};
+} // namespace generativeqc_grid_adjoint
+struct Context {
+  int device = 0;
+  void *stream = nullptr;
+  void check_device() {}
+};
+struct Owner {
+  Context context;
+  generativeqc::runtime::OwnedCudaBuffer<unsigned char> phased_storage;
+  size_t atoms{}, points{}, geometry_lanes{}, bytes{}, byte_budget{},
+      becke_threads_per_point = 1, becke_shared_bytes{}, phased_bytes{}, launches{},
+      synchronizations{};
+  bool failed{}, topology_ready{}, becke_normalize_supported{}, becke_normalize_cooperative{},
+      becke_binary_scaled_requested{};
+  void *center_pairs{};
+};
+struct NativeOwner {
+  Owner *scientific{};
+};
+int live_owners = 0;
+bool center_miss = false;
+void error_text(char *out, size_t n, const char *s) {
+  if (out && n)
+    std::snprintf(out, n, "%s", s);
+}
+struct cudaDeviceProp {
+  int major = 12, minor = 0, maxThreadsPerBlock = 1024, maxThreadsDim[3]{1024, 1024, 64},
+      maxGridSize[3]{65535, 65535, 65535};
+  size_t sharedMemPerBlock = 65536;
+};
+inline cudaDeviceProp props;
+int cudaGetDeviceProperties(cudaDeviceProp *p, int) {
+  *p = props;
+  return property_status;
+}
+struct cudaFuncAttributes {
+  int maxThreadsPerBlock = 1024;
+  size_t sharedSizeBytes = 0;
+};
+template <class F> int cudaFuncGetAttributes(cudaFuncAttributes *, F) { return 0; }
+size_t blocks(size_t x, size_t n) { return (x + n - 1) / n; }
+struct Input {
+  const uint2 *indices;
+};
+Input phased_input(Owner &o, size_t) { return {reinterpret_cast<uint2 *>(o.phased_storage.get())}; }
+void phased_becke_indices(size_t, uint2 *) {}
+template <bool> void phased_becke_normalize_cooperative() {}
+namespace generativeqc_stationary_cuda {}
+"""
+    source = prefix + "\n".join(
+        _definition(executor, s)
+        for s in (
+            "size_t phased_allocation(",
+            "size_t allocation(",
+            "template <class F>\nint guarded(",
+        )
+    )
+    source += (
+        "\n"
+        + r"""
+
+int stationary_create(int, int, int, size_t atoms, size_t aos, size_t primitives, size_t points,
+                      size_t tasks, size_t spins, size_t, size_t budget, size_t lanes, size_t,
+                      void **out, char *err, size_t n) {
+  return guarded(nullptr, err, n, [&] {
+    size_t bytes = allocation(atoms, aos, primitives, points, tasks, spins, lanes);
+    if (budget < bytes)
+      throw std::invalid_argument("short");
+    size_t centers = 48 * atoms * (atoms - 1) / 2;
+    auto p = std::make_unique<Owner>();
+    p->bytes = bytes;
+    if (!center_miss && centers <= budget - bytes) {
+      p->bytes += centers;
+      p->center_pairs = reinterpret_cast<void *>(1);
+    }
+    p->atoms = atoms;
+    p->points = points;
+    p->geometry_lanes = lanes;
+    p->byte_budget = budget;
+    *out = p.release();
+    ++live_owners;
+  });
+}
+void stationary_destroy(void *p) {
+  delete static_cast<Owner *>(p);
+  --live_owners;
+}
+"""
+    )
+    source += "\n" + _definition(executor, "int stationary_configure_becke(")
+    source += "\n" + re.sub(
+        r"<<<.*?>>>",
+        "",
+        _definition(executor, "int stationary_configure_phased_becke_v1("),
+        flags=re.DOTALL,
+    )
+    source += "\n" + "\n".join(
+        _definition(runtime, s)
+        for s in (
+            "size_t native_phased_becke_bytes(",
+            "size_t native_numeric_bytes(",
+            "void native_require_status(",
+            "int native_create(",
+        )
+    )
+    controller = (ROOT / "src/dft/cuda_stationary_controller.cpp").read_text()
+    method = (ROOT / "src/methods/dft_method.cpp").read_text()
+    failure = (ROOT / "src/methods/execution_failure.hpp").read_text()
+    method_header = (ROOT / "src/methods/method.hpp").read_text()
+    public = '\n#include <array>\n#include <exception>\n#include "generativeqc/generativeqc.hpp"\nusing generativeqc::Error;\n'
+    public += _definition(method_header, "class MethodError final") + ";\n"
+    public += _definition(failure, "inline bool retryable_seed_failure(") + "\n"
+    public += _definition(controller, "void require_stationary_call(") + "\n"
+    f = _definition(method, "generativeqc_status native_cuda_stationary_gradient(")
+    catch = f[f.rindex("} catch (const std::bad_alloc&)") : f.index("#else")]
+    public += (
+        "generativeqc_status map_public_status(int status) { std::string detail; auto stationary_controller_=std::make_unique<int>(); std::array<char,512> error{}; try { require_stationary_call(status,error); return GENERATIVEQC_STATUS_SUCCESS; "
+        + catch
+        + "}\n"
+    )
+    public += 'bool retry_status(int status) { const auto mapped=map_public_status(status); return retryable_seed_failure(mapped,std::make_exception_ptr(MethodError(mapped,"force failure"))); }\n'
+    source += public
+    source += r"""
+
+int main() {
+  std::setbuf(stdout, nullptr);
+  const size_t atoms = 96, points = 256;
+  const size_t min = allocation(atoms, 224, 672, points, 1, 1, points, false);
+  const size_t center = 48 * atoms * (atoms - 1) / 2, phase = phased_allocation(atoms, points);
+  auto run = [&](size_t budget, int expected, size_t expected_phase) {
+    char error[256]{};
+    void *out = nullptr;
+    const int before = allocations;
+    int status = native_create(0, 12, 0, atoms, 224, 672, points, 1, 1, 1, budget, points, 32, &out,
+                               error, sizeof(error));
+    std::printf(
+        "allocation_status=%d property_status=%d status=%d expected=%d phase=%zu allocations=%d\n",
+        alloc_status, property_status, status, expected, expected_phase, allocations - before);
+    if (status != expected) {
+      if (out) {
+        auto *n = static_cast<NativeOwner *>(out);
+        stationary_destroy(n->scientific);
+        delete n;
+      }
+      return false;
+    }
+    if (!status) {
+      auto *n = static_cast<NativeOwner *>(out);
+      assert(n && n->scientific->phased_bytes == expected_phase);
+      assert(n->scientific->bytes <= budget);
+      stationary_destroy(n->scientific);
+      delete n;
+    } else
+      assert(!out);
+    assert(!live_owners && !live_allocations);
+    return true;
+  };
+  assert(run(min, 0, 0));
+  assert(run(min + center + phase - 1, 0, 0));
+  assert(run(min + center + phase, 0, phase));
+  center_miss = true;
+  assert(run(min + center + phase, 0, 0));
+  center_miss = false;
+  props.major = 8;
+  assert(run(min + center + phase, 0, 0));
+  props.major = 12;
+  props.maxThreadsPerBlock = 64;
+  assert(run(min + center + phase, 0, 0));
+  props.maxThreadsPerBlock = 1024;
+  alloc_status = cudaErrorMemoryAllocation;
+  assert(run(min + center + phase, 0, 0));
+  alloc_status = 0;
+  property_status = 71;
+  assert(run(min + center + phase, 4, 0));
+  property_status = 0;
+  scope_status = 71;
+  assert(run(min + center + phase, 4, 0));
+  scope_status = 0;
+  select_status = 71;
+  assert(run(min + center + phase, 4, 0));
+  select_status = 0;
+  alloc_status = 71;
+  const int expect = 4;
+  const auto mapped = map_public_status(expect);
+  std::printf("private=%d public=%d numerical=%d CUDA=%d seed_retry=%d\n", expect, int(mapped),
+              int(GENERATIVEQC_STATUS_NUMERICAL_FAILURE), int(GENERATIVEQC_STATUS_CUDA_ERROR),
+              int(retry_status(expect)));
+  assert(map_public_status(1) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && retry_status(1));
+  assert(map_public_status(4) == GENERATIVEQC_STATUS_CUDA_ERROR && !retry_status(4));
+  return run(min + center + phase, expect, 0) ? 0 : 1;
+}
+"""
+    (tmp_path / "phase_driver_status.cpp").write_text(source)
+    executable = native_cxx.build_executable(
+        [tmp_path / "phase_driver_status.cpp"],
+        tmp_path / "phase_driver_status",
+        compile_args=[
+            "-std=c++20",
+            "-O0",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
     )
     subprocess.run([str(executable)], check=True, timeout=10)
