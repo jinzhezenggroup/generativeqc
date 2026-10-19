@@ -336,3 +336,55 @@ The public KS ABI also has a size-tagged private application-precision extension
 blindly appending a scalar to the base layout can interpret an old extension's
 energy budget as the new field. Any layout change must explicitly validate the
 schema/complete sizes and fail closed for unsupported source/library pairs.
+
+## Larger public Fast results and bounded-grid follow-up
+
+The completed job 10337 now retains all twelve actual-public-Fast endpoints at
+48 and 96 atoms, for both original shared grids. Direct/96 same-grid maxima
+are `6.75300e-9 Eh` / `1.63406e-5 Eh/bohr` / `5.23037e-6 Eh/bohr` RMS at
+48×16×32, and `6.75164e-9 Eh` / `1.63126e-5 Eh/bohr` / `5.22163e-6 Eh/bohr`
+RMS at 48×12×24. These pass Fast's arithmetic-only gates, not FP64 force
+accuracy or total-grid precision. The reference and native raw hashes and
+per-phase dtype counts are retained in the ignored
+`precision-study/fast-default-large-collected-0935.json` analysis. No existing
+measurement-time gate is overwritten by that analysis.
+
+Job 10338's shared48×16×32 DF/96 endpoint failed force resource admission after
+SCF convergence: `stationary CUDA byte budget is not representable`. Its
+nonzero outcome and failed cold record must remain failures, not pending or
+numerical passes. Both DF/48 original-grid populations have twelve successful
+same-grid endpoints but execute FP64; they are not mixed-precision wins.
+
+The prospective shared64×24×48 pilot cannot be extrapolated to 96 atoms:
+`96 * 64 * 24 * 48 = 7,077,888` points exceeds the existing composite force
+owner's four-million-point admission domain. Do not silently raise that limit
+or remove the guard to make a benchmark run. Finite twelve-hour Slurm jobs
+1151 on n4 (96 atoms) and 1799 on n5 (48 atoms) therefore queue additional
+full-Fock XC-only checks of 64×16×32, 80×16×32 and 64×18×36, at fixed
+NLC48×12×24, Direct then DF. Their corresponding 96-atom shared-grid point
+counts are 3,145,728, 3,932,160 and 3,981,312. Fitting the point domain does
+not prove byte-budget admission, accuracy or performance. The source-frozen
+driver is `run-fast-compact-xc.sh`; retain the separate
+`fast-compact-xc-full-fock` journals rather than replacing previous grids.
+
+The completed Direct/48 NLC48×12×24 to NLC48×16×32 angular change at fixed
+XC144×48×96 is `9.26914e-7 Eh` / `4.82276e-6 Eh/bohr` / `1.66535e-6 Eh/bohr`
+RMS. The new twelve-atom XC320×96×192 to XC384×128×256 changes reach
+`6.61203e-10 Eh` / `7.37037e-8 Eh/bohr` across Direct/DF. Neither pair alone
+qualifies an anchor: independent radial/angular and joint screening controls
+remain necessary. No final FP64 or total-Fast grid is selected. The publication
+gate change passed 296 focused CPU tests and the configured pre-commit hooks;
+that validation does not substitute for the outstanding GPU accuracy studies.
+
+At 09:53 +08, the Direct/96 full-Fock XC144×48×96 / NLC48×12×24 anchor
+population from n1 completed both geometries. Its source, screening, solver,
+geometry and fixed-NLC prescriptions match the n5 XC observations. Relative to
+this still-unqualified anchor, XC48×16×32 differs by `7.84687e-5 Eh` /
+`2.91486e-5 Eh/bohr` / `1.61175e-5 Eh/bohr` RMS: the observed energy difference
+exceeds even Fast's full energy budget. XC64×24×48 differences are
+`2.57788e-7 Eh` / `1.00743e-5 Eh/bohr` / `4.07987e-6 Eh/bohr` RMS; XC96×32×64
+differences are `1.45920e-6 Eh` / `2.95064e-6 Eh/bohr` / `1.18519e-6 Eh/bohr`
+RMS. Independent radial/angular checks on the anchor are still pending, so do
+not turn these observed differences into final grid gates. Preserve receipts in
+`precision-study/fast-xc96-combined-receipts-observations.json`. The 48/96-atom
+studies cannot be replaced by the successful small shared64 execution pilot.
