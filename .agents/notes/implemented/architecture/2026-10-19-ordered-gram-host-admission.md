@@ -34,7 +34,7 @@ and one retain their copy-only/null-history/null-cache exception.
 | Extracted guard text must compile with an inserted recorder | Original 13 rejections and three valid/disabled cases retained; 37 rejections now cover each required pointer, both shape signs, geometry, history and alias errors |
 | Addressability guard spelling | Python unbounded-integer byte products determine acceptance around exact storage boundaries, including copy-only histories |
 | Host validation may inspect borrowed state | NaN/inactive/invalid-count state remains untouched; non-host-readable sentinel addresses are admitted without dereferencing |
-| The launch header composes with existing HF includes | Compile the real SCF task-layout and launch headers together under the consumer's namespace import and call the existing empty-topology admission contract |
+| The launch header composes with the HF consumer's namespace context | Compile the launch header under a test-owned SCF detail scope and nested consumer import, without depending on scheduler helper names |
 
 The original 378 arithmetic cases remain intact: capacities 2 through 64,
 bitwise ordered results, independent long-double oracle, wrap, retirement,
@@ -85,6 +85,9 @@ that exact compile failure. A dedicated ordered-Gram namespace resolves it
 without changing the HF consumer or scientific implementation. Keep this
 composition regression and the failed-head CI receipt; an isolated successful
 CUDA compile does not replace the complete package build gate.
+The retained composition fixture declares its own client tag rather than naming
+a private scheduler helper. Exporting even an empty CUDA `detail` namespace
+reproduces the ambiguity in its compile negative control.
 The discovery subprocess supplies explicit empty input so its integer-width
 query sees EOF under `pytest -s` as well as captured pytest. An attached live
 PTY reproduced the blocked child before this repair and passed afterward.

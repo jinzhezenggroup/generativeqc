@@ -152,20 +152,20 @@ def test_ordered_launch_admission(
         "#include <limits>\n#include <stdexcept>\n#include <climits>\n#include <cmath>\n"
         "#include <iostream>\n"
         '#include "scf/cuda/scf_diis_kernels.hpp"\n'
-        '#include "scf/direct_task_layout.hpp"\n'
         "unsigned launches = 0;\n"
         + r"""
-// The HF consumer imports cuda_execution alongside the existing SCF detail
-// namespace. Including the launch contract must preserve that composition.
+// Model the HF consumer's enclosing detail scope and nested CUDA namespace
+// import with a test-owned type, independent of any scheduler helper names.
+namespace generativeqc::scf::detail {
+struct AdmissionHeaderClientTag {};
+}
 namespace generativeqc::scf {
+namespace {
 using namespace cuda_execution;
-bool admits_empty_topology() {
-  return !detail::direct_topology_requires_bounded_streaming(0);
+using HeaderClientTag = detail::AdmissionHeaderClientTag;
 }
 }
 int main() {
-  if (!generativeqc::scf::admits_empty_topology())
-    throw std::runtime_error("SCF header composition changed empty-topology admission");
   using generativeqc::scf::cuda_execution::ordered_gram_admission::validate_ordered_gram_launch;
   double fock{}, residual{}, fock_history{}, residual_history{}, solve{}, rhs{}, effective{}, cache{};
   std::uint8_t active = 1;
