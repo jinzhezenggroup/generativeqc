@@ -50,4 +50,3 @@ def test_cuda_ao_and_vv10_cutoffs() -> None:
     assert "prepared_ao_work.cutoff = select_ao ? ao_selection_cutoff : 0" in src
     assert float(MOLECULAR_VV10_DENSITY_THRESHOLD) == 1e-10
     assert MOLECULAR_VV10_DENSITY_POLICY == "vv10-molecular-rho-ge-1e-10-v2"
-
