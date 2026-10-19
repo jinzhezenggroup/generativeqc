@@ -114,6 +114,30 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   reports zero errors; this does not count as the unchanged checker passing.
   Required Linux CI remains the authoritative public-contract gate. No slice A
   schema, manifest or implementation file was changed to suppress the failure.
+- The c9 author-head CI retained one genuine failure:
+  `test_catalog_and_human_report_reproduce_offline`. Its 442 independent bulk
+  Libxc E/vxc/fxc cases all passed. Offline regeneration changes only six
+  unpolarized `graph_nodes` counts by one: LDA_C_ML1, LDA_C_ML2,
+  MGGA_C_REVTPSS, MGGA_C_TPSS, MGGA_C_TPSSLOC and MGGA_C_TPSS_GAUSSIAN.
+  Their exact/approximate constants now occupy distinct nodes. Cohort totals, source
+  inputs, statuses, admission and the generated human report do not change.
+  The necessary generated catalog refresh and its single product-output
+  checksum are included; no hash algorithm, source input, oracle or gate is
+  changed to suppress the failure.
+- An additional before/after audit covers those six registrations in both
+  spins through order two. All twelve original Libxc fixture comparisons pass
+  at unchanged rtol=2e-9/atol=2e-10, and all numerical output bytes are equal
+  before/after. Six polarized scalar-emitter sources are byte-identical; each
+  unpolarized source swaps only one commutative multiply's operand order
+  (`0.5*v` to `v*0.5`, or `2*v` to `v*2`) after interning preserves type.
+  This explicitly extends, rather than overstates, the earlier fourteen-case
+  unchanged-source sample.
+- The #2276/#2609 author confirmed the bounded generated-product seam in PR
+  #2617 comment 6266798274. Their held/unmerged changes are not imported.
+  Preserve every other parent registry entry. Bind the catalog checksum to
+  actual committed LF bytes: Windows CRLF output has a different checksum
+  despite identical JSON data. Generation and product registration were
+  independently reproduced in an explicit committed-LF snapshot.
 
 ## Consequences and revisit conditions
 

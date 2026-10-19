@@ -137,7 +137,7 @@
       ],
       "outputs": {
         "docs/libxc_bulk_import.md": "71a155b1a7de6f21dab5841fa11623b7280f23de8bd545cebb47e304429a1630",
-        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "d691ee7ee86b572ed14c0dd9657cfb2e732c99efc6122ad4f92e052fbf487f9c"
+        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "be752a9369ba5f6ee222cb4fcfb6e676e78f4f86c9876fdc783a64d223b012a3"
       }
     },
     "libxc-method-metadata": {
