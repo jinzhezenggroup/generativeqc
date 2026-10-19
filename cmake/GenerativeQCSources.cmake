@@ -390,6 +390,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/posthf/mp2_derivative_cpu.cpp
       src/posthf/mp2_energy.cpp
       src/posthf/ump2_energy.cpp
+      src/posthf/ump2_force.cpp
       src/posthf/mp2_force.cpp
       src/posthf/mp2_gradient.cpp
       src/posthf/native_provider.cpp

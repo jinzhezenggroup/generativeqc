@@ -77,7 +77,8 @@
       "family": "perturbation",
       "provider": "ump2",
       "properties": [
-        "energy"
+        "energy",
+        "forces"
       ],
       "supports_batch": true
     },
