@@ -592,6 +592,9 @@ the current value on equality. Reversed bounds therefore select the upper bound;
 the [2025.12 standard](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.clip.html)
 leaves reversed bounds and mixed array dtypes unspecified. These capture limits
 do not restrict the existing eager standard `clip`, including its NaN behavior.
+For direct `xp.compile(xp.clip, backend="reference")`, supply concrete array
+arguments for all three parameters, as required by the compiled runtime input
+contract. Capture absent or static scalar bounds inside a named function instead.
 Reference first-order JVP/VJP use the existing explicit
 `allow_comparison_where=True` option. Interior derivatives follow the selected
 input or bound, including broadcast adjoint reduction. At a tie, the selected

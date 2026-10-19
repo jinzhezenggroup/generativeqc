@@ -24,6 +24,44 @@ def symbolic(name: str, shape: tuple, dtype: str = "float64") -> VibeArray:
 
 
 @pytest.mark.parametrize("dtype", ("float32", "float64"))
+def test_direct_callable_compilation_accepts_named_array_inputs(dtype: str) -> None:
+    x = np.array([[-2.0], [2.0]], dtype=dtype)
+    lo = np.array([-1.0, 0.0, 1.0], dtype=dtype)
+    hi = np.array(1.5, dtype=dtype)
+    source = xp.compile(xp.clip, backend="reference")
+    try:
+        expected = np.asarray(strict.clip(*(strict.asarray(v) for v in (x, lo, hi))))
+        for result in (source(x, lo, hi), source(x=x, min=lo, max=hi)):
+            np.testing.assert_array_equal(result, expected)
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("dtype,budget", (("float32", 2048), ("float64", 4096)))
+@pytest.mark.parametrize("array_bounds", (False, True))
+def test_reference_broadcast_bounds_fit_a_small_logical_budget(
+    dtype: str, budget: int, array_bounds: bool
+) -> None:
+    x = np.arange(64, dtype=dtype).reshape(8, 8) / 8 - 4
+    lo, hi = np.full((1, 8), -1, dtype=dtype), np.full((8, 1), 1, dtype=dtype)
+    function = (
+        (lambda x, lo, hi: xp.clip(x, lo, hi))
+        if array_bounds
+        else (lambda x: xp.clip(x, -1, 1))
+    )
+    args = (x, lo, hi) if array_bounds else (x,)
+    source = xp.compile(function, backend="reference", max_bytes=budget)
+    too_small = xp.compile(function, backend="reference", max_bytes=128)
+    try:
+        np.testing.assert_array_equal(source(*args), np.clip(x, lo, hi))
+        with pytest.raises(ValueError, match="retained-byte budget"):
+            too_small(*args)
+    finally:
+        source.close()
+        too_small.close()
+
+
+@pytest.mark.parametrize("dtype", ("float32", "float64"))
 @pytest.mark.parametrize("shape", ((), (0, 3), (2, 1, 3)))
 @pytest.mark.parametrize(
     "bounds", ((None, None), (-1, None), (None, 1), (-1, 1), (1, 1), (-3, -1), (1, 3))

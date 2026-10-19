@@ -227,7 +227,7 @@ def where(condition: object, x1: object, x2: object) -> typing.Any:
     return _eager_compute(np.where, predicate, *_eager_operands(x1, x2, scalars=True))
 
 
-def clip(x: object, /, min: object = None, max: object = None) -> VibeArray:
+def clip(x: object, min: object = None, max: object = None) -> VibeArray:
     """Capture bounded finite generic real clamping without changing eager clip."""
     return _namespace.clip(x, min, max)
 

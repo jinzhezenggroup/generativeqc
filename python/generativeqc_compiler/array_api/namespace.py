@@ -384,7 +384,12 @@ def clip(x: object, /, min: object = None, max: object = None) -> VibeArray:
         value.shape, *(bound.shape for bound in bounds if bound is not None)
     )
     value = _broadcast_generic(value, shape)
-    lower, upper = bounds
+    # Share each bound between its comparison and selected real branch. The
+    # reference interpreter charges every live logical array before any CSE.
+    lower, upper = (
+        _broadcast_generic(bound, shape) if bound is not None else None
+        for bound in bounds
+    )
     if lower is not None:
         value = where(less(value, lower), lower, value)
     if upper is not None:

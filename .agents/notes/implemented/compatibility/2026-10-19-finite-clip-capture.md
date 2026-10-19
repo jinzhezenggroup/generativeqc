@@ -18,6 +18,14 @@ annotations before even a both-None identity. Apply the lower bound before the
 upper bound; reversed bounds select the upper bound, an explicitly chosen policy
 in a range the standard leaves unspecified. Keep the current branch on equality,
 preserving its signed zero. Exact static literals cannot encode negative zero.
+Keep the private adapter input nameable for direct callable compilation; the
+public standard signature remains positional-only. Prebroadcast each bound once
+and share it between comparison and real selection. The reference interpreter
+checks every live logical array before optimization, so independently rebuilding
+equivalent bound broadcasts needlessly consumes its conservative byte budget.
+These NumPy broadcasts are shared-storage views, not separate physical data
+buffers; this is a logical resource-accounting fix, not a measured memory or
+performance claim.
 
 ## Rejected alternatives
 
@@ -46,6 +54,10 @@ shapes, dtype/annotation/domain rejection, deterministic serialization, interior
 JVP/VJP/dot/finite differences and the explicit tie convention. A native FP64
 forward/JVP/VJP regression forbids reference interpretation and must run in a
 supported cached C++ environment; Windows reference tests alone do not qualify it.
+Direct-callable regressions exercise all-array runtime arguments in both real
+dtypes. Small 64-element scalar/lower-rank bound controls execute within 2048/4096
+byte reference budgets while a genuinely insufficient budget still rejects.
+They test observable budget admission without pinning IR node counts or spelling.
 
 ## Consequences
 
