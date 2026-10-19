@@ -47,6 +47,12 @@ evaluation and emitted FP64 literals still round to binary64; preserving an
 exact coefficient does not qualify arbitrary user expressions for native
 SCF, forces or CUDA execution.
 
+The generated bulk Libxc catalog records the shared scalar owner as a
+canonical producer input. Source-registry verification rejects a stale
+catalog/product record when that owner changes, even if the old catalog and
+its output digest still agree. Regenerate through `tools/import_libxc_bulk.py`
+while preserving pinned upstream sources and the existing admission cohort.
+
 The [implicit-response primitive](implicit_response.md) emits ordinary TensorIR
 JVP/VJP/RHS/source programs without importing the runtime solver.
 `src/integrals`, `src/tensor` and `src/dft` own the corresponding native interfaces, runtime allocation and

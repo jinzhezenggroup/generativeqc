@@ -99,7 +99,7 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   artifact identities that include generator source hashes must invalidate.
   This audit compares scalar emission and mathematical identity, not an
   assertion that all build artifact identities remain unchanged.
-- Local validation: 60 Graph tests, 295 shared XC/Maple/UserExpression/
+- Local validation: 61 Graph/provenance tests, 295 shared XC/Maple/UserExpression/
   derivative-IR/structure tests, 51 weighted-ERI independent finite-difference
   tests, and eight selected one-electron controls passed. The shared
   suite initially had 294 passes and one structure import failure because
@@ -123,7 +123,7 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   inputs, statuses, admission and the generated human report do not change.
   The necessary generated catalog refresh and its single product-output
   checksum are included; no hash algorithm, source input, oracle or gate is
-  changed to suppress the failure.
+  weakened to suppress the failure.
 - An additional before/after audit covers those six registrations in both
   spins through order two. All twelve original Libxc fixture comparisons pass
   at unchanged rtol=2e-9/atol=2e-10, and all numerical output bytes are equal
@@ -138,6 +138,21 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   actual committed LF bytes: Windows CRLF output has a different checksum
   despite identical JSON data. Generation and product registration were
   independently reproduced in an explicit committed-LF snapshot.
+- A third late finding exposed a missing causal producer input: after the
+  catalog refresh, changing only a temporary scalar-owner copy still passed
+  the bulk product's freshness check while retaining the old catalog/output
+  digest. The new behavior regression was RED on the published 4a head and
+  GREEN after registration of `integral/expr.py` as a canonical input.
+  It copies the actual scoped source/product records, verifies the valid
+  baseline, then mutates only the scalar source and requires rejection. It
+  neither pins a function body/hash in a permanent test nor runs a generator
+  or compiler during the mutation test.
+- The producer now records that direct scalar input and its own updated LF
+  source digest. The existing registry/hash implementation, catalog bytes,
+  output digest and all unrelated records remain unchanged. The owner
+  clarified this additional importer/registry seam in comment 6267510375;
+  it was not inferred from the earlier catalog-only boundary. The green 4a
+  CI and its earlier approval were retained but did not clear the new finding.
 
 ## Consequences and revisit conditions
 

@@ -1,6 +1,8 @@
 """Exact coefficient identities must survive symbolic multiplication and AD."""
 
+import json
 import math
+import shutil
 import subprocess
 import sys
 from fractions import Fraction
@@ -8,6 +10,8 @@ from pathlib import Path
 
 import pytest
 from generativeqc_compiler.integral.expr import Expr, Graph
+
+from tools import source_registry
 
 NEAR_ONE = (Fraction(2**53 + 1, 2**53), Fraction(2**54 - 1, 2**54))
 
@@ -225,3 +229,43 @@ def test_exact_and_approximate_payload_provenance_survives_interning_and_rebuild
         assert isinstance(rebuilt.node(new_approximate).payload, float)
         assert new_exact.identifier != new_approximate.identifier
         assert rebuilt.is_constant(new_approximate, value)
+
+
+def test_bulk_catalog_freshness_rejects_changed_scalar_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    registry = json.loads((root / "upstream/manifest.json").read_text(encoding="utf-8"))
+    product = registry["products"]["libxc-bulk-graph-catalog"]
+    scoped = {
+        "schema": registry["schema"],
+        "schema_version": registry["schema_version"],
+        "sources": {name: registry["sources"][name] for name in product["inputs"]},
+        "products": {"libxc-bulk-graph-catalog": product},
+        "derived_manifests": {},
+    }
+    scalar_owner = "python/generativeqc_compiler/integral/expr.py"
+    paths = {
+        scalar_owner,
+        product["generator"],
+        *product["canonical_inputs"],
+        *product["outputs"],
+    }
+    for source in scoped["sources"].values():
+        paths.update(
+            (Path(source["local_root"]) / name).as_posix() for name in source["files"]
+        )
+    for relative in paths:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / relative, destination)
+    scoped_path = tmp_path / "upstream/manifest.json"
+    scoped_path.write_text(json.dumps(scoped), encoding="utf-8")
+    monkeypatch.setattr(source_registry, "ROOT", tmp_path)
+    source_registry.verify(scoped_path, cache_root=tmp_path / "source-cache")
+    # Keep the old catalog and its output digest: changing its scalar owner
+    # must still invalidate freshness, without executing a generator or compiler.
+    target = tmp_path / scalar_owner
+    target.write_bytes(target.read_bytes() + b"\n# changed scalar source input\n")
+    with pytest.raises(source_registry.SourceRegistryError, match="digest mismatch"):
+        source_registry.verify(scoped_path, cache_root=tmp_path / "source-cache")
