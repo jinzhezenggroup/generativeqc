@@ -21,8 +21,10 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
         settings = {
             "initial_guess": "minao" if arm == "gpu4pyscf" else "huckel",
             "xc_grid": {"rule": arm, "points": 200 + i},
+            "selected_candidate_precision": "fp64" if arm == "standard" else "auto",
         }
         observation: dict[str, Any] = {
+            "repeat": i,
             "seconds": float({"gpu4pyscf": 6, "standard": 4, "fast": 2}[arm] + i),
             "energy": -1.0,
             "forces": [[0.0, 0.0, 0.0]],
@@ -36,6 +38,31 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
                 "profile": "fast",
                 "status": "qualified_mixed_gradient",
                 "solve_count": 1,
+                "scope": "qualification_not_per_call_observable_audit",
+                "gradient_admission": "fixture-mixed",
+                "fallback_reasons": [],
+                "errors": [],
+                "rejected_errors": [],
+                "budget": {
+                    "energy_abs": 1e-5,
+                    "force_max_abs": 1e-4,
+                    "force_rms": 3e-5,
+                },
+                "solves": [
+                    {
+                        "role": "candidate",
+                        "requested_precision": "auto",
+                        "seconds": 1.0,
+                        "iterations": 12,
+                        "force_evaluations": 1,
+                        "fock_builds": 12,
+                        "executed_backend": "cuda",
+                        "energy_tolerance": 1e-6,
+                        "density_tolerance": 1e-4,
+                        "screening_tolerance": 1e-10,
+                        "error": None,
+                    }
+                ],
             }
         observations.append(observation)
     return {
@@ -47,6 +74,23 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
         "endpoint": "constructor-scf-energy-analytic-force-host-export",
         "repeats": 2,
         "samples": observations,
+        "controls": {
+            "scf_overrides": False,
+            "initial_guess_overrides": False,
+            "reference_grid_overrides": False,
+            "native_required_hybrid_GridSpec": False,
+            "fast_default_policy": "fast" if arm == "fast" else None,
+            "force_grid_response_override": False,
+        },
+        "accelerator": {
+            "name": "host-test-synthetic-GPU",
+            "compute_capability": [12, 0],
+            "total_global_memory_bytes": 32000000000,
+            "multiprocessor_count": 170,
+        },
+        "environment": {"git": {"commit": "a" * 40, "dirty": False}},
+        "source_sha256": "b" * 64,
+        **({"native_library_sha256": "c" * 64} if arm in runner.NATIVE_ARMS else {}),
     }
 
 
@@ -78,11 +122,18 @@ def test_three_way_default_main_table_and_speedups() -> None:
 
 def test_fast_mode_never_masquerades_as_fp32_when_it_audits() -> None:
     gpu, standard, fast = receipts()
-    fast["samples"][0]["precision_validation"] = {
-        "profile": "fast",
-        "status": "observed_met",
-        "solve_count": 2,
-    }
+    report = fast["samples"][0]["precision_validation"]
+    report.update(status="observed_met", solve_count=2, errors=audit_errors())
+    report["solves"].append(
+        {
+            **report["solves"][0],
+            "role": "fp64_audit",
+            "requested_precision": "fp64",
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-10,
+            "screening_tolerance": 1e-14,
+        }
+    )
     summary = runner.compare(gpu, standard, fast)
     assert summary["fast_internal_solve_counts"] == [2, 1]
     assert summary["fast_statuses"] == ["observed_met", "qualified_mixed_gradient"]
@@ -430,6 +481,23 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
         budget=None,
         solves=(solve, solve),
     )
+    validation.to_dict = lambda: {
+        "profile": validation.profile,
+        "status": validation.status,
+        "solve_count": validation.solve_count,
+        "solves": [
+            {
+                **vars(solve),
+                "executed_backend": "cuda",
+                "energy_tolerance": 1e-12,
+                "density_tolerance": 1e-10,
+                "screening_tolerance": 1e-14,
+                "force_evaluations": 1,
+                "error": None,
+            }
+        ]
+        * 2,
+    }
     result = SimpleNamespace(
         converged=True,
         executed_backend="cuda",
@@ -459,6 +527,8 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
     assert sample["precision_validation"]["status"] == "observed_met"
     assert sample["gradient_arithmetic"] == "fp64"
     assert sample["mixed_fock_builds"] == 0
+    assert sample["precision_validation"]["solves"][0]["energy_tolerance"] == 1e-12
+    assert sample["precision_validation"]["solves"][0]["executed_backend"] == "cuda"
 
 
 def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
@@ -469,9 +539,7 @@ def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
 
     executed: list[str] = []
     canonical_basis = {"H": [[0, [1.0, 1.0]]]}
-    monkeypatch.setattr(
-        runner, "reference_r2scan3c_basis", lambda: canonical_basis
-    )
+    monkeypatch.setattr(runner, "reference_r2scan3c_basis", lambda: canonical_basis)
 
     def reference_correction(atoms: Any) -> Any:
         assert len(atoms) == 1
@@ -483,9 +551,7 @@ def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
 
         return evaluate
 
-    monkeypatch.setattr(
-        runner, "reference_r2scan3c_correction", reference_correction
-    )
+    monkeypatch.setattr(runner, "reference_r2scan3c_correction", reference_correction)
     grad = SimpleNamespace(
         grid_response=False,
         kernel=lambda: np.array([[1.0, 2.0, 3.0]]),
@@ -525,14 +591,14 @@ def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
         return SimpleNamespace(**kwargs)
 
     cp = SimpleNamespace(
-        cuda=SimpleNamespace(
-            runtime=SimpleNamespace(deviceSynchronize=lambda: None)
-        ),
+        cuda=SimpleNamespace(runtime=SimpleNamespace(deviceSynchronize=lambda: None)),
         asnumpy=np.asarray,
     )
     dft = SimpleNamespace(rks=SimpleNamespace(RKS=lambda mol: model))
     monkeypatch.setitem(sys.modules, "cupy", cp)
-    monkeypatch.setitem(sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=molecule)))
+    monkeypatch.setitem(
+        sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=molecule))
+    )
     monkeypatch.setitem(sys.modules, "gpu4pyscf", SimpleNamespace(dft=dft))
     monkeypatch.setitem(sys.modules, "gpu4pyscf.dft", dft)
 
@@ -543,9 +609,399 @@ def test_gpu4_composite_correction_is_timed_and_completes_energy_forces(
         "evaluate-D4-gCP",
     ]
     assert result["energy"] == pytest.approx(-1.875)
-    np.testing.assert_allclose(
-        result["forces"], [[-1.25, -2.5, -3.75]], atol=0, rtol=0
-    )
+    np.testing.assert_allclose(result["forces"], [[-1.25, -2.5, -3.75]], atol=0, rtol=0)
     assert result["settings"]["composite_corrections"]["included_in_timing"]
     assert result["settings"]["composite_corrections"]["energy_hartree"] == 0.125
     assert result["grid_response"] is False
+
+
+def audit_errors() -> list[dict[str, Any]]:
+    return [
+        {
+            "observable": observable,
+            "norm": norm,
+            "unit": unit,
+            "difference": 0.0,
+            "reference_norm": 1.0,
+            "allowance": {"absolute": 1e-5, "max_abs": 1e-4, "rms": 3e-5}[norm],
+        }
+        for observable, norm, unit in (
+            ("energy", "absolute", "Eh"),
+            ("forces", "max_abs", "Eh/bohr"),
+            ("forces", "rms", "Eh/bohr"),
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        "warm",
+        "energy_only",
+        "missing_science",
+        "missing_hardware",
+        "empty_hardware",
+        "override",
+        "duplicate_repeat",
+        "missing_repeat_id",
+        "unequal_repeats",
+        "different_binary",
+        "different_source",
+        "missing_source",
+        "failed_fast_audit",
+        "missing_solves",
+        "wrong_solve_count",
+        "missing_budget",
+        "missing_solve_controls",
+        "failed_last_solve",
+        "missing_candidate_precision",
+        "boolean_time",
+        "boolean_converged",
+    ),
+)
+def test_reject_incomplete_protocol_and_provenance(fault: str) -> None:
+    gpu, standard, fast = records = receipts()
+    report = fast["samples"][0]["precision_validation"]
+    if fault == "warm":
+        for record in records:
+            record["phase"] = "warm-reused-density"
+    elif fault == "energy_only":
+        for record in records:
+            record["endpoint"] = "energy-only"
+    elif fault == "missing_science":
+        for record in records:
+            record["problem"] = {"method": "pbe", "atoms": 1}
+    elif fault == "missing_hardware":
+        for record in records:
+            del record["accelerator"]
+    elif fault == "empty_hardware":
+        for record in records:
+            record["accelerator"] = {}
+    elif fault == "override":
+        for record in records:
+            record["controls"]["scf_overrides"] = True
+    elif fault == "duplicate_repeat":
+        fast["samples"][1]["repeat"] = 0
+    elif fault == "missing_repeat_id":
+        del fast["samples"][1]["repeat"]
+    elif fault == "unequal_repeats":
+        fast["samples"].pop()
+        fast["repeats"] = 1
+    elif fault == "different_binary":
+        fast["native_library_sha256"] = "d" * 64
+    elif fault == "different_source":
+        fast["source_sha256"] = "d" * 64
+    elif fault == "missing_source":
+        del fast["environment"]
+    elif fault == "failed_fast_audit":
+        report["status"] = "observed_unmet"
+    elif fault == "missing_solves":
+        del report["solves"]
+    elif fault == "wrong_solve_count":
+        report["solve_count"] = 2
+    elif fault == "missing_budget":
+        del report["budget"]
+    elif fault == "missing_solve_controls":
+        del report["solves"][0]["screening_tolerance"]
+    elif fault == "failed_last_solve":
+        report["solves"][-1]["error"] = "SCF failed"
+    elif fault == "missing_candidate_precision":
+        del fast["samples"][0]["settings"]["selected_candidate_precision"]
+    elif fault == "boolean_time":
+        fast["samples"][0]["seconds"] = True
+    elif fault == "boolean_converged":
+        fast["samples"][0]["converged"] = "true"
+    with pytest.raises(ValueError):
+        runner.compare(gpu, standard, fast)
+
+
+def test_render_recomputes_rows_from_retained_receipts() -> None:
+    summary = runner.compare(*receipts())
+    summary["main_table"][0].update(
+        generativeqc_fast_seconds=float("nan"), fast_speedup_vs_gpu4pyscf=999
+    )
+    summary["science_equivalence_proved"] = True
+    summary["accuracy"] = "qualified"
+    table = runner.main_table_markdown([summary])
+    assert "2.500" in table and "2.60x" in table
+    assert "nan" not in table and "999" not in table
+    assert "Accuracy unverified" in table and "Stock force definitions differ" in table
+    summary["receipts"]["fast"]["samples"][0]["energy"] = float("nan")
+    with pytest.raises(ValueError):
+        runner.main_table_markdown([summary])
+
+
+def test_render_rejects_forged_schema_only_table(tmp_path: Path) -> None:
+    fake = {
+        "schema": runner.COMPARISON_SCHEMA,
+        "main_table": [
+            {
+                "method": "pbe",
+                "atoms": 96,
+                "gpu4pyscf_default_seconds": 1.0,
+                "generativeqc_standard_seconds": -1.0,
+                "generativeqc_fast_seconds": float("nan"),
+                "standard_speedup_vs_gpu4pyscf": 999.0,
+                "fast_speedup_vs_gpu4pyscf": float("inf"),
+            }
+        ],
+    }
+    source, output = tmp_path / "forged.json", tmp_path / "table.md"
+    source.write_text(json.dumps(fake))
+    with pytest.raises(ValueError):
+        runner.main(["render", "--comparisons", str(source), "--output", str(output)])
+    assert not output.exists()
+
+
+def test_legitimate_failed_candidate_and_strict_audit_remain_reported() -> None:
+    gpu, standard, fast = receipts()
+    for sample in fast["samples"]:
+        report = sample["precision_validation"]
+        successful = report["solves"][0]
+        report["solves"] = [
+            {
+                **successful,
+                "iterations": None,
+                "force_evaluations": None,
+                "error": "candidate failed",
+            },
+            {
+                **successful,
+                "role": "fp64_fallback",
+                "requested_precision": "fp64",
+                "energy_tolerance": 1e-12,
+            },
+            {
+                **successful,
+                "role": "fp64_audit",
+                "requested_precision": "fp64",
+                "energy_tolerance": 1e-12,
+            },
+        ]
+        report.update(
+            solve_count=3,
+            status="observed_met",
+            fallback_reasons=["budget_fock_failed_fp64_fallback"],
+            errors=audit_errors(),
+        )
+    summary = runner.compare(gpu, standard, fast)
+    assert summary["fast_internal_solve_counts"] == [3, 3]
+    assert summary["receipts"]["fast"]["samples"][0]["precision_validation"]["solves"][
+        0
+    ]["error"]
+    assert "Accuracy unverified" in runner.main_table_markdown([summary])
+
+
+@pytest.mark.parametrize("fault", ("missing", "incomplete", "nonfinite", "unmet"))
+def test_fast_observed_met_requires_successful_complete_audit(fault: str) -> None:
+    gpu, standard, fast = receipts()
+    report = fast["samples"][0]["precision_validation"]
+    report["status"] = "observed_met"
+    report["solves"].append(
+        {**report["solves"][0], "role": "fp64_audit", "requested_precision": "fp64"}
+    )
+    report["solve_count"] = 2
+    if fault != "missing":
+        report["errors"] = audit_errors()
+        if fault == "incomplete":
+            report["errors"].pop()
+        elif fault == "nonfinite":
+            report["errors"][0]["difference"] = float("nan")
+        else:
+            report["errors"][0]["difference"] = 1.0
+    with pytest.raises(ValueError):
+        runner.compare(gpu, standard, fast)
+
+
+def test_receipt_budget_tracks_public_fast_default() -> None:
+    from dataclasses import asdict
+
+    from generativeqc import PrecisionPolicy
+
+    assert runner.DEFAULT_FAST_BUDGET == asdict(PrecisionPolicy("fast").budget)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        "nondefault_budget",
+        "candidate_only_audit",
+        "wrong_audit_precision",
+        "missing_audit_role",
+        "nondefault_allowance",
+        "unrecorded_verification",
+        "false_rejected_errors",
+    ),
+)
+def test_fast_default_and_audit_census_fail_closed(fault: str) -> None:
+    gpu, standard, fast = receipts()
+    report = fast["samples"][0]["precision_validation"]
+    if fault == "nondefault_budget":
+        report["budget"]["energy_abs"] = 1.0
+    else:
+        report.update(status="observed_met", errors=audit_errors())
+        if fault != "candidate_only_audit":
+            report["solves"].append(
+                {
+                    **report["solves"][0],
+                    "role": "fp64_audit",
+                    "requested_precision": "fp64",
+                }
+            )
+            report["solve_count"] = 2
+        if fault == "wrong_audit_precision":
+            report["solves"][-1]["requested_precision"] = "auto"
+        elif fault == "missing_audit_role":
+            report["solves"][-1]["role"] = "candidate"
+        elif fault == "nondefault_allowance":
+            report["errors"][0]["allowance"] = 1.0
+        elif fault in ("unrecorded_verification", "false_rejected_errors"):
+            report["rejected_errors"] = audit_errors()
+            report["fallback_reasons"].append("candidate_exceeded_observable_budget")
+            if fault == "unrecorded_verification":
+                report["rejected_errors"][0]["difference"] = 1.0
+            else:
+                report["solves"].append(
+                    {**report["solves"][-1], "role": "fp64_fallback_verification"}
+                )
+                report["solve_count"] = 3
+    with pytest.raises(ValueError):
+        runner.compare(gpu, standard, fast)
+
+
+@pytest.mark.parametrize(
+    "initial", ("candidate", "failed_candidate", "temporary_failure")
+)
+@pytest.mark.parametrize("rejected", (False, True))
+def test_fast_audit_preserves_public_fallback_shapes(
+    initial: str, rejected: bool
+) -> None:
+    gpu, standard, fast = receipts()
+    for sample in fast["samples"]:
+        report = sample["precision_validation"]
+        candidate = report["solves"][0]
+        strict = {
+            **candidate,
+            "requested_precision": "fp64",
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-10,
+            "screening_tolerance": 1e-14,
+        }
+        if initial == "candidate":
+            solves = [candidate]
+        else:
+            report["fallback_reasons"].append("budget_fock_failed_fp64_fallback")
+            solves = [{**strict, "role": "fp64_fallback"}]
+            if initial == "failed_candidate":
+                solves.insert(
+                    0,
+                    {
+                        **candidate,
+                        "error": "candidate failed",
+                        "iterations": None,
+                        "force_evaluations": None,
+                        "fock_builds": None,
+                    },
+                )
+        solves.append({**strict, "role": "fp64_audit"})
+        if rejected:
+            report["rejected_errors"] = audit_errors()
+            report["rejected_errors"][0]["difference"] = 1.0
+            report["fallback_reasons"].append("candidate_exceeded_observable_budget")
+            solves.append({**strict, "role": "fp64_fallback_verification"})
+        report.update(
+            status="observed_met",
+            errors=audit_errors(),
+            solves=solves,
+            solve_count=len(solves),
+        )
+    summary = runner.compare(gpu, standard, fast)
+    assert summary["fast_internal_solve_counts"] == [len(solves)] * 2
+    assert summary["science_equivalence_proved"] is False
+
+
+def composite_receipts() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    records = receipts()
+    for arm, record in zip(runner.ARMS, records, strict=True):
+        record["problem"] = runner.problem_identity("r2scan-3c", [("H", (0, 0, 0))])
+        for sample in record["samples"]:
+            correction = {"included_in_timing": True, "energy_hartree": -0.125}
+            if arm in runner.NATIVE_ARMS:
+                sample["composite_corrections"] = {
+                    **correction,
+                    "provider": "native-canonical-D4+gCP",
+                    "complete": True,
+                }
+            else:
+                sample["settings"]["composite_corrections"] = {
+                    **correction,
+                    "provider": "independent-CPU-dftd4+gCP",
+                    "d4": {
+                        "s6": 1.0,
+                        "s8": 0.0,
+                        "s9": 2.0,
+                        "a1": 0.42,
+                        "a2": 5.65,
+                        "ga": 2.0,
+                        "gc": 1.0,
+                    },
+                }
+    return records
+
+
+def test_complete_r2scan3c_receipts_remain_accuracy_unverified() -> None:
+    summary = runner.compare(*composite_receipts())
+    assert summary["problem"]["basis"] == "def2-mTZVPP"
+    assert summary["problem"]["composite_corrections"] == ["D4", "gCP"]
+    table = runner.main_table_markdown([summary])
+    assert "r2scan-3c" in table and "Accuracy unverified" in table
+    assert "GPU4PySCF r2SCAN + independent CPU D4/gCP" in table
+    assert table.count("| Method |") == 1
+    assert "independent CPU D4/gCP" not in runner.main_table_markdown(
+        [runner.compare(*receipts())]
+    )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        "plain_basis",
+        "plain_science",
+        "missing_native",
+        "incomplete_native",
+        "missing_reference",
+        "missing_gcp",
+        "untimed_reference",
+        "nonfinite_energy",
+        "missing_d4_parameter",
+        "changed_d4_parameter",
+    ),
+)
+def test_composite_receipts_require_complete_canonical_provenance(fault: str) -> None:
+    gpu, standard, fast = records = composite_receipts()
+    if fault == "plain_basis":
+        for record in records:
+            record["problem"]["basis"] = "def2-svp"
+    elif fault == "plain_science":
+        for record in records:
+            record["problem"]["composite_corrections"] = []
+    elif fault == "missing_native":
+        del fast["samples"][0]["composite_corrections"]
+    elif fault == "incomplete_native":
+        standard["samples"][0]["composite_corrections"]["complete"] = False
+    elif fault == "missing_reference":
+        del gpu["samples"][0]["settings"]["composite_corrections"]
+    else:
+        correction = gpu["samples"][0]["settings"]["composite_corrections"]
+        if fault == "missing_gcp":
+            correction["provider"] = "independent-CPU-dftd4"
+        elif fault == "untimed_reference":
+            correction["included_in_timing"] = False
+        elif fault == "nonfinite_energy":
+            correction["energy_hartree"] = float("nan")
+        elif fault == "missing_d4_parameter":
+            del correction["d4"]["s9"]
+        else:
+            correction["d4"]["s9"] = 1.0
+    with pytest.raises(ValueError):
+        runner.compare(gpu, standard, fast)

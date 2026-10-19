@@ -17,7 +17,6 @@ import os
 import statistics
 import subprocess
 import sys
-from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -25,6 +24,12 @@ from typing import Any
 from benchmarks._retention import raw_output_path
 
 SCHEMA = "generativeqc.production-default-ef.v2"
+COMPARISON_SCHEMA = "generativeqc.production-default-comparison.v2"
+PHASE = "fresh-owner"
+ENDPOINT = "constructor-scf-energy-analytic-force-host-export"
+# Receipt protocol identity, not an override passed to a calculator. A host
+# regression compares this snapshot with PrecisionPolicy("fast").budget.
+DEFAULT_FAST_BUDGET = {"energy_abs": 1e-5, "force_max_abs": 1e-4, "force_rms": 3e-5}
 METHODS = {
     "lda": ("lda-rks", "LDA_X,LDA_C_PW"),
     "pbe": ("pbe-rks", "PBE"),
@@ -186,27 +191,7 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     if arm == "fast":
         if validation is None or validation.profile != "fast":
             raise RuntimeError("Fast result lacks its actual precision validation")
-        validation_info: dict[str, Any] | None = {
-            "profile": validation.profile,
-            "status": validation.status,
-            "scope": validation.scope,
-            "solve_count": validation.solve_count,
-            "gradient_admission": validation.gradient_admission,
-            "fallback_reasons": list(validation.fallback_reasons),
-            "budget": asdict(validation.budget)
-            if validation.budget is not None
-            else None,
-            "solves": [
-                {
-                    "role": solve.role,
-                    "requested_precision": solve.requested_precision,
-                    "iterations": solve.iterations,
-                    "fock_builds": solve.fock_builds,
-                    "seconds": solve.seconds,
-                }
-                for solve in validation.solves
-            ],
-        }
+        validation_info: dict[str, Any] | None = validation.to_dict()
     else:
         validation_info = None
     grid = candidate.ks_options.grid
@@ -389,39 +374,296 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
     return sample
 
 
+def _positive_number(value: Any) -> bool:
+    return type(value) in (int, float) and math.isfinite(value) and value > 0
+
+
+def _digest(value: Any, length: int = 64) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _checked_protocol(record: dict[str, Any], engine: str) -> None:
+    problem = record.get("problem")
+    if not isinstance(problem, dict) or (
+        not isinstance(problem.get("method"), str)
+        or problem["method"] not in METHODS
+        or problem.get("basis")
+        != ("def2-mTZVPP" if problem["method"] == "r2scan-3c" else "def2-svp")
+        or problem.get("composite_corrections")
+        != (["D4", "gCP"] if problem["method"] == "r2scan-3c" else [])
+        or problem.get("basis_representation") != "spherical"
+        or type(problem.get("charge")) is not int
+        or problem["charge"] != 0
+        or type(problem.get("spin")) is not int
+        or problem["spin"] != 0
+        or problem.get("density_fitting") != "none"
+        or type(problem.get("atoms")) is not int
+        or problem["atoms"] <= 0
+        or not _digest(problem.get("geometry_sha256"))
+    ):
+        raise ValueError("incomplete default scientific identity")
+    if record.get("phase") != PHASE or record.get("endpoint") != ENDPOINT:
+        raise ValueError("receipt is not a fresh-owner complete E+F endpoint")
+    expected_controls = {
+        "scf_overrides": False,
+        "initial_guess_overrides": False,
+        "reference_grid_overrides": False,
+        "native_required_hybrid_GridSpec": (
+            engine in NATIVE_ARMS and problem["method"] in REQUIRED_NATIVE_GRID
+        ),
+        "fast_default_policy": "fast" if engine == "fast" else None,
+        "force_grid_response_override": False,
+    }
+    controls = record.get("controls")
+    if not isinstance(controls, dict) or any(
+        key not in controls
+        or type(controls[key]) is not type(value)
+        or controls[key] != value
+        for key, value in expected_controls.items()
+    ):
+        raise ValueError("missing or overridden default controls")
+    device = record.get("accelerator")
+    if not isinstance(device, dict) or (
+        not isinstance(device.get("name"), str)
+        or not device["name"].strip()
+        or not isinstance(device.get("compute_capability"), list)
+        or len(device["compute_capability"]) != 2
+        or any(
+            type(value) is not int or value < 0
+            for value in device["compute_capability"]
+        )
+        or any(
+            type(device.get(key)) is not int or device[key] <= 0
+            for key in ("total_global_memory_bytes", "multiprocessor_count")
+        )
+    ):
+        raise ValueError("missing or incomplete GPU hardware")
+    environment = record.get("environment")
+    source = environment.get("git") if isinstance(environment, dict) else None
+    if (
+        not isinstance(source, dict)
+        or not _digest(source.get("commit"), 40)
+        or type(source.get("dirty")) is not bool
+        or not _digest(record.get("source_sha256"))
+        or (engine in NATIVE_ARMS and not _digest(record.get("native_library_sha256")))
+    ):
+        raise ValueError("incomplete source or native binary provenance")
+
+
+def _checked_audit_errors(
+    errors: Any, budget: dict[str, Any], *, successful: bool
+) -> None:
+    allowances = {
+        ("energy", "absolute", "Eh"): budget["energy_abs"],
+        ("forces", "max_abs", "Eh/bohr"): budget["force_max_abs"],
+        ("forces", "rms", "Eh/bohr"): budget["force_rms"],
+    }
+    if not isinstance(errors, (list, tuple)) or len(errors) != len(allowances):
+        raise ValueError("Fast observed audit lacks complete E/F norms")
+    observed = set()
+    met = []
+    for error in errors:
+        if not isinstance(error, dict) or any(
+            type(error.get(key)) not in (int, float)
+            or not math.isfinite(error[key])
+            or error[key] < 0
+            for key in ("difference", "reference_norm", "allowance")
+        ):
+            raise ValueError("Fast audit error evidence is incomplete or nonfinite")
+        identity = (error.get("observable"), error.get("norm"), error.get("unit"))
+        if (
+            any(not isinstance(value, str) for value in identity)
+            or identity not in allowances
+        ):
+            raise ValueError("Fast observed audit has an unknown E/F norm")
+        if error["allowance"] != allowances[identity]:
+            raise ValueError("Fast audit allowance differs from its default budget")
+        observed.add(identity)
+        met.append(error["difference"] <= error["allowance"])
+    if observed != set(allowances) or all(met) != successful:
+        raise ValueError("Fast audit norms disagree with the reported acceptance")
+
+
+def _checked_fast_report(report: Any) -> None:
+    if not isinstance(report, dict) or (
+        report.get("profile") != "fast"
+        or not isinstance(report.get("status"), str)
+        or report.get("status")
+        not in {
+            "observed_met",
+            "qualified_budget_fock",
+            "qualified_mixed_gradient",
+            "qualified_strict_final",
+        }
+        or type(report.get("solve_count")) is not int
+        or report["solve_count"] < 1
+        or not isinstance(report.get("solves"), (list, tuple))
+        or len(report["solves"]) != report["solve_count"]
+        or not isinstance(report.get("fallback_reasons"), (list, tuple))
+        or any(not isinstance(reason, str) for reason in report["fallback_reasons"])
+        or not isinstance(report.get("scope"), str)
+        or not isinstance(report.get("gradient_admission"), str)
+        or not isinstance(report.get("budget"), dict)
+        or report["budget"] != DEFAULT_FAST_BUDGET
+        or any(
+            not _positive_number(report["budget"].get(key))
+            for key in ("energy_abs", "force_max_abs", "force_rms")
+        )
+    ):
+        raise ValueError("Fast execution/audit provenance is missing or unsuccessful")
+    for solve in report["solves"]:
+        if not isinstance(solve, dict) or (
+            not isinstance(solve.get("role"), str)
+            or solve.get("requested_precision") not in ("fp64", "auto")
+            or solve.get("executed_backend") != "cuda"
+            or not _positive_number(solve.get("seconds"))
+            or any(
+                not _positive_number(solve.get(key))
+                for key in (
+                    "energy_tolerance",
+                    "density_tolerance",
+                    "screening_tolerance",
+                )
+            )
+            or "error" not in solve
+            or (solve["error"] is not None and not isinstance(solve["error"], str))
+            or (
+                solve["error"] is None
+                and (
+                    type(solve.get("iterations")) is not int
+                    or solve["iterations"] < 1
+                    or solve.get("force_evaluations") != 1
+                )
+            )
+        ):
+            raise ValueError("incomplete Fast solve provenance")
+    if report["solves"][-1]["error"] is not None:
+        raise ValueError("Fast final solve failed")
+    if report["status"] == "observed_met":
+        solves = report["solves"]
+        roles = [solve["role"] for solve in solves]
+        rejected = report.get("rejected_errors")
+        if not isinstance(rejected, (list, tuple)):
+            raise ValueError("Fast observed audit lacks rejected-candidate provenance")
+        verification = bool(rejected)
+        if verification != (
+            "candidate_exceeded_observable_budget" in report["fallback_reasons"]
+        ):
+            raise ValueError("Fast rejection and verification provenance disagree")
+        expected = ["candidate", "fp64_audit"]
+        if solves[0]["error"] is not None:
+            expected.insert(1, "fp64_fallback")
+        elif roles[0] == "fp64_fallback":
+            # A temporary property-capable candidate may fail before a recorded
+            # solve; the public controller still records its strict fallback.
+            expected[0] = "fp64_fallback"
+        if (
+            "fp64_fallback" in expected
+            and "budget_fock_failed_fp64_fallback" not in report["fallback_reasons"]
+        ):
+            raise ValueError("Fast strict fallback lacks its failure reason")
+        if verification:
+            expected.append("fp64_fallback_verification")
+        if roles != expected or any(
+            solve["error"] is not None or solve["requested_precision"] != "fp64"
+            for solve in solves
+            if solve["role"] != "candidate"
+        ):
+            raise ValueError(
+                "Fast observed audit lacks an independent successful FP64 census"
+            )
+        _checked_audit_errors(report.get("errors"), report["budget"], successful=True)
+        if verification:
+            _checked_audit_errors(rejected, report["budget"], successful=False)
+
+
 def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]]:
+    if not isinstance(record, dict):
+        raise TypeError("invalid benchmark receipt")
     if record.get("schema") != SCHEMA or record.get("engine") != engine:
         raise ValueError("wrong engine or schema")
     if record.get("status") != "complete":
         raise ValueError("uncompleted default benchmark cannot be ranked")
+    _checked_protocol(record, engine)
     samples = record.get("samples")
     if not isinstance(samples, list) or not samples:
         raise ValueError("missing timed samples")
-    if len(samples) != record.get("repeats"):
+    if type(record.get("repeats")) is not int or len(samples) != record["repeats"]:
         raise ValueError("missing or extra repetitions")
+    if any(not isinstance(sample, dict) for sample in samples) or any(
+        type(sample.get("repeat")) is not int or sample["repeat"] != index
+        for index, sample in enumerate(samples)
+    ):
+        raise ValueError("missing, duplicate or out-of-order repetition identity")
     atoms = record.get("problem", {}).get("atoms")
     if not isinstance(atoms, int) or atoms <= 0:
         raise ValueError("invalid atom count in measured scientific input")
     for sample in samples:
+        settings = sample.get("settings")
+        if (
+            type(sample.get("grid_response")) is not bool
+            or (engine in NATIVE_ARMS and sample["grid_response"] is not True)
+            or type(sample.get("iterations")) is not int
+            or sample["iterations"] <= 0
+            or not isinstance(settings, dict)
+            or not isinstance(settings.get("initial_guess"), str)
+            or not isinstance(settings.get("xc_grid"), dict)
+            or not isinstance(settings["xc_grid"].get("rule"), str)
+            or not _positive_number(settings["xc_grid"].get("points"))
+            or (
+                engine in NATIVE_ARMS
+                and settings.get("selected_candidate_precision") not in ("fp64", "auto")
+            )
+        ):
+            raise ValueError(
+                "missing executed settings, iterations or force definition"
+            )
         if engine == "fast":
-            report = sample.get("precision_validation")
-            if (
-                not isinstance(report, dict)
-                or report.get("profile") != "fast"
-                or not isinstance(report.get("status"), str)
-                or not isinstance(report.get("solve_count"), int)
-                or report["solve_count"] < 1
+            _checked_fast_report(sample.get("precision_validation"))
+        if record["problem"]["method"] == "r2scan-3c":
+            correction = (
+                sample.get("composite_corrections")
+                if engine in NATIVE_ARMS
+                else settings.get("composite_corrections")
+            )
+            provider = (
+                "native-canonical-D4+gCP"
+                if engine in NATIVE_ARMS
+                else "independent-CPU-dftd4+gCP"
+            )
+            if not isinstance(correction, dict) or (
+                correction.get("provider") != provider
+                or correction.get("included_in_timing") is not True
+                or type(correction.get("energy_hartree")) not in (int, float)
+                or not math.isfinite(correction["energy_hartree"])
+                or (engine in NATIVE_ARMS and correction.get("complete") is not True)
             ):
-                raise ValueError("Fast execution/audit provenance is missing")
+                raise ValueError(
+                    "missing or incomplete timed r2SCAN-3c D4/gCP evidence"
+                )
+            if engine == "gpu4pyscf" and correction.get("d4") != {
+                "s6": 1.0,
+                "s8": 0.0,
+                "s9": 2.0,
+                "a1": 0.42,
+                "a2": 5.65,
+                "ga": 2.0,
+                "gc": 1.0,
+            }:
+                raise ValueError("r2SCAN-3c reference D4 parameters are not canonical")
         seconds = sample.get("seconds")
         energy = sample.get("energy")
         forces = sample.get("forces")
         if (
-            not sample.get("converged")
-            or not isinstance(seconds, (int, float))
+            sample.get("converged") is not True
+            or type(seconds) not in (int, float)
             or not math.isfinite(seconds)
             or seconds <= 0
-            or not isinstance(energy, (int, float))
+            or type(energy) not in (int, float)
             or not math.isfinite(energy)
             or not isinstance(forces, list)
             or len(forces) != atoms
@@ -429,7 +671,7 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
                 not isinstance(row, list)
                 or len(row) != 3
                 or any(
-                    not isinstance(value, (int, float)) or not math.isfinite(value)
+                    type(value) not in (int, float) or not math.isfinite(value)
                     for value in row
                 )
                 for row in forces
@@ -447,28 +689,23 @@ def compare(
     """One three-way default comparison; never claim equal accuracy/work."""
     records = {"gpu4pyscf": gpu4pyscf, "standard": standard, "fast": fast}
     samples = {arm: _checked_samples(records[arm], arm) for arm in ARMS}
-    for key in ("problem", "phase", "endpoint"):
+    for key in ("problem", "phase", "endpoint", "repeats", "source_sha256"):
         if (
             len({json.dumps(records[arm].get(key), sort_keys=True) for arm in ARMS})
             != 1
         ):
             raise ValueError(f"mismatched default comparison: {key}")
-    # One real GPU model is mandatory for a reported speed ratio. Host-only
-    # synthetic receipts may omit all accelerator metadata, but live records do not.
-    hardware = [records[arm].get("accelerator") for arm in ARMS]
-    present = [isinstance(device, dict) for device in hardware]
-    if any(present) and not all(present):
-        raise ValueError("missing GPU hardware for one default-comparison arm")
-    checked_hardware = all(present)
-    if checked_hardware:
-        for name in (
-            "name",
-            "compute_capability",
-            "total_global_memory_bytes",
-            "multiprocessor_count",
-        ):
-            if len({json.dumps(device.get(name)) for device in hardware}) != 1:
-                raise ValueError(f"different GPU hardware: {name}")
+    if standard["native_library_sha256"] != fast["native_library_sha256"]:
+        raise ValueError("Standard and Fast used different native binary images")
+    hardware = [records[arm]["accelerator"] for arm in ARMS]
+    for name in (
+        "name",
+        "compute_capability",
+        "total_global_memory_bytes",
+        "multiprocessor_count",
+    ):
+        if len({json.dumps(device[name]) for device in hardware}) != 1:
+            raise ValueError(f"different GPU hardware: {name}")
     medians = {
         arm: statistics.median(row["seconds"] for row in samples[arm]) for arm in ARMS
     }
@@ -493,8 +730,15 @@ def compare(
         "fast_speedup_vs_gpu4pyscf": medians["gpu4pyscf"] / medians["fast"],
         "fast_speedup_vs_standard": medians["standard"] / medians["fast"],
     }
+    if any(
+        not _positive_number(value)
+        for key, value in row.items()
+        if key not in ("method", "atoms")
+    ):
+        raise ValueError("nonfinite or nonpositive derived performance ratio")
     return {
-        "schema": "generativeqc.production-default-comparison.v2",
+        "schema": COMPARISON_SCHEMA,
+        "receipts": records,
         "problem": problem,
         "main_table": [row],
         "medians_seconds": medians,
@@ -504,7 +748,7 @@ def compare(
         "fast_statuses": fast_status,
         "fast_internal_solve_counts": fast_solve_counts,
         "engine_settings": {arm: samples[arm][0]["settings"] for arm in ARMS},
-        "same_gpu_hardware_verified": checked_hardware,
+        "same_gpu_hardware_verified": True,
         "same_moving_grid_force_definition": equivalent_response,
         "force_definition_warning": (
             None
@@ -523,12 +767,39 @@ def compare(
 
 def main_table_markdown(comparisons: list[dict[str, Any]]) -> str:
     """Render exactly one performance table, never a separate accuracy table."""
+    checked = []
+    for record in comparisons:
+        if (
+            not isinstance(record, dict)
+            or record.get("schema") != COMPARISON_SCHEMA
+            or not isinstance(record.get("receipts"), dict)
+            or set(record["receipts"]) != set(ARMS)
+        ):
+            raise ValueError(
+                "cannot render an unverified/older comparison or incomplete receipts"
+            )
+        checked.append(compare(*(record["receipts"][arm] for arm in ARMS)))
+    if not checked:
+        raise ValueError("cannot render an empty comparison")
     headers = (
         "| Method | Atoms | GPU4PySCF default (s) | "
         "GQC Standard (s) | GQC Fast (s) | Standard speedup | Fast speedup |"
     )
-    lines = [headers, "|---|---:|---:|---:|---:|---:|---:|"]
-    rows = [row for item in comparisons for row in item["main_table"]]
+    lines = [
+        "Accuracy unverified: independent grid-converged E/F qualification is pending.",
+    ]
+    if any(not item["same_moving_grid_force_definition"] for item in checked):
+        lines.append(
+            "Stock force definitions differ: GPU4PySCF keeps its default grid response; "
+            "GenerativeQC includes moving-grid response. Speedups compare end-user latency."
+        )
+    if any(item["problem"]["method"] == "r2scan-3c" for item in checked):
+        lines.append(
+            "For r2SCAN-3c rows, the GPU4PySCF column means GPU4PySCF r2SCAN + "
+            "independent CPU D4/gCP, with canonical def2-mTZVPP and all corrections timed."
+        )
+    lines.extend(("", headers, "|---|---:|---:|---:|---:|---:|---:|"))
+    rows = [row for item in checked for row in item["main_table"]]
     for row in sorted(rows, key=lambda item: (item["method"], item["atoms"])):
         lines.append(
             f"| {row['method']} | {row['atoms']} | "
