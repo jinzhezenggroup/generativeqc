@@ -673,11 +673,7 @@ typedef struct generativeqc_ks_options {
    * u=(index+1/2)/radial_points, full orders on [1/3,3/4], half outside,
    * quarter for u<1/5 or u>6/7,
    * with orders rounded up and at least three azimuth points. Its maximum
-   * angular orders are 128 polar and 512 azimuth. Version 4 is the default
-   * Treutler/Ahlrichs + Lebedev + NWChem family with Treutler-adjusted Becke:
-   * radial_points encodes level 0..9, both angular fields must be zero. H--Lr
-   * are supported; NULL radii select the pinned Bragg table. Explicit v4 radii
-   * affect partition adjustment only. No density pruning is implied. */
+   * angular orders are 128 polar and 512 azimuth. No density pruning is implied. */
   uint32_t grid_version;
   uint32_t radial_points;
   uint32_t angular_polar;
