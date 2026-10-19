@@ -87,6 +87,32 @@ their primal inputs, so later mutation cannot change the derivative. Call
 `pullback.close()` to release native owners. Compiled and gradient functions
 also provide `close()` and `compilation_info()`.
 
+For first-order fixed external masks on generic finite FP64 arrays, public JVP
+accepts an explicit opt-in and a matching tangent tuple with `None` at each
+non-differentiated primal:
+
+```python
+def selected_values(x, y, mask):
+    return xp.where(mask, x * x, y * y)
+
+value, direction = xp.jvp(
+    selected_values, (x, y, mask), (dx, dy, None),
+    allow_external_mask_where=True,
+)
+```
+
+This path is qualified for reference/materializing native CPU. `None` supplies
+no numerical tangent, including for the Boolean mask; omitted real directions
+are fixed parameters. At least one explicit real direction is required. Every
+supplied direction, including a disconnected one, must match its primal shape
+and dtype and remain finite. Requested disconnected FP32 or scientific-domain
+inputs reject before compilation. All live primal and forward derivative
+domains remain checked, including unselected branches and empty outputs. Results
+are detached, inherited native byte/work/node budgets apply, and temporary
+executors close on success or failure. Default JVP admission, computed predicates,
+Boolean AD, scientific annotations, FP32/mixed/packed selection, higher-order
+selection and CUDA admission remain unchanged.
+
 For quantum-chemistry equations, pass `specs={parameter: TensorSpec(...)}` to
 `compile` to retain AO, occupied, virtual, auxiliary and spin domains. Equal
 extents never authorize mixing scientific spaces. `einsum` accepts exact

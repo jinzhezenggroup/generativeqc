@@ -1002,6 +1002,28 @@ def _external_mask_zero_forward(program: Program) -> list[Node]:
     ]
 
 
+def _validate_external_mask_inputs(
+    program: Program, inputs: Mapping[str, Node], mode: str
+) -> None:
+    """Qualify requested real inputs even when disconnected from primal outputs."""
+    from .autodiff import _validate_reference_context
+
+    if any(node.spec.dtype != "float64" for node in inputs.values()):
+        raise ValueError(f"generated external-mask {mode} requires float64 real arrays")
+    _validate_reference_context(
+        Program(
+            {
+                **{
+                    f"primal_{i}": node
+                    for i, node in enumerate(program.outputs.values())
+                },
+                **{f"input_{i}": node for i, node in enumerate(inputs.values())},
+            },
+            program.definitions,
+        )
+    )
+
+
 def linearize(
     program: Program,
     tangent_inputs: typing.Any,
@@ -1067,6 +1089,8 @@ def linearize(
     )
     if external_where and not requested:
         raise ValueError("external-mask JVP requires a declared differentiable input")
+    if external_where:
+        _validate_external_mask_inputs(program, requested, "JVP")
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -1248,25 +1272,7 @@ def transpose_program(
     }
     selected_inputs = _select_names(differentiable, inputs, "input")
     if external_where:
-        # Disconnected requested inputs become live zero gradients. Qualify
-        # their dtype/domains too, rather than validating only primal outputs.
-        if any(node.spec.dtype != "float64" for node in selected_inputs.values()):
-            raise ValueError("generated external-mask VJP requires float64 real arrays")
-        _validate_reference_context(
-            Program(
-                {
-                    **{
-                        f"primal_{i}": node
-                        for i, node in enumerate(program.outputs.values())
-                    },
-                    **{
-                        f"input_{i}": node
-                        for i, node in enumerate(selected_inputs.values())
-                    },
-                },
-                program.definitions,
-            )
-        )
+        _validate_external_mask_inputs(program, selected_inputs, "VJP")
     groups = _input_groups(program)
     roots = (node for name in selected_inputs for node in groups[name])
     relevant = needed & _descendants_of(program, roots)
