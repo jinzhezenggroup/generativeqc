@@ -556,7 +556,8 @@ void nonlocal_density_domain() {
       r += phi[mu] * weighted;
       for (unsigned k = 0; k < 3; ++k) g[k] += 2.0 * ao[((k + 1) * points + p) * n + mu] * weighted;
     }
-    if (r >= 1e-8) {
+    // Mirror the aligned MolecularV1 rho admission (both pair domains).
+    if (r >= 1e-10) {
       active.push_back(p);
       xyz.insert(xyz.end(), grid.points().begin() + 3 * p, grid.points().begin() + 3 * p + 3);
       weights.push_back(grid.weights()[p]);
