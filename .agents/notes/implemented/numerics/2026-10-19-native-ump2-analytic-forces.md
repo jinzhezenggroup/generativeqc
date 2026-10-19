@@ -86,3 +86,23 @@ oracle therefore certifies its true residual with an independent bounded dense
 solve; it does not weaken the force gate or add a production fallback. Do not
 repeat the failed approach of tightening only the reference iteration tolerance
 or raising the molecular force tolerance to hide an uncertified reference.
+
+
+## Shell-staging materialization disposition
+
+The initial CPU pullback retains `first[di,N,N,N]`, `second[di,dj,N,N]`,
+`third[di,dj,dk,N]` and `local[di,dj,dk,dl]` for one spin frame at a time.
+`second` lives through the sk/sl loops; `third` through sl; `local` is borrowed
+synchronously by the existing weighted ERI derivative sink and then destroyed.
+The source-work inventory sees the latter three producers as new high-rank
+materialization candidates. Their source-bound owner/dispositions are recorded in
+`manifests/native_materialization_dispositions.json` under existing #1626.
+
+Disposition is **retained-pending-evidence**. The force planner admits all
+simultaneously live shell stages using `8*(d*N^3+d^2*N^2+d^3*N+d^4)` bytes,
+beside provider/reference, ijab/rank-two state, MO blocks, response, VJP and bounded
+derivative scratch. Numerical parity, source failure recovery and budget gates
+qualify the complete force; they do not establish that the stages are required
+or profitable. Compact structural support or producer/consumer fusion can be
+revisited with complete-endpoint timing, semantic work and peak-storage evidence.
+Do not infer work-boundedness or a speedup from the finite numeric-memory gate.
