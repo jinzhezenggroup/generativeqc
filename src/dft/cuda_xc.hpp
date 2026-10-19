@@ -289,6 +289,18 @@ class CudaXcPlan {
   bool select_local_ao(double cutoff, std::size_t max_host_bytes,
                        CudaXcAoDiscovery schedule = CudaXcAoDiscovery::HostTiles);
   const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
+  /** Setup-only exact point permutation, before maps/providers/capture. Only
+   * a matching borrowed MolecularGrid can supply the canonical source. The
+   * caller reserves separate temporary host and retained device allowances;
+   * insufficient capacity/device OOM retains the original order. This opt-in
+   * path is qualified for semilocal SCF; nonlocal consumers stay canonical. */
+  bool prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
+                            std::size_t device_budget);
+  std::size_t spatial_grid_device_bytes() const noexcept { return spatial_grid_bytes_; }
+  /** Canonical atom/radial/angular order for moving-grid force consumers.
+   * Spatial SCF execution keeps a separate exact permutation of these values;
+   * atomic measures and owner indexing always refer to this canonical view. */
+  CudaXcGridView canonical_grid_view() const;
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
   /** Borrow the immutable validated AoBasis records on the plan's current
@@ -383,6 +395,9 @@ class CudaXcPlan {
   std::size_t arena_bytes_{};
   cudaStream_t stream_{};
   std::shared_ptr<const void> grid_lifetime_;
+  const double *canonical_points_{}, *canonical_weights_{};
+  double* spatial_grid_{};
+  std::size_t spatial_grid_bytes_{};
   generativeqc::runtime::AsyncGeneration generations_;
   double *basis_{}, *points_{}, *weights_{}, *ao_{}, *work_{}, *features_{}, *coefficients_{},
       *point_totals_{}, *potential_{}, *totals_{}, *delta_features_{};
