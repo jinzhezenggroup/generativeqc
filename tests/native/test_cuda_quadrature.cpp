@@ -73,8 +73,7 @@ void compare(const System& system, GridSpec spec, bool derivative) {
 
 void accounting(const System& system, GridSpec spec) {
   using namespace generativeqc::runtime;
-  const auto points =
-      system.atoms.size() * spec.radial_points * spec.angular_polar * spec.angular_azimuth;
+  const auto points = system.atoms.size() * generativeqc::dft::grid_points_per_atom(spec);
   const auto expected = generativeqc::dft::cuda_quadrature_bytes(system.atoms.size(), points);
   const auto retained = generativeqc::dft::cuda_resident_grid_bytes(points);
   auto ledger = std::make_shared<DeviceResourceLedger>(DeviceResourceLedger{expected, 0});
@@ -159,7 +158,7 @@ int main(int argc, char** argv) {
     spec.angular_polar = 7;
     spec.angular_azimuth = 23;
     auto system = centers(6);  // 4830 points crosses a tile and ends partway through an atom.
-    for (unsigned version : {1U, 2U}) {
+    for (unsigned version : {1U, 2U, 3U}) {
       spec.version = version;
       spec.element_radii[1] = 0.8;
       spec.element_radii[8] = 1.4;
@@ -167,6 +166,7 @@ int main(int argc, char** argv) {
         spec.partition_iterations = iterations;
         compare(system, spec, iterations == 3);
       }
+      accounting(system, spec);
     }
     spec.version = 1;
     spec.element_radii = {};

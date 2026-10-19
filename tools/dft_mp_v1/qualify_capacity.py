@@ -287,15 +287,6 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
 # complete-grid overrides, selected AO policy and native-owner cleanup.
 # The hybrid predicate also remains source provenance. Executable admission
 # controls cover device, ECP, options, schedule and MethodIR eligibility.
-PYTHON_GRID_CONTRACT_SHA256 = (
-    "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
-)
-QUADRATURE_LAYOUT_CONTRACT_SHA256 = (
-    "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
-)
-NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
-    "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
-)
 NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
     "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
 )
@@ -420,9 +411,6 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
-NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
-)
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
     "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
@@ -791,7 +779,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     methods = {}
     expected = {
         "__init__": None,
-        "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
+        "decode": None,
         "stationary_integral_device_reserve": (
             NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
         ),
@@ -3032,7 +3020,12 @@ def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
 
 
 def _grid_count_contract(repository: Path) -> dict[str, str]:
-    """Bind the source-only point count to the native CUDA grid owner."""
+    """Record grid implementation provenance and validate the retained v2 ABI.
+
+    Point construction, emitted buffer layout and snapshot decoding are covered
+    by executable CPU/CUDA contracts, not historical implementation hashes.
+    This source-only inventory is not numerical or real-device qualification.
+    """
 
     python_grid = (repository / "python/generativeqc_compiler/dft/grid.py").read_text(
         encoding="utf-8"
@@ -3131,10 +3124,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         "native_grid_point_count_sha256": point_count_digest,
     }
     expected = {
-        "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
         "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
-        "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
-        "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }

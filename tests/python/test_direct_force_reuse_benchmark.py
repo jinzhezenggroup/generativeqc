@@ -268,7 +268,10 @@ def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None
     descendant = (
         "import json,os,pathlib,signal,time;"
         "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
-        f"pathlib.Path({str(marker)!r}).write_text(json.dumps({{'pid':os.getpid(),'pgid':os.getpgrp()}}));"
+        f"target=pathlib.Path({str(marker)!r});"
+        "temporary=target.with_suffix('.tmp');"
+        "temporary.write_text(json.dumps({'pid':os.getpid(),'pgid':os.getpgrp()}));"
+        "temporary.replace(target);"
         "time.sleep(15)"
     )
     leader = (

@@ -155,7 +155,7 @@ int main() {
   require(generativeqc_resource_ks_cpu_host_v1(shape.data(), shape.size(), inventory.data(),
                                                inventory.size()) == 0,
           "CPU host shape query failed");
-  require(inventory[0] == 15360 && inventory[13] == 263184 && inventory[14] == 32864 &&
+  require(inventory[0] == 15360 && inventory[13] == 263184 && inventory[14] == 33504 &&
               inventory[15] == 415600 && inventory[12] == 393216,
           "CPU host H2 lifetime bounds changed");
   auto unrestricted = shape;
@@ -169,7 +169,7 @@ int main() {
   nonlocal[16] = 768;
   require(generativeqc_resource_ks_cpu_host_v1(nonlocal.data(), nonlocal.size(), inventory.data(),
                                                inventory.size()) == 0 &&
-              inventory[11] == 48 * shape[8] && inventory[14] == 32864 + 768,
+              inventory[11] == 48 * shape[8] && inventory[14] == 33504 + 768,
           "nonlocal/ECP numeric owners are missing");
   for (const auto slot : {0u, 1u, 2u, 3u, 4u, 5u, 8u, 9u, 10u, 11u, 13u}) {
     auto invalid = shape;

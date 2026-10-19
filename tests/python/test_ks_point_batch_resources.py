@@ -22,7 +22,7 @@ from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.xc.quadrature_cuda import _LAYOUT
+from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -77,6 +77,7 @@ def native_probe(
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
+    (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -140,7 +141,7 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         + _definition(diis, "bool incremental_diis_gram_requested(")
         + "\n}\n"
     )
-    source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
+    source += '\n#include "generated_quadrature.cuh"\n'
     source += r"""
 namespace generativeqc::dft {
 using scf::cuda_execution::MatrixLibraryOwner;

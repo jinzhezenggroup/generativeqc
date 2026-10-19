@@ -3220,7 +3220,7 @@ def _complete_rks_cuda_gradient_diagnostic(
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
-    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
+    Domain: qualified real FP64 RKS/UKS compositions, native fixed-topology grid and
     distinct noncolliding centers. Enlarged domains require the shared native
     stationary integral owner. No CPKS is required. None for either whole-grid
     work guard admits the finite complete grid, retaining bounded submission
@@ -3873,9 +3873,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 raise ValueError(
                     "resident molecular-grid lease differs from stationary state"
                 )
-            points_per_atom = (
-                spec.radial_points * spec.angular_polar * spec.angular_azimuth
-            )
+            points_per_atom = spec.points_per_atom
             if points_per_atom <= 0 or grid_points != na * points_per_atom:
                 raise ValueError(
                     "resident molecular grid is not the expected atom-major GridSpec"

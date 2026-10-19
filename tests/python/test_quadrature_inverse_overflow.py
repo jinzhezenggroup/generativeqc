@@ -5,7 +5,6 @@ This checks binary64 arithmetic and indexing, not CUDA scheduling/device libm.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -15,12 +14,13 @@ from generativeqc_compiler.xc.quadrature_cuda import emit_quadrature_cuda
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from conftest import NativeCxx
+
 
 @pytest.fixture(scope="module")
-def partition_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def partition_binary(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     directory = tmp_path_factory.mktemp("inverse-partition")
     (directory / "cuda_runtime.h").write_text(
         """#pragma once
@@ -71,19 +71,17 @@ int main(int argc,char**argv) {
     cpp = directory / "partition.cpp"
     cpp.write_text(source)
     binary = directory / "partition"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        (cpp,),
+        binary,
+        compile_args=(
             "-std=c++20",
             "-O0",
             "-D__CUDACC__",
+            "-D__host__=",
+            "-D__device__=",
             f"-I{directory}",
-            str(cpp),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        timeout=30,
+        ),
     )
     return binary
 
