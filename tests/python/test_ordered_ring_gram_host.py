@@ -277,7 +277,12 @@ int main() {
         compile_args=("-std=c++20", "-I" + str(tmp_path), "-I" + str(ROOT / "src")),
     )
     result = subprocess.run(
-        [str(executable)], check=True, capture_output=True, text=True, timeout=30
+        [str(executable)],
+        input="",
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     maximum_bytes, scalar_bytes = map(int, result.stdout.split())
     cases = []

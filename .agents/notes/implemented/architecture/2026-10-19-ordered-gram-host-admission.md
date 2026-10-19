@@ -85,6 +85,9 @@ that exact compile failure. A dedicated ordered-Gram namespace resolves it
 without changing the HF consumer or scientific implementation. Keep this
 composition regression and the failed-head CI receipt; an isolated successful
 CUDA compile does not replace the complete package build gate.
+The discovery subprocess supplies explicit empty input so its integer-width
+query sees EOF under `pytest -s` as well as captured pytest. An attached live
+PTY reproduced the blocked child before this repair and passed afterward.
 
 Local qualification scripts and raw logs are opt-in ignored artifacts, not
 permanent required-CI source-spelling/fingerprint checks. Remote receipts are
