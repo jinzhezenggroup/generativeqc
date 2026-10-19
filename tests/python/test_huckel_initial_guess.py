@@ -199,7 +199,7 @@ def test_huckel_numeric_cap_preserves_bounded_core_fallback() -> None:
     assert actual.initial_guess["target_attempts"] == 1
 
 
-@pytest.mark.parametrize("guess", [InitialGuessSpec("huckel")])
+@pytest.mark.parametrize("guess", ["auto", InitialGuessSpec("huckel")])
 def test_empty_atomic_subspace_preserves_budgeted_core_fallback(guess: object) -> None:
     """A valid target without atomic occupied channels still has a bounded fallback."""
     atoms = [("He", (0, 0, 0))]

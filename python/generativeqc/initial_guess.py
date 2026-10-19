@@ -306,11 +306,7 @@ def _automatic_minao_model_eligible(
 def automatic_initial_guess_candidate(
     calculator: typing.Any, *, restricted: bool, has_ecp: bool
 ) -> InitialGuessSpec | None:
-    """Prefer the GPU4PySCF MINAO default where native permits it."""
-    if _automatic_minao_model_eligible(
-        calculator, restricted=restricted, has_ecp=has_ecp
-    ):
-        return InitialGuessSpec("minao")
+    """Select Huckel through native v2; preserve MINAO/Hcore on older libraries."""
     if supports_automatic_huckel(
         calculator._library,
         cuda_rhf=calculator._device_name == "cuda"
@@ -327,6 +323,10 @@ def automatic_initial_guess_candidate(
             )
         if admitted:
             return InitialGuessSpec("huckel")
+    if _automatic_minao_model_eligible(
+        calculator, restricted=restricted, has_ecp=has_ecp
+    ):
+        return InitialGuessSpec("minao")
     return None
 
 

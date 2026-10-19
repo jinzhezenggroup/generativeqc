@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, NoReturn
 
-from generativeqc import Calculator, InitialGuessSpec
+from generativeqc import Calculator
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
-
-if TYPE_CHECKING:
-    import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -56,37 +51,3 @@ def test_cuda_ao_and_vv10_cutoffs() -> None:
     assert float(MOLECULAR_VV10_DENSITY_THRESHOLD) == 1e-10
     assert MOLECULAR_VV10_DENSITY_POLICY == "vv10-molecular-rho-ge-1e-10-v2"
 
-
-def test_auto_guess_prefers_minao(monkeypatch: pytest.MonkeyPatch) -> None:
-    import generativeqc.initial_guess as guess
-
-    monkeypatch.setattr(guess, "_automatic_minao_model_eligible", lambda *a, **kw: True)
-
-    def fail(*_args: object, **_kwargs: object) -> NoReturn:
-        raise AssertionError("must select MINAO before querying Huckel")
-
-    monkeypatch.setattr(guess, "supports_automatic_huckel", fail)
-    assert guess.automatic_initial_guess_candidate(
-        SimpleNamespace(_library=object()), restricted=True, has_ecp=False
-    ) == InitialGuessSpec("minao")
-
-
-def test_auto_guess_fallback_remains_guarded(monkeypatch: pytest.MonkeyPatch) -> None:
-    import generativeqc.initial_guess as guess
-
-    monkeypatch.setattr(
-        guess, "_automatic_minao_model_eligible", lambda *a, **kw: False
-    )
-    monkeypatch.setattr(guess, "supports_automatic_huckel", lambda *a, **kw: True)
-    monkeypatch.setattr(
-        guess, "_native_automatic_minao_eligible", lambda *a, **kw: True
-    )
-    obj = SimpleNamespace(
-        _library=object(),
-        _device_name="cuda",
-        _method=guess._native.METHOD_RHF,
-        _density_fitting_mode=guess._native.DENSITY_FITTING_NONE,
-    )
-    assert guess.automatic_initial_guess_candidate(
-        obj, restricted=True, has_ecp=False
-    ) == InitialGuessSpec("huckel")

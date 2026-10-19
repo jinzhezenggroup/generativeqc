@@ -195,10 +195,10 @@ class Calculator:
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
 
-        ``initial_guess="auto"`` prefers MINAO for eligible FP64 all-electron
-        restricted direct HF/KS cold starts. Qualified CUDA RHF and fitted HF/KS
-        domains without MINAO retain native Huckel; other domains use Hcore.
-        Explicit
+        ``initial_guess="auto"`` selects native Modified Huckel for FP64
+        all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
+        Older libraries retain their previously supported default. Other domains retain
+        Hcore, as does a batch containing an unsupported element. Explicit
         ``None`` disables preparation; existing densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
