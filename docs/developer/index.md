@@ -31,6 +31,7 @@ architecture
 compiler_architecture
 electronic_structure_boundaries
 provider_selection_boundaries
+gpu4pyscf_default_numeric_alignment
 ```
 
 ```{toctree}
