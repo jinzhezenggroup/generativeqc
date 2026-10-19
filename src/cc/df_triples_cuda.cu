@@ -9,6 +9,7 @@
 
 #include "cc/df_triples.hpp"
 #include "cc/df_triples_traversal.hpp"
+#include "cc/phase_observation.hpp"
 #include "generated_df_occupied_triples_cuda.cuh"
 #include "posthf/capacity.hpp"
 #include "tensor/cuda_runtime.cuh"
@@ -422,6 +423,7 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
                               std::size_t max_bytes, int device, std::size_t max_panel_buffers,
                               runtime::PrecisionDirective admitted_w) {
   const auto started = Clock::now();
+  phase_observation::Scope observed_triples(phase_observation::Site::triples_inclusive, o, v);
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples dimensions, threshold or panel limit");
@@ -514,6 +516,11 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     result.cuda_runtime_version = execution.runtime_version();
     result.w_precision_identity = selected.precision.identity;
     result.w_codegen_precision_schedule_identity = selected.schedule_identity;
+    if (phase_observation::detailed_enabled())
+      phase_observation::admitted_triples(
+          o, v, q, p.panel_capacity, p.paired_pointer_bytes, selected.selected,
+          result.w_contraction_storage_bits, result.w_contraction_compute_bits,
+          result.w_contraction_accumulation_bits, max_bytes, p.total);
     generated_df::Inputs in;
     const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
                                                &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
@@ -537,15 +544,24 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     std::array<std::size_t, 3> identities;
     identities.fill(std::numeric_limits<std::size_t>::max());
     std::array<std::size_t, 3> ages{};
+    phase_observation::PanelSources panel_source_ids;
     std::size_t epoch = 0, tile = 0;
     auto panel_slot_for = [&](std::size_t occupied) {
+      phase_observation::Scope host(phase_observation::Site::triples_host_preparation, occupied,
+                                    p.panel_capacity);
       std::size_t slot = 0;
       for (; slot < p.panel_capacity; ++slot)
         if (identities[slot] == occupied) break;
       if (slot == p.panel_capacity) {
         slot = static_cast<std::size_t>(
             std::min_element(ages.begin(), ages.begin() + p.panel_capacity) - ages.begin());
+        host.close();
+        phase_observation::Scope panel(phase_observation::Site::triples_panel_submission, occupied,
+                                       slot, reinterpret_cast<std::uintptr_t>(context.stream));
         execution.build_panel(context, in, occupied, panels + slot * p.v3, slot);
+        panel.close();
+        if (phase_observation::detailed_enabled())
+          panel_source_ids.remember(slot, panel.identity());
         ++result.panel_gemms;
         identities[slot] = occupied;
       }
@@ -553,10 +569,16 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
       return slot;
     };
     auto visit_tile = [&](std::size_t i, std::size_t j, std::size_t k, std::size_t canonical_tile) {
+      phase_observation::Scope observed_tile(phase_observation::Site::triples_tile_inclusive,
+                                             canonical_tile, (i * o + j) * o + k,
+                                             reinterpret_cast<std::uintptr_t>(context.stream));
+      phase_observation::Scope host(phase_observation::Site::triples_host_preparation,
+                                    canonical_tile, 0);
       const std::array<std::size_t, 3> occupied{i, j, k};
       const bool alias_tile = distinct_moments && (i == j || j == k);
       const auto sources = alias_tile ? generated_df::occupied_moment_sources(i, j, k)
                                       : generated_df::MomentSourceMap{};
+      host.close();
       // Group W seeds by their integral-panel index. A single-panel fallback
       // consumes every dependent GEMM before that storage is reused. All
       // producer/consumer work is ordered on Context's one owned stream.
@@ -568,6 +590,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
         const auto* panel = panels + slot * p.v3;
         // Equal-index non-FP64 tiles still require all six original seeds.
         std::array<std::size_t, 6> seed_permutations{};
+        phase_observation::Scope seed_preparation(phase_observation::Site::triples_seed_preparation,
+                                                  canonical_tile, occupied[index]);
         std::size_t seed_count = 0;
         for (std::size_t permutation = 0; permutation < 6; ++permutation) {
           const auto* order = generated_df::permutations[permutation];
@@ -577,17 +601,26 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
           if (sources.index[permutation] != permutation) continue;
           seed_permutations[seed_count++] = permutation;
         }
+        seed_preparation.close();
         if (seed_count == 2 && p.paired_pointer_bytes) {
           const auto* first_order = generated_df::permutations[seed_permutations[0]];
           const auto* second_order = generated_df::permutations[seed_permutations[1]];
           const bool swapped = occupied[second_order[0]] == occupied[first_order[0]] &&
                                occupied[second_order[1]] == occupied[first_order[2]] &&
                                occupied[second_order[2]] == occupied[first_order[1]];
-          if (swapped && execution.build_w_pair(context, in, occupied[first_order[0]],
-                                                occupied[first_order[1]], occupied[first_order[2]],
-                                                panel, moments + seed_permutations[0] * p.v3,
-                                                moments + seed_permutations[1] * p.v3,
-                                                context.arena + p.paired_pointers)) {
+          if (swapped && [&] {
+                phase_observation::Scope pair(
+                    phase_observation::Site::triples_pair_submission,
+                    seed_permutations[0] * 6 + seed_permutations[1], 2,
+                    reinterpret_cast<std::uintptr_t>(context.stream),
+                    phase_observation::detailed_enabled() ? panel_source_ids.dependency(slot) : 0);
+                const bool accepted = execution.build_w_pair(
+                    context, in, occupied[first_order[0]], occupied[first_order[1]],
+                    occupied[first_order[2]], panel, moments + seed_permutations[0] * p.v3,
+                    moments + seed_permutations[1] * p.v3, context.arena + p.paired_pointers);
+                pair.close(accepted ? 0 : 2);
+                return accepted;
+              }()) {
             result.moment_gemms += 4;
             continue;
           }
@@ -595,12 +628,19 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
         for (std::size_t seed = 0; seed < seed_count; ++seed) {
           const auto permutation = seed_permutations[seed];
           const auto* order = generated_df::permutations[permutation];
+          phase_observation::Scope moment(
+              phase_observation::Site::triples_moment_submission, permutation, 1,
+              reinterpret_cast<std::uintptr_t>(context.stream),
+              phase_observation::detailed_enabled() ? panel_source_ids.dependency(slot) : 0);
           execution.build_w(context, in, occupied[order[0]], occupied[order[1]], occupied[order[2]],
                             panel, moments + permutation * p.v3, slot);
           result.moment_gemms += 2;
         }
       }
       const double degeneracy = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
+      phase_observation::Scope epilogue(phase_observation::Site::triples_epilogue_submission,
+                                        canonical_tile, 1,
+                                        reinterpret_cast<std::uintptr_t>(context.stream));
       if (alias_tile)
         generated_df::energy_distinct_tile(o, v, i, j, k, degeneracy, threshold, in, moments,
                                            sources, p.blocks, partials, context.error,
@@ -609,6 +649,10 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
         generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
                                   partials, context.error, context.stream);
       ++result.epilogue_kernels;
+      epilogue.close();
+      phase_observation::Scope reduction(phase_observation::Site::triples_reduction_submission,
+                                         canonical_tile, 1,
+                                         reinterpret_cast<std::uintptr_t>(context.stream));
       reduce<<<1, 256, 0, context.stream>>>(partials, p.blocks, energies + canonical_tile,
                                             context.error);
       generativeqc_tensor::cuda_check(cudaGetLastError());
@@ -619,14 +663,26 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     // canonical tile addresses preserve the original final reduction inputs.
     detail::visit_occupied_tiles(o, distinct_moments && p.panel_capacity == 3, visit_tile);
     if (tile != p.tiles) throw std::logic_error("DF triples occupied work mismatch");
+    phase_observation::Scope final_reduction(phase_observation::Site::triples_reduction_submission,
+                                             p.tiles, 1,
+                                             reinterpret_cast<std::uintptr_t>(context.stream));
     reduce<<<1, 256, 0, context.stream>>>(energies, p.tiles, energy, context.error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
     ++result.reduction_kernels;
+    final_reduction.close();
+    phase_observation::Scope download(phase_observation::Site::triples_download_submission, 0,
+                                      sizeof(double) + sizeof(int),
+                                      reinterpret_cast<std::uintptr_t>(context.stream));
     generativeqc_tensor::cuda_check(cudaMemcpyAsync(&result.energy, energy, sizeof(double),
                                                     cudaMemcpyDeviceToHost, context.stream));
     generativeqc_tensor::cuda_check(cudaMemcpyAsync(&failed, context.error, sizeof(int),
                                                     cudaMemcpyDeviceToHost, context.stream));
-    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    download.close();
+    {
+      phase_observation::Scope wait(phase_observation::Site::explicit_wait, 0, 0,
+                                    reinterpret_cast<std::uintptr_t>(context.stream));
+      generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    }
     if (failed || !std::isfinite(result.energy))
       throw std::runtime_error("nonfinite or unsafe generated DF triples arithmetic");
     result.minimum_absolute_denominator = minimum;

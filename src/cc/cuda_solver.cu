@@ -1,5 +1,6 @@
 #include "cc/iteration_driver.hpp"
 #include "cc/phase_observation.hpp"
+#include "cc/replay_tiles.hpp"
 #include "cc/solver.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -799,8 +800,7 @@ struct Owner {
     df_state.t1 = state.t1;
     df_state.t2 = state.t2;
     for (std::size_t q = 0; q < naux;) {
-      const auto batch =
-          physical_replay && replay_batch ? std::min(replay_batch, naux - q) : std::size_t{1};
+      const auto batch = detail::replay_tile_width(naux - q, replay_batch, physical_replay);
       phase_observation::Scope tile(phase_observation::Site::q_tile_inclusive, q, batch,
                                     reinterpret_cast<std::uintptr_t>(stream));
       phase_observation::Scope host(phase_observation::Site::q_host_preparation, q, batch);
@@ -1313,8 +1313,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
                                      : 0ULL);
     phase_observation::admitted_plan(
         phase_observation::PlanOwner::ccsd, owner.naux, owner.plan.strict_auxiliary_batch_size,
-        owner.replay_batch, route, options.max_bytes, owner.diagnostic.numeric_capacity_bytes,
-        owner.diagnostic.owned_device_bytes);
+        detail::replay_tile_width(owner.naux, owner.replay_batch, true), route, options.max_bytes,
+        owner.diagnostic.numeric_capacity_bytes, owner.diagnostic.owned_device_bytes);
   }
   SolverResult result;
   result.reason = "maximum RCCSD iterations reached";

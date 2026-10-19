@@ -92,3 +92,48 @@ must establish the new native, canonical registration and collector identities.
 Historical source/library/profile evidence keeps its original identity and
 INCOMPLETE limitations. The original #1765 goal is not completed by these hooks,
 host tests, successful compilation or CI.
+
+## Detailed contract v2
+
+The original opt-in preserves its Q-only emission view. A separately negotiated
+v2 permit enables DF raw generation, projections, packing, publication/validation
+and complete triples tile/panel/moment/epilogue/reduction/wait sites. A typed
+seventeen-word triples admission record reports the selected lowering,
+precision, panel capacity and reserved layout after preparation/fallback.
+Reserved layout bytes are distinct from live allocation or peak measurements.
+The CLI exposes existing DF/triples work counters so a source census need not
+derive its expected inventory from the observer callback itself.
+
+The triples algorithm's identities/ages/cache decisions remain unchanged. Its
+separate three-entry diagnostic PanelSources ledger intentionally uses 48 bytes
+of zero-initialized stack storage, including while capture is disabled. A late
+v2 enable followed by an already-existing panel cache hit therefore returns the
+explicit unknown identity zero. A different permit cannot inherit a cached
+producer identity. Invalid slots fail closed without out-of-bounds access.
+CPU controls exercise these paths directly, not by asserting source spelling.
+
+Optional paired moment submission retains the original short-circuit and call.
+Its observer scope records bounded decline status2 when that existing optional
+call returns false; this is separate from scientific exception status1. The
+collector must interpret the typed site/status and independent admitted route,
+not silently treat every declined optional attempt as completed GPU production.
+These source additions still do not establish collector losslessness, installed
+build qualification, device execution, independent scientific acceptance or
+whole-endpoint attribution.
+
+The Owner's optional replay-batch storage uses zero as a scalar-fallback
+sentinel. Admission reports effective width through the same replay tile rule
+used by the real loop: positive remaining Q with no prepared batch means width1,
+no Q means width0, and prepared batches retain their bounded/tail width. Tests
+connect this actual projection to literal scalar/batched/ragged/no-Q walks and
+prepared/allocation fallback doubles; they do not replace the emitted sentinel
+with a hardcoded synthetic width while leaving production reporting unchanged.
+
+Triples census keeps three layers distinct: logical W products, issued vendor
+GEMM-family calls (including batched calls), and actual device kernel records.
+For nine occupied orbitals the independent combinatorial domain has165
+triangular tiles,729 ordered physical tuples and1458 two-product W terms. A
+successful pair can represent four logical products through two batched vendor
+calls plus helper kernels. None of these numbers alone fixes device kernel
+count. Admitted lowering, pointer/panel capacity and accepted/declined pairing
+remain required inputs to the mapping.

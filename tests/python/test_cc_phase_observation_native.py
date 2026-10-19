@@ -38,6 +38,7 @@ EMITTER = r"""
 #include <stdexcept>
 
 #include "cc/phase_observation.hpp"
+#include "cc/replay_tiles.hpp"
 namespace phase = generativeqc::cc::phase_observation;
 extern "C" int generativeqc_cc_phase_enable_v1(std::uint64_t version, phase::Observer cb, void* ctx,
                                                std::uint64_t* permit) {
@@ -75,9 +76,11 @@ extern "C" void fixture_plan(int mode) {
   unsigned replay_batch = 8;
   {
     phase::Scope setup(phase::Site::setup_inclusive);
-    replay_batch = mode == 1 ? 1 : 4;
+    // Optional prepare/allocation refusal leaves the real stored sentinel zero.
+    replay_batch = (mode == 1 || mode == 2) ? 0 : 4;
   }
-  phase::admitted_plan(phase::PlanOwner::ccsd, 488, 8, replay_batch,
+  phase::admitted_plan(phase::PlanOwner::ccsd, 488, 8,
+                        generativeqc::cc::detail::replay_tile_width(488,replay_batch,true),
                        phase::hoisted | phase::matrix | phase::replay_matrix, 8000000, 4000000,
                        3000000);
   {
@@ -93,6 +96,57 @@ extern "C" void fixture_plan(int mode) {
       phase::Scope accumulation(phase::Site::q_accumulation_submission, 0, 8, 0, producer_id);
     }
   }
+}
+extern "C" void fixture_details(bool unknown) {
+  phase::Scope root(phase::Site::endpoint_inclusive);
+  if (unknown) { phase::Scope invalid(static_cast<phase::Site>(999)); return; }
+  { phase::Scope source(phase::Site::source_inclusive, 230, 488);
+    phase::Scope production(phase::Site::source_gpu_submission, 0, 488); }
+  { phase::Scope triples(phase::Site::triples_inclusive, 9, 221);
+    phase::admitted_triples(9,221,488,3,4096,0,64,64,64,8000000,4000000);
+    phase::Scope tile(phase::Site::triples_tile_inclusive,5,171);
+    phase::Scope panel(phase::Site::triples_panel_submission,2,0);
+    const auto producer=panel.identity();panel.close();
+    phase::Scope moment(phase::Site::triples_moment_submission,0,1,0,producer); }
+}
+extern "C" std::uint64_t fixture_late_panel_cache(void (*enable_inside)()) {
+  phase::PanelSources sources;
+  enable_inside();
+  return sources.dependency(0); // Existing logical cache hit, no observed producer.
+}
+extern "C" std::uint64_t fixture_panel_cache(bool remember) {
+  static phase::PanelSources sources;
+  if (remember) sources.remember(0, 123);
+  return sources.dependency(0);
+}
+extern "C" std::uint64_t fixture_panel_bounds() {
+  phase::PanelSources sources;
+  return sources.dependency(3);
+}
+extern "C" void fixture_replay_rule() {
+  using generativeqc::cc::detail::replay_tile_width;
+  static_assert(replay_tile_width(0,0,true)==0);
+  static_assert(replay_tile_width(13,0,true)==1);
+  static_assert(replay_tile_width(13,4,true)==4);
+  static_assert(replay_tile_width(3,8,true)==3);
+  for (auto stored : {0u,4u}) {
+    std::size_t offset=0,tiles=0;
+    const std::size_t expected_batched[4]{4,4,4,1};
+    while(offset<13) {
+      const auto width=replay_tile_width(13-offset,stored,true);
+      if(width!=(stored?expected_batched[tiles]:1))throw std::runtime_error("actual replay rule mismatch");
+      offset+=width;++tiles;
+    }
+    if(tiles!=(stored?4u:13u))throw std::runtime_error("actual replay traversal mismatch");
+  }
+  if(replay_tile_width(13,4,false)!=1)throw std::runtime_error("non-physical scalar route changed");
+}
+extern "C" void fixture_no_q_projection() {
+  phase::Scope root(phase::Site::endpoint_inclusive);
+  phase::Scope solve(phase::Site::ccsd_solve_inclusive);
+  phase::admitted_plan(phase::PlanOwner::ccsd,0,1,
+      generativeqc::cc::detail::replay_tile_width(0,0,true),
+      phase::conventional,8000000,4000000,3000000);
 }
 """
 CLIENT = r"""
@@ -123,6 +177,9 @@ std::uint64_t plan_id = 0, producer_id = 0;
 std::uint64_t end_statuses[16]{};
 unsigned end_count = 0;
 unsigned events = 0;
+unsigned triples_admissions = 0, detailed_sites = 0;
+std::uint64_t triples_plan = 0;
+std::uint64_t last_admitted_auxiliary=999,last_admitted_replay=999;
 std::uint64_t token = 0;
 int context = 1, newcontext = 2;
 bool busy_rejected = false;
@@ -131,6 +188,18 @@ void require(bool x, const char* s) {
 }
 void callback(const std::uint64_t* v, std::size_t n, void*) {
   ++events;
+  if(n==14 && v[0]==0x434350410001ULL){last_admitted_auxiliary=v[5];last_admitted_replay=v[7];}
+  if (n == 17 && v[0] == 0x434354410001ULL) {
+    require(v[4]==9 && v[5]==221 && v[6]==488 && v[7]==3 && v[8]==4096 &&
+            v[10]==64 && v[11]==64 && v[12]==64 && v[13]==8000000 &&
+            v[14]==4000000 && v[15]==token && v[16]==0, "typed reserved triples plan");
+    ++triples_admissions;triples_plan=v[2];
+  }
+  if (n == 12 && v[0] == 0x434350480001ULL && v[4] == 28) {
+    require(v[5]==5 && v[6]==171 && v[7]==triples_plan && v[10]==token,
+            "canonical triples tuple and admitted plan");
+    ++detailed_sites;
+  }
   if (n == 12 && v[0] == 0x434350480001ULL && v[1] == 2) {
     require(end_count < 16, "bounded end-status fixture");
     end_statuses[end_count++] = v[11];
@@ -174,6 +243,10 @@ void replacement() {
   std::uint64_t e = 0;
   require(unbind(callback, &context, &e) == 0, "replace detach");
   require(bind(callback, &newcontext) == 0, "replace rebind");
+}
+void enable_detailed_inside() {
+  require(enable(generativeqc::cc::phase_observation::kDetailedContract,
+                 callback, &context, &token) == 0, "late explicit permit");
 }
 template <class F>
 F symbol(void* l, const char* n) {
@@ -222,9 +295,10 @@ int main(int argc, char** argv) {
     require(enable(contract + 1, callback, &context, &token) != 0, "unknown diagnostic contract");
     require(enable(contract, callback, &newcontext, &token) != 0, "foreign live owner");
     require(enable(contract, callback, &context, &token) == 0 && token, "explicit contract enable");
-    if (mode == "admission" || mode == "fallback-admission") {
+    if (mode == "admission" || mode == "fallback-admission" || mode=="allocation-fallback-admission") {
       expected_replay = mode == "admission" ? 4 : 1;
-      symbol<void (*)(int)>(l, "fixture_plan")(mode == "admission" ? 0 : 1);
+      symbol<void (*)(int)>(l, "fixture_plan")(mode == "admission" ? 0 : mode=="fallback-admission"?1:2);
+      symbol<void (*)()>(l,"fixture_replay_rule")();
       require(plan_seen == 1 && events == 17, "admission after setup and phase inventory");
       require(finish(token, &errors) == 0 && errors == 0, "admission complete control lifetime");
     } else if (mode == "normal") {
@@ -274,6 +348,36 @@ int main(int argc, char** argv) {
       require(finish(token, &errors) == 0 && errors != 0, "exhausted trace incomplete");
       require(enable(contract, callback, &context, &token) != 0,
               "new CC admission refused at saturation");
+    } else if (mode == "legacy-details" || mode == "detailed" || mode == "unknown-site") {
+      if (mode != "legacy-details") {
+        require(finish(token,&errors)==0 && errors==0,"finish legacy view");
+        require(enable(generativeqc::cc::phase_observation::kDetailedContract,
+                       callback,&context,&token)==0,"explicit detailed v2 contract");
+      }
+      symbol<void (*)(bool)>(l,"fixture_details")(mode=="unknown-site");
+      if(mode=="legacy-details")require(events==2 && triples_admissions==0 && detailed_sites==0,
+                                         "v1 never receives new layouts/sites");
+      else if(mode=="detailed")require(triples_admissions==1 && detailed_sites==2,"v2 detailed delivery");
+      require(finish(token,&errors)==0 && (errors!=0)==(mode=="unknown-site"),
+              "unknown site fails closed without scientific exception");
+    } else if (mode == "late-panel-cache") {
+      require(finish(token,&errors)==0 && errors==0,"finish preexisting view");
+      require(symbol<std::uint64_t (*)(void (*)())>(l,"fixture_late_panel_cache")(
+                  enable_detailed_inside)==0,"late cache hit is explicitly unobserved, not uninitialized");
+      auto cache=symbol<std::uint64_t (*)(bool)>(l,"fixture_panel_cache");
+      require(cache(true)==123,"same permit diagnostic producer");
+      require(finish(token,&errors)==0 && errors==0,"finish first permit");
+      enable_detailed_inside();
+      require(cache(false)==0,"new permit cannot inherit cached source identity");
+      require(finish(token,&errors)==0 && errors==0,"finish new permit");
+    } else if (mode == "panel-bounds") {
+      require(symbol<std::uint64_t (*)()>(l,"fixture_panel_bounds")()==0,
+              "invalid diagnostic slot returns unknown");
+      require(finish(token,&errors)==0 && errors!=0,"bounds failure remains incomplete");
+    } else if(mode=="no-q-admission") {
+      symbol<void (*)()>(l,"fixture_no_q_projection")();
+      require(last_admitted_auxiliary==0 && last_admitted_replay==0,"no-Q stays absent, never scalar width1");
+      require(finish(token,&errors)==0 && errors==0,"no-Q observation closes");
     } else if (mode == "source-id-exhaustion") {
       symbol<void (*)()>(l, "fixture_exhaust_source_ids")();
       emit(0, nullptr);
@@ -346,8 +450,15 @@ def phase_probe(
         "exhaustion",
         "admission",
         "fallback-admission",
+        "allocation-fallback-admission",
         "null-context",
         "source-id-exhaustion",
+        "legacy-details",
+        "detailed",
+        "unknown-site",
+        "late-panel-cache",
+        "panel-bounds",
+        "no-q-admission",
     ],
 )
 def test_cc_source_control_and_admission(

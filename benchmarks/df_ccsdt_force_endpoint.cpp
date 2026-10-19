@@ -240,6 +240,13 @@ int main(int argc, char** argv) {
       field("resident_jk_retry_seconds", result.orbital.resident_jk_retry_seconds);
       work_field("reference_seconds", result.primal.reference_seconds);
       work_field("source_seconds", result.primal.problem_seconds);
+      work_field("df_source_scans", result.primal.source_scans);
+      work_field("df_source_reads", result.primal.source_reads);
+      work_field("df_source_values", result.primal.source_values);
+      work_field("df_transform_fmas", result.primal.transform_fmas);
+      work_field("df_transform_stages", result.primal.transform_stages);
+      work_field("df_block_gemms", result.primal.mo_blocks);
+      work_field("df_cuda_transform_calls", result.primal.cuda_transform_calls);
       work_field("ccsd_seconds", result.primal.solver_seconds);
       field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
       if (ccsd_mixed_precision)
@@ -387,6 +394,16 @@ int main(int argc, char** argv) {
       work_field("source_weight_values", result.source_weight_values);
       work_field("metric_weight_values", result.metric_weight_values);
       work_field("triples_work", result.triples.contraction_summands);
+      work_field("triples_occupied_tiles", result.triples.occupied_tiles);
+      work_field("triples_panel_capacity", result.triples.panel_capacity);
+      work_field("triples_panel_calls", result.triples.panel_gemms);
+      // Logical two-product W work; batched vendor calls and device kernels
+      // have independent counts and must not be equated to this quantity.
+      work_field("triples_moment_products", result.triples.moment_gemms);
+      work_field("triples_epilogue_kernels", result.triples.epilogue_kernels);
+      work_field("triples_reduction_kernels", result.triples.reduction_kernels);
+      work_field("triples_reserved_bytes", result.triples.workspace_bytes);
+      work_field("triples_arena_bytes", result.triples.arena_bytes);
       field("triples_w_fp32_requested", triples_w_fp32);
       field("triples_w_resource_fallback", result.triples.resource_fallback);
       work_field("triples_w_storage_bits", result.triples.w_contraction_storage_bits);
