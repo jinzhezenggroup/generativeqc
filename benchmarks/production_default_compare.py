@@ -284,6 +284,16 @@ def compare(native: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]
             raise ValueError(f"mismatched default comparison: {key}")
     if native["force_policy"] not in FORCE_POLICIES:
         raise ValueError("unknown default force policy")
+    # An apples-to-apples device comparison needs at least the same GPU model.
+    native_gpu, reference_gpu = native.get("accelerator"), reference.get("accelerator")
+    checked_hardware = isinstance(native_gpu, dict) and isinstance(reference_gpu, dict)
+    if checked_hardware:
+        for property_name in (
+            "name", "compute_capability", "total_global_memory_bytes",
+            "multiprocessor_count",
+        ):
+            if native_gpu.get(property_name) != reference_gpu.get(property_name):
+                raise ValueError(f"different GPU hardware: {property_name}")
     n_time = statistics.median(s["seconds"] for s in left)
     g_time = statistics.median(s["seconds"] for s in right)
     n_response = {s["grid_response"] for s in left}
@@ -313,6 +323,7 @@ def compare(native: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]
         "accuracy": "unverified: no independent grid-converged E/F oracle",
         "science_equivalence_proved": False,
         "equal_fock_work_proved": False,
+        "gpu_hardware_model_verified": checked_hardware,
         "runtime_scope": "fresh owner, initialized CUDA context, "
         "constructor + SCF + forces + host export",
         "native_settings": left[0]["settings"],
@@ -406,6 +417,13 @@ def main(argv: list[str] | None = None) -> None:
             sample["repeat"] = repeat
             record["samples"].append(sample)
             _save(args.output, record)
+        if args.engine == "generativeqc":
+            library_path = Path(record["samples"][0]["native_library_path"])
+            digest = hashlib.sha256()
+            with library_path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1 << 20), b""):
+                    digest.update(chunk)
+            record["native_library_sha256"] = digest.hexdigest()
         record["status"] = "complete"
     except Exception as error:
         record.update(status="failed", error=f"{type(error).__name__}: {error}")
