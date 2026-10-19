@@ -21,6 +21,7 @@ from pathlib import Path
 
 try:
     from benchmarks._retention import raw_output_path
+    from benchmarks.cc_tile_capture_diagnostics import validate_diagnostics_policy
     from benchmarks.cc_tile_environment import (
         NativeSupervisor,
         atomic_json,
@@ -37,6 +38,7 @@ try:
     )
 except ModuleNotFoundError:
     from _retention import raw_output_path
+    from cc_tile_capture_diagnostics import validate_diagnostics_policy
     from cc_tile_environment import (
         NativeSupervisor,
         atomic_json,
@@ -142,6 +144,15 @@ def check_identity(identity: dict) -> None:
     validate_observation_policy(
         identity.get("observation_policy"), identity.get("observation_policy_sha256")
     )
+    warning_policy = identity.get("capture_diagnostics_policy")
+    if warning_policy is not None:
+        validate_diagnostics_policy(
+            warning_policy,
+            identity.get("capture_diagnostics_policy_sha256"),
+            identity["observation_policy"]["session_control"]["profiler"],
+        )
+    elif identity.get("capture_diagnostics_policy_sha256") is not None:
+        raise ValueError("capture diagnostics policy missing for hash")
 
 
 def check_science(record: dict, oracle: dict) -> dict:
@@ -262,6 +273,16 @@ def main() -> int:
     (args.output / "oracle.json").write_bytes(oracle_bytes)
     if binding_bytes is not None:
         (args.output / "nsys_binding.json").write_bytes(binding_bytes)
+    warning_policy = identity.get("capture_diagnostics_policy")
+    if warning_policy is not None:
+        parent_source = Path(warning_policy["profiler"]["argv"][-1])
+        parent_bytes = parent_source.read_bytes()
+        if (
+            hashlib.sha256(parent_bytes).hexdigest()
+            != warning_policy["parent_source_sha256"]
+        ):
+            raise ValueError("predeclared NVTX-only parent source changed")
+        (args.output / "nsys_parent.py").write_bytes(parent_bytes)
     # Resolve the actual loader choice before timing, using this frozen executable.
     loader = subprocess.run(
         ["ldd", str(args.executable.resolve())],
@@ -542,7 +563,7 @@ def main() -> int:
             # Directory failure still permits an attempted terminal receipt.
             retain_error("artifact inventory", error)
         if receipt["outcome"] == "PASS":
-            for name in {
+            required = {
                 "endpoint.json",
                 "oracle.json",
                 "native.log",
@@ -550,7 +571,12 @@ def main() -> int:
                 "child_environment.json",
                 "cc_tile_child.py",
                 "cc_tile_environment.py",
-            } - receipt["artifacts"].keys():
+            }
+            if binding is not None:
+                required.add("nsys_binding.json")
+            if warning_policy is not None:
+                required.add("nsys_parent.py")
+            for name in required - receipt["artifacts"].keys():
                 retain_error(
                     f"artifact {name}",
                     ValueError("required campaign artifact unavailable"),

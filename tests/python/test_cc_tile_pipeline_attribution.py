@@ -288,6 +288,17 @@ def sqlite_fixture(tmp_path: Path) -> tuple[Path, dict]:
     path = tmp_path / "nsys.sqlite"
     with sqlite3.connect(path) as db:
         db.executescript("""
+            create table DIAGNOSTIC_EVENT(timestamp integer,timestampType integer,source integer,
+                severity integer,text text,globalPid integer);
+            insert into DIAGNOSTIC_EVENT values(0,1,3,1,'fixture profiling info',-1);
+            create table ENUM_DIAGNOSTIC_SEVERITY_LEVEL(id integer,name text,label text);
+            insert into ENUM_DIAGNOSTIC_SEVERITY_LEVEL values
+                (0,'UnknownLevel','Unknown'),(1,'Info','Info'),(2,'Warning','Warning'),
+                (3,'Error','Error'),(4,'Verbose','Verbose');
+            create table ENUM_DIAGNOSTIC_SOURCE_TYPE(id integer,name text,label text);
+            insert into ENUM_DIAGNOSTIC_SOURCE_TYPE values
+                (0,'UnknownSource','Unknown'),(1,'Injection','Injection'),
+                (2,'Daemon','Daemon'),(3,'Analysis','Analysis');
             create table StringIds(id integer, value text);
             insert into StringIds values(1,'cudaStreamWaitEvent');
             create table NVTX_EVENTS(start integer,end integer,globalTid integer,text text,textId integer);
@@ -2121,3 +2132,365 @@ def test_profiled_child_requires_actual_parent_observed_process_identity(
         child["process"]["pid"] = 51
     with pytest.raises(ValueError):
         validate_child(child, plan, 50, observed)
+
+
+def diagnostics_fixture(tmp_path: Path) -> tuple[list[dict], dict, dict]:
+    from benchmarks.cc_tile_capture_diagnostics import (
+        PARENT_WARNINGS,
+        diagnostics_policy,
+    )
+
+    _, _, binding, parent = session_fixture()
+    source = tmp_path / "parent.py"
+    source.write_text("qualified wrapper fixture\n")
+    severity = {"UnknownLevel": 0, "Info": 1, "Warning": 2, "Error": 3, "Verbose": 4}
+    origins = {"UnknownSource": 0, "Injection": 1, "Daemon": 2, "Analysis": 3}
+    policy = diagnostics_policy(
+        binding["profiler"], checksum(source), severity, origins
+    )
+    rows = [
+        {
+            "timestamp": 0,
+            "timestampType": 1,
+            "source": 3,
+            "severity": 1,
+            "text": "Profiling has started.",
+            "globalPid": -1,
+        }
+    ]
+    rows.extend(
+        {
+            "timestamp": 1,
+            "timestampType": 2,
+            "source": 3,
+            "severity": 2,
+            "text": text,
+            "globalPid": parent["pid"] * 0x1000000,
+        }
+        for text in PARENT_WARNINGS
+    )
+    arguments = {
+        "profiler": binding["profiler"],
+        "severity_codes": severity,
+        "source_codes": origins,
+        "binding": binding,
+        "binding_hash": canonical_hash(binding),
+        "parent": parent,
+        "native": {"pid": 50, "starttime": "22000"},
+        "parent_global_tid": 44 * 0x1000000 + 44,
+        "native_global_pid": 50 * 0x1000000,
+        "parent_cuda_activities": 0,
+        "native_cuda_activities": 1,
+        "parent_source": source,
+    }
+    return rows, policy, arguments
+
+
+def test_predeclared_parent_warnings_are_retained_without_claiming_cuda_pass(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.cc_tile_capture_diagnostics import classify_diagnostics
+
+    rows, policy, arguments = diagnostics_fixture(tmp_path)
+    result = classify_diagnostics(rows, policy, canonical_hash(policy), **arguments)
+    assert result["accepted_parent_warning_count"] == 2
+    assert result["accepted_parent_warnings"] == rows[1:]
+    assert result["records"] == rows
+    assert "PASS" not in result["classification"]
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "native-warning",
+        "global-warning",
+        "unknown-warning",
+        "same-pid-other-domain",
+        "extra-text",
+        "duplicate",
+        "wrong-source",
+        "error",
+        "unknown-severity",
+        "unknown-source",
+        "bool-severity",
+        "bad-clock-type",
+        "missing-rows",
+        "parent-cuda",
+        "unknown-parent-cuda",
+        "native-no-cuda",
+        "unknown-native-cuda",
+        "parent-pid",
+        "parent-starttime",
+        "native-pid",
+        "source-changed",
+        "source-missing",
+        "tool-version",
+        "tool-hash",
+        "binding-hash",
+        "enum-drift",
+        "unknown-policy-field",
+        "extra-allowed-text",
+        "policy-hash",
+    ],
+)
+def test_diagnostics_parent_exception_cannot_hide_unknown_or_child_failure(
+    tmp_path: Path, defect: str
+) -> None:
+    from benchmarks.cc_tile_capture_diagnostics import classify_diagnostics
+
+    rows, policy, arguments = diagnostics_fixture(tmp_path)
+    if defect == "native-warning":
+        rows[1]["globalPid"] = arguments["native_global_pid"]
+    elif defect == "global-warning":
+        rows[1]["globalPid"] = -1
+    elif defect == "unknown-warning":
+        rows[1]["globalPid"] = 51 * 0x1000000
+    elif defect == "same-pid-other-domain":
+        rows[1]["globalPid"] += 1 << 48
+    elif defect == "extra-text":
+        rows[1]["text"] += " extra"
+    elif defect == "duplicate":
+        rows.append(deepcopy(rows[1]))
+    elif defect == "wrong-source":
+        rows[1]["source"] = 1
+    elif defect == "error":
+        rows[1]["severity"] = 3
+    elif defect == "unknown-severity":
+        rows[1]["severity"] = 0
+    elif defect == "unknown-source":
+        rows[1]["source"] = 0
+    elif defect == "bool-severity":
+        rows[1]["severity"] = True
+    elif defect == "bad-clock-type":
+        rows[1]["timestampType"] = 99
+    elif defect == "missing-rows":
+        rows = []
+    elif defect == "parent-cuda":
+        arguments["parent_cuda_activities"] = 1
+    elif defect == "unknown-parent-cuda":
+        arguments["parent_cuda_activities"] = None
+    elif defect == "native-no-cuda":
+        arguments["native_cuda_activities"] = 0
+    elif defect == "unknown-native-cuda":
+        arguments["native_cuda_activities"] = None
+    elif defect == "parent-pid":
+        arguments["parent"] = dict(arguments["parent"], pid=45)
+    elif defect == "parent-starttime":
+        arguments["parent"] = dict(arguments["parent"], starttime="12001")
+    elif defect == "native-pid":
+        arguments["native"]["pid"] = 51
+    elif defect == "source-changed":
+        arguments["parent_source"].write_text("changed\n")
+    elif defect == "source-missing":
+        arguments["parent_source"].unlink()
+    elif defect == "tool-version":
+        arguments["profiler"] = dict(arguments["profiler"], version="unqualified")
+    elif defect == "tool-hash":
+        arguments["profiler"] = dict(arguments["profiler"], sha256="b" * 64)
+    elif defect == "binding-hash":
+        arguments["binding_hash"] = "0" * 64
+    elif defect == "enum-drift":
+        arguments["source_codes"] = dict(arguments["source_codes"], Analysis=9)
+    elif defect == "unknown-policy-field":
+        policy["ignore_all_warnings"] = True
+    elif defect == "extra-allowed-text":
+        policy["parent_warnings"].append("GPU buffer overflow")
+    policy_hash = "0" * 64 if defect == "policy-hash" else canonical_hash(policy)
+    with pytest.raises(ValueError):
+        classify_diagnostics(rows, policy, policy_hash, **arguments)
+
+
+@pytest.mark.parametrize("defect", ["warnings", "missing-table", "unknown-enum"])
+def test_sqlite_diagnostics_fail_closed_without_prior_parent_policy(
+    tmp_path: Path, defect: str
+) -> None:
+    path, receipt = sqlite_fixture(tmp_path)
+    with sqlite3.connect(path) as db:
+        if defect == "warnings":
+            db.execute(
+                "update DIAGNOSTIC_EVENT set severity=2,text='No CUDA events collected. Does the process use CUDA?'"
+            )
+        elif defect == "missing-table":
+            db.execute("drop table DIAGNOSTIC_EVENT")
+        else:
+            db.execute(
+                "update ENUM_DIAGNOSTIC_SOURCE_TYPE set name='unrecognized' where id=3"
+            )
+    receipt["nsys"].update(
+        sqlite_sha256=checksum(path), sqlite_size=path.stat().st_size
+    )
+    with pytest.raises(ValueError):
+        read_nsys(path, receipt)
+
+
+def sqlite_parent_warning_fixture(tmp_path: Path) -> tuple[Path, dict]:
+    path, receipt = sqlite_fixture(tmp_path)
+    policy, execution, binding, parent = session_fixture()
+    diagnostic_rows, warning_policy, arguments = diagnostics_fixture(tmp_path)
+    receipt["identity"]["observation_policy"] = policy
+    receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+    receipt["identity"]["capture_diagnostics_policy"] = warning_policy
+    receipt["identity"]["capture_diagnostics_policy_sha256"] = canonical_hash(
+        warning_policy
+    )
+    receipt["execution_environment"] = execution
+    receipt["execution_environment_sha256"] = canonical_hash(execution)
+    receipt["profiler_session_binding"] = binding
+    receipt["profiler_session_binding_sha256"] = canonical_hash(binding)
+    receipt["parent_process"] = parent
+    receipt["native_process"] = arguments["native"]
+    receipt["capture"].update(
+        profiler_version=binding["profiler"]["version"],
+        profiler_sha256=binding["profiler"]["sha256"],
+        profiler_argv=binding["profiler"]["argv"],
+    )
+    parent_tid = arguments["parent_global_tid"]
+    native_pid = arguments["native_global_pid"]
+    native_tid = native_pid + arguments["native"]["pid"]
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "update NVTX_EVENTS set text='cc1765/complete-process',globalTid=? where text='endpoint'",
+            (parent_tid,),
+        )
+        db.execute(
+            "update NVTX_EVENTS set globalTid=? where text='prepare'", (native_tid,)
+        )
+        for statement in [
+            "update CUPTI_ACTIVITY_KIND_KERNEL set globalPid=? where globalPid=1",
+            "update CUPTI_ACTIVITY_KIND_MEMCPY set globalPid=? where globalPid=1",
+            "update CUPTI_ACTIVITY_KIND_SYNCHRONIZATION set globalPid=? where globalPid=1",
+        ]:
+            db.execute(statement, (native_pid,))
+        db.execute("update CUPTI_ACTIVITY_KIND_RUNTIME set globalTid=?", (native_tid,))
+        db.execute("delete from DIAGNOSTIC_EVENT")
+        db.executemany(
+            "insert into DIAGNOSTIC_EVENT values(?,?,?,?,?,?)",
+            [
+                (
+                    r["timestamp"],
+                    r["timestampType"],
+                    r["source"],
+                    r["severity"],
+                    r["text"],
+                    r["globalPid"],
+                )
+                for r in diagnostic_rows
+            ],
+        )
+    receipt["nsys"].update(
+        sqlite_sha256=checksum(path),
+        sqlite_size=path.stat().st_size,
+        cuda_global_pid=native_pid,
+        runtime_global_tids=[native_tid],
+        endpoint_label="cc1765/complete-process",
+        endpoint_global_tid=parent_tid,
+        parent_source_artifact=str(arguments["parent_source"]),
+    )
+    return path, receipt
+
+
+def test_sqlite_reader_binds_and_retains_only_parent_warning_exception(
+    tmp_path: Path,
+) -> None:
+    path, receipt = sqlite_parent_warning_fixture(tmp_path)
+    trace = read_nsys(path, receipt)
+    diagnostics = trace["extraction"]["diagnostics"]
+    assert diagnostics["accepted_parent_warning_count"] == 2
+    assert diagnostics["observed_parent_cuda_activities"] == 0
+    assert len(diagnostics["records"]) == 3
+    assert summarize(trace, receipt)["status"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "child-warning",
+        "parent-cuda-api",
+        "missing-parent-source",
+        "missing-policy",
+        "source-drift",
+    ],
+)
+def test_sqlite_reader_parent_exception_is_not_a_global_warning_filter(
+    tmp_path: Path, defect: str
+) -> None:
+    path, receipt = sqlite_parent_warning_fixture(tmp_path)
+    if defect == "child-warning":
+        with sqlite3.connect(path) as db:
+            db.execute(
+                "update DIAGNOSTIC_EVENT set globalPid=? where severity=2",
+                (receipt["nsys"]["cuda_global_pid"],),
+            )
+    elif defect == "parent-cuda-api":
+        with sqlite3.connect(path) as db:
+            db.execute(
+                "insert into CUPTI_ACTIVITY_KIND_RUNTIME values(1,2,?,99,1)",
+                (receipt["nsys"]["endpoint_global_tid"],),
+            )
+    elif defect == "missing-parent-source":
+        del receipt["nsys"]["parent_source_artifact"]
+    elif defect == "missing-policy":
+        del receipt["identity"]["capture_diagnostics_policy"]
+        del receipt["identity"]["capture_diagnostics_policy_sha256"]
+    else:
+        Path(receipt["nsys"]["parent_source_artifact"]).write_text("changed")
+    receipt["nsys"].update(
+        sqlite_sha256=checksum(path), sqlite_size=path.stat().st_size
+    )
+    with pytest.raises(ValueError):
+        read_nsys(path, receipt)
+
+
+@pytest.mark.parametrize("lost", [False, True])
+def test_campaign_retains_predeclared_parent_source_or_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lost: bool
+) -> None:
+    from benchmarks.cc_tile_capture_diagnostics import diagnostics_policy
+
+    _, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+    identity_path = tmp_path / "identity.json"
+    identity = json.loads(identity_path.read_text())
+    _, _, binding, _ = session_fixture()
+    source = tmp_path / "nvtx_parent.py"
+    source.write_text("parent source fixture\n")
+    profiler = dict(
+        binding["profiler"], argv=[*binding["profiler"]["argv"][:-1], str(source)]
+    )
+    observation = execution_environment(os.environ)["observation"]
+    identity["observation_policy"] = observation_policy(
+        observation, observation, nsys_profiler=profiler
+    )
+    identity["observation_policy_sha256"] = canonical_hash(
+        identity["observation_policy"]
+    )
+    identity["capture_diagnostics_policy"] = diagnostics_policy(
+        profiler,
+        checksum(source),
+        {"UnknownLevel": 0, "Info": 1, "Warning": 2, "Error": 3, "Verbose": 4},
+        {"UnknownSource": 0, "Injection": 1, "Daemon": 2, "Analysis": 3},
+    )
+    identity["capture_diagnostics_policy_sha256"] = canonical_hash(
+        identity["capture_diagnostics_policy"]
+    )
+    atomic_json(identity_path, identity)
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            fake_endpoint(command, kwargs, endpoint)
+
+        def wait(self, timeout: float) -> int:
+            if lost:
+                (output / "nsys_parent.py").unlink()
+            return 0
+
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    if lost:
+        with pytest.raises(ValueError, match="required campaign artifact"):
+            campaign_main()
+    else:
+        assert campaign_main() == 0
+        assert (output / "nsys_parent.py").read_bytes() == source.read_bytes()
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["outcome"] == ("FAIL" if lost else "PASS")

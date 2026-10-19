@@ -21,6 +21,11 @@ from typing import Any
 
 try:
     from benchmarks._retention import raw_output_path
+    from benchmarks.cc_tile_capture_diagnostics import (
+        classify_diagnostics,
+        strict_diagnostics,
+        validate_diagnostics_policy,
+    )
     from benchmarks.cc_tile_environment import (
         canonical_hash,
         validate_execution,
@@ -30,6 +35,11 @@ try:
     )
 except ModuleNotFoundError:
     from _retention import raw_output_path
+    from cc_tile_capture_diagnostics import (
+        classify_diagnostics,
+        strict_diagnostics,
+        validate_diagnostics_policy,
+    )
     from cc_tile_environment import (
         canonical_hash,
         validate_execution,
@@ -100,6 +110,34 @@ def read_nsys(database: Path, receipt: dict) -> dict:
                 raise ValueError(f"unsupported Nsight columns in {table}")
             # Only literal table names supplied by this adapter reach this helper.
             return db.execute(f'select rowid as attribution_rowid,* from "{table}"')  # noqa: S608
+
+        diagnostic_fields = (
+            "timestamp",
+            "timestampType",
+            "source",
+            "severity",
+            "text",
+            "globalPid",
+        )
+        diagnostic_rows = rows("DIAGNOSTIC_EVENT", list(diagnostic_fields))
+        if diagnostic_rows is None:
+            raise ValueError("Nsight diagnostics table unavailable")
+        diagnostics = [
+            {key: row[key] for key in diagnostic_fields} for row in diagnostic_rows
+        ]
+
+        def diagnostic_codes(table: str) -> dict:
+            values = rows(table, ["id", "name"])
+            if values is None:
+                raise ValueError("Nsight diagnostic enum table unavailable")
+            retained = list(values)
+            result = {row["name"]: row["id"] for row in retained}
+            if len(result) != len(retained):
+                raise ValueError("duplicate diagnostic enum name")
+            return result
+
+        severity_codes = diagnostic_codes("ENUM_DIAGNOSTIC_SEVERITY_LEVEL")
+        source_codes = diagnostic_codes("ENUM_DIAGNOSTIC_SOURCE_TYPE")
 
         start, end = receipt["endpoint"]["start_ns"], receipt["endpoint"]["end_ns"]
         signatures = set()
@@ -256,6 +294,66 @@ def read_nsys(database: Path, receipt: dict) -> dict:
             )
         else:
             raise ValueError("complete process endpoint NVTX range unavailable")
+        warning_policy = receipt["identity"].get("capture_diagnostics_policy")
+        if warning_policy is None:
+            diagnostic_result = strict_diagnostics(
+                diagnostics, severity_codes, source_codes
+            )
+        else:
+            if bound.get("endpoint_label") != "cc1765/complete-process":
+                raise ValueError("NVTX-only parent endpoint role is not proven")
+            parent_tid = integer(bound.get("endpoint_global_tid"), "parent NVTX tid")
+            parent_pid = parent_tid - parent_tid % 0x1000000
+            parent_activities = 0
+            diagnostic_activity_tables = []
+            for table, field in (
+                ("CUPTI_ACTIVITY_KIND_KERNEL", "globalPid"),
+                ("CUPTI_ACTIVITY_KIND_MEMCPY", "globalPid"),
+                ("CUPTI_ACTIVITY_KIND_MEMSET", "globalPid"),
+                ("CUPTI_ACTIVITY_KIND_SYNCHRONIZATION", "globalPid"),
+                ("CUPTI_ACTIVITY_KIND_RUNTIME", "globalTid"),
+                ("CUPTI_ACTIVITY_KIND_DRIVER", "globalTid"),
+            ):
+                activity = rows(table, [field])
+                if activity is None:
+                    continue
+                diagnostic_activity_tables.append(table)
+                for record in activity:
+                    value = record[field]
+                    if type(value) is not int or value < 0:
+                        raise ValueError("unbound CUDA activity process identifier")
+                    global_pid = (
+                        value - value % 0x1000000 if field == "globalTid" else value
+                    )
+                    parent_activities += global_pid == parent_pid
+            source_artifact = bound.get("parent_source_artifact")
+            if not isinstance(source_artifact, str) or not source_artifact:
+                raise ValueError("retained NVTX-only parent source required")
+            diagnostic_result = classify_diagnostics(
+                diagnostics,
+                warning_policy,
+                receipt["identity"].get("capture_diagnostics_policy_sha256"),
+                profiler=receipt["identity"]["observation_policy"]["session_control"][
+                    "profiler"
+                ],
+                severity_codes=severity_codes,
+                source_codes=source_codes,
+                binding=receipt.get("profiler_session_binding"),
+                binding_hash=receipt.get("profiler_session_binding_sha256"),
+                parent=receipt.get("parent_process"),
+                native=receipt.get("native_process"),
+                parent_global_tid=parent_tid,
+                native_global_pid=pid,
+                parent_cuda_activities=parent_activities,
+                native_cuda_activities=sum(row["kind"] == "kernel" for row in events),
+                parent_source=Path(source_artifact),
+            )
+            diagnostic_result["observed_parent_cuda_activities"] = parent_activities
+            diagnostic_result["inspected_activity_tables"] = diagnostic_activity_tables
+            diagnostic_result["activity_scope"] = (
+                "observed rows plus independently qualified wrapper source; "
+                "missing activity tables do not establish zero CUDA work or full coverage"
+            )
     if not any(row["kind"] == "kernel" for row in events):
         raise ValueError("selected CUDA process/device has no executed kernels")
     trace = {
@@ -277,7 +375,8 @@ def read_nsys(database: Path, receipt: dict) -> dict:
     }
     host_wait_segments = partition(host_waits, start, end)
     trace["extraction"] = {
-        "adapter": "nsys-cuda-nvtx-columns-v1",
+        "adapter": "nsys-cuda-nvtx-columns-v2",
+        "diagnostics": diagnostic_result,
         "rows": rows_read,
         "sqlite_sha256": checksum(database),
         "wait_scope": "CUPTI synchronization intervals; host API waits remain a separate explanatory view",
@@ -334,6 +433,22 @@ def validate_identity(actual: dict, expected: dict) -> None:
         raise ValueError("semantic environment profiles differ")
     if actual["observation_policy"] != expected["observation_policy"]:
         raise ValueError("observation recipes differ")
+    for identity in (actual, expected):
+        policy = identity.get("capture_diagnostics_policy")
+        policy_hash = identity.get("capture_diagnostics_policy_sha256")
+        if policy is not None:
+            validate_diagnostics_policy(
+                policy,
+                policy_hash,
+                identity["observation_policy"]["session_control"]["profiler"],
+            )
+        elif policy_hash is not None:
+            raise ValueError("diagnostics policy missing for retained hash")
+    if any(
+        actual.get(key) != expected.get(key)
+        for key in ("capture_diagnostics_policy", "capture_diagnostics_policy_sha256")
+    ):
+        raise ValueError("capture diagnostics policies differ")
     for key in IDENTITY:
         value = actual.get(key)
         if not isinstance(value, str) or not value or value != expected.get(key):

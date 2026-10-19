@@ -123,6 +123,13 @@ def read_run(directory: Path) -> dict[str, Any]:
         or json.loads((directory / "nsys_binding.json").read_text()) != binding
     ):
         raise ValueError("retained outer profiler binding artifact mismatch")
+    warning_policy = identity.get("capture_diagnostics_policy")
+    if warning_policy is not None and (
+        "nsys_parent.py" not in artifacts
+        or checksum(directory / "nsys_parent.py")
+        != warning_policy["parent_source_sha256"]
+    ):
+        raise ValueError("retained NVTX-only parent source mismatch")
     plan = json.loads((directory / "execution_plan.json").read_text())
     if plan != {
         "argv": receipt.get("command"),

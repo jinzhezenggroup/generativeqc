@@ -109,3 +109,32 @@ must survive teardown. An owned session row may briefly outlive target reap;
 bounded settlement cannot convert query failure or unknown state into success.
 The formal outer controller still needs all-exception cleanup qualification,
 new-head validation/review and prelaunch audit before another GPU submission.
+
+## Predeclared capture-diagnostics policy
+
+The later CPU CUDA/NVTX control retained real session/PID/starttime bindings and
+both NVTX ranges, but emitted two Analysis warnings on each CPU-only process:
+`CUDA profiling might have not been started correctly.` and `No CUDA events
+collected. Does the process use CUDA?`. With no CUDA activity tables this remains
+INCOMPLETE. The successful NVTX-only control and all original warnings remain
+unchanged. Neither case is a CUDA qualification.
+
+A separately frozen diagnostics policy now permits at most one of each exact
+warning on the independently qualified NVTX-only parent only. Actual profiler
+identity/version/argv and enum maps, parent PID/starttime plus exact serialized
+NVTX identity, original policy/binding hashes, retained wrapper source bytes,
+zero observed parent CUDA activity and positive native kernel activity are
+mandatory. The raw reader rejects warning/error/unknown diagnostics by default
+and rejects native/global/unknown PID, extra/duplicate/wrong-source warnings even
+with self-consistent refreshed hashes. All original rows and admitted-warning
+counts remain in the derived report. Missing tables remain unavailable; this
+classification alone does not establish a lossless capture or scientific PASS.
+
+The parent must not initialize/query CUDA to suppress these diagnostics. A
+separate CPU ldd-helper comparison, with and without inherited injection,
+produced only the same parent/CPU-child warnings. No loader execution semantics
+or production C++ change is needed. The shared warning policy and wrapper source
+must be frozen before any of the three samples. The campaign copies that source into each
+run; declared parent/binding artifacts missing at finalization fail closed.
+The reader rehashes the retained source. It cannot replace independent review of
+the wrapper's NVTX-only source contract with a self-reported role or hash label.
