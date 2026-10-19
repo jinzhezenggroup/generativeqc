@@ -34,9 +34,9 @@ void verify_scf_defaults() {
   descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
   auto options = common_scf_options(descriptor);
-  require(!options.preliminary_guess && options.max_iterations == 50 &&
-              options.diis_history == 8 && options.energy_tolerance == 1.0e-9 &&
-              options.density_tolerance == 1.0e-8 && options.screening_tolerance == 1.0e-13 &&
+  require(!options.preliminary_guess && options.max_iterations == 50 && options.diis_history == 8 &&
+              options.energy_tolerance == 1.0e-9 && options.density_tolerance == 1.0e-8 &&
+              options.screening_tolerance == 1.0e-13 &&
               options.application_precision_budget == std::array<double, 3>{},
           "HF/KS common SCF defaults changed");
 
