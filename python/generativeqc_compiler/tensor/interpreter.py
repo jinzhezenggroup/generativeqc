@@ -147,7 +147,14 @@ def _evaluate(
             arguments.extend((value, list(labels)))
         # optimize=False keeps a deterministic direct reference contraction;
         # contraction-tree selection is a separate lowering concern.
-        result = np.einsum(*arguments, list(a["output"]), optimize=False)
+        # Some NumPy einsum kernels read a zero-stride value even when the
+        # reduction extent is zero. Preserve the empty contraction identity
+        # without inspecting backing bytes outside the logical operands.
+        result = (
+            np.zeros(node.spec.shape, dtype=node.spec.dtype)
+            if any(value.size == 0 for value in operands)
+            else np.einsum(*arguments, list(a["output"]), optimize=False)
+        )
         return result * _coefficient(a["coefficient"], node.spec.dtype)
     if op == "runtime_indexed_select":
         value, maps = operands[0], operands[1:]

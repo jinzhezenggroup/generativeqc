@@ -474,6 +474,8 @@ def _jvp_einsum(node: Node, values: typing.Any, tangents: typing.Any) -> np.ndar
     output = list(node.attrs["output"])
     coefficient = _coefficient(node.attrs["coefficient"], node.spec.dtype)
     result = _zeros(node.spec)
+    if any(value.size == 0 for value in values):
+        return result
     for differentiated in range(len(node.inputs)):
         arguments = []
         for operand, (value, tangent, label) in enumerate(
@@ -728,6 +730,11 @@ def _vjp_einsum(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndar
     labels = node.attrs["labels"]
     output = list(node.attrs["output"])
     coefficient = _coefficient(node.attrs["coefficient"], node.spec.dtype)
+    if any(value.size == 0 for value in values):
+        return [
+            np.zeros(value.shape, dtype=node.spec.dtype) * coefficient
+            for value in values
+        ]
     if any(
         len(set(operand_labels)) != len(operand_labels) for operand_labels in labels
     ):
