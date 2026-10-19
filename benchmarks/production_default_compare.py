@@ -150,7 +150,9 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
             "solve_count": validation.solve_count,
             "gradient_admission": validation.gradient_admission,
             "fallback_reasons": list(validation.fallback_reasons),
-            "budget": asdict(validation.budget) if validation.budget is not None else None,
+            "budget": asdict(validation.budget)
+            if validation.budget is not None
+            else None,
             "solves": [
                 {
                     "role": solve.role,
@@ -216,13 +218,18 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
         "grid_response": True,
         "settings": settings,
         "precision_validation": validation_info,
-        "mixed_fock_builds": work.get("mixed_stage_fock_builds") if isinstance(work, dict) else None,
-        "gradient_arithmetic": gradient.get("returned_mode") if isinstance(gradient, dict) else None,
+        "mixed_fock_builds": work.get("mixed_stage_fock_builds")
+        if isinstance(work, dict)
+        else None,
+        "gradient_arithmetic": gradient.get("returned_mode")
+        if isinstance(gradient, dict)
+        else None,
         "native_library_path": str(Path(candidate._library._name).resolve()),
     }
     del calculator, candidate
     gc.collect()
     return sample
+
 
 def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
     """Time stock GPU4PySCF, without SCF, grid or force-response overrides."""
@@ -233,8 +240,13 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
     cp.cuda.runtime.deviceSynchronize()
     started = perf_counter()
     mol = gto.M(
-        atom=atoms, basis="def2-svp", cart=False,
-        charge=0, spin=0, unit="Bohr", verbose=0,
+        atom=atoms,
+        basis="def2-svp",
+        cart=False,
+        charge=0,
+        spin=0,
+        unit="Bohr",
+        verbose=0,
     )
     engine = rks.RKS(mol)
     engine.xc = METHODS[method][1]
@@ -297,6 +309,7 @@ def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
     gc.collect()
     return sample
 
+
 def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]]:
     if record.get("schema") != SCHEMA or record.get("engine") != engine:
         raise ValueError("wrong engine or schema")
@@ -356,7 +369,10 @@ def compare(
     records = {"gpu4pyscf": gpu4pyscf, "standard": standard, "fast": fast}
     samples = {arm: _checked_samples(records[arm], arm) for arm in ARMS}
     for key in ("problem", "phase", "endpoint"):
-        if len({json.dumps(records[arm].get(key), sort_keys=True) for arm in ARMS}) != 1:
+        if (
+            len({json.dumps(records[arm].get(key), sort_keys=True) for arm in ARMS})
+            != 1
+        ):
             raise ValueError(f"mismatched default comparison: {key}")
     # One real GPU model is mandatory for a reported speed ratio. Host-only
     # synthetic receipts may omit all accelerator metadata, but live records do not.
@@ -367,14 +383,15 @@ def compare(
     checked_hardware = all(present)
     if checked_hardware:
         for name in (
-            "name", "compute_capability", "total_global_memory_bytes",
+            "name",
+            "compute_capability",
+            "total_global_memory_bytes",
             "multiprocessor_count",
         ):
             if len({json.dumps(device.get(name)) for device in hardware}) != 1:
                 raise ValueError(f"different GPU hardware: {name}")
     medians = {
-        arm: statistics.median(row["seconds"] for row in samples[arm])
-        for arm in ARMS
+        arm: statistics.median(row["seconds"] for row in samples[arm]) for arm in ARMS
     }
     responses = {arm: {row["grid_response"] for row in samples[arm]} for arm in ARMS}
     if any(len(response) != 1 for response in responses.values()):
@@ -407,22 +424,21 @@ def compare(
         },
         "fast_statuses": fast_status,
         "fast_internal_solve_counts": fast_solve_counts,
-        "engine_settings": {
-            arm: samples[arm][0]["settings"] for arm in ARMS
-        },
+        "engine_settings": {arm: samples[arm][0]["settings"] for arm in ARMS},
         "same_gpu_hardware_verified": checked_hardware,
         "same_moving_grid_force_definition": equivalent_response,
         "force_definition_warning": (
-            None if equivalent_response
+            None
+            if equivalent_response
             else "GPU4PySCF uses its stock force grid_response default; "
-                 "GenerativeQC Standard/Fast use full moving-grid response. "
-                 "This is default end-user E+F runtime, not equal-force-work speedup."
+            "GenerativeQC Standard/Fast use full moving-grid response. "
+            "This is default end-user E+F runtime, not equal-force-work speedup."
         ),
         "accuracy": "not_qualified_against_independent_grid_converged_oracle",
         "science_equivalence_proved": False,
         "equal_fock_work_proved": False,
         "runtime_scope": "new calculator owner, initialized CUDA context, "
-                         "constructor+SCF+analytic force+host export",
+        "constructor+SCF+analytic force+host export",
     }
 
 
@@ -433,21 +449,18 @@ def main_table_markdown(comparisons: list[dict[str, Any]]) -> str:
         "GQC Standard (s) | GQC Fast (s) | Standard / GPU4 | Fast / GPU4 |"
     )
     lines = [headers, "|---|---:|---:|---:|---:|---:|---:|"]
-    rows = [
-        row
-        for item in comparisons
-        for row in item["main_table"]
-    ]
+    rows = [row for item in comparisons for row in item["main_table"]]
     for row in sorted(rows, key=lambda item: (item["method"], item["atoms"])):
         lines.append(
-            f'| {row["method"]} | {row["atoms"]} | '
-            f'{row["gpu4pyscf_default_seconds"]:.3f} | '
-            f'{row["generativeqc_standard_seconds"]:.3f} | '
-            f'{row["generativeqc_fast_seconds"]:.3f} | '
-            f'{row["standard_speedup_vs_gpu4pyscf"]:.2f}x | '
-            f'{row["fast_speedup_vs_gpu4pyscf"]:.2f}x |'
+            f"| {row['method']} | {row['atoms']} | "
+            f"{row['gpu4pyscf_default_seconds']:.3f} | "
+            f"{row['generativeqc_standard_seconds']:.3f} | "
+            f"{row['generativeqc_fast_seconds']:.3f} | "
+            f"{row['standard_speedup_vs_gpu4pyscf']:.2f}x | "
+            f"{row['fast_speedup_vs_gpu4pyscf']:.2f}x |"
         )
     return "\n".join(lines)
+
 
 def _save(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -505,15 +518,23 @@ def main(argv: list[str] | None = None) -> None:
         # Keep all three execution arms in independent Python processes, so
         # each has its own GPU/PySCF native state and clean cold seed.
         receipts = {
-            arm: args.output.with_name(f"{args.output.stem}-{arm}.json")
-            for arm in ARMS
+            arm: args.output.with_name(f"{args.output.stem}-{arm}.json") for arm in ARMS
         }
         for arm in ARMS:
             subprocess.run(
                 [
-                    sys.executable, "-m", "benchmarks.production_default_compare",
-                    arm, "--method", args.method, "--atoms", str(args.atoms),
-                    "--repeats", str(args.repeats), "--output", str(receipts[arm]),
+                    sys.executable,
+                    "-m",
+                    "benchmarks.production_default_compare",
+                    arm,
+                    "--method",
+                    args.method,
+                    "--atoms",
+                    str(args.atoms),
+                    "--repeats",
+                    str(args.repeats),
+                    "--output",
+                    str(receipts[arm]),
                 ],
                 check=True,
             )
@@ -595,13 +616,16 @@ def main(argv: list[str] | None = None) -> None:
     finally:
         _save(args.output, record)
     print(
-        json.dumps({
-            "engine": arm,
-            "seconds": [row["seconds"] for row in record["samples"]],
-            "status": record["status"],
-        }),
+        json.dumps(
+            {
+                "engine": arm,
+                "seconds": [row["seconds"] for row in record["samples"]],
+                "status": record["status"],
+            }
+        ),
         flush=True,
     )
+
 
 if __name__ == "__main__":
     main()
