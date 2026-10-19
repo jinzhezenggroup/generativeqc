@@ -28,9 +28,22 @@ GridSpec()*; GPU4PySCF receives its own completely unmodified grid.
 This exception is prominently recorded and is not represented as a pure
 zero-argument native hybrid run.
 
-Supported methods: LDA, PBE, PBE0, r2SCAN and WB97M-V. Do not silently
-replace r2SCAN-3c with plain r2SCAN: D4/gCP and its basis must also be
-included in a future independent complete-model implementation.
+Supported methods: LDA, PBE, PBE0, r2SCAN, **r2SCAN-3c** and WB97M-V.
+
+For r2SCAN-3c, native Standard and Fast use the canonical selector, which
+loads the pinned **def2-mTZVPP** basis, native D4 dispersion and gCP.
+GPU4PySCF does not expose an ordinary built-in r2SCAN-3c method: this
+benchmark uses its **unmodified default** R2SCAN electronic SCF/gradient
+with the same canonical def2-mTZVPP basis, then adds independent CPU D4
+and gCP energies/analytic gradients. Those corrections and their
+preparation are included in the complete timed GPU4 E+F endpoint.
+The exact independent reference was already used in
+`benchmarks/readme_omol25.py::reference_correction`.
+
+Therefore the r2SCAN-3c comparison is labeled "GPU4PySCF r2SCAN +
+independent CPU D4/gCP", never a native GPU4PySCF r2SCAN-3c selector.
+Only method-defined scientific inputs are shared: neither program
+receives the other's grid, initial guess, density or SCF tolerances.
 
 ## Scope
 
@@ -63,7 +76,7 @@ misreported as successful FP32 arithmetic. Do not reuse older matched-grid
 Execute inside a finite Slurm GPU allocation, using the same device
 and scientific case for all three arms:
 
-    srun ... python -m benchmarks.production_default_compare all --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/pbe0-96-defaults.json
+    srun ... python -m benchmarks.production_default_compare all --method r2scan-3c --atoms 96 --repeats 3 --output .artifacts/benchmarks/r2scan3c-96-defaults.json
 
 This launches three separate child processes, writes three JSON receipts
 (next to the combined JSON) and prints **one performance main table** with
