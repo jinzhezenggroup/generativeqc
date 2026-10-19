@@ -72,8 +72,10 @@ Strict FP64 tiled density and potential inner products use explicit FP64
 `fma`, even when the surrounding CUDA build disables implicit contraction.
 Storage and accumulation remain FP64, with the same reduction index order and
 one accumulator. Fusion changes rounding; cross potential products also add
-their two legs sequentially. Independent E/V and complete energy/force gates
-qualify that arithmetic. The range-sensitive diagonal fallback retains its
+their two legs sequentially. If a fused cross step becomes nonfinite, it retries
+the original grouped two-product expression so a cancelling leg cannot turn a
+previously finite step into an intermediate overflow. Independent E/V and
+complete energy/force gates qualify the arithmetic on their recorded source. The range-sensitive diagonal fallback retains its
 original two-product expression, and FP32/mixed products keep their separate
 arithmetic contract.
 

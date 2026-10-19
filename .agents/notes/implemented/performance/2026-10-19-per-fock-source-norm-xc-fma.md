@@ -203,3 +203,36 @@ The final n4:1192 profile independently confirms 24 Focks with median J
 dropped and no callback errors occurred. It agrees with the isolated candidate's
 3.257288 s, while the complete instrumented E/F gate also passes. Per-Fock
 samples are retained alongside the clean integration samples.
+
+
+## Review follow-up: finite-domain safeguards
+
+The measurements above retain their original source and library identities.
+The following bounded source corrections are later than that measured image;
+its GPU correctness and timing receipts are not relabelled as repaired-head runs.
+
+The FP64 potential's sequential fused cross step can overflow before its second,
+opposite-sign leg cancels. An executable control uses the actual GGA panel
+producer and potential body with A=2^1022, B=1.5*2^1023: point0 contributes B,
+point1 contributes +A and -A. The old grouped expression and all matrix entries
+are finite; nested FMA alone reports infinity. The fused path now retries the
+original grouping from the saved accumulator only when its result is nonfinite.
+Four sign/order cases and original-FMA/disabled-fallback negative controls retain
+this boundary. Finite fused results, FP32/mixed arithmetic and the diagonal
+range fallback remain unchanged. Extra guard/register cost has not been measured.
+
+The represented Hermite-source norm must not be capped by the old Q*D envelope.
+Public normalization accepts a two-primitive s shell with exponent5e-97 and a
+tiny normalized coefficient1e-150. Its stored self-pair transform times density
+3e-24 rounds to the smallest FP64 subnormal. The inherited envelope is
+1.4924430845890334e-203 while the analytic represented-source norm is
+2.4574206120103395e-203. This is a certificate-domain counterexample, not a
+newly demonstrated molecular J/SCF error above the acceptance tolerance.
+The direct outward triangle norm is retained without the redundant cap; the
+permanent control uses actual normalization/density/source bodies and an
+80-digit independent analytic norm, with zero/restore/window checks.
+
+Scoped host checks, negative controls and ordinary required CI qualify these
+repairs separately. No numerical tolerance, optional budget, retained receipt,
+full-source allowance divisor or scientific acceptance gate is weakened; no new
+GPU campaign is claimed.

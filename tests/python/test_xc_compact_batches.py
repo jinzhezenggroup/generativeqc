@@ -299,6 +299,42 @@ void close(double value,double expected) {
 
 _NUMERICS = r"""
 using namespace generativeqc::dft::cuda_xc_detail;
+void check_cross_fma_range_fallback() {
+  constexpr I active=16,count=16,panel=active*count;
+  for (int sign : {-1,1}) for (bool swapped : {false,true}) {
+    const double large=sign*0x1.8p1023,leg=sign*0x1p1022;
+    std::vector<double> ao(4*panel),coefficients(4*count),weights(count,1.0),
+        work(panel),potential(active*active);
+    ao[0]=1.0;
+    ao[panel+1]=1.0;
+    coefficients[count]=large;
+    ao[active]=ao[active+1]=1.0;
+    ao[panel+active]=swapped ? 1.0 : -1.0;
+    ao[panel+active+1]=swapped ? -1.0 : 1.0;
+    coefficients[count+1]=leg;
+    int error=0;
+    launch({2,1,1},{128,1,1},[&] {
+      compact_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
+          active,count,1,4,1,work.data(),&error);
+    });
+    assert(error==0);
+    assert(work[0]==0.0 && work[1]==large);
+    assert(work[active]==(swapped ? leg : -leg));
+    assert(work[active+1]==(swapped ? -leg : leg));
+    launch({1,1,1},{16,16,1},[&] {
+      tiled_potential_body<true,double>(ao.data(),work.data(),active,count,1,nullptr,
+          potential.data(),nullptr,false,&error,nullptr,active,0);
+    });
+    assert(error==0);
+    // Independent A W^T + W A^T: point1's two off-diagonal legs
+    // cancel exactly before adding point0's finite large contribution.
+    assert(potential[1]==large && potential[active]==large);
+    assert(potential[0]==(swapped ? 2*leg : -2*leg));
+    assert(potential[active+1]==(swapped ? -2*leg : 2*leg));
+    for (double value : potential) assert(std::isfinite(value));
+  }
+}
+
 void check_diagonal_ranges() {
   constexpr I active=16,count=16,panel=active*count;
   for (int trial=0;trial<3;++trial) {
@@ -485,5 +521,6 @@ int main() {
   for (I channel=0;channel<3;++channel) assert(totals[channel]==reference_totals[channel]);
   assert(error==0);
   check_diagonal_ranges();
+  check_cross_fma_range_fallback();
 }
 """

@@ -16,15 +16,19 @@ import subprocess
 import sys
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mpmath as mp
 import numpy as np
 import pytest
+from _cpp_source_support import cpp_function_definition
 from generativeqc_compiler.integral.md_j_engine_cuda import (
     _emit_primitive_norms,
     emit_md_j_engine_header,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 ANGULAR_PAIRS = tuple((bra, ket) for bra in range(5) for ket in range(5))
@@ -209,6 +213,109 @@ def test_hermite_norm_bounds_independent_coulomb_derivatives(
 @pytest.mark.parametrize("p", [0.0, -1.0, 1e-200, 1e200, math.inf, math.nan])
 def test_unrepresentable_hermite_norm_fails_open(md_engine: Any, p: float) -> None:
     assert math.isinf(md_engine.primitive_norm(p, 4, 34))
+
+
+def test_source_norm_covers_normalized_basis_subnormal_precontraction(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """A legacy Q*D cap need not bound the actual rounded Hermite source."""
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\n#define __host__\n#define __device__\n#define __global__\n"
+        "#define __constant__\n#define __forceinline__ inline\n"
+        "using cudaStream_t=void*; using cudaError_t=int;\n"
+    )
+    native = (ROOT / "src/scf/cuda/direct_md_j.cu").read_text()
+    kernels = "\n".join(
+        cpp_function_definition(native, name)
+        for name in ("md_j_density", "md_j_primitive_source_norms")
+    )
+    source, binary = tmp_path / "source_norm.cpp", tmp_path / "source_norm"
+    source.write_text(
+        r"""
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include "molecule/basis.hpp"
+#include "scf/cuda/direct_md_j.hpp"
+using namespace generativeqc::scf::cuda_execution;
+struct Dim { unsigned x; };
+Dim threadIdx{}, blockIdx{}, blockDim{32};
+template<class T> T atomicMax(T* address,T value) {
+  const T previous=*address; *address=std::max(previous,value); return previous;
+}
+long long __double_as_longlong(double value) {
+  long long bits; std::memcpy(&bits,&value,sizeof(bits)); return bits;
+}
+double __dadd_ru(double a,double b) { return std::nextafter(a+b,INFINITY); }
+"""
+        + NORM_INTRINSICS
+        + _emit_primitive_norms().replace("#if defined(__CUDACC__)", "#if 1")
+        + kernels
+        + r"""
+int main() {
+  generativeqc::core::System system;
+  system.atoms.push_back({2,{0.,0.,0.},0});
+  const double alpha=5e-97;
+  const double tiny=1e-150/std::pow(2*alpha/std::acos(-1.),.75);
+  system.shells.push_back({0,0,{{alpha,tiny},{alpha,1.}}});
+  std::string detail;
+  assert(generativeqc::molecule::validate_and_normalize(system,detail)==
+         GENERATIVEQC_STATUS_SUCCESS);
+  const double coefficient=system.shells[0].primitives[0].coefficient;
+  double transforms[2]{0.,coefficient*coefficient};
+  std::uint16_t slots[1]{1};
+  MdJPair pair{}; pair.hermites=pair.first_count=pair.second_count=1;
+  MdJPrimitive primitive{}; primitive.exponent=2*alpha;
+  double represented=0.,potential=0.,density_bound=0.;
+  double q=__dmul_ru(transforms[1],md_engine_hermite_norm(primitive.exponent,0,0));
+  MdJScreenBound leaf{}; MdJPrimitiveScreenState state{};
+  MdJView md{}; md.pairs=&pair; md.primitives=&primitive; md.primitive_count=1;
+  md.primitive_bounds=&q; md.density_bounds=&density_bound; md.density=&represented;
+  md.potential=&potential; md.transforms=transforms; md.transform_slots=slots;
+  md.hierarchy=&leaf; md.primitive_screen=&state;
+  DeviceBatch batch{}; batch.nbf=1;
+  for (const double density:{3e-24,0.,3e-24}) {
+    state={}; density_bound=std::abs(density);
+    md_j_density(batch,md,0,1,false,&density,nullptr);
+    md_j_primitive_source_norms(md,0,1);
+    assert(state.maximum_source_norm==leaf.qd);
+    std::printf("%.17g %.17g %.17g %.17g\n",primitive.exponent,represented,leaf.qd,
+                md_j_bound_product_up(q,density_bound));
+    state={}; md_j_primitive_source_norms(md,1,2);
+    assert(leaf.qd==0. && state.maximum_source_norm==0.);
+  }
+}
+"""
+    )
+    required_native_cxx.build_executable(
+        [source, ROOT / "src/molecule/basis.cpp"],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-O1",
+            "-ffp-contract=off",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ],
+    )
+    result = subprocess.run(
+        [str(binary)], check=True, capture_output=True, text=True, timeout=30
+    )
+    rows = [tuple(map(float, line.split())) for line in result.stdout.splitlines()]
+    assert len(rows) == 3 and rows[0] == rows[2]
+    assert rows[1][1:] == (0.0, 0.0, 0.0)
+    p, represented, bound, legacy_cap = rows[0]
+    assert represented == np.nextafter(0.0, 1.0)
+    with mp.workdps(80):
+        exponent = mp.mpf(p)
+        expected = mp.mpf(represented) * mp.sqrt(
+            2 * mp.pi ** mp.mpf("2.5") / (exponent**2 * mp.sqrt(2 * exponent))
+        )
+        assert mp.mpf(legacy_cap) < expected  # Establish the old-cap counterexample
+        assert mp.mpf(bound) >= expected
 
 
 NORM_INTRINSICS = r"""

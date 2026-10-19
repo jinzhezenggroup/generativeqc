@@ -78,9 +78,10 @@ Each directed primitive product receives an omission allowance of
 `min(screening_tolerance, 1e-12) / (maximum_pair_primitives * primitive_count)`.
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
-the represented Hermite source. Its minimum with the independently conservative
-primitive norm times the shell density envelope is stored in the existing
-hierarchy's `qD` field. Multiplying the output primitive norm by this source
+the represented Hermite source and is stored in the existing hierarchy's `qD`
+field. It is not capped by the uncontracted primitive norm times the shell
+density envelope: precontraction rounding near underflow can make that envelope
+smaller than the norm of the stored source. Multiplying the output primitive norm by this source
 bound, rounded upward, bounds the directed contribution to any output AO.
 The complete omitted absolute contribution to each J entry is thus
 bounded by `min(screening_tolerance, 1e-12)`; this bounds screening, not floating
@@ -169,7 +170,8 @@ independent science gate; missing/skipped tests do not qualify it.
 From a development checkout with a verified compiler cache on PATH:
 
 ```sh
-ccache --version
+compiler_cache="$(command -v sccache || command -v ccache)"
+"$compiler_cache" --version
 export PYTHONPATH=python:tests/python:.
 python benchmarks/md_j_engine_acceptance.py --timeout 1500 \
   --output .artifacts/md-j-host.json
