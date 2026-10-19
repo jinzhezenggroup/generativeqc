@@ -15,6 +15,7 @@ import pytest
 from benchmarks.qualify_residency_qz import snapshot
 from tools import residency_allocation
 from tools.audit_replay_allocations import InvalidReceipt
+from tools.capture_prepared_allocations import digest
 from tools.cupti_graph_inventory import GraphInventory
 from tools.cupti_residency_capture import CuptiCapture
 from tools.cupti_source_capture import SourceInventory
@@ -256,6 +257,7 @@ def constructor_environment(
     class LibraryDouble:
         def __init__(self, name: str) -> None:
             self._name = name
+            self._handle = id(self)
 
         def __getattr__(self, name: str) -> Any:
             def function(*args: Any) -> int:
@@ -294,7 +296,7 @@ def constructor_environment(
         return {
             "native_library": native_path,
             "qz_receipt": proof_path,
-            "qz_receipt_sha256": residency_allocation.digest(proof_path),
+            "qz_receipt_sha256": digest(proof_path),
         }
 
     def construct(kind: str, **kwargs: Any) -> Any:
@@ -401,4 +403,86 @@ def test_self_reported_platform_is_not_a_constructor_authorization(
     env = constructor_environment
     with pytest.raises(TypeError):
         env.construct("activity", platform="qz")
+    assert not env.state["enabled"]
+
+
+def test_receipt_hash_and_identity_use_one_byte_snapshot(
+    constructor_environment: Any,
+    receipt: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = constructor_environment
+    options = env.options()
+    replacement = deepcopy(receipt)
+    replacement["allocation"]["project_id"] = "unreviewed-project"
+    replacement["api"]["job"]["project_id"] = "unreviewed-project"
+
+    def replace_during_native_probe(_: Any) -> str:
+        options["qz_receipt"].write_text(json.dumps(replacement))
+        return env.state["uuid"]
+
+    monkeypatch.setattr(
+        residency_allocation, "native_uuid", replace_during_native_probe
+    )
+    _, proof = residency_allocation.allocation_identity(
+        options["native_library"],
+        options["qz_receipt"],
+        options["qz_receipt_sha256"],
+    )
+    assert proof["allocation"] == receipt["allocation"]
+    assert proof["receipt_sha256"] == options["qz_receipt_sha256"]
+    assert digest(options["qz_receipt"]) != proof["receipt_sha256"]
+
+
+@pytest.mark.parametrize("kind", ["activity", "graph", "source"])
+def test_constructor_rejects_hardlinked_collector_as_native(
+    constructor_environment: Any, kind: str
+) -> None:
+    env = constructor_environment
+    options = env.options()
+    alias = env.collector_path.with_name("collector-hardlink")
+    alias.hardlink_to(env.collector_path)
+    options["native_library"] = alias
+    env.native._name = str(alias)
+    with pytest.raises(InvalidReceipt, match="collector cannot substitute"):
+        env.construct(kind, **options)
+    assert not env.state["enabled"]
+
+
+@pytest.mark.parametrize("kind", ["graph", "source"])
+def test_constructor_rejects_same_name_with_different_loaded_handle(
+    constructor_environment: Any, kind: str
+) -> None:
+    env = constructor_environment
+    other_native = type(env.native)(env.native._name)
+    assert other_native._handle != env.native._handle
+    constructor = GraphInventory if kind == "graph" else SourceInventory
+    with pytest.raises(InvalidReceipt, match="handle/library mismatch"):
+        constructor(env.collector_path, other_native, capacity=64, **env.options())
+    assert not env.state["enabled"]
+
+
+@pytest.mark.parametrize("kind", ["graph", "source"])
+def test_constructor_accepts_another_wrapper_for_the_same_loaded_handle(
+    constructor_environment: Any, kind: str
+) -> None:
+    env = constructor_environment
+    same_native = type(env.native)(env.native._name)
+    same_native._handle = env.native._handle
+    constructor = GraphInventory if kind == "graph" else SourceInventory
+    assert constructor(env.collector_path, same_native, capacity=64, **env.options())
+    assert env.state["enabled"]
+
+
+def test_one_snapshot_parser_still_rejects_duplicate_keys(
+    constructor_environment: Any,
+) -> None:
+    env = constructor_environment
+    options = env.options()
+    proof_path = options["qz_receipt"]
+    proof_path.write_text('{"schema":"first","schema":"second"}')
+    with pytest.raises(InvalidReceipt, match="duplicate JSON field"):
+        residency_allocation.allocation_identity(
+            options["native_library"], proof_path, digest(proof_path)
+        )
     assert not env.state["enabled"]

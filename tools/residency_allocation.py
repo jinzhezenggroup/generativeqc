@@ -9,6 +9,8 @@ original API response alongside the receipt for external provenance review.
 from __future__ import annotations
 
 import ctypes
+import hashlib
+import json
 import os
 import socket
 import subprocess
@@ -16,8 +18,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from tools.audit_replay_allocations import _require
-from tools.capture_prepared_allocations import digest, load, visible_device_uuid
+from tools.audit_replay_allocations import _require, _unique_object
+from tools.capture_prepared_allocations import visible_device_uuid
 
 SCHEMA = "generativeqc.qz-allocation.v1"
 
@@ -42,17 +44,21 @@ def require_cupti_allocation(
         and all(c in "0123456789abcdef" for c in qz_receipt_sha256),
         "incomplete or invalid qz CUPTI allocation inputs",
     )
+    native_library = native_library.resolve(strict=True)
+    collector = collector.resolve(strict=True)
     _require(
-        native_library.resolve() != collector.resolve(),
+        not native_library.samefile(collector),
         "collector cannot substitute for the qualified native library",
     )
     if native is not None:
         _require(
             isinstance(getattr(native, "_name", None), str)
-            and Path(native._name).resolve() == native_library.resolve(),
+            and Path(native._name).resolve() == native_library,
             "observer native handle/library mismatch",
         )
-    allocation_identity(native_library, qz_receipt, qz_receipt_sha256)
+    allocation_identity(
+        native_library, qz_receipt, qz_receipt_sha256, observer_native=native
+    )
 
 
 def validate_qz(
@@ -182,7 +188,11 @@ def native_uuid(library: Path) -> str:
 
 
 def allocation_identity(
-    library: Path, receipt_path: Path | None = None, receipt_sha256: str | None = None
+    library: Path,
+    receipt_path: Path | None = None,
+    receipt_sha256: str | None = None,
+    *,
+    observer_native: Any = None,
 ) -> tuple[str, dict[str, Any]]:
     """Preserve the original Slurm contract unless an explicit qz proof is given."""
     if receipt_path is None:
@@ -193,13 +203,15 @@ def allocation_identity(
             "job_id": os.environ["SLURM_JOB_ID"],
             "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
         }
+    receipt_bytes = receipt_path.read_bytes()
     _require(
-        receipt_sha256 is not None and digest(receipt_path) == receipt_sha256,
+        receipt_sha256 is not None
+        and hashlib.sha256(receipt_bytes).hexdigest() == receipt_sha256,
         "qz receipt hash mismatch",
     )
     uuid = native_uuid(library)
     proof = validate_qz(
-        load(receipt_path),
+        json.loads(receipt_bytes, object_pairs_hook=_unique_object),
         uuid=uuid,
         hostname=socket.gethostname(),
         environment=dict(os.environ),
@@ -207,6 +219,15 @@ def allocation_identity(
     )
     proof["receipt_sha256"] = receipt_sha256
     native = ctypes.CDLL(str(library.resolve()))
+    if observer_native is not None:
+        # Reuse the existing qualification load, rather than loading another
+        # DSO solely for comparison. _handle is the dlopen/LoadLibrary handle;
+        # _name alone may resolve to a different DSO after a symlink changes.
+        _require(
+            type(getattr(observer_native, "_handle", None)) is int
+            and observer_native._handle == native._handle,
+            "observer native handle/library mismatch",
+        )
     versions = {}
     for symbol in ("cudaRuntimeGetVersion", "cudaDriverGetVersion"):
         function = getattr(native, symbol)
