@@ -42,9 +42,13 @@ __global__ void md_j_density_bounds(DeviceBatch batch, MdJView md, std::size_t b
   }
   for (unsigned stride = kMdThreads / 2; stride; stride /= 2)
     maximum = fmax(maximum, __shfl_down_sync(0xffffffff, maximum, stride));
-  if (threadIdx.x == 0)
-    md.density_bounds[blockIdx.x] =
-        __dmul_ru(maximum, components * (pair.first == pair.second ? 1.0 : 2.0));
+  if (threadIdx.x == 0) {
+    const auto bound = __dmul_ru(maximum, components * (pair.first == pair.second ? 1.0 : 2.0));
+    md.density_bounds[blockIdx.x] = bound;
+    if (md.primitive_screen)
+      atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_density),
+                static_cast<unsigned long long>(__double_as_longlong(bound)));
+  }
 }
 
 __global__ void md_j_bounds(DeviceBatch batch, MdJView md, const double* bounds) {
@@ -141,6 +145,32 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
       md.transforms[primitive.transform_offset + slot] = weight * value;
     }
   }
+}
+
+/** Use the compiler's Hermite norm on the cached, normalized public-AO E.
+ * Taking absolute values before summing is essential: cancellation in a
+ * contracted shell must never hide a large signed primitive contribution. */
+__global__ void md_j_primitive_bounds(MdJView md) {
+  const auto primitive = md.primitives[blockIdx.x];
+  const auto pair = md.pairs[primitive.pair];
+  double maximum = 0.0;
+  for (unsigned component = threadIdx.x;
+       component < static_cast<unsigned>(pair.first_count * pair.second_count);
+       component += blockDim.x) {
+    double norm = 0.0;
+    for (unsigned index = 0; index < pair.hermites; ++index) {
+      const double coefficient = fabs(md_j_transform(md, primitive, pair, component, index));
+      if (coefficient == 0.0) continue;
+      const double term =
+          __dmul_ru(coefficient, md_engine_hermite_norm(primitive.exponent, pair.angular, index));
+      norm = __dadd_ru(norm, term);
+      if (!isfinite(norm)) norm = INFINITY;
+    }
+    maximum = fmax(maximum, norm);
+  }
+  for (unsigned stride = kMdThreads / 2; stride; stride /= 2)
+    maximum = fmax(maximum, __shfl_down_sync(0xffffffffU, maximum, stride));
+  if (threadIdx.x == 0) md.primitive_bounds[blockIdx.x] = maximum;
 }
 
 __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, std::size_t end,
@@ -310,6 +340,12 @@ cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, co
   md_j_transforms<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(batch, md);
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
+  if (md.primitive_bounds) {
+    md_j_primitive_bounds<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(md);
+    // Complete Hermite J has no residual AO-mask traversal to prepare.
+    md.residual_candidate_count = 0;
+    return cudaGetLastError();
+  }
   md.active_pair_offsets[0] = 0;
   for (unsigned angular = 0; angular <= 4; ++angular) {
     md_active_pairs<<<static_cast<unsigned>((md.pair_count + 127) / 128), 128, 0, stream>>>(
@@ -367,6 +403,9 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
                  std::size_t system_count, bool unrestricted, double screening,
                  const double* density, const double* beta, double* coulomb) {
   const auto end = system_begin + system_count;
+  if (md.primitive_screen)
+    runtime::cuda_resource_check(
+        cudaMemsetAsync(md.primitive_screen, 0, sizeof(MdJPrimitiveScreenState), stream));
   md_j_density_bounds<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(

@@ -106,9 +106,11 @@ def engine_runtime_probe(
     kernels = "\n".join(
         cpp_function_definition(native, name, include_template=templated)
         for name, templated in (
+            ("md_j_primitive_allowance", False),
             ("md_j_engine_pair_loc", False),
             ("md_j_engine_hierarchy", False),
             ("md_j_engine_direction", False),
+            ("md_j_engine_primitive_direction", False),
             ("md_j_engine_tile_admitted", False),
             ("md_j_engine_potential", True),
         )
@@ -223,7 +225,7 @@ void __syncwarp(unsigned mask = 0xffffffffU) {
 template <class T>
 T __shfl_down_sync(unsigned mask, T value, unsigned delta, unsigned width = 32) {
   static_assert(sizeof(T) <= sizeof(std::uint64_t));
-  assert(mask == 0xffffffffU && width == 32);
+  assert(mask == 0xffffffffU && width && width <= 32 && (width & (width - 1)) == 0);
   std::uint64_t bits = 0;
   std::memcpy(&bits, &value, sizeof(value));
   shuffled[threadIdx.x] = bits;
@@ -237,6 +239,12 @@ T __shfl_down_sync(unsigned mask, T value, unsigned delta, unsigned width = 32) 
 }
 template <class T> T atomicAdd(T* address, T value) {
   return std::atomic_ref<T>(*address).fetch_add(value);
+}
+template <class T> T atomicMax(T* address, T value) {
+  std::atomic_ref<T> target(*address);
+  T previous = target.load();
+  while (previous < value && !target.compare_exchange_weak(previous, value)) {}
+  return previous;
 }
 double __dmul_ru(double a, double b) {
   const long double exact = static_cast<long double>(a) * b;

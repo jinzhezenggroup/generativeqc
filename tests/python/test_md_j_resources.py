@@ -123,6 +123,10 @@ struct HostBatch {
       for(unsigned axis=0;axis<3;++axis) ao_term_angular[ao*9+axis]=angular[ao][axis];
   }
 };
+std::size_t direct_jk_sum(std::size_t a,std::size_t b) {
+  if(b>std::numeric_limits<std::size_t>::max()-a) throw std::bad_alloc();
+  return a+b;
+}
 namespace runtime { bool active_device_resource_ledger=false; }
 std::size_t direct_jk_product(std::size_t a,std::size_t b) { return a*b; }
 int allocation_index=0, failure_stage=-1, failure_kind=1;
@@ -183,8 +187,11 @@ int exercise(bool resident_source_only,bool ledger,int stage,int kind,const char
       const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
       assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
       const auto engine=std::getenv("GENERATIVEQC_MD_J_ENGINE");
-      const bool reference=engine && std::strcmp(engine,"reference")==0;
+      const bool primitive=!engine || std::strcmp(engine,"primitive")==0;
+      const bool reference=primitive || (engine && std::strcmp(engine,"reference")==0);
       assert(owner.md_j.reference_engine==reference);
+      assert(bool(owner.md_j.primitive_bounds)==primitive);
+      assert(bool(owner.md_j.primitive_screen)==primitive);
       assert(bool(owner.md_j.hierarchy)==reference);
       assert(!reference || owner.md_j.hierarchy_layout.valid);
     } else {
@@ -210,17 +217,20 @@ int main() {
 """
 
 
-@pytest.mark.parametrize("engine", ["incumbent", "reference"])
+@pytest.mark.parametrize("engine", [None, "incumbent", "reference", "primitive"])
 @pytest.mark.parametrize("counted", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
     native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
     counted: bool,
-    engine: str,
+    engine: str | None,
 ) -> None:
     """Optional diagnostic storage obeys the same admission and rollback cap."""
-    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", engine)
+    if engine is None:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", engine)
     if counted:
         monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
     else:
@@ -268,7 +278,7 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
 
 @pytest.mark.parametrize("atoms", [48, 96])
 @pytest.mark.parametrize("spherical", [False, True])
-def test_canonical_transform_storage_retains_existing_cap(
+def test_canonical_transform_storage_respects_owner_capacity(
     tmp_path: Path,
     native_cxx: NativeCxx,
     monkeypatch: pytest.MonkeyPatch,
@@ -278,13 +288,14 @@ def test_canonical_transform_storage_retains_existing_cap(
     """Inventory real basis expansions without constructing integrals or a GPU.
 
     Capacity is the contract, not an exact internal operation count. In
-    particular the large-basis case must fit without raising the existing cap
-    or changing public-ledger admission. Printed inventories are diagnostic.
+    particular the incumbent large-basis case still fits the private default
+    reservation, while a larger explicit owner budget admits the full reference
+    hierarchy. Printed inventories are diagnostic, not fixed byte-count gates.
     """
     monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
     monkeypatch.delenv("GENERATIVEQC_MD_J_RECIPROCAL", raising=False)
     monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
-    monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", "incumbent")
     basis = json.loads(
         (ROOT / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json").read_text()
     )
@@ -348,18 +359,51 @@ int main() {
   host.system_shell_offsets={0,static_cast<std::int64_t>(host.shell_angular.size())};
   host.system_shell_pair_offsets={0,static_cast<std::int64_t>(host.shell_pair_first.size())};
   MdJHost planned;
-  assert(planned.prepare(host,kMdJResidentCap));
+  assert(planned.prepare(host,kMdJDefaultReservation));
   const auto charged=kMdSourceFixedBytes+planned.pairs.size()*(sizeof(MdJPair)+3*sizeof(double)+sizeof(std::uint32_t))+
       planned.primitives.size()*(sizeof(MdJPrimitive)+sizeof(std::uint32_t))+
       host.system_shell_offsets.size()*3*sizeof(std::int64_t)+
       planned.transform_slots.size()*sizeof(std::uint16_t)+(planned.transforms+2*planned.hermites)*sizeof(double);
-  assert(charged==planned.bytes && charged<=kMdJResidentCap);
+  assert(charged==planned.bytes && charged<=kMdJDefaultReservation);
   const auto dense_bytes=charged-planned.pairs.size()*sizeof(std::uint32_t)-
       planned.transform_slots.size()*sizeof(std::uint16_t)-planned.transforms*sizeof(double)+dense_values*sizeof(double);
   std::printf("nbf=%zu pairs=%zu primitives=%zu dense_values=%zu sparse_values=%zu map_slots=%zu "
-              "dense_bytes=%zu sparse_bytes=%zu cap=%zu\n",host.nbf,planned.pairs.size(),
+              "dense_bytes=%zu sparse_bytes=%zu reservation=%zu\n",host.nbf,planned.pairs.size(),
               planned.primitives.size(),dense_values,planned.transforms,planned.transform_slots.size(),
-              dense_bytes,charged,kMdJResidentCap);
+              dense_bytes,charged,kMdJDefaultReservation);
+  // Admission follows the supplied owner capacity even above the default
+  // reservation. Exercise exact fit and both fallback boundaries on real
+  // r2SCAN-3c basis shapes, without constructing a four-index ERI tensor.
+  std::uint64_t counts[5]{};
+  for(unsigned a=0;a<5;++a) counts[a]=planned.class_offsets[a+1]-planned.class_offsets[a];
+  const auto hierarchy=md_j_hierarchy_storage(counts);
+  assert(hierarchy.valid);
+  const auto required=charged+hierarchy.bytes;
+  setenv("GENERATIVEQC_MD_J_ENGINE","reference",1);
+  MdJHost full;
+  assert(full.prepare(host,required) && full.reference_engine && full.bytes==required);
+  for(auto capacity:{charged,required-1}) {
+    MdJHost bounded;
+    assert(bounded.prepare(host,capacity) && !bounded.reference_engine);
+    assert(bounded.bytes==charged && bounded.bytes<=capacity);
+  }
+  MdJHost short_base;
+  assert(!short_base.prepare(host,charged-1));
+  // This named acceptance workload exceeds the former 128-MiB hard cap.
+  if(host.nbf==1088) assert(required>kMdJDefaultReservation);
+  std::printf("reference_bytes=%zu owner_capacity=%zu reference_admitted=%d\n",
+              full.bytes,required,full.reference_engine);
+  // Qualify the ordinary default on the same real 48/96-atom basis shapes,
+  // including its extra primitive bounds and exact optional-capacity boundary.
+  const auto primitive_required=required+planned.primitives.size()*sizeof(double)+
+                                sizeof(MdJPrimitiveScreenState);
+  unsetenv("GENERATIVEQC_MD_J_ENGINE");
+  MdJHost default_engine;
+  assert(default_engine.prepare(host,primitive_required) && default_engine.primitive_engine);
+  assert(default_engine.bytes==primitive_required);
+  MdJHost default_short;
+  assert(default_short.prepare(host,primitive_required-1));
+  assert(!default_short.primitive_engine && default_short.bytes==charged);
 }
 """
     representation = (
@@ -383,7 +427,7 @@ int main() {
     subprocess.run([str(binary)], check=True, timeout=30)
 
 
-def test_reference_hierarchy_admission_preserves_incumbent_cap(
+def test_reference_hierarchy_admission_preserves_owner_budget(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
     """Insufficient optional hierarchy capacity keeps the complete old owner."""
@@ -405,14 +449,14 @@ int main() {
   unsetenv("GENERATIVEQC_DISABLE_MD_J");
   unsetenv("GENERATIVEQC_MD_J_WORK_COUNTS");
   unsetenv("GENERATIVEQC_MD_J_RECIPROCAL");
-  unsetenv("GENERATIVEQC_MD_J_ENGINE");
+  setenv("GENERATIVEQC_MD_J_ENGINE","incumbent",1);
   HostBatch host;
   MdJHost incumbent;
-  assert(incumbent.prepare(host,kMdJResidentCap));
+  assert(incumbent.prepare(host,kMdJDefaultReservation));
   assert(!incumbent.reference_engine);
   setenv("GENERATIVEQC_MD_J_ENGINE","reference",1);
   MdJHost complete;
-  assert(complete.prepare(host,kMdJResidentCap) && complete.reference_engine);
+  assert(complete.prepare(host,kMdJDefaultReservation) && complete.reference_engine);
   assert(complete.bytes==incumbent.bytes+complete.hierarchy_layout.bytes);
   assert(complete.pair_loc_offsets[5]==complete.hermites);
   for(auto capacity:{incumbent.bytes,complete.bytes-1}) {
@@ -427,9 +471,33 @@ int main() {
   assert(exact.prepare(host,complete.bytes) && exact.reference_engine);
   MdJHost insufficient;
   assert(!insufficient.prepare(host,incumbent.bytes-1));
+  setenv("GENERATIVEQC_MD_J_ENGINE","primitive",1);
+  MdJHost primitive;
+  assert(primitive.prepare(host,kMdJDefaultReservation));
+  assert(primitive.reference_engine && primitive.primitive_engine);
+  assert(primitive.bytes==complete.bytes+primitive.primitives.size()*sizeof(double)
+                         +sizeof(MdJPrimitiveScreenState));
+  assert(primitive.maximum_pair_primitives==1);
+  for(auto capacity:{incumbent.bytes,complete.bytes,primitive.bytes-1}) {
+    MdJHost bounded;
+    assert(bounded.prepare(host,capacity));
+    assert(!bounded.primitive_engine && !bounded.reference_engine);
+    assert(bounded.bytes==incumbent.bytes);
+  }
+  MdJHost exact_primitive;
+  assert(exact_primitive.prepare(host,primitive.bytes) && exact_primitive.primitive_engine);
+  // Default selection must obey the same exact-fit and rollback boundaries.
+  unsetenv("GENERATIVEQC_MD_J_ENGINE");
+  MdJHost default_engine;
+  assert(default_engine.prepare(host,primitive.bytes) && default_engine.primitive_engine);
+  assert(default_engine.bytes==primitive.bytes);
+  MdJHost default_bounded;
+  assert(default_bounded.prepare(host,primitive.bytes-1));
+  assert(!default_bounded.primitive_engine && !default_bounded.reference_engine);
+  assert(default_bounded.bytes==incumbent.bytes);
   setenv("GENERATIVEQC_MD_J_ENGINE","unknown",1);
   bool failed=false;
-  try { MdJHost invalid; invalid.prepare(host,kMdJResidentCap); }
+  try { MdJHost invalid; invalid.prepare(host,kMdJDefaultReservation); }
   catch(const std::invalid_argument&) { failed=true; }
   assert(failed);
 }

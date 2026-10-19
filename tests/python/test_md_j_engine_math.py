@@ -21,7 +21,10 @@ from typing import Any
 import mpmath as mp
 import numpy as np
 import pytest
-from generativeqc_compiler.integral.md_j_engine_cuda import emit_md_j_engine_header
+from generativeqc_compiler.integral.md_j_engine_cuda import (
+    _emit_primitive_norms,
+    emit_md_j_engine_header,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 ANGULAR_PAIRS = tuple((bra, ket) for bra in range(5) for ket in range(5))
@@ -60,7 +63,15 @@ def md_engine(tmp_path_factory: pytest.TempPathFactory) -> Any:
     )
     (folder / "generated_md_j_engine.cuh").write_text(emit_md_j_engine_header())
     source, obj, library = folder / "probe.cpp", folder / "probe.o", folder / "probe.so"
-    source.write_text(PROBE)
+    # Execute the emitted CUDA-only bound with outward host arithmetic doubles.
+    # Independent high-precision Coulomb derivatives below supply its oracle.
+    source.write_text(
+        PROBE
+        + NORM_INTRINSICS
+        + _emit_primitive_norms().replace("#if defined(__CUDACC__)", "#if 1")
+        + '\nextern "C" double primitive_norm(double p,unsigned l,unsigned i) {'
+        + "return md_engine_hermite_norm(p,l,i);}\n"
+    )
     subprocess.run(
         [
             cache_launcher,
@@ -107,6 +118,8 @@ def md_engine(tmp_path_factory: pytest.TempPathFactory) -> Any:
         array,
     ]
     owner.contract_values.restype = ctypes.c_int
+    owner.primitive_norm.argtypes = [ctypes.c_double, ctypes.c_uint, ctypes.c_uint]
+    owner.primitive_norm.restype = ctypes.c_double
     return owner
 
 
@@ -170,6 +183,42 @@ RADIAL_CASES = tuple(
         (1e4, (1.0, 2.0, -3.0)),
     )
 )
+
+
+@pytest.mark.parametrize("p", [1e-20, 0.03, 1.0, 100.0, 1e20])
+def test_hermite_norm_bounds_independent_coulomb_derivatives(
+    md_engine: Any, p: float
+) -> None:
+    """Every s/p/d pair derivative, including mixed Cartesian components."""
+    for angular in range(5):
+        radial, _ = _closed_radial(2 * angular, p / 2, (0.0, 0.0, 0.0))
+        positions = {state: i for i, state in enumerate(_states(2 * angular))}
+        for index, state in enumerate(_states(angular)):
+            squared = (
+                2
+                * math.pi**2.5
+                / (p * p * math.sqrt(2 * p))
+                * (-1) ** sum(state)
+                * radial[positions[tuple(2 * n for n in state)]]
+            )
+            actual = md_engine.primitive_norm(p, angular, index)
+            expected = math.sqrt(squared)
+            assert expected <= actual <= expected * 1.001
+
+
+@pytest.mark.parametrize("p", [0.0, -1.0, 1e-200, 1e200, math.inf, math.nan])
+def test_unrepresentable_hermite_norm_fails_open(md_engine: Any, p: float) -> None:
+    assert math.isinf(md_engine.primitive_norm(p, 4, 34))
+
+
+NORM_INTRINSICS = r"""
+using std::isfinite;
+double __dmul_rd(double a,double b) { return std::nextafter(a*b,0.0); }
+double __dmul_ru(double a,double b) { return std::nextafter(a*b,INFINITY); }
+double __ddiv_ru(double a,double b) { return std::nextafter(a/b,INFINITY); }
+double __dsqrt_rd(double a) { return std::nextafter(std::sqrt(a),0.0); }
+double __dsqrt_ru(double a) { return std::nextafter(std::sqrt(a),INFINITY); }
+"""
 
 
 @pytest.mark.parametrize("order", range(9))

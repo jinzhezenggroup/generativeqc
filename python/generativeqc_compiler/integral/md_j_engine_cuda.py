@@ -28,6 +28,7 @@ screening, density preparation, shell normalization, or launch policy.
 from __future__ import annotations
 
 from functools import cache
+from math import prod
 
 from .expr import Graph, RematerializationPolicy
 from .scalar_c import ScalarCEmitter
@@ -73,7 +74,7 @@ def _emit_radial_stage(stage: int) -> list[str]:
         graph = Graph()
         variables = {
             "coordinate": "difference." + "xyz"[axis],
-            "first": f"output[{first}]",
+            "first": f"output[{first} * Stride]",
         }
         expression = graph.variable("coordinate") * graph.variable("first")
         if powers[axis] > 1:
@@ -81,13 +82,13 @@ def _emit_radial_stage(stage: int) -> list[str]:
             second = previous[(source[0], source[1], source[2])]
             if second >= destination:
                 raise ValueError("MD radial stage would overwrite a live dependency")
-            variables["second"] = f"output[{second}]"
+            variables["second"] = f"output[{second} * Stride]"
             expression = expression + (powers[axis] - 1) * graph.variable("second")
         plan = graph.materialization_plan(
             (expression,), RematerializationPolicy.inline_single_use_values()
         )
         emitter = ScalarCEmitter(graph, variables, plan)
-        emitter.emit_assignment(expression, f"output[{destination}]")
+        emitter.emit_assignment(expression, f"output[{destination} * Stride]")
         lines.extend("  " + line for line in emitter.lines)
     lines.extend((f"    output[0] = seeds[Order - {stage}];", "  }"))
     return lines
@@ -144,8 +145,52 @@ def emit_md_j_engine_header() -> str:
         + stages
         + "\n}\n\n"
         + _emit_contraction_tables()
+        + _emit_primitive_norms()
         + _CONTRACT
     )
+
+
+def _emit_primitive_norms() -> str:
+    r"""Emit Coulomb norms for the *represented* Hermite Gaussian functions.
+
+    For Lambda_t = d_P^t exp(-p |r-P|^2), evaluating the existing Coulomb
+    recurrence at P=Q gives
+
+      (Lambda_t|Lambda_t) = 2*pi**(5/2)/(p*p*sqrt(2*p))
+                          * p**|t| * prod((2*t_i-1)!!) / (2*|t|+1).
+
+    Cauchy--Schwarz and the triangle inequality then bound an AO primitive
+    pair by sum_t |E_t| ||Lambda_t||, even for signed/general contractions.
+    Positive arithmetic rounds outward. Unrepresentable intermediates fail
+    open; a zero coefficient is the only structural-zero shortcut.
+    Runtime ownership and the cumulative omission allowance stay native.
+    """
+    states = [state for l in range(5) for state in _hermite_states(l)]
+    degrees = ", ".join(str(sum(state)) for state in states)
+    factors = ", ".join(
+        str(prod(prod(range(1, 2 * n, 2)) for n in state)) for state in states
+    )
+    return r"""
+#if defined(__CUDACC__)
+static __device__ __constant__ unsigned char kMdPrimitiveDegrees[70] = {@DEGREES@};
+static __device__ __constant__ unsigned short kMdPrimitiveFactors[70] = {@FACTORS@};
+
+/** Upper bound on a Hermite Coulomb norm, not a contracted-shell estimate.
+ * 35 exceeds 2*pi^(5/2). This deliberately loose exact constant avoids a
+ * libm/transcendental rounding assumption in the screening certificate. */
+__device__ inline double md_engine_hermite_norm(double p, unsigned angular, unsigned index) {
+  const auto prefix = angular * (angular + 1) * (angular + 2) * (angular + 3) / 24;
+  const auto degree = kMdPrimitiveDegrees[prefix + index];
+  const auto factor = kMdPrimitiveFactors[prefix + index];
+  const double denominator = __dmul_rd(__dmul_rd(p, p), __dsqrt_rd(__dmul_rd(2.0, p)));
+  if (!(p > 0.0) || !isfinite(p) || !(denominator > 0.0) || !isfinite(denominator)) return INFINITY;
+  double square = __ddiv_ru(35.0, denominator);
+  for (unsigned i = 0; i < degree; ++i) square = __dmul_ru(square, p);
+  square = __ddiv_ru(__dmul_ru(square, double(factor)), double(2 * degree + 1));
+  return isfinite(square) ? __dsqrt_ru(square) : INFINITY;
+}
+#endif
+""".replace("@DEGREES@", degrees).replace("@FACTORS@", factors)
 
 
 _PREAMBLE = r"""/*
@@ -181,15 +226,18 @@ namespace generativeqc::scf::cuda_execution {
 
 """
 
-_RADIAL_PREFIX = r"""/** Produce exactly choose(Order+3,3) R(0,t,u,v) values, t/u/v ascending.
+_RADIAL_PREFIX = r"""/** Produce choose(Order+3,3) strided R(0,t,u,v) values, t/u/v ascending.
  * At stage s the same compact buffer holds R(Order-s,t,u,v), |tuv|<=s.
  * Descending stores preserve every prior-stage dependency. The only additional
  * radial storage is Order+1 shared-owner Boys seeds; no four-dimensional
  * auxiliary, allocation, lane synchronization, or global scratch is needed. */
-template <unsigned Order>
+// Stride interleaves independent quartets across adjacent source lanes. The
+// default preserves the compact scalar layout used by independent math probes.
+template <unsigned Order, unsigned Stride = 1>
 __device__ inline void md_engine_radial(double rho, Vec3<double> p, Vec3<double> q,
                                         double* output) {
   static_assert(Order <= 8, "MD s/p/d radial order must not exceed eight");
+  static_assert(Stride > 0);
   const Vec3<double> difference{p.x - q.x, p.y - q.y, p.z - q.z};
   double seeds[Order + 1];
   boys_values<Order>(rho * (difference.x * difference.x + difference.y * difference.y +
@@ -227,25 +275,25 @@ __device__ inline double md_engine_ket_sign(unsigned ket_component) {
 }
 
 /** Unscaled forward dot; the native schedule owns publication and reduction. */
-template <unsigned BraAngular, unsigned KetAngular>
+template <unsigned BraAngular, unsigned KetAngular, unsigned Stride = 1>
 __device__ inline double md_engine_forward_component(const double* radial,
                                                      const double* ket_density,
                                                      unsigned bra_component) {
   double value = 0.0;
   for (unsigned j = 0; j < md_j_hermite_count(KetAngular); ++j)
     value += md_engine_ket_sign<KetAngular>(j) * ket_density[j] *
-             radial[md_engine_radial_address<BraAngular, KetAngular>(bra_component, j)];
+             radial[Stride * md_engine_radial_address<BraAngular, KetAngular>(bra_component, j)];
   return value;
 }
 
-template <unsigned BraAngular, unsigned KetAngular>
+template <unsigned BraAngular, unsigned KetAngular, unsigned Stride = 1>
 __device__ inline double md_engine_reverse_component(const double* radial,
                                                      const double* bra_density,
                                                      unsigned ket_component) {
   double value = 0.0;
   for (unsigned i = 0; i < md_j_hermite_count(BraAngular); ++i)
     value += md_engine_ket_sign<KetAngular>(ket_component) * bra_density[i] *
-             radial[md_engine_radial_address<BraAngular, KetAngular>(i, ket_component)];
+             radial[Stride * md_engine_radial_address<BraAngular, KetAngular>(i, ket_component)];
   return value;
 }
 

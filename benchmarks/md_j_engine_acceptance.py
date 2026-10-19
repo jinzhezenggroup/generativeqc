@@ -100,7 +100,7 @@ def summarize(gates: dict[str, Any]) -> dict[str, Any]:
         )
         and not any(gate.get("status") == "failed" for gate in gates.values()),
         "default_promotion_qualified": False,
-        "default_promotion_reason": "This scoped correctness run does not qualify full-size cold performance or change the incumbent default",
+        "default_promotion_reason": "This scoped correctness run does not independently qualify full-size cold performance or change the production default",
         "gpu_evidence": "actual executed resident tests required; host scalar tests and skipped tests do not qualify CUDA",
         "timing_policy": "JUnit properties retain per-endpoint and resident diagnostic timings; no speedup is inferred from instrumented correctness runs",
     }

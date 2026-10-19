@@ -60,6 +60,65 @@ def _assert_selected(plan: Any, engine: str = "reference") -> None:
     ), schedule
 
 
+def test_reference_r2scan3c_large_owner_admission(
+    monkeypatch: Any, capfd: Any, record_property: Any
+) -> None:
+    """A budgeted 96-atom owner admits the hierarchy above the old fixed cap.
+
+    Compare a nonsymmetric one-density-tail J against the exact-mask incumbent;
+    full E/F acceptance supplies the independent large-system scientific oracle.
+    The explicit budget belongs to this standalone probe, not a public ledger.
+    """
+    from generativeqc import Atom
+    from generativeqc.basis import load_basis
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    from benchmarks.md_j_engine_benchmark import MolecularCase
+
+    atoms = [
+        Atom.from_value(atom)
+        for atom in MolecularCase("r2scan3c-budget", "def2-mtzvpp", 1088, 2609).atoms()
+    ]
+    basis_file = (
+        Path(__file__).resolve().parents[2]
+        / "python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"
+    )
+    shells = load_basis(basis_file).shells_for(atoms)
+    budget = 1 << 30
+    monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    results = {}
+    with NativeAO(atoms, shells, representation="spherical") as basis:
+        assert basis.nao == 1088
+        density = np.zeros((basis.nao, basis.nao))
+        density[-1, -2] = 0.83
+        for engine in ("incumbent", "reference"):
+            _select(monkeypatch, engine)
+            with ResidentMdJProbe(
+                basis,
+                _spec("restricted"),
+                screening_tolerance=1e-12,
+                device_budget_bytes=budget,
+            ) as plan:
+                _assert_selected(plan, engine)
+                assert plan.diagnostics["device_bytes"] <= budget
+                results[engine] = plan.evaluate(density).coulomb.copy()
+                np.testing.assert_array_equal(
+                    plan.evaluate(np.zeros_like(density)).coulomb, 0.0
+                )
+                record_property(
+                    f"{engine}_device_bytes", plan.diagnostics["device_bytes"]
+                )
+            log = capfd.readouterr().err
+            assert "MD_J_WORK " in log
+            if engine == "reference":
+                assert "MD_J_ENGINE_WORK " in log
+    np.testing.assert_allclose(
+        results["reference"], results["incumbent"], atol=3e-11, rtol=3e-11
+    )
+    record_property("owner_budget_bytes", budget)
+
+
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 @pytest.mark.parametrize("basis_kind", ["def2-svp", "general-contractions"])
@@ -190,7 +249,7 @@ def test_reference_pair_factors_and_one_density_tail(
 def test_reference_residual_mask_and_molecular_threshold_neighbors(
     monkeypatch: Any, capfd: Any, record_property: Any
 ) -> None:
-    """Compare native MD/disabled-MD at neighbors of a libcint-derived cutoff.
+    """Compare both native MD engines at neighbors of a libcint-derived cutoff.
 
     These are not claimed to be exact native equality boundaries: native and
     libcint Schwarz evaluations can differ by ulps. Synthetic direction and
@@ -226,10 +285,13 @@ def test_reference_residual_mask_and_molecular_threshold_neighbors(
             np.nextafter(boundary, np.inf),
         ]
         for cutoff in thresholds:
-            monkeypatch.setenv("GENERATIVEQC_DISABLE_MD_J", "1")
+            # The disabled-MD provider has a different nonzero-screening
+            # contract. Only the incumbent MD path shares this exact AO mask.
+            _select(monkeypatch, "incumbent")
             with ResidentMdJProbe(
                 basis, _spec("restricted"), screening_tolerance=cutoff
             ) as baseline:
+                _assert_selected(baseline, "incumbent")
                 expected = baseline.evaluate(density).coulomb
             _select(monkeypatch, "reference")
             with ResidentMdJProbe(
@@ -290,7 +352,7 @@ def test_reference_incumbent_k_and_tiny_budget_fallback(
                     )
 
 
-def test_reference_unset_selector_retains_incumbent(monkeypatch: Any) -> None:
+def test_unset_selector_selects_primitive(monkeypatch: Any) -> None:
     from generativeqc_compiler.dft import NativeAO
     from md_j_resident_probe import ResidentMdJProbe
 
@@ -300,13 +362,19 @@ def test_reference_unset_selector_retains_incumbent(monkeypatch: Any) -> None:
         NativeAO(WATER, "def2-svp", representation="spherical") as basis,
         ResidentMdJProbe(basis, _spec("restricted")) as plan,
     ):
-        _assert_selected(plan, "incumbent")
+        assert plan.diagnostics["direct_schedule"].startswith("md-j-primitive/")
 
 
 @pytest.mark.parametrize("method", ["rhf", "uhf", "pbe0-rks", "pbe0-uks"])
 @pytest.mark.parametrize("policy", ["strict", "fast"])
+@pytest.mark.parametrize("engine", ["reference", "default"])
 def test_reference_complete_energy_force_endpoint(
-    method: str, policy: str, monkeypatch: Any, capfd: Any, record_property: Any
+    method: str,
+    policy: str,
+    engine: str,
+    monkeypatch: Any,
+    capfd: Any,
+    record_property: Any,
 ) -> None:
     """Matched whole-endpoint parity with disabled MD, with execution provenance."""
     from generativeqc import Calculator, GridSpec, KsOptions, PrecisionCalculator
@@ -331,11 +399,17 @@ def test_reference_complete_energy_force_endpoint(
     atoms = WATER[:2] if method in ("uhf", "pbe0-uks") else WATER
     multiplicity = 2 if len(atoms) == 2 else 1
     outputs = {}
-    for mode in ("disabled", "reference"):
+    for mode in ("disabled", engine):
         if mode == "disabled":
             monkeypatch.setenv("GENERATIVEQC_DISABLE_MD_J", "1")
+            monkeypatch.setenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER", "0")
         else:
-            _select(monkeypatch, "reference")
+            monkeypatch.delenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER", raising=False)
+            if mode == "default":
+                monkeypatch.delenv("GENERATIVEQC_MD_J_ENGINE", raising=False)
+                monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+            else:
+                _select(monkeypatch, engine)
         capfd.readouterr()
         started = time.perf_counter()
         calculator = (
@@ -344,9 +418,20 @@ def test_reference_complete_energy_force_endpoint(
             else Calculator(precision="fp64", **options)
         )
         try:
-            outputs[mode] = calculator.singlepoint(
-                atoms, multiplicity=multiplicity, properties=("energy", "forces")
-            )
+            if method == "pbe0-rks":
+                # RKS singlepoint closes a non-retained owner and may bypass
+                # resident MD. Exercise the complete retained-owner route used
+                # by full-size acceptance, retaining the execution assertion.
+                with calculator.prepare_batch(
+                    [atoms], multiplicities=[multiplicity], warm_start=True
+                ) as owner:
+                    outputs[mode] = owner.execute(
+                        properties=("energy", "forces"), strict=True
+                    ).items[0]
+            else:
+                outputs[mode] = calculator.singlepoint(
+                    atoms, multiplicity=multiplicity, properties=("energy", "forces")
+                )
         finally:
             calculator.clear_cache()
         seconds = time.perf_counter() - started
@@ -361,7 +446,7 @@ def test_reference_complete_energy_force_endpoint(
             assert not sum(counts) and not rows
         # Retain the actual observation: endpoint equality alone cannot prove
         # that an endpoint routes through resident MD. The KS endpoint must.
-        if mode == "reference" and "ks" in method:
+        if mode != "disabled" and "ks" in method:
             assert sum(counts) > 0 and rows, "KS endpoint bypassed resident MD-J"
         record_property(
             f"{mode}_endpoint",
@@ -384,12 +469,12 @@ def test_reference_complete_energy_force_endpoint(
                     "strict_fock_builds": (outputs[mode].precision or {}).get(
                         "strict_stage_fock_builds"
                     ),
-                    "timing_scope": "fresh calculator + complete energy/force singlepoint + clear_cache; execution counters enabled",
+                    "timing_scope": "fresh calculator + complete energy/force endpoint + owner teardown/clear_cache; execution counters enabled",
                 },
                 sort_keys=True,
             ),
         )
-    expected, actual = outputs["disabled"], outputs["reference"]
+    expected, actual = outputs["disabled"], outputs[engine]
     assert expected.converged and actual.converged
     assert expected.executed_backend == actual.executed_backend == "cuda"
     energy_gate, force_gate = (3e-9, 3e-8) if policy == "strict" else (1e-7, 1e-5)

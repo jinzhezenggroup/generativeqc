@@ -181,14 +181,60 @@ GENERATIVEQC_ERI_SHARED_HD constexpr unsigned md_j_contract_hermites(unsigned an
   return angular <= 8 ? (angular + 1) * (angular + 2) * (angular + 3) / 6 : 0;
 }
 
-/** Shared workspace contract for the four-warp source consumer. Each warp
- * retains one compact R(0,t,u,v) simplex. Tiles retain one density and one
- * potential vector per primitive, plus at most 96 bytes per descriptor and
- * 128 control bytes. The descriptor owner must assert its ABI fits this cap. */
+/** Shared workspace contract for the quartet/component thread decomposition.
+ * Low-order lanes own independent quartets instead of reserving a whole warp
+ * for one scalar radial recurrence. Larger component domains share each source
+ * across a power-of-two number of component lanes. The descriptor owner must
+ * assert its ABI fits the conservative 96-byte accounting cap. */
 inline constexpr unsigned kMdJSourceThreads = 128;
 inline constexpr std::uint64_t kMdJPrimitiveDescriptorBytes = 96;
 inline constexpr std::uint64_t kMdJSourceControlBytes = 128;
 inline constexpr std::uint64_t kMdJSharedOccupancyTarget = 32U << 10;
+
+/** Choose source concurrency from output size and compact radial workspace.
+ * These are the upstream single-density register-shape targets (11 outputs,
+ * 31 radial states), applied to both independently admitted directions. They
+ * provide conservative shape targets, not a register-use guarantee: radial
+ * seeds still have one owner per source. They never change scientific screening.
+ */
+GENERATIVEQC_ERI_SHARED_HD constexpr unsigned md_j_component_lanes(unsigned bra_angular,
+                                                                   unsigned ket_angular) {
+  const auto bra = md_j_contract_hermites(bra_angular);
+  const auto ket = md_j_contract_hermites(ket_angular);
+  const auto outputs = bra > ket ? bra : ket;
+  const auto radial = md_j_contract_hermites(bra_angular + ket_angular);
+  unsigned lanes = 1;
+  while (11 * lanes < outputs || 31 * lanes < radial) lanes *= 2;
+  // Radial scratch can consume almost the whole shared-memory target before
+  // even one full source-lane rectangle fits. In particular (2,3) and (3,4)
+  // would otherwise select widths 4 and 1, leaving most quartet lanes idle
+  // and multiplying persistent tasks. Share each recurrence over more
+  // component lanes until at least one complete rectangle can be retained.
+  // This is a utilization invariant, independent of molecular pair counts.
+  while (lanes < kMdJSourceThreads) {
+    const auto sources = kMdJSourceThreads / lanes;
+    unsigned width = 1;
+    while (width * width < sources) width *= 2;
+    const auto required = radial * sources * sizeof(double) +
+                          2 * sizeof(double) * width * (bra + ket) +
+                          2 * width * kMdJPrimitiveDescriptorBytes + kMdJSourceControlBytes;
+    if (required <= kMdJSharedOccupancyTarget) break;
+    lanes *= 2;
+  }
+  return lanes;
+}
+
+GENERATIVEQC_ERI_SHARED_HD constexpr unsigned md_j_source_lanes(unsigned bra_angular,
+                                                                unsigned ket_angular) {
+  return kMdJSourceThreads / md_j_component_lanes(bra_angular, ket_angular);
+}
+
+/** Consecutive bra lanes form shuffle groups within each physical warp. */
+GENERATIVEQC_ERI_SHARED_HD constexpr unsigned md_j_bra_lanes(unsigned sources) {
+  unsigned lanes = 1;
+  while (lanes * lanes < sources) lanes *= 2;
+  return lanes;
+}
 
 GENERATIVEQC_ERI_SHARED_HD constexpr bool md_j_tile_shared_bytes(unsigned bra_angular,
                                                                  unsigned ket_angular,
@@ -201,7 +247,7 @@ GENERATIVEQC_ERI_SHARED_HD constexpr bool md_j_tile_shared_bytes(unsigned bra_an
       md_j_hierarchy_level(ket_width) == kMdJHierarchyLevels)
     return false;
   std::uint64_t radial = 0, bra = 0, ket = 0, vectors = 0, descriptors = 0, total = 0;
-  if (!md_j_checked_mul(kMdJSourceThreads / 32 * sizeof(double),
+  if (!md_j_checked_mul(md_j_source_lanes(bra_angular, ket_angular) * sizeof(double),
                         md_j_contract_hermites(bra_angular + ket_angular), radial) ||
       !md_j_checked_mul(2 * sizeof(double) * bra_width, md_j_contract_hermites(bra_angular), bra) ||
       !md_j_checked_mul(2 * sizeof(double) * ket_width, md_j_contract_hermites(ket_angular), ket) ||

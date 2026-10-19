@@ -13,6 +13,24 @@
 namespace generativeqc::scf::cuda_execution {
 namespace {
 
+/** Each output AO pair sums at most max_pair_primitives target primitives and
+ * primitive_count source primitives. Giving each directed product this share
+ * bounds their total omitted absolute J contribution by min(tolerance,1e-12).
+ * The bound concerns screening error, independently of FP64 summation error. */
+__host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening) {
+#ifdef __CUDA_ARCH__
+  return __ddiv_rd(
+      __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.maximum_pair_primitives)),
+      double(md.primitive_count));
+#else
+  return std::nextafter(
+      std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(md.maximum_pair_primitives),
+                     0.0) /
+          double(md.primitive_count),
+      0.0);
+#endif
+}
+
 /** Sorted primitive descriptors are the decontracted pair mapping. Each row
  * receives one packed Hermite interval; original shell/primitive identity and
  * sparse E offsets stay intact for residual J, K and public-AO reconstruction. */
@@ -28,20 +46,31 @@ __global__ void md_j_engine_pair_loc(MdJView md, unsigned angular) {
  * padding. Geometry q/minima are immutable; qD/density are refreshed on the
  * owning stream for every density. No reduction reads another warp's scratch. */
 __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t begin,
-                                      std::size_t end) {
+                                      std::size_t end, double screening = 0.0) {
   const auto position = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   const auto layout = md.hierarchy_layout.buckets[angular];
   if (position >= layout.aligned) return;  // padded size is a whole number of warps
   auto* output = md.hierarchy + md.hierarchy_layout.bucket_offsets[angular];
   MdJScreenBound bound{};
   if (position < layout.count) {
-    const auto primitive =
-        md.primitives[md.ordered_primitives[md.class_offsets[angular] + position]];
+    const auto index = md.ordered_primitives[md.class_offsets[angular] + position];
+    const auto primitive = md.primitives[index];
     const auto system = md.pairs[primitive.pair].system;
-    if (system >= begin && system < end)
-      bound =
-          md_j_screen_bound(md.maximum_bounds[primitive.pair], md.density_bounds[primitive.pair],
-                            md.minimum_bounds[primitive.pair]);
+    if (system >= begin && system < end) {
+      bound = md_j_screen_bound(
+          md.primitive_bounds ? md.primitive_bounds[index] : md.maximum_bounds[primitive.pair],
+          md.density_bounds[primitive.pair], md.minimum_bounds[primitive.pair]);
+      if (md.primitive_screen) {
+        // A q-sorted prefix encloses both directions for any density in this
+        // replay. Recompute it on device; pointer identity is not a cache key.
+        const auto limit =
+            md_j_bound_product_up(md_j_bound_product_up(bound.q, md.primitive_maximum_bound),
+                                  md.primitive_screen->maximum_density);
+        if (md.primitive_screen->maximum_density != 0.0 &&
+            limit >= md_j_primitive_allowance(md, screening))
+          atomicMax(md.primitive_screen->active + angular, static_cast<unsigned>(position + 1));
+      }
+    }
   }
   output[position] = bound;
   for (unsigned level = 1; level < kMdJHierarchyLevels; ++level) {
@@ -68,6 +97,16 @@ __device__ inline bool md_j_engine_direction(MdJView md, std::uint32_t output, s
   return density != 0.0 && contribution >= allowance;
 }
 
+/** The complete primitive recipe bypasses the public-AO mask explicitly.
+ * Both signed density orientations already occur in density_bounds and E D. */
+__device__ inline bool md_j_engine_primitive_direction(MdJView md, std::uint32_t output,
+                                                       std::uint32_t input, double screening) {
+  const auto density = md.density_bounds[md.primitives[input].pair];
+  const auto contribution = md_j_bound_product_up(
+      md_j_bound_product_up(md.primitive_bounds[output], md.primitive_bounds[input]), density);
+  return density != 0.0 && contribution >= md_j_primitive_allowance(md, screening);
+}
+
 __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angular,
                                                  unsigned ket_angular,
                                                  const MdJTileSchedule& schedule,
@@ -82,17 +121,20 @@ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angula
                    ket_layout.offsets[md_j_hierarchy_level(schedule.ket_width)] + task.ket_tile];
   // Node minima are maxima of leaf minima: multiplication is monotone, so
   // even the same nearest-rounded comparison conservatively encloses leaves.
-  if (bra.minimum * ket.minimum < screening) return false;
-  const auto allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
+  if (!md.primitive_bounds && bra.minimum * ket.minimum < screening) return false;
+  const auto allowance =
+      md.primitive_bounds ? md_j_primitive_allowance(md, screening)
+                          : __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
   return (ket.density != 0.0 && md_j_screen_density_bound(bra, ket) >= allowance) ||
          (bra.density != 0.0 && md_j_screen_density_bound(ket, bra) >= allowance);
 }
 
-/** Bounded reciprocal consumer. Four warps stream a canonical tile inventory;
- * each warp shares one compact radial simplex and both density directions.
- * Tile-cached density/potential replace per-quartet AO expansion and global
- * publication. High-angular pairs use the same generated backend, not an
- * ordered fallback. All block barriers are outside divergent source branches. */
+/** Bounded reciprocal consumer with upstream-style quartet/component lanes.
+ * Adjacent lanes evaluate different primitive sources; only larger angular
+ * domains reserve additional lanes for output components. A bra accumulator
+ * stays in registers across ket batches, while a shuffle gives each shared ket
+ * output one writer. Thus no per-source shared floating-point atomic is needed.
+ * All barriers remain outside divergent source/screening branches. */
 template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
 __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, std::size_t begin,
                                       std::size_t end, double screening) {
@@ -101,20 +143,30 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
   constexpr auto bra_components = md_j_hermite_count(BraAngular);
   constexpr auto ket_components = md_j_hermite_count(KetAngular);
   constexpr auto radial_components = md_j_hermite_count(BraAngular + KetAngular);
-  constexpr auto warps = kMdJSourceThreads / 32;
+  constexpr auto sources = md_j_source_lanes(BraAngular, KetAngular);
+  constexpr auto components = md_j_component_lanes(BraAngular, KetAngular);
+  constexpr auto bra_lanes = md_j_bra_lanes(sources), ket_lanes = sources / bra_lanes;
+  constexpr auto bra_outputs = (bra_components + components - 1) / components;
+  constexpr auto ket_outputs = (ket_components + components - 1) / components;
   static_assert(schedule.valid && sizeof(MdJPrimitive) <= kMdJPrimitiveDescriptorBytes);
   static_assert(std::is_trivially_default_constructible_v<MdJPrimitive> &&
                 std::is_trivially_default_constructible_v<MdJTileTask>);
   static_assert(schedule.shared_bytes <= kMdJSharedCapacity);
+  if (md.primitive_screen)
+    inventory = md_j_tile_inventory(md.primitive_screen->active[BraAngular],
+                                    md.primitive_screen->active[KetAngular], bra_width, ket_width,
+                                    BraAngular == KetAngular);
   __shared__ MdJPrimitive bra_cache[bra_width], ket_cache[ket_width];
   __shared__ double bra_density[bra_width * bra_components],
       ket_density[ket_width * ket_components];
-  __shared__ double bra_potential[bra_width * bra_components],
-      ket_potential[ket_width * ket_components];
-  __shared__ double radial[warps][radial_components];
+  __shared__ double ket_potential[ket_width * ket_components];
+  // Structure-of-arrays radial storage coalesces adjacent independent sources.
+  // After the last ket batch this same allocation holds bra reduction partials.
+  __shared__ double radial[sources * radial_components];
   __shared__ MdJTileTask task;
   __shared__ bool live, admitted;
-  const auto lane = threadIdx.x % 32, warp = threadIdx.x / 32;
+  const auto source_lane = threadIdx.x % sources, component_lane = threadIdx.x / sources;
+  const auto bra_lane = source_lane % bra_lanes, ket_lane = source_lane / bra_lanes;
   unsigned long long roots = 0, forwards = 0, reverses = 0, tiles = 0, screened = 0;
   while (true) {
     if (threadIdx.x == 0) {
@@ -148,7 +200,6 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
                                md.pairs[bra_cache[slot].pair].system < end
                            ? md.density[bra_cache[slot].hermite_offset + i % bra_components]
                            : 0.0;
-      bra_potential[i] = 0.0;
     }
     for (unsigned i = threadIdx.x; i < ket_width * ket_components; i += blockDim.x) {
       const auto slot = i / ket_components;
@@ -159,53 +210,93 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
       ket_potential[i] = 0.0;
     }
     __syncthreads();
-    for (unsigned source = warp; source < bra_width * ket_width; source += warps) {
-      const auto bra_slot = source / ket_width, ket_slot = source % ket_width;
-      if (!md_j_tile_source_valid(inventory, task, bra_slot, ket_slot)) continue;
-      const auto bra = bra_cache[bra_slot], ket = ket_cache[ket_slot];
-      const auto bra_pair = md.pairs[bra.pair], ket_pair = md.pairs[ket.pair];
-      if (bra_pair.system < begin || bra_pair.system >= end || bra_pair.system != ket_pair.system)
-        continue;
-      const bool forward = md_j_engine_direction(md, bra.pair, ket.pair, screening);
-      const bool distinct =
-          BraAngular != KetAngular || task.bra_begin + bra_slot != task.ket_begin + ket_slot;
-      const bool reverse = distinct && md_j_engine_direction(md, ket.pair, bra.pair, screening);
-      if (!forward && !reverse) continue;
-      if (lane == 0) {
-        const auto rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
-        md_engine_radial<BraAngular + KetAngular>(rho, bra.product, ket.product, radial[warp]);
-        if constexpr (CountWork) {
-          ++roots;
-          forwards += forward;
-          reverses += reverse;
+    for (unsigned bra_begin = 0; bra_begin < task.bra_count; bra_begin += bra_lanes) {
+      const auto bra_slot = bra_begin + bra_lane;
+      double bra_values[bra_outputs]{};
+      for (unsigned ket_begin = 0; ket_begin < task.ket_count; ket_begin += ket_lanes) {
+        const auto ket_slot = ket_begin + ket_lane;
+        bool forward = false, reverse = false;
+        double prefactor = 0.0;
+        if (md_j_tile_source_valid(inventory, task, bra_slot, ket_slot)) {
+          const auto bra = bra_cache[bra_slot], ket = ket_cache[ket_slot];
+          const auto bra_pair = md.pairs[bra.pair], ket_pair = md.pairs[ket.pair];
+          if (bra_pair.system >= begin && bra_pair.system < end &&
+              bra_pair.system == ket_pair.system) {
+            const auto bra_index =
+                md.ordered_primitives[md.class_offsets[BraAngular] + task.bra_begin + bra_slot];
+            const auto ket_index =
+                md.ordered_primitives[md.class_offsets[KetAngular] + task.ket_begin + ket_slot];
+            forward = md.primitive_bounds
+                          ? md_j_engine_primitive_direction(md, bra_index, ket_index, screening)
+                          : md_j_engine_direction(md, bra.pair, ket.pair, screening);
+            const bool distinct =
+                BraAngular != KetAngular || task.bra_begin + bra_slot != task.ket_begin + ket_slot;
+            reverse = distinct &&
+                      (md.primitive_bounds
+                           ? md_j_engine_primitive_direction(md, ket_index, bra_index, screening)
+                           : md_j_engine_direction(md, ket.pair, bra.pair, screening));
+            if (forward || reverse) {
+              if (component_lane == 0) {
+                const auto rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
+                md_engine_radial<BraAngular + KetAngular, sources>(rho, bra.product, ket.product,
+                                                                   radial + source_lane);
+                if constexpr (CountWork) {
+                  ++roots;
+                  forwards += forward;
+                  reverses += reverse;
+                }
+              }
+              prefactor = 2.0 * pow(kPi, 2.5) /
+                          (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
+            }
+          }
+        }
+        __syncthreads();
+        if (forward)
+          for (unsigned slot = 0; slot < bra_outputs; ++slot) {
+            const auto component = slot * components + component_lane;
+            if (component < bra_components)
+              bra_values[slot] +=
+                  prefactor *
+                  md_engine_forward_component<BraAngular, KetAngular, sources>(
+                      radial + source_lane, ket_density + ket_slot * ket_components, component);
+          }
+        // Every physical lane participates in each shuffle, including padded
+        // tails and screened sources. Only bra_lane==0 writes the shared sum;
+        // different ket/component groups own disjoint elements.
+        for (unsigned slot = 0; slot < ket_outputs; ++slot) {
+          const auto component = slot * components + component_lane;
+          double value = 0.0;
+          if (reverse && component < ket_components)
+            value = prefactor *
+                    md_engine_reverse_component<BraAngular, KetAngular, sources>(
+                        radial + source_lane, bra_density + bra_slot * bra_components, component);
+          for (unsigned stride = bra_lanes / 2; stride; stride /= 2)
+            value += __shfl_down_sync(0xffffffffU, value, stride, bra_lanes);
+          if (bra_lane == 0 && ket_slot < task.ket_count && component < ket_components)
+            ket_potential[ket_slot * ket_components + component] += value;
+        }
+        // All component readers finish before source lanes reuse radial data.
+        __syncthreads();
+      }
+      for (unsigned slot = 0; slot < bra_outputs; ++slot) {
+        const auto component = slot * components + component_lane;
+        if (component < bra_components)
+          radial[component * sources + source_lane] = bra_values[slot];
+      }
+      __syncthreads();
+      for (unsigned i = threadIdx.x; i < bra_lanes * bra_components; i += blockDim.x) {
+        const auto component = i / bra_lanes, lane = i % bra_lanes;
+        const auto output_slot = bra_begin + lane;
+        if (output_slot < task.bra_count) {
+          double value = 0.0;
+          for (unsigned ket = 0; ket < ket_lanes; ++ket)
+            value += radial[component * sources + ket * bra_lanes + lane];
+          if (value != 0.0)
+            atomicAdd(md.potential + bra_cache[output_slot].hermite_offset + component, value);
         }
       }
-      __syncwarp();
-      const double prefactor =
-          2.0 * pow(kPi, 2.5) / (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
-      if (forward)
-        for (unsigned component = lane; component < bra_components; component += 32) {
-          const auto value =
-              prefactor * md_engine_forward_component<BraAngular, KetAngular>(
-                              radial[warp], ket_density + ket_slot * ket_components, component);
-          atomicAdd(bra_potential + bra_slot * bra_components + component, value);
-        }
-      if (reverse)
-        for (unsigned component = lane; component < ket_components; component += 32) {
-          const auto value =
-              prefactor * md_engine_reverse_component<BraAngular, KetAngular>(
-                              radial[warp], bra_density + bra_slot * bra_components, component);
-          atomicAdd(ket_potential + ket_slot * ket_components + component, value);
-        }
-      // All readers finish before lane zero reuses this warp's radial scratch.
-      __syncwarp();
-    }
-    __syncthreads();
-    for (unsigned i = threadIdx.x; i < task.bra_count * bra_components; i += blockDim.x) {
-      const double value = bra_potential[i];
-      if (value != 0.0)
-        atomicAdd(md.potential + bra_cache[i / bra_components].hermite_offset + i % bra_components,
-                  value);
+      __syncthreads();
     }
     for (unsigned i = threadIdx.x; i < task.ket_count * ket_components; i += blockDim.x) {
       const double value = ket_potential[i];
@@ -220,7 +311,7 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
       atomicAdd(md.work_counts->engine_tiles + 5 * BraAngular + KetAngular, tiles);
       atomicAdd(md.work_counts->engine_screened_tiles + 5 * BraAngular + KetAngular, screened);
     }
-    if (lane == 0) {
+    if (component_lane == 0) {
       constexpr auto forward_index = 5 * BraAngular + KetAngular;
       constexpr auto reverse_index = 5 * KetAngular + BraAngular;
       atomicAdd(md.work_counts->uniform_roots + forward_index, roots);
@@ -262,7 +353,7 @@ void launch_md_j_engine(cudaStream_t stream, MdJView md, std::size_t begin, std:
     const auto aligned = (count + 31) / 32 * 32;
     if (!aligned) continue;
     md_j_engine_hierarchy<<<static_cast<unsigned>((aligned + 127) / 128), 128, 0, stream>>>(
-        md, angular, begin, end);
+        md, angular, begin, end, screening);
     runtime::cuda_resource_check(cudaPeekAtLastError());
   }
   launch_md_j_engine_class<0, 0>(stream, md, begin, end, screening);

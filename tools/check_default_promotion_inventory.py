@@ -286,12 +286,13 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
 
 
 def _discover_md_j_default(root: Path) -> dict[str, str]:
-    """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
+    """Keep the admitted domain and diagnostic opt-out reviewable.
+
+    Capacity is enforced by executable owner-budget and rollback probes in
+    test_md_j_resources, not by pinning a private shape-estimate constant.
+    """
     relative = Path("src/scf/cuda/direct_jk.cpp")
     source = _read(root / relative)
-    layout = _read(root / "src/scf/cuda/direct_md_j.hpp")
-    if not re.search(r"kMdJResidentCap\s*=\s*128U\s*<<\s*20", layout):
-        raise ValueError("MD-J default resident cap drifted from 128 MiB")
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
         or 'std::strcmp(disabled, "1") == 0' not in source
@@ -712,6 +713,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():

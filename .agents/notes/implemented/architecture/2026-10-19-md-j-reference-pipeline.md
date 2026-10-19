@@ -98,3 +98,16 @@ Real-device measurements support better tile/warp allocation or safe default
 promotion; high-angular shells or multiple independent densities are added with
 independent oracles; or the user explicitly approves a different screening
 contract as a separate scientific behavior change.
+
+## Subsequent execution-layout qualification
+
+The [quartet-lane scheduling decision](../performance/2026-10-19-md-j-quartet-lane-scheduling.md)
+supersedes the original warp-per-source execution layout after real-device
+profiling exposed a substantial regression. It preserves this note's scientific,
+ownership and fallback decisions, and records the repaired endpoint evidence
+and the r2SCAN-3c hierarchy-capacity limitation.
+
+The later [owner-capacity decision](../performance/2026-10-19-md-j-owner-capacity.md)
+supersedes the fixed 128-MiB admission ceiling. The private reservation remains,
+but actual optional storage follows the direct owner's remaining capacity;
+public-ledger exclusion and bounded fallbacks still apply.

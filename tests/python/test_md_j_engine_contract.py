@@ -128,7 +128,16 @@ void schedules() {
     assert(schedule.threads == 128 && schedule.threads % 32 == 0);
     assert(schedule.bra_width == schedule.ket_width);
     assert(md_j_hierarchy_level(schedule.bra_width) < 6);
-    const U expected = 4 * hermites(bra + ket) * sizeof(double) +
+    const auto components = md_j_component_lanes(bra, ket);
+    const auto sources = md_j_source_lanes(bra, ket);
+    assert(components * sources == schedule.threads);
+    assert(components && (components & (components - 1)) == 0);
+    assert(md_j_bra_lanes(sources) <= 32 && sources % md_j_bra_lanes(sources) == 0);
+    // An admitted ordinary tile must populate every quartet lane at least
+    // once. Shared radial storage must not force a nearly empty rectangle.
+    assert(schedule.bra_width >= md_j_bra_lanes(sources));
+    assert(schedule.ket_width >= sources / md_j_bra_lanes(sources));
+    const U expected = sources * hermites(bra + ket) * sizeof(double) +
         2 * sizeof(double) * (schedule.bra_width * hermites(bra) +
                              schedule.ket_width * hermites(ket)) +
         96 * (schedule.bra_width + schedule.ket_width) + 128;

@@ -898,7 +898,6 @@ def test_new_response_option_must_be_registered(
 @pytest.mark.parametrize(
     "relative,before,after",
     [
-        ("src/scf/cuda/direct_md_j.hpp", "128U << 20", "256U << 20"),
         ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
         (
             "src/scf/cuda/direct_jk.cpp",
@@ -912,7 +911,7 @@ def test_new_response_option_must_be_registered(
         ),
     ],
 )
-def test_md_j_default_domain_and_optional_capacity_are_audited(
+def test_md_j_default_domain_and_opt_out_are_audited(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
     payload = _payload()

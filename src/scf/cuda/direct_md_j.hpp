@@ -10,7 +10,11 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-inline constexpr std::size_t kMdJResidentCap = 128U << 20;
+/** Extra allowance requested by private KS's shape-only provider estimate.
+ * This is a reservation hint, not a second cap on an already budgeted owner.
+ * Actual MD storage must fit the direct plan's remaining capacity; public
+ * ledger-bound plans cannot spend this optional allowance. */
+inline constexpr std::size_t kMdJDefaultReservation = 128U << 20;
 inline constexpr double kMdJDensityErrorCap = 1e-12;
 
 struct MdSourceTask {
@@ -49,6 +53,13 @@ struct MdJWorkCounts {
   unsigned long long engine_tiles[25]{}, engine_screened_tiles[25]{};
 };
 
+/** Device-only replay census for complete primitive J. Prefixes are refreshed
+ * after the current density bound, including every captured graph replay. */
+struct MdJPrimitiveScreenState {
+  double maximum_density;
+  std::uint32_t active[5];
+};
+
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.
  * A null minimum_bounds selects the unchanged normal J provider. The minimum
  * of every AO-pair Schwarz bound permits MD only for uniformly accepted shell
@@ -70,6 +81,12 @@ struct MdJView {
   /** Selected once, after the entire reference-engine workspace is admitted.
    * The original AO-pair mask and residual owner remain authoritative. */
   bool reference_engine{};
+  /** Explicitly different screening contract: complete J with a cumulative
+   * primitive omission allowance, rather than the legacy public-AO mask. */
+  double* primitive_bounds{};
+  MdJPrimitiveScreenState* primitive_screen{};
+  double primitive_maximum_bound{};
+  std::size_t maximum_pair_primitives{};
   MdJHierarchyStorage hierarchy_layout{};
   MdJScreenBound* hierarchy{};
   std::size_t pair_loc_offsets[6]{};

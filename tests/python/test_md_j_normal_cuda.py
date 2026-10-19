@@ -54,6 +54,8 @@ def test_normal_md_j_independent_screened_oracle(
     expected = np.einsum("ijkl,kl->ij", screened, total)
     spec = replace(FockBuildSpec.hf(spin, derivative_order=0), exchange=FockTerm(False))
     monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    # This legacy gate checks exact AO-mask semantics, retained by incumbent.
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", "incumbent")
     with (
         NativeAO(WATER, "def2-svp", representation=representation) as basis,
         FockPlan(basis, spec, device="cuda", screening_tolerance=screening) as plan,
@@ -122,6 +124,8 @@ def test_reciprocal_work_census_preserves_density_consumers(
     from md_j_resident_probe import ResidentMdJProbe as FockPlan
 
     monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    # Reciprocal/oriented ablations belong to the retained incumbent recipe.
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", "incumbent")
     monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
     spec = replace(
         FockBuildSpec.hf("restricted", derivative_order=0),

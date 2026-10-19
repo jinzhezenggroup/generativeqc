@@ -1631,11 +1631,12 @@
         "src/scf/cuda/direct_md_j.hpp",
         "src/methods/dft_method.cpp"
       ],
-      "rationale": "Unbudgeted strict-FP64 zero-order SPD Coulomb defaults to MD-J for at least eight AOs, within an optional 128-MiB cap after retained normal owners. Public active-ledger plans retain normal J because they reserve no optional MD allowance. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers. Original source qualification retains three same-binary cold pairs with independent gates and explicit 17/16 Fock counts.",
+      "rationale": "Eligible strict-FP64 zero-order s/p/d Coulomb defaults to complete primitive MD-J for at least eight AOs. Optional storage is charged to the actual owner capacity after retained normal owners; the private 128-MiB shape reservation is not a second hard cap. Public active-ledger plans retain normal J. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers.",
       "revisit_condition": "Broaden ledger admission only with an explicit optional candidate reserving future owners, rebuild and forces; broaden numerical/workload domains only with renewed independent gates and complete endpoints. Retained GPU receipts remain pinned to their measured source; host resource repairs do not claim new GPU qualification.",
       "evidence": [
         "pr:#2100",
-        "benchmarks/results/md-j-default-cold/README.md"
+        "benchmarks/results/md-j-default-cold/README.md",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-owner-capacity.md"
       ]
     },
     {
@@ -1723,7 +1724,7 @@
     },
     {
       "id": "dft.md-j-reference-engine",
-      "classification": "needs-qualification",
+      "classification": "already-default",
       "controls": [
         "dft-policy:GENERATIVEQC_MD_J_ENGINE"
       ],
@@ -1735,8 +1736,8 @@
         "src/scf/cuda/md_j_engine.cuh",
         "python/generativeqc_compiler/integral/md_j_engine_cuda.py"
       ],
-      "rationale": "Explicit reference selects the integrated GPU4PySCF-aligned J-value backend for the existing strict-FP64 s/p/d domain. Sorted primitive pair_loc, conservative FP64 six-level hierarchy and generated compact reciprocal contraction retain the exact public-AO mask and native residual source. Unset/incumbent keeps the previously qualified default; optional cap, ledger, K, mixed and derivative policies remain unchanged. Host mathematics and lifecycle checks do not qualify CUDA execution or performance.",
-      "revisit_condition": "Require source-identified independent raw J and complete HF/DFT energy+force integration, CUDA sanitizer/tail/graph replay, exact-mask work accounting, and matched full-size cold/warm endpoint comparisons before default promotion or expansion to higher angular/multiple independent densities.",
+      "rationale": "Unset/primitive selects complete primitive Hermite J with independent conservative Coulomb norms, current-density active prefixes and a cumulative per-entry screening allowance. Explicit reference/incumbent retain exact public-AO-mask compatibility. Hierarchy refusal retains incumbent MD and base-storage refusal retains normal J. Independent oracle, changed-density graph, sanitizer, resource rollback and complete 96-atom r2SCAN-3c/PBE0 E/F qualification support the guarded default; the public ledger, K, mixed and derivative boundaries remain.",
+      "revisit_condition": "Renew source-matched independent numerical, resource/lifecycle and full endpoint qualification before broadening basis, ledger, precision or multiple-independent-density domains. Preserve explicit exact-mask rollback and report semantic work counts with endpoint timing.",
       "evidence": [
         "docs/developer/md_j_engine.md",
         "tests/python/test_md_j_engine_math.py",
@@ -1745,7 +1746,32 @@
         "tests/python/test_md_j_engine_runtime.py",
         "tests/python/test_md_j_engine_cuda.py",
         "tests/python/test_md_j_resources.py",
-        "benchmarks/md_j_engine_acceptance.py"
+        "benchmarks/md_j_engine_acceptance.py",
+        "tests/python/test_md_j_primitive_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
+      ]
+    },
+    {
+      "id": "dft.xc-spatial-order",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_XC_SPATIAL_ORDER"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "src/dft/grid_spatial_order.hpp"
+      ],
+      "rationale": "Eligible resident semilocal XC with admitted local AO maps defaults to an exact spatial permutation of points and weights. Canonical grid ownership remains authoritative for moving-grid forces. Explicit 0, insufficient allowances and optional device OOM retain canonical execution; nonlocal and public-ledger owners remain excluded. Independent E/V, graph/tail/resource/sanitizer and complete 96-atom energy+force qualification support promotion.",
+      "revisit_condition": "Require renewed canonical force identity, resource reservation and independent endpoint qualification before enabling nonlocal or public-ledger consumers or changing quadrature, AO thresholds or precision.",
+      "evidence": [
+        "docs/developer/dft_grid.md",
+        "tests/native/test_dft_cuda.cu",
+        "note:.agents/notes/implemented/performance/2026-10-19-xc-spatial-grid-order.md",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
       ]
     }
   ]

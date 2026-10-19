@@ -1,11 +1,19 @@
-# Reference-aligned MD Coulomb engine
+# MD Coulomb engines
 
-The resident direct J/K owner has a complete, opt-in MD **J-value** engine selected
-at plan construction by `GENERATIVEQC_MD_J_ENGINE=reference`. The default is
-`incumbent`; setting that value explicitly restores the existing MD source
-consumer. Invalid values are errors. Diagnostics identify the selected owner as
-`md-j-reference/retained-k` or `md-j-hermite/retained-k`. Inspect diagnostics:
-requesting an optional engine is not proof that its storage was admitted.
+The resident direct J/K owner defaults to the complete primitive Hermite
+**J-value** engine, diagnosed as `md-j-primitive/retained-k`. Selection is frozen
+at plan construction. `GENERATIVEQC_MD_J_ENGINE=primitive` explicitly selects
+the same recipe; `incumbent` restores the earlier MD source consumer and
+`reference` selects the hierarchy with exact public-AO-mask compatibility.
+Their diagnostics are `md-j-hermite/retained-k` and `md-j-reference/retained-k`.
+Invalid values are errors. Inspect diagnostics: optional storage refusal retains
+a bounded existing provider, so requesting a recipe does not prove admission.
+
+The primitive recipe has the cumulative screening contract described below.
+Both hierarchy recipes use the same generated radial/contraction mathematics,
+native resource owner and retained K/derivative providers. The
+[default-promotion decision](../../.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md)
+records qualification of the ordinary unset selectors.
 
 This engine uses the architecture of official GPU4PySCF at
 [`9af748a71ca8f4881c604332c2f0cc1632e033ac`](https://github.com/pyscf/gpu4pyscf/tree/9af748a71ca8f4881c604332c2f0cc1632e033ac).
@@ -18,8 +26,10 @@ in `LICENSES/gpu4pyscf-Apache-2.0.txt` and `THIRD_PARTY_NOTICES.md`.
 ## Architecture correspondence
 
 All upstream paths below are relative to `gpu4pyscf/` at the pinned revision.
-The adaptation deliberately preserves GenerativeQC's public-AO screening
-contract; it does not claim binary layout or screening equivalence with upstream.
+The table describes the `reference` adaptation, which preserves the public-AO
+screening contract. The default primitive recipe replaces its exact-mask source
+admission with the cumulative bound below. Neither recipe claims binary layout
+or screening equivalence with upstream.
 
 | Stage | Pinned GPU4PySCF | Integrated GenerativeQC equivalent and compatibility choice |
 | --- | --- | --- |
@@ -28,7 +38,7 @@ contract; it does not claim binary layout or screening equivalence with upstream
 | Density precontraction | `lib/gvhf-md/contract_Et.cu`: `Et_dot_dm` | Existing `md_j_density` contracts the actual public density into resident primitive Hermite density using cached E. UKS uses alpha+beta; nonsymmetric density retains both AO directions. |
 | Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, maximum leaf minimum, and density. Coarse rejection preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. Precomputed qD is retained as hierarchy metadata but is not substituted at rounded boundaries. |
 | Exact admission | Upstream applies its own shell-pair cutoff contract | `md_j_engine_direction` retains the existing public-AO minimum-product and directional density allowance. Partially masked pairs still use the established exact residual source. Thus upstream log thresholds and half factors are not silently imported. |
-| Task/tile scheduling | `j_engine.py` scheme selection; `md_j.cuh` and `md_contract_j.cu` hierarchical task consumers | Checked 64-bit rectangular/triangular inventories, atomic device cursor, four-warp tiles, shared density/potential caches and per-warp compact radial scratch. Angular/workspace-aware tile widths respect a conservative 32-KiB target and 48-KiB hard cap. All 15 canonical angular class pairs, including (4,4), use this backend. Shapes are conservative and await device tuning. |
+| Task/tile scheduling | `j_engine.py` scheme selection; `md_j.cuh` and `md_contract_j.cu` hierarchical task consumers | Checked 64-bit rectangular/triangular inventories and an atomic device cursor feed 128-thread tiles. Adjacent source lanes evaluate independent primitive quartets; larger angular domains reserve power-of-two component lanes using upstream's single-density shape targets. Interleaved radial scratch, register bra accumulation and shuffle/single-writer ket reduction avoid per-source shared floating-point atomics. Angular/workspace-aware tile widths respect a conservative 32-KiB target and 48-KiB hard cap. All 15 canonical angular class pairs, including (4,4), use this backend. |
 | Generated recurrence and contraction | `md_indices.cu`, `md_pairdata.c`, `md_contract_j.cu`: compact Cartesian indexing, MD radial recurrence and two directions | Compiler-owned `md_j_engine_cuda.py` emits compact descending in-place R simplexes through order 8 and lane-owned forward/reverse contractions from the existing scalar IR and Boys seeds. One radial source supplies both admitted directions. |
 | Multiplicity and reconstruction | `contract_Et.cu` same-decontracted-shell half factor, same-pair factor, transpose sum and final scaling | Existing `md_j_project` applies cached E back to original public AOs. Original-shell density folding and canonical primitive identity handle multiplicity. Upstream half factors cannot be copied independently because a decontracted shell differs from an original contracted shell. |
 | Runtime lifecycle | Python/CuPy orchestration and upstream native launch code | Existing native plan owns transforms, layout, density, potential, hierarchy and cursor on one stream. Preparation-only q/minimum downloads are fenced before sorting; sorted uploads are fenced before staging is released. Replay has no host integral work, host polling or per-replay allocation. |
@@ -45,7 +55,8 @@ providers. In particular, availability of a derivative-order-one plan does not
 mean this J-value kernel computes forces. Complete HF/DFT energy and force tests
 exercise integration through the retained derivative providers.
 
-For each original shell pair, the minimum public-AO Schwarz bound proves that
+In the `incumbent` and `reference` recipes, the minimum public-AO Schwarz bound
+proves that
 all public quartets pass; the maximum proves that none pass. Only the uniform
 region enters the Hermite source consumer. The existing residual source retains
 the exact per-public-AO mask for the partial region. Density omission still uses
@@ -54,7 +65,43 @@ census**, downward-rounded allowance and upward-rounded contribution. Forward
 and reverse admission remain independent. An exactly zero density has no source
 work; a zero screening tolerance disables density omission of nonzero terms.
 
-The sorted active prefix excludes only primitives whose original pair cannot
+### Complete primitive recipe
+
+The `primitive` recipe precontracts **all** Coulomb contributions and does not
+invoke the partial-mask residual. It computes a conservative Coulomb norm for
+each primitive AO-pair expansion from cached normalized E coefficients and
+compiler-emitted Hermite norms. Absolute coefficient sums remain valid for
+signed/general contractions. The bound belongs to each primitive, rather than
+being copied from its contracted parent.
+
+Each directed primitive product receives an omission allowance of
+`min(screening_tolerance, 1e-12) / (maximum_pair_primitives * primitive_count)`.
+The upward-rounded product of the two primitive bounds and the input shell
+pair's absolute density envelope bounds that product's contribution to any
+output AO. The complete omitted absolute contribution to each J entry is thus
+bounded by `min(screening_tolerance, 1e-12)`; this bounds screening, not floating
+point accumulation error. No old per-AO integral mask is applied. Zero tolerance
+disables omission of nonzero terms. Nonrepresentable bound arithmetic retains
+work, and zero density produces zero source work.
+
+Preparation sorts primitive bounds within angular classes. Every replay computes
+the current maximum density envelope and five device-only active prefixes,
+then constructs its rectangular/triangular work inventory from those prefixes.
+Small geometry bounds cannot restore a quadratic traversal over the entire
+unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
+changing density magnitude never relies on pointer identity. All ordinary E,
+density and output mappings remain complete, including primitives excluded from
+the current source traversal.
+
+This recipe additionally charges one FP64 bound per primitive and one small
+device census. Its hierarchy and bound storage must fit the same owner's
+remaining capacity. An unadmitted optional recipe retains the existing
+incumbent provider and its documented screening contract; inspect diagnostics
+when requiring a particular recipe. An unset selector requests `primitive`.
+
+### Reference recipe lifetime and resources
+
+The reference recipe's sorted active prefix excludes only primitives whose original pair cannot
 participate in any uniform source under the same incumbent geometry test. Full
 storage and pair locations remain available to density, reconstruction and the
 residual provider. Hierarchy tails are zero-filled. Subset-system replay never
@@ -63,18 +110,42 @@ include the diagonal once and triangular reciprocal half once; cross-angular
 tasks use rectangles. Cursor arithmetic is checked without relying on double
 precision integer identity above 2^53.
 
-The reference hierarchy shares the existing optional 128-MiB resident cap, after
-mandatory owners are charged. If extra hierarchy storage does not fit, the
-admitted incumbent MD pipeline remains usable. Allocation/preparation failure
-rolls back the optional MD owner and retains the normal provider. No cap is
-raised and no user budget is bypassed. Plans freeze selection and immutable
-geometry; density and hierarchy are refreshed for every replay. Geometry changes
-require the existing plan invalidation/reconstruction rules.
+The reference hierarchy shares the direct plan's remaining device capacity,
+after retained normal owners are charged. There is no additional fixed MD byte
+cap. If extra hierarchy storage does not fit, the admitted incumbent MD pipeline
+remains usable. Allocation/preparation failure rolls back the optional MD owner
+and retains the normal provider. Private KS shape estimates request a 128-MiB
+default reservation; that estimate is not a limit on an explicitly budgeted
+owner. Public resource-ledger plans still reserve no optional MD storage and
+retain the normal provider. No user budget is bypassed. Plans freeze selection
+and immutable geometry; density and hierarchy are refreshed for every replay.
+Geometry changes require the existing plan invalidation/reconstruction rules.
+The [owner-capacity decision](../../.agents/notes/implemented/performance/2026-10-19-md-j-owner-capacity.md)
+records the distinction between the private reservation and actual admission.
 
 `GENERATIVEQC_MD_J_WORK_COUNTS=1` retains existing `MD_J_WORK` counters and adds
 `MD_J_ENGINE_WORK` tile/early-rejection counters. Compare roots, directional
 contractions, residual work and tile visits along with complete endpoint time.
 Memory-bounded traversal alone is not evidence of work or performance improvement.
+
+Source lanes form a two-dimensional bra/ket batch. Each source has one radial
+recurrence owner; component lanes read that source's strided compact simplex.
+Bra partials remain in registers across ket batches, then reuse the radial
+workspace for reduction. Ket partials reduce across contiguous bra shuffle
+groups before a single writer updates each shared element. Global atomics
+publish the tile's outputs. Screened and padded lanes still participate in
+every block barrier and shuffle; directional admission never changes their
+synchronization obligations. The scalar recurrence remains compiler-owned and
+is not an instruction-for-instruction copy of GPU4PySCF. The
+[execution-layout decision](../../.agents/notes/implemented/performance/2026-10-19-md-j-quartet-lane-scheduling.md)
+records the qualification and reasons for this decomposition.
+
+The component-lane selector also reserves enough shared memory for a complete
+bra/ket source-lane rectangle. A radial footprint must not force a tiny tile
+that leaves most of its own quartet lanes idle. This utilization invariant
+applies to both hierarchy recipes; it does not change mathematical screening.
+The [complete primitive decision](../../.agents/notes/implemented/performance/2026-10-19-primitive-complete-md-j.md)
+records its scientific bound, schedule rationale and qualification evidence.
 
 ## Validation and reproducible acceptance
 
@@ -146,10 +217,16 @@ export GENERATIVEQC_TEST_MD_J_ENGINE=1
 for tool in memcheck initcheck racecheck synccheck; do
   compute-sanitizer --tool "$tool" --error-exitcode 99 \
     python -m pytest -q tests/python/test_md_j_engine_cuda.py \
-    -k 'pair_factors_and_one_density_tail or residual_mask or graph_capture' \
+    -k 'pair_factors_and_one_density_tail or residual_mask or graph_capture_preserves_retained_k' \
     > ".artifacts/md-j-${tool}.log" 2>&1 || exit "$?"
 done
 ```
+
+Run the complete graph suite separately as part of the CUDA gate. Its
+changed-density test deliberately invalidates a capture to check recovery;
+Compute Sanitizer reports the expected CUDA API errors as failures. The
+sanitizer selection above exercises successful graph capture and replay without
+suppressing API-error reporting or weakening the recovery tests.
 
 ### Full-size cold, warm and moved measurements
 
@@ -225,8 +302,8 @@ any minimum-speedup threshold is declared before measurement. Neither J timing
 nor successful receipt collection authorizes default promotion.
 
 Real CUDA compilation/execution, sanitizer receipts, graph-capture replay and
-source-matched full-size cold/warm endpoint performance are separate outstanding
-qualification gates until actual evidence is recorded. The correctness runner
+source-matched full-size cold/warm endpoint performance require separate
+qualification receipts. The correctness runner
 executes graph capture when `--gpu` is selected; full-size measurements use the
 separate bounded benchmark driver above. Neither runner authorizes default
 promotion. Compare upstream and GenerativeQC with the same basis phase,

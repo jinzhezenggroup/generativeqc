@@ -1639,6 +1639,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
             options.semilocal_correlation_scale, borrow_resident_grid);
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
+        // Keep the canonical resident quadrature for grid-response forces.
+        // The optional semilocal execution copy changes only point order and
+        // is excluded under a public ledger until a fleet planner reserves it.
+        const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
+        // Unset selects the qualified spatial schedule; explicit 0 keeps the
+        // canonical execution order for diagnostics and paired comparisons.
+        if ((!spatial_choice || std::string_view(spatial_choice) == "1") && admit_ao &&
+            borrow_resident_grid && !nonlocal_correlation &&
+            !runtime::active_device_resource_ledger) {
+          const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
+          const auto host_bytes =
+              sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
+                                         sizeof(std::size_t)));
+          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes);
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
+        }
         if (admit_ao) {
           if (!xc->select_local_ao(1e-16, ao_map_host_budget,
                                    device_discovery ? CudaXcAoDiscovery::DeviceChunks
@@ -4107,7 +4123,9 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
   }
   try {
     const auto& layout = impl_->xc->layout();
-    const auto grid = impl_->xc->grid_view();
+    // SCF may integrate a private exact permutation. Derivative ownership and
+    // atomic measures use the retained canonical order, authenticated below.
+    const auto grid = impl_->xc->canonical_grid_view();
     CudaKsResidentGridBinding candidate{frame.device_id,   impl_->xc->packed_basis(),
                                         grid.points,       grid.weights,
                                         frame.density,     layout.natom,
@@ -4122,7 +4140,7 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
     if (quadrature) {
       if (quadrature.device != frame.device_id || quadrature.points != grid.points ||
           quadrature.weights != grid.weights || quadrature.point_count != grid.point_count)
-        throw std::logic_error("CUDA KS moving-grid source is not its actual XC quadrature");
+        throw std::logic_error("CUDA KS moving-grid source is not its canonical XC quadrature");
       const auto& spec = impl_->grid.spec();
       candidate.atomic_weights = quadrature.atomic_weights;
       candidate.points_per_atom = grid_points_per_atom(spec);
