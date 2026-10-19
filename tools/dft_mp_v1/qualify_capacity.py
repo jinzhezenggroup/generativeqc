@@ -482,7 +482,7 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+    "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
 )
 # Binary-scaled admission and the out-of-line normalization dispatch are part
 # of the reviewed owner contract, including the incumbent fallback schedule.
