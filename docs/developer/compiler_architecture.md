@@ -37,9 +37,11 @@ differentiation. `is_constant(expr, value)` interprets a rational payload's
 query using `constant`'s source-literal convention (finite float literals use
 their decimal spelling). Normalization distinguishes input types so a float
 and its equal binary Fraction cannot seed each other's cached coefficient.
+Both the constant lookup and scalar value numbering preserve payload type;
+an exact rational and an equal approximate float remain separate nodes.
 For a stored approximate float payload it compares the represented value
-directly, including exact comparison against rational
-queries. Neither a non-unit rational rounding to binary64 one nor a nonzero
+directly, including exact comparison against rational queries. Neither a
+non-unit rational rounding to binary64 one nor a nonzero
 rational rounding to zero is a neutral/annihilating coefficient. Scalar
 evaluation and emitted FP64 literals still round to binary64; preserving an
 exact coefficient does not qualify arbitrary user expressions for native

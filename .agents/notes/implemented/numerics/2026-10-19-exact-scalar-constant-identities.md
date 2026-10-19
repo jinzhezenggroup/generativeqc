@@ -17,13 +17,14 @@ These are exact-payload/symbolic errors, before native FP64 rounding.
 
 ## Decision and compatibility
 
-The shared constant predicate and normalization cache keys change. Fraction
+The shared constant predicate, normalization cache and constant interning
+keys change. Fraction
 payloads compare with the query normalized through the existing source-literal
 coefficient rule;
 this preserves `is_constant(constant(0.1), 0.1)`. Approximate float payloads
 compare directly against the query, so an approximate 0.1 is equal to the
 float 0.1 but not to exact Fraction(1, 10). No tolerance is used. Binary and
-n-ary arithmetic, interning, derivatives, rebuilds, hash algorithms and
+n-ary arithmetic, derivative rules, rebuilds, artifact hash algorithms and
 emitters keep their existing owners and mechanisms.
 
 Normalization uses a type-aware unbounded cache. A float 0.1 and
@@ -35,7 +36,18 @@ also seeded this cache: `is_constant(constant(0), 0.1)` changed a subsequent
 binary Fraction constant to decimal 1/10, even in another Graph. This was
 independently reproduced and corrected; the same alias was also reachable
 through constant construction before this PR. Typed keys preserve each
-input's existing interpretation without changing the graph interning key.
+input's existing interpretation.
+
+A second automatic review identified a separate provenance collision:
+constructing `constant(Fraction.from_float(0.1))` before
+`approximate_constant(0.1)` reused the Fraction node, while reverse order
+reused a float node. The documented predicate therefore still depended on
+construction order. This was independently reproduced before changing both
+constant interning layers: the local lookup uses `(type, value)` and the
+scalar value-number key includes constant payload type. Node's public shape
+and the shared value-numbering implementation are unchanged. The added type
+is a semantic distinction, not an attempt to preserve erroneous identities;
+previously conflated exact/approximate graphs deliberately change identity.
 
 The complete call-site audit found add's two zero checks, multiply's zero/one
 checks, and the exact-one branch-boundary test in `xc.libxc_bulk`.
@@ -69,7 +81,13 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   for predicate/float/rational cache-seeding orders at 0.1 and 0.3. They check
   both the original and a second Graph against direct Fraction constructors;
   no test clears or inspects the production cache.
-- A bounded one-off audit replayed the baseline predicate extracted from the
+- Eight provenance cases failed on the second head, covering both creation
+  orders at 0.1, 0.5, 1.0 and 0.0 across independent Graphs, cloning and
+  associative rebuild. Exact and approximate payload types remain distinct
+  even when their numeric values coincide; existing zero/one simplifications
+  retain their behavior.
+- A bounded one-off audit replayed baseline predicate, normalization and both
+  interning methods extracted from the
   committed source in an isolated process. All 14 legacy fixtures retained
   reachable mathematics and scalar-emitter source bytes: three PSSS axes,
   three one-electron derivative families, and polarized/unpolarized LDA_X,
@@ -81,9 +99,9 @@ Mixed approximate arithmetic continues using the existing float-fold policy.
   artifact identities that include generator source hashes must invalidate.
   This audit compares scalar emission and mathematical identity, not an
   assertion that all build artifact identities remain unchanged.
-- Local validation: 52 Graph tests, 295 shared XC/Maple/UserExpression/
+- Local validation: 60 Graph tests, 295 shared XC/Maple/UserExpression/
   derivative-IR/structure tests, 51 weighted-ERI independent finite-difference
-  tests, and seven selected one-electron derivative tests passed. The shared
+  tests, and eight selected one-electron controls passed. The shared
   suite initially had 294 passes and one structure import failure because
   Microsoft Store Python's isolated mode could not import user-installed
   NumPy; the complete 295-test suite passed in an isolated dependency

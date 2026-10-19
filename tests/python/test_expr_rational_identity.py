@@ -193,3 +193,35 @@ for graph in (g, Graph()):
     assert not graph.is_constant(literal, binary)
 """
     subprocess.run([sys.executable, "-c", source], check=True, timeout=30)
+
+
+@pytest.mark.parametrize("value", (0.1, 0.5, 1.0, 0.0))
+@pytest.mark.parametrize("approximate_first", (False, True))
+def test_exact_and_approximate_payload_provenance_survives_interning_and_rebuild(
+    value: float, approximate_first: bool
+) -> None:
+    binary = Fraction.from_float(value)
+    for graph in (Graph(), Graph()):
+        if approximate_first:
+            approximate = graph.approximate_constant(value)
+            exact = graph.constant(binary)
+        else:
+            exact = graph.constant(binary)
+            approximate = graph.approximate_constant(value)
+        assert isinstance(graph.node(exact).payload, Fraction)
+        assert isinstance(graph.node(approximate).payload, float)
+        assert exact.identifier != approximate.identifier
+        assert graph.is_constant(approximate, value)
+        assert graph.is_constant(exact, binary)
+        assert graph.clone_constant(graph.node(exact)).identifier == exact.identifier
+        assert (
+            graph.clone_constant(graph.node(approximate)).identifier
+            == approximate.identifier
+        )
+        rebuilt, (new_exact, new_approximate) = graph.canonicalize_associative(
+            (exact, approximate)
+        )
+        assert isinstance(rebuilt.node(new_exact).payload, Fraction)
+        assert isinstance(rebuilt.node(new_approximate).payload, float)
+        assert new_exact.identifier != new_approximate.identifier
+        assert rebuilt.is_constant(new_approximate, value)

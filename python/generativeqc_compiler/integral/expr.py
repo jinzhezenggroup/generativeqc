@@ -383,7 +383,7 @@ class Graph:
 
     def __init__(self) -> None:
         self.nodes: list[Node] = []
-        self._constants: dict[Coefficient, Expr] = {}
+        self._constants: dict[tuple[type[Coefficient], Coefficient], Expr] = {}
         self._variables: dict[str, Expr] = {}
         self._value_numbers = ValueNumberTable[Node]()
         # Nodes are immutable and this graph only appends new nodes, so the
@@ -392,7 +392,9 @@ class Graph:
 
     def _intern(self, node: Node) -> Expr:
         charge_symbolic_intern()
-        identifier = self._value_numbers.number_exact_pure(node)
+        # Equal numeric values can carry distinct exact/approximate semantics.
+        key = (node, type(node.payload)) if node.operation == "constant" else node
+        identifier = self._value_numbers.number_exact_pure(key)
         if identifier == len(self.nodes):
             self.nodes.append(node)
         elif identifier > len(self.nodes):
@@ -425,10 +427,11 @@ class Graph:
         return Fraction(str(numeric))
 
     def _intern_constant(self, value: Coefficient) -> Expr:
-        expression = self._constants.get(value)
+        key = (type(value), value)
+        expression = self._constants.get(key)
         if expression is None:
             expression = self._intern(Node("constant", payload=value))
-            self._constants[value] = expression
+            self._constants[key] = expression
         return expression
 
     def constant(self, value: Scalar) -> Expr:
