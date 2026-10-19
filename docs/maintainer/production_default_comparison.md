@@ -1,66 +1,88 @@
-# Compare independent production defaults
+# Production-default three-way benchmark
 
-This is a separate **user-facing default performance** measurement. It does not
-replace the README's matched-grid numerical-implementation test or the
-independent accuracy-qualification procedure in
-[performance engineering](performance_engineering.md). No published speedup
-may be inferred from a ratio alone.
+This is the standalone performance benchmark for **three actual user-facing
+modes**, not a numerical-alignment campaign. It does not change production
+settings or reinterpret historical matched-grid README results.
 
-## Protocol
+The only scientific inputs shared between all three arms are the molecule,
+charge/spin, functional, exact orbital basis and direct/non-DF calculation.
+The programs decide their own SCF convergence, initial guesses, screening,
+quadrature, pruning, VV10 point domains and hardware execution optimizations.
 
-Shared inputs: water-3/6/12/24/48/96 nested geometry, charge/spin, exact
-DFT functional, spherical def2-SVP and direct Coulomb/exchange. Each program
-uses **its own** default initial guess, SCF convergence controls, J/K
-screening, XC grid, pruning, density filtering and acceleration strategy.
+| Engine | Public API | Numerical settings passed by benchmark |
+| --- | --- | --- |
+| GPU4PySCF default | gpu4pyscf.dft.rks.RKS(mol) | None (functional selected) |
+| GenerativeQC Standard | generativeqc.Calculator(..., device="cuda") | None |
+| GenerativeQC Fast | generativeqc.PrecisionCalculator(policy="fast", ...) | No manually chosen budget or SCF knobs |
 
-Supported electronic functionals: LDA, PBE, PBE0, r2SCAN and WB97M-V.
-The native API currently requires an explicit GridSpec() for PBE0 and
-WB97M-V because no qualified automatic hybrid grid exists. This is
-recorded as a mandatory API input; it is *not* claimed to be a fully
-zero-configuration native hybrid run. r2SCAN-3c is not silently reduced
-to r2SCAN: its D4 and gCP corrections require an explicit complete-model
-reference and separate provenance before a defaults comparison is valid.
+Fast uses its **own published default** application error budget and may
+execute mixed precision, strict FP64 or a measured strict fallback/audit.
+The *entire* public Fast call is timed, and its validation status, internal
+solve count, requested precision and selected controls are recorded. Calling
+Calculator(precision="auto") would **not** represent this Fast mode.
 
-The timed fresh-owner endpoint includes public constructor, grid and integral
-preparation, first cold SCF, analytic force and host result export, starting
-with an already initialized CUDA context. Each repetition uses a new owner.
-It does **not** claim process-startup/compilation cold timing, imported-density
-warm timing, or automatically matched Fock/JK work. Measurements run in
-separate engine processes; CPU/GPU version, grid details, source identity,
-SCF iterations and failure status are recorded, never reconstructed.
+The native hybrid/range-separated public API currently requires an explicit
+KsOptions(grid=GridSpec()) because an implicit hybrid production grid policy
+is not published. Both Standard and Fast receive that *native default
+GridSpec()*; GPU4PySCF receives its own completely unmodified grid.
+This exception is prominently recorded and is not represented as a pure
+zero-argument native hybrid run.
 
-## Commands
+Supported methods: LDA, PBE, PBE0, r2SCAN and WB97M-V. Do not silently
+replace r2SCAN-3c with plain r2SCAN: D4/gCP and its basis must also be
+included in a future independent complete-model implementation.
 
-Run both commands on the **same GPU**, separately inside finite Slurm
-allocations; repeat with independent process launches to assess cold-context
-variance if needed:
+## Scope
 
-    srun ... python -m benchmarks.production_default_compare generativeqc --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/native-default.json
-    srun ... python -m benchmarks.production_default_compare gpu4pyscf --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/gpu4-default.json
+All timings are **fresh-owner cold E+F**: after CUDA context initialization,
+measure constructor, complete SCF energy, complete analytic force and
+host export, with one new calculator per repetition. All three engines
+run in separate child processes on the same assigned GPU. Differences in
+Fock iteration counts and internal budgets are part of their defaults,
+not normalized away. No unmeasured reference density enters a timing.
 
-Combine on any host (no GPU needed):
+No default is forcibly changed, including GPU4PySCF's force
+grid_response setting. GenerativeQC Standard/Fast produce moving-grid
+responsive forces while GPU4PySCF normally leaves that response disabled.
+This makes the main table a **stock end-user E+F latency comparison**,
+not equivalent-derivative FLOP/precision evidence. The exact executed
+force response setting is retained with the raw receipt.
 
-    python -m benchmarks.production_default_compare compare --native .artifacts/benchmarks/native-default.json --reference .artifacts/benchmarks/gpu4-default.json --output .artifacts/benchmarks/default-ratio.json
+Numerical/analytic force gates must be evaluated independently against
+grid-converged references before claiming scientific agreement.
+The performance summary is explicitly marked accuracy-unverified.
+Failed SCF, partial force vectors, nonfinite energy/forces/timing, missing
+repetitions, mismatched scientific inputs, incompatible force definitions
+between native Standard/Fast, or mismatched GPU hardware are rejected.
+The Fast summary includes its internal solve count, so a fallback is not
+misreported as successful FP32 arithmetic. Do not reuse older matched-grid
+96-atom numbers as production-default data.
 
-For true software defaults, the force policy is engine-default.
-Native returns full moving-grid-response analytic forces, while GPU4PySCF
-normally leaves grid_response disabled. Thus the default E+F ratio is a
-**user-workflow runtime comparison for different force definitions**, not
-a speed comparison of equal derivatives. GPU4PySCF's actual gradient
-grid_response value is captured for every sample, rather than assumed.
+## One-command run
 
-To compare the cost of *complete moving-grid forces*, run both engine
-commands with --force-policy full-moving-grid. This explicitly overrides
-GPU4PySCF's usual gradient response setting, but never copies SCF defaults
-or the native quadrature. Keep the two force policies in separate tables.
+Execute inside a finite Slurm GPU allocation, using the same device
+and scientific case for all three arms:
 
-An independent grid-converged oracle should separately verify total energy,
-maximum force component and moved-geometry force behavior for each program.
-The summary is unconditionally marked **accuracy unverified** until such
-evidence is supplied. Default-vs-default energy disagreement is not an
-independent oracle. Mismatched scientific inputs, missing repetitions, or
-failed SCF prohibit a timing comparison. No pre-existing matched-grid
-96-atom result is relabelled as a production-default measurement.
+    srun ... python -m benchmarks.production_default_compare all --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/pbe0-96-defaults.json
+
+This launches three separate child processes, writes three JSON receipts
+(next to the combined JSON) and prints **one performance main table** with
+GPU4PySCF default, GenerativeQC Standard, GenerativeQC Fast and two speedups.
+
+Or execute and combine individual arms:
+
+    srun ... python -m benchmarks.production_default_compare gpu4pyscf --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/gpu4.json
+    srun ... python -m benchmarks.production_default_compare standard --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/standard.json
+    srun ... python -m benchmarks.production_default_compare fast --method pbe0 --atoms 96 --repeats 3 --output .artifacts/benchmarks/fast.json
+    python -m benchmarks.production_default_compare compare --gpu4pyscf .artifacts/benchmarks/gpu4.json --standard .artifacts/benchmarks/standard.json --fast .artifacts/benchmarks/fast.json --output .artifacts/benchmarks/defaults.json
+
+Gather individual method/atom comparisons into **the same single table**:
+
+    python -m benchmarks.production_default_compare render --comparisons .artifacts/benchmarks/defaults.json --output .artifacts/benchmarks/main-table.md
+
+This benchmark reports measured wall time, not a claim of identical
+numerical tolerances, identical force definitions or identical Fock work.
+The existing common-grid validation tool remains independent.
 
 Agent: ChatGPT
 Model: GPT-6

@@ -1,8 +1,9 @@
-"""Time each engine's production-default cold E+F, without numerical alignment.
+"""Benchmark GPU4PySCF defaults and GenerativeQC Standard/Fast defaults.
 
-Run native and GPU4PySCF in separate processes in a finite Slurm allocation.
-Shared geometry/basis/functional are the scientific input, not SCF/grid knobs.
-The default force modes can differ; ratios are not accuracy certificates.
+Each arm runs in its own process on the same GPU. Scientific inputs are shared;
+SCF convergence, initial guesses, grids, pruning and screening are not copied
+between programs, and Fast uses its public default application error budget.
+Complete cold E+F timings include any real Fast strict/audit fallback solves.
 """
 
 from __future__ import annotations
@@ -14,13 +15,16 @@ import json
 import math
 import os
 import statistics
+import subprocess
+import sys
+from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 from benchmarks._retention import raw_output_path
 
-SCHEMA = "generativeqc.production-default-ef.v1"
+SCHEMA = "generativeqc.production-default-ef.v2"
 METHODS = {
     "lda": ("lda-rks", "LDA_X,LDA_C_PW"),
     "pbe": ("pbe-rks", "PBE"),
@@ -29,7 +33,8 @@ METHODS = {
     "wb97m-v": ("wb97m-v-rks", "WB97M_V"),
 }
 REQUIRED_NATIVE_GRID = frozenset(("pbe0", "wb97m-v"))
-FORCE_POLICIES = ("engine-default", "full-moving-grid")
+ARMS = ("gpu4pyscf", "standard", "fast")
+NATIVE_ARMS = ("standard", "fast")
 SIZES = (3, 6, 12, 24, 48, 96)
 
 
@@ -69,6 +74,18 @@ def native_constructor_kwargs(method: str) -> dict[str, Any]:
     return kwargs
 
 
+def make_native_calculator(method: str, arm: str) -> Any:
+    """Select real public default implementations; do not pass numerical flags."""
+    from generativeqc import Calculator, PrecisionCalculator
+
+    options = native_constructor_kwargs(method)
+    if arm == "standard":
+        return Calculator(**options)
+    if arm == "fast":
+        return PrecisionCalculator(policy="fast", **options)
+    raise ValueError("native arm must be standard or fast")
+
+
 def _finite_endpoint(
     energy: float, forces: Any, atoms: int, seconds: float
 ) -> list[list[float]]:
@@ -95,49 +112,81 @@ def _grid_point_count(grid: Any) -> int | None:
     return len(points) if points is not None else None
 
 
-def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
-    """Use the public CUDA Calculator with no SCF/seed/threshold overrides."""
+def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
+    """Time Standard/Fast constructor, cold SCF, complete forces and host output."""
     import cupy as cp
-    from generativeqc import Calculator
     from generativeqc_compiler.dft.nonlocal_policy import (
         MOLECULAR_VV10_DENSITY_POLICY,
         MOLECULAR_VV10_DENSITY_THRESHOLD,
     )
 
-    if force_policy not in FORCE_POLICIES:
-        raise ValueError("unknown force policy")
+    if arm not in NATIVE_ARMS:
+        raise ValueError("unsupported native precision profile")
     cp.cuda.runtime.deviceSynchronize()
-    start = perf_counter()
-    calculator = Calculator(**native_constructor_kwargs(method))
+    started = perf_counter()
+    calculator = make_native_calculator(method, arm)
     result = calculator.singlepoint(atoms, properties=("energy", "forces"))
     cp.cuda.runtime.deviceSynchronize()
-    seconds = perf_counter() - start
+    seconds = perf_counter() - started
+
     if not result.converged or result.executed_backend != "cuda":
-        raise RuntimeError("native CUDA default SCF did not converge")
+        raise RuntimeError(f"GenerativeQC {arm} CUDA SCF did not converge")
     if result.forces is None:
-        raise RuntimeError("native force endpoint is unavailable")
+        raise RuntimeError(f"GenerativeQC {arm} force endpoint unavailable")
     forces = _finite_endpoint(float(result.energy), result.forces, len(atoms), seconds)
-    grid = calculator.ks_options.grid
-    seed = calculator.initial_guess
-    diagnostic = (
-        result.initial_guess if isinstance(result.initial_guess, dict) else None
-    )
+
+    # Fast is a public PrecisionCalculator wrapper; its internally selected
+    # Calculator may have DIFFERENT default controls and may perform an FP64
+    # reference audit. Read the result's actual status, never assume FP32.
+    candidate = calculator if arm == "standard" else calculator._candidate
+    validation = result.precision_validation
+    if arm == "fast":
+        if validation is None or validation.profile != "fast":
+            raise RuntimeError("Fast result lacks its actual precision validation")
+        validation_info: dict[str, Any] | None = {
+            "profile": validation.profile,
+            "status": validation.status,
+            "scope": validation.scope,
+            "solve_count": validation.solve_count,
+            "gradient_admission": validation.gradient_admission,
+            "fallback_reasons": list(validation.fallback_reasons),
+            "budget": asdict(validation.budget) if validation.budget is not None else None,
+            "solves": [
+                {
+                    "role": solve.role,
+                    "requested_precision": solve.requested_precision,
+                    "iterations": solve.iterations,
+                    "fock_builds": solve.fock_builds,
+                    "seconds": solve.seconds,
+                }
+                for solve in validation.solves
+            ],
+        }
+    else:
+        validation_info = None
+    grid = candidate.ks_options.grid
+    guess = candidate.initial_guess
+    initial = result.initial_guess if isinstance(result.initial_guess, dict) else None
+    work = result.precision or {}
+    gradient = work.get("gradient") if isinstance(work, dict) else None
     settings = {
-        "initial_guess": seed.kind if seed is not None else "hcore",
+        "precision_profile": "fp64" if arm == "standard" else "fast",
+        "selected_candidate_precision": (
+            "fp64" if arm == "standard" else calculator._candidate_precision
+        ),
+        "initial_guess": guess.kind if guess is not None else "hcore",
         "initial_guess_policy": "auto",
         "initial_guess_executed": (
-            diagnostic.get("kind")
-            if diagnostic is not None and diagnostic.get("outcome") == "used"
+            initial.get("kind")
+            if initial is not None and initial.get("outcome") == "used"
             else "hcore-or-existing-density"
         ),
-        "initial_guess_outcome": (
-            diagnostic.get("outcome") if diagnostic is not None else None
-        ),
-        "max_iterations": calculator._max_iterations,
-        "energy_tolerance": calculator._energy_tolerance,
-        "density_tolerance": calculator._density_tolerance,
-        "diis_history": calculator._diis_history,
-        "screening_tolerance": calculator._screening_tolerance,
+        "initial_guess_outcome": initial.get("outcome") if initial else None,
+        "max_iterations": candidate._max_iterations,
+        "energy_tolerance": candidate._energy_tolerance,
+        "density_tolerance": candidate._density_tolerance,
+        "diis_history": candidate._diis_history,
+        "screening_tolerance": candidate._screening_tolerance,
         "xc_grid": {
             "rule": "native-resolved-GridSpec",
             "version": grid.version,
@@ -148,6 +197,7 @@ def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
             "points": getattr(result.ks_diagnostic, "grid_points", None),
         },
         "mandatory_explicit_hybrid_GridSpec": method in REQUIRED_NATIVE_GRID,
+        "force_grid_response": True,
         "vv10_density": (
             {
                 "policy": MOLECULAR_VV10_DENSITY_POLICY,
@@ -165,31 +215,26 @@ def native_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
         "iterations": int(result.iterations),
         "grid_response": True,
         "settings": settings,
-        "native_library_path": str(Path(calculator._library._name).resolve()),
+        "precision_validation": validation_info,
+        "mixed_fock_builds": work.get("mixed_stage_fock_builds") if isinstance(work, dict) else None,
+        "gradient_arithmetic": gradient.get("returned_mode") if isinstance(gradient, dict) else None,
+        "native_library_path": str(Path(candidate._library._name).resolve()),
     }
-    del calculator
+    del calculator, candidate
     gc.collect()
     return sample
 
-
-def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
-    """Preserve RKS/SCF/grid defaults; optional full gradient is explicit."""
+def gpu4_sample(method: str, atoms: Any) -> dict[str, Any]:
+    """Time stock GPU4PySCF, without SCF, grid or force-response overrides."""
     import cupy as cp
     from gpu4pyscf.dft import rks
     from pyscf import gto
 
-    if force_policy not in FORCE_POLICIES:
-        raise ValueError("unknown force policy")
     cp.cuda.runtime.deviceSynchronize()
-    start = perf_counter()
+    started = perf_counter()
     mol = gto.M(
-        atom=atoms,
-        basis="def2-svp",
-        cart=False,
-        charge=0,
-        spin=0,
-        unit="Bohr",
-        verbose=0,
+        atom=atoms, basis="def2-svp", cart=False,
+        charge=0, spin=0, unit="Bohr", verbose=0,
     )
     engine = rks.RKS(mol)
     engine.xc = METHODS[method][1]
@@ -197,14 +242,13 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
     if not engine.converged:
         raise RuntimeError("GPU4PySCF default SCF did not converge")
     gradient = engine.nuc_grad_method()
-    gradient_default = bool(getattr(gradient, "grid_response", False))
-    if force_policy == "full-moving-grid":
-        gradient.grid_response = True
-    actual_response = bool(getattr(gradient, "grid_response", False))
+    # Important: even grid_response remains at GPU4PySCF's REAL default.
+    grid_response = bool(getattr(gradient, "grid_response", False))
     forces = -cp.asnumpy(gradient.kernel())
     cp.cuda.runtime.deviceSynchronize()
-    seconds = perf_counter() - start
+    seconds = perf_counter() - started
     forces = _finite_endpoint(energy, forces, len(atoms), seconds)
+
     settings = {
         "initial_guess": str(getattr(engine, "init_guess", "unavailable")),
         "max_iterations": int(engine.max_cycle),
@@ -222,14 +266,14 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
             "angular_pruning": _function_name(engine.grids.prune),
             "radii_adjust": _function_name(engine.grids.radii_adjust),
             "becke": _function_name(engine.grids.becke_scheme),
+            "points": _grid_point_count(engine.grids),
         },
+        "nonlocal_grid_points": (
+            _grid_point_count(engine.nlcgrids) if method == "wb97m-v" else None
+        ),
+        "force_grid_response_default": grid_response,
+        "force_grid_response_executed": grid_response,
     }
-    settings["xc_grid"]["points"] = _grid_point_count(engine.grids)
-    settings["nonlocal_grid_points"] = (
-        _grid_point_count(engine.nlcgrids) if method == "wb97m-v" else None
-    )
-    settings["force_grid_response_default"] = gradient_default
-    settings["force_grid_response_executed"] = actual_response
     if method == "wb97m-v":
         from gpu4pyscf.dft import numint
         from gpu4pyscf.grad import rks as grad_rks
@@ -246,13 +290,12 @@ def gpu4_sample(method: str, atoms: Any, force_policy: str) -> dict[str, Any]:
         "iterations": (
             int(engine.cycles) if getattr(engine, "cycles", None) is not None else None
         ),
-        "grid_response": actual_response,
+        "grid_response": grid_response,
         "settings": settings,
     }
     del gradient, engine, mol
     gc.collect()
     return sample
-
 
 def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]]:
     if record.get("schema") != SCHEMA or record.get("engine") != engine:
@@ -268,6 +311,16 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
     if not isinstance(atoms, int) or atoms <= 0:
         raise ValueError("invalid atom count in measured scientific input")
     for sample in samples:
+        if engine == "fast":
+            report = sample.get("precision_validation")
+            if (
+                not isinstance(report, dict)
+                or report.get("profile") != "fast"
+                or not isinstance(report.get("status"), str)
+                or not isinstance(report.get("solve_count"), int)
+                or report["solve_count"] < 1
+            ):
+                raise ValueError("Fast execution/audit provenance is missing")
         seconds = sample.get("seconds")
         energy = sample.get("energy")
         forces = sample.get("forces")
@@ -294,61 +347,107 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
     return samples
 
 
-def compare(native: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
-    """Return the observed default-runtime ratio, never an accuracy assertion."""
-    left = _checked_samples(native, "generativeqc")
-    right = _checked_samples(reference, "gpu4pyscf")
-    for key in ("problem", "force_policy", "phase", "endpoint"):
-        if native.get(key) != reference.get(key):
+def compare(
+    gpu4pyscf: dict[str, Any],
+    standard: dict[str, Any],
+    fast: dict[str, Any],
+) -> dict[str, Any]:
+    """One three-way default comparison; never claim equal accuracy/work."""
+    records = {"gpu4pyscf": gpu4pyscf, "standard": standard, "fast": fast}
+    samples = {arm: _checked_samples(records[arm], arm) for arm in ARMS}
+    for key in ("problem", "phase", "endpoint"):
+        if len({json.dumps(records[arm].get(key), sort_keys=True) for arm in ARMS}) != 1:
             raise ValueError(f"mismatched default comparison: {key}")
-    if native["force_policy"] not in FORCE_POLICIES:
-        raise ValueError("unknown default force policy")
-    # An apples-to-apples device comparison needs at least the same GPU model.
-    native_gpu, reference_gpu = native.get("accelerator"), reference.get("accelerator")
-    checked_hardware = isinstance(native_gpu, dict) and isinstance(reference_gpu, dict)
+    # One real GPU model is mandatory for a reported speed ratio. Host-only
+    # synthetic receipts may omit all accelerator metadata, but live records do not.
+    hardware = [records[arm].get("accelerator") for arm in ARMS]
+    present = [isinstance(device, dict) for device in hardware]
+    if any(present) and not all(present):
+        raise ValueError("missing GPU hardware for one default-comparison arm")
+    checked_hardware = all(present)
     if checked_hardware:
-        for property_name in (
+        for name in (
             "name", "compute_capability", "total_global_memory_bytes",
             "multiprocessor_count",
         ):
-            if native_gpu.get(property_name) != reference_gpu.get(property_name):
-                raise ValueError(f"different GPU hardware: {property_name}")
-    n_time = statistics.median(s["seconds"] for s in left)
-    g_time = statistics.median(s["seconds"] for s in right)
-    n_response = {s["grid_response"] for s in left}
-    g_response = {s["grid_response"] for s in right}
-    if len(n_response) != 1 or len(g_response) != 1:
-        raise ValueError("force definition changed within one engine")
+            if len({json.dumps(device.get(name)) for device in hardware}) != 1:
+                raise ValueError(f"different GPU hardware: {name}")
+    medians = {
+        arm: statistics.median(row["seconds"] for row in samples[arm])
+        for arm in ARMS
+    }
+    responses = {arm: {row["grid_response"] for row in samples[arm]} for arm in ARMS}
+    if any(len(response) != 1 for response in responses.values()):
+        raise ValueError("force response policy varied within an arm")
+    if responses["standard"] != responses["fast"]:
+        raise ValueError("Standard and Fast returned different force definitions")
+    equivalent_response = responses["standard"] == responses["gpu4pyscf"]
+    fast_status = [row["precision_validation"]["status"] for row in samples["fast"]]
+    fast_solve_counts = [
+        row["precision_validation"]["solve_count"] for row in samples["fast"]
+    ]
+    problem = gpu4pyscf["problem"]
+    row = {
+        "method": problem["method"],
+        "atoms": problem["atoms"],
+        "gpu4pyscf_default_seconds": medians["gpu4pyscf"],
+        "generativeqc_standard_seconds": medians["standard"],
+        "generativeqc_fast_seconds": medians["fast"],
+        "standard_speedup_vs_gpu4pyscf": medians["gpu4pyscf"] / medians["standard"],
+        "fast_speedup_vs_gpu4pyscf": medians["gpu4pyscf"] / medians["fast"],
+        "fast_speedup_vs_standard": medians["standard"] / medians["fast"],
+    }
     return {
-        "schema": "generativeqc.production-default-compare.v1",
-        "problem": native["problem"],
-        "force_policy": native["force_policy"],
-        "native_median_seconds": n_time,
-        "gpu4pyscf_median_seconds": g_time,
-        "observed_default_runtime_ratio_gpu4_over_native": g_time / n_time,
-        "native_iterations": [s.get("iterations") for s in left],
-        "gpu4pyscf_iterations": [s.get("iterations") for s in right],
-        "native_grid": left[0]["settings"]["xc_grid"],
-        "gpu4pyscf_grid": right[0]["settings"]["xc_grid"],
-        "native_initial_guess": left[0]["settings"]["initial_guess"],
-        "gpu4pyscf_initial_guess": right[0]["settings"]["initial_guess"],
-        "same_moving_grid_response": n_response == g_response,
+        "schema": "generativeqc.production-default-comparison.v2",
+        "problem": problem,
+        "main_table": [row],
+        "medians_seconds": medians,
+        "iterations": {
+            arm: [sample["iterations"] for sample in samples[arm]] for arm in ARMS
+        },
+        "fast_statuses": fast_status,
+        "fast_internal_solve_counts": fast_solve_counts,
+        "engine_settings": {
+            arm: samples[arm][0]["settings"] for arm in ARMS
+        },
+        "same_gpu_hardware_verified": checked_hardware,
+        "same_moving_grid_force_definition": equivalent_response,
         "force_definition_warning": (
-            None
-            if n_response == g_response
-            else "Different analytic-force definitions under stock defaults; "
-            "performance ratio is not an equal-work force speedup."
+            None if equivalent_response
+            else "GPU4PySCF uses its stock force grid_response default; "
+                 "GenerativeQC Standard/Fast use full moving-grid response. "
+                 "This is default end-user E+F runtime, not equal-force-work speedup."
         ),
-        "accuracy": "unverified: no independent grid-converged E/F oracle",
+        "accuracy": "not_qualified_against_independent_grid_converged_oracle",
         "science_equivalence_proved": False,
         "equal_fock_work_proved": False,
-        "gpu_hardware_model_verified": checked_hardware,
-        "runtime_scope": "fresh owner, initialized CUDA context, "
-        "constructor + SCF + forces + host export",
-        "native_settings": left[0]["settings"],
-        "gpu4pyscf_settings": right[0]["settings"],
+        "runtime_scope": "new calculator owner, initialized CUDA context, "
+                         "constructor+SCF+analytic force+host export",
     }
 
+
+def main_table_markdown(comparisons: list[dict[str, Any]]) -> str:
+    """Render exactly one performance table, never a separate accuracy table."""
+    headers = (
+        "| Method | Atoms | GPU4PySCF default (s) | "
+        "GQC Standard (s) | GQC Fast (s) | Standard / GPU4 | Fast / GPU4 |"
+    )
+    lines = [headers, "|---|---:|---:|---:|---:|---:|---:|"]
+    rows = [
+        row
+        for item in comparisons
+        for row in item["main_table"]
+    ]
+    for row in sorted(rows, key=lambda item: (item["method"], item["atoms"])):
+        lines.append(
+            f'| {row["method"]} | {row["atoms"]} | '
+            f'{row["gpu4pyscf_default_seconds"]:.3f} | '
+            f'{row["generativeqc_standard_seconds"]:.3f} | '
+            f'{row["generativeqc_fast_seconds"]:.3f} | '
+            f'{row["standard_speedup_vs_gpu4pyscf"]:.2f}x | '
+            f'{row["fast_speedup_vs_gpu4pyscf"]:.2f}x |'
+        )
+    return "\n".join(lines)
 
 def _save(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,65 +456,106 @@ def _save(path: Path, value: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("engine", choices=("generativeqc", "gpu4pyscf", "compare"))
+    parser.add_argument("engine", choices=(*ARMS, "compare", "all", "render"))
     parser.add_argument("--method", choices=tuple(METHODS))
     parser.add_argument("--atoms", type=int, choices=SIZES, default=3)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument(
-        "--force-policy", choices=FORCE_POLICIES, default="engine-default"
-    )
-    parser.add_argument("--native", type=Path)
-    parser.add_argument("--reference", type=Path)
+    parser.add_argument("--gpu4pyscf", type=Path)
+    parser.add_argument("--standard", type=Path)
+    parser.add_argument("--fast", type=Path)
+    parser.add_argument("--comparisons", type=Path, nargs="+")
     parser.add_argument("--output", required=True, type=raw_output_path)
     args = parser.parse_args(argv)
-    if args.engine == "compare":
-        if args.native is None or args.reference is None:
-            parser.error("compare requires both --native and --reference")
-        receipt = compare(
-            json.loads(args.native.read_text()),
-            json.loads(args.reference.read_text()),
-        )
-        _save(args.output, receipt)
-        print(
-            json.dumps(
-                {
-                    "runtime_ratio": receipt[
-                        "observed_default_runtime_ratio_gpu4_over_native"
-                    ],
-                    "accuracy": receipt["accuracy"],
-                }
-            ),
-            flush=True,
-        )
+
+    if args.engine == "render":
+        if not args.comparisons:
+            parser.error("render requires --comparisons")
+        comparisons = [json.loads(path.read_text()) for path in args.comparisons]
+        if any(
+            record.get("schema") != "generativeqc.production-default-comparison.v2"
+            for record in comparisons
+        ):
+            raise ValueError("cannot render an unverified/older comparison schema")
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        table = main_table_markdown(comparisons)
+        args.output.write_text(table + "\n")
+        print(table, flush=True)
         return
+
+    if args.engine == "compare":
+        if args.gpu4pyscf is None or args.standard is None or args.fast is None:
+            parser.error("compare requires --gpu4pyscf, --standard and --fast")
+        result = compare(
+            json.loads(args.gpu4pyscf.read_text()),
+            json.loads(args.standard.read_text()),
+            json.loads(args.fast.read_text()),
+        )
+        _save(args.output, result)
+        print(main_table_markdown([result]), flush=True)
+        return
+
     if args.method is None:
-        parser.error("--method is required to measure a GPU engine")
+        parser.error("--method is required for measured engines and all mode")
     if args.repeats < 1:
         parser.error("--repeats must be positive")
     if not os.environ.get("SLURM_JOB_ID"):
-        parser.error("GPU measurement requires a finite Slurm allocation")
+        parser.error("GPU runs require a finite Slurm GPU allocation")
+
+    if args.engine == "all":
+        # Keep all three execution arms in independent Python processes, so
+        # each has its own GPU/PySCF native state and clean cold seed.
+        receipts = {
+            arm: args.output.with_name(f"{args.output.stem}-{arm}.json")
+            for arm in ARMS
+        }
+        for arm in ARMS:
+            subprocess.run(
+                [
+                    sys.executable, "-m", "benchmarks.production_default_compare",
+                    arm, "--method", args.method, "--atoms", str(args.atoms),
+                    "--repeats", str(args.repeats), "--output", str(receipts[arm]),
+                ],
+                check=True,
+            )
+        result = compare(
+            json.loads(receipts["gpu4pyscf"].read_text()),
+            json.loads(receipts["standard"].read_text()),
+            json.loads(receipts["fast"].read_text()),
+        )
+        _save(args.output, result)
+        print(main_table_markdown([result]), flush=True)
+        return
+
     import cupy as cp
 
     from benchmarks._support import cuda_accelerator_metadata, environment_metadata
     from benchmarks.readme_hf_scaling import scaling_cases
 
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
-    sampler = native_sample if args.engine == "generativeqc" else gpu4_sample
+    arm = args.engine
+    sample = (
+        (lambda: gpu4_sample(args.method, atoms))
+        if arm == "gpu4pyscf"
+        else (lambda: native_sample(args.method, atoms, arm))
+    )
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "running",
-        "engine": args.engine,
+        "engine": arm,
         "problem": problem_identity(args.method, atoms),
         "phase": "fresh-owner",
         "endpoint": "constructor-scf-energy-analytic-force-host-export",
-        "force_policy": args.force_policy,
         "repeats": args.repeats,
         "samples": [],
         "controls": {
             "scf_overrides": False,
             "initial_guess_overrides": False,
             "reference_grid_overrides": False,
-            "native_mandatory_hybrid_grid": args.method in REQUIRED_NATIVE_GRID,
+            "native_required_hybrid_GridSpec": (
+                arm in NATIVE_ARMS and args.method in REQUIRED_NATIVE_GRID
+            ),
+            "fast_default_policy": "fast" if arm == "fast" else None,
+            "force_grid_response_override": False,
         },
         "environment": environment_metadata(
             distributions={
@@ -432,12 +572,17 @@ def main(argv: list[str] | None = None) -> None:
     _save(args.output, record)
     try:
         for repeat in range(args.repeats):
-            sample = sampler(args.method, atoms, args.force_policy)
-            sample["repeat"] = repeat
-            record["samples"].append(sample)
+            observation = sample()
+            observation["repeat"] = repeat
+            record["samples"].append(observation)
             _save(args.output, record)
-        if args.engine == "generativeqc":
+        if arm in NATIVE_ARMS:
             library_path = Path(record["samples"][0]["native_library_path"])
+            if any(
+                row["native_library_path"] != str(library_path)
+                for row in record["samples"]
+            ):
+                raise RuntimeError("native library path changed across repetitions")
             digest = hashlib.sha256()
             with library_path.open("rb") as stream:
                 for chunk in iter(lambda: stream.read(1 << 20), b""):
@@ -450,15 +595,13 @@ def main(argv: list[str] | None = None) -> None:
     finally:
         _save(args.output, record)
     print(
-        json.dumps(
-            {
-                "engine": args.engine,
-                "seconds": [s["seconds"] for s in record["samples"]],
-            }
-        ),
+        json.dumps({
+            "engine": arm,
+            "seconds": [row["seconds"] for row in record["samples"]],
+            "status": record["status"],
+        }),
         flush=True,
     )
-
 
 if __name__ == "__main__":
     main()
