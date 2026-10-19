@@ -147,7 +147,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
-    "real-selection": "fixed-external-mask-only; reference-AD; generated-fp64-first-order-opt-in",
+    "real-selection": "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
