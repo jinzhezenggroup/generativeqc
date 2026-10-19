@@ -3,7 +3,7 @@
 This command emits actual CUPTI transfer/sync diagnostics plus matched numerical
 evidence. Scientific payload/dependency annotation is deliberately unresolved;
 a successful collection exits 2 (INCOMPLETE), matching the residency auditor's
-semantics. Use one fresh process per case inside a finite Slurm GPU allocation.
+semantics. Use one fresh process per case inside a verified GPU allocation.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from tools.capture_prepared_allocations import (
     load,
     numerical_evidence,
     verify_source,
-    visible_device_uuid,
     workload,
     write_new,
 )
@@ -37,6 +36,7 @@ from tools.cupti_graph_inventory import summarize_graphs
 from tools.cupti_residency_capture import CuptiCapture, summarize
 from tools.cupti_source_capture import SourceInventory, summarize_sources
 from tools.cupti_source_ratchet import check_work_ratchet, load_work_ratchet
+from tools.residency_allocation import allocation_identity
 
 
 def regions() -> dict[int, dict[str, str]]:
@@ -53,8 +53,12 @@ def regions() -> dict[int, dict[str, str]]:
 
 
 def contract(arguments: argparse.Namespace) -> dict[str, Any]:
-    """Check actual source/artifacts and the GPU assigned by Slurm before work."""
-    uuid = visible_device_uuid(arguments.library)
+    """Check actual source/artifacts and scheduler-assigned GPU before work."""
+    uuid, allocation = allocation_identity(
+        arguments.library,
+        getattr(arguments, "qz_receipt", None),
+        getattr(arguments, "qz_receipt_sha256", None),
+    )
     manifest = load(arguments.source_manifest)
     verify_source(ROOT, manifest)
     _require(
@@ -63,6 +67,7 @@ def contract(arguments: argparse.Namespace) -> dict[str, Any]:
             "tools/cupti_residency_capture.cpp",
             "tools/cupti_residency_capture.py",
             "tools/capture_prepared_residency.py",
+            "tools/residency_allocation.py",
             "tools/cupti_graph_inventory.cpp",
             "tools/cupti_graph_inventory.py",
             "tools/cupti_source_capture.cpp",
@@ -89,7 +94,7 @@ def contract(arguments: argparse.Namespace) -> dict[str, Any]:
         else None
     )
     return {
-        "schema": "generativeqc.cupti-prepared.v1",
+        "schema": "generativeqc.cupti-prepared.v2",
         "identity": {
             "source_commit": manifest["source_commit"],
             "source_tree": manifest["source_tree"],
@@ -102,6 +107,7 @@ def contract(arguments: argparse.Namespace) -> dict[str, Any]:
             "toolchain": arguments.toolchain,
         },
         "workload": case,
+        "allocation": allocation,
         "observed_work_ratchet": ratchet,
         "numerical_references": {
             "matched_history": "ordinary CUDA prepared history",
@@ -191,7 +197,7 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
         mapped = {
             Path(row.split()[-1]).resolve()
             for row in Path("/proc/self/maps").read_text().splitlines()
-            if "libcupti.so" in row and row.split()[-1].startswith("/")
+            if "libcupti.so" in row and Path(row.split()[-1]).is_absolute()
         }
         _require(
             mapped == {arguments.cupti_library.resolve()},
@@ -268,7 +274,7 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
         {
             "source_matched": True,
             "completed": True,
-            "slurm_job_id": os.environ["SLURM_JOB_ID"],
+            "allocation": expected["allocation"],
             "numerical": numerical_evidence(results, targets),
             "reference_kind": expected["numerical_references"]["matched_history"],
             "independent_reference_kind": expected["numerical_references"][
@@ -324,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.add_argument("--" + name, type=Path)
     parser.add_argument("--toolchain")
+    parser.add_argument("--qz-receipt", type=Path)
+    parser.add_argument("--qz-receipt-sha256")
     parser.add_argument(
         "--work-ratchet",
         type=Path,
