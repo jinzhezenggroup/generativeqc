@@ -8,6 +8,20 @@
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
+__global__ void merge_grid_contributions_kernel(std::size_t elements, double* potential,
+                                                double* totals, int* error,
+                                                const double* nonlocal_potential,
+                                                const double* nonlocal_totals,
+                                                const int* nonlocal_error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
+       index += std::size_t(blockDim.x) * gridDim.x)
+    potential[index] += nonlocal_potential[index];
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    totals[0] += nonlocal_totals[0];
+    if (*nonlocal_error != 0) *error = *nonlocal_error;
+  }
+}
+
 __global__ void reset_control_kernel(unsigned spins, int occupied_alpha, int occupied_beta,
                                      Control* control, std::uint8_t* enabled,
                                      std::uint8_t* spin_enabled) {
@@ -238,6 +252,14 @@ void assemble_fock(cudaStream_t stream, std::size_t n, unsigned spins, const dou
   fock_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
       n * n, spins, hcore, coulomb, exchange, exchange_coefficient, range_exchange,
       range_exchange_coefficient, potential, enabled, fock);
+}
+
+void merge_grid_contributions(cudaStream_t stream, std::size_t elements, double* potential,
+                              double* totals, int* error, const double* nonlocal_potential,
+                              const double* nonlocal_totals, const int* nonlocal_error) {
+  const auto blocks = std::min<std::size_t>((elements + 127) / 128, 65535);
+  merge_grid_contributions_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
+      elements, potential, totals, error, nonlocal_potential, nonlocal_totals, nonlocal_error);
 }
 
 void stabilize_uks_proposal(cudaStream_t stream, std::size_t n, const double* overlap,

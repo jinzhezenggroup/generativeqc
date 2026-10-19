@@ -313,6 +313,10 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
                                                   std::string& detail) {
   impl_.reset();
   detail.clear();
+  if (expected.identity.model.nonlocal_grid) {
+    detail = "independent XC/VV10 grids do not yet support coupled response";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   try {
     require(options.max_device_bytes && options.max_affine_term_visits &&
                 options.max_direct_eri_evaluations &&

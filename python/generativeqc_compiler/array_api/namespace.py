@@ -7,6 +7,7 @@ import typing
 from fractions import Fraction
 from math import copysign, isfinite, prod
 from string import ascii_letters
+from struct import pack, unpack
 
 from generativeqc_compiler.tensor import ir as tensor_ir
 from generativeqc_compiler.tensor.types import (
@@ -329,6 +330,71 @@ def where(condition: object, x1: object, x2: object) -> VibeArray:
     left, right = _promote_generic_arrays(*branches)
     predicate, left, right = broadcast_arrays(predicate, left, right)
     return VibeArray(tensor_ir.where(predicate.node, left.node, right.node))
+
+
+def clip(x: object, /, min: object = None, max: object = None) -> VibeArray:
+    """Clamp finite generic real arrays using existing comparisons and selection.
+
+    Array bounds must have x's dtype. Apply the lower bound before the upper
+    bound, keeping the current value on equality; reversed bounds select max.
+    Comparisons define a selected-branch AD convention, not a derivative at ties.
+    """
+    value = _array(x, "clip x")
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("clip requires real float32 or float64 arrays")
+    bounds = []
+    for name, bound in (("min", min), ("max", max)):
+        if bound is None:
+            bounds.append(None)
+        elif isinstance(bound, VibeArray):
+            if bound.dtype != value.dtype:
+                raise TypeError("clip array bounds must have the same dtype as x")
+            bounds.append(bound)
+        else:
+            factor = _generic_scalar(bound, f"clip {name}")
+            try:
+                rounded = float(factor)
+                if value.dtype == "float32":
+                    rounded = unpack("f", pack("f", rounded))[0]
+            except (ValueError, OverflowError) as error:
+                raise ValueError(
+                    f"clip {name} must be finite in {value.dtype}"
+                ) from error
+            if not isfinite(rounded):
+                raise ValueError(f"clip {name} must be finite in {value.dtype}")
+            bounds.append(
+                VibeArray(
+                    tensor_ir.constant(
+                        factor, TensorSpec(dtype=value.dtype, role="constant")
+                    )
+                )
+            )
+    for operand in (value, *bounds):
+        if operand is not None and (
+            not _is_generic_array(operand)
+            or operand.node.spec.representation != "general"
+            or operand.node.spec.symmetries
+            or any(index.space.spin is not None for index in operand.node.spec.indices)
+        ):
+            raise TypeError(
+                "clip supports only generic arrays without scientific annotations"
+            )
+    # Validate the joint shape even when one bound would mask every value.
+    shape = broadcast_shapes(
+        value.shape, *(bound.shape for bound in bounds if bound is not None)
+    )
+    value = _broadcast_generic(value, shape)
+    # Share each bound between its comparison and selected real branch. The
+    # reference interpreter charges every live logical array before any CSE.
+    lower, upper = (
+        _broadcast_generic(bound, shape) if bound is not None else None
+        for bound in bounds
+    )
+    if lower is not None:
+        value = where(less(value, lower), lower, value)
+    if upper is not None:
+        value = where(greater(value, upper), upper, value)
+    return value
 
 
 def equal(x1: object, x2: object) -> VibeArray:

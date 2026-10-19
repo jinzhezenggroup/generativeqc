@@ -12,6 +12,7 @@ For precise names, units, capabilities, and public Python signatures, use the [R
 
 installation
 quickstart
+spin_roots
 native_cli
 native_cpp
 methods

@@ -11,6 +11,7 @@ FRONTEND_VERSION = 1
 _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-selection": ("where",),
     "real-elementwise": (
+        "clip",
         "add",
         "subtract",
         "multiply",
@@ -80,6 +81,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 # test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
+        "clip",
         "where",
         "add",
         "equal",
@@ -147,7 +149,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
-    "real-selection": "fixed-external-mask-only; reference-AD; generated-fp64-first-order-opt-in",
+    "real-selection": "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -160,6 +162,11 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "clip": {
+        "min": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "max": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "capture": "finite-only; lower-then-upper; current-value-selected-on-ties",
+    },
     "sum": {
         "axis": "static-int|tuple|None",
         "keepdims": "generic-arrays-only",
@@ -232,6 +239,9 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "clip": {
+        "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+    },
     "reshape_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_to_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_shapes": {

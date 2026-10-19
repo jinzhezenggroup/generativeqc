@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from generativeqc import KsOptions
 from generativeqc.elements import atomic_number
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
@@ -185,12 +186,18 @@ def protocol(
     benchmark: EndpointSpec = OMOL25,
     auxiliary_basis: Any = None,
     density_fitting_memory_budget_bytes: int = 0,
+    nonlocal_grid: Any = None,
 ) -> dict[str, Any]:
     """Describe inputs without loading a native library or touching the GPU.
 
     Retain workspace hints so distinct resource/work populations are not pooled,
     even though the hint changes neither the Hamiltonian nor its accuracy gates.
     """
+    if nonlocal_grid is not None and not benchmark.has_vv10:
+        raise ValueError("a nonlocal grid requires a VV10 benchmark")
+    separate_nonlocal_grid = KsOptions(
+        grid=spec, nonlocal_grid=nonlocal_grid
+    ).has_separate_nonlocal_grid
     if (
         type(density_fitting_memory_budget_bytes) is not int
         or not 0 <= density_fitting_memory_budget_bytes <= 1 << 40
@@ -230,6 +237,11 @@ def protocol(
                 "representation": "spherical",
                 "geometries_bohr": [original, moved],
                 "grid": None if benchmark.method == "hf" else asdict(spec),
+                **(
+                    {"nonlocal_grid": asdict(nonlocal_grid)}
+                    if separate_nonlocal_grid
+                    else {}
+                ),
                 "properties": ["energy", "forces"],
                 "force_return": "host_array_in_timed_endpoint",
                 "density_fitting": benchmark.density_fitting,
@@ -672,6 +684,12 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("--auxiliary-basis-file", type=Path)
     parser.add_argument("--grid", type=int, nargs=3)
     parser.add_argument(
+        "--nonlocal-grid",
+        type=int,
+        nargs=3,
+        help="Independent VV10 quadrature; omission retains the shared grid",
+    )
+    parser.add_argument(
         "--grid-pruning", choices=("auto", "none", "radial-v1"), default="auto"
     )
     parser.add_argument("--repeats", type=int, default=5)
@@ -729,6 +747,10 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
     if args.repeats < 1 or (args.grid is not None and min(args.grid) < 1):
         parser.error("repeats and grid dimensions must be positive")
+    if args.nonlocal_grid is not None and (
+        not benchmark.has_vv10 or min(args.nonlocal_grid) < 1
+    ):
+        parser.error("--nonlocal-grid requires VV10 and positive grid dimensions")
     if (
         args.engine == "native"
         and args.reference is None
@@ -808,6 +830,13 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     spec = benchmark_grid_spec(
         args.grid, case.atoms, args.grid_pruning, method=benchmark.method
     )
+    nonlocal_spec = (
+        benchmark_grid_spec(
+            args.nonlocal_grid, case.atoms, args.grid_pruning, method=benchmark.method
+        )
+        if args.nonlocal_grid is not None
+        else None
+    )
     scientific = protocol(
         args.atoms,
         basis,
@@ -816,6 +845,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         benchmark=benchmark,
         auxiliary_basis=auxiliary_basis,
         density_fitting_memory_budget_bytes=args.df_memory_budget_bytes,
+        nonlocal_grid=nonlocal_spec,
     )
     oracle = None
     if args.engine == "native" and args.reference and args.reference.exists():
@@ -921,6 +951,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                         reference_basis,
                         spec,
                         xc=benchmark.reference_xc,
+                        nonlocal_spec=nonlocal_spec,
                     )
                 if benchmark.density_fitting:
                     engine = engine.density_fit(auxbasis=reference_auxiliary)
@@ -1066,7 +1097,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 basis=basis,
                 device="cuda",
                 basis_representation="spherical",
-                ks_options=None if benchmark.method == "hf" else KsOptions(grid=spec),
+                ks_options=None
+                if benchmark.method == "hf"
+                else KsOptions(grid=spec, nonlocal_grid=nonlocal_spec),
                 density_fitting=args.density_fitting,
                 auxiliary_basis=auxiliary_basis,
                 density_fitting_relative_threshold=1e-10,

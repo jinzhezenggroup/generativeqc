@@ -391,6 +391,7 @@ def register_product(catalog: dict[str, Any]) -> None:
         "canonical_inputs": {
             path: digest(ROOT / path)
             for path in (
+                "python/generativeqc_compiler/integral/expr.py",
                 "tools/libxc_bulk_metadata.py",
                 "python/generativeqc_compiler/xc/libxc_bulk.py",
                 "python/generativeqc_compiler/xc/libxc_maple.py",

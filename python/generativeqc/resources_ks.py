@@ -907,6 +907,10 @@ def ks_resource_request(
             "automatic Libxc KS resource planning currently supports CPU only"
         )
     automatic_cpu = automatic_name is not None
+    if model.has_separate_nonlocal_grid:
+        raise NotImplementedError(
+            "KS resource-ledger planning does not yet support independent XC/VV10 grids"
+        )
     requires_tau = "tau" in model.functional.ingredients
     if requires_tau and not automatic_cpu and backend == "cpu":
         raise NotImplementedError(

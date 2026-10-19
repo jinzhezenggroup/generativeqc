@@ -279,6 +279,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const scf::PreparedFockPlan* range_provider{};
   const AoBasis& basis;
   const MolecularGrid& grid;
+  const MolecularGrid& nonlocal_grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
   scf::PreparedCudaFockBinding range_fock_binding{};
@@ -303,7 +304,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   CudaXcLayout xc_layout;
   CudaKsResources resource;
   CudaKsTransfers movement;
-  void *arena{}, *xc_arena{}, *nonlocal_arena{};
+  void *arena{}, *xc_arena{}, *nonlocal_arena{}, *nonlocal_xc_arena{};
   std::size_t ks_arena_bytes{}, nonlocal_arena_bytes{};
   double *nonlocal_raw_density{}, *nonlocal_raw_gradient{}, *nonlocal_effective_weights{},
       *nonlocal_effective_density{}, *nonlocal_effective_gradient{}, *nonlocal_vrho{},
@@ -316,6 +317,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::string nonlocal_cache_schedule;
   nlc::Vv10CudaDeviceLayout nonlocal_layout{};
   std::unique_ptr<CudaXcPlan> xc;
+  std::unique_ptr<CudaXcPlan> nonlocal_xc;
+  CudaXcLayout nonlocal_xc_layout;
   CudaXcAoSelectionWork prepared_ao_work;
   std::uint64_t initial_xc_evaluations{};
   std::unique_ptr<OrdinaryStreamEigensolver> eigensolver;
@@ -993,7 +996,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     if (nonlocal_layout.workspace_bytes % sizeof(double))
       throw std::logic_error("resident VV10 workspace is not double-aligned");
-    const auto points = xc_layout.npoint;
+    const auto points = nonlocal_grid.point_count();
     const auto workspace_doubles = nonlocal_layout.workspace_bytes / sizeof(double);
     const auto doubles =
         sum(product(11, points), sum(workspace_doubles, nonlocal_cache_enabled ? 7U : 2U));
@@ -1200,6 +1203,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         range_provider(separate_range_provider),
         basis(basis),
         grid(grid),
+        nonlocal_grid(control.nonlocal_grid ? *control.nonlocal_grid : grid),
         options(control),
         grid_spec(grid.spec()),
         functional(functional),
@@ -1326,7 +1330,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (nonlocal_correlation &&
         (nonlocal_correlation->backend() != GENERATIVEQC_BACKEND_CUDA ||
          nonlocal_correlation->device_id() != device ||
-         nonlocal_correlation->resources().point_count != grid.point_count()))
+         nonlocal_correlation->resources().point_count != nonlocal_grid.point_count()))
       throw std::invalid_argument("CUDA KS nonlocal owner is incompatible with the grid or device");
     current_device();
     const auto resident_grid = grid.cuda_view();
@@ -1336,6 +1340,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
                                options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
+    if (options.nonlocal_grid)
+      nonlocal_xc_layout = cuda_xc_layout(
+          basis, nonlocal_grid, semilocal_family_code(SemilocalFamily::Pbe), spins == 2, tile,
+          CudaXcAoPrecision::Fp64, 0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
     const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
     if (application_precision) {
@@ -1508,16 +1516,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Its negative-zero weight marks a screened row whose energy and AO
       // potential are discarded. Preserve active positive-zero/signed weights
       // while avoiding that row's otherwise unnecessary partner traversal.
-      nonlocal_layout =
-          nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
+      nonlocal_layout = nlc::vv10_cuda_device_layout(nonlocal_grid.point_count(),
+                                                     xc_layout.tile_points, true, false, true);
       const auto* cache_choice = std::getenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE");
       const auto parameters = nonlocal_correlation->parameters();
       // Complete endpoint controls qualify the exact component cache once
       // quadratic pair work dominates its linear ingredient comparison.
-      const bool cache_requested =
-          cache_choice ? std::string_view(cache_choice) == "1" : xc_layout.npoint >= 65536;
-      nonlocal_cache_enabled = cache_requested && xc_layout.npoint >= 3 &&
-                               xc_layout.npoint <= (std::uint64_t{1} << 32) &&
+      const bool cache_requested = cache_choice ? std::string_view(cache_choice) == "1"
+                                                : nonlocal_grid.point_count() >= 65536;
+      nonlocal_cache_enabled = cache_requested && nonlocal_grid.point_count() >= 3 &&
+                               nonlocal_grid.point_count() <= (std::uint64_t{1} << 32) &&
                                parameters.variant == nlc::Vv10Variant::vv10 &&
                                std::fabs(parameters.coefficient) <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
@@ -1602,6 +1610,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes,
               sum(eigensolver->host_bytes(), eigensolver->metadata_bytes()));
+      // Reserve the mandatory secondary transport before optional primary AO maps.
+      // A map allocation miss must still be able to retry the dense primary arena.
+      if (!host_unfused && options.nonlocal_grid)
+        check(runtime::resource_cuda_malloc(&nonlocal_xc_arena, nonlocal_xc_layout.device_bytes));
       if (resource.xc_device_bytes) {
         bool host_oom = false;
         auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
@@ -1637,6 +1649,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
             basis, grid, functional, spins == 2, tile, xc_arena, resource.xc_device_bytes, stream,
             CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
             options.semilocal_correlation_scale, borrow_resident_grid);
+        if (options.nonlocal_grid) {
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, nonlocal_xc_layout.device_bytes);
+          resource.grid_device_bytes =
+              sum(resource.grid_device_bytes, nonlocal_grid.cuda_view().device_bytes);
+          resource.retained_host_numeric_bytes =
+              sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);
+          // VV10 needs only total rho/grad-rho and their GGA AO pullback. The
+          // qualified zero-scaled PBE transport supplies those without adding
+          // PBE energy or requiring WB97M-V component-scaling capability.
+          nonlocal_xc = std::make_unique<CudaXcPlan>(
+              basis, nonlocal_grid, semilocal_family_code(SemilocalFamily::Pbe), spins == 2, tile,
+              nonlocal_xc_arena, nonlocal_xc_layout.device_bytes, stream, CudaXcAoPrecision::Fp64,
+              0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
+        }
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
         // Keep the canonical resident quadrature for grid-response forces.
@@ -1761,13 +1787,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // retired lease drains even if diagnostic metadata cannot be allocated.
     }
     xc.reset();
+    nonlocal_xc.reset();
     eigensolver.reset();
     matrix_products.reset();
     if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
+    if (nonlocal_xc_arena) runtime::resource_cuda_free(nonlocal_xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
     nonlocal_arena = xc_arena = arena = nullptr;
+    nonlocal_xc_arena = nullptr;
     fast_anchor_arena = nullptr;
     cudaSetDevice(previous);
   }
@@ -2103,18 +2132,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!device_nonlocal) {
       potential = xc->enqueue_replay_body(density, elements);
     } else {
-      potential = xc->enqueue_replay_density_features(density, elements, nonlocal_raw_density,
-                                                      nonlocal_raw_gradient);
-      const auto quadrature = xc->grid_view();
+      auto& nonlocal_source = nonlocal_xc ? *nonlocal_xc : *xc;
+      if (nonlocal_xc) potential = xc->enqueue_replay_body(density, elements);
+      const auto nonlocal_potential = nonlocal_source.enqueue_replay_density_features(
+          density, elements, nonlocal_raw_density, nonlocal_raw_gradient);
+      if (!nonlocal_xc) potential = nonlocal_potential;
+      const auto quadrature = nonlocal_source.grid_view();
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
-            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
-            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
-            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+            stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
+            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_domain_error);
       });
       enqueue_nonlocal_pairs(quadrature.points);
-      xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
-                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_energy);
+      nonlocal_source.enqueue_replay_nonlocal_potential(nonlocal_effective_weights,
+                                                        nonlocal_effective_gradient, nonlocal_vrho,
+                                                        nonlocal_vsigma, nonlocal_energy);
+      if (nonlocal_xc) merge_grid_views(potential, nonlocal_potential);
     }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
@@ -2189,6 +2224,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       for (unsigned slot = 0; slot < pending_iterations; ++slot) {
         const auto submitted_generation = ++generation;
         xc->publish_submitted_generation(submitted_generation);
+        if (nonlocal_xc) nonlocal_xc->publish_submitted_generation(submitted_generation);
         pending_generations[slot] = submitted_generation;
       }
     } catch (...) {
@@ -2482,7 +2518,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule &&
           nonlocal_cache_mixed == mixed_pair_arithmetic) {
         nlc::enqueue_vv10_force_key_compare_cuda(
-            stream, xc_layout.npoint, nonlocal_correlation->parameters(),
+            stream, nonlocal_grid.point_count(), nonlocal_correlation->parameters(),
             nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
             nonlocal_workspace, nonlocal_domain_error, nonlocal_pair_error,
             nonlocal_cache_mismatch);
@@ -2502,14 +2538,32 @@ struct CudaKsPlan::Impl : KsStateStorage {
     });
     if (nonlocal_cache_enabled) {
       run_resident_nonlocal_cuda([&] {
-        nlc::enqueue_vv10_store_force_key_cuda(stream, xc_layout.npoint, nonlocal_effective_density,
-                                               nonlocal_workspace, nonlocal_domain_error,
-                                               nonlocal_domain_error, nonlocal_pair_error);
+        nlc::enqueue_vv10_store_force_key_cuda(
+            stream, nonlocal_grid.point_count(), nonlocal_effective_density, nonlocal_workspace,
+            nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
       });
       nonlocal_cache_schedule = schedule;
       nonlocal_cache_mixed = mixed_pair_arithmetic;
       nonlocal_cache_ready = true;
     }
+  }
+
+  /** Both views belong exclusively to this owner and the same ordered stream.
+   * Only E/V are additive: electron-count diagnostics retain the XC rule. */
+  void merge_grid_views(const CudaXcView& semilocal, const CudaXcView& nonlocal) {
+    if (semilocal.stream != stream || nonlocal.stream != stream || semilocal.nao != n ||
+        nonlocal.nao != n || semilocal.spins != spins || nonlocal.spins != spins)
+      throw std::logic_error("independent quadrature views do not share the KS frame");
+    cuda_ks_detail::merge_grid_contributions(
+        stream, elements, const_cast<double*>(semilocal.potential),
+        const_cast<double*>(semilocal.totals), const_cast<int*>(semilocal.error),
+        nonlocal.potential, nonlocal.totals, nonlocal.error);
+    check(cudaGetLastError());
+  }
+
+  void merge_nonlocal_grid(std::uint64_t next_generation) {
+    if (nonlocal_xc)
+      merge_grid_views(xc->view(next_generation), nonlocal_xc->view(next_generation));
   }
 
   CudaXcView stage_xc(std::uint64_t next_generation,
@@ -2524,27 +2578,31 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
       // in opt-in diagnostics. Disabled tracing adds no events or fences.
+      auto& nonlocal_source = nonlocal_xc ? *nonlocal_xc : *xc;
+      if (nonlocal_xc) xc->enqueue(density, elements, next_generation, phase);
       runtime::cuda_trace::trace_call("semilocal_density_features", stream, [&] {
-        xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
-                                     nonlocal_raw_gradient, phase);
+        nonlocal_source.enqueue_density_features(
+            density, elements, next_generation, nonlocal_raw_density, nonlocal_raw_gradient, phase);
       });
-      const auto quadrature = xc->grid_view();
+      const auto quadrature = nonlocal_source.grid_view();
       if (nonlocal_frozen_stage) {
         // Keep the anchor gradient, screening mask and scalar pair derivatives
         // together: their AO assembly is precisely V_nlc[D_anchor]. Only raw
         // current-density features above are overwritten by this inner step.
         // Its energy is provisional and can never satisfy the target gate.
-        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                       nonlocal_energy);
+        nonlocal_source.enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                                   nonlocal_effective_gradient, nonlocal_vrho,
+                                                   nonlocal_vsigma, nonlocal_energy);
+        merge_nonlocal_grid(next_generation);
         return xc->view(next_generation);
       }
       runtime::cuda_trace::TraceRegion domain_trace("nonlocal_density_domain", stream);
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
-            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
-            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
-            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+            stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
+            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_domain_error);
       });
       domain_trace.finish();
       runtime::cuda_trace::TraceRegion pair_trace("nonlocal_pair_features", stream);
@@ -2553,10 +2611,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
           phase == generativeqc::runtime::PrecisionPhase::Admitted && pending_mixed_nonlocal);
       pair_trace.finish();
       runtime::cuda_trace::trace_call("nonlocal_ao_potential", stream, [&] {
-        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                       nonlocal_energy);
+        nonlocal_source.enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                                   nonlocal_effective_gradient, nonlocal_vrho,
+                                                   nonlocal_vsigma, nonlocal_energy);
       });
+      merge_nonlocal_grid(next_generation);
       return xc->view(next_generation);
     }
     const auto bytes = elements * sizeof(double);
@@ -2578,7 +2637,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       host_xc_totals = {value.energy, 0.5 * value.electrons, 0.5 * value.electrons};
       if (nonlocal_correlation) {
         const auto nonlocal =
-            nlc::integrate_vv10_rks(basis, grid, host_xc_density, *nonlocal_correlation,
+            nlc::integrate_vv10_rks(basis, nonlocal_grid, host_xc_density, *nonlocal_correlation,
                                     xc_layout.tile_points, {}, nonlocal_domain);
         if (nonlocal.potential.size() != matrix)
           throw std::runtime_error("host-unfused RKS nonlocal potential size changed");
@@ -2601,8 +2660,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       host_xc_totals = {value.energy, value.electrons[0], value.electrons[1]};
       if (nonlocal_correlation) {
         const auto nonlocal =
-            nlc::integrate_vv10_uks(basis, grid, host_xc_alpha, host_xc_beta, *nonlocal_correlation,
-                                    xc_layout.tile_points, nonlocal_domain);
+            nlc::integrate_vv10_uks(basis, nonlocal_grid, host_xc_alpha, host_xc_beta,
+                                    *nonlocal_correlation, xc_layout.tile_points, nonlocal_domain);
         if (nonlocal.potential[0].size() != matrix || nonlocal.potential[1].size() != matrix)
           throw std::runtime_error("host-unfused UKS nonlocal potential size changed");
         for (std::size_t i = 0; i < matrix; ++i) {
@@ -3445,6 +3504,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (nonlocal_correlation) {
       identity.model.nonlocal_correlation = nonlocal_correlation->parameters();
       identity.model.nonlocal_density_domain = nonlocal_domain;
+      identity.model.nonlocal_grid = options.nonlocal_grid_spec;
     }
     // A snapshot must describe the same XC composition that built its Fock matrix.
     identity.model.semilocal_exchange_scale = options.semilocal_exchange_scale;
@@ -4196,12 +4256,13 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
         impl_->generation - impl_->final_generation < kCudaKsChunkCapacity;
     if (!exact_generation && !bounded_terminal_overwrite)
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
-    if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
+    if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient ||
+        !impl_->nonlocal_grid.point_count())
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
     binding = {impl_->device,
                impl_->nonlocal_raw_density,
                impl_->nonlocal_raw_gradient,
-               impl_->xc_layout.npoint,
+               impl_->nonlocal_grid.point_count(),
                reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,
@@ -4457,6 +4518,11 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
     const auto& xc = impl_->xc->transfers();
     out.setup_h2d_bytes += xc.setup_h2d_bytes;
     out.synchronizations += xc.synchronizations;
+  }
+  if (impl_->nonlocal_xc) {
+    const auto& nonlocal = impl_->nonlocal_xc->transfers();
+    out.setup_h2d_bytes += nonlocal.setup_h2d_bytes;
+    out.synchronizations += nonlocal.synchronizations;
   }
   return out;
 }

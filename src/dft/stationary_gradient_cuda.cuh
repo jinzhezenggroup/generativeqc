@@ -610,6 +610,10 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
       // Optional retention must not revoke the already admitted bounded path.
       (void)cudaGetLastError();
       return;
+    } catch (const std::runtime_error& failure) {
+      // The allocation owner reports non-OOM CUDA faults as runtime_error.
+      // Preserve the driver's type before crossing the stationary C ABI.
+      throw DeviceRuntimeError(failure.what());
     }
     auto input = phased_input(*owner, owner->points);
     phased_becke_indices<<<owner->atoms, 128, 0, owner->context.stream>>>(

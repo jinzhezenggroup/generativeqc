@@ -1,6 +1,6 @@
 """Exercise snapshot decoding with typed methods and a host-only wire fixture."""
 
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -126,6 +126,9 @@ def _decode_fixture(
         _density_fitting_requested=False,
         check_current=lambda: None,
         fock_provider_proof=lambda: ("exact", None, 0.0),
+    )
+    source._decode_nonlocal_grid = MethodType(
+        NativeKsSnapshot._decode_nonlocal_grid, source
     )
     return options, source, basis, grid
 

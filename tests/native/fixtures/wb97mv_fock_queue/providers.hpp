@@ -319,6 +319,7 @@ struct Model {
   int device{};
   double semilocal_exchange_scale{1}, semilocal_correlation_scale{1};
   std::optional<nlc::Correlation> nonlocal_correlation{nlc::Correlation{}};
+  std::optional<int> nonlocal_grid;
   nlc::Vv10DensityDomain nonlocal_density_domain{nlc::Vv10DensityDomain::MolecularV1};
   std::optional<scf::ResolvedFockBuild> range_correction;
 };

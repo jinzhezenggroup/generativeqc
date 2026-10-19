@@ -293,6 +293,10 @@ class _CompositeGrid:
         grid_budget_bytes: int,
         max_nonlocal_pairs: int,
     ) -> None:
+        if getattr(state._source, "nonlocal_grid", state.grid) is not state.grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support coupled response"
+            )
         self.state, self.basis, self.grid = state, basis, state.grid
         _, self.spec = resolve_ks_method(state.identity.method)
         self.functional_identity = self.spec.identity

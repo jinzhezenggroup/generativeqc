@@ -415,8 +415,11 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             owner="MolecularGrid",
         ),
         "public_grid_abi_sha256": (current_grid_abi_identity()),
-        "native_grid_abi_sha256": (
-            "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
+        "native_grid_abi_sha256": qualify_capacity._source_span_sha256(
+            (ROOT / "src/methods/dft_method_preparation.cpp").read_text(),
+            begin="dft::GridSpec ks_grid_options(",
+            end="void validate_ks_spin_state(",
+            label="native GridSpec ABI lowerer",
         ),
         "generated_quadrature_layout_sha256": current_grid_layout_identity(),
         "native_cuda_grid_sha256": qualify_capacity._source_span_sha256(
@@ -710,7 +713,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
         "native_phased_becke_admission_sha256": (
-            "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -2746,19 +2749,187 @@ def test_native_execution_provenance_tracks_harmless_body_edits(
     assert_dispatch_contract(source, tmp_path, native_cxx)
 
 
-def test_grid_count_fails_closed_when_native_abi_lowering_moves(
-    tmp_path: Path,
+def assert_native_grid_abi(
+    repository: Path, tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute current readers with real ABI/GridSpec declarations, without a DSO."""
+    preparation = (repository / "src/methods/dft_method_preparation.cpp").read_text()
+    reader = preparation[
+        preparation.index("dft::GridSpec ks_grid_options(") : preparation.index(
+            "void validate_ks_spin_state("
+        )
+    ]
+    start = preparation.index(
+        "    if (ks_input->struct_size < sizeof(generativeqc_ks_options)"
+    )
+    admission = preparation[
+        start : preparation.index("    if ((ks_input->spin_channels", start)
+    ]
+    grid = (ROOT / "src/dft/grid.cpp").read_text()
+    validator = grid[
+        grid.index("void validate_grid_spec(") : grid.index(
+            "std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells"
+        )
+    ]
+    source = tmp_path / "grid_abi.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <climits>
+#include <cmath>
+#include <iostream>
+#include <optional>
+#include <stdexcept>
+#include <string_view>
+#include "generativeqc/generativeqc.h"
+#include "dft/application_precision.hpp"
+#include "dft/grid.hpp"
+namespace dft=generativeqc::dft;
+struct MethodError:std::runtime_error { int status; MethodError(int s,const char* m):std::runtime_error(m),status(s){} };
+struct NativeKsExecutionPlan { bool nonlocal_correlation=true; };
+const char* expected_scf_domain(const NativeKsExecutionPlan&) { return "current-domain"; }
+namespace scf { struct ScfOptions {
+ enum class XcExecutionSchedule { DeviceFused,HostUnfused };
+ std::uint64_t xc_tile_points=256;
+ XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
+ std::optional<dft::GridSpec> nonlocal_grid_spec;
+ std::array<double,3> application_precision_budget{};
+}; }
+auto checked_precision_mode(const generativeqc_method_descriptor& d) { return d.precision_mode; }
+"""
+        + "\nnamespace generativeqc::dft {\n"
+        + validator
+        + "\n}\n"
+        + reader
+        + "\nvoid admit(const generativeqc_method_descriptor& descriptor, scf::ScfOptions& options) { const auto* ks_input=descriptor.ks_options;\n"
+        + admission
+        + "}\n"
+        + r"""
+int main() {
+ static_assert(sizeof(generativeqc_ks_options)==160);
+ static_assert(sizeof(dft::ApplicationPrecisionKsOptions)==184);
+ static_assert(sizeof(dft::NonlocalGridKsOptions)==200);
+ static_assert(offsetof(dft::NonlocalGridKsOptions,grid)==192);
+ generativeqc_ks_options primary{};
+ primary.struct_size=sizeof(primary); primary.abi_version=GENERATIVEQC_ABI_VERSION;
+ primary.scf_domain="current-domain"; primary.tile_points=37;
+ primary.grid_version=1;primary.radial_points=8;primary.angular_polar=4;primary.angular_azimuth=8;
+ primary.partition_iterations=3;primary.coincident_tolerance=1e-12;
+ primary.xc_execution_schedule=GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
+ generativeqc_method_descriptor descriptor{};descriptor.ks_options=&primary;descriptor.precision_mode=GENERATIVEQC_PRECISION_AUTO;
+ NativeKsExecutionPlan plan;
+ auto read=[&](const generativeqc_ks_options* input) { descriptor.ks_options=input;scf::ScfOptions options;admit(descriptor,options);auto grid=ks_grid_options(descriptor,options,plan);return std::make_pair(grid,options);};
+ const auto legacy=read(&primary);
+ assert(legacy.first.radial_points==8 && legacy.second.xc_tile_points==37);
+ assert(legacy.second.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
+ dft::ApplicationPrecisionKsOptions precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=184;
+ const auto old_precision=read(&precision.base);
+ assert(old_precision.first==legacy.first);
+ assert((old_precision.second.application_precision_budget==std::array<double,3>{1e-6,1e-5,3e-6}));
+ auto secondary=primary;secondary.radial_points=4;secondary.angular_polar=8;secondary.partition_iterations=2;
+ std::array<double,119> radii;radii.fill(1.0);radii[1]=1.3;secondary.element_radii=radii.data();secondary.element_radius_count=119;
+ dft::NonlocalGridKsOptions independent{};independent.base.base=primary;independent.base.base.struct_size=200;independent.grid=&secondary;
+ const auto split=read(&independent.base.base);
+ assert(split.first==legacy.first && split.second.nonlocal_grid_spec);
+ assert(split.second.nonlocal_grid_spec->radial_points==4 && split.second.nonlocal_grid_spec->angular_polar==8);
+ assert(split.second.nonlocal_grid_spec->partition_iterations==2 && split.second.nonlocal_grid_spec->element_radii[1]==1.3);
+ assert(split.second.xc_tile_points==37);
+ radii[1]=9;assert(split.second.nonlocal_grid_spec->element_radii[1]==1.3);
+ auto equal=primary;std::array<double,119> units;units.fill(1);equal.element_radii=units.data();equal.element_radius_count=119;independent.grid=&equal;
+ assert(!read(&independent.base.base).second.nonlocal_grid_spec);
+ unsigned rejected=0;
+ for(unsigned size:{0u,159u,161u,183u,185u,199u,201u,208u}) {
+  auto bad=primary;bad.struct_size=size;
+  try {read(&bad);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_ABI_MISMATCH);++rejected;}
+ }
+ for(unsigned mode=0;mode<11;++mode) {
+  auto bad=independent;auto inner=secondary;bad.grid=&inner;
+  if(mode==0)bad.version=0;
+  if(mode==1)bad.version=2;
+  if(mode==2)bad.reserved=1;
+  if(mode==3)bad.grid=nullptr;
+  if(mode==4)inner.struct_size=184;
+  if(mode==5)inner.abi_version=GENERATIVEQC_ABI_VERSION+1;
+  if(mode==6)inner.scf_domain="wrong";
+  if(mode==7)inner.radial_points=0;
+  if(mode==8)inner.tile_points=0;
+  if(mode==9)inner.element_radius_count=118;
+  if(mode==10)plan.nonlocal_correlation=false;
+  try {read(&bad.base.base);}catch(const std::exception&){++rejected;}
+  plan.nonlocal_correlation=true;
+ }
+ assert(rejected==19);
+ precision.energy=-1;try {read(&precision.base);assert(false);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_INVALID_ARGUMENT);}
+ std::cout<<"PASS real-header legacy160/184/private200, copied prescription, normalized equality, 19 invalid/unsupported controls, negative precision budget\n";
+}
+"""
+    )
+    binary = tmp_path / "grid_abi"
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-O0",
+            f"-I{repository / 'include'}",
+            f"-I{repository / 'src'}",
+            f"-I{ROOT / 'include'}",
+            f"-I{ROOT / 'src'}",
+        ],
+    )
+    result = subprocess.run(
+        [str(binary)], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert result.returncode == 0, (
+        "native grid ABI contract changed: " + result.stdout + result.stderr
+    )
+
+
+def test_native_grid_abi_preserves_legacy_and_private_layouts(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    assert_native_grid_abi(ROOT, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "grid.radial_points = input.radial_points;",
+            "grid.radial_points = input.radial_points + 1;",
+        ),
+        (
+            "options.xc_tile_points = input.tile_points;",
+            "options.xc_tile_points = input.tile_points + 1;",
+        ),
+        (
+            "if (ks_input->struct_size != sizeof(generativeqc_ks_options) &&",
+            "if (false && ks_input->struct_size != sizeof(generativeqc_ks_options) &&",
+        ),
+        ("if (!execution_plan.nonlocal_correlation)", "if (false)"),
+    ],
+)
+def test_native_grid_abi_controls_reject_transport_and_admission_mutations(
+    tmp_path: Path, required_native_cxx: "NativeCxx", old: str, new: str
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
     target = tmp_path / "src/methods/dft_method_preparation.cpp"
-    source = target.read_text(encoding="utf-8")
+    source = target.read_text()
+    assert old in source
+    target.write_text(source.replace(old, new, 1))
+    with pytest.raises(AssertionError, match="native grid ABI contract changed"):
+        assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
+
+
+def test_grid_count_fails_closed_when_native_abi_lowering_moves(tmp_path: Path) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "src/methods/dft_method_preparation.cpp"
+    source = target.read_text()
     old = "grid.radial_points = input.radial_points;"
     assert old in source
     target.write_text(
-        source.replace(old, "grid.radial_points = input.radial_points + 1;", 1),
-        encoding="utf-8",
+        source.replace(old, "grid.radial_points = input.radial_points + 1;", 1)
     )
-
     with pytest.raises(RuntimeError, match="grid point-count contract changed"):
         qualify_capacity._grid_count_contract(tmp_path)
 

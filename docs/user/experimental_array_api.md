@@ -144,6 +144,43 @@ Computed predicates, Boolean AD, scientific
 annotations, FP32/mixed/packed policies, higher-order selection and CUDA are
 unsupported; default `where` rejection is unchanged.
 
+For a condition computed from real comparisons, explicitly select
+`allow_comparison_where=True` on `jvp`, `vjp`, `grad` or `value_and_grad`:
+
+```python
+def piecewise_values(x, threshold):
+    return xp.where(x > threshold, x * x, 3 * x)
+
+value, direction = xp.jvp(
+    piecewise_values, (x, threshold), (dx, None),
+    allow_comparison_where=True,
+)
+```
+
+This is first-order differentiation of the real branches with the condition
+fixed at that call's primal value. It supports all six finite real comparisons,
+external selectors and their typed views on generic FP64 arrays, using reference
+or materializing native CPU execution. Only real branch edges carry derivatives;
+Boolean values and comparisons have no tangents/cotangents. Real computations
+used only by the predicate are evaluated and domain-checked as primals, without
+evaluating their derivatives. If a value is also used by a real branch, its
+branch derivative remains subject to the usual domain checks. All unselected
+real branches retain the existing primal and forward-derivative checks.
+
+At a switching point, the selected branch defines the reported directional and
+adjoint values; this is **not a claim of mathematical differentiability** at a
+jump or kink. Finite differences qualify points whose selectors do not switch
+under the chosen perturbation. VJP snapshots include predicate inputs, so later
+mutation does not change its selector. `None` JVP directions, `argnums`, retained
+byte/work/node budgets, detached outputs and executor lifetime follow the fixed
+external-mask contract above. The default policy and
+`allow_external_mask_where=True` retain their narrower admission. Boolean
+outputs/AD, scientific annotations, FP32/mixed/packed generated selection,
+higher-order selection and CUDA remain unsupported. Low-level reference
+`tensor.autodiff.jvp/vjp/dot_test` accepts the same explicit option on generic
+finite FP32/FP64 graphs; generated `linearize/transpose_program` accepts it on
+FP64 graphs.
+
 For quantum-chemistry equations, pass `specs={parameter: TensorSpec(...)}` to
 `compile` to retain AO, occupied, virtual, auxiliary and spin domains. Equal
 extents never authorize mixing scientific spaces. `einsum` accepts exact
@@ -544,6 +581,28 @@ compilation, dynamic indexing/shapes and arbitrary Python control flow are not
 implied by eager support. Unsupported capture functions, including linalg/fft,
 raise instead of evaluating a NumPy fallback during tracing.
 
+Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
+arrays. Each bound can be absent, a finite static scalar under the existing exact
+scalar contract, or a same-dtype generic array. All three shapes must broadcast;
+mixed array dtypes, scientific annotations and nonfinite live operands are
+rejected. Both absent bounds give a detached numerical identity at execution.
+Static negative-zero literals remain unsupported; array signed zeros are retained
+by selection. Clamping applies the lower bound and then the upper bound, keeping
+the current value on equality. Reversed bounds therefore select the upper bound;
+the [2025.12 standard](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.clip.html)
+leaves reversed bounds and mixed array dtypes unspecified. These capture limits
+do not restrict the existing eager standard `clip`, including its NaN behavior.
+For direct `xp.compile(xp.clip, backend="reference")`, supply concrete array
+arguments for all three parameters, as required by the compiled runtime input
+contract. Capture absent or static scalar bounds inside a named function instead.
+Reference first-order JVP/VJP use the existing explicit
+`allow_comparison_where=True` option. Interior derivatives follow the selected
+input or bound, including broadcast adjoint reduction. At a tie, the selected
+current branch is only a convention, not a differentiability claim. No new AD
+engine or TensorIR primitive is introduced. The clip capability entry keeps
+native CPU/CUDA qualification unset; successful capture alone does not qualify
+either backend, performance, or full standard compliance.
+
 Captured `where(condition, x1, x2)` supports a genuine Boolean condition and
 finite generic float32/float64 branches. The branches use explicit casts for
 float promotion; condition and values each broadcast explicitly, including
@@ -558,7 +617,8 @@ result element. All live operands are evaluated and finite-checked, so an invali
 or nonfinite unselected branch still raises, even under a constant condition.
 Scientific index domains, representations and symmetry annotations are not
 admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
-tests support only external fixed Boolean masks in finite generic real graphs;
+tests support external fixed Boolean masks in finite generic real graphs, and
+comparison selectors with the explicit `allow_comparison_where=True` option;
 see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
 `xp.grad` and `xp.value_and_grad` accept `allow_external_mask_where=True`
 for first-order fixed external-mask gradients on generic finite FP64 arrays
@@ -581,14 +641,16 @@ All live branches and forward derivative domains remain checked, including
 unselected branches and disconnected or empty requested gradients. Prepared
 calls read the current mask; the function does not freeze its contents. The
 combined value/gradient call uses one native endpoint and retains inherited
-byte/work/node budgets and independent executor lifetime. Computed predicates,
+byte/work/node budgets and independent executor lifetime. With this external-mask-only
+option, computed predicates,
 Boolean differentiation, scientific annotations, FP32/mixed/packed policies,
 higher-order transforms and CUDA remain unsupported. Default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
 functions accept `allow_external_mask_where=True` to generate first-order
 JVP/VJP programs for fixed external masks on generic finite FP64 arrays,
 replayable by the reference interpreter and materializing native CPU owner.
-Only real branch tangents/cotangents are generated; comparisons and mask AD
-remain unsupported. See the derivative contract linked above for its eager
+Only real branch tangents/cotangents are generated. Comparison selectors require
+the separate `allow_comparison_where=True` option described above; comparisons
+and masks never receive derivatives. See the derivative contract linked above for its eager
 validation and higher-order boundaries.
 The materializing native CPU forward path admits only
 float64 branches with the same generic-domain restrictions and explicit broadcasts.

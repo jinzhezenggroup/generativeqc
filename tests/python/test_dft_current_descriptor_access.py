@@ -51,22 +51,24 @@ constexpr unsigned GENERATIVEQC_ABI_VERSION=1;
 constexpr int GENERATIVEQC_STATUS_ABI_MISMATCH=2,GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3,GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 constexpr unsigned GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED=0,GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED=1;
 struct MethodError:std::runtime_error { MethodError(int,const char* m):std::runtime_error(m){} };
-struct NativeKsExecutionPlan {};
+struct NativeKsExecutionPlan {bool nonlocal_correlation=false;};
 const char* expected_scf_domain(const NativeKsExecutionPlan&) {return "current-domain";}
 namespace core {struct System {std::vector<int> atoms;};}
-namespace scf {struct ScfOptions {
- enum class XcExecutionSchedule {DeviceFused,HostUnfused};
- std::uint64_t xc_tile_points=256;
- XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
-};}
 namespace dft {
 struct GridSpec {
  unsigned version=1,radial_points=4,angular_polar=3,angular_azimuth=2,partition_iterations=3;
  double coincident_tolerance=1e-12;
  std::array<double,119> element_radii{};
+ bool operator==(const GridSpec&) const = default;
 };
 void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::invalid_argument("radial");}
 }
+namespace scf {struct ScfOptions {
+ std::optional<dft::GridSpec> nonlocal_grid_spec;
+ enum class XcExecutionSchedule {DeviceFused,HostUnfused};
+ std::uint64_t xc_tile_points=256;
+ XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
+};}
 struct generativeqc_ks_options {
  std::size_t struct_size=sizeof(generativeqc_ks_options); unsigned abi_version=1;
  const char* scf_domain="current-domain"; std::uint64_t tile_points=37;
@@ -74,6 +76,12 @@ struct generativeqc_ks_options {
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
 };
+namespace dft {struct NonlocalGridKsOptions {
+ generativeqc_ks_options base;
+ double energy{},maximum_force{},rms_force{};
+ std::uint32_t version=1,reserved=0;
+ const generativeqc_ks_options* grid=nullptr;
+};}
 struct generativeqc_method_descriptor {
  std::size_t struct_size=sizeof(generativeqc_method_descriptor);
  const generativeqc_ks_options* ks_options=nullptr;
