@@ -273,3 +273,158 @@ def test_render_rejects_old_and_incomplete_records(
                 str(tmp_path / "table.md"),
             ]
         )
+
+
+def test_all_mode_runs_exactly_three_isolated_public_arms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The user-facing all command must never substitute AUTO for Fast."""
+    monkeypatch.setenv("SLURM_JOB_ID", "host-fixture")
+    launched: list[str] = []
+
+    def fake_run(arguments: list[str], *, check: bool) -> SimpleNamespace:
+        assert check
+        assert arguments[:3] == [
+            sys.executable, "-m", "benchmarks.production_default_compare"
+        ]
+        arm = arguments[3]
+        assert arm in runner.ARMS
+        destination = Path(arguments[arguments.index("--output") + 1])
+        destination.write_text(json.dumps(receipt(arm)))
+        launched.append(arm)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    combined = tmp_path / "all.json"
+    runner.main([
+        "all", "--method", "pbe", "--atoms", "3",
+        "--repeats", "2", "--output", str(combined),
+    ])
+    assert launched == list(runner.ARMS)
+    result = json.loads(combined.read_text())
+    assert len(result["main_table"]) == 1
+    assert result["main_table"][0]["generativeqc_fast_seconds"] == pytest.approx(2.5)
+    for arm in runner.ARMS:
+        assert (tmp_path / f"all-{arm}.json").is_file()
+
+
+def test_gpu4_scientific_defaults_and_grid_response_remain_unmodified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An independent reference default is not a grid/tolerance override."""
+    import numpy as np
+
+    measured: list[tuple[str, Any]] = []
+    gradient = SimpleNamespace(grid_response=False)
+
+    def gradient_kernel() -> np.ndarray:
+        measured.append(("grid_response", gradient.grid_response))
+        return np.zeros((1, 3))
+
+    gradient.kernel = gradient_kernel
+    grids = SimpleNamespace(
+        level=3,
+        coords=np.zeros((2, 3)),
+        radi_method=lambda: None,
+        prune=lambda: None,
+        radii_adjust=None,
+        becke_scheme=lambda: None,
+    )
+    engine = SimpleNamespace(
+        xc=None,
+        converged=True,
+        cycles=12,
+        grids=grids,
+        max_cycle=50,
+        conv_tol=1e-9,
+        conv_tol_grad=None,
+        diis_space=8,
+        direct_scf=True,
+        direct_scf_tol=1e-13,
+        init_guess="minao",
+        nuc_grad_method=lambda: gradient,
+    )
+
+    def kernel() -> float:
+        measured.append(("scf", (engine.conv_tol, engine.max_cycle, engine.xc)))
+        return -1.0
+
+    engine.kernel = kernel
+    cp = SimpleNamespace(
+        cuda=SimpleNamespace(runtime=SimpleNamespace(deviceSynchronize=lambda: None)),
+        asnumpy=np.asarray,
+    )
+    gto = SimpleNamespace(M=lambda **kwargs: SimpleNamespace(**kwargs))
+    dft = SimpleNamespace(rks=SimpleNamespace(RKS=lambda molecule: engine))
+    monkeypatch.setitem(sys.modules, "cupy", cp)
+    monkeypatch.setitem(sys.modules, "pyscf", SimpleNamespace(gto=gto))
+    monkeypatch.setitem(sys.modules, "gpu4pyscf", SimpleNamespace(dft=dft))
+    monkeypatch.setitem(sys.modules, "gpu4pyscf.dft", dft)
+    sample = runner.gpu4_sample("pbe", [("H", (0.0, 0.0, 0.0))])
+    assert measured == [
+        ("scf", (1e-9, 50, "PBE")),
+        ("grid_response", False),
+    ]
+    assert not sample["grid_response"]
+    assert sample["settings"]["xc_grid"]["level"] == 3
+    assert sample["settings"]["initial_guess"] == "minao"
+
+
+def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default Fast fallback and all its solves belong to the timed endpoint."""
+    import numpy as np
+
+    grid = SimpleNamespace(
+        version=1, radial_points=48, angular_polar=16,
+        angular_azimuth=32, pruning="none",
+    )
+    candidate = SimpleNamespace(
+        ks_options=SimpleNamespace(grid=grid),
+        initial_guess=SimpleNamespace(kind="huckel"),
+        _max_iterations=100,
+        _energy_tolerance=1e-10,
+        _density_tolerance=1e-8,
+        _diis_history=8,
+        _screening_tolerance=1e-12,
+        _library=SimpleNamespace(_name="/tmp/fake-native-library.so"),
+    )
+    solve = SimpleNamespace(
+        role="fp64_audit", requested_precision="fp64",
+        iterations=11, fock_builds=12, seconds=0.1,
+    )
+    validation = SimpleNamespace(
+        profile="fast", status="observed_met", scope="relaxed_target",
+        solve_count=2, gradient_admission="fp64-after-budget-rejection",
+        fallback_reasons=("candidate_exceeded_observable_budget",),
+        budget=None, solves=(solve, solve),
+    )
+    result = SimpleNamespace(
+        converged=True, executed_backend="cuda",
+        energy=-1.5, forces=np.zeros((1, 3)),
+        iterations=11, initial_guess={"kind": "huckel", "outcome": "used"},
+        precision_validation=validation,
+        precision={"mixed_stage_fock_builds": 0,
+                   "gradient": {"returned_mode": "fp64"}},
+        ks_diagnostic=SimpleNamespace(grid_points=24576),
+    )
+    precision_calculator = SimpleNamespace(
+        _candidate=candidate, _candidate_precision="fp64",
+        singlepoint=lambda atoms, properties: result,
+    )
+    cp = SimpleNamespace(
+        cuda=SimpleNamespace(runtime=SimpleNamespace(deviceSynchronize=lambda: None))
+    )
+    monkeypatch.setitem(sys.modules, "cupy", cp)
+    monkeypatch.setattr(
+        runner, "make_native_calculator", lambda method, arm: precision_calculator
+    )
+    sample = runner.native_sample(
+        "pbe", [("H", (0.0, 0.0, 0.0))], "fast"
+    )
+    assert sample["settings"]["selected_candidate_precision"] == "fp64"
+    assert sample["precision_validation"]["solve_count"] == 2
+    assert sample["precision_validation"]["status"] == "observed_met"
+    assert sample["gradient_arithmetic"] == "fp64"
+    assert sample["mixed_fock_builds"] == 0

@@ -446,7 +446,7 @@ def main_table_markdown(comparisons: list[dict[str, Any]]) -> str:
     """Render exactly one performance table, never a separate accuracy table."""
     headers = (
         "| Method | Atoms | GPU4PySCF default (s) | "
-        "GQC Standard (s) | GQC Fast (s) | Standard / GPU4 | Fast / GPU4 |"
+        "GQC Standard (s) | GQC Fast (s) | Standard speedup | Fast speedup |"
     )
     lines = [headers, "|---|---:|---:|---:|---:|---:|---:|"]
     rows = [row for item in comparisons for row in item["main_table"]]
