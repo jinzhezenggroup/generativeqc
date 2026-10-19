@@ -15,9 +15,8 @@ def test_named_hybrid_calculator_accepts_explicit_grid(method: str) -> None:
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
-def test_named_hybrid_still_requires_explicit_grid(method: str) -> None:
-    with pytest.raises(NotImplementedError, match="explicit GridSpec"):
-        Calculator(method=method)
+def test_named_hybrid_defaults_to_treutler(method: str) -> None:
+    assert Calculator(method=method).ks_options.grid == GridSpec.treutler()
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))

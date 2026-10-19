@@ -85,11 +85,15 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     throw std::invalid_argument("unknown KS host execution storage");
   const bool cpu = execution == KsHostExecution::cpu;
   const bool host_xc = cpu || execution == KsHostExecution::cuda_host_unfused;
+  // The resolved v4 wire shape uses polar=0 and radial=level (including 0).
+  // This query only admits capacity; the scientific descriptor validates v4.
+  const bool element_grid = shape.polar_points == 0 && shape.radial_points <= 9;
   if (!shape.atoms || !shape.orbital_aos || shape.cartesian_aos < shape.orbital_aos ||
       !shape.shells || shape.shells > shape.orbital_aos || shape.primitives < shape.shells ||
       (shape.spins != 1 && shape.spins != 2) || shape.maximum_angular > maximum ||
-      (cpu && shape.maximum_angular > 4) || !shape.grid_points || !shape.radial_points ||
-      !shape.polar_points || !shape.tile_points || !shape.max_iterations)
+      (cpu && shape.maximum_angular > 4) || !shape.grid_points ||
+      (!element_grid && (!shape.radial_points || !shape.polar_points)) || !shape.tile_points ||
+      !shape.max_iterations)
     throw std::invalid_argument(
         "KS inventory requires valid topology; CPU is limited to through-g");
   const auto orbital_square = product({shape.orbital_aos, shape.orbital_aos});
@@ -148,6 +152,9 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
   auto quadrature = sum(
       {product({16, sum({product({2, shape.radial_points}), product({3, shape.polar_points})})}),
        product({8, shape.atoms})});
+  if (element_grid)
+    quadrature = sum({quadrature, product({80, shape.grid_points}),
+                      product({8, shape.atoms, shape.atoms}), product({64, shape.atoms}), 8});
   Bytes setup = 0;
   if (cpu) {
     const auto cartesian_fourth = product({cartesian_square, cartesian_square});

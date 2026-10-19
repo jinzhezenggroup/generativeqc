@@ -205,3 +205,27 @@ The complete Apache-2.0 license is retained in
 installs. The pinned upstream tree has no NOTICE file; this attribution is
 GenerativeQC's notice, not an invented upstream NOTICE. The overall project
 continues to be distributed under GPL-3.0-or-later.
+
+## Treutler/Lebedev/NWChem quadrature tables
+
+`python/generativeqc_compiler/dft/data/treutler-lebedev.json` retains numeric
+Lebedev symmetry-orbit coefficients, Treutler element factors, Bragg radii and
+radial/angular level tables extracted from PySCF 2.14.0. The input file SHA-256s
+and upstream version accompany the tables; `tools/import_pyscf_grid_tables.py`
+is the explicit maintenance importer. Production uses local tables and native
+or generated arithmetic, without a PySCF/GPU4PySCF runtime dependency.
+
+PySCF: Copyright 2014–2024 The PySCF Developers. Apache License 2.0;
+see [license](LICENSES/pyscf-Apache-2.0.txt) and
+[upstream notice](LICENSES/pyscf-NOTICE.txt). The numerical coefficients have
+been reorganized into symmetry orbits and independently expanded by this
+project; upstream implementation source is not executed in production.
+
+The Lebedev data originate with Dmitri Laikov, translated by Christoph van
+Wuellen and subsequently by Gerald Knizia, as credited in PySCF's
+`dft/LebedevGrid.py`. The original distribution was made publicly available
+with Laikov's permission. Please cite V. I. Lebedev and D. N. Laikov,
+“A quadrature formula for the sphere of the 131st algebraic order of accuracy,”
+*Doklady Mathematics* **59**(3), 477–481 (1999), when using these grids.
+Treutler radial quadrature: O. Treutler and R. Ahlrichs,
+*Journal of Chemical Physics* **102**, 346–354 (1995).

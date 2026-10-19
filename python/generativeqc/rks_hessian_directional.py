@@ -243,6 +243,7 @@ def _native_rks_xc_geometry_direction(
         center_motion=direction,
         iterations=grid_spec.partition_iterations,
         coincident_tolerance=grid_spec.coincident_tolerance,
+        atomic_radii=grid_spec.partition_radii(basis.atoms),
     )
     selected = (np.arange(len(points)), owners)
     atomic_weights = np.asarray(source.atomic_weights)
@@ -378,6 +379,7 @@ def native_rks_xc_hvp_components(
         center_motion=vector,
         iterations=grid_spec.partition_iterations,
         coincident_tolerance=grid_spec.coincident_tolerance,
+        atomic_radii=grid_spec.partition_radii(basis.atoms),
     )
     _validate_partition_provenance(
         atomic_weights, grid.weights, right_partition.weights[selected]
@@ -490,6 +492,7 @@ def native_rks_xc_hvp_components(
                 center_motion=unit,
                 iterations=grid_spec.partition_iterations,
                 coincident_tolerance=grid_spec.coincident_tolerance,
+                atomic_radii=grid_spec.partition_radii(basis.atoms),
             )
             mixed_partition = partition_mixed_response(
                 points,
@@ -500,6 +503,7 @@ def native_rks_xc_hvp_components(
                 right_center_motion=vector,
                 iterations=grid_spec.partition_iterations,
                 coincident_tolerance=grid_spec.coincident_tolerance,
+                atomic_radii=grid_spec.partition_radii(basis.atoms),
             )
             for branch in (
                 left_partition.branch_identity,

@@ -195,7 +195,7 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
        {exchange}}},
-      stationary_fp32_point_capable ? native_geometry<true> : nullptr
+      stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology
   }};
   return binding;
 }}

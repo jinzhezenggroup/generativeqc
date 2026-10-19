@@ -4203,10 +4203,12 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
         throw std::logic_error("CUDA KS moving-grid source is not its canonical XC quadrature");
       const auto& spec = impl_->grid.spec();
       candidate.atomic_weights = quadrature.atomic_weights;
-      candidate.points_per_atom = grid_points_per_atom(spec);
+      candidate.points_per_atom = spec.version == 4 ? 0 : grid_points_per_atom(spec);
       candidate.partition_iterations = spec.partition_iterations;
       candidate.coincident_tolerance = spec.coincident_tolerance;
       candidate.quadrature_owner = quadrature.owner;
+      candidate.atom_offsets = quadrature.atom_offsets;
+      candidate.atomic_radii = quadrature.atomic_radii;
     }
     binding = candidate;
     return GENERATIVEQC_STATUS_SUCCESS;

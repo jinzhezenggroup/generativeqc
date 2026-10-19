@@ -288,7 +288,9 @@ extern "C" void grid_lifetime(void* handle,std::size_t points,std::uint64_t* out
   auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
   active_device_resource_ledger=ledger;
   namespace q=generated::quadrature;
-  struct {std::size_t points;} l{points};
+  struct {std::size_t points, atoms;} l{points, 0};
+  using dft::cuda_resident_grid_bytes;
+  const bool treutler=false;
   const bool retain_device=true;
   const int device=0;
 """

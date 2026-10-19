@@ -309,7 +309,9 @@ int main() {
   if(p->bytes!=bytes+cache_bytes || !p->center_pairs || p->center_geometry_bytes!=cache_bytes) return 12;
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != p->bytes-256)
     return 13;
-  if(reinterpret_cast<double*>(p->center_pairs)!=p->centers+3*12 ||
+  if(p->atomic_radii != p->centers+3*12 ||
+     reinterpret_cast<double*>(p->atom_offsets) != p->atomic_radii+12 ||
+     reinterpret_cast<double*>(p->center_pairs) != reinterpret_cast<double*>(p->atom_offsets)+13 ||
      reinterpret_cast<double*>(p->center_pairs)+cache_bytes/8!=p->weights) return 14;
   delete p;
   oom_above=bytes;

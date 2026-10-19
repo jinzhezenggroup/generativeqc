@@ -299,7 +299,9 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   device_pointer(arena, device_);
   if (borrowed_grid) {
     if (borrowed_grid.device != device_ || borrowed_grid.point_count != layout_.npoint ||
-        borrowed_grid.device_bytes != cuda_resident_grid_bytes(layout_.npoint))
+        borrowed_grid.device_bytes !=
+            cuda_resident_grid_bytes(layout_.npoint,
+                                     borrowed_grid.atom_offsets ? layout_.natom : 0))
       throw std::invalid_argument("CUDA XC resident grid has incompatible device or shape");
     device_pointer(borrowed_grid.points, device_);
     device_pointer(borrowed_grid.weights, device_);

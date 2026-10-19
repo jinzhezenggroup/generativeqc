@@ -107,6 +107,13 @@ int native_topology(void* pointer, const double* primitives, const int64_t* rang
                              error_size);
 }
 
+int native_grid_topology(void* pointer, const size_t* offsets, const double* radii, size_t atoms,
+                         char* error, size_t error_size) {
+  auto* owner = static_cast<NativeOwner*>(pointer);
+  return stationary_grid_topology_v1(owner ? owner->scientific : nullptr, offsets, radii, atoms,
+                                     error, error_size);
+}
+
 int native_reset_geometry(void* pointer, const double* centers, double tolerance, char* error,
                           size_t error_size) {
   auto* owner = static_cast<NativeOwner*>(pointer);

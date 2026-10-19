@@ -351,6 +351,11 @@ def _item_host_inventory(
     quadrature = (
         16 * (2 * model.grid.radial_points + 3 * model.grid.angular_polar) + 8 * a
     )
+    if getattr(model.grid, "version", 1) == 4:
+        # Native immutable element rules coexist with their contiguous upload
+        # source and the final grid. Reserve their atom-expanded upper bound,
+        # pair corrections, prefix metadata and bounded vector bookkeeping.
+        quadrature += byte_product(80, points) + byte_product(8, a, a) + 64 * a + 8
     if backend == "cuda":
         # Shared rule/center/radius upload coexists with the small rule vectors.
         quadrature += 8 * (4 * a + 2 * (512 + 256))
@@ -1000,10 +1005,7 @@ def ks_resource_request(
                 "orbital": orbital,
                 "electrons": asdict(electrons),
                 "spins": 2 if unrestricted else 1,
-                "grid_points": byte_product(
-                    len(atoms),
-                    model.grid.points_per_atom,
-                ),
+                "grid_points": model.grid.point_count(a.atomic_number for a in atoms),
             }
         )
     controls = {

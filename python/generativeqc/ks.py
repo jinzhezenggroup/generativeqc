@@ -1028,38 +1028,9 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if (
-            "tau" in expected.ingredients
-            and not compile_ks_execution_plan(native_named_ir).exchange
-        ):
-            # The v2 policy has no qualified pure meta-GGA profile. Preserve
-            # the existing explicit v1 default rather than assigning a GGA grid.
-            if options.grid_accuracy != "standard":
-                raise NotImplementedError(
-                    "r2SCAN grid accuracy profiles require an explicit GridSpec"
-                )
-            grid = GridSpec()
-        elif _is_pbe_d4_composition(named_ir):
-            grid = GridPolicy(options.grid_accuracy).resolve(
-                "pbe-rks", derivative_order=0
-            )
-        elif ks_coefficients(method_ir)[2] != 0.0:
-            raise NotImplementedError(
-                "global-hybrid grid policy requires an explicit GridSpec"
-            )
-        else:
-            grid_method = method
-            if parse_automatic_libxc_selector(method) is not None:
-                family = "lda" if expected.ingredients == ("rho",) else "pbe"
-                grid_method = (
-                    f"{family}-{'uks' if method_ir.spin == 'polarized' else 'rks'}"
-                )
-            grid = GridPolicy(
-                options.grid_accuracy,
-                pruning="none"
-                if parse_automatic_libxc_selector(method) is not None
-                else "radial-v1",
-            ).resolve(grid_method, derivative_order=0)
+        # One explicit quadrature family serves all supported semilocal and
+        # hybrid compositions. An omitted VV10 grid inherits this same spec.
+        grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(

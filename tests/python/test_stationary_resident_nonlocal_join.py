@@ -28,7 +28,9 @@ def fixture(
         device=0, points=8192, weights=12288, atomic_weights=16384, point_count=6
     )
     source = SimpleNamespace(
-        grid_spec=SimpleNamespace(coincident_tolerance=1e-12),
+        grid_spec=SimpleNamespace(
+            coincident_tolerance=1e-12, version=1, points_per_atom=3
+        ),
         cuda_resident_grid=lambda: resident_grid,
     )
     state = SimpleNamespace(
@@ -338,10 +340,13 @@ def test_join_replays_complete_grid_after_reset() -> None:
 
 @pytest.mark.parametrize("secondary_count", [4, 6, 8])
 @pytest.mark.parametrize("fallback", [False, True])
+@pytest.mark.parametrize("ragged", [False, True])
 def test_split_join_uses_two_nonaliasing_leases(
-    secondary_count: int, fallback: bool
+    secondary_count: int, fallback: bool, ragged: bool
 ) -> None:
-    counts = {"local": 6, "nonlocal": secondary_count}
+    local_count = 7 if ragged else 6
+    secondary_count += int(ragged)
+    counts = {"local": local_count, "nonlocal": secondary_count}
     views = {
         label: SimpleNamespace(
             device=0,
@@ -361,9 +366,13 @@ def test_split_join_uses_two_nonaliasing_leases(
     }
     events = []
     source = SimpleNamespace(
+        grid_spec=SimpleNamespace(version=4 if ragged else 1, points_per_atom=3),
+        nonlocal_grid_spec=SimpleNamespace(
+            version=4 if ragged else 1, points_per_atom=secondary_count // 2
+        ),
         nonlocal_grid=quadratures["nonlocal"],
         nonlocal_atomic_weights=np.ones(secondary_count) * 3,
-        atomic_weights=np.ones(6) * 2,
+        atomic_weights=np.ones(local_count) * 2,
         cuda_resident_grid=lambda nonlocal_grid=False: views[
             "nonlocal" if nonlocal_grid else "local"
         ],
@@ -411,7 +420,7 @@ def test_split_join_uses_two_nonaliasing_leases(
             host_raw: np.ndarray | None,
         ) -> None:
             assert task.alive and task.label == self.label
-            assert ppa == counts[self.label] // 2
+            assert ppa == (0 if ragged else counts[self.label] // 2)
             assert weights_pointer == views[self.label].weights + 8 * begin
             assert raw_pointer == views[self.label].atomic_weights + 8 * begin
             np.testing.assert_array_equal(
@@ -477,15 +486,18 @@ def test_split_join_uses_two_nonaliasing_leases(
         functional=4,
         ingredients=("rho", "gradient", "tau"),
     )
-    assert len([e for e in events if e[:2] == ("geometry", "local")]) == 3
+    assert (
+        len([e for e in events if e[:2] == ("geometry", "local")])
+        == (local_count + 1) // 2
+    )
     assert (
         len([e for e in events if e[:2] == ("geometry", "nonlocal")])
-        == secondary_count // 2
+        == (secondary_count + 1) // 2
     )
-    assert work["ao_collocation_point_visits"] == 6 + secondary_count * (
+    assert work["ao_collocation_point_visits"] == local_count + secondary_count * (
         2 if fallback else 1
     )
-    assert work["geometry_point_visits"] == 6 + secondary_count
+    assert work["geometry_point_visits"] == local_count + secondary_count
     assert set(parts) == {
         "xc_ao",
         "xc_grid",

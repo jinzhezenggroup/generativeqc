@@ -1,9 +1,9 @@
-"""Original table-free atom-centered quadrature and equal-radius Becke weights.
+"""Versioned atom-centered quadrature and normalized Becke partitions.
 
-Angular integration uses a Gauss-Legendre polar × periodic trapezoidal rule,
-not a Lebedev table. Radial r=R*t/(1-t), t in (0,1), uses Gauss-Legendre nodes.
-The recorded element radii set R; they do not add a heteronuclear partition
-correction. No empirical angular/radius tables or runtime downloads are used.
+The default policy uses pinned Treutler/Ahlrichs radial and Lebedev angular
+rules, NWChem pruning and Treutler radius-adjusted Becke partitions. Explicit
+versions 1--3 retain their rational-Legendre/tensor angular prescriptions.
+No reference package or runtime download is needed.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import typing
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -106,6 +107,11 @@ class GridSpec:
     Version 3 is an explicit-radius, opt-in ``radial-v1`` pruned contract.
     Its shell sizes depend only on the integer radial rank, never on
     geometry or density, so moving-grid derivatives retain fixed topology.
+    Version 4 is Treutler/Lebedev with NWChem pruning and Treutler's Bragg-radius
+    partition adjustment. Use ``GridSpec.treutler(level=3)`` to construct it.
+    In that version the legacy wire field ``radial_points`` carries the grid
+    level (0--9), and both angular fields are zero. Actual radial/angular counts
+    depend on the element; they are never inferred from those wire fields.
     """
 
     radial_points: int = 48
@@ -124,7 +130,39 @@ class GridSpec:
 
     def __post_init__(self) -> None:
         """Validate the supported grid prescription and normalize unique element radii."""
-        checked_int(self.version, "grid version", high=3)
+        checked_int(self.version, "grid version", high=4)
+        if self.version == 4:
+            checked_int(self.radial_points, "Treutler grid level", low=0, high=9)
+            if (self.angular_polar, self.angular_azimuth) != (0, 0) or (
+                self.radial_rule,
+                self.angular_rule,
+                self.partition,
+                self.pruning,
+                self.units,
+                self.ordering,
+            ) != (
+                "treutler-ahlrichs",
+                "lebedev",
+                "becke-treutler",
+                "nwchem",
+                "Bohr",
+                "atom-radial-lebedev",
+            ):
+                raise ValueError("unsupported Treutler/Lebedev grid prescription")
+            checked_int(self.partition_iterations, "partition iterations", high=5)
+            if (
+                not np.isfinite(self.coincident_tolerance)
+                or self.coincident_tolerance < 0
+            ):
+                raise ValueError("invalid coincident-center tolerance")
+            radii = tuple(sorted(self.element_radii))
+            if any(
+                type(z) is not int or not 1 <= z <= 103 or not np.isfinite(r) or r <= 0
+                for z, r in radii
+            ) or len({z for z, _ in radii}) != len(radii):
+                raise ValueError("invalid or duplicate Treutler partition radius")
+            object.__setattr__(self, "element_radii", radii)
+            return
         checked_int(self.radial_points, "radial points", high=512)
         checked_int(self.angular_polar, "polar points", high=256)
         checked_int(self.angular_azimuth, "azimuth points", low=3, high=1024)
@@ -165,9 +203,65 @@ class GridSpec:
             raise ValueError("duplicate element radius")
         object.__setattr__(self, "element_radii", tuple(sorted(radii)))
 
+    @classmethod
+    def treutler(cls, level: int = 3) -> GridSpec:
+        """Construct the pinned GPU4PySCF/PySCF default quadrature family.
+
+        Level 3 is the default for both XC and VV10. Changing a level changes
+        quadrature accuracy, not SCF convergence or density screening.
+        """
+        from .treutler import tables, validate_element_level
+
+        validate_element_level(1, level)
+        data = tables()
+        return cls(
+            version=4,
+            radial_points=level,
+            angular_polar=0,
+            angular_azimuth=0,
+            radial_rule="treutler-ahlrichs",
+            angular_rule="lebedev",
+            partition="becke-treutler",
+            pruning="nwchem",
+            ordering="atom-radial-lebedev",
+            element_radii=tuple(enumerate(data["bragg_radii_bohr"][1:104], start=1)),
+        )
+
+    @property
+    def level(self) -> int | None:
+        """Return the Treutler level, or None for explicit legacy tensor grids."""
+        return self.radial_points if self.version == 4 else None
+
+    def point_count(self, atomic_numbers: typing.Iterable[int]) -> int:
+        """Count actual points without assuming equal-sized atomic quadratures."""
+        if self.version == 4:
+            from .treutler import atomic_point_count
+
+            return sum(
+                atomic_point_count(z, self.radial_points) for z in atomic_numbers
+            )
+        return sum(1 for _ in atomic_numbers) * self.points_per_atom
+
+    def partition_radii(
+        self, atoms: typing.Iterable[typing.Any]
+    ) -> tuple[float, ...] | None:
+        """Return per-center Bragg radii only for the adjusted partition family."""
+        if self.version != 4:
+            return None
+        radii = dict(self.element_radii)
+        return tuple(radii[a.atomic_number] for a in atoms)
+
+    def atom_offsets(self, atoms: typing.Iterable[typing.Any]) -> tuple[int, ...]:
+        """Return atom-major prefix offsets without materializing any points."""
+        from itertools import accumulate
+
+        return (0, *accumulate(self.point_count((a.atomic_number,)) for a in atoms))
+
     @property
     def angular_shells(self) -> tuple[tuple[int, int], ...]:
         """Return immutable (polar, azimuth) counts in increasing radial order."""
+        if self.version == 4:
+            raise ValueError("Lebedev shell orders depend on the element")
         return _angular_shells(
             self.version, self.radial_points, self.angular_polar, self.angular_azimuth
         )
@@ -324,17 +418,31 @@ class GridProfile:
 
 @dataclass(frozen=True)
 class GridPolicy:
-    """Resolve pruned LDA/PBE grids, retaining explicit unpruned compatibility."""
+    """Resolve Treutler defaults and explicit legacy LDA/PBE policies."""
 
     accuracy: str = "standard"
-    pruning: str = "radial-v1"
+    pruning: str = "nwchem"
 
     def profile(self, method: str, *, derivative_order: int = 0) -> GridProfile:
         """Select a qualified LDA or GGA/PBE profile, using tight grids for derivatives."""
         if self.accuracy not in ("standard", "tight"):
             raise ValueError("grid accuracy must be 'standard' or 'tight'")
-        if self.pruning not in ("none", "radial-v1"):
-            raise ValueError("grid pruning must be 'none' or 'radial-v1'")
+        if self.pruning not in ("none", "radial-v1", "nwchem"):
+            raise ValueError("grid pruning must be 'none', 'radial-v1' or 'nwchem'")
+        if self.pruning == "nwchem":
+            if derivative_order not in (0, 1):
+                raise NotImplementedError(
+                    "production grid derivatives support orders 0 and 1"
+                )
+            level = 4 if self.accuracy == "tight" else 3
+            return GridProfile(
+                f"treutler-level{level}-v4",
+                level,
+                0,
+                0,
+                pruning="nwchem",
+                topology="atom-radial-lebedev",
+            )
         if derivative_order not in (0, 1):
             raise NotImplementedError(
                 "production grid derivatives support orders 0 and 1"
@@ -368,6 +476,8 @@ class GridPolicy:
     @property
     def provenance(self) -> dict[str, typing.Any]:
         """Return policy version, radii source, topology, and partition provenance."""
+        if self.pruning == "nwchem":
+            return grid_policy_provenance(self.resolve("pbe"))
         return {
             "policy_version": 2 if self.pruning == "none" else 3,
             "radii_source": GRID_POLICY_RADII_SOURCE,
@@ -382,6 +492,9 @@ class GridPolicy:
 
     def resolve(self, method: str, *, derivative_order: int = 0) -> GridSpec:
         """Build the selected versioned quadrature with pinned element radii."""
+        if self.pruning == "nwchem":
+            self.profile(method, derivative_order=derivative_order)
+            return GridSpec.treutler(4 if self.accuracy == "tight" else 3)
         profile = self.profile(method, derivative_order=derivative_order)
         return GridSpec(
             version=2 if self.pruning == "none" else 3,
@@ -396,6 +509,20 @@ class GridPolicy:
 
 def grid_policy_provenance(spec: GridSpec) -> dict[str, typing.Any]:
     """Describe the exact origin of a resolved grid without over-claiming policy provenance."""
+    if spec.version == 4:
+        from .treutler import tables
+
+        return {
+            "policy_version": 4,
+            "contract": "treutler-lebedev-nwchem/v1",
+            "level": spec.level,
+            "upstream": tables()["upstream"],
+            "source_sha256": dict(tables()["source_sha256"]),
+            "partition": spec.partition,
+            "pruning": spec.pruning,
+            "screening": "none",
+            "derivative_topology": "fixed",
+        }
     if spec.version == 1:
         return {"policy_version": 1, "contract": "reference-grid-v1"}
     if spec.version not in (2, 3):
@@ -420,6 +547,7 @@ def partition_weights(
     *,
     iterations: typing.Any = 3,
     coincident_tolerance: typing.Any = 1e-12,
+    atomic_radii: typing.Any = None,
 ) -> typing.Any:
     """Return normalized ownership [point,atom] with stable log products.
 
@@ -440,6 +568,11 @@ def partition_weights(
         or not len(centers)
     ):
         raise ValueError("points/centers require shape (n,3) and at least one center")
+    if atomic_radii is not None:
+        atomic_radii = immutable(atomic_radii, shape=(len(centers),))
+        if np.any(atomic_radii <= 0):
+            raise ValueError("partition radii must be positive")
+        from .treutler import radii_adjustment
     distance = np.empty((len(points), len(centers)))
     # Avoid a point × atom × xyz temporary; this workspace is charged by plans.
     for a, center in enumerate(centers):
@@ -460,6 +593,9 @@ def partition_weights(
                     mu = coincident_zero
                 else:
                     mu = np.clip((distance[:, a] - distance[:, b]) / separation, -1, 1)
+                    if atomic_radii is not None:
+                        adjustment = radii_adjustment(atomic_radii[a], atomic_radii[b])
+                        mu = mu + adjustment * (1 - mu * mu)
                 for _ in range(iterations):
                     mu = 0.5 * mu * (3 - mu * mu)
                 pair = np.clip(0.5 * (1 - mu), 0, 1)
@@ -504,7 +640,7 @@ class MolecularGrid:
         setup_scratch_bytes: ClassVar[int]
 
     atoms: tuple
-    spec: GridSpec = GridSpec()
+    spec: GridSpec = field(default_factory=GridSpec.treutler)
     charge: int = 0
     multiplicity: int = 1
 
@@ -529,6 +665,43 @@ class MolecularGrid:
                     + ", ".join(map(str, missing))
                 )
             resolved = tuple(radii[a.atomic_number] for a in atoms)
+        if self.spec.version == 4:
+            from .treutler import atomic_rule
+
+            rules = {
+                a.atomic_number: atomic_rule(a.atomic_number, self.spec.radial_points)
+                for a in atoms
+            }
+            offsets = np.cumsum([0, *(len(rules[a.atomic_number]) for a in atoms)])
+            for name, value in (
+                ("centers", immutable(centers)),
+                ("resolved_radii", resolved),
+                ("atomic_rules", MappingProxyType(rules)),
+                ("atom_offsets", np.frombuffer(offsets.tobytes(), dtype=offsets.dtype)),
+                ("npoint", int(offsets[-1])),
+                (
+                    "identity",
+                    molecular_grid_identity(
+                        atoms,
+                        self.spec,
+                        charge=self.charge,
+                        multiplicity=self.multiplicity,
+                    ),
+                ),
+                (
+                    "numeric_bytes",
+                    centers.nbytes
+                    + offsets.nbytes
+                    + 8 * len(atoms)
+                    + sum(rule.nbytes for rule in rules.values()),
+                ),
+                (
+                    "setup_scratch_bytes",
+                    3 * max(rule.nbytes for rule in rules.values()),
+                ),
+            ):
+                object.__setattr__(self, name, value)
+            return
         z, wz = np.polynomial.legendre.leggauss(self.spec.angular_polar)
         phi = np.arange(self.spec.angular_azimuth) * (
             2 * np.pi / self.spec.angular_azimuth
@@ -631,6 +804,18 @@ class MolecularGrid:
     def _raw_tiles(self, tile_points: typing.Any = 256) -> typing.Any:
         """Shared atomic points/measures before molecular partitioning."""
         checked_int(tile_points, "tile points")
+        if self.spec.version == 4:
+            for owner, atom in enumerate(self.atoms):
+                rule = self.atomic_rules[atom.atomic_number]
+                for start in range(0, len(rule), tile_points):
+                    block = rule[start : start + tile_points]
+                    yield GridTile(
+                        int(self.atom_offsets[owner]) + start,
+                        immutable(block[:, :3] + self.centers[owner]),
+                        immutable(block[:, 3]),
+                        (owner,) * len(block),
+                    )
+            return
         na = len(self.directions)
         per_atom = self.spec.points_per_atom
         for begin in range(0, self.npoint, tile_points):
@@ -666,6 +851,7 @@ class MolecularGrid:
                 self.centers,
                 iterations=self.spec.partition_iterations,
                 coincident_tolerance=self.spec.coincident_tolerance,
+                atomic_radii=self.resolved_radii if self.spec.version == 4 else None,
             )
             weights = raw.weights * partition[np.arange(len(raw.owners)), raw.owners]
             yield GridTile(raw.begin, raw.points, immutable(weights), raw.owners)

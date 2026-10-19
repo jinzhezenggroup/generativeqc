@@ -927,6 +927,7 @@ def complete_rks_gradient_diagnostic(
                 atoms.astype(np.int64),
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
             continue
         # One coordinate at a time bounds storage; this interpreter boundary
@@ -942,6 +943,7 @@ def complete_rks_gradient_diagnostic(
                     center_motion=fallback_motion,
                     iterations=spec.partition_iterations,
                     coincident_tolerance=spec.coincident_tolerance,
+                    atomic_radii=spec.partition_radii(basis.atoms),
                 )
                 selected = (np.arange(end - begin), atoms)
                 derivative = response.directional[selected]
@@ -999,6 +1001,7 @@ def complete_rks_gradient_diagnostic(
                 owners,
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
         else:
             assert fallback_motion is not None
@@ -1015,6 +1018,7 @@ def complete_rks_gradient_diagnostic(
                             center_motion=fallback_motion,
                             iterations=spec.partition_iterations,
                             coincident_tolerance=spec.coincident_tolerance,
+                            atomic_radii=spec.partition_radii(basis.atoms),
                         )
                         selected = (np.arange(end - begin), atoms)
                         components["nonlocal_weight"][a, axis] += np.dot(

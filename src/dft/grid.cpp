@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "generated_atomic_grid.hpp"
+
 namespace generativeqc::dft {
 namespace {
 
@@ -95,6 +97,10 @@ double owner_partition(const double* point, const core::System& system, std::siz
                          distance(point, system.atoms[b].position.data())) /
                             separation,
                         -1.0, 1.0);
+        if (spec.version == 4)
+          mu += grid_radius_adjustment(spec, system.atoms[a].atomic_number,
+                                       system.atoms[b].atomic_number) *
+                (1.0 - mu * mu);
       }
       for (unsigned iteration = 0; iteration < spec.partition_iterations; ++iteration)
         mu = 0.5 * mu * (3.0 - mu * mu);
@@ -117,6 +123,16 @@ double owner_partition(const double* point, const core::System& system, std::siz
 }  // namespace
 
 void validate_grid_spec(const GridSpec& spec) {
+  if (spec.version == 4) {
+    if (spec.radial_points > 9 || spec.angular_polar || spec.angular_azimuth ||
+        !spec.partition_iterations || spec.partition_iterations > 5 ||
+        !std::isfinite(spec.coincident_tolerance) || spec.coincident_tolerance < 0)
+      throw std::invalid_argument("unsupported Treutler/Lebedev grid prescription");
+    for (double radius : spec.element_radii)
+      if (!std::isfinite(radius) || radius < 0)
+        throw std::invalid_argument("invalid Treutler partition radius");
+    return;
+  }
   if ((spec.version != 1 && spec.version != 2 && spec.version != 3) || !spec.radial_points ||
       spec.radial_points > 512 || !spec.angular_polar || spec.angular_polar > 256 ||
       spec.angular_azimuth < 3 || spec.angular_azimuth > 1024 || !spec.partition_iterations ||
@@ -132,6 +148,7 @@ void validate_grid_spec(const GridSpec& spec) {
 
 std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells(const GridSpec& spec) {
   validate_grid_spec(spec);
+  if (spec.version == 4) throw std::invalid_argument("Lebedev shells require an element");
   std::vector<std::pair<std::size_t, std::size_t>> shells(
       spec.radial_points, {spec.angular_polar, spec.angular_azimuth});
   if (spec.version != 3) return shells;
@@ -142,6 +159,7 @@ std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells(const GridS
 
 std::size_t grid_points_per_atom(const GridSpec& spec) {
   validate_grid_spec(spec);
+  if (spec.version == 4) throw std::invalid_argument("Treutler point counts require an element");
   std::size_t points = 0;
   for (std::size_t radial = 0; radial < spec.radial_points; ++radial) {
     const auto [polar, azimuth] = angular_shape(spec, radial);
@@ -151,6 +169,72 @@ std::size_t grid_points_per_atom(const GridSpec& spec) {
     points += count;
   }
   return points;
+}
+
+GridSpec default_grid_spec() {
+  GridSpec result;
+  result.version = 4;
+  result.radial_points = 3;  // version-4 wire level, not an element's radial count
+  result.angular_polar = result.angular_azimuth = 0;
+  for (unsigned z = 1; z < std::size(generated::atomic_grid::xi); ++z)
+    result.element_radii[z] = generated::atomic_grid::bragg[z];
+  return result;
+}
+
+double grid_radius_adjustment(const GridSpec& spec, unsigned first, unsigned second) {
+  if (spec.version != 4) return 0;
+  const auto ratio = std::sqrt(spec.element_radii[second] / spec.element_radii[first]);
+  return std::clamp(0.25 * (ratio - 1.0 / ratio), -0.5, 0.5);
+}
+
+namespace {
+template <class Consumer>
+void treutler_shells(unsigned z, unsigned level, Consumer consume) {
+  namespace rule = generated::atomic_grid;
+  const auto [radial, maximum] = rule::counts(z, level);
+  const auto step = std::numbers::pi / (radial + 1);
+  for (unsigned rank = radial; rank; --rank) {
+    const double angle = rank * step;
+    const auto transformed = rule::radial_transform(std::cos(angle), rule::xi[z]);
+    const auto radius = transformed[0];
+    const auto dr = step * std::sin(angle) * transformed[1];
+    consume(radius, dr, rule::pruned_count(z, radius, maximum));
+  }
+}
+}  // namespace
+
+std::size_t grid_atom_point_count(const GridSpec& spec, unsigned z) {
+  if (spec.version != 4) return grid_points_per_atom(spec);
+  validate_grid_spec(spec);
+  std::size_t count = 0;
+  treutler_shells(z, spec.radial_points,
+                  [&](double, double, unsigned angular) { count += angular; });
+  return count;
+}
+
+std::size_t grid_point_count(const core::System& system, const GridSpec& spec) {
+  std::size_t count = 0;
+  for (const auto& atom : system.atoms) {
+    const auto add = grid_atom_point_count(spec, atom.atomic_number);
+    if (add > std::numeric_limits<std::size_t>::max() - count)
+      throw std::invalid_argument("DFT grid point count overflow");
+    count += add;
+  }
+  return count;
+}
+
+std::vector<std::array<double, 4>> treutler_atomic_rule(unsigned z, unsigned level) {
+  std::vector<std::array<double, 4>> result;
+  std::size_t count = 0;
+  treutler_shells(z, level, [&](double, double, unsigned angular) { count += angular; });
+  result.reserve(count);
+  treutler_shells(z, level, [&](double radius, double dr, unsigned angular) {
+    const double measure = 4.0 * std::numbers::pi * radius * radius * dr;
+    for (const auto& direction : generated::atomic_grid::angular(angular))
+      result.push_back({radius * direction.x, radius * direction.y, radius * direction.z,
+                        measure * direction.weight});
+  });
+  return result;
 }
 
 std::pair<std::vector<double>, std::vector<double>> MolecularGrid::legendre_rule(
@@ -165,6 +249,8 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec, Deferred
   for (const auto& atom : system_.atoms) {
     const auto z = atom.atomic_number;
     if (z < 1 || z > 118) throw std::invalid_argument("invalid grid atomic number");
+    if (spec_.version == 4 && z > 103)
+      throw std::invalid_argument("Treutler parameters are available only for H-Lr");
     if (spec_.version >= 2 && !(spec_.element_radii[z] > 0.0))
       throw std::invalid_argument("production DFT grid has no sourced element radius");
     for (double coordinate : atom.position)
@@ -174,6 +260,27 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec, Deferred
 
 MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec)
     : MolecularGrid(system, spec, Deferred{}) {
+  if (spec_.version == 4) {
+    std::map<unsigned, std::vector<std::array<double, 4>>> rules;
+    const auto total = grid_point_count(system_, spec_);
+    points_.reserve(multiply(total, 3));
+    weights_.reserve(total);
+    owners_.reserve(total);
+    for (std::size_t owner = 0; owner < system_.atoms.size(); ++owner) {
+      const auto& atom = system_.atoms[owner];
+      if (!rules.contains(atom.atomic_number))
+        rules.emplace(atom.atomic_number,
+                      treutler_atomic_rule(atom.atomic_number, spec_.radial_points));
+      for (const auto& row : rules.at(atom.atomic_number)) {
+        const double point[]{atom.position[0] + row[0], atom.position[1] + row[1],
+                             atom.position[2] + row[2]};
+        points_.insert(points_.end(), point, point + 3);
+        weights_.push_back(row[3] * owner_partition(point, system_, owner, spec_));
+        owners_.push_back(owner);
+      }
+    }
+    return;
+  }
   const auto shells = grid_angular_shells(spec_);
   std::map<std::size_t, std::pair<std::vector<double>, std::vector<double>>> polar_rules;
   for (const auto& [polar_count, azimuth_count] : shells)
@@ -217,6 +324,18 @@ MolecularGrid::MolecularGrid(const core::System& system, GridSpec spec)
 }
 
 std::vector<double> MolecularGrid::atomic_weights() const {
+  if (spec_.version == 4) {
+    std::vector<double> result;
+    result.reserve(point_count());
+    std::map<unsigned, std::vector<std::array<double, 4>>> rules;
+    for (const auto& atom : system_.atoms) {
+      if (!rules.contains(atom.atomic_number))
+        rules.emplace(atom.atomic_number,
+                      treutler_atomic_rule(atom.atomic_number, spec_.radial_points));
+      for (const auto& point : rules.at(atom.atomic_number)) result.push_back(point[3]);
+    }
+    return result;
+  }
   const auto shells = grid_angular_shells(spec_);
   std::map<std::size_t, std::vector<double>> polar_weights;
   for (const auto& [polar_count, azimuth_count] : shells)
@@ -309,6 +428,14 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
                   unit_b / separation + numerator * unit_ab / separation2;
             }
           }
+        }
+        if (spec_.version == 4 && separation > spec_.coincident_tolerance) {
+          const auto adjustment = grid_radius_adjustment(spec_, system_.atoms[a].atomic_number,
+                                                         system_.atoms[b].atomic_number);
+          const double slope = 1.0 - 2.0 * adjustment * mu;
+          for (std::size_t block = 0; block < pair_atom_count; ++block)
+            for (double& derivative : pair_derivative[block]) derivative *= slope;
+          mu += adjustment * (1.0 - mu * mu);
         }
         for (unsigned iteration = 0; iteration < spec_.partition_iterations; ++iteration) {
           const double slope = 1.5 * (1.0 - mu * mu);

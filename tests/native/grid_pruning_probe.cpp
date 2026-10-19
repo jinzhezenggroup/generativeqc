@@ -17,13 +17,16 @@ extern "C" std::size_t grid_pruning_probe(unsigned version, std::size_t radial, 
     generativeqc::core::System system;
     system.atoms = {{1, {centers[0], centers[1], centers[2]}},
                     {8, {centers[3], centers[4], centers[5]}}};
-    generativeqc::dft::GridSpec spec;
+    auto spec =
+        version == 4 ? generativeqc::dft::default_grid_spec() : generativeqc::dft::GridSpec{};
     spec.version = version;
     spec.radial_points = radial;
     spec.angular_polar = polar;
     spec.angular_azimuth = azimuth;
-    spec.element_radii[1] = 0.8;
-    spec.element_radii[8] = 1.4;
+    if (version != 4) {
+      spec.element_radii[1] = 0.8;
+      spec.element_radii[8] = 1.4;
+    }
     const generativeqc::dft::MolecularGrid grid(system, spec);
     if (points) {
       std::copy(grid.points().begin(), grid.points().end(), points);
