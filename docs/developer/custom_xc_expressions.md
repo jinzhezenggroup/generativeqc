@@ -116,11 +116,90 @@ from semantic identity, so equal mathematics may retain different declarations.
 (xc-expression-backends)=
 ## Capability boundary
 
+The sealed declaration's `evaluate` endpoint is a diagnostic CPU scalar call.
+It neither compiles code nor grants native SCF, force, response or CUDA admission.
+Explicit compiled CPU point/batch programs use the separate API below;
+compilation alone does not qualify a formula scientifically.
+
+(xc-expression-native)=
+### Explicit native CPU point/batch programs
+
+`xc.expression_program(formula, order=0|1|2)` builds a separate immutable scalar
+derivative recipe. It uses canonical Graph differentiation, associative
+canonicalization and small-integer power lowering. Exported graphs and audit
+payloads are detached. The declaration's v2 identity and replay semantics remain
+unchanged; program identity additionally records the output contract and graph.
+
+```python
+from pathlib import Path
+import numpy as np
+from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+
+program = xc.expression_program(formula, order=2)
+native = xc.compile_expression(
+    program,
+    compiler=CppCompilerAdapter(Path("/usr/bin/g++")),
+    cache=Path("/absolute/persistent/compiler-cache"),
+)
+point = native.point(rho_a=0.2, rho_b=0.03)
+batch = native.evaluate(np.array([[0., .2], [0., .03]], dtype=np.float64))
+```
+
+Compilation is explicit, standalone CPU C++, using `ScalarCEmitter` and the shared
+compiler/cache adapter; it does not load the full native library. A verified
+`sccache` (0.16.0+ for runtime JIT) or `ccache` launcher is required on a cache miss.
+The compiled artifact records source, toolchain and binary identity. Artifact
+hits replay without compiling; source/binary integrity checks remain active.
+The current adapter uses the existing Unix-style C++ shared-library toolchain.
+
+`UserExpressionProgram` owns only the immutable mathematical recipe, detached
+graphs, output labels and identity. Its `compile(compiler=..., cache=...)` method
+returns a hash-verified compiled artifact without loading a DSO or allocating
+point buffers. `xc.compile_expression(program, compiler=..., cache=...)` returns
+a `NativeUserExpression` owned by the Python runtime, which retains the loaded
+library/function and owns input snapshots, output scratch and publication.
+The fixed batch loop and pointer/count/finite-domain checks live in
+`src/dft/xc_user_expression_point.hpp`; canonical scalar roots are emitted by the
+compiler. This introduces no alternate mathematical engine or user callback.
+The header is a declared wheel asset. A checked copy is staged beside generated
+source under its logical basename, preserving source/header identity across
+checkout and installed resolution. Missing assets and corrupt staged source,
+header or compiled artifacts fail explicitly. No checkout fallback repairs an
+installed package with a missing asset. A cache miss also reports missing or
+failed compiler/cache prerequisites instead of choosing an interpreter.
+
+Rows are energy density (hartree/bohr^3), then `d/d rho_a`, `d/d rho_b`, then the
+packed upper Hessian `(aa, ab, bb)`. Order zero returns one row, order one three,
+order two six. Batch input is strictly a float64 ndarray of shape `(2, npoint)`;
+noncontiguous inputs are copied. Each call validates both declared inputs even
+for a constant expression. Finite nonnegative rho includes vacuum and zero
+minority spin at every order. Built-in XC's separate interior-v1 validation is
+unchanged; inputs are never padded with sigma/tau.
+
+The adapter bounds batches to 65,536 points, derivative graphs to 8,192 nodes,
+derivative exact coefficients to 512 bits and generated source to 262,144 bytes.
+At order two the input snapshot and output scratch together contain at most
+4 MiB of FP64 data; publication adds at most 3 MiB of immutable output bytes.
+These bounds exclude compiler-process memory and Python/graph metadata. Empty
+batches return the correctly shaped empty result. Nonfinite/negative input,
+wrong dtype/shape, excessive budgets or nonfinite output fail explicitly. No
+caller output buffer is accepted: failed native scratch is discarded and a
+previous result remains unchanged. Successful outputs have detached, read-only
+byte storage. There is no interpreter or reference fallback.
+
+Successful compilation establishes a compiled point/batch artifact, and successful
+calls establish only those finite pointwise outputs. Independent polynomial
+tests exercise the complete endpoints; a custom polynomial is not thereby a
+physically calibrated XC functional. `formula.capability()` remains the sealed
+declaration's qualification report, separate from an individual compiled artifact.
+SCF, nuclear forces, response and CUDA remain unqualified. This delivers a bounded
+part of #2330 B; C--G and broader B qualification remain separate work.
+
 | Stage | CPU | CUDA |
 | --- | --- | --- |
 | Representation | Bounded scalar contract | Same target-neutral contract |
 | Pointwise validation of a user formula | UNQUALIFIED | UNQUALIFIED |
-| Native compilation | UNQUALIFIED | UNQUALIFIED |
+| Native compilation | Explicit bounded point/batch program | UNQUALIFIED |
 | Self-consistent SCF | UNQUALIFIED | UNQUALIFIED |
 | Analytic nuclear forces | UNQUALIFIED | UNQUALIFIED |
 
@@ -128,6 +207,6 @@ from semantic identity, so equal mathematics may retain different declarations.
 `UserExpression` is deliberately distinct from `FunctionalSpec`;
 `method.compose(..., xc=formula)` rejects it. Native Calculator admission is
 unchanged. There is no Python SCF callback or host/device/reference fallback.
-Issue #2330's derivative pipeline integration, native LDA SCF, GGA/meta-GGA,
+Issue #2330's broader derivative qualification, native LDA SCF, GGA/meta-GGA,
 forces, CUDA and end-to-end usability remain separate work. This contract does
 not complete #2330, #558 or #1118.
