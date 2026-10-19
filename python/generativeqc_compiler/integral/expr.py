@@ -1149,10 +1149,22 @@ class Graph:
         return result
 
     def is_constant(self, expression: Expr, value: Scalar | None = None) -> bool:
+        """Match a coefficient without rounding exact payloads to binary64.
+
+        Rational payloads use the same source-literal interpretation as
+        ``constant`` (including decimal float literals). Approximate payloads
+        retain their represented float value; a rational query is compared
+        exactly rather than rounded to that float.
+        """
         node = self.node(expression)
         if node.operation != "constant":
             return False
-        return value is None or float(self._constant_value(node)) == float(value)
+        if value is None:
+            return True
+        coefficient = self._constant_value(node)
+        if isinstance(coefficient, Fraction):
+            return coefficient == self._exact_coefficient(value)
+        return coefficient == value
 
     def differentiate(
         self,
