@@ -290,7 +290,7 @@ def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None
         path = Path(f"/proc/{owned['pid']}/stat")
         try:
             state = path.read_text().split()[2]
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             return False
         return state not in ("Z", "X")
 
