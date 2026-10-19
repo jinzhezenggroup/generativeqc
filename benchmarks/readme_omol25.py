@@ -661,9 +661,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("engine", choices=("reference", "native"))
     parser.add_argument(
         "--policy",
-        choices=("fp64", "fast"),
-        default="fp64",
-        help="Native application arithmetic; fp64 remains the ordinary optimized Calculator",
+        choices=("standard", "fast", "fp64"),
+        default="standard",
+        help="Application policy: standard is optimized FP64; fp64 remains a legacy alias",
     )
     parser.add_argument(
         "--fast-budget",
@@ -730,7 +730,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args(argv)
-    if args.engine == "reference" and args.policy != "fp64":
+    if args.engine == "reference" and args.policy == "fast":
         parser.error("the independent reference must remain FP64")
     if args.fast_budget is not None and args.policy != "fast":
         parser.error("--fast-budget requires --policy fast")

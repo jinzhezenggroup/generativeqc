@@ -213,8 +213,11 @@ def fleet(backend: Any, monkeypatch: Any) -> Any:
     return state
 
 
-def test_native_fleet_reuse_without_item_timing_or_seed_exports(fleet: Any) -> None:
-    calculator = PrecisionCalculator(policy="fp64")
+@pytest.mark.parametrize("profile", ("standard", "fp64"))
+def test_native_fleet_reuse_without_item_timing_or_seed_exports(
+    fleet: Any, profile: str
+) -> None:
+    calculator = PrecisionCalculator(policy=profile)
     fleet.fleet_outputs = [[item(0), item(1)], [item(0), item(1)]]
     with calculator.prepare_batch([ATOMS, ATOMS]) as prepared:
         first = prepared.execute(strict=True)
