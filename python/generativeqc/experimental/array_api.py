@@ -1324,16 +1324,28 @@ def jvp(
     tangents: tuple[object, ...],
     *,
     backend: str | None = None,
+    allow_external_mask_where: bool = False,
     **options: typing.Any,
 ) -> tuple[typing.Any, typing.Any]:
     """Compile a function and forward directional derivative on one backend.
 
     Primals/tangents are matching tuples of positional array arguments. Returned
     primal and tangent outputs preserve the function's array/dictionary structure.
+    ``allow_external_mask_where=True`` admits first-order generic finite FP64
+    fixed-mask selection on reference/CPU. In that opt-in only, None marks a
+    non-differentiated primal (including a Boolean mask). Every supplied real
+    direction must match its primal; at least one real direction is required.
     """
     from ._array_api_autodiff import _jvp
 
-    return _jvp(function, primals, tangents, backend, options)
+    return _jvp(
+        function,
+        primals,
+        tangents,
+        backend,
+        options,
+        allow_external_mask_where=allow_external_mask_where,
+    )
 
 
 def vjp(
@@ -1414,6 +1426,14 @@ def capabilities() -> dict[str, object]:
             "molecular_derivatives": "native-analytic-nuclear-first-order",
             "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
+            "external_mask_jvp": {
+                "option": "allow_external_mask_where",
+                "default": False,
+                "backends": ("reference", "cpu"),
+                "real_dtype": "float64",
+                "non_differentiated_primal": "explicit-None-tangent-in-matching-tuple",
+                "scope": "first-order-generic-fixed-external-mask; at-least-one-real-direction; eager-all-live-domains",
+            },
             "external_mask_vjp": {
                 "option": "allow_external_mask_where",
                 "default": False,

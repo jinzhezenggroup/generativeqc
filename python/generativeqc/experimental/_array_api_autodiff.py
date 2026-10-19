@@ -76,7 +76,10 @@ def _seed(value: Any, spec: Any, name: str) -> np.ndarray:
 
 
 def _combine(primal: Program, derivative: Program) -> Program:
-    if derivative.provenance.get("external_mask_where_vjp"):
+    if any(
+        derivative.provenance.get(key)
+        for key in ("external_mask_where_jvp", "external_mask_where_vjp")
+    ):
         # Fixed-mask derivatives freeze real feeds as non-differentiable execution
         # data. Rebuild the primal against those same canonical inputs before
         # combining; restoring their AD flags would reopen higher-order AD.
@@ -205,24 +208,45 @@ def _jvp(
     tangents: Any,
     backend: str | None,
     options: dict[str, Any],
+    *,
+    allow_external_mask_where: bool = False,
 ) -> tuple[Any, Any]:
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
     if (
         not isinstance(primals, tuple)
         or not isinstance(tangents, tuple)
         or len(primals) != len(tangents)
     ):
         raise TypeError("primals and tangents must be matching tuples")
+    positions = tuple(
+        position
+        for position, tangent in enumerate(tangents)
+        if not allow_external_mask_where or tangent is not None
+    )
+    if allow_external_mask_where and not positions:
+        raise ValueError("external-mask JVP requires at least one real tangent")
     base = _compiled(function, backend, options)
-    names, _ = _arguments(base, tuple(range(len(primals))))
-    base = base._variant(names)
-    primal, feeds = base._prepare(*primals)
-    forward = linearize(primal, names)
-    inputs = {node.attrs["name"]: node for node in primal.nodes if node.op == "input"}
-    directions = dict(zip(names, tangents, strict=True))
-    for generated, name in forward.input_map.items():
-        feeds[generated] = _seed(directions[name], inputs[name].spec, f"tangent {name}")
-    combined = _combine(primal, forward.program)
     try:
+        if allow_external_mask_where and base._backend not in ("reference", "cpu"):
+            raise ValueError("external-mask JVP requires reference or CPU backend")
+        names, _ = _arguments(base, positions)
+        base = base._variant(names)
+        primal, feeds = base._prepare(*primals)
+        forward = linearize(
+            primal, names, allow_external_mask_where=allow_external_mask_where
+        )
+        inputs = {
+            node.attrs["name"]: node for node in primal.nodes if node.op == "input"
+        }
+        directions = dict(
+            zip(names, (tangents[position] for position in positions), strict=True)
+        )
+        for generated, name in forward.input_map.items():
+            feeds[generated] = _seed(
+                directions[name], inputs[name].spec, f"tangent {name}"
+            )
+        combined = _combine(primal, forward.program)
         values = base._execution.execute(combined, feeds)
         derivative = {
             original: values[generated]

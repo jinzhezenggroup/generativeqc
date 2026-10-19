@@ -87,6 +87,32 @@ their primal inputs, so later mutation cannot change the derivative. Call
 `pullback.close()` to release native owners. Compiled and gradient functions
 also provide `close()` and `compilation_info()`.
 
+For first-order fixed external masks on generic finite FP64 arrays, public JVP
+accepts an explicit opt-in and a matching tangent tuple with `None` at each
+non-differentiated primal:
+
+```python
+def selected_values(x, y, mask):
+    return xp.where(mask, x * x, y * y)
+
+value, direction = xp.jvp(
+    selected_values, (x, y, mask), (dx, dy, None),
+    allow_external_mask_where=True,
+)
+```
+
+This path is qualified for reference/materializing native CPU. `None` supplies
+no numerical tangent, including for the Boolean mask; omitted real directions
+are fixed parameters. At least one explicit real direction is required. Every
+supplied direction, including a disconnected one, must match its primal shape
+and dtype and remain finite. Requested disconnected FP32 or scientific-domain
+inputs reject before compilation. All live primal and forward derivative
+domains remain checked, including unselected branches and empty outputs. Results
+are detached, inherited native byte/work/node budgets apply, and temporary
+executors close on success or failure. Default JVP admission, computed predicates,
+Boolean AD, scientific annotations, FP32/mixed/packed selection, higher-order
+selection and CUDA admission remain unchanged.
+
 `xp.vjp` additionally accepts `argnums` (an integer or nonempty tuple). It returns
 only those input cotangents, always as a tuple in the requested order. Negative
 positions count from the supplied positional primals, rather than any omitted
@@ -557,7 +583,7 @@ calls read the current mask; the function does not freeze its contents. The
 combined value/gradient call uses one native endpoint and retains inherited
 byte/work/node budgets and independent executor lifetime. Computed predicates,
 Boolean differentiation, scientific annotations, FP32/mixed/packed policies,
-higher-order transforms and CUDA remain unsupported. Public `jvp` and default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
+higher-order transforms and CUDA remain unsupported. Default generated derivatives still reject `where`. The low-level `linearize` and `transpose_program`
 functions accept `allow_external_mask_where=True` to generate first-order
 JVP/VJP programs for fixed external masks on generic finite FP64 arrays,
 replayable by the reference interpreter and materializing native CPU owner.
