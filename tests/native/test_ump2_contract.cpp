@@ -126,6 +126,161 @@ void native_equations() {
   }
 }
 
+using namespace generativeqc;
+
+void finite_density_equations() {
+  for (unsigned channel = 0; channel < 3; ++channel) {
+    const double left = -0.71, right = 0.23;
+    std::array<double, 4> density{};
+    generativeqc::mp2::generated::ump2_density_cpu_plan(channel).run(left, right, density.data());
+    std::array<double, 6> plus{}, minus{};
+    const auto adjoint = generativeqc::mp2::generated::ump2_adjoint_cpu_plan(channel);
+    adjoint.run(-(left + right) / 2, (left + right) / 2, -1, 0, 0, 0, plus.data());
+    adjoint.run(-(left - right) / 2, (left - right) / 2, -1, 0, 0, 0, minus.data());
+    for (unsigned leg = 0; leg < 4; ++leg) {
+      require(std::abs(density[leg] - (plus[leg + 2] - minus[leg + 2]) / 4) < 1e-14,
+              "finite density disagrees with source VJP polarization");
+      require(std::abs(density[leg] - (leg < 2 ? -1 : 1) * left * right / 4) < 1e-14,
+              "finite density spin factor/sign mismatch");
+    }
+    bool rejected = false;
+    try {
+      generativeqc::mp2::generated::ump2_density_cpu_plan(channel).run(
+          std::numeric_limits<double>::infinity(), right, density.data());
+    } catch (const std::runtime_error&) {
+      rejected = true;
+    }
+    require(rejected, "finite density accepted a nonfinite cotangent");
+  }
+}
+
+void degenerate_occupied_gauge() {
+  core::System system;
+  const std::vector<core::Primitive> primitives{
+      {3.42525091, 0.1543289673}, {0.62391373, 0.5353281423}, {0.1688554, 0.4446345422}};
+  const double b = 1.2646147821786555;
+  for (double y : {-b, b})
+    for (double x : {-2.0, 0.0, 2.0}) {
+      system.atoms.push_back({1, {x, y, 0}});
+      system.shells.push_back({static_cast<unsigned>(system.atoms.size() - 1), 0, primitives});
+    }
+  std::string detail;
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          "degenerate H6 setup failed");
+  const auto strategy = scf::resolve_fock_build(methods::detail::ump2_reference_fock_spec(),
+                                                scf::FockBackend::Cpu, 0);
+  scf::PreparedFockPlan plan(system, nullptr, strategy);
+  scf::ScfOptions options;
+  options.export_physical_reference = true;
+  options.compute_forces = false;
+  options.screening_tolerance = 0;
+  options.energy_tolerance = options.density_tolerance = 1e-13;
+  options.max_iterations = 500;
+  options.reference_memory_budget_bytes = 256ULL << 20;
+  options.resolved_fock_build = strategy;
+  auto solved = scf::run_prepared_fock_strategy(plan, options);
+  require(solved.converged && solved.unrestricted_reference, "degenerate H6 UHF failed");
+  const auto original = *solved.unrestricted_reference;
+  for (unsigned spin = 0; spin < 2; ++spin)
+    require(
+        std::abs(original.orbital_energies[spin][1] - original.orbital_energies[spin][2]) < 1e-9,
+        "H6 no longer exercises the same-space degenerate domain");
+  scf::PreparedFockInteractionSourceView source(plan);
+  std::vector<double> baseline;
+  double baseline_energy = 0;
+  for (unsigned mask = 0; mask < 4; ++mask) {
+    auto ref = original;
+    const auto n = ref.nbf;
+    const double c = std::cos(0.3), s = std::sin(0.3);
+    for (unsigned spin = 0; spin < 2; ++spin)
+      if (mask & (1U << spin))
+        for (std::size_t row = 0; row < n; ++row) {
+          const auto first = original.coefficients[spin][row * n + 1];
+          const auto second = original.coefficients[spin][row * n + 2];
+          ref.coefficients[spin][row * n + 1] = c * first + s * second;
+          ref.coefficients[spin][row * n + 2] = -s * first + c * second;
+        }
+    auto problem = methods::detail::unrestricted_response_problem(ref, plan);
+    const auto force = mp2::unrestricted_force_cpu(ref, &problem, source, 256ULL << 20, 1e-10);
+    const auto energy = mp2::conventional_unrestricted_energy(ref, source, 256ULL << 20, 1e-10);
+    const double total = ref.energy + energy.channels[0] + energy.channels[1] + energy.channels[2];
+    require(force.response.converged() && force.stationarity_residual < 1e-8,
+            "degenerate H6 response/stationarity failed");
+    require(std::abs(force.forces[3]) < 2e-8, "H6 middle-atom reflection force is nonzero");
+    if (!mask) {
+      baseline = force.forces;
+      baseline_energy = total;
+    } else {
+      require(std::abs(total - baseline_energy) < 1e-11, "occupied gauge changed energy");
+      for (std::size_t k = 0; k < baseline.size(); ++k)
+        require(std::abs(force.forces[k] - baseline[k]) < 1e-9,
+                "same-space occupied gauge changed nuclear force");
+    }
+  }
+
+  // Corrupt the physical reference in its degenerate occupied block without
+  // changing its claimed scalar residual. Its same-space residual lies between
+  // the strict 1e-9 compatibility gate and final 1e-7 gate. Two independent
+  // symmetric directions avoid accidentally commuting with the density when
+  // another eigensolver chooses a different gauge of this degenerate block.
+  const auto n = original.nbf;
+  std::vector<double> first(n), second(n);
+  for (std::size_t row = 0; row < n; ++row)
+    for (std::size_t col = 0; col < n; ++col) {
+      first[row] += original.overlap[row * n + col] * original.coefficients[0][col * n + 1];
+      second[row] += original.overlap[row * n + col] * original.coefficients[0][col * n + 2];
+    }
+  bool rejected = false;
+  for (unsigned direction = 0; direction < 2; ++direction) {
+    auto inconsistent = original;
+    for (std::size_t row = 0; row < n; ++row)
+      for (std::size_t col = 0; col < n; ++col)
+        inconsistent.hcore[row * n + col] +=
+            1e-6 * (direction == 0 ? first[row] * second[col] + second[row] * first[col]
+                                   : first[row] * first[col] - second[row] * second[col]);
+    auto incompatible_problem = methods::detail::unrestricted_response_problem(inconsistent, plan);
+    try {
+      (void)mp2::unrestricted_force_cpu(inconsistent, &incompatible_problem, source, 256ULL << 20,
+                                        1e-10);
+    } catch (const std::runtime_error& error) {
+      require(std::string(error.what()).find("nonstationary degenerate") != std::string::npos,
+              "inconsistent H6 reference failed outside strict compatibility gate");
+      rejected = true;
+    }
+  }
+  require(rejected, "degenerate compatibility failure reached force publication");
+}
+
+void sparse_coordinate_admission() {
+  core::System system;
+  system.charge = 599;
+  system.multiplicity = 2;
+  for (unsigned i = 0; i < 600; ++i) system.atoms.push_back({1, {5.0 * i, 0, 0}});
+  system.shells = {{0, 0, {{1.0, 1.0}}}};
+  std::string detail;
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          "sparse-coordinate setup failed");
+  core::ContextState context;
+  context.requested_backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  methods::Capabilities capabilities;
+  capabilities.method = GENERATIVEQC_METHOD_UMP2;
+  auto descriptor = ump2_descriptor();
+  descriptor.correlation_memory_budget_bytes = 20ULL << 20;
+  auto calculation =
+      methods::detail::prepare_ump2_calculation(capabilities, context, system, descriptor);
+  bool rejected = false;
+  try {
+    (void)calculation->execute(true);
+  } catch (const methods::MethodError& error) {
+    rejected = error.status() == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  require(rejected && !calculation->correlation_diagnostic(),
+          "sparse-coordinate force exceeded capacity or published a failed diagnostic");
+  const auto energy = calculation->execute(false);
+  require(energy.convergence.converged && calculation->correlation_diagnostic(),
+          "sparse-coordinate force failure poisoned energy-only replay");
+}
+
 void force_contract() {
   auto system = h2();
   system.atoms.push_back({1, {0.3, 0, 2.7}});
@@ -425,6 +580,9 @@ void source_and_slots() {
 int main() {
   try {
     native_equations();
+    finite_density_equations();
+    degenerate_occupied_gauge();
+    sparse_coordinate_admission();
     energy_only_reference_admission();
     unsupported_requests();
     source_and_slots();

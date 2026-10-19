@@ -173,3 +173,62 @@ def test_native_ump2_force_empty_rotation_space() -> None:
     )
     assert result.converged
     np.testing.assert_allclose(result.forces, np.zeros((1, 3)), atol=1e-12)
+
+
+@pytest.mark.parametrize("element,multiplicity", [("Li", 2), ("Be", 1)])
+def test_degenerate_virtual_atomic_force(element: str, multiplicity: int) -> None:
+    atoms = [(element, (0.0, 0.0, 0.0))]
+    oracle = _oracle(atoms, multiplicity)
+    calc = Calculator(
+        method="ump2",
+        basis="sto-3g",
+        device="cpu",
+        initial_guess=None,
+        max_iterations=500,
+        energy_tolerance=1e-13,
+        density_tolerance=1e-13,
+    )
+    result = calc.singlepoint(
+        atoms, multiplicity=multiplicity, properties=("energy", "forces")
+    )
+    assert result.converged
+    np.testing.assert_allclose(result.energy, oracle.e_tot, atol=2e-8, rtol=0)
+    np.testing.assert_allclose(
+        result.forces, -analytic_gradient(oracle), atol=2e-7, rtol=0
+    )
+    np.testing.assert_allclose(result.forces, 0, atol=1e-10)
+
+
+def test_degenerate_occupied_h6_analytic_and_reconverged_force() -> None:
+    b = 1.2646147829697263
+    atoms = [("H", (x, y, 0.0)) for y in (-b, b) for x in (-2.0, 0.0, 2.0)]
+    oracle = _oracle(atoms, 1)
+    calc = Calculator(
+        method="ump2",
+        basis="sto-3g",
+        device="cpu",
+        initial_guess=None,
+        max_iterations=500,
+        energy_tolerance=1e-13,
+        density_tolerance=1e-13,
+    )
+    result = calc.singlepoint(atoms, properties=("energy", "forces"))
+    assert result.converged
+    np.testing.assert_allclose(result.energy, oracle.e_tot, atol=2e-8, rtol=0)
+    np.testing.assert_allclose(
+        result.forces, -analytic_gradient(oracle), atol=2e-7, rtol=2e-7
+    )
+    np.testing.assert_allclose(result.forces[1, 0], 0, atol=2e-8)
+    np.testing.assert_allclose(np.sum(result.forces, axis=0), 0, atol=1e-9)
+    for step in (1e-3, 3e-4):
+        energies = []
+        for sign in (1, -1):
+            moved = [(a, list(xyz)) for a, xyz in atoms]
+            moved[1][1][0] += sign * step
+            energies.append(calc.singlepoint(moved, properties=("energy",)).energy)
+        np.testing.assert_allclose(
+            (energies[0] - energies[1]) / (2 * step),
+            -result.forces[1, 0],
+            atol=2e-7,
+            rtol=0,
+        )

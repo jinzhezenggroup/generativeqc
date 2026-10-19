@@ -227,7 +227,7 @@
       "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
       "source_bindings": {
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "60fcd3edb18bedf2402cba605be9f9c6e7e19ebc119e7b59d1e5c90a341b1c8b",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
         "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
       }
     },
@@ -256,7 +256,7 @@
       "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
       "source_bindings": {
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "60fcd3edb18bedf2402cba605be9f9c6e7e19ebc119e7b59d1e5c90a341b1c8b",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
         "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
       }
     },
@@ -287,7 +287,7 @@
         "src/integrals/s_integrals.cpp": "a555368e4473fa0e9c56b6cf7a737d99d52d2d24bfbbb168c7d9b95e54a5afb8",
         "src/integrals/s_integrals.hpp": "0857306c01be92cd67eabb9838acfdcd6083e69df3de3216818f0c82297d4060",
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
-        "src/posthf/ump2_force.cpp": "60fcd3edb18bedf2402cba605be9f9c6e7e19ebc119e7b59d1e5c90a341b1c8b",
+        "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
         "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
       }
     }

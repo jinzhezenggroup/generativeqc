@@ -113,9 +113,19 @@ bars to the physical same-spin ijab block and scatter-adds all epsilon bars.
 There are no restricted occupation multipliers.
 
 The runtime retains three ijab cotangents and rank-two spin Fock multipliers.
-Canonical occupied/occupied and virtual/virtual stationarity is enforced before
-the occupied/virtual solve. Exact same-space degeneracies require a vanishing
-antisymmetric gradient; unresolved nonstationarity fails closed. One packed
+Finite occupied/occupied and virtual/virtual density blocks are assembled from
+leg contractions of the retained physical ijab cotangents, without dividing by
+same-space orbital-energy differences. A generated bilinear helper polarizes
+the existing epsilon VJP through the shared TensorIR JVP; its physical-bar
+normalization is evaluated from that same VJP. Every occupied and virtual leg
+is accumulated separately, including repeated same-spin legs. The generated
+epsilon diagonals retain their original summation; offdiagonal contributions
+are stored symmetrically in the existing rank-two matrices. This keeps the
+force invariant under rotations within exactly degenerate occupied or virtual
+spaces and does not require an extra amplitude tensor. After this finite
+assembly, same-space pairs with an energy gap at most 1e-9 still require an
+antisymmetric gradient at most 1e-9. This compatibility check is separate from
+the later 1e-7 full relaxed residual gate. One packed
 alpha-then-beta Z-vector uses `response::spin_orbital_problem`, the actual native
 `J[delta-P-alpha + delta-P-beta] - K[delta-P-spin]` provider and common native
 GMRES. The physical unpreconditioned residual and the final full Lagrangian
@@ -131,9 +141,14 @@ array is materialized. The endpoint still retains dense ijab weights and streams
 O(N^3) MO blocks; this is not an arbitrary-size or performance-qualified route.
 
 The conservative numeric plan is checked before cotangent or response execution.
-It includes the provider/reference, generated VJP workspace, three ijab outputs,
-rank-two state, four MO blocks, complete Krylov storage, simultaneous shell
-staging, result storage and bounded derivative scratch. Planned and measured
+It includes the provider/reference, generated VJP and bilinear-helper workspaces,
+three ijab outputs, rank-two state, four MO blocks, complete Krylov storage,
+simultaneous shell staging, result storage and bounded derivative scratch. For
+`C = 3 * atom_count`, checked coordinate storage reserves `C*C + 16*C` doubles:
+the one-electron consumer retains C center Jets with C derivative elements,
+plus simultaneous scalar values, output planes and generated-kernel wrapper
+scratch. The bounded derivative route admits s/p/d/f shells; higher-angular-
+momentum fallback recurrences are outside this force capacity contract. Planned and measured
 memory are distinct. No force or success diagnostic publishes after a resource,
 source, response, denominator or nonfinite failure.
 
@@ -149,7 +164,10 @@ requires a fresh residual below 1e-11. Compatible exact zero modes use the
 least-norm solution. This avoids treating iterative Krylov termination as a
 response accuracy certificate; no production coefficient/response or generated
 UMP2 graph is consumed by the oracle. H2, asymmetric open-shell H3, OH, NH2 and localized stretched H2 provide total
-force gates; reconverged central differences use multiple steps. Acceptance is
+force gates; a same-space-degenerate H6 fixture additionally checks analytic and
+reconverged forces, and native alpha-only, beta-only and both-spin occupied-gauge
+rotations. Li and Be retain successful forces with degenerate virtual p spaces.
+Reconverged central differences use multiple steps. Acceptance is
 2e-7 Hartree/Bohr against analytic/directional oracles, 1e-9 translational closure,
 2e-9 restricted-limit parity, and 1e-10 alpha/beta permutation parity. Prepared
 cold/warm/changed geometry, inclusive budget admission, source failure recovery,

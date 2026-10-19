@@ -163,6 +163,47 @@ Weights initial_weights(const hf::UnrestrictedPhysicalReference& ref,
   return w;
 }
 
+// Complete finite same-space blocks from the already assembled physical
+// integral cotangents. Each occupied/virtual occurrence contributes separately,
+// including both legs of a same-spin channel. The generated bilinear helper is
+// the polarized epsilon VJP, so no spin/energy normalization is duplicated here.
+void complete_same_space_weights(const hf::UnrestrictedPhysicalReference& ref, Weights& w) {
+  const auto n = ref.nbf;
+  for (unsigned channel = 0; channel < channels.size(); ++channel) {
+    const auto [left, right] = channels[channel];
+    const auto nl = ref.nocc[left], nr = ref.nocc[right];
+    const std::array<std::size_t, 4> extent{nl, nr, n - nl, n - nr};
+    const std::array<unsigned, 4> spin{left, right, left, right};
+    const std::array<std::size_t, 4> offset{0, 0, nl, nr};
+    const auto& gamma = w.correlation[channel];
+    if (gamma.empty()) continue;
+    const auto program = generated::ump2_density_cpu_plan(channel);
+    std::size_t stride = gamma.size();
+    for (unsigned leg = 0; leg < extent.size(); ++leg) {
+      stride /= extent[leg];
+      const auto outer = gamma.size() / (extent[leg] * stride);
+      for (std::size_t p = 0; p < extent[leg]; ++p)
+        for (std::size_t q = p + 1; q < extent[leg]; ++q) {
+          double value = 0;
+          for (std::size_t block = 0; block < outer; ++block)
+            for (std::size_t inner = 0; inner < stride; ++inner) {
+              const auto base = block * extent[leg] * stride + inner;
+              std::array<double, 4> bars{};
+              program.run(gamma[base + p * stride], gamma[base + q * stride], bars.data());
+              value += bars[leg];
+            }
+          if (!std::isfinite(value)) throw std::runtime_error("nonfinite UMP2 same-space density");
+          const auto row = offset[leg] + p, col = offset[leg] + q;
+          // Diagonals retain their original generated epsilon-bar summation.
+          for (auto* matrix : {&w.one[spin[leg]], &w.fock[spin[leg]]}) {
+            (*matrix)[row * n + col] += value;
+            (*matrix)[col * n + row] += value;
+          }
+        }
+    }
+  }
+}
+
 // Rectangular per-shell pullback. Each spin frame acts on its own slots;
 // no molecular AO-rank-four cotangent or coordinate derivative tensor exists.
 Matrix derivative(const hf::UnrestrictedPhysicalReference& ref, const core::System& system,
@@ -255,6 +296,11 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
       threshold <= 0 || !budget)
     throw std::invalid_argument("invalid UMP2 force owner/request");
   (void)validate_unrestricted_energy_input(ref, source, threshold);
+  // The coordinate workspace below bounds the generated s/p/d/f consumer,
+  // not the atom-sized Jet recurrence fallback used for higher shells.
+  if (std::any_of(source.orbital().shells.begin(), source.orbital().shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum > 3; }))
+    throw std::invalid_argument("UMP2 force source supports shells through f");
   const auto dimension = add(mul(ref.nocc[0], n - ref.nocc[0]), mul(ref.nocc[1], n - ref.nocc[1]));
   if ((dimension && (!problem || problem->dimension() != dimension ||
                      !problem->matches(ref.electronic_reference()))) ||
@@ -287,16 +333,29 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
       add(mul(max_shell, rank3),
           add(mul(shell3, n2), add(mul(mul(shell3, max_shell), n), mul(shell3, shell3))));
   elements = add(elements, staging_elements);
-  elements = add(elements, mul(8, mul(source.orbital().atoms.size(), 3)));
+  const auto ncoord = mul(source.orbital().atoms.size(), 3);
+  // One-electron contraction retains ncoord center Jets, each with ncoord
+  // derivative elements. Sixteen further planes conservatively cover center
+  // scalar values, contraction/result and all simultaneous generated-kernel
+  // wrapper temporaries. The later ERI consumer uses only twelve coordinates.
+  const auto coordinate_elements = add(mul(ncoord, ncoord), mul(16, ncoord));
+  elements = add(elements, coordinate_elements);
   auto peak = add(provider_peak, add(mul(elements, sizeof(double)), plan.workspace_bytes));
-  for (unsigned c = 0; c < 3; ++c)
+  for (unsigned c = 0; c < 3; ++c) {
     peak = add(peak, generated::ump2_adjoint_cpu_plan(c).numeric_bytes);
+    peak = add(peak, generated::ump2_density_cpu_plan(c).numeric_bytes);
+  }
+  // Caller-owned four-leg output; generated capacities include adapter scratch.
+  peak = add(peak, mul(4, sizeof(double)));
   // The native weighted derivative consumer has bounded recurrence scratch.
   peak = add(peak, posthf::source_scratch_bytes);
   if (peak > budget)
     throw std::length_error("complete UMP2 force endpoint exceeds numeric memory budget");
   auto w = initial_weights(ref, provider, threshold);
+  complete_same_space_weights(ref, w);
   auto gradient = rotation_gradient(ref, provider, w);
+  // Retain the strict degenerate-subspace compatibility gate independently of
+  // the later full relaxed residual. A small gap never discards finite density.
   for (unsigned spin = 0; spin < 2; ++spin) {
     const auto no = ref.nocc[spin];
     for (auto block : std::array<std::array<std::size_t, 2>, 2>{{{0, no}, {no, n}}})
@@ -304,14 +363,10 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
         for (std::size_t q = p + 1; q < block[1]; ++q) {
           const auto gap = ref.orbital_energies[spin][p] - ref.orbital_energies[spin][q];
           const auto g = gradient[spin][p * n + q] - gradient[spin][q * n + p];
-          if (std::abs(gap) <= 1e-9) {
-            if (std::abs(g) > 1e-9)
-              throw std::runtime_error("nonstationary degenerate UMP2 orbital subspace");
-          } else
-            subtract_fock(w, spin, n, q, p, g / gap);
+          if (std::abs(gap) <= 1e-9 && std::abs(g) > 1e-9)
+            throw std::runtime_error("nonstationary degenerate UMP2 orbital subspace");
         }
   }
-  gradient = rotation_gradient(ref, provider, w);
   Matrix rhs(dimension), diagonal(dimension);
   std::size_t offset = 0;
   for (unsigned spin = 0; spin < 2; ++spin) {
@@ -358,7 +413,8 @@ ConventionalForceResult unrestricted_force_cpu(const hf::UnrestrictedPhysicalRef
   result.stationarity_residual = residual;
   result.planned_endpoint_peak_bytes = peak;
   result.derivative_workspace_bytes =
-      add(posthf::source_scratch_bytes, mul(add(staging_elements, mul(4, n2)), sizeof(double)));
+      add(posthf::source_scratch_bytes,
+          mul(add(coordinate_elements, add(staging_elements, mul(4, n2))), sizeof(double)));
   result.weighted_eri_shell_tiles =
       mul(3, mul(mul(source.orbital().shells.size(), source.orbital().shells.size()),
                  mul(source.orbital().shells.size(), source.orbital().shells.size())));

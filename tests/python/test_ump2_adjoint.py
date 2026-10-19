@@ -514,3 +514,60 @@ def test_actual_uhf_fixed_orbital_perturbations(case: str) -> None:
         for sign in (1, -1)
     ]
     assert abs((energies[0] - energies[1]) / (2 * h) - inner(result, dg, de)) < 2e-8
+
+
+@pytest.mark.parametrize("occupied", [(2, 1), (2, 2), (0, 1), (5, 5), (0, 0)])
+def test_finite_same_space_density_preserves_epsilon_and_repeated_legs(
+    occupied: tuple,
+) -> None:
+    from generativeqc_compiler.tensor import execute
+
+    from tools.generate_mp2_native import ump2_density_program
+
+    blocks, eps, counts = problem(occupied)
+    result = canonical(blocks, eps, counts)
+    density = {spin: np.zeros((len(eps[spin]), len(eps[spin]))) for spin in SPINS}
+    for channel in CHANNELS:
+        program, normalization = ump2_density_program(channel)
+        unit = {
+            "g": 1 / float(normalization),
+            "x": -1 / float(normalization),
+            "d_g": 1 / float(normalization),
+            "d_x": -1 / float(normalization),
+            "ei": -1.0,
+            "ej": 0.0,
+            "ea": 0.0,
+            "eb": 0.0,
+            "bar_energy": 1.0,
+        }
+        leg = execute(
+            program,
+            {
+                node.attrs["name"]: np.full(node.spec.shape, unit[node.attrs["name"]])
+                for node in program.live_nodes
+                if node.op == "input"
+            },
+        ).outputs
+        weights = [
+            float(leg["d_bar_" + name].item()) for name in ("ei", "ej", "ea", "eb")
+        ]
+        left, right = channel.split("_")
+        nl, nr = counts[left], counts[right]
+        gamma = result.integrals_iajb[channel]
+        density[left][:nl, :nl] += weights[0] * np.einsum("ijab,kjab->ik", gamma, gamma)
+        density[right][:nr, :nr] += weights[1] * np.einsum(
+            "ijab,ikab->jk", gamma, gamma
+        )
+        density[left][nl:, nl:] += weights[2] * np.einsum("ijab,ijcb->ac", gamma, gamma)
+        density[right][nr:, nr:] += weights[3] * np.einsum(
+            "ijab,ijac->bc", gamma, gamma
+        )
+    _, _, oracle_epsilon = four_spin_oracle(blocks, eps, counts)
+    for spin in SPINS:
+        np.testing.assert_allclose(
+            np.diag(density[spin]), result.orbital_energies[spin], atol=2e-15
+        )
+        np.testing.assert_allclose(
+            np.diag(density[spin]), oracle_epsilon[spin], atol=2e-15
+        )
+        np.testing.assert_allclose(density[spin], density[spin].T, atol=2e-15)
