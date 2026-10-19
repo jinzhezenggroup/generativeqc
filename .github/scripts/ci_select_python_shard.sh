@@ -258,6 +258,10 @@ measured_core_runtime_paths=(
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
   "${measured_core_runtime_paths[@]}"
+  # Run 39266084600 reached the 30-minute core-b cap in this module's
+  # late shared-emitter setup. Retain its modulo slot, but keep the whole
+  # module and fixture on the existing loadfile lane (1235 s that run).
+  tests/python/test_df_shell_units.py
   # The complete CBS module took 309-329 s in recent CI. Keep its core
   # slot, but transfer all cases and shared fixtures to posthf loadfile;
   # run 38996287111 posthf finished its Python step in 1112 s.
@@ -586,6 +590,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Preserve all CPU/CUDA cases, oracles and cold/warm/rebound checks.
     if git ls-files --error-unmatch -- tests/python/test_mixed_rsh_df_forces.py >/dev/null 2>&1; then
       test_targets+=(tests/python/test_mixed_rsh_df_forces.py)
+    fi
+    # Keep the complete source-equivalence/cache-invalidation gate together.
+    # Its module-scoped emission must not be split across worksteal workers.
+    if git ls-files --error-unmatch -- tests/python/test_df_shell_units.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_df_shell_units.py)
     fi
     ;;
   compiler-heavy)
