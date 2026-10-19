@@ -358,15 +358,32 @@ def test_production_grid_open_shell_converges_against_independent_dense_quadratu
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks"])
-def test_production_grid_light_element_energy_and_force(method: typing.Any) -> None:
-    """Production v2 survives the independent full-response water oracle."""
+@pytest.mark.parametrize("pruning", ["none", "radial-v1"])
+@pytest.mark.parametrize("displacement", [0.0, 0.001])
+def test_production_grid_light_element_energy_and_force(
+    method: typing.Any, pruning: str, displacement: float
+) -> None:
+    """Unpruned and opt-in pruned grids survive independent full-response SCF."""
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
-    calc = production_calculator(method, max_iterations=200)
-    with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
+    spec = GridPolicy(pruning="none").resolve(method)
+    if pruning != "none":
+        spec = replace(spec, version=3, pruning=pruning)
+    atoms = [
+        (
+            element,
+            tuple(
+                np.asarray(center) + ((0, 0, displacement) if index == 1 else (0, 0, 0))
+            ),
+        )
+        for index, (element, center) in enumerate(ATOMS)
+    ]
+    calc = calculator(method, ks_options=KsOptions(grid=spec), max_iterations=200)
+    with calc.prepare_batch([atoms]) as batch, NativeAO(atoms) as basis:
         energy = batch.execute(strict=True).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
-        assert state._source.grid_spec.version == 2
-        assert state._source.grid_provenance["policy_version"] == 2
+        assert state._source.grid_spec == spec
+        assert state._source.grid_provenance["policy_version"] == spec.version
+        assert len(state.grid.points) == len(atoms) * spec.points_per_atom
         result = complete_rks_gradient_diagnostic(
             state,
             basis,
@@ -380,13 +397,13 @@ def test_production_grid_light_element_energy_and_force(method: typing.Any) -> N
         assert energy == pytest.approx(reference_energy, abs=2e-9)
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
-        public = calc.singlepoint(ATOMS, properties=("energy", "forces"))
+        public = calc.singlepoint(atoms, properties=("energy", "forces"))
         assert public.energy == pytest.approx(reference_energy, abs=2e-9)
         np.testing.assert_allclose(public.forces, -reference, atol=1e-7, rtol=0)
 
 
 def test_production_grid_transition_metal_energy_and_force() -> None:
-    """Fe/H v2 grid resolves sourced Z=26 radii with an independent force oracle."""
+    """Fe/H production grid retains sourced radii and an independent force oracle."""
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
 
     atoms = [("Fe", (0.05, -0.02, 0.03)), ("H", (0.17, 0.11, 2.25))]
@@ -406,7 +423,7 @@ def test_production_grid_transition_metal_energy_and_force() -> None:
     ):
         energy = batch.execute(strict=True).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
-        assert state._source.grid_spec.version == 2
+        assert state._source.grid_spec.version == 3
         assert dict(state._source.grid_spec.element_radii)[26] > 0
         assert max(shell.angular_momentum for shell in basis.shells) == 1
         assert basis_definition.provenance.source.startswith("inline issue-596")
@@ -861,6 +878,7 @@ def independent_global_hybrid_gradient(
     density_fitting: bool = False,
     auxiliary_shells: typing.Any = None,
     return_mean_field: bool = False,
+    initial_density: typing.Any = None,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
@@ -922,7 +940,7 @@ def independent_global_hybrid_gradient(
     mf.grids.gen_atomic_grids = lambda *args, **kwargs: tab
     mf.small_rho_cutoff = 0
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, 1e-10, 200
-    energy = mf.kernel()
+    energy = mf.kernel(dm0=initial_density)
     assert mf.converged
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True

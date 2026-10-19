@@ -79,27 +79,28 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
     derivative = GridPolicy().resolve("pbe-rks", derivative_order=1)
     derivative_profile = GridPolicy().profile("pbe-rks", derivative_order=1)
 
-    assert lda.grid.version == pbe.grid.version == tight.grid.version == 2
+    assert lda.grid.version == pbe.grid.version == tight.grid.version == 3
+    assert lda.grid.pruning == pbe.grid.pruning == tight.grid.pruning == "radial-v1"
     assert (
         lda.grid.radial_points,
         lda.grid.angular_polar,
         lda.grid.angular_azimuth,
     ) == (
-        54,
-        16,
-        32,
+        64,
+        20,
+        40,
     )
     assert (
         pbe.grid.radial_points,
         pbe.grid.angular_polar,
         pbe.grid.angular_azimuth,
     ) == (
-        54,
+        64,
         16,
         32,
     )
     assert tight.grid == derivative
-    assert derivative_profile.pruning == "none"
+    assert derivative_profile.pruning == "radial-v1"
     assert derivative_profile.screening == "none"
     assert derivative_profile.topology == "atom-radial-polar-azimuth"
     assert (
@@ -118,7 +119,7 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
     assert radii[54] > 0.0  # representative heavier element, Xe
     assert lda.identity != pbe.identity
     assert pbe.identity != tight.identity
-    assert pbe.to_payload()["grid"]["version"] == 2
+    assert pbe.to_payload()["grid"]["version"] == 3
     assert pbe.to_payload()["grid_provenance"] == GridPolicy().provenance
     assert pbe.to_payload()["grid_provenance"] == grid_policy_provenance(pbe.grid)
     assert GridSpec(**pbe.to_payload()["grid"]) == pbe.grid
@@ -127,7 +128,7 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
     assert canonical_hash(changed_provenance) != pbe.identity
 
     native = native_ks_options(pbe)
-    assert native.grid_version == 2
+    assert native.grid_version == 3
     assert native.element_radius_count == 119
     assert native.element_radii[26] == pytest.approx(radii[26], rel=0, abs=0)
     assert native.element_radii[87] == 0.0
@@ -142,7 +143,11 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
     )
     for custom in (custom_points, custom_radii):
         provenance = grid_policy_provenance(custom)
-        assert provenance == {"policy_version": 2, "contract": "explicit-grid-v2"}
+        assert provenance == {
+            "policy_version": 3,
+            "contract": "explicit-grid-v3",
+            "pruning": "radial-v1",
+        }
         resolved_custom = resolve_ks_options("pbe-rks", KsOptions(grid=custom))
         assert resolved_custom.to_payload()["grid_provenance"] == provenance
         assert resolved_custom.identity != pbe.identity
@@ -189,6 +194,8 @@ def test_grid_policy_capability_boundaries_fail_closed() -> None:
         policy.resolve("pbe-rks", derivative_order=2)
     with pytest.raises(ValueError, match="accuracy"):
         GridPolicy("turbo").resolve("pbe-rks")
+    with pytest.raises(ValueError, match="pruning"):
+        GridPolicy(pruning="unknown").resolve("pbe-rks")
 
 
 @pytest.mark.parametrize(
@@ -414,6 +421,14 @@ def test_custom_model_changes_plan_identity_without_materializing_grid(
     )
     assert default.identity != custom.identity
     assert custom.resident_bytes["host"] < default.resident_bytes["host"]
+    pruned = estimate_ks_resources(
+        [H2],
+        ks_options=KsOptions(
+            grid=replace(CUSTOM, version=3, pruning="radial-v1"), tile_points=31
+        ),
+    )
+    assert pruned.identity != custom.identity
+    assert pruned.resident_bytes["host"] < custom.resident_bytes["host"]
     changed_radius = estimate_ks_resources(
         [H2],
         ks_options=KsOptions(
@@ -425,16 +440,19 @@ def test_custom_model_changes_plan_identity_without_materializing_grid(
 
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
+@pytest.mark.parametrize("pruning", ("none", "radial-v1"))
 def test_custom_native_grid_matches_independent_scf_and_budget(
-    method: typing.Any, device: typing.Any
+    method: typing.Any, device: typing.Any, pruning: str
 ) -> None:
+    """Check the model and admitted capacities, including unallocated force reserves."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
 
     pyscf.lib.num_threads(1)
     uks = method.endswith("uks")
     charge, multiplicity = (1, 2) if uks else (0, 1)
-    options = KsOptions(grid=CUSTOM, tile_points=31)
+    spec = CUSTOM if pruning == "none" else replace(CUSTOM, version=3, pruning=pruning)
+    options = KsOptions(grid=spec, tile_points=31)
     calculator = Calculator(
         method=method,
         device=device,
@@ -462,10 +480,13 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
         verbose=0,
     )
     grid = MolecularGrid(
-        atoms, spec=CUSTOM, charge=charge, multiplicity=multiplicity
+        atoms, spec=spec, charge=charge, multiplicity=multiplicity
     ).explicit()
-    native = calculator.singlepoint(atoms, charge=charge, multiplicity=multiplicity)
+    native = calculator.singlepoint(
+        atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
+    )
     assert native.converged and native.physical_residual_rms < 1e-9
+    assert native.forces is None
     assert native.executed_backend == ("cuda" if device == "cuda" else "cpu_reference")
     assert native.ks_diagnostic.grid_points == len(grid.weights)
     assert native.ks_diagnostic.tile_points == options.tile_points
@@ -481,7 +502,7 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
         assert reference.converged
         assert abs(native.energy - reference.e_tot) < 1e-8
     default = Calculator(method=method, device=device).singlepoint(
-        atoms, charge=charge, multiplicity=multiplicity
+        atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
     )
     assert abs(default.energy - native.energy) > 1e-8
     # Tile shape changes scheduling and capacity, while this fixed-grid energy
@@ -491,7 +512,9 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
     )
     assert (
         abs(
-            other.singlepoint(atoms, charge=charge, multiplicity=multiplicity).energy
+            other.singlepoint(
+                atoms, charge=charge, multiplicity=multiplicity, properties=("energy",)
+            ).energy
             - native.energy
         )
         < 1e-9
@@ -499,17 +522,47 @@ def test_custom_native_grid_matches_independent_scf_and_budget(
     with calculator.prepare_batch(
         [atoms, atoms], charges=[charge] * 2, multiplicities=[multiplicity] * 2
     ) as batch:
-        batch.execute(strict=True)
-        assert batch.execute(strict=True).items[0].warm_start_used
+        batch.execute(properties=("energy",), strict=True)
+        assert (
+            batch.execute(properties=("energy",), strict=True).items[0].warm_start_used
+        )
         if device == "cuda":
             ledger = batch.resource_diagnostics["preparation"]["device_ledger"]
-            assert ledger["live_bytes"] == batch.resource_plan.resident_bytes["device"]
+            planned_peak = batch.resource_plan.peak_bytes["device"]
+            assert ledger["capacity_admission"]["declared_device_peak"] == planned_peak
+            assert ledger["limit_bytes"] == planned_peak
+            assert (
+                0 < ledger["live_bytes"] <= batch.resource_plan.resident_bytes["device"]
+            )
+            assert ledger["live_bytes"] <= ledger["peak_bytes"] <= planned_peak
+            assert ledger["admission"]["numeric_live_bytes"] == ledger["live_bytes"]
+            assert ledger["admission"]["combined_peak_bytes"] <= planned_peak
+            assert ledger["rejected_allocations"] == 0
         # Replacing the model must fail before any old density/DIIS can run.
         calculator._ks_options = resolve_ks_options(
             method, replace(options, grid=GridSpec())
         )
         with pytest.raises(RuntimeError, match="model identity changed"):
-            batch.execute(strict=True)
+            batch.execute(properties=("energy",), strict=True)
+
+
+@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
+def test_custom_grid_packaged_cuda_force_domain_remains_rejected(
+    method: str, tmp_path: typing.Any
+) -> None:
+    """Energy support must not silently promote partition-2 packaged forces."""
+    from generativeqc_compiler.method import stationary_cuda
+
+    profile = stationary_cuda._qualified_aot_profile(method.replace("-", "_"))
+    with pytest.raises(NotImplementedError, match="partition_iterations=3 only"):
+        stationary_cuda.load_stationary_aot_artifact(
+            tmp_path,
+            functional=profile.functional,
+            spin=profile.spin,
+            plan=profile.plan,
+            architecture="sm_120",
+            iterations=CUSTOM.partition_iterations,
+        )
 
 
 def test_noncurrent_native_ks_schema_is_rejected(monkeypatch: typing.Any) -> None:

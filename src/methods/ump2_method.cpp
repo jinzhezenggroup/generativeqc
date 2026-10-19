@@ -10,10 +10,12 @@
 #include "methods/batch_capabilities.hpp"
 #include "methods/correlated_batch.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/unrestricted_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
 #include "posthf/ump2_energy.hpp"
+#include "posthf/ump2_force.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
@@ -65,8 +67,6 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     if (warm_start_fallback) *warm_start_fallback = false;
-    if (compute_forces)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "UMP2 forces are unavailable");
     try {
       const auto warm_capacity = warm_reference::reservation_bytes(
           system_, initial_state, retained_warm_state != nullptr, 2);
@@ -100,6 +100,17 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
       Result result;
       result.energy = reference.energy + corr.channels[0] + corr.channels[1] + corr.channels[2];
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite UMP2 total energy");
+      std::optional<mp2::ConventionalForceResult> force;
+      if (compute_forces) {
+        std::optional<response::SpinResponseProblem> response_problem;
+        if (reference.nocc[0] * (reference.nbf - reference.nocc[0]) +
+            reference.nocc[1] * (reference.nbf - reference.nocc[1]))
+          response_problem.emplace(unrestricted_response_problem(reference, reference_plan));
+        force =
+            mp2::unrestricted_force_cpu(reference, response_problem ? &*response_problem : nullptr,
+                                        source, phase_budget, threshold_);
+        result.forces = std::move(force->forces);
+      }
       result.convergence = {hf.iterations, hf.energy_change, hf.density_rms, hf.converged};
       result.fock_builds = hf.fock_builds;
       result.executed_backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
@@ -116,6 +127,24 @@ class Ump2Prepared final : public PreparedCalculation, public ReferenceSeededCal
       diagnostic.energy_tile_count = corr.tiles;
       // The generated inventory hash binds all three spin-labelled TensorIR programs.
       std::copy_n(mp2::generated::kUmp2InventoryHash, 64, diagnostic.equation_hash);
+      if (force) {
+        diagnostic.response_iterations = force->response.iterations;
+        diagnostic.response_restarts = force->response.restarts;
+        diagnostic.response_absolute_residual = force->response.residual_norm;
+        diagnostic.response_relative_residual = force->response.relative_residual;
+        diagnostic.response_workspace_bytes = force->response.workspace_bytes;
+        diagnostic.measured_response_workspace_peak_bytes =
+            force->response.measured_workspace_peak_bytes;
+        diagnostic.response_workspace_allocation_count = force->response.workspace_allocation_count;
+        diagnostic.derivative_workspace_bytes = force->derivative_workspace_bytes;
+        diagnostic.planned_endpoint_peak_bytes = std::max<std::uint64_t>(
+            diagnostic.numeric_capacity_bytes,
+            posthf::checked_add(force->planned_endpoint_peak_bytes, warm_capacity));
+        diagnostic.numeric_capacity_bytes = diagnostic.planned_endpoint_peak_bytes;
+        diagnostic.force_provenance_flags = 0x7;
+        constexpr char response_hash[] = "uhf-canonical-response-v1";
+        std::copy_n(response_hash, sizeof(response_hash), diagnostic.response_operator_hash);
+      }
       last_ = diagnostic;
       return result;
     } catch (const std::length_error& error) {

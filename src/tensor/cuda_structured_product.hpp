@@ -27,7 +27,7 @@ enum class StructuredOperation : std::size_t {
  */
 class CudaStructuredProductBinding {
  public:
-  static constexpr std::size_t kPreparationHostBytes = 32U << 10;
+  static constexpr std::size_t kPreparationHostBytes = kCudaStructuredProductBindingHostBytes;
   /** Primitive evidence cannot promote a new scientific endpoint by default. */
   static constexpr bool production_library_qualified = false;
   CudaStructuredProductBinding(cudaStream_t stream, cublasHandle_t handle, int dimension,

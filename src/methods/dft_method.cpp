@@ -35,6 +35,7 @@
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/fock_precision.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/mean_field.hpp"
@@ -170,14 +171,16 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
- * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
+ * into a prepared calculation. Native callers supply an already decoded System
+ * without an opaque C ABI handle; that explicit source must take precedence.
+ * Only omission of both forms requests the orbital basis as the fit basis. */
 std::optional<core::System> ks_auxiliary_template(const generativeqc_method_descriptor& descriptor,
                                                   const core::System* native_auxiliary) {
-  if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
-  if (native_auxiliary == nullptr)
+  if (native_auxiliary != nullptr) return *native_auxiliary;
+  if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "auxiliary basis must be resolved at the API boundary");
-  return *native_auxiliary;
+  return std::nullopt;
 }
 
 void validate_ks_auxiliary_geometry(const core::System& system,
@@ -297,17 +300,30 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 /** One immutable CUDA admission rule for metadata and complete force consumers.
  * Availability is deliberately context-specific, not a method-global force bit.
  * Optional compiled bindings, precise Fock coefficients, representation and
- * FP64 final states are prerequisites. Budget-admitted AUTO may narrow the
- * gradient, never the final token checks; other contexts retain their consumer. */
+ * FP64 final states are prerequisites. Strict-density AUTO may narrow the
+ * gradient; budget-Fock AUTO reuses only the FP64 force body. Neither route
+ * weakens the final token checks; other contexts retain their consumer. */
 const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
   const bool application =
-      options.energy_tolerance <= 1e-10 && options.density_tolerance <= 1e-8 &&
-      options.screening_tolerance <= 1e-12 &&
+      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                           options.screening_tolerance, false) &&
       dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
                                       maximum_angular, execution_plan.spin_channels == 1);
+  const bool budget_force =
+      options.precision_mode == GENERATIVEQC_PRECISION_AUTO && options.resolved_fock_build &&
+      dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                           options.screening_tolerance, true) &&
+      dft::admit_application_fock(
+          options.application_precision_budget, aos, atoms, maximum_angular,
+          execution_plan.spin_channels == 1 &&
+              options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+          all_electron,
+          scf::cuda_fock_precision_capabilities(*options.resolved_fock_build).coulomb) &&
+      dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
+                                                  execution_plan.spin_channels == 1);
   // Above the retained-pair regime, the incumbent phased strict consumer is
   // faster than native inline cooperative FP64. Do not slow the comparator
   // merely to make both precision modes use an identical execution schedule.
@@ -317,7 +333,7 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   if (!all_electron ||
       maximum_angular > ((qualify_through_d || native_shape || application) ? 2U : 1U) ||
       grid.partition_iterations != 3 ||
-      (options.precision_mode != GENERATIVEQC_PRECISION_FP64 && !application) ||
+      (options.precision_mode != GENERATIVEQC_PRECISION_FP64 && !application && !budget_force) ||
       options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
       !options.resolved_fock_build ||
       options.resolved_fock_build->backend != scf::FockBackend::Cuda ||
@@ -393,6 +409,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
+    if (options_.nonlocal_grid_spec && *options_.nonlocal_grid_spec != grid_.spec()) {
+      nonlocal_grid_ = std::make_unique<dft::MolecularGrid>(ks_molecular_grid(
+          system_, *options_.nonlocal_grid_spec, backend_, device,
+          options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused));
+      options_.nonlocal_grid = nonlocal_grid_.get();
+    }
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
@@ -508,6 +530,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
                               runtime::vector_capacities(basis_.packed, grid_.points(),
                                                          grid_.weights(), grid_.owners(), warm_));
     bytes = runtime::add_capacity(bytes, integral_response_cache_.bytes());
+    if (nonlocal_grid_)
+      bytes = runtime::add_capacity(
+          bytes, runtime::vector_capacities(nonlocal_grid_->points(), nonlocal_grid_->weights(),
+                                            nonlocal_grid_->owners()));
     if (range_correction_)
       bytes = runtime::add_capacity(bytes, range_correction_->cpu_observation_capacity());
 #if GENERATIVEQC_HAS_CUDA
@@ -650,6 +676,45 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
     return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status resident_orbital_frame(const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      if (prepare) {
+        dft::KsFinalStateDiagnostic diagnostic;
+        return cuda_->prepare_resident_final_orbital_frame(expected, binding, diagnostic, detail);
+      }
+      return cuda_->resident_final_orbital_frame(expected, binding, detail);
+    }
+#endif
+    detail = "resident orbital frame requires a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  generativeqc_status resident_fock_sources(const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->resident_final_fock_sources(expected, binding, detail);
+#endif
+    detail = "resident Fock sources require a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  generativeqc_status resident_grid_reference(const dft::CudaKsFinalStateToken& expected,
+                                              dft::CudaKsResidentGridBinding& binding,
+                                              std::string& detail) {
+    binding = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->resident_final_grid(expected, binding, detail);
+#endif
+    detail = "resident basis/grid requires a native CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   generativeqc_status resident_density(const dft::CudaKsFinalStateToken& expected, int& device,
@@ -824,6 +889,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // its raw measures directly; dividing partitioned weights loses tail data.
     output.atomic_weights = grid_.atomic_weights();
     output.resident_grid = grid_.cuda_view();
+    if (nonlocal_grid_) {
+      output.nonlocal_points = nonlocal_grid_->points();
+      output.nonlocal_weights = nonlocal_grid_->weights();
+      output.nonlocal_grid_owners = nonlocal_grid_->owners();
+      output.nonlocal_atomic_weights = nonlocal_grid_->atomic_weights();
+      output.nonlocal_resident_grid = nonlocal_grid_->cuda_view();
+    }
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -1120,7 +1192,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
                      [](const auto& atom) { return atom.ecp_core != 0; });
     return dft::spatial_spd_force_default_eligible(
         fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range,
-        options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
+        options_.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
+            (admitted_cuda_stationary_binding() && application_gradient_qualification() == 0));
   }
 
   generativeqc_status cuda_full_range_integral_derivatives(
@@ -1764,6 +1837,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Both capacity planning and execution consume the same budget/model gate.
    * In particular, strict SCF does not imply strict derivative arithmetic. */
   std::uint64_t application_gradient_qualification() const noexcept {
+    if (!dft::admit_stationary_force_controls(options_.energy_tolerance, options_.density_tolerance,
+                                              options_.screening_tolerance, false))
+      return 0;
     const auto* binding = admitted_cuda_stationary_binding();
     if (!binding) return 0;
     std::size_t maximum_angular = 0;
@@ -2033,6 +2109,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                         options_.semilocal_correlation_scale};
       if (range_correction_) identity.model.range_correction = range_correction_->strategy();
       if (nonlocal_) identity.model.nonlocal_correlation = nonlocal_->parameters();
+      identity.model.nonlocal_grid = options_.nonlocal_grid_spec;
       if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan_.semilocal_family))
         identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::MolecularV1;
       dft::KsPhysicalState physical{identity,
@@ -2085,13 +2162,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
   void prepare_nonlocal(int device) {
-    if (grid_.point_count() > std::numeric_limits<std::uint32_t>::max())
+    const auto& nonlocal_grid = options_.nonlocal_grid ? *options_.nonlocal_grid : grid_;
+    if (nonlocal_grid.point_count() > std::numeric_limits<std::uint32_t>::max())
       throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                         "KS grid exceeds the VV10 public point-count domain");
     generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
     nonlocal_ = dft::nlc::Vv10Plan::prepare(
-        backend_, device, static_cast<std::uint32_t>(grid_.point_count()),
+        backend_, device, static_cast<std::uint32_t>(nonlocal_grid.point_count()),
         static_cast<std::uint32_t>(options_.xc_tile_points), execution_plan_.nonlocal_parameters,
         execution_plan_.nonlocal_maximum_bytes, detail, status);
     if (!nonlocal_)
@@ -2146,6 +2224,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   dft::AoBasis basis_;
   dft::MolecularGrid grid_;
+  std::unique_ptr<dft::MolecularGrid> nonlocal_grid_;
   std::vector<double> warm_;
   ExactDensityResponseCache integral_response_cache_;
   const std::uint64_t cpu_owner_{next_cpu_ks_owner()};
@@ -2575,6 +2654,39 @@ class KsPreparedBatch final : public PreparedBatch,
     return status;
   }
 
+  generativeqc_status resident_orbital_frame(std::size_t index,
+                                             const dft::CudaKsFinalStateToken& expected,
+                                             dft::CudaKsResidentOrbitalFrameBinding& binding,
+                                             std::string& detail, bool prepare) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_orbital_frame(expected, binding, detail, prepare);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_fock_sources(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected,
+                                            dft::CudaKsResidentFockBinding& binding,
+                                            std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_fock_sources(expected, binding, detail);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status resident_grid_reference(std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              dft::CudaKsResidentGridBinding& binding,
+                                              std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->resident_grid_reference(expected, binding, detail);
+    binding = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status resident_density(std::size_t index,
                                        const dft::CudaKsFinalStateToken& expected, int& device,
                                        const double*& alpha, const double*& beta,
@@ -2837,14 +2949,14 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
                                                          shape[5] == 0 && shape[6] == 0, shape[4],
                                                          shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    const auto points = runtime::size_mul(
-        shape[0], runtime::size_mul(grid.radial_points,
-                                    runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
+    const auto points = runtime::size_mul(shape[0], dft::grid_points_per_atom(grid));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
-        dft::application_gradient_qualification(*binding, options.application_precision_budget,
-                                                shape[1], shape[0], shape[4]) != 0);
+        dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,
+                                             options.screening_tolerance, false) &&
+            dft::application_gradient_qualification(*binding, options.application_precision_budget,
+                                                    shape[1], shape[0], shape[4]) != 0);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -2878,6 +2990,7 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system);
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+        execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
         (!system.ecp_terms.empty() ||
          std::any_of(system.atoms.begin(), system.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; })))

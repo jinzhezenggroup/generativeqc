@@ -10,6 +10,9 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_ks_resident_fock.hpp"
+#include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -94,6 +97,12 @@ struct CudaKsTransfers {
    * density export materializes D in dead scratch, without modifying the seed. */
   std::uint64_t fitted_warm_factor_publications{}, fitted_warm_factor_restores{};
   std::uint64_t fitted_warm_factor_fallbacks{};
+  /** Successful fixed-anchor Fast J/K actions, cumulative across solves.
+   * Delta actions use the total current-minus-anchor density, not a chain of
+   * preceding iterates. Optional allocation misses retain the ordinary solve.
+   * These counters are internal and do not extend the public C transport ABI. */
+  std::uint64_t fast_anchor_builds{}, fast_delta_builds{}, fast_anchor_invalidations{};
+  std::uint64_t fast_anchor_allocation_fallbacks{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
@@ -302,6 +311,27 @@ class CudaKsPlan {
   generativeqc_status prepare_resident_final_stationary_weights(
       const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
       KsFinalStateDiagnostic& diagnostic, std::string& detail);
+  /** Zero-transfer complete-frame lease, available only after successful
+   * resident preparation or a canonical weighted final-state read. */
+  generativeqc_status resident_final_orbital_frame(const CudaKsFinalStateToken& expected,
+                                                   CudaKsResidentOrbitalFrameBinding& binding,
+                                                   std::string& detail) const;
+  /** Borrow actual immutable Fock sources plus accepted F/H on the producer
+   * stream. Requires the existing scalar-validated canonical-frame lease. */
+  generativeqc_status resident_final_fock_sources(const CudaKsFinalStateToken& expected,
+                                                  CudaKsResidentFockBinding& binding,
+                                                  std::string& detail) const;
+  /** Zero-transfer immutable basis/grid and accepted density lease. Requires
+   * the same canonical validation as resident_final_orbital_frame; host-unfused
+   * owners without a resident XC plan fail closed, without staging a copy. */
+  generativeqc_status resident_final_grid(const CudaKsFinalStateToken& expected,
+                                          CudaKsResidentGridBinding& binding,
+                                          std::string& detail) const;
+  /** Reuse the shared physical/canonical resident proof and then borrow C/eps.
+   * Stale/capturing/failed states never publish a partial frame binding. */
+  generativeqc_status prepare_resident_final_orbital_frame(
+      const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
+      KsFinalStateDiagnostic& diagnostic, std::string& detail);
   /** Borrow final total rho/grad-rho already produced by device-fused
    * nonlocal XC. The binding is available only for the exact current token
    * and performs no transfer, synchronization or numerical launch. */
@@ -322,8 +352,9 @@ class CudaKsPlan {
   generativeqc_status read_final_state(const CudaKsFinalStateToken& expected,
                                        bool compute_weighted_density, VerifiedKsFinalState& state,
                                        std::string& detail);
-  /** At an idle force boundary, retire optional SCF ERIs only if the requested
-   * additional device envelope exceeds currently free memory. D/W/XC, the
+  /** At an idle force boundary, retire the optional cold-SCF anchor first,
+   * then optional SCF ERIs only if the requested additional device envelope
+   * still exceeds free memory. D/W/XC, the
    * exact final token and the last-good warm seed remain owned by this plan.
    * Receipt: requested bytes, free before, free after, retired device bytes.
    * This is not a reservation: the actual consumer still owns allocation and

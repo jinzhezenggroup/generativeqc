@@ -1,0 +1,42 @@
+{
+  "schema": "generativeqc.hessian-aot-inventory/v1",
+  "ao": true,
+  "arrays": [
+    "coefficients_polarized",
+    "coefficients_unpolarized",
+    "coefficient_response_polarized",
+    "coefficient_response_unpolarized",
+    "ecp_harmonics",
+    "ecp_radial_0",
+    "ecp_radial_1",
+    "ecp_radial_2",
+    "ecp_radial_3",
+    "ecp_radial_4",
+    "ecp_radial_map",
+    "grid_mixed_becke",
+    "grid_mixed_log",
+    "grid_mixed_norm",
+    "grid_mixed_ratio",
+    "nuclear_pair_hvp",
+    "vv10_pair",
+    "xc_polarized",
+    "xc_unpolarized"
+  ],
+  "integrals": [
+    {"family": "overlap", "angular": [0, 0], "components": [0]},
+    {"family": "overlap", "angular": [1, 0], "components": [0, 1, 2]},
+    {"family": "overlap", "angular": [2, 0], "components": [0, 1, 2, 3, 4, 5]},
+    {"family": "overlap", "angular": [3, 0], "components": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]},
+    {"family": "kinetic", "angular": [0, 0], "components": [0]},
+    {"family": "nuclear_attraction", "angular": [0, 0], "components": [0]},
+    {"family": "eri", "angular": [0, 0, 0, 0], "components": [0]},
+    {"family": "eri", "angular": [0, 0, 0, 0], "components": [0], "radial": "long_range"},
+    {"family": "eri", "angular": [0, 0, 0, 0], "components": [0], "radial": "short_range"},
+    {"family": "eri", "angular": [1, 0, 0, 0], "components": [0, 1, 2]},
+    {"family": "eri", "angular": [1, 0, 0, 0], "components": [0, 1, 2], "radial": "long_range"},
+    {"family": "coulomb_metric", "angular": [0, 0], "components": [0]},
+    {"family": "coulomb_metric", "angular": [1, 0], "components": [0, 1, 2]},
+    {"family": "three_center_eri", "angular": [0, 0, 0], "components": [0]},
+    {"family": "three_center_eri", "angular": [1, 0, 0], "components": [0, 1, 2]}
+  ]
+}

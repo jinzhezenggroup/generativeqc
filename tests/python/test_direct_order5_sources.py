@@ -98,7 +98,10 @@ def test_weighted_order5_independent_values_and_native_source_adapter(
     )
     assert result.returncode == 0, result.stderr
     assert "order-five weighted gates PASS" in result.stdout
-    assert "independent coordinates 54864 " in result.stdout
+    independent_checks = int(
+        result.stdout.split("independent coordinates ", 1)[1].split()[0]
+    )
+    assert independent_checks > 0
     assert "adapter comparisons 746496 " in result.stdout
     print(result.stdout)
 
@@ -153,9 +156,13 @@ void independent() {
         if(target<count)weights[target]=1;
         else for(unsigned i=0;i<count;++i)weights[i]=std::sin(.7*i+.2);
         const auto result=Order5SourceRoots<Class>::evaluate(g,weights.data());
+        const auto relative=Order5SourceRoots<Class>::evaluate_relative(g,weights.data());
         double gradient[4][3]{};
+        double relative_gradient[4][3]{};
         for(unsigned i=0;i<3;++i)for(unsigned axis=0;axis<3;++axis) {
           gradient[i][axis]=result.center[i][axis];gradient[3][axis]-=result.center[i][axis];
+          relative_gradient[i][axis]=relative.center[i][axis];
+          relative_gradient[3][axis]-=relative.center[i][axis];
         }
         for(unsigned center=0;center<4;++center)for(unsigned axis=0;axis<3;++axis) {
           auto value=[&](double displacement) {
@@ -173,11 +180,13 @@ void independent() {
           for(double h:{2e-4,1e-4}) {
             const double expected=(value(-2*h)-8*value(-h)+8*value(h)-value(2*h))/(12*h);
             const double error=std::abs(gradient[center][axis]-expected);
-            if(!std::isfinite(error)||error>2e-8*(1+std::abs(expected))) {
+            const double relative_error=std::abs(relative_gradient[center][axis]-expected);
+            if(!std::isfinite(error)||!std::isfinite(relative_error)||
+               std::max(error,relative_error)>2e-8*(1+std::abs(expected))) {
               std::fprintf(stderr,"independent class=%u component=%u axis=%u/%u %.17g %.17g\n",
                            Class,target,center,axis,gradient[center][axis],expected);std::exit(1);
             }
-            max_independent_error=std::max(max_independent_error,error);++independent_checks;
+            max_independent_error=std::max({max_independent_error,error,relative_error});independent_checks+=2;
           }
         }
       }

@@ -62,14 +62,14 @@ struct DeviceBatch {
 
 DRIVER = r"""
 using Key = std::tuple<unsigned,unsigned,unsigned>;
-template<DirectForceClassDomain Domain>
+template<DirectForceClassDomain Domain, unsigned AngularOrder = 0U>
 void enumerate(const std::vector<std::uint32_t>& offsets, unsigned systems,
                std::map<Key,unsigned>& seen) {
   for (unsigned worker = 0; worker < 7; ++worker) {
     DirectForceClassPagePosition position{};
     DirectForceClassPage page{};
     for (std::uint64_t claim = worker;
-         direct_force_class_pair_page<Domain>(offsets.data(), systems, claim, position, page);
+         direct_force_class_pair_page<Domain, AngularOrder>(offsets.data(), systems, claim, position, page);
          claim += 7U) {
       assert(page.ket_end > page.ket_begin);
       assert(page.ket_end - page.ket_begin <= direct_force_class_page_size(Domain));
@@ -106,6 +106,19 @@ int main() {
                  ket < offsets[second*stride+system+1] && (first != second || ket <= bra); ++ket)
               ++expected[{system,bra,ket}];
     assert(seen == expected);
+    std::map<Key,unsigned> six, expected_six;
+    enumerate<DirectForceClassDomain::Cooperative,6U>(offsets,systems,six);
+    constexpr unsigned pair_orders[]{0U,1U,2U,2U,3U,4U};
+    for (unsigned system = 0; system < systems; ++system)
+      for (unsigned first = 0; first < 6; ++first)
+        for (unsigned second = 0; second <= first; ++second)
+          if (pair_orders[first] + pair_orders[second] == 6U)
+            for (unsigned bra = offsets[first*stride+system];
+                 bra < offsets[first*stride+system+1]; ++bra)
+              for (unsigned ket = offsets[second*stride+system];
+                   ket < offsets[second*stride+system+1] && (first != second || ket <= bra); ++ket)
+                ++expected_six[{system,bra,ket}];
+    assert(six == expected_six);
   }
   const unsigned angular[]{0U,1U,2U,3U};
   const unsigned first_shell[]{0U,1U,1U,2U,2U,2U,3U,3U,3U,3U};

@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .spin_roots import SpinRootPolicy, SpinRootResult
+
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
@@ -1042,36 +1044,48 @@ class Calculator:
                 supported_properties=self._capabilities.supported_properties
                 | {"forces"},
             )
-        second_order_basis = (
-            self._basis is not None
-            and not basis_has_ecp
-            and (
-                isinstance(self._basis, str)
-                or (
-                    isinstance(self._basis, BasisSet)
-                    and all(
-                        shell.angular_momentum <= 3
-                        for element in self._basis.elements
-                        for shell in element.shells
-                    )
-                )
-                or (
-                    not isinstance(self._basis, BasisSet)
-                    and not isinstance(self._basis, str)
-                    and all(shell.angular_momentum <= 3 for shell in self._basis)
+        second_order_basis = self._basis is not None and (
+            isinstance(self._basis, str)
+            or (
+                isinstance(self._basis, BasisSet)
+                and all(
+                    shell.angular_momentum <= 3
+                    for element in self._basis.elements
+                    for shell in element.shells
                 )
             )
+            or (
+                not isinstance(self._basis, BasisSet)
+                and not isinstance(self._basis, str)
+                and all(shell.angular_momentum <= 3 for shell in self._basis)
+            )
+        )
+        from .ks import composite_stationary_second_order_eligible
+
+        self._composite_rks_second_order = (
+            self._ks_options is not None
+            and composite_stationary_second_order_eligible(self._ks_options.method_ir)
         )
         public_rks_second_order = (
-            self._device_name == "cpu"
-            and density_fitting_mode == _native.DENSITY_FITTING_NONE
+            (self._device_name == "cpu" or self._composite_rks_second_order)
+            and (not basis_has_ecp or self._composite_rks_second_order)
+            and (
+                density_fitting_mode == _native.DENSITY_FITTING_NONE
+                or self._composite_rks_second_order
+            )
             and self._precision_mode == _native.PRECISION_FP64
-            and self._representation_name == "cartesian"
+            and (
+                self._representation_name == "cartesian"
+                or self._composite_rks_second_order
+            )
             and self._automatic_libxc_name is None
             and self._dispersion_method_ir is None
             and second_order_basis
             and self._ks_options is not None
-            and stationary_second_order_eligible(self._ks_options.method_ir)
+            and (
+                stationary_second_order_eligible(self._ks_options.method_ir)
+                or self._composite_rks_second_order
+            )
         )
         if public_rks_second_order:
             self._capabilities = replace(
@@ -1224,7 +1238,7 @@ class Calculator:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method == _native.METHOD_RCCSD
+            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
             or (
                 not batch
                 and self._method == _native.METHOD_MP2
@@ -1351,7 +1365,11 @@ class Calculator:
         if active_ks_options is not None and self._ks_options_version >= 1:
             from .ks import native_ks_options
 
-            descriptor.ks_options = ctypes.pointer(native_ks_options(active_ks_options))
+            descriptor.ks_options = ctypes.pointer(
+                native_ks_options(
+                    active_ks_options, library=self._library, backend=self._backend
+                )
+            )
         if self._method in _COUPLED_CLUSTER_METHODS:
             descriptor.ccsd_max_iterations = self._ccsd_max_iterations
             descriptor.ccsd_diis_history = self._ccsd_diis_history
@@ -1490,14 +1508,15 @@ class Calculator:
             "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
         }
 
-    def _shells_for_atoms(
+    def _basis_for_atoms(
         self,
         atoms: Sequence[Atom],
         basis: str | Sequence[Shell] | None = None,
         *,
         operator: str | None = None,
         derivative_order: int = 0,
-    ) -> tuple[Shell, ...]:
+    ) -> BasisSet | tuple[Shell, ...]:
+        """Admit immutable basis metadata without expanding native contractions."""
         selected_basis = self._basis if basis is None else basis
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
@@ -1513,9 +1532,23 @@ class Calculator:
             representation=selected_basis.representation
             if isinstance(selected_basis, BasisSet)
             else self._representation_name,
-            consumer=self._auxiliary_basis_consumer(selected_operator)
+            consumer=self._auxiliary_basis_consumer(selected_operator, derivative_order)
             if auxiliary
             else None,
+        )
+        return selected_basis
+
+    def _shells_for_atoms(
+        self,
+        atoms: Sequence[Atom],
+        basis: str | Sequence[Shell] | None = None,
+        *,
+        operator: str | None = None,
+        derivative_order: int = 0,
+    ) -> tuple[Shell, ...]:
+        """Expand portable metadata for planning, custom bases and old libraries."""
+        selected_basis = self._basis_for_atoms(
+            atoms, basis, operator=operator, derivative_order=derivative_order
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1530,7 +1563,9 @@ class Calculator:
             return "cuda"
         return self._device_name
 
-    def _auxiliary_basis_consumer(self, operator: str) -> str | None:
+    def _auxiliary_basis_consumer(
+        self, operator: str, derivative_order: int = 0
+    ) -> str | None:
         """Select the correlation source's domain, not generic DF-HF exports.
 
         The physical correlation source and its nuclear pullback support
@@ -1550,6 +1585,14 @@ class Calculator:
             )
         ):
             return "correlation_df"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order == 0
+            and self._density_fitting_backend() == "cuda"
+            and self._device_name == "cuda"
+            and getattr(self, "_composite_rks_second_order", False)
+        ):
+            return "wb97mv_df_values"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -1805,7 +1848,7 @@ class Calculator:
                         representation=basis.representation
                         if isinstance(basis, BasisSet)
                         else self._representation_name,
-                        consumer=self._auxiliary_basis_consumer(operator)
+                        consumer=self._auxiliary_basis_consumer(operator, order)
                         if role == "auxiliary"
                         else None,
                     )
@@ -1852,25 +1895,97 @@ class Calculator:
                 context=context,
             )
             return system
-        selected_basis = self._basis if basis is None else basis
-        if not isinstance(selected_basis, BasisSet):
-            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
-        shells = self._shells_for_atoms(atoms, basis)
+        selected_basis = self._basis_for_atoms(atoms, basis)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
+        from . import _basis_builtin
+
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        if not correlation_auxiliary and _basis_builtin.eligible(
+            self._library, selected_basis
+        ):
+            return _basis_builtin.create_system(
+                self._library, context, selected_basis, atoms, charge, multiplicity
+            )
+        atom_array = (_native.AtomDescriptor * len(atoms))(
+            *(
+                _native.AtomDescriptor(atom.atomic_number, *atom.position)
+                for atom in atoms
+            )
+        )
+        bundled_create = getattr(
+            self._library, "generativeqc_system_create_bundled", None
+        )
+        bundled_name = (
+            _model_resolution._bundled_basis_name(selected_basis)
+            if bundled_create is not None and not correlation_auxiliary
+            else None
+        )
+        template_create = getattr(
+            self._library, "generativeqc_system_create_basis_template_v1", None
+        )
+        use_template = (
+            template_create is not None
+            and isinstance(selected_basis, BasisSet)
+            and not correlation_auxiliary
+        )
+        if use_template or (
+            bundled_create is not None
+            and bundled_name is not None
+            and not correlation_auxiliary
+        ):
+            descriptor = _native.SystemDescriptor(
+                struct_size=ctypes.sizeof(_native.SystemDescriptor),
+                abi_version=_native.ABI_VERSION,
+                atoms=atom_array,
+                atom_count=len(atom_array),
+                charge=int(charge),
+                multiplicity=int(multiplicity),
+                basis_representation=(
+                    _native.BASIS_SPHERICAL
+                    if selected_basis.representation == "spherical"
+                    else _native.BASIS_CARTESIAN
+                ),
+            )
+            system = ctypes.c_void_p()
+            if bundled_create is not None and bundled_name is not None:
+                status = bundled_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    bundled_name.encode("ascii"),
+                    selected_basis.provenance.checksum.encode("ascii"),
+                    ctypes.byref(system),
+                )
+            else:
+                from ._basis_native import NativeBasisTemplate
+
+                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+                if (
+                    source.has_ecp
+                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and not self._composite_rks_second_order
+                ):
+                    raise NotImplementedError(
+                        "ECP density-fitting execution is not yet validated"
+                    )
+                status = template_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    ctypes.byref(source.descriptor),
+                    ctypes.byref(system),
+                )
+            _native.check(self._library, status, context=context)
+            return system
+        shells = self._shells_for_atoms(atoms, basis)
         checked_integer(len(shells), "shell count", low=1, high=2**32 - 1)
         checked_integer(
             sum(len(s.primitives) for s in shells),
             "primitive count",
             low=1,
             high=2**32 - 1,
-        )
-        atom_array = (_native.AtomDescriptor * len(atoms))(
-            *(
-                _native.AtomDescriptor(atom.atomic_number, *atom.position)
-                for atom in atoms
-            )
         )
         flattened_primitives: list[Primitive] = []
         shell_descriptors: list[_native.ShellDescriptor] = []
@@ -1918,7 +2033,10 @@ class Calculator:
 
         cores, ecp_terms = resolve_ecp(selected_basis, atoms)
         if ecp_terms:
-            if self._density_fitting_mode != _native.DENSITY_FITTING_NONE:
+            if (
+                self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not self._composite_rks_second_order
+            ):
                 raise NotImplementedError(
                     "ECP density-fitting execution is not yet validated"
                 )
@@ -1939,15 +2057,20 @@ class Calculator:
             )
             return system
         create_system = self._library.generativeqc_system_create
-        if basis is not None and self._auxiliary_basis_consumer("df_metric"):
+        auxiliary_consumer = (
+            self._auxiliary_basis_consumer("df_metric") if basis is not None else None
+        )
+        if auxiliary_consumer:
             create_system = getattr(
                 self._library,
-                "generativeqc_correlation_auxiliary_system_create_v1",
+                "generativeqc_correlation_auxiliary_system_create_v1"
+                if auxiliary_consumer == "correlation_df"
+                else "generativeqc_ks_auxiliary_system_create_v1",
                 None,
             )
             if create_system is None:
                 raise NotImplementedError(
-                    "native library lacks correlation-only DF auxiliary admission"
+                    "native library lacks the requested source-only DF auxiliary admission"
                 )
         _native.check(
             self._library,
@@ -2154,7 +2277,9 @@ class Calculator:
                 raise NotImplementedError(
                     "native library does not support the current semantic KS execution-plan ABI"
                 )
-            native_ks_options(selection.options)
+            native_ks_options(
+                selection.options, library=self._library, backend=self._backend
+            )
         return selection
 
     def _effective_ks_options(
@@ -2300,16 +2425,24 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
+        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+            )
         if endpoint not in self._capabilities.supported_second_order:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
-                "the qualified DFT second-order domain is CPU direct all-electron "
-                "Cartesian FP64 closed-shell LDA/PBE RKS"
+                "qualified domains are CPU direct all-electron Cartesian FP64 "
+                "closed-shell LDA/PBE, or canonical FP64 WB97M-V RKS/UKS with "
+                "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
-        if multiplicity != 1:
+        if multiplicity != 1 and not (
+            self._composite_rks_second_order
+            and self._ks_options.method_ir.spin == "polarized"
+        ):
             raise NotImplementedError(
-                "public DFT second-order execution is restricted to closed-shell "
-                "RKS multiplicity=1"
+                "RKS requires multiplicity=1; open-shell second order requires "
+                "the polarized WB97M-V graph"
             )
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
@@ -2323,10 +2456,31 @@ class Calculator:
         charge: int,
         multiplicity: int,
         operation: typing.Callable[[typing.Any], typing.Any],
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
+        import time
+        from types import MappingProxyType
+
         from generativeqc_compiler.dft import NativeAO
 
         from .rks_response import NativeRKSResponse
+
+        started = time.perf_counter()
+        factory = NativeRKSResponse.from_native
+        options = {}
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import CompositeRKSResponse
+
+            if type(grid_budget_bytes) is not int or grid_budget_bytes < 1:
+                raise ValueError("grid_budget_bytes must be a positive integer")
+            if type(max_nonlocal_pairs) is not int or max_nonlocal_pairs < 1:
+                raise ValueError("max_nonlocal_pairs must be a positive integer")
+            factory = CompositeRKSResponse.from_native
+            options = {
+                "grid_budget_bytes": grid_budget_bytes,
+                "max_nonlocal_pairs": max_nonlocal_pairs,
+            }
 
         with self.prepare_batch(
             [atoms],
@@ -2343,9 +2497,20 @@ class Calculator:
                     charge=charge,
                     multiplicity=multiplicity,
                 ) as basis,
-                NativeRKSResponse.from_native(batch, basis) as operator,
+                factory(batch, basis, **options) as operator,
             ):
-                return operation(operator)
+                result = operation(operator)
+        if self._composite_rks_second_order:
+            result = replace(
+                result,
+                _diagnostics=MappingProxyType(
+                    {
+                        **result.diagnostics,
+                        "endpoint_seconds": time.perf_counter() - started,
+                    }
+                ),
+            )
+        return result
 
     def hessian_vector_product(
         self,
@@ -2357,11 +2522,19 @@ class Calculator:
         cache: typing.Any = ".artifacts",
         integral_budget_bytes: int = 64 << 20,
         solver_options: typing.Any = None,
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Compute a bounded analytic Cartesian HVP for qualified LDA/PBE RKS.
+        """Compute a bounded analytic Cartesian HVP for LDA/PBE or WB97M-V.
 
-        The public domain is CPU, direct, all-electron, Cartesian, strict-FP64,
-        closed-shell LDA/PBE RKS. Unsupported methods/backends fail before SCF.
+        LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
+        Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
+        and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
+        AD and coupled response, remain in linked native C++/CUDA code. A
+        build-time Hessian AOT package is required; Python, CuPy and runtime
+        compilation are not numerical dependencies. ``cache`` is retained for
+        CPU/development compatibility and is unused by this CUDA AOT path.
+        Unsupported resources never select host AD.
         The integral budget bounds generated second-order integral work;
         response/provider diagnostics remain separately reported.
 
@@ -2370,13 +2543,45 @@ class Calculator:
         the Cartesian Hessian uses Hartree/Bohr squared. Invalid directions,
         failed response solves and exceeded budgets raise before publication.
         See :ref:`python-calculation-values` and :ref:`python-calculation-errors`."""
-        from .rks_hessian import rks_hvp
-        from .rks_hessian_integrals import checked_direction
+        from ._native_hessian import checked_direction
 
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hvp"
         )
         vector = checked_direction(direction, len(native_atoms))
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                direction=vector,
+                integral_budget_bytes=integral_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import composite_rks_hvp
+
+            return self._run_public_rks_second_order(
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                operation=lambda operator: composite_rks_hvp(
+                    operator,
+                    vector,
+                    cache=cache,
+                    integral_budget_bytes=integral_budget_bytes,
+                    solver_options=solver_options,
+                ),
+            )
+        from .rks_hessian import rks_hvp
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2399,23 +2604,34 @@ class Calculator:
         multiplicity: int = 1,
         block_size: int | None = None,
         cache: typing.Any = ".artifacts",
-        strategy: str = "recycled",
+        strategy: str | None = None,
         output_budget_bytes: int = 64 << 20,
         integral_budget_bytes: int = 64 << 20,
         solver_options: typing.Any = None,
+        grid_budget_bytes: int = 128 << 20,
+        max_nonlocal_pairs: int = 16_777_216,
     ) -> typing.Any:
-        """Assemble a raw bounded analytic Cartesian Hessian for LDA/PBE RKS.
+        """Assemble a raw analytic Cartesian Hessian for LDA/PBE or WB97M-V.
 
         The matrix is never post-hoc symmetrized. The output budget must hold
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
 
+        WB97M-V uses compiler automatic differentiation and implicit CPKS, not
+        displaced SCFs. Its RKS/UKS owner assembles scalar columns
+        (``block_size=None`` or ``1``). The default strategy resolves to native
+        ``"scalar"`` on CUDA and ``"recycled"`` on CPU; explicitly requesting
+        recycling/block solves on CUDA is unsupported, never silently ignored.
+        CUDA returns an aggregate native result: intermediate/source-component
+        panels remain on device rather than being exported for Python assembly.
+        ``grid_budget_bytes`` bounds its numeric AO/grid/pair workspace;
+        ``max_nonlocal_pairs`` independently caps ordered VV10 pairs per action.
+        Tight SCF/response tolerances and a converged grid remain necessary.
+
         Return a detached result record with a ``matrix`` of shape
         ``(3*natoms, 3*natoms)`` in Hartree/Bohr squared. The qualified context
         and failure/lifetime rules are those of :ref:`python-calculation-backends`,
         :ref:`python-calculation-errors` and :ref:`python-calculation-ownership`."""
-        from .rks_hessian import rks_hessian
-
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hessian"
         )
@@ -2430,6 +2646,57 @@ class Calculator:
                 "full RKS Hessian output and immutable publication exceed "
                 "output_budget_bytes"
             )
+        if self._composite_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import run_native_cuda
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError("native CUDA Hessian requires block_size=None or 1")
+            if strategy not in (None, "scalar"):
+                raise NotImplementedError(
+                    "native CUDA Hessian supports only strategy='scalar'; no Krylov recycling"
+                )
+            return run_native_cuda(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                integral_budget_bytes=integral_budget_bytes,
+                output_budget_bytes=output_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                solver_options=solver_options,
+            )
+        if self._composite_rks_second_order:
+            from .composite_rks_hessian import composite_rks_hessian
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError(
+                    "WB97M-V Hessian currently requires block_size=None or 1"
+                )
+            if strategy not in (None, "recycled"):
+                raise ValueError(
+                    "WB97M-V Hessian currently uses the default scalar response strategy"
+                )
+            return self._run_public_rks_second_order(
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                grid_budget_bytes=grid_budget_bytes,
+                max_nonlocal_pairs=max_nonlocal_pairs,
+                operation=lambda operator: composite_rks_hessian(
+                    operator,
+                    cache=cache,
+                    integral_budget_bytes=integral_budget_bytes,
+                    output_budget_bytes=output_budget_bytes,
+                    solver_options=solver_options,
+                ),
+            )
+        from .rks_hessian import rks_hessian
+
         return self._run_public_rks_second_order(
             native_atoms,
             charge=charge,
@@ -2438,13 +2705,56 @@ class Calculator:
                 operator,
                 block_size=block_size,
                 cache=cache,
-                strategy=strategy,
+                strategy="recycled" if strategy is None else strategy,
                 output_budget_bytes=output_budget_bytes,
                 integral_budget_bytes=integral_budget_bytes,
                 solver_options=solver_options,
                 _public_calculator_endpoint=True,
             ),
         )
+
+    def stable_singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+        policy: SpinRootPolicy | None = None,
+        previous: SpinRootResult | None = None,
+    ) -> SpinRootResult:
+        """Require a stable real-internal UHF/UKS root before publishing E/forces.
+
+        This explicit CPU FP64 all-electron workflow certifies unscreened J/K
+        with SCF screening at most 1e-12. It reuses
+        native SCF, J/K, SCF-domain XC and the shared coupled response action.
+        ``SpinRootPolicy`` bounds the full spectrum/restarts and failure gates.
+        ``previous`` is a completed ``SpinRootResult`` for the same model; its
+        occupied spaces are projected as a seed and the new root is independently
+        requalified. Root switches reject unless the policy explicitly allows
+        them. Stable states pass through; unstable states need a lower, stationary,
+        fully stable restart. Failure publishes no energy or force result.
+
+        Coordinates are Bohr, energies Hartree and analytic forces Hartree/Bohr.
+        UHF, native UMP2 UHF references and qualified semilocal polarized LDA/PBE
+        are admitted; CUDA, fitting,
+        ECP, mixed precision, complex/spin-flip stability and unqualified XC fail
+        closed. Install ``generativeqc[stability]`` for the bounded CPU linear
+        algebra. This is not a global-minimum or arbitrary spatial-symmetry proof.
+        """
+        from ._spin_root_workflow import stable_singlepoint
+
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return stable_singlepoint(
+                self,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                policy=policy,
+                previous=previous,
+            )
 
     def singlepoint(
         self,

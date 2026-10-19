@@ -16,6 +16,7 @@ _LAYOUT = r"""#pragma once
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace generativeqc::generated::quadrature {
 inline size_t product(size_t a, size_t b) {
@@ -32,6 +33,32 @@ struct Layout {
   size_t atoms, points, tile, rules, radial, polar, azimuth, geometry, distances, logs, xyz, weights;
   size_t doubles, device_bytes;
 };
+// At most five contiguous radial bands share three angular rules. Keeping
+// this bounded descriptor by value avoids any point-sized host index table.
+struct PrunedShells {
+  size_t bands{}, points_per_atom{};
+  size_t radial_begin[5]{}, point_begin[6]{};
+  size_t polar_count[5]{}, azimuth_count[5]{};
+  size_t polar_offset[5]{}, azimuth_offset[5]{};
+};
+struct PrunedPoint {
+  size_t owner, radial, polar, azimuth;
+};
+#if defined(__CUDACC__)
+__host__ __device__
+#endif
+inline PrunedPoint decode_pruned_point(size_t index, const PrunedShells& shells) {
+  const size_t owner = index / shells.points_per_atom;
+  const size_t local = index % shells.points_per_atom;
+  size_t band = 0;
+  while (band + 1 < shells.bands && local >= shells.point_begin[band + 1]) ++band;
+  const size_t angular = shells.polar_count[band] * shells.azimuth_count[band];
+  const size_t offset = local - shells.point_begin[band];
+  const size_t radial = shells.radial_begin[band] + offset / angular;
+  const size_t direction = offset % angular;
+  return {owner, radial, shells.polar_offset[band] + direction / shells.azimuth_count[band],
+          shells.azimuth_offset[band] + direction % shells.azimuth_count[band]};
+}
 // 4096 points bounds launch overhead and O(tile * atoms) scratch. The small
 // Gauss-Legendre tables use their validated maximum capacity in every plan,
 // so shape-only callers need no grid-version-specific ABI or GPU query.
@@ -60,6 +87,13 @@ inline Layout layout(size_t atoms, size_t points) {
 inline unsigned blocks(size_t count) {
   return static_cast<unsigned>(std::min(size_t{65535}, 1 + (count - 1) / 128));
 }
+// Backend-neutral launch dimensions also support host-only shape validation.
+inline std::pair<unsigned, unsigned> atom_point_blocks(size_t points, size_t atoms) {
+  if (!points || !atoms) throw std::invalid_argument("empty atom-point launch");
+  const unsigned x = blocks(points);
+  const size_t y_cap = std::max(size_t{1}, size_t{65535} / x);
+  return {x, static_cast<unsigned>(std::min(atoms, y_cap))};
+}
 } // namespace generativeqc::generated::quadrature
 
 #if defined(__CUDACC__)
@@ -70,9 +104,8 @@ namespace generativeqc::generated::quadrature {
 // flattened runtime divisor in every lane. Cap the total block count at the
 // historical 65535 while allowing oversized atom sets to grid-stride in y.
 inline dim3 atom_point_grid(size_t points, size_t atoms) {
-  const unsigned x = blocks(points);
-  const size_t y_cap = std::max(size_t{1}, size_t{65535} / x);
-  return dim3(x, static_cast<unsigned>(std::min(atoms, y_cap)));
+  const auto shape = atom_point_blocks(points, atoms);
+  return dim3(shape.first, shape.second);
 }
 """
 
@@ -153,6 +186,26 @@ __global__ void points_kernel(size_t begin, size_t count, size_t nr, size_t nz, 
     xyz[3*i+1] = centers[3*owner+1] + r * pz[0] * pp[1];
     xyz[3*i+2] = centers[3*owner+2] + r * pz[1];
     weights[i] = wr * pz[2] * pp[2];
+  }
+}
+// The same radial and angular arithmetic, with a bounded shell decoder rather
+// than the rectangular v1/v2 index map. Every retained shell is a complete
+// Gauss-Legendre/trapezoidal rule, not a subset with inherited dense weights.
+__global__ void pruned_points_kernel(size_t begin, size_t count, size_t nr, PrunedShells shells,
+                                     const double* centers, const double* radial,
+                                     const double* polar, const double* azimuth,
+                                     double* xyz, double* weights) {
+  for (size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < count;
+       point += size_t(blockDim.x) * gridDim.x) {
+    const auto index = decode_pruned_point(begin + point, shells);
+    const double* pr = radial + 2 * (index.owner * nr + index.radial);
+    const double* pz = polar + 3 * index.polar;
+    const double* pp = azimuth + 3 * index.azimuth;
+    const double r = pr[0], wr = pr[1];
+    xyz[3 * point] = centers[3 * index.owner] + r * pz[0] * pp[0];
+    xyz[3 * point + 1] = centers[3 * index.owner + 1] + r * pz[0] * pp[1];
+    xyz[3 * point + 2] = centers[3 * index.owner + 2] + r * pz[1];
+    weights[point] = wr * pz[2] * pp[2];
   }
 }
 // Atom-major 2-D launch keeps adjacent point lanes coalesced without runtime

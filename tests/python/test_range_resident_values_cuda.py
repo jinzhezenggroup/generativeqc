@@ -102,5 +102,6 @@ def test_resident_range_sources_match_independent_matrices(
         else "range oracle checks 16"
     ) in result.stdout
     if mode == "range-mixed-oracle":
+        assert "mixed full-range oracle checks 36" in result.stdout
         assert "mixed resident range oracle checks 8" in result.stdout
     (tmp_path / "oracle-result.txt").write_text(result.stdout)

@@ -56,16 +56,23 @@ def retry_probe(
     return binary
 
 
+@pytest.mark.parametrize("independent", (False, True))
 @pytest.mark.parametrize(
-    "component", range(6), ids=["j", "density", "xc", "range", "nlc", "all"]
+    "component", range(7), ids=["j", "density", "xc", "range", "nlc", "all", "matrix"]
 )
 @pytest.mark.parametrize("stage", range(3), ids=["seed", "frozen", "target"])
 @pytest.mark.parametrize("source", range(3), ids=["absent", "mixed", "strict"])
 def test_failed_mixed_operator_retries_fresh_strict_target(
-    retry_probe: Path, component: int, stage: int, source: int
+    retry_probe: Path, component: int, stage: int, source: int, independent: bool
 ) -> None:
     result = subprocess.run(
-        [str(retry_probe), str(component), str(stage), str(source)],
+        [
+            str(retry_probe),
+            str(component),
+            str(stage),
+            str(source),
+            str(int(independent)),
+        ],
         capture_output=True,
         text=True,
         timeout=10,
@@ -101,10 +108,15 @@ namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T...) { ++domains; }
 }
 struct CudaXcView {};
+const double* expected_density = nullptr;
 struct Xc {
   int semilocal = 0, features = 0, potentials = 0;
-  template<class... T> void enqueue(T...) { ++semilocal; }
-  template<class... T> void enqueue_density_features(T...) { ++features; }
+  template<class... T> void enqueue(const double* density, T...) {
+    require(density == expected_density, "XC received a delta density"); ++semilocal;
+  }
+  template<class... T> void enqueue_density_features(const double* density, T...) {
+    require(density == expected_density, "NLC received a delta density"); ++features;
+  }
   template<class... T> void enqueue_nonlocal_potential(T...) { ++potentials; }
   CudaXcView view(std::uint64_t) { return {}; }
   struct Grid { const double *weights{}, *points{}; };
@@ -114,6 +126,7 @@ struct Source { bool mixed; bool mixed_recurrence() const { return mixed; } };
 struct Owner {
   bool is_failed = true, pending_incremental_delta = true;
   bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
+  bool pending_mixed_contractions{};
   bool pending_mixed_range_exchange{}, pending_mixed_nonlocal{};
   bool strict_refinement{}, phase_source_cold = true, stabilize_occupations = true;
   bool final_closure = true, is_active{}, occupied_fitted_factor_ready = true;
@@ -154,20 +167,29 @@ struct Owner {
   int *nonlocal_domain_error{};
   std::size_t elements = 1;
   struct { std::size_t npoint = 24; } xc_layout;
+  struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
+  std::unique_ptr<Xc> nonlocal_xc;
+  unsigned merges = 0;
+  void merge_nonlocal_grid(std::uint64_t) { if (nonlocal_xc) ++merges; }
+  double delta_value = -2; double* incremental_delta_density = &delta_value;
   std::unique_ptr<Xc> xc = std::make_unique<Xc>();
 """
 
 MAIN = r"""
 int main(int argc, char** argv) {
  try {
-  require(argc == 4, "expected component, provisional stage and lease selection");
+  require(argc == 5, "expected component, provisional stage, lease and grid selections");
   const int component = std::stoi(argv[1]), stage = std::stoi(argv[2]), source = std::stoi(argv[3]);
   Owner p;
+  const bool independent = std::stoi(argv[4]) != 0;
+  if (independent) p.nonlocal_xc = std::make_unique<Xc>();
+  expected_density = p.density;
   p.pending_mixed_coulomb = component == 0 || component == 5;
   p.pending_mixed_density = component == 1 || component == 5;
   p.pending_mixed_point = component == 2 || component == 5;
   p.pending_mixed_range_exchange = component == 3 || component == 5;
   p.pending_mixed_nonlocal = component == 4 || component == 5;
+  p.pending_mixed_contractions = component == 5 || component == 6;
   p.nonlocal_seed_stage = stage == 0; p.nonlocal_frozen_stage = stage == 1;
   if (source) p.phase_source = std::make_unique<Source>(Source{source == 1});
   require(p.retry() && p.is_active && !p.is_failed && p.strict_refinement, "strict retry was not selected");
@@ -182,8 +204,10 @@ int main(int argc, char** argv) {
           "retry changed density or invented completed work");
   p.stage_xc(2, Phase::StrictAudit);
   require(domains == 1 && p.pairs == 1 && !p.last_pair_mixed, "retry did not evaluate fresh strict NLC");
-  require(!p.xc->semilocal && p.xc->features == 1 && p.xc->potentials == 1,
-          "retry selected a seed-only or frozen-potential target");
+  auto& target = independent ? *p.nonlocal_xc : *p.xc;
+  require(p.xc->semilocal == int(independent) && target.features == 1 && target.potentials == 1 &&
+              p.merges == unsigned(independent),
+          "retry selected a seed-only, frozen or unmerged target");
   // A failure with no admitted mixed component remains terminal.
   Owner strict;
   require(!strict.retry() && strict.is_failed && !strict.is_active && !strict.retries,

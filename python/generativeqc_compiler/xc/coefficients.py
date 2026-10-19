@@ -10,8 +10,7 @@ import typing
 from dataclasses import dataclass
 from functools import lru_cache
 
-import numpy as np
-
+from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.dft.xc_bilinear import ao_pair_bilinear

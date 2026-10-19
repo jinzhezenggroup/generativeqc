@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -328,3 +333,122 @@ def test_public_ledger_fallback_keeps_dense_arithmetic_capability(
     assert _run(admission_probe, selection, family, spin, "ledger", precision) == (
         f"dense:{int(automatic)}:{int(automatic and family == '1')}"
     )
+
+
+def _independent_grid_allocation_block(source: str, signature: str) -> str:
+    begin = source.index(signature)
+    opening = source.index("{", begin)
+    depth, end = 1, opening + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[begin:end]
+
+
+def test_independent_grid_keeps_dense_fallback_and_failure_cleanup(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Compile real arena admission and cleanup with bounded host doubles."""
+    source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    # Isolate numeric arena admission after mandatory solver preparation and
+    # before device uploads. Neither allocator outcomes nor call order is mocked.
+    anchor = "sum(eigensolver->host_bytes(), eigensolver->metadata_bytes()));"
+    start = source.index(anchor) + len(anchor)
+    end = source.index("      check(cudaMemsetAsync(arena", start)
+    early = source[start:end]
+    constructor_start = source.index("        xc = std::make_unique<CudaXcPlan>(")
+    constructor_end = source.index(";", constructor_start) + 1
+    primary = source[constructor_start:constructor_end]
+    secondary = _independent_grid_allocation_block(
+        source[constructor_end:], "        if (options.nonlocal_grid) {"
+    )
+    cleanup = cpp_function_definition(source, "cleanup")
+    unit, executable = tmp_path / "allocation.cpp", tmp_path / "allocation"
+    unit.write_text(
+        _INDEPENDENT_GRID_ALLOCATION_HARNESS.replace("EARLY", early)
+        .replace("PRIMARY_CONSTRUCTOR", primary)
+        .replace("SECONDARY", secondary)
+        .replace("CLEANUP", cleanup)
+    )
+    native_cxx.build_executable([unit], executable, compile_args=("-std=c++20", "-O0"))
+    result = subprocess.run(
+        [str(executable)], check=False, capture_output=True, text=True, timeout=10
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+_INDEPENDENT_GRID_ALLOCATION_HARNESS = r"""
+#include <cassert>
+#include <cstddef>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <new>
+#include <vector>
+constexpr int cudaSuccess=0,cudaErrorMemoryAllocation=2,cudaErrorUnknown=9;
+int cudaGetLastError(){return 0;}int cudaGetDevice(int* p){*p=0;return 0;}int cudaSetDevice(int){return 0;}
+int cudaStreamSynchronize(void*){return 0;}
+void check(int s){if(s==2)throw std::bad_alloc();if(s)throw s;}
+std::size_t sum(std::size_t a,std::size_t b){return a+b;}
+namespace runtime {
+std::size_t free_bytes;std::vector<std::size_t> requests;std::map<void*,std::size_t> owned;int failure=0;bool host_fail=false;std::size_t failing_bytes=0;
+int resource_cuda_malloc(void** pointer,std::size_t bytes,bool* host_oom=nullptr){
+ requests.push_back(bytes);if(host_oom)*host_oom=false;
+ if(bytes==failing_bytes&&failure){if(host_oom)*host_oom=host_fail;return failure;}
+ if(bytes>free_bytes)return cudaErrorMemoryAllocation;
+ free_bytes-=bytes;*pointer=reinterpret_cast<void*>(requests.size()*16);owned[*pointer]=bytes;return cudaSuccess;
+}
+void resource_cuda_free(void* pointer){assert(owned.contains(pointer));free_bytes+=owned.at(pointer);owned.erase(pointer);}
+void reset(std::size_t cap){assert(owned.empty());free_bytes=cap;requests.clear();failure=0;host_fail=false;failing_bytes=0;}
+}
+enum class CudaXcAoPrecision{Fp64};enum class SemilocalFamily{Pbe};int semilocal_family_code(SemilocalFamily){return 1;}
+unsigned rejected_constructor=0, constructor_calls=0;
+struct CudaXcPlan{template<class... Args>CudaXcPlan(Args&&...){if(++constructor_calls==rejected_constructor)throw 7;}};
+struct CudaXcLayout{static constexpr std::size_t lowering_host_bytes=256;std::size_t device_bytes=0;};
+struct Grid{struct View{std::size_t device_bytes=1024;explicit operator bool()const{return true;}};View cuda_view()const{return {};}};
+struct Resettable{void reset(){}};
+struct Fixture {
+ struct {std::size_t xc_device_bytes,grid_device_bytes=0,retained_host_numeric_bytes=512;} resource;
+ CudaXcLayout xc_layout{64*1024},nonlocal_xc_layout{128*1024};
+ struct {std::size_t host_peak_bytes=256;} ao_selection_bound;
+ bool admit_ao;bool host_unfused=false;bool borrow_resident_grid=true;
+ struct{bool nonlocal_grid;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;}options;
+ void *xc_arena=nullptr,*nonlocal_xc_arena=nullptr,*fast_anchor_arena=nullptr,*nonlocal_arena=nullptr,*arena=nullptr;
+ std::unique_ptr<CudaXcPlan> xc,nonlocal_xc,eigensolver;Resettable matrix_products;
+ struct{void* stream=nullptr;}range_fock_binding;void retire_phase_source(bool){}
+ int basis=0,spins=1,tile=64,device=0,functional=1;void* stream=nullptr;Grid grid,nonlocal_grid;
+ Fixture(bool maps,bool split):resource{(maps?96u:64u)*1024},admit_ao(maps),options{split}{}
+ void prepare(){try{
+EARLY
+PRIMARY_CONSTRUCTOR
+SECONDARY
+ }catch(...){cleanup();throw;}}
+CLEANUP
+ ~Fixture(){cleanup();}
+};
+int main(){
+
+ for(bool maps:{false,true})for(bool split:{false,true}){
+  runtime::reset(208*1024);bool ok=true;{
+   Fixture f(maps,split);try{f.prepare();}catch(...){ok=false;}
+   assert(ok && "independent grid must preserve the dense primary fallback");
+   if(ok&&split){assert(f.resource.xc_device_bytes==192*1024);assert(f.resource.grid_device_bytes==1024);}
+   if(maps&&split)assert(!f.admit_ao);
+  }assert(runtime::owned.empty()&&runtime::free_bytes==208*1024);
+  std::cout<<"success maps="<<maps<<" split="<<split<<" result="<<ok<<" cleanup=complete\n";
+ }
+ for(auto bytes:{64u*1024,96u*1024,128u*1024})for(int kind:{2,9})for(bool host:{false,true}){
+  runtime::reset(256*1024);runtime::failure=kind;runtime::host_fail=host;runtime::failing_bytes=bytes;
+  bool failed=false;{Fixture f(bytes!=64*1024,true);try{f.prepare();}catch(...){failed=true;}
+   const bool optional_device_miss=bytes==96*1024&&kind==2&&!host;
+   assert(failed!=optional_device_miss);
+  }assert(runtime::owned.empty()&&runtime::free_bytes==256*1024);
+ }
+ for(unsigned target:{1u,2u}){
+  runtime::reset(256*1024);rejected_constructor=target;constructor_calls=0;bool failed=false;
+  {Fixture f(true,true);try{f.prepare();}catch(...){failed=true;}}
+  assert(failed&&runtime::owned.empty()&&runtime::free_bytes==256*1024);
+ }
+ std::cout<<"12 allocator failure cases and both constructor failures preserve cleanup; host/runtime failures are not retried\n";
+}
+"""

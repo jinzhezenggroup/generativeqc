@@ -80,16 +80,26 @@ Plan prepare(bool force_capability) {
   return *plan;
 }
 int main() {
+  static_assert(select_direct_weighted_force_response(""));
+  static_assert(select_direct_weighted_force_response("1"));
+  static_assert(select_direct_weighted_force_response("relative"));
+  static_assert(!select_direct_weighted_force_response("0"));
+  static_assert(!select_direct_weighted_force_response("unknown"));
   static_assert(select_direct_spd_force_schedule("") == DirectSpdForceSchedule::Automatic);
   static_assert(select_direct_spd_force_schedule("0") == DirectSpdForceSchedule::Incumbent);
   static_assert(select_direct_spd_force_schedule("unknown") == DirectSpdForceSchedule::Incumbent);
   static_assert(select_direct_spd_force_schedule("1") == DirectSpdForceSchedule::SpatialReuse);
   static_assert(select_direct_spd_force_schedule("spatial-reuse") == DirectSpdForceSchedule::SpatialReuse);
+  static_assert(select_direct_spd_force_schedule("relative-reuse") == DirectSpdForceSchedule::RelativeReuse);
+  static_assert(select_direct_spd_force_schedule("relative-density") == DirectSpdForceSchedule::DensityReuse);
   for (const bool eligible : {false, true}) {
-    assert(resolve_direct_spd_force_schedule(DirectSpdForceSchedule::Incumbent, eligible) == DirectSpdForceSchedule::Incumbent);
-    assert(resolve_direct_spd_force_schedule(DirectSpdForceSchedule::SpatialReuse, eligible) == DirectSpdForceSchedule::SpatialReuse);
+    for (const auto explicit_schedule : {DirectSpdForceSchedule::Incumbent,
+                                        DirectSpdForceSchedule::SpatialReuse,
+                                        DirectSpdForceSchedule::RelativeReuse,
+                                        DirectSpdForceSchedule::DensityReuse})
+      assert(resolve_direct_spd_force_schedule(explicit_schedule, eligible) == explicit_schedule);
     assert(resolve_direct_spd_force_schedule(DirectSpdForceSchedule::Automatic, eligible) ==
-           (eligible ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent));
+           (eligible ? DirectSpdForceSchedule::DensityReuse : DirectSpdForceSchedule::Incumbent));
   }
   assert(unsetenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS") == 0);
   const auto automatic = prepare(true);
@@ -98,11 +108,20 @@ int main() {
   const auto value_owner = prepare(false);
   assert(setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", "spatial-reuse", 1) == 0);
   const auto spatial = prepare(true);
+  assert(setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", "relative-density", 1) == 0);
+  const auto density = prepare(true);
+  assert(setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", "", 1) == 0);
+  const auto empty = prepare(true);
   assert(unsetenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS") == 0);
   assert(automatic.spd_force_schedule == DirectSpdForceSchedule::Automatic);
   assert(baseline.spd_force_schedule == DirectSpdForceSchedule::Incumbent);
   assert(value_owner.spd_force_schedule == DirectSpdForceSchedule::Incumbent);
   assert(spatial.spd_force_schedule == DirectSpdForceSchedule::SpatialReuse);
+  assert(density.spd_force_schedule == DirectSpdForceSchedule::DensityReuse);
+  assert(empty.spd_force_schedule == DirectSpdForceSchedule::Automatic);
+  assert(resolve_direct_spd_force_schedule(automatic.spd_force_schedule, true) == density.spd_force_schedule);
+  assert(resolve_direct_spd_force_schedule(empty.spd_force_schedule, true) == density.spd_force_schedule);
+  assert(resolve_direct_spd_force_schedule(baseline.spd_force_schedule, true) == DirectSpdForceSchedule::Incumbent);
 }
 """
     )

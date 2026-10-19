@@ -3,7 +3,41 @@ include_guard(GLOBAL)
 # Project-level generated-source declarations. The generic command mechanics
 # live in GenerativeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
+function(generativeqc_register_named_ks_catalog target)
+  # Method identities include source families the generator does not import.
+  # Keep those provenance inputs explicit rather than relying on its depfile.
+  file(GLOB_RECURSE _generativeqc_named_ks_inputs CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_named_ks_catalog_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
+    DEPENDS ${_generativeqc_named_ks_inputs}
+            "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
+    COMMENT "Generating the shared MethodIR-owned native KS catalog")
+endfunction()
+
 macro(generativeqc_register_host_generated_sources target)
+  generativeqc_register_named_ks_catalog(${target})
+  generativeqc_register_generated_sources(
+    NAME generativeqc_basis_catalog_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_basis_pack.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_basis_pack.hpp"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+    ARGS
+      --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
+      --output "${CMAKE_CURRENT_BINARY_DIR}/generated/native_basis_pack.hpp"
+    COMMENT "Generating shared Python-free native basis catalog")
   generativeqc_register_generated_sources(
     NAME generativeqc_matrix_product_codegen
     TARGET ${target}
@@ -1066,6 +1100,9 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_relative_response_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_cooperative_gradient_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_density_gradient_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")

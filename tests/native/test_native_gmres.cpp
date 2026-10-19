@@ -969,6 +969,74 @@ void response_batch_contract() {
           "mutated response batch plan reached its operator");
 }
 
+void response_batch_diagnostic_storage() {
+  for (unsigned flags = 1; flags <= 3; ++flags) {
+    DenseOperator matrix{2, {3.0, 0.2, -0.1, 2.0}};
+    generativeqc::response::LinearResponseProblem problem(
+        2, [&](auto input, auto output) { matrix(input, output); });
+    GmresOptions options;
+    options.relative_tolerance = 1e-13;
+    options.restart = 2;
+    options.max_iterations = 8;
+    const std::array<double, 2> rhs{3.4, 3.9};
+    const std::array<generativeqc::response::ResponseSolveRequest, 2> requests{
+        generativeqc::response::ResponseSolveRequest{rhs},
+        generativeqc::response::ResponseSolveRequest{rhs},
+    };
+    const auto without_trace = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), std::numeric_limits<std::size_t>::max());
+    options.collect_history = flags & 1;
+    options.collect_basis = flags & 2;
+    const auto probe = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), std::numeric_limits<std::size_t>::max());
+    require(probe.peak_numeric_bytes > without_trace.peak_numeric_bytes &&
+                probe.retained_diagnostic_bytes > 0,
+            "response batch omitted retained diagnostic storage");
+    const auto refused_plan = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), probe.peak_numeric_bytes - 1);
+    const auto refused =
+        generativeqc::response::solve_response_batch(refused_plan, problem, requests);
+    require(!refused.complete() && refused.responses.empty() && matrix.actions == 0,
+            "diagnostic batch refusal invoked a callback or published result arrays");
+    const auto exact = generativeqc::response::prepare_response_batch(
+        problem, options, requests.size(), probe.peak_numeric_bytes);
+    const auto result = generativeqc::response::solve_response_batch(exact, problem, requests);
+    std::size_t live_bytes = 0, diagnostic_bytes = 0;
+    require(result.complete() && result.responses.size() == requests.size(),
+            "exact-budget diagnostic batch failed");
+    for (const auto& response : result.responses) {
+      require(response.converged() && std::abs(response.solution[0] - 1) < 1e-12 &&
+                  std::abs(response.solution[1] - 2) < 1e-12,
+              "diagnostic collection changed the independently solved system");
+      live_bytes += response.solution.get_allocator().counter()->snapshot().live_bytes;
+      diagnostic_bytes +=
+          (response.history.capacity() + response.basis.capacity()) * sizeof(double);
+      require(response.history.empty() != options.collect_history &&
+                  response.basis.empty() != options.collect_basis,
+              "diagnostic batch lost the requested publication");
+    }
+    require(diagnostic_bytes <= result.retained_diagnostic_bytes &&
+                result.retained_diagnostic_bytes == exact.retained_diagnostic_bytes &&
+                live_bytes <= result.retained_solution_bytes + result.retained_diagnostic_bytes &&
+                live_bytes <= result.planned_peak_numeric_bytes,
+            "live tracked result storage exceeds the batch admission receipt");
+    auto modified = exact;
+    --modified.retained_diagnostic_bytes;
+    bool rejected = false;
+    const auto actions_before = matrix.actions;
+    try {
+      (void)generativeqc::response::solve_response_batch(modified, problem, requests);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected && matrix.actions == actions_before,
+            "mutated diagnostic capacity reached the physical operator");
+    const auto empty = generativeqc::response::prepare_response_batch(problem, options, 0, 0);
+    require(empty.admitted && empty.peak_numeric_bytes == 0 && empty.retained_diagnostic_bytes == 0,
+            "empty diagnostic batch reserved result storage");
+  }
+}
+
 void amortized_true_residuals() {
   constexpr std::size_t n = 24;
   DenseOperator matrix{n, std::vector<double>(n * n)};
@@ -1059,6 +1127,7 @@ int main() {
     breakdown_and_nonfinite_paths();
     options_and_workspace_boundaries();
     response_batch_contract();
+    response_batch_diagnostic_storage();
     amortized_true_residuals();
     stable_norm_extremes();
     measured_workspace_owns_returned_storage();

@@ -146,6 +146,11 @@ void select_ao_chunk(const CudaXcLayout& l, cudaStream_t stream, const double* b
   if (failure) throw std::runtime_error("invalid native XC device AO discovery output");
 }
 
+bool mixed_matrix_contractions_supported(const CudaXcLayout& layout) {
+  return !layout.response && layout.ao_precision == CudaXcAoPrecision::Fp64 && layout.npoint != 0 &&
+         fp32_tiled_xc_admitted(layout.nao, layout.tile_points, layout.spins, layout.work_jets);
+}
+
 void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStream_t stream,
              const double* basis, const double* points, const double* weights,
              const double* density, double* ao, double* work, double* features,
@@ -173,7 +178,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
   const bool compact_candidate =
       point_batch_plan.compact && !density_provider &&
       !(potential_binding && potential_binding->diagnostic().provider_allowance);
-  const bool compensate_totals = !l.fp32_contractions;
+  const bool compensate_totals = !l.fp32_point_totals;
   if (compensate_totals)
     cuda_check(cudaMemsetAsync(totals, 0, kCudaXcTotalStorageElements * sizeof(double), stream));
   if (l.local_ao || compact_candidate) {
@@ -235,7 +240,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto density_launcher = l.local_ao
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
-      if (l.fp32_contractions && tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
+      if (l.fp32_contractions && fp32_tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
         launch_density_product<false, true, float>(stream, density, ao, active, count, l.spins,
                                                    l.work_jets, work, error, ids, l.nao);
       } else if (density_provider && active) {

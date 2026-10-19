@@ -259,8 +259,17 @@ BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
 )
+# The normalized-system caller delegates representation arithmetic to these
+# shared shell owners. Pin both helpers as well as the caller so moving the
+# equation does not leave arithmetic, width or overflow checks unauthenticated.
+NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256 = (
+    "e69f53d3da18e44119894075fc898559006f88edcddab5770204f88e306154e5"
+)
+NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256 = (
+    "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
+)
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
-    "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
+    "73c8ab3e116dde28f94c4f988f3b9f418ea11a09414ac342ac310d76cf020410"
 )
 # The complete predicate also admits exact automatic Libxc components through
 # the bounded all-electron CPU owner. Its shared context rejects CUDA. CUDA
@@ -278,23 +287,17 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
 # complete-grid overrides, selected AO policy and native-owner cleanup.
 # The hybrid predicate also remains source provenance. Executable admission
 # controls cover device, ECP, options, schedule and MethodIR eligibility.
-PYTHON_GRID_CONTRACT_SHA256 = (
-    "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
-)
-QUADRATURE_LAYOUT_CONTRACT_SHA256 = (
-    "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
-)
-NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
-    "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
-)
 NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
     "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
 )
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
+# Reviewed independent-grid reader: real-header ABI and mutation tests cover
+# legacy160/184, private200 and malformed/unsupported requests. Retain this
+# source-only preflight refusal; updating the pin requires those controls.
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
-    "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
+    "9ed33ad79768b17ed480eda116897aa127705d24f73ebc429933e18c2c5a077c"
 )
 # The additional native static wrappers reuse the existing primitive objects.
 # The compiler now supplies the inventory and grouped native generation; retain
@@ -411,9 +414,6 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
-NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
-)
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
     "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
@@ -485,7 +485,7 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+    "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
 )
 # Binary-scaled admission and the out-of-line normalization dispatch are part
 # of the reviewed owner contract, including the incumbent fallback schedule.
@@ -782,7 +782,7 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     methods = {}
     expected = {
         "__init__": None,
-        "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
+        "decode": None,
         "stationary_integral_device_reserve": (
             NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
         ),
@@ -2091,6 +2091,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                         native.DENSITY_FITTING_CPU_REFERENCE
                     )
                     calculator._method = native.METHOD_PBE_RKS
+                    calculator._composite_rks_second_order = False
                     calculator._library = SimpleNamespace(
                         generativeqc_system_create=capture_system,
                         generativeqc_system_create_ecp=capture_ecp,
@@ -2421,6 +2422,18 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
     if ao_count_digest != NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256:
         raise RuntimeError("native spherical AO count contract changed")
 
+    shell_source = (repository / "src/molecule/basis.hpp").read_text(encoding="utf-8")
+    shell_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t shell_ao_count("
+    )
+    if shell_count_digest != NATIVE_SHELL_AO_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native shell AO count contract changed")
+    cartesian_count_digest = _cpp_block_sha256(
+        shell_source, "[[nodiscard]] constexpr std::size_t cartesian_count("
+    )
+    if cartesian_count_digest != NATIVE_CARTESIAN_SHELL_COUNT_CONTRACT_SHA256:
+        raise RuntimeError("native Cartesian shell count contract changed")
+
     stationary_source = (
         repository / "python/generativeqc/_stationary_cuda.py"
     ).read_text(encoding="utf-8")
@@ -2441,6 +2454,8 @@ def _spd_expansion_contract(repository: Path) -> dict[str, Any]:
         "ao_packer_contract_sha256": packer_digest,
         "ao_pack_bridge_contract_sha256": bridge_digest,
         "native_spherical_ao_count_contract_sha256": ao_count_digest,
+        "native_shell_ao_count_contract_sha256": shell_count_digest,
+        "native_cartesian_shell_count_contract_sha256": cartesian_count_digest,
         "stationary_layout_contract_sha256": layout_digest,
         "sparse_spherical_component_terms": {
             "s": SPARSE_SPHERICAL_COMPONENT_TERMS[0],
@@ -3008,7 +3023,12 @@ def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
 
 
 def _grid_count_contract(repository: Path) -> dict[str, str]:
-    """Bind the source-only point count to the native CUDA grid owner."""
+    """Record grid implementation provenance and validate the retained v2 ABI.
+
+    Point construction, emitted buffer layout and snapshot decoding are covered
+    by executable CPU/CUDA contracts, not historical implementation hashes.
+    This source-only inventory is not numerical or real-device qualification.
+    """
 
     python_grid = (repository / "python/generativeqc_compiler/dft/grid.py").read_text(
         encoding="utf-8"
@@ -3078,9 +3098,9 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
-    # Preserve the original frozen ABI digest: the exact ks_grid_options
-    # source span (including its trailing blank line) is now in preparation.
-    # Changing to _cpp_block_sha256 would silently alter the audit oracle.
+    # Preserve the complete reviewed-reader span as both provenance and a
+    # fail-closed source-only preflight. Executable real-header ABI controls
+    # additionally protect field transport and malformed extension rejection.
     preparation_source = (
         repository / "src/methods/dft_method_preparation.cpp"
     ).read_text(encoding="utf-8")
@@ -3107,10 +3127,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
         "native_grid_point_count_sha256": point_count_digest,
     }
     expected = {
-        "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
         "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
-        "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
-        "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }
@@ -3710,6 +3727,7 @@ def _build_report(
         "python/generativeqc_compiler/dft/grid.py",
         "python/generativeqc_compiler/xc/quadrature_cuda.py",
         "src/molecule/basis.cpp",
+        "src/molecule/basis.hpp",
         "src/dft/ao_grid.cpp",
         "src/dft/bridge.cpp",
         "src/dft/grid.hpp",

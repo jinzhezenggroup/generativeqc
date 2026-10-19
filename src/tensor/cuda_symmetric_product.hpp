@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "runtime/lowering_binding.hpp"
+#include "tensor/cuda_binding_resources.hpp"
 
 namespace generativeqc::tensor {
 
@@ -50,7 +51,7 @@ struct SymmetricProductDiagnostic {
  */
 class PreparedSymmetricProduct {
  public:
-  static constexpr std::size_t host_reservation = 16U << 10;
+  static constexpr std::size_t host_reservation = kCudaSymmetricProductBindingHostBytes;
   virtual ~PreparedSymmetricProduct() = default;
   virtual void execute(cudaStream_t, const SymmetricProductInvocation&) const = 0;
   virtual const SymmetricProductDiagnostic& diagnostic() const noexcept = 0;

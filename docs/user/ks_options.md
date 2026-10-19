@@ -1,8 +1,9 @@
 # Prepared semilocal KS model options
 
 `Calculator(method="lda-rks" | "pbe-rks" | "lda-uks" | "pbe-uks",
-ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA. Its default
-grid and tile reproduce the original method behavior. The existing compiler
+ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA.
+LDA/PBE production grids enable radial angular pruning by default. Explicit
+`GridSpec` v1/v2 prescriptions retain their unpruned behavior. The existing compiler
 `FunctionalSpec` and `GridSpec` are reused, with an explicit native SCF
 tail/spin domain; a second functional catalog is not introduced.
 
@@ -54,11 +55,101 @@ coincident-center tolerance and per-element radial scales. The native grid
 uses the same rational-Legendre radial rule, Legendre-trapezoid angular rule
 and equal-radius Becke partition as the reference. Element radii scale radial
 points and radial Jacobians; they do not add a heteronuclear partition
-correction. Pruning, screening, rules and units retain the version-1 contract.
+correction. Versions 1 and 2 remain unpruned; version 3 explicitly opts into
+the angular-pruning contract described next. Density screening is separate.
 Changing the grid changes the discrete energy. Changing `tile_points` changes
 the schedule, capacity and FP64 reduction order. With local-AO maps, larger
 block unions can also admit additional AO tail work; complete numerical gates
 remain necessary even though the grid and cutoff are unchanged.
+
+(angular-pruning)=
+## Angular pruning
+
+`GridPolicy` and the default LDA/PBE `KsOptions` use the version-3 `radial-v1`
+prescription. The standard profile also increases radial resolution relative to
+v2; LDA uses additional angular resolution. These changes preserve the retained
+energy/force gates on the qualified water fixtures, rather than assuming that
+fewer points alone justify a default. Pruning is not automatically promoted to
+hybrid, meta-GGA or VV10 profiles. Select the retained unpruned policy explicitly
+when reproducing v2 calculations:
+
+```python
+from dataclasses import replace
+from generativeqc import Calculator, GridPolicy, KsOptions
+
+unpruned = GridPolicy(pruning="none").resolve("pbe-rks")
+pruned = GridPolicy().resolve("pbe-rks")
+print(unpruned.points_per_atom, pruned.points_per_atom)
+calculator = Calculator(
+    method="pbe-rks",
+    device="cuda",
+    ks_options=KsOptions(grid=pruned),
+)
+```
+
+Version 3 requires a finite positive radial scale for every element actually
+used. For an isolated angular-pruning experiment on a fixed v2 grid, use
+`replace(unpruned, version=3, pruning="radial-v1")` instead; this differs from
+selecting the newly qualified default radial/angular maxima. Custom radial
+counts, radii and angular orders remain explicit inputs.
+Maximum version-3 orders are 128 polar and 512 azimuth points. Unsupported
+prescriptions fail validation rather than silently disabling pruning. Native
+C/C++ callers select the same contract with `grid_version=3` / `KsGrid.version=3`
+and explicit element radii; the descriptor layout is unchanged.
+
+For increasing radial index `i`, define `u=(i+1/2)/radial_points`:
+
+| Radial rank | Angular orders relative to the requested maximum |
+| --- | --- |
+| `u < 1/5` | Quarter polar and azimuth orders |
+| `1/5 <= u < 1/3` | Half orders |
+| `1/3 <= u <= 3/4` | Full orders |
+| `3/4 < u <= 6/7` | Half orders |
+| `u > 6/7` | Quarter orders |
+
+Reduced orders round upward, with at least one polar and three azimuth points.
+Each shell uses its own complete Gauss-Legendre × periodic-trapezoid rule with
+the corresponding integration weights. This is an original table-free policy,
+**not NWChem/Lebedev pruning**. Element radii scale the physical shell positions;
+the angular schedule depends only on integer radial rank. Consequently the exact
+point count can be planned without constructing quadrature, and topology stays
+fixed as nuclei move. CPU and CUDA materialization, atomic-measure exports,
+resident ownership and moving-grid weight response use that same shell order.
+Other method/backend force-admission restrictions are unchanged.
+
+Pruning removes constructed points; it does not change a density cutoff or imply
+that an existing density-screened VV10 pair domain shrinks by the same fraction.
+Changing pruning changes the discrete energy and its analytic forces. Qualify
+the chosen method, basis and geometry class before using it for a production
+comparison. With the independent PySCF reference dependencies installed, run:
+
+```console
+python -m benchmarks.grid_policy_convergence --include-pruning --output .artifacts/grid-pruning-convergence.json
+```
+
+This CPU oracle checks LDA/PBE energy and grid-responsive analytic gradients
+against a dense grid whose stability is checked against a denser grid. Pruned
+standard/tight profiles must meet the unchanged unpruned accuracy gates while
+reducing point counts. It is not a VV10, large-system or GPU performance claim.
+The matched-grid runners default to `--grid-pruning auto`: LDA/PBE select the
+production policy for both native and GPU4PySCF; other methods retain unpruned
+diagnostic grids until independently qualified. `--grid-pruning none` selects
+the retained unpruned policy. Explicit `--grid NR NP NA` counts preserve the
+historical one-Bohr radial scales. `README_BENCHMARK_GRID_PRUNING` forwards this
+choice through `benchmarks/run_readme_dft_benchmarks.sh`.
+
+For an independent production-grid comparison, use
+`python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
+inside a finite Slurm GPU allocation with a source-matched Release library and
+GPU4PySCF installed. This runner uses GPU4PySCF's **own NWChem-pruned grids**,
+not the native angular rules. It checks dense-reference stability and both
+engines' complete energy/force results before selecting among timed candidates.
+The energy budget scales per water unit; maximum force budgets do not scale
+with system size. Qualification also reserves margin for the observed
+dense-reference variation; that variation is not a rigorous error bound.
+Raw samples, failed candidates, work counts and independent
+reference results are retained. Publishing a README production ranking still requires
+the [complete endpoint and accuracy qualification](../maintainer/performance_engineering.md#readme-production-comparisons).
 
 ## SCF and force tile policies
 
@@ -91,25 +182,35 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ### CUDA Direct integral forces
 
-Exact-direct full-range RKS global hybrids with strict FP64 and at least
-384 public AOs automatically request primitive-local spatial Coulomb reuse in
-the order-six s/p/d force consumer. This includes eligible PBE0 and B3LYP:
-the method authenticates Direct J/K, operators, exact-exchange coefficient and
-resident final-density token, not a functional name alone. HF, UKS, fitted, ECP,
-RSH, nonlocal, D4 and lower-precision consumers retain the incumbent defaults.
+Full-range exact-Direct FP64 force workers use generated relative-coordinate
+responses by default for angular orders one through five, including separate
+and combined J/K and RKS/UKS sources. Unset, empty, `1` and `relative` select
+this arithmetic; `GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0` or an unknown
+nonempty value retains the nuclear-coordinate rollback. `ssss`, FP32 and
+long-range roots are unchanged. See the
+[compiler and finite-fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
+
+Independently, qualified full-range exact-Direct restricted FP64 force producers
+with at least 384 public AOs automatically request relative-response order-six
+reuse and guarded pure-J density-first contraction in orders six/seven. The
+method authenticates the actual J/K source and resident final-density token,
+not a functional name. Pure J permits independent D4/gCP terms; nonzero
+exchange, bilinear seeds and partial AO masks retain component contraction.
+HF, UKS, fitted, ECP, RSH, nonlocal and D4-hybrid consumers keep their previous
+order-six/seven defaults. All resource and derivative-capability guards remain.
 
 `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
-Explicit `=1` or `=spatial-reuse` requests reuse outside the automatic method
-scope, without bypassing the resident primitive-pair, prefix, topology or
-derivative-capability guards. Unset or empty selects the automatic policy;
-other values retain the incumbent. Preference is captured when the force
-owner is prepared, so changing the environment needs a new prepared owner.
-The cache is primitive-local, introduces no retained quartet inventory, and
-leaves screening and gradient accumulation order unchanged. Orders seven/eight
-and mixed-f fallback routing retain their existing consumers.
+Explicit `=1` or `=spatial-reuse` selects the earlier spatial consumer;
+`=relative-reuse` shares relative responses without density-first contraction,
+and `=relative-density` also requests the guarded factorization. No selector
+bypasses admission. Unset or empty selects the automatic policy; other values
+retain the incumbent. Both independent preferences are captured when preparing
+the force owner, so changing either requires a new prepared owner. Screening,
+source/atom accumulation, order-eight and mixed-f fallback semantics remain.
 
-See the [spatial-reuse decision](../../.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md)
-for the algorithm, qualification scope and retained alternatives.
+See the [order-six/seven default decision](../../.agents/notes/implemented/performance/2026-10-17-direct-force-default-promotion.md)
+and [low-order default decision](../../.agents/notes/implemented/performance/2026-10-17-weighted-relative-force-responses.md)
+for qualification boundaries and retained alternatives.
 
 ### CUDA final-state validation
 
@@ -119,13 +220,12 @@ for these strict-FP64 restricted producers:
 - Full-range exact-direct global hybrids with at least 384 AOs. The signed
   exchange coefficient and Direct J/K operators, not a functional name such as
   PBE0 or B3LYP, determine eligibility.
-- All-electron full-range Coulomb-only models using exact-direct J with
-  **544 ≤ AOs < 1088**, or density-fitted J with at least **544 AOs**.
+- All-electron full-range Coulomb-only models using exact-direct or
+  density-fitted J with at least **544 AOs**.
   This includes eligible r²SCAN-3c owners; their separate D4/gCP corrections
-  remain part of the complete endpoint. Exact-direct pure-J owners at 1088 AOs
-  and above retain the host proof because the measured Direct/96 moved endpoint
-  failed complete-endpoint nonregression. This hold does not apply to the
-  separately qualified DF or global-hybrid defaults.
+  remain part of the complete endpoint. The stationary-energy repair and its
+  source-matched complete-endpoint qualification replace the temporary
+  1088-AO exact-direct hold; the historical failed cohort remains rejected.
 
 Resource and live-generation checks still require the matrix-library handle,
 charged packets and no previously published stationary W/total-D lease. Smaller
@@ -139,8 +239,14 @@ automatic policy; other values are errors. This changes only execution of the
 shared strict proof: scientific acceptance gates, dense host exports and the
 orbital-energy expression for KS weighted density remain unchanged.
 
+Ordinary strict-FP64 all-electron exact-direct pure-J CUDA KS can hold an
+already stationary density while rebuilding the complete physical F[D] to
+confirm a failed energy gate. Density change and both physical residual norms
+must already pass their original thresholds. The fresh energy must still pass;
+this neither replays a cached energy nor changes convergence or iteration limits.
+
 See the [default-selection decision](../../.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md)
-and [bounded pure-J policy](../../.agents/notes/implemented/performance/2026-10-16-bound-pure-j-direct-final-validation.md)
+and [stationary pure-J energy confirmation](../../.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
 for their evidence and limits.
 
 ### Experimental incremental Direct-J/K and resource budgets

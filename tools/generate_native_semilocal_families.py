@@ -18,7 +18,7 @@ PYTHON_COMPAT_OUTPUT = (
     ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
 )
 SCHEMA = "generativeqc.native-semilocal-families.v3"
-LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/method/_generated_libxc_methods.py"
+LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/xc/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
     "component_scaling",
     "mixed_ao_precision",

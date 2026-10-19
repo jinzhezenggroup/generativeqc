@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_ks_grid_reference.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Nonmovable adapter borrowing actual immutable packed AO basis, quadrature and accepted density from the live prepared KS batch/item/token after scalar-only canonical proof. Reauthenticates exact pointers/extents/device/stream without numerical export or functional/Hessian authority.",
+  "regions": []
+}

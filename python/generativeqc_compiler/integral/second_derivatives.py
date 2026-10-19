@@ -323,7 +323,11 @@ def build_second_derivative_kernel(
         graph, value, argument, boys_count, differentiate = _one_electron_primal(
             integral, indices, primal_form
         )
-    elif integral.operator.family == OperatorFamily.FOUR_CENTER_ERI:
+    elif integral.operator.family in (
+        OperatorFamily.FOUR_CENTER_ERI,
+        OperatorFamily.LONG_RANGE_ERI,
+        OperatorFamily.SHORT_RANGE_ERI,
+    ):
         weights = consumer.weights or WeightDescriptor(
             "raw_unit_weight",
             TensorLayout(

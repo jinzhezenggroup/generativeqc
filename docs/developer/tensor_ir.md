@@ -223,11 +223,33 @@ float32/float64 graphs with external Boolean input/constant masks. Masks may
 pass through validated transpose, reshape, slice, static gather and broadcast
 views; they never receive tangent/cotangent storage. JVP selects the real branch
 tangents with the actual Boolean mask; VJP routes real bars to the branches and
-uses the existing broadcast/scatter adjoints. Computed comparison conditions,
-Boolean outputs, scientific annotations and differentiation with respect to
-masks remain unsupported. This context-specific contract appears in
+uses the existing broadcast/scatter adjoints. Without the comparison-selector option below, computed comparison conditions
+remain unsupported. Boolean outputs, scientific annotations and differentiation
+with respect to masks remain unsupported in either mode. This context-specific contract appears in
 `autodiff.capabilities()["reference_external_mask_where"]`, rather than the
 unrestricted `AD_PRIMITIVES`/generated/native capability set.
+
+The explicit `allow_comparison_where=True` option additionally admits conditions
+from the six real comparison primitives and their typed Boolean views. It is
+available on reference `jvp/vjp/dot_test` (generic finite FP32/FP64), generated
+`linearize/transpose_program` and public `jvp/vjp/grad/value_and_grad` (generic
+finite FP64; reference/materializing CPU). Comparison and Boolean-output
+*differentiation* remains unsupported. Derivative dependency traversal stops at
+Boolean edges: a predicate-only `sqrt(p)` is a checked primal, not a derivative
+request, even when `p` is a requested real input. Reused branch values retain
+their derivative-domain checks. Requested predicate-only input directions remain
+validated and their cotangents are zero. The generated JVP retains requested
+direction validation as live graph edges, including after serialization/CSE/DCE.
+No Boolean derivative storage is allocated.
+
+The selector is evaluated at the primal, including at equality. The selected
+branch is the derivative convention at a switch; no differentiability or
+finite-difference assertion is made at a jump or kink. Independent finite
+differences use perturbations that preserve selectors. VJP replay uses the
+forward snapshot, including all predicate inputs. The new option preserves
+default and external-mask-only admission and the typed first-order boundary.
+Its generated provenance uses `comparison_where_jvp/vjp`; real execution inputs
+remain non-differentiable even if descriptive provenance is removed.
 
 All live primal operands remain finite/domain checked, including unselected
 branches. Existing derivative-domain/finiteness checks and VJP requested-input
@@ -258,19 +280,27 @@ backend-independent TensorIR `Program` DAGs:
   `Program.dumps()` and can be passed directly to `plan_cuda`.
 - Unrelated Boolean diagnostic outputs are pruned from a requested real path.
   Selecting a Boolean output or a real output whose ancestors contain Boolean
-  data rejects by default. `linearize(..., allow_external_mask_where=True)`
-  explicitly admits first-order generated forward JVP for fixed external
+  data rejects by default. `linearize(..., allow_external_mask_where=True)` and
+  `transpose_program(..., allow_external_mask_where=True)` explicitly admit
+  first-order generated JVP/VJP for fixed external
   Boolean input/constant masks through the reference contract's validated
   type-preserving views, on generic finite FP64 arrays only. Boolean values
-  never receive tangent storage; the canonical `where` selects real tangents.
-  Computed comparisons, Boolean outputs, scientific/control annotations,
+  never receive tangent/cotangent storage; the canonical `where` selects real
+  tangents or routes real cotangents to the selected branches. Existing view
+  adjoints perform broadcast reductions and repeated-gather scatter additions.
+  Without the comparison-selector option, computed comparisons also reject.
+  Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
-  CUDA, portable/scalar, public compiled AD, VJP and HVP are outside this slice.
+  CUDA, portable/scalar and HVP are outside this slice. The public scalar
+  `grad`/`value_and_grad` wrappers, selected-argument `vjp` and fixed-mask `jvp`
+  expose the same explicit opt-in on reference/CPU; see the [Array API contract](../user/experimental_array_api.md).
+  Combined primal/derivative graphs use the generated execution inputs, preserving
+  the non-differentiable boundary.
   Generated real feeds preserve names, roles, dtypes and shapes but are declared
   non-differentiable execution data. This existing typed boundary survives
   reconstruction without provenance, replay and optimization; the result is
-  not another AD input space. Generation requires a declared real tangent input.
+  not another AD input space. Generation requires a declared real AD input.
 - In that opt-in domain, output selection controls publication, while all
   original live primal and forward derivative domains remain checked. Missing
   real input directions become explicit zero-like values, so an unselected or
@@ -279,12 +309,16 @@ backend-independent TensorIR `Program` DAGs:
   and optimization, including empty requested outputs. Guards zero each
   element before reducing, avoiding a new overflow from summing large finite
   primals/tangents. The reduced guards form an exact +1 multiplier on each
-  output tangent, preserving signed zero and other finite FP64 values.
-  The CPU node/work/byte budgets charge this validation work.
+  derivative output, preserving signed zero and other finite FP64 values.
+  Reverse generation reuses the forward rules with zero directions to preserve
+  those same domains, including unselected/unreturned branches. Each requested
+  output cotangent remains validated even when it has no path to a requested
+  input, or the published gradient is empty. The CPU node/work/byte budgets
+  charge this validation work.
   Retained definitions alone are insufficient: only output-reachable work
   executes. Non-selection forward programs keep the legacy generation version,
   equations and derivative identities, including when the flag is set.
-- Reverse slice/gather use exact incidence matrices. Repeated einsum labels
+- Reverse slice/gather use structural scatter additions. Repeated einsum labels
   use exact identity projections. A packed parameter is expanded through an
   explicit unpack DAG, and its reverse output applies `unpack_transpose`
   (including orbit weights).

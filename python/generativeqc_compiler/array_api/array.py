@@ -45,10 +45,12 @@ class VibeArray:
 
     @property
     def T(self) -> VibeArray:
-        """Reverse all axes, matching the standard array transpose attribute."""
+        """Transpose a matrix, rejecting arrays with any other rank."""
         from . import namespace
 
-        return namespace.permute_dims(self, tuple(reversed(range(self.ndim))))
+        if self.ndim != 2:
+            raise ValueError("T requires a two-dimensional array")
+        return namespace.permute_dims(self, (1, 0))
 
     @property
     def mT(self) -> VibeArray:
@@ -170,8 +172,10 @@ class VibeArray:
         return namespace.negative(self)
 
     def __pos__(self) -> VibeArray:
-        """Return this symbolic array unchanged for unary plus."""
-        return self
+        """Apply the real-valued symbolic positive operation."""
+        from . import namespace
+
+        return namespace.positive(self)
 
     def __getitem__(self, key: object) -> VibeArray:
         """Build symbolic indexing through the Array API namespace."""

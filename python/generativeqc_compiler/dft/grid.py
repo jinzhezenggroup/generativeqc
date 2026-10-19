@@ -12,6 +12,7 @@ import hashlib
 import json
 import typing
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -77,7 +78,7 @@ def molecular_grid_identity(
         )
         if missing:
             raise ValueError(
-                "production GridSpec v2 has no sourced radius for atomic number(s) "
+                "production GridSpec has no sourced radius for atomic number(s) "
                 + ", ".join(map(str, missing))
             )
         resolved = tuple(radii[a.atomic_number] for a in atoms)
@@ -102,7 +103,9 @@ class GridSpec:
     contract: every element that is actually used must have an explicit radius.
     Overrides are explicit (atomic_number, radius) pairs, not an opaque accuracy level.
     Coincident centers within the declared distance use an equal pair split.
-    Screening and pruning are disabled; changing either needs a new contract.
+    Version 3 is an explicit-radius, opt-in ``radial-v1`` pruned contract.
+    Its shell sizes depend only on the integer radial rank, never on
+    geometry or density, so moving-grid derivatives retain fixed topology.
     """
 
     radial_points: int = 48
@@ -121,7 +124,7 @@ class GridSpec:
 
     def __post_init__(self) -> None:
         """Validate the supported grid prescription and normalize unique element radii."""
-        checked_int(self.version, "grid version", high=2)
+        checked_int(self.version, "grid version", high=3)
         checked_int(self.radial_points, "radial points", high=512)
         checked_int(self.angular_polar, "polar points", high=256)
         checked_int(self.angular_azimuth, "azimuth points", low=3, high=1024)
@@ -130,18 +133,26 @@ class GridSpec:
             self.radial_rule,
             self.angular_rule,
             self.partition,
-            self.pruning,
             self.units,
             self.ordering,
         ) != (
             "rational-legendre",
             "legendre-trapezoid",
             "becke-equal-radius",
-            "none",
             "Bohr",
             "atom-radial-polar-azimuth",
         ):
             raise ValueError("unsupported grid prescription/version")
+        if self.pruning != ("radial-v1" if self.version == 3 else "none"):
+            raise ValueError(
+                "radial-v1 pruning requires grid version 3; v1/v2 are unpruned"
+            )
+        if self.version == 3 and (
+            self.angular_polar > 128 or self.angular_azimuth > 512
+        ):
+            raise ValueError(
+                "radial-v1 supports at most 128 polar and 512 azimuth points"
+            )
         if not np.isfinite(self.coincident_tolerance) or self.coincident_tolerance < 0:
             raise ValueError("invalid coincident-center tolerance")
         radii = []
@@ -153,6 +164,50 @@ class GridSpec:
         if len({z for z, _ in radii}) != len(radii):
             raise ValueError("duplicate element radius")
         object.__setattr__(self, "element_radii", tuple(sorted(radii)))
+
+    @property
+    def angular_shells(self) -> tuple[tuple[int, int], ...]:
+        """Return immutable (polar, azimuth) counts in increasing radial order."""
+        return _angular_shells(
+            self.version, self.radial_points, self.angular_polar, self.angular_azimuth
+        )
+
+    @property
+    def points_per_atom(self) -> int:
+        """Exact point count, including shell pruning but not density screening."""
+        return sum(polar * azimuth for polar, azimuth in self.angular_shells)
+
+
+@lru_cache(maxsize=128)
+def _angular_shells(
+    version: int, radial: int, polar: int, azimuth: int
+) -> tuple[tuple[int, int], ...]:
+    """Table-free radial-v1 policy, distinct from Lebedev/NWChem pruning.
+
+    For u=(radial_index+1/2)/radial_points, retain full resolution on
+    [1/3, 3/4], halve each angular order outside it, and quarter it for
+    u<1/5 or u>6/7. Integer comparisons make point-count planning independent
+    of quadrature materialization and floating-point root roundoff.
+    Rounded-up orders keep small or odd prescriptions valid. Element radii
+    set the physical shells without introducing geometry-dependent switches.
+    """
+    if version != 3:
+        return ((polar, azimuth),) * radial
+    result = []
+    for index in range(radial):
+        rank = 2 * index + 1
+        divisor = (
+            4
+            if 5 * rank < 2 * radial or 7 * rank > 12 * radial
+            else (2 if 3 * rank < 2 * radial or 4 * rank > 6 * radial else 1)
+        )
+        result.append(
+            (
+                (polar + divisor - 1) // divisor,
+                max(3, (azimuth + divisor - 1) // divisor),
+            )
+        )
+    return tuple(result)
 
 
 # Canonical production radii. These are the pinned covalent_radius_bohr values
@@ -269,14 +324,17 @@ class GridProfile:
 
 @dataclass(frozen=True)
 class GridPolicy:
-    """Canonical production grid resolver shared by KS and future consumers."""
+    """Resolve pruned LDA/PBE grids, retaining explicit unpruned compatibility."""
 
     accuracy: str = "standard"
+    pruning: str = "radial-v1"
 
     def profile(self, method: str, *, derivative_order: int = 0) -> GridProfile:
         """Select a qualified LDA or GGA/PBE profile, using tight grids for derivatives."""
         if self.accuracy not in ("standard", "tight"):
             raise ValueError("grid accuracy must be 'standard' or 'tight'")
+        if self.pruning not in ("none", "radial-v1"):
+            raise ValueError("grid pruning must be 'none' or 'radial-v1'")
         if derivative_order not in (0, 1):
             raise NotImplementedError(
                 "production grid derivatives support orders 0 and 1"
@@ -298,17 +356,24 @@ class GridPolicy:
             # 16x32 topology while using the 54-point radial rule that meets
             # the retained independent energy/force convergence gate.
             shape = (72, 24, 48) if tight else (54, 16, 32)
-        return GridProfile(f"{family}-{'tight' if tight else 'standard'}-v2", *shape)
+        if not tight and self.pruning == "radial-v1":
+            shape = (64, 20, 40) if family == "lda" else (64, 16, 32)
+        version = 2 if self.pruning == "none" else 3
+        return GridProfile(
+            f"{family}-{'tight' if tight else 'standard'}-v{version}",
+            *shape,
+            pruning=self.pruning,
+        )
 
     @property
     def provenance(self) -> dict[str, typing.Any]:
         """Return policy version, radii source, topology, and partition provenance."""
         return {
-            "policy_version": 2,
+            "policy_version": 2 if self.pruning == "none" else 3,
             "radii_source": GRID_POLICY_RADII_SOURCE,
             "upstream_revision": GRID_POLICY_UPSTREAM_REVISION,
             "supported_atomic_numbers": (1, len(_PRODUCTION_RADII)),
-            "pruning": "none",
+            "pruning": self.pruning,
             "screening": "none",
             "partition": "becke-equal-radius",
             "topology": "atom-radial-polar-azimuth",
@@ -316,14 +381,15 @@ class GridPolicy:
         }
 
     def resolve(self, method: str, *, derivative_order: int = 0) -> GridSpec:
-        """Build a version-2 grid specification from the selected profile and radii."""
+        """Build the selected versioned quadrature with pinned element radii."""
         profile = self.profile(method, derivative_order=derivative_order)
         return GridSpec(
-            version=2,
+            version=2 if self.pruning == "none" else 3,
             radial_points=profile.radial_points,
             angular_polar=profile.angular_polar,
             angular_azimuth=profile.angular_azimuth,
             partition_iterations=profile.partition_iterations,
+            pruning=profile.pruning,
             element_radii=tuple(enumerate(_PRODUCTION_RADII, start=1)),
         )
 
@@ -332,16 +398,20 @@ def grid_policy_provenance(spec: GridSpec) -> dict[str, typing.Any]:
     """Describe the exact origin of a resolved grid without over-claiming policy provenance."""
     if spec.version == 1:
         return {"policy_version": 1, "contract": "reference-grid-v1"}
-    if spec.version != 2:
+    if spec.version not in (2, 3):
         raise ValueError("unsupported grid policy version")
 
     # Version identifies the representation, not the source of user data.
     # Only exact prescribed resolver outputs may claim the pinned policy source.
     for accuracy in ("standard", "tight"):
-        policy = GridPolicy(accuracy)
+        policy = GridPolicy(accuracy, pruning=spec.pruning)
         if any(spec == policy.resolve(method) for method in ("lda", "pbe")):
             return policy.provenance
-    return {"policy_version": 2, "contract": "explicit-grid-v2"}
+    return {
+        "policy_version": spec.version,
+        "contract": f"explicit-grid-v{spec.version}",
+        **({"pruning": spec.pruning} if spec.version == 3 else {}),
+    }
 
 
 def partition_weights(
@@ -425,6 +495,8 @@ class MolecularGrid:
         angular_weights: ClassVar[np.ndarray]
         radii: ClassVar[np.ndarray]
         radial_weights: ClassVar[np.ndarray]
+        shell_offsets: ClassVar[np.ndarray]
+        shell_direction_offsets: ClassVar[np.ndarray]
         resolved_radii: ClassVar[tuple[float, ...]]
         npoint: ClassVar[int]
         identity: ClassVar[str]
@@ -453,7 +525,7 @@ class MolecularGrid:
             )
             if missing:
                 raise ValueError(
-                    "production GridSpec v2 has no sourced radius for atomic number(s) "
+                    "production GridSpec has no sourced radius for atomic number(s) "
                     + ", ".join(map(str, missing))
                 )
             resolved = tuple(radii[a.atomic_number] for a in atoms)
@@ -469,6 +541,43 @@ class MolecularGrid:
         angular_weights = np.repeat(
             wz * (2 * np.pi / self.spec.angular_azimuth), len(phi)
         )
+        shell_bytes = 0
+        if self.spec.pruning != "none":
+            directions, measures = [], []
+            rules = {}
+            offsets, direction_offsets = [0], []
+            direction_count = 0
+            for polar, azimuth in self.spec.angular_shells:
+                shape = (polar, azimuth)
+                if shape not in rules:
+                    nodes, weights = np.polynomial.legendre.leggauss(polar)
+                    angles = np.arange(azimuth) * (2 * np.pi / azimuth)
+                    heights, angles = np.meshgrid(nodes, angles, indexing="ij")
+                    rings = np.sqrt(1 - heights * heights)
+                    directions.append(
+                        np.stack(
+                            (rings * np.cos(angles), rings * np.sin(angles), heights),
+                            axis=-1,
+                        ).reshape(-1, 3)
+                    )
+                    measures.append(np.repeat(weights * (2 * np.pi / azimuth), azimuth))
+                    rules[shape] = direction_count
+                    direction_count += polar * azimuth
+                direction_offsets.append(rules[shape])
+                offsets.append(offsets[-1] + polar * azimuth)
+            angular, angular_weights = (
+                np.concatenate(directions),
+                np.concatenate(measures),
+            )
+            for name, values in (
+                ("shell_offsets", offsets),
+                ("shell_direction_offsets", direction_offsets),
+            ):
+                storage = np.frombuffer(
+                    np.asarray(values, dtype=np.int64).tobytes(), dtype=np.int64
+                )
+                object.__setattr__(self, name, storage)
+                shell_bytes += storage.nbytes
         t, wt = np.polynomial.legendre.leggauss(self.spec.radial_points)
         t, wt = (t + 1) * 0.5, wt * 0.5
         r = t / (1 - t)
@@ -482,7 +591,7 @@ class MolecularGrid:
         ):
             object.__setattr__(self, name, immutable(value))
         object.__setattr__(self, "resolved_radii", resolved)
-        object.__setattr__(self, "npoint", len(atoms) * len(r) * len(angular))
+        object.__setattr__(self, "npoint", len(atoms) * self.spec.points_per_atom)
         object.__setattr__(
             self,
             "identity",
@@ -506,7 +615,8 @@ class MolecularGrid:
                     "radial_weights",
                 )
             )
-            + 40 * len(atoms),
+            + 40 * len(atoms)
+            + shell_bytes,
         )
         # NumPy's Legendre construction uses dense companion eigensolves.
         # Their numeric temporaries are setup-only and independent of grid
@@ -522,11 +632,19 @@ class MolecularGrid:
         """Shared atomic points/measures before molecular partitioning."""
         checked_int(tile_points, "tile points")
         na = len(self.directions)
-        per_atom = len(self.radii) * na
+        per_atom = self.spec.points_per_atom
         for begin in range(0, self.npoint, tile_points):
             indices = np.arange(begin, min(begin + tile_points, self.npoint))
             owner, local = np.divmod(indices, per_atom)
-            radial, angular = np.divmod(local, na)
+            if self.spec.pruning == "none":
+                radial, angular = np.divmod(local, na)
+            else:
+                radial = np.searchsorted(self.shell_offsets, local, side="right") - 1
+                angular = (
+                    local
+                    - self.shell_offsets[radial]
+                    + self.shell_direction_offsets[radial]
+                )
             scale = np.asarray(self.resolved_radii)[owner]
             points = (
                 self.centers[owner]

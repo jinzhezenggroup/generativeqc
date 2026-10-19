@@ -1,0 +1,8 @@
+{
+  "name": "wb97mv_nuclear_jk",
+  "outputs": [
+    "generated/response/wb97mv_nuclear_jk.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/method/wb97mv_nuclear_jk.py",
+  "scope": "Build-time ordered-quartet WB97M-V RKS/UKS energy, integral-weight VJP/density JVP, four density-incidence VJPs and frozen-density integral JVPs. Reuses incumbent stationary gradient spin/range policy and TensorIR AD with bounded output-demand inline lowering. Native owners retain basis projection, source caching, deterministic reduction and lifecycle/publication. No runtime Python or compilation is required."
+}

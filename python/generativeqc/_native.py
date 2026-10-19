@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import os
 import typing
+from functools import lru_cache
 from pathlib import Path
 
 from ._generated_methods import METHOD_CONSTANTS as _METHOD_CONSTANTS
@@ -221,6 +222,53 @@ class ShellDescriptor(ctypes.Structure):
     ]
 
 
+class BasisShellTemplate(ctypes.Structure):
+    _fields_ = [
+        ("angular_momentum", ctypes.c_uint32),
+        ("exponent_offset", ctypes.c_uint32),
+        ("primitive_count", ctypes.c_uint32),
+        ("coefficient_offset", ctypes.c_uint32),
+        ("contraction_count", ctypes.c_uint32),
+    ]
+
+
+class BasisEcpTemplate(ctypes.Structure):
+    _fields_ = [
+        ("angular_momentum", ctypes.c_uint32),
+        ("power", ctypes.c_uint32),
+        ("exponent", ctypes.c_double),
+        ("coefficient", ctypes.c_double),
+    ]
+
+
+class BasisElementTemplate(ctypes.Structure):
+    _fields_ = [
+        ("atomic_number", ctypes.c_int32),
+        ("ecp_core_electrons", ctypes.c_int32),
+        ("shell_offset", ctypes.c_uint32),
+        ("shell_count", ctypes.c_uint32),
+        ("ecp_term_offset", ctypes.c_uint32),
+        ("ecp_term_count", ctypes.c_uint32),
+    ]
+
+
+class BasisTemplateDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("elements", ctypes.POINTER(BasisElementTemplate)),
+        ("element_count", ctypes.c_uint32),
+        ("shells", ctypes.POINTER(BasisShellTemplate)),
+        ("shell_count", ctypes.c_uint32),
+        ("exponents", ctypes.POINTER(ctypes.c_double)),
+        ("exponent_count", ctypes.c_uint32),
+        ("coefficients", ctypes.POINTER(ctypes.c_double)),
+        ("coefficient_count", ctypes.c_uint32),
+        ("ecp_terms", ctypes.POINTER(BasisEcpTemplate)),
+        ("ecp_term_count", ctypes.c_uint32),
+    ]
+
+
 class SystemDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -292,6 +340,16 @@ class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
         ("application_energy_budget", ctypes.c_double),
         ("application_max_force_budget", ctypes.c_double),
         ("application_rms_force_budget", ctypes.c_double),
+    ]
+
+
+class NonlocalGridKsOptionsDescriptor(ApplicationPrecisionKsOptionsDescriptor):
+    """Private exact-layout extension, discovered before passing borrowed pointers."""
+
+    _fields_ = [
+        ("nonlocal_grid_version", ctypes.c_uint32),
+        ("nonlocal_grid_reserved", ctypes.c_uint32),
+        ("nonlocal_grid", ctypes.POINTER(KsOptionsDescriptor)),
     ]
 
 
@@ -1046,6 +1104,209 @@ class InactiveEigensolverProfileEntry(ctypes.Structure):
     ]
 
 
+class ResponseRecycleDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("max_vectors", ctypes.c_uint64),
+        ("max_retained_bytes", ctypes.c_uint64),
+    ]
+
+
+class ResponseColumns(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("storage", ctypes.POINTER(ctypes.c_double)),
+        ("element_count", ctypes.c_uint64),
+        ("rows", ctypes.c_uint64),
+        ("columns", ctypes.c_uint64),
+        ("origin", ctypes.c_uint64),
+        ("row_stride", ctypes.c_int64),
+        ("column_stride", ctypes.c_int64),
+    ]
+
+
+class ResponseRecycleCapacity(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("vector_capacity", ctypes.c_uint64),
+        ("retained_capacity_bytes", ctypes.c_uint64),
+        ("projection_workspace_bytes", ctypes.c_uint64),
+        ("update_workspace_bytes", ctypes.c_uint64),
+    ]
+
+
+class ResponseRecycleState(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("vector_count", ctypes.c_uint64),
+        ("generation", ctypes.c_uint64),
+        ("storage_bytes", ctypes.c_uint64),
+        ("measured_live_bytes", ctypes.c_uint64),
+        ("measured_peak_bytes", ctypes.c_uint64),
+        ("allocation_count", ctypes.c_uint64),
+    ]
+
+
+def optional_response_recycle_library() -> ctypes.CDLL | None:
+    """Discover an additive CPU protocol, never suppress a selected-library load error."""
+    selected = next((path for path in _candidate_paths() if path.is_file()), None)
+    if selected is None:
+        return None
+    library = ctypes.CDLL(str(selected.resolve()))
+    names = (
+        "generativeqc_response_recycle_capacity_v1_get",
+        "generativeqc_response_recycle_create_v1",
+        "generativeqc_response_recycle_state_v1_get",
+        "generativeqc_response_recycle_project_v1",
+        "generativeqc_response_recycle_update_v1",
+        "generativeqc_response_recycle_copy_v1",
+        "generativeqc_response_recycle_destroy",
+    )
+    if any(not hasattr(library, name) for name in names):
+        return None
+    library.generativeqc_status_message.argtypes = [ctypes.c_int32]
+    library.generativeqc_status_message.restype = ctypes.c_char_p
+    handle = ctypes.c_void_p
+    count = ctypes.c_uint64
+    vector = ctypes.POINTER(ctypes.c_double)
+    columns = ctypes.POINTER(ResponseColumns)
+    signatures = (
+        [
+            ctypes.POINTER(ResponseRecycleDescriptor),
+            ctypes.POINTER(ResponseRecycleCapacity),
+        ],
+        [ctypes.POINTER(ResponseRecycleDescriptor), ctypes.POINTER(handle)],
+        [handle, ctypes.POINTER(ResponseRecycleState)],
+        [handle, count, columns, vector, count, count],
+        [handle, count, columns, columns, count, count, count],
+        [handle, count, count, count, vector, count],
+        [handle],
+    )
+    for name, arguments in zip(names, signatures, strict=True):
+        function = getattr(library, name)
+        function.argtypes = arguments
+        function.restype = None if name.endswith("destroy") else ctypes.c_int32
+    return library
+
+
+ResponseAction = ctypes.CFUNCTYPE(
+    ctypes.c_int32,
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.c_size_t,
+)
+
+
+class ResponseGmresDescriptor(ctypes.Structure):
+    """Borrowed synchronous CPU action and bounded shared-GMRES controls."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dimension", ctypes.c_uint64),
+        ("rhs", ctypes.POINTER(ctypes.c_double)),
+        ("initial_guess", ctypes.POINTER(ctypes.c_double)),
+        ("apply", ResponseAction),
+        ("apply_data", ctypes.c_void_p),
+        ("precondition", ResponseAction),
+        ("precondition_data", ctypes.c_void_p),
+        ("rtol", ctypes.c_double),
+        ("atol", ctypes.c_double),
+        ("restart", ctypes.c_uint64),
+        ("max_iterations", ctypes.c_uint64),
+        ("max_workspace_bytes", ctypes.c_uint64),
+        ("reorthogonalize", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("breakdown_tolerance", ctypes.c_double),
+        ("true_residual_every", ctypes.c_uint64),
+        ("stagnation_window", ctypes.c_uint64),
+        ("stagnation_tolerance", ctypes.c_double),
+    ]
+
+
+class ResponseResultView(ctypes.Structure):
+    """Arrays borrow an immutable native result handle, never its input callbacks."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("reason", ctypes.c_int32),
+        ("converged", ctypes.c_int32),
+        ("dimension", ctypes.c_uint64),
+        ("solution", ctypes.POINTER(ctypes.c_double)),
+        ("solution_count", ctypes.c_uint64),
+        ("history", ctypes.POINTER(ctypes.c_double)),
+        ("history_count", ctypes.c_uint64),
+        ("basis", ctypes.POINTER(ctypes.c_double)),
+        ("basis_columns", ctypes.c_uint64),
+        ("residual_norm", ctypes.c_double),
+        ("relative_residual", ctypes.c_double),
+        ("iterations", ctypes.c_uint64),
+        ("restarts", ctypes.c_uint64),
+        ("operator_actions", ctypes.c_uint64),
+        ("preconditioner_actions", ctypes.c_uint64),
+        ("workspace_bytes", ctypes.c_uint64),
+        ("measured_workspace_peak_bytes", ctypes.c_uint64),
+        ("workspace_allocation_count", ctypes.c_uint64),
+        ("orthogonalization_seconds", ctypes.c_double),
+        ("operator_seconds", ctypes.c_double),
+    ]
+
+
+@lru_cache(maxsize=8)
+def _load_response_library(path: str) -> ctypes.CDLL | None:
+    """Bind only the additive CPU response protocol; an older library is explicit compatibility."""
+    library = ctypes.CDLL(path)
+    names = (
+        "generativeqc_response_gmres_workspace_v1",
+        "generativeqc_response_solve_v1",
+        "generativeqc_response_result_view_v1_get",
+        "generativeqc_response_result_destroy",
+    )
+    if any(not hasattr(library, name) for name in names):
+        return None
+    library.generativeqc_status_message.argtypes = [ctypes.c_int]
+    library.generativeqc_status_message.restype = ctypes.c_char_p
+    library.generativeqc_response_gmres_workspace_v1.argtypes = [
+        ctypes.POINTER(ResponseGmresDescriptor),
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    library.generativeqc_response_gmres_workspace_v1.restype = ctypes.c_int32
+    library.generativeqc_response_solve_v1.argtypes = [
+        ctypes.POINTER(ResponseGmresDescriptor),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.generativeqc_response_solve_v1.restype = ctypes.c_int32
+    library.generativeqc_response_result_view_v1_get.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ResponseResultView),
+    ]
+    library.generativeqc_response_result_view_v1_get.restype = ctypes.c_int32
+    library.generativeqc_response_result_destroy.argtypes = [ctypes.c_void_p]
+    library.generativeqc_response_result_destroy.restype = None
+    return library
+
+
+def optional_response_library() -> ctypes.CDLL | None:
+    """Discover AOT host GMRES without compiling, selecting a CUDA profile or probing a device.
+
+    Discovery remains live for explicit path overrides. Only absence of an installed
+    library/additive protocol permits compatibility, never a load error or solve rejection.
+    """
+    for candidate in _candidate_paths():
+        if candidate.exists():
+            return _load_response_library(str(candidate.resolve()))
+    return None
+
+
 def _installed_package_library() -> Path | None:
     """Return the native library bundled beside the installed Python package."""
     candidates: list[Path] = []
@@ -1124,6 +1385,26 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         void_pp,
     ]
     library.generativeqc_system_create.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_system_create_bundled"):
+        library.generativeqc_system_create_bundled.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            void_pp,
+        ]
+        library.generativeqc_system_create_bundled.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_bundled_basis_catalog_sha256"):
+        library.generativeqc_bundled_basis_catalog_sha256.argtypes = []
+        library.generativeqc_bundled_basis_catalog_sha256.restype = ctypes.c_char_p
+    if hasattr(library, "generativeqc_system_create_basis_template_v1"):
+        library.generativeqc_system_create_basis_template_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            ctypes.POINTER(BasisTemplateDescriptor),
+            void_pp,
+        ]
+        library.generativeqc_system_create_basis_template_v1.restype = ctypes.c_int
     if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
         library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
             ctypes.c_void_p,

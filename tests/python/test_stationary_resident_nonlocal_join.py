@@ -336,28 +336,165 @@ def test_join_replays_complete_grid_after_reset() -> None:
     assert events.count(("borrow", 2)) == 6
 
 
-def test_production_driver_uses_shared_pass_accumulators() -> None:
-    driver = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
-    join = (ROOT / "python/generativeqc/_stationary_nonlocal_cuda.py").read_text()
-    assert "resident_nonlocal_geometry(" in driver
-    assert "nonlocal_sources=self.nonlocal_sources" in driver
-    assert "_ResidentNonlocalForceOwner(" in driver
-    assert "seed_from_snapshot(state._source, task)" in join
-    assert join.count("grid.feature_task_device_points(") == 1
-    assert join.count("ao_maps.feature_task(") == 1
-    assert "with grid.feature_task(" not in join
-    assert "except NotImplementedError:" in join
-    assert join.count("nonlocal_owner.collect(") == 1
-    assert "state.grid.owners" not in join
-    assert "geometry_molecular_resident_weights(" in join
-    assert "geometry_external_device_molecular_resident_weights(" in join
-    for retired in (
-        "NonlocalFixedGridPlan",
-        "feature_task_with_features(",
-        "rho[active]",
-        "seeds[:, begin:end]",
-    ):
-        assert retired not in driver
+@pytest.mark.parametrize("secondary_count", [4, 6, 8])
+@pytest.mark.parametrize("fallback", [False, True])
+def test_split_join_uses_two_nonaliasing_leases(
+    secondary_count: int, fallback: bool
+) -> None:
+    counts = {"local": 6, "nonlocal": secondary_count}
+    views = {
+        label: SimpleNamespace(
+            device=0,
+            points=base,
+            weights=base + 1000,
+            atomic_weights=base + 2000,
+            point_count=counts[label],
+        )
+        for label, base in [("local", 10000), ("nonlocal", 20000)]
+    }
+    quadratures = {
+        label: SimpleNamespace(
+            points=np.zeros((n, 3)),
+            weights=np.arange(n) + (0.5 if label == "local" else 10.5),
+        )
+        for label, n in counts.items()
+    }
+    events = []
+    source = SimpleNamespace(
+        nonlocal_grid=quadratures["nonlocal"],
+        nonlocal_atomic_weights=np.ones(secondary_count) * 3,
+        atomic_weights=np.ones(6) * 2,
+        cuda_resident_grid=lambda nonlocal_grid=False: views[
+            "nonlocal" if nonlocal_grid else "local"
+        ],
+    )
+    state = SimpleNamespace(grid=quadratures["local"], _source=source)
+
+    class Grid:
+        device_id = 0
+
+        @contextmanager
+        def feature_task_device_points(
+            self, pointer: int, count: int, *args: typing.Any, **kwargs: typing.Any
+        ) -> typing.Iterator[SimpleNamespace]:
+            label = "nonlocal" if pointer >= 20000 else "local"
+            begin = (pointer - views[label].points) // 24
+            assert begin + count <= counts[label]
+            task = SimpleNamespace(
+                label=label,
+                begin=begin,
+                count=count,
+                alive=True,
+                view=SimpleNamespace(stream=31),
+            )
+            events.append(("borrow", label, begin, count))
+            try:
+                yield task
+            finally:
+                task.alive = False
+
+    class Sources:
+        natom = 2
+        profile_device = False
+
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def check(
+            self,
+            task: SimpleNamespace,
+            begin: int,
+            ppa: int,
+            weights_pointer: int,
+            weights: np.ndarray,
+            raw_pointer: int,
+            host_raw: np.ndarray | None,
+        ) -> None:
+            assert task.alive and task.label == self.label
+            assert ppa == counts[self.label] // 2
+            assert weights_pointer == views[self.label].weights + 8 * begin
+            assert raw_pointer == views[self.label].atomic_weights + 8 * begin
+            np.testing.assert_array_equal(
+                weights, quadratures[self.label].weights[begin : begin + task.count]
+            )
+            events.append(("geometry", self.label, begin))
+
+        def geometry_molecular_resident_weights(
+            self, *args: typing.Any, **kwargs: typing.Any
+        ) -> None:
+            self.check(*args)
+
+        def geometry_external_device_molecular_resident_weights(
+            self, *args: typing.Any
+        ) -> None:
+            self.check(*args[:7])
+
+        def finish_span(self, names: tuple[str, ...]) -> dict[str, np.ndarray]:
+            return {name: np.ones((2, 3)) for name in names}
+
+    class Owner:
+        point_count = secondary_count
+        executed = False
+        collected_points = 0
+
+        def diagnostic(self, **kwargs: typing.Any) -> SimpleNamespace:
+            return SimpleNamespace(
+                executed=self.executed,
+                collected_points=self.collected_points,
+                pair_cache_probes=0,
+                pair_cache_hits=0,
+                pair_evaluations=0,
+            )
+
+        def seed_from_snapshot(
+            self, source: SimpleNamespace, task: SimpleNamespace
+        ) -> None:
+            assert task.label == "nonlocal"
+            if fallback:
+                raise NotImplementedError
+            self.collected_points = secondary_count
+
+        def collect(self, task: SimpleNamespace, begin: int) -> None:
+            assert task.label == "nonlocal"
+            self.collected_points += task.count
+
+        def execute(self) -> SimpleNamespace:
+            assert self.collected_points == secondary_count
+            self.executed = True
+            return SimpleNamespace(
+                pointer=99, stride=secondary_count, stream=31, generation=1
+            )
+
+    parts, _seconds, work = MODULE.resident_split_nonlocal_geometry(
+        grid=Grid(),
+        sources=Sources("local"),
+        nonlocal_sources=Sources("nonlocal"),
+        nonlocal_owner=Owner(),
+        state=state,
+        raw_weights=source.atomic_weights,
+        tile_points=2,
+        ao_count=2,
+        functional=4,
+        ingredients=("rho", "gradient", "tau"),
+    )
+    assert len([e for e in events if e[:2] == ("geometry", "local")]) == 3
+    assert (
+        len([e for e in events if e[:2] == ("geometry", "nonlocal")])
+        == secondary_count // 2
+    )
+    assert work["ao_collocation_point_visits"] == 6 + secondary_count * (
+        2 if fallback else 1
+    )
+    assert work["geometry_point_visits"] == 6 + secondary_count
+    assert set(parts) == {
+        "xc_ao",
+        "xc_grid",
+        "xc_weight",
+        "nuclear",
+        "nonlocal_ao",
+        "nonlocal_grid",
+        "nonlocal_weight",
+    }
 
 
 def test_fresh_owner_is_not_reset_before_first_seed() -> None:

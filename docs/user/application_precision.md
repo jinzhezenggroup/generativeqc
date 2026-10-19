@@ -9,11 +9,14 @@ Every supported native CUDA XC composition uses the same shared Direct-Fock prec
 policy. Admission depends on executable operator capabilities, not a functional
 name, canonical exchange fraction or MethodIR identity. The current restricted,
 all-electron Direct consumer admits **FP32 J and full-range K recurrence** with
-24–768 AOs, 2–96 atoms and shells through d. It uses the requested supported
+at least 24 AOs, at least two atoms and shells through d. There is no fixed AO
+or atom-count upper limit in this precision policy; native dimension validation
+and actual resource admission still apply. It uses the requested supported
 quadrature unchanged; the J/K precision decision does not require a particular grid.
 Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
 `3e-5` Eh/bohr RMS force when requested. This domain is independent of the
-384-AO mixed-gradient limit; neither is a hardware AO limit.
+384-AO mixed-gradient limit, which remains unchanged. Admission is not a
+per-system observable-error certificate; explicit audits retain their contract.
 
 Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
@@ -31,14 +34,22 @@ SR/LR K uses FP32 in both the optional whole-shell consumer and its bounded
 canonical-AO fallback; both report executed mixed recurrence work.
 Post-SCF corrections retain their existing arithmetic and complete-model checks;
 they do not select the recurrence precision of electronic J/K. Cached primitive
-preparation, whole-shell contraction/scatter, XC, eigensolution and global
-accumulation retain FP64. The bounded canonical-AO value fallback uses its
+preparation, whole-shell contraction/scatter, XC point algebra, eigensolution
+and global accumulation retain FP64. Shared XC density and potential matrix
+products use FP32 inner arithmetic in admitted physical Fast-Fock layouts,
+including their existing compact and indexed schedules. Their panels and
+physical outputs remain FP64; potential contributions accumulate across point
+tiles in FP64. Binary column normalization preserves representable density
+tails without clipping inputs or moving their dot products back to FP64.
+Strict refinement and response consumers keep strict products. The bounded
+canonical-AO value fallback uses its
 existing FP32 scalar policy for primitive and contracted values:
 this is **not an all-FP32 calculation**. An admitted phase-local integral source
 uses FP32 recurrence and FP32 storage, with FP64 density products and compensated
 scatter. Its immutable geometry/operator/precision identity prevents strict
-consumers from borrowing it. At most twelve mixed iterations
-precede bounded FP64 physical refinement. At the admitted `1e-4` stationarity
+consumers from borrowing it. Ordinary full-range proposals admit at most twelve
+mixed iterations before bounded FP64 physical refinement; the nonlocal outer
+schedule has the separate bounded proposal budget described below. At the admitted `1e-4` stationarity
 ceiling, consecutive fresh FP64 physical Focks and authenticated final-state
 validation replace an additional fixed-point SCF sweep. Export still constructs
 the current physical-Fock projector and checks its density defect against the
@@ -47,6 +58,14 @@ Final physical checks run in FP64 against the selected relaxed tolerances;
 electron trace, idempotency and canonical diagonalization checks stay strict.
 Relaxed candidates retain FP64 force arithmetic, not the independent
 strict-density mixed-gradient qualification described next.
+Where the complete generated graph and molecular shape already qualify a native
+prepared force consumer, budget-selected Focks reuse that consumer in FP64 rather
+than repeating Python derivative preparation. Admission also checks the actual
+Direct-Fock module capability and finite SCF controls no looser than
+`1e-6` energy, `1e-4` density and `1e-10` screening. Final-state tokens, model
+identity and resource-capacity checks still apply. Unsupported complete graphs
+retain their existing bounded force consumer. Relaxed SCF controls do not
+authorize mixed-gradient arithmetic or its additional resident-grid capacity.
 
 An admitted endpoint reports `qualified_budget_fock`, actual positive FP32
 `coulomb_j` and recurrence work, and consecutive final FP64 Fock checks. Positive
@@ -55,6 +74,10 @@ projection contains K. Separate range K contributes executed recurrence evidence
 VV10 reports mixed pair work only after at least one FP32 pair actually executes,
 and retains strict records when pair-domain fallback is used. Nonlocal exact-key
 reuse includes arithmetic identity, so FP32 results cannot certify strict closure.
+The operator census reports XC matrix products independently of XC point
+algebra: FP32 density products have FP32 reduction, while FP32 potential
+products have FP64 inter-tile reduction. Both retain FP64 storage. A mixed
+matrix product does not imply mixed XC point or analytic-force arithmetic.
 Module qualification is not a
 measured per-call observable error or a
 universal force-error bound. Explicit targets still request a separate complete
@@ -71,15 +94,48 @@ two quartic caches do not overlap. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
+For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
+nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
+at 192 or more AOs, without a fixed upper AO limit. This is not a whitelist of
+measured AO counts or a claim that every larger shape has been benchmarked. Smaller eligible
+owners keep ordinary Fast unless explicitly opted in. Provisional
+initializer and frozen-VV10 iterations evaluate linear operators on the total
+current-minus-anchor density and reconstruct their full matrices in FP64.
+Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
+XC and VV10 still consume total density. Delta iterations do not advance the
+anchor. Final physical checks and Fast's selected convergence tolerances are
+unchanged: this does not promise FP64-mode observable accuracy.
+
+The anchor lease is optional, allocated after mandatory preparation and included
+in the native state capacity. It requires five additional FP64 AO matrices and
+one scalar. Device allocation failure keeps the ordinary Fast path; host
+reservation and non-allocation errors remain explicit failures. At a pressured
+force handoff the idle anchor is retired before optional ERIs; density, stationary
+weights, XC, the final-state token and the warm seed remain valid. Subsequent
+warm and cold solves on that owner use ordinary Fast without reallocating anchors.
+FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
+device chunks and same-owner warm replays retain their incumbent path.
+`GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
+unset selects the default at 192 or more AOs; `1` opts in within the scientific
+eligibility domain, including smaller owners, without forcing unsupported domains.
+There is no universal iteration-count or speed guarantee.
+
 The shared nonlocal initializer and frozen-potential proposal stages also admit
-budget-selected mixed Focks. Provisional residuals never certify the target or
-trigger residual-based precision switching; their iterations still consume the
-same twelve-iteration mixed cap. The initializer reserves its last mixed slot
-for a fresh complete target Fock instead of spending every slot on seed work.
+budget-selected mixed Focks. Provisional residuals never certify the target.
+The initializer retains its eleven-step cap; additional mixed budget belongs to
+the complete target's frozen-potential proposal, capped at sixteen inner steps.
+The shared total proposal cap is at most twenty-nine mixed iterations and always
+reserves two iterations for fresh strict targets when the caller's limit permits.
+Finishing the frozen-potential proposal hands off to strict target evaluation,
+not another mixed pair sweep that would immediately be discarded.
 Strict refinement leaves the frozen/seed stage,
 invalidates nonlinear history and evaluates fresh complete FP64 target Focks.
 Bounded FP32 VV10 pair closures reuse the compiler's rational derivatives and
 energy denominator, rather than losing those optimizations when lowering to float.
+Mixed packets retain each point's immutable FP32 scale eligibility during partner
+rotation; pair-distance eligibility is still checked for every physical pair.
+The domain, FP64 weighted reductions and strict fallback remain unchanged. Strict
+packets use a separate specialization without the mixed admission state.
 
 Arithmetic admission is not a speedup guarantee. Compare complete energy/force
 endpoints against the optimized FP64

@@ -1,4 +1,4 @@
-"""Generated directional response of the existing unpruned Becke grid.
+"""Generated directional response of fixed-topology Becke quadratures.
 
 This is a tiled CPU diagnostic/consumer building block for #163 B and #180,
 not a complete KS gradient/HVP or a native derivative capability. Scalar first
@@ -11,8 +11,8 @@ import typing
 from dataclasses import dataclass
 from hashlib import sha256
 
-import numpy as np
-
+from generativeqc_compiler.common.array_execution import arrays as np
+from generativeqc_compiler.common.array_execution import branch_bytes
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.grid import GridTile, MolecularGrid, checked_int
@@ -144,16 +144,18 @@ def partition_response(
                 db=ds,
             )
             clipped = np.abs(mu) >= 1
-            branch.update(np.asarray(np.sign(mu) * clipped, dtype=np.int8).tobytes())
+            branch.update(
+                branch_bytes(np.asarray(np.sign(mu) * clipped, dtype=np.int8))
+            )
             pair, derivative = pair_program.evaluate(
                 mu=np.clip(mu, -1, 1), dmu=np.where(clipped, 0, dmu)
             )
             outside = (pair < 0) | (pair > 1)
-            branch.update(outside.tobytes())
+            branch.update(branch_bytes(outside))
             derivative = np.where(outside, 0, derivative)
             pair = np.clip(pair, 0, 1)
             branch.update(
-                np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8).tobytes()
+                branch_bytes(np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8))
             )
             for atom, value, tangent in (
                 (a, pair, derivative),
@@ -313,7 +315,9 @@ def partition_mixed_response(
                 lrb=lrs,
             )
             clipped = np.abs(mu) >= 1
-            branch.update(np.asarray(np.sign(mu) * clipped, dtype=np.int8).tobytes())
+            branch.update(
+                branch_bytes(np.asarray(np.sign(mu) * clipped, dtype=np.int8))
+            )
             pair, lpair, rpair, lrpair = pair_program.evaluate(
                 mu=np.clip(mu, -1, 1),
                 lmu=np.where(clipped, 0, lmu),
@@ -321,13 +325,13 @@ def partition_mixed_response(
                 lrmu=np.where(clipped, 0, lrmu),
             )
             outside = (pair < 0) | (pair > 1)
-            branch.update(outside.tobytes())
+            branch.update(branch_bytes(outside))
             lpair = np.where(outside, 0, lpair)
             rpair = np.where(outside, 0, rpair)
             lrpair = np.where(outside, 0, lrpair)
             pair = np.clip(pair, 0, 1)
             branch.update(
-                np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8).tobytes()
+                branch_bytes(np.asarray((pair == 0) + 2 * (pair == 1), dtype=np.int8))
             )
             for atom, value, left, right, mixed in (
                 (a, pair, lpair, rpair, lrpair),

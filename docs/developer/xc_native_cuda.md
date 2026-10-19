@@ -57,6 +57,29 @@ reduction. Existing FP32 contraction schedules keep their original accumulation.
 The point algebra, Vxc matrix and SCF convergence thresholds are unchanged;
 this is an accuracy improvement, not a bitwise-reproducible SCF contract.
 
+### Budget-Fock matrix products
+
+The shared physical density/potential consumer can select FP32 inner products
+independently of point algebra and total summation. Application Fast-Fock
+admission prepares this capability before evaluation; ordinary strict and
+response consumers retain their strict defaults. Selection uses executable
+layout/ingredient capabilities, not functional names. Existing indexed,
+compact and ragged schedules are retained.
+
+Density AO columns use a per-column binary scale before their FP32 dot
+products, restoring that scale into FP64 physical storage afterward. This
+preserves representable tiny tails without a density floor or a hidden strict
+recomputation. Potential panels also retain FP64 storage; their tile-local
+products and sums narrow, while inter-tile scatter and compensated point totals
+remain FP64. The precision census therefore reports separate matrix-product
+reduction signatures rather than inheriting the point evaluator's dtype.
+
+The existing one-sided diagonal schedule is available to both scalar types.
+Its FP32-only operand guard prevents half-panel doubling overflow and otherwise
+retains the original two-legged FP32 contraction; the strict schedule and its
+guard are unchanged. Invalid arithmetic remains an explicit numerical failure,
+not a clipped density or a successful Fast result after strict recovery.
+
 ### Experimental automatic AOT plumbing
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc

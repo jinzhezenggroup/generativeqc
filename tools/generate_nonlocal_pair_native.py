@@ -251,12 +251,20 @@ struct PairValues {
 // FP64. This sufficient domain bounds the FP32 pair's positive denominators
 // and positive factor products away from overflow/underflow. Extreme inputs retain
 // the established strict closure, rather than being clipped or screened out.
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool fp32_pair_scale_domain(
+    double omega, double kappa) noexcept {
+  constexpr double lower = 0x1p-8, upper = 0x1p8;
+  return omega >= lower && omega <= upper && kappa >= lower && kappa <= upper;
+}
+
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool fp32_pair_radius_domain(double r2) noexcept {
+  return (r2 == 0.0 || r2 >= 0x1p-16) && r2 <= 0x1p12;
+}
+
 GENERATIVEQC_NONLOCAL_PAIR_HD inline bool fp32_pair_domain(
     double r2, double wi, double wj, double ki, double kj) noexcept {
-  constexpr double lower = 0x1p-8, upper = 0x1p8;
-  return (r2 == 0.0 || r2 >= 0x1p-16) && r2 <= 0x1p12 && wi >= lower && wi <= upper &&
-         wj >= lower && wj <= upper && ki >= lower && ki <= upper &&
-         kj >= lower && kj <= upper;
+  return fp32_pair_radius_domain(r2) && fp32_pair_scale_domain(wi, ki) &&
+         fp32_pair_scale_domain(wj, kj);
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
@@ -324,11 +332,12 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilate
   return result;
 }
 
+/** Evaluate only after the caller proves fp32_pair_domain for both legs.
+ * Packet owners may retain the immutable scale gates while partners rotate;
+ * the radius gate is still checked independently for every physical pair. */
 template <bool Geometry>
-GENERATIVEQC_NONLOCAL_PAIR_HD inline bool try_pair_values_vv10_bilateral_fp32(
-    double r2, double wi, double wj, double ki, double kj,
-    BilateralPairValues& result) noexcept {
-  if (!fp32_pair_domain(r2, wi, wj, ki, kj)) return false;
+GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilateral_fp32(
+    double r2, double wi, double wj, double ki, double kj) noexcept {
   float phi{}, omega{}, kappa{}, omega_j{}, kappa_j{}, radial{};
   if constexpr (Geometry)
     pair_vv10_bilateral_g1_fp32(static_cast<float>(r2), static_cast<float>(wi),
@@ -338,7 +347,15 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline bool try_pair_values_vv10_bilateral_fp32(
     pair_vv10_bilateral_g0_fp32(static_cast<float>(r2), static_cast<float>(wi),
         static_cast<float>(wj), static_cast<float>(ki), static_cast<float>(kj),
         phi, omega, kappa, omega_j, kappa_j);
-  result = {{phi, omega, kappa, radial}, omega_j, kappa_j};
+  return {{phi, omega, kappa, radial}, omega_j, kappa_j};
+}
+
+template <bool Geometry>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline bool try_pair_values_vv10_bilateral_fp32(
+    double r2, double wi, double wj, double ki, double kj,
+    BilateralPairValues& result) noexcept {
+  if (!fp32_pair_domain(r2, wi, wj, ki, kj)) return false;
+  result = pair_values_vv10_bilateral_fp32<Geometry>(r2, wi, wj, ki, kj);
   return true;
 }
 

@@ -5,10 +5,23 @@
 #include "generativeqc/generativeqc.h"
 #include "methods/generated_method_manifest.hpp"
 #include "methods/method.hpp"
+#include "scf/progressive_hf.hpp"
 
 extern "C" {
 
+/** Private additive HF execution controller. The callback is synchronous and
+ * borrowed for this call only; missing-symbol compatibility stays explicit. */
+GENERATIVEQC_API generativeqc_status
+generativeqc_progressive_hf_run_v1(generativeqc::scf::ProgressiveHFCallback callback, void* state,
+                                   uint64_t* receipt, size_t count) {
+  if (count != 2) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return generativeqc::scf::run_progressive_hf(callback, state, receipt);
+}
+
 uint32_t generativeqc_ks_options_version(void) { return 1; }
+
+/** Independent XC/VV10 quadrature with an unchanged public KS descriptor. */
+GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void) { return 1; }
 
 /** Private Python bridge: distinguish support for the optional size-tagged
  * precision extension from the unchanged scientific KS descriptor version. */

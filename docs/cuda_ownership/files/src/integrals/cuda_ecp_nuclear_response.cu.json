@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/cuda_ecp_nuclear_response.cu",
+  "role": "runtime",
+  "subsystem": "ecp",
+  "reason": "Checked bounded two-grid radial scheduling, linked AO collocation, cached spatial jets and fixed harmonic projections. Compiler-owned constants, radial potential/projector leaves, AO Taylor AD and bilinear VJP/JVP own the mathematics. Native loops apply generated term/displacement/weighted reductions, stage all four channels, check finite/symmetry/coarse-fine admission, count literal source/projection/affine/reduction work and reauthenticate before publication. No host numerical quadrature/contraction, Python, JIT or maintained ECP derivative authority.",
+  "regions": []
+}

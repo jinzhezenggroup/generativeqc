@@ -4,6 +4,68 @@ GenerativeQC performance work must optimize scientific work and data movement, n
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
+## README production comparisons
+
+The README's headline HF/DFT comparison measures the cost of reaching a common
+scientific accuracy target with each engine's best qualified production
+configuration, not the cost of executing an artificially identical amount of
+work. Here, "best" means the fastest configuration among the documented,
+independently qualified candidates that were actually measured for the declared
+workload, not a claim of a global optimum or the fastest individual sample.
+
+Publication requires:
+
+- **A shared scientific task.** Keep geometry, charge, spin, Hamiltonian,
+  functional, orbital basis, method-defined corrections and requested outputs
+  fixed. Declare direct versus density-fitted treatment and auxiliary bases;
+  do not silently compare different approximation contracts. Use the same
+  hardware and declared resource limits. Different execution plans are allowed.
+- **Independent accuracy qualification.** Declare common energy and force gates
+  before choosing configurations. Each engine must pass against an independent
+  reference whose grid convergence is established for the method. Agreement
+  between two coarse-grid calculations is insufficient. Validate analytic forces
+  with the selected moving quadrature, including grid/partition response, and
+  include displaced geometries rather than qualifying only one stationary point.
+- **Independent production configuration.** Let each engine select supported
+  radial/angular grids, pruning, screening, precision and solver settings that
+  meet those gates. Do not disable a reference engine's supported optimization
+  solely because GenerativeQC lacks it. Likewise, do not enable unqualified
+  pruning or a lower precision in GenerativeQC to make the comparison look
+  symmetric. Record exact settings and engine versions for every selected case.
+- **Complete endpoint measurements.** Measure setup plus the first complete
+  energy-and-analytic-force call for cold results. Apply the same declared
+  initialization and reuse policy to both engines, retain all required warm
+  repeats, and report their median and variability rather than selecting the
+  fastest observation. Retain source/binary identities, compilation-cache state,
+  resource settings, SCF iterations and Fock-build counts. Reference densities or
+  oracle work must not silently enter a production endpoint.
+- **Visible grid and nonlocal work.** Record semilocal and nonlocal grid sizes
+  separately, pruning rules, density thresholds and active point-domain sizes.
+  Record actual VV10 pair work when available; otherwise identify any pair-count
+  estimate as an estimate. A smaller constructed grid need not reduce the
+  already density-screened pair domain by the same fraction, and neither ratio
+  establishes a complete-endpoint speedup.
+
+Matched-grid runs remain useful implementation diagnostics and regression
+evidence under `benchmarks/results/`, but are not the headline production
+ranking unless their configurations independently satisfy this policy. Existing
+fixed-grid drivers and renderers do not by themselves establish production
+qualification. Missing references, incomplete endpoints, failed gates and
+timeouts stay visible in retained evidence, not as ranked performance results.
+If selected production configurations have not yet been qualified and measured
+for both engines, mark the README comparison pending rather than relabelling
+historical timings or publishing estimated speedups.
+
+The LDA/PBE pruning qualification entry point is
+`python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
+inside a finite Slurm allocation. It measures fresh complete native and
+GPU4PySCF energy/force owners, with process/artifact caches warmed and without
+cross-sample converged-density reuse. Native uses its versioned policy;
+GPU4PySCF uses its own NWChem-pruned radial/Lebedev grids. Shared dense-reference
+gates, reference-stability margins, raw samples and physical work counts decide
+which measured candidates qualify. This limited water/STO-3G qualification is
+not a general VV10, basis-set or whole-README production ranking.
+
 ## Optimization method taxonomy
 
 Treat performance as a stack of optimization opportunities rather than as a
@@ -289,6 +351,42 @@ With the census enabled, `GENERATIVEQC_DIRECT_FORCE_CENSUS_SPLIT_LOW=1`
 separates the generated low-order and order-six spatial consumers for event
 attribution. This diagnostic repeats candidate enumeration; its measured
 intervals cannot replace the ordinary combined kernel's clean endpoint time.
+
+`GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=relative-reuse` opts into a separate
+order-six consumer that shares primitive, Hermite and Coulomb/Boys preparation
+across AO components and nuclear responses. `relative-density` additionally
+projects density weights into Hermite coefficients before the order-six/seven
+Coulomb contraction. Factorization requires exact full-range pure J and a
+complete AO-Schwarz mask; exchange, bilinear seeds, partial masks, unsupported
+domains and nonfinite reordered intermediates retain the component fallback
+before any force scatter. These selectors are captured during preparation;
+the automatic policy is unchanged, and `spatial-reuse` or `0` selects the
+retained spatial or incumbent route. The census's `density_contraction`
+subrecord counts density terms and Hermite products separately from component
+contractions, including preparation performed by declined attempts. None of
+these invocation counts is a hardware FLOP count.
+
+The independent low-order arithmetic rollback is
+`GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES=0`. Its automatic FP64
+relative-response path shares differentiation of the existing weighted scalar;
+it does not alter screening or the admitted primitive/source counts. See the
+[compiler and fallback contract](../developer/weighted_eri.md#relative-coordinate-force-responses).
+To compare the nuclear rollback with genuinely unset selection while retaining
+the qualified order-six/seven defaults, run:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=01:05:00 env GENERATIVEQC_LIBRARY=/absolute/path/libgenerativeqc.so \
+  python -m benchmarks.direct_force_reuse .artifacts/weighted-responses-96 \
+  --atoms 96 --weighted-responses
+```
+
+This mode removes inherited order-six/seven overrides from both arms, records
+the comparison axis, and preserves each 1800-second population cap, five warm
+calls and five moved-warm calls. Do not combine it with `--baseline` or
+`--candidate`, which compare the separate order-six/seven schedule axis.
+An original-library comparison is additionally required to detect any cold
+module-loading cost hidden by a same-image selector comparison.
 
 Two preparation-time experimental controls retain the incumbent defaults:
 `GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE=8|16|32` changes only the admitted

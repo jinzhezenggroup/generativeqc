@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+stability = ["scipy>=1.10"]
 # Required by the benchmark publication renderer regression; do not skip it.
 test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
@@ -43,6 +44,9 @@ autotune = ["pyscf>=2.8"]
 # `generativeqc[cuda12]`. Linux CUDA wheel providers are base runtime dependencies
 # because NVCC registration constructors need cudart while libgenerativeqc.so loads.
 cuda12 = []
+# CuPy is only needed by the explicit low-level CUDA development owner, not by
+# public native-AOT CUDA Hessian/HVP calls or the Python-free C++ CLI.
+cuda-hessian = ["cupy-cuda12x>=13.6,<14"]
 
 # The public `generativeqc` program is installed as a native wheel/SDK binary.
 # Only explicit compiler/autotune tooling uses a Python console entry point.

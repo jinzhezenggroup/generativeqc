@@ -10,7 +10,7 @@ Internal `src/` headers are not public API declarations.
 
 The [complete symbol reference](native_symbols.md) contains stable targets and
 source-owned contracts for every exported C function, every explicitly declared
-public C++ operation, and all eleven public C++ owner/record types. Record fields
+public C++ operation, and all public C++ owner/record types. Record fields
 are described with their owning type. Generated method identifiers are covered
 by the [capability authorities](capabilities.md), rather than a second copied
 support matrix.
@@ -52,6 +52,34 @@ See [capability sources](capabilities.md).
 | `generativeqc_batch_execute` | Execute the fleet with per-input result statuses rather than assuming every member succeeded |
 | `generativeqc_context_get_last_detail` | Borrow context detail; copy it before another context operation because D4/nonlocal calls may clear it even on success |
 
+For bundled Gaussian bases, `generativeqc_system_create_bundled` accepts an
+atom-only full-size system descriptor, a bundled name and an optional expected
+catalog checksum. `generativeqc_bundled_basis_catalog_sha256` identifies the
+compiled source pack; supplying it as the expected checksum binds external
+metadata to that exact catalog. The C++ `System(context, atoms, basis_name, ...)`
+constructor uses the same expansion and existing normalization/validation owner.
+These paths read no basis files, import no Python and invoke no compiler at
+runtime. They do not broaden any method/backend capability.
+
+For caller-supplied FP64 data, `generativeqc_system_create_basis_template_v1`
+accepts the same atom-only system descriptor and an element-local template
+descriptor. Shared exponents and row-major general contractions are expanded in
+atom, shell and contraction-row order, retaining zero coefficients. Scalar ECP
+terms carry their nonnegative source angular channels; the greatest channel of
+each element becomes the local potential. The compiled catalog, canonical-file
+CLI adapter and Python `BasisSet` adapter share this expansion owner. Existing
+descriptor constructors retain normalization and scientific/backend admission.
+The C++ `System(context, atoms, template_descriptor, ...)` overload provides the
+same copying, synchronous lifetime contract. Array ranges and expanded uint32
+capacities are checked before expansion; no system is published on failure.
+
+Template arrays are numerical inputs, not authenticated canonical JSON or a
+native model/provenance identity. Format/schema and provenance adapters remain
+outside this constructor. The template route preserves the existing bounded
+scalar ECP scope (orbital s/p/d/f, local channel through g, radial powers 0–4);
+method/backend restrictions still apply. Explicit atom-expanded descriptors
+remain supported for existing clients.
+
 Keep the execution context valid for dependent prepared owners, and release each
 handle with its matching `*_destroy` function. Systems own copied atom/basis
 data. Calculations and batches copy those systems during successful preparation,
@@ -71,6 +99,115 @@ supported on a moved-from execution owner.
 failed native status calls. `Error::status()` preserves the status code.
 `Calculation::execute` checks supported properties; omitted forces are
 represented by `std::optional` rather than an all-zero vector.
+
+## Empirical SCF effort policy
+
+`generativeqc_scf_effort_decide_v1` selects an already-defined strict/hold/relax/
+tighten level and detached hysteresis state. It applies the supplied empirical
+diagnostic envelope, joint-domain metadata and inclusive energy/force allowances.
+Strict reproducibility, missing force and near-stationary cleanup precede
+forecasting. Out-of-domain or nonfinite-forecast fallback is an explicit successful
+`STRICT_FALLBACK` decision, not a failed native call or permission to run an
+unqualified model. Integer counts and density-level storage are checked; native
+storage is constant and level work is linear, with no physical SCF/device work.
+
+`generativeqc_scf_effort_verify_v1` independently checks the measured final model,
+strict-level, convergence, energy-change, density and force gates. It reports
+every unmet gate; a model mismatch takes `unverified` precedence. Equality passes
+each numeric gate. This does not replace the caller's actual strict cleanup solve.
+
+Both protocols borrow inputs only for the call and publish detached scalar
+records on success; errors preserve output. Complete ABI headers are required.
+The caller owns calibration provenance, physical identity comparisons and leases;
+neither an empirical estimate nor a caller-supplied identity flag authenticates a
+physical calculation. See [accuracy policy](../user/accuracy.md#native-scf-effort-decisions)
+and the source-owned [symbol contracts](native_symbols.md).
+
+(response-recycle)=
+## CPU response recycle vectors
+
+`generativeqc_response_recycle_*` exposes a context-free CPU retained-vector
+owner through the installed C header, also usable from C++. Creation owns only
+metadata; shape-only capacity queries and whole-consumer admission precede
+dimension-sized allocations. Initialize all complete ABI headers, including
+nested strided-column descriptors. Signed strides locate logical values inside
+declared storage using `origin`; empty columns need no storage.
+
+Projection borrows one RHS and publishes a detached guess on success only.
+Replacement visits old directions, solution, then basis using two-pass MGS and
+the existing norm cutoff. Retained limits can change atomically without copying
+old directions to the caller. Stale generations, invalid extents and insufficient
+workspace do not publish new vectors; failed numerical attempts still contribute
+to allocation telemetry. A diagnostic column-range copy remains valid after
+replacement or destruction. Serialize operations and destruction per owner.
+
+This numeric owner does not retain a physical operator or certify method/model
+compatibility. The caller validates live scientific leases and updates only
+accepted solves. Additional workspace excludes existing retained payload and
+object/provider overhead; telemetry is not a complete physical endpoint receipt.
+See the [response architecture](../developer/response.md#native-cpu-recycle-vectors)
+and each function's [source-owned contract](native_symbols.md).
+
+## Response controller
+
+`generativeqc_response_gmres_workspace_v1` and
+`generativeqc_response_solve_v1` expose the same CPU FP64 restarted GMRES owner
+used by native method consumers. They require no context, Python interpreter,
+compiler or device. The descriptor supplies a synchronous physical linear
+action and an optional, separate linear right-preconditioner callback. These
+callbacks do not define or infer CPHF, CPKS, Lambda or CC equations or symmetry.
+
+The shape-only workspace query validates controls without reading vector or
+callback pointers. Insufficient workspace publishes a diagnostic result without
+dimension-sized solver allocations or callback work. API success means a result
+was published, **not** that the solve converged: inspect `converged`, `reason`
+and the true unpreconditioned residual. The host triangular backsolve rejects
+zero/nonfinite pivots, nonfinite coefficients and nonfinite solution candidates;
+small nonzero pivots alone do not reject a solution. A nonfinite candidate returns
+breakdown with the best finite iterate, without invoking the operator on that
+candidate. The existing absolute Arnoldi/Givens `breakdown_tolerance` checks remain,
+so general operator-scale invariance is not guaranteed. Callback failure propagates
+its status and leaves the result slot null. See the [symbol contracts](native_symbols.md)
+for exact flags, layouts and failure behavior.
+
+`generativeqc_response_result_view_v1_get` borrows immutable solution/history
+arrays and a column-major Arnoldi basis until
+`generativeqc_response_result_destroy`. The basis belongs to the reported best
+iterate; diagnostic collection is opt-in. The move-only C++
+`generativeqc::ResponseResult` wrapper owns the same publication. Inputs and
+callbacks need survive only the synchronous solve, not result inspection.
+Workspace bounds and measured peaks describe solver-owned numeric storage,
+excluding callback/provider allocations and complete-endpoint resource use.
+The [response guide](../developer/response.md#installed-solver-policies) defines
+Python dispatch and the remaining compatibility domains.
+
+## Native basis projection
+
+`generativeqc_basis_projection_query_v1` validates bounded shape/policy metadata
+and returns target coefficient/density counts and a conservative owner-visible
+numeric working capacity. It reads no numerical arrays, allocates no numeric
+workspace and initializes no provider. The caller may query even when its
+workspace budget is insufficient. Input/output query descriptors must be disjoint.
+
+`generativeqc_basis_project_cpu_v1` accepts either occupied source columns or a
+pure integer-occupied HF density, rectangular target/source overlaps and a
+versioned policy. It shares the existing occupied transport and ordinary CPU
+algebra/eigen provider. C++ callers use the installed C header directly; no
+additional public C++ owner class is required. Context accelerator selection
+does not change this explicit host operation or add a device transfer/probe.
+
+Execution refuses an undersized positive workspace limit before numerical-array
+reads; zero is unbounded. Written coefficient/density ranges and the output
+record must be disjoint from inputs and one another. ABI, buffer, admission,
+scientific or provider failure preserves both output arrays and the output
+record. Unused output tails remain unchanged on success. Empty occupied channels
+publish zero density without inventing orbitals. This is a proposed seed, never
+evidence of target SCF convergence or model identity. See the
+[basis projection contract](../user/basis_projection.md).
+
+The capacity covers owner-visible numeric state/results and ordinary eigen
+scratch; caller arrays, metadata, allocator and provider-retained overhead remain
+outside it. It is not complete physical memory authority or an RSS guarantee.
 
 ## Units and failure semantics
 

@@ -11,6 +11,36 @@
 
 namespace generativeqc::dft {
 
+/** Force arithmetic and SCF arithmetic have separate admission contracts.
+ * Budget-converged densities may feed the existing FP64 force consumer; only
+ * strict SCF controls may authorize independently qualified mixed gradients. */
+inline bool admit_stationary_force_controls(double energy, double density, double screening,
+                                            bool budget_stationarity) noexcept {
+  const std::array<double, 3> controls{energy, density, screening};
+  const std::array<double, 3> ceilings = budget_stationarity
+                                             ? std::array<double, 3>{1e-6, 1e-4, 1e-10}
+                                             : std::array<double, 3>{1e-10, 1e-8, 1e-12};
+  for (std::size_t index = 0; index < controls.size(); ++index)
+    if (!std::isfinite(controls[index]) || controls[index] <= 0.0 ||
+        controls[index] > ceilings[index])
+      return false;
+  return true;
+}
+
+inline constexpr unsigned nonlocal_proposal_iteration_limit = 16;
+/** Preserve the incumbent twelve-Fock warmup's eleven initializer steps.
+ * Extra mixed budget belongs to the target's frozen-potential proposal, not
+ * to a more accurate solution of the deliberately incomplete seed operator. */
+inline constexpr unsigned nonlocal_seed_iteration_limit = 11;
+
+/** Bound one initializer, one mixed target, and one frozen-potential proposal.
+ * Two iterations remain reserved for fresh strict targets. The provisional
+ * inner residual selects a precision handoff, never physical convergence. */
+inline unsigned nonlocal_mixed_proposal_limit(unsigned target_limit) noexcept {
+  const auto proposal_limit = nonlocal_seed_iteration_limit + nonlocal_proposal_iteration_limit + 2;
+  return std::min(proposal_limit, target_limit > 2 ? target_limit - 2 : 1U);
+}
+
 /** Stop proposing sub-tolerance density changes before a fresh energy check.
  * This selects a proposal, not convergence or an observable-error certificate.
  * Budget-Fock confirmation uses a residual one order below its 1e-4 physical
@@ -24,14 +54,16 @@ inline double nonlocal_confirmation_tolerance(bool budget_stationarity,
 }
 
 /** Frozen operators propose densities, never accepted physical states.
- * Oversolving that changing fixed-point problem below budget confirmation
- * accuracy adds strict J/K work without certifying the target operator.
- * Explicit strict solves retain their incumbent adaptive inner tolerance. */
+ * Use a bounded fraction of the last full-target AO residual to avoid
+ * oversolving a potential that will change at the next target refresh.
+ * The strict floor still follows tighter caller tolerances; publication
+ * requires fresh full-target checks, not this provisional stopping gate.
+ * Budget-selected proposals retain their separate confirmation policy. */
 inline double nonlocal_inner_tolerance(bool budget_stationarity, double maximum_residual,
                                        double density_tolerance) noexcept {
   if (budget_stationarity) return nonlocal_confirmation_tolerance(true, density_tolerance);
   const double target_gate = std::min(1e-9, density_tolerance);
-  return std::clamp(maximum_residual * 1e-3, std::min(1e-12, target_gate * 0.1), 1e-7);
+  return std::clamp(maximum_residual * 1e-2, std::min(1e-12, target_gate * 0.1), 1e-5);
 }
 
 /** Private size-tagged Python transport. The original public KS descriptor
@@ -43,6 +75,16 @@ struct ApplicationPrecisionKsOptions {
   double energy{}, maximum_force{}, rms_force{};
 };
 static_assert(offsetof(ApplicationPrecisionKsOptions, base) == 0);
+
+/** Private additive transport for an independently prescribed VV10 grid.
+ * The borrowed descriptor contributes only its grid fields; preparation copies
+ * them before returning. Keeping the precision prefix preserves both old ABIs. */
+struct NonlocalGridKsOptions {
+  ApplicationPrecisionKsOptions base;
+  std::uint32_t version{1}, reserved{};
+  const generativeqc_ks_options* grid{};
+};
+static_assert(offsetof(NonlocalGridKsOptions, base) == 0);
 
 /** Recognize the private request without reading past a legacy descriptor.
  * Full allowance validation remains with KS preparation. This early query
@@ -81,17 +123,37 @@ inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t 
 
 /** Budget-Fock candidate domain, independent of mixed-gradient capacity.
  * The prepared owner authenticates the requested model and the shared Direct
- * operator capabilities. A strict physical Fock closes the solve;
+ * operator capabilities and validates actual dimensions and resources. AO and
+ * atom counts have no qualification-window ceiling. A strict physical Fock closes the solve;
  * allowances select provisional arithmetic, not a per-molecule error bound. */
 inline bool admit_application_fock(const std::array<double, 3>& allowances, std::size_t aos,
                                    std::size_t atoms, unsigned maximum_angular, bool restricted,
                                    bool all_electron, bool mixed_fock_available) noexcept {
   for (const auto allowance : allowances)
     if (!std::isfinite(allowance) || allowance < 0.0) return false;
-  return restricted && all_electron && mixed_fock_available && aos >= 24 && aos <= 768 &&
-         atoms >= 2 && atoms <= 96 && maximum_angular <= 2 && allowances[0] >= 1e-5 &&
-         allowances[1] >= 1e-4 && (allowances[2] == 0.0 || allowances[2] >= 3e-5);
+  return restricted && all_electron && mixed_fock_available && aos >= 24 && atoms >= 2 &&
+         maximum_angular <= 2 && allowances[0] >= 1e-5 && allowances[1] >= 1e-4 &&
+         (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
+
+/** Fixed FP64 anchors are qualified only for the relaxed Fast WB97M-V outer
+ * solve. The caller supplies already-admitted Fock/shape capabilities and an
+ * exact full/range Direct provider; this never admits new mixed arithmetic.
+ * Public resource-ledger and device-chunk owners keep their incumbent plan. */
+inline bool admit_fast_anchor_delta(bool budget_fock, bool budget_stationarity,
+                                    std::uint32_t functional, bool exact_direct, unsigned spins,
+                                    bool vv10, bool resource_ledger,
+                                    unsigned chunk_width) noexcept {
+  return budget_fock && budget_stationarity &&
+         functional == semilocal_family_code(SemilocalFamily::Wb97mv) && exact_direct &&
+         spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
+}
+
+/** Profitability is separate from scientific eligibility and resource admission.
+ * Retain the lower floor established by complete endpoints, not an upper bound
+ * tied to measured sizes. Smaller eligible owners retain opt-in; membership is
+ * no per-call speed or observable-error guarantee. */
+inline bool default_fast_anchor_delta(std::size_t aos) noexcept { return aos >= 192; }
 
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for

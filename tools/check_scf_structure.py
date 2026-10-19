@@ -38,6 +38,9 @@ ALLOWED = {
 # Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
+    # The immutable DF basis lease is exported only by its actual source owner;
+    # it does not authorize dependencies on KS consumers or mutable plan state.
+    "scf/cuda/df_source.cpp": ("scf/cuda_density_fitting_basis.hpp",),
     "scf/initial_guess/huckel.cpp": (
         "molecule/basis.hpp",
         "scf/fock_prepared.hpp",
@@ -325,6 +328,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
+    "molecule/basis.hpp",
     "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
@@ -341,6 +345,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/queue_plan.hpp",
     "scf/direct_task_layout.hpp",
+    "scf/md_transform_layout.hpp",
     "scf/aot_shell_registry.hpp",
     "scf/cuda/direct_jk_kernels.hpp",
     "scf/cuda/direct_md_j.hpp",
@@ -352,6 +357,8 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda_direct_jk_device.hpp",
     "runtime/",
 )
+CUDA_MODULES["md_transform_metadata"] = ("scf/md_transform_layout.hpp",)
+CUDA_ALLOWED["md_transform_metadata"] = ()
 CUDA_MODULES["cuda_one_electron_export"] = (
     "one_electron_export",
     "one_electron_export_batch",
@@ -671,6 +678,9 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/direct_bounded_pages.hpp",
     "scf/cuda/direct_bounded_tasks.hpp",
     "scf/cuda/direct_constants.hpp",
+    # The host driver captures shared weighted-force arithmetic at preparation;
+    # this declaration surface does not expose recurrence implementations.
+    "scf/cuda/direct_coulomb.hpp",
     "scf/cuda/direct_angular_fock.hpp",
     "scf/cuda/direct_angular_force.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
