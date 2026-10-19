@@ -17,13 +17,37 @@ from typing import Any
 
 try:
     from benchmarks._retention import raw_output_path
-    from benchmarks.cc_tile_pipeline_campaign import WORK, check_identity, check_science
+    from benchmarks.cc_tile_environment import (
+        canonical_hash,
+        validate_child,
+        validate_execution,
+        validate_libraries,
+        validate_observation,
+    )
+    from benchmarks.cc_tile_pipeline_campaign import (
+        CLOCK_SCHEMA,
+        WORK,
+        check_identity,
+        check_science,
+    )
 except ModuleNotFoundError:
     from _retention import raw_output_path
-    from cc_tile_pipeline_campaign import WORK, check_identity, check_science
+    from cc_tile_environment import (
+        canonical_hash,
+        validate_child,
+        validate_execution,
+        validate_libraries,
+        validate_observation,
+    )
+    from cc_tile_pipeline_campaign import (
+        CLOCK_SCHEMA,
+        WORK,
+        check_identity,
+        check_science,
+    )
 
-SCHEMA = "generativeqc.cc-tile-campaign.v1"
-REPORT_SCHEMA = "generativeqc.cc-tile-campaign-report.v1"
+SCHEMA = "generativeqc.cc-tile-campaign.v2"
+REPORT_SCHEMA = "generativeqc.cc-tile-campaign-report.v2"
 
 
 def checksum(path: Path) -> str:
@@ -37,6 +61,8 @@ def read_run(directory: Path) -> dict[str, Any]:
     receipt = json.loads(receipt_path.read_text())
     if receipt.get("schema") != SCHEMA:
         raise ValueError("unsupported campaign receipt schema")
+    if receipt.get("clock_schema") != CLOCK_SCHEMA:
+        raise ValueError("unsupported child wall measurement contract")
     identity = receipt.get("identity")
     check_identity(identity)
     artifacts = receipt.get("artifacts")
@@ -57,6 +83,69 @@ def read_run(directory: Path) -> dict[str, Any]:
             path
         ) != expected.get("sha256"):
             raise ValueError(f"campaign artifact mismatch: {name}")
+    for name in (
+        "execution_plan.json",
+        "child_environment.json",
+        "cc_tile_child.py",
+        "cc_tile_environment.py",
+    ):
+        if name not in artifacts:
+            raise ValueError("actual child environment/launcher artifacts required")
+    execution = receipt.get("execution_environment")
+    actual_environment = validate_execution(execution, identity["environment_sha256"])
+    if any(
+        actual_environment.get(key) != "1"
+        for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+    ):
+        raise ValueError("one numerical-library thread required")
+    if canonical_hash(execution) != receipt.get("execution_environment_sha256"):
+        raise ValueError("execution environment hash mismatch")
+    command = receipt.get("command")
+    if (
+        not isinstance(command, list)
+        or len(command) < 3
+        or any(not isinstance(value, str) for value in command)
+    ):
+        raise ValueError("retained native argv required")
+    validate_observation(
+        execution,
+        identity["observation_policy"],
+        identity["observation_policy_sha256"],
+        receipt.get("diagnostic"),
+        str(Path(command[2]).parent),
+    )
+    plan = json.loads((directory / "execution_plan.json").read_text())
+    if plan != {
+        "argv": receipt.get("command"),
+        "environment": execution,
+        "profile_sha256": identity["environment_sha256"],
+    }:
+        raise ValueError("execution plan differs from frozen receipt")
+    child = json.loads((directory / "child_environment.json").read_text())
+    validate_child(child, plan, receipt.get("native_pid"))
+    if receipt.get("launcher_sha256") != {
+        name: checksum(directory / name)
+        for name in ("cc_tile_child.py", "cc_tile_environment.py")
+    }:
+        raise ValueError("retained launcher identity mismatch")
+    if receipt.get("child_environment_verified") is not True:
+        raise ValueError("actual child inheritance was not verified")
+    bindings = receipt.get("native_bindings")
+    libraries = receipt.get("loader_libraries")
+    validate_libraries(libraries)
+    if (
+        not isinstance(bindings, dict)
+        or not isinstance(libraries, dict)
+        or not libraries
+        or bindings.get("libraries") != libraries
+    ):
+        raise ValueError("actual mapped library binding required")
+    if not any(
+        item.get("sha256") == identity["library_sha256"] for item in libraries.values()
+    ):
+        raise ValueError("mapped native library does not match identity")
+    if bindings.get("executable") != receipt["command"][0]:
+        raise ValueError("actual native executable differs from planned argv")
     if (
         receipt.get("outcome") != "PASS"
         or receipt.get("binary_identity_unchanged") is not True
@@ -123,6 +212,19 @@ def compare_runs(directories: list[Path]) -> dict[str, Any]:
     work = clean[0]["receipt"]["work"]
     if any(run["receipt"]["work"] != work for run in runs):
         raise ValueError("semantic work changed across clean/diagnostic runs")
+    provider_hashes = {
+        name: item["sha256"]
+        for name, item in clean[0]["receipt"]["loader_libraries"].items()
+    }
+    if any(
+        {
+            name: item["sha256"]
+            for name, item in run["receipt"]["loader_libraries"].items()
+        }
+        != provider_hashes
+        for run in runs
+    ):
+        raise ValueError("provider bindings changed across campaign runs")
     energy_keys = ("total_energy", "triples_energy")
     energy_bits = {
         key: [struct.pack("d", run["endpoint"][key]).hex() for run in runs]
@@ -139,6 +241,7 @@ def compare_runs(directories: list[Path]) -> dict[str, Any]:
         "clean_process_wall_median_ns": statistics.median(clean_wall),
         "diagnostic_process_wall_ns": diagnostic[0]["receipt"]["process_wall_ns"],
         "diagnostic_wall_used_for_timing": False,
+        "clock_schema": CLOCK_SCHEMA,
         "semantic_work": work,
         "energy_bits": {key: values[0] for key, values in energy_bits.items()},
         "science": [run["receipt"]["science"] for run in runs],
@@ -146,6 +249,12 @@ def compare_runs(directories: list[Path]) -> dict[str, Any]:
             {
                 "directory": run["directory"],
                 "diagnostic": run["receipt"]["diagnostic"],
+                "execution_environment_sha256": run["receipt"][
+                    "execution_environment_sha256"
+                ],
+                "native_bindings_sha256": canonical_hash(
+                    run["receipt"]["native_bindings"]
+                ),
                 "receipt_sha256": checksum(Path(run["directory"]) / "receipt.json"),
             }
             for run in runs

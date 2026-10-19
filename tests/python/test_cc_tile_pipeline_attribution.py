@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import json
+import os
 import random
 import sqlite3
 import subprocess
@@ -15,6 +16,14 @@ from typing import Any, Self
 import pytest
 
 from benchmarks import cc_tile_pipeline_campaign as campaign
+from benchmarks.cc_tile_environment import (
+    CHILD_SCHEMA,
+    atomic_json,
+    canonical_hash,
+    execution_environment,
+    observation_policy,
+    profile_environment,
+)
 from benchmarks.cc_tile_pipeline_attribution import (
     KINDS,
     SCHEMA,
@@ -27,19 +36,66 @@ from benchmarks.cc_tile_pipeline_campaign import WORK, check_science
 from benchmarks.cc_tile_pipeline_campaign import main as campaign_main
 from benchmarks.cc_tile_pipeline_campaign_report import compare_runs
 
+CAMPAIGN_ARTIFACTS = {
+    "native.log",
+    "endpoint.json",
+    "oracle.json",
+    "execution_plan.json",
+    "child_environment.json",
+    "cc_tile_child.py",
+    "cc_tile_environment.py",
+}
+
+
+def fake_endpoint(command: list[str], options: dict, endpoint: bytes) -> None:
+    """Model the documented launcher/child evidence at the subprocess boundary."""
+    plan = json.loads(Path(command[-2]).read_text())
+    environment = execution_environment(options["env"])
+    atomic_json(
+        Path(command[-1]),
+        {
+            "schema": CHILD_SCHEMA,
+            "status": "PREPARED_FOR_EXEC",
+            "pid": 1765,
+            "argv": plan["argv"],
+            "environment": environment,
+            "environment_sha256": canonical_hash(environment),
+        },
+    )
+    Path(plan["argv"][2]).write_bytes(endpoint)
+
+
+def mock_native_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        campaign,
+        "observe_native",
+        lambda pid, executable, libraries: {
+            "executable": str(executable.resolve()),
+            "libraries": libraries,
+        },
+    )
+
 
 def fixture() -> tuple[dict, dict]:
+    policy = observation_policy(
+        execution_environment({})["observation"],
+        execution_environment({})["observation"],
+    )
     identity = {
         "source_commit": "a" * 40,
         "library_sha256": "b" * 64,
         "executable_sha256": "c" * 64,
         "input_sha256": "d" * 64,
-        "environment_sha256": "e" * 64,
+        "environment_sha256": canonical_hash(profile_environment({})),
+        "environment_profile": profile_environment({}),
         "device_uuid": "GPU-test",
         "run_id": "hand-clock",
+        "observation_policy": policy,
+        "observation_policy_sha256": canonical_hash(policy),
     }
     window = {"start_ns": 0, "end_ns": 30, "wall_ns": 30}
     trace = {
+        "diagnostic": True,
         "schema": SCHEMA,
         "identity": identity,
         "endpoint": window,
@@ -53,11 +109,16 @@ def fixture() -> tuple[dict, dict]:
             "profiler_version": "fixture-v1",
         },
         "events": [],
+        "execution_environment": execution_environment({}),
+        "execution_environment_sha256": canonical_hash(execution_environment({})),
     }
     receipt = {
+        "diagnostic": True,
         "schema": SCHEMA,
         "identity": deepcopy(identity),
         "endpoint": deepcopy(window),
+        "execution_environment": execution_environment({}),
+        "execution_environment_sha256": canonical_hash(execution_environment({})),
     }
     return trace, receipt
 
@@ -456,17 +517,83 @@ def campaign_run(tmp_path: Path, name: str, *, diagnostic: bool) -> Path:
     (directory / "endpoint.json").write_text(json.dumps(endpoint))
     (directory / "oracle.json").write_text(json.dumps(oracle))
     (directory / "native.log").write_text("retained\n")
+    identity = fixture()[0]["identity"]
+    identity["oracle_sha256"] = checksum(directory / "oracle.json")
+    identity["oracle_input_sha256"] = identity["input_sha256"]
+    environment = execution_environment(
+        {
+            key: "1"
+            for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+        }
+    )
+    identity["environment_profile"] = environment["profile"]
+    identity["observation_policy"] = observation_policy(
+        environment["observation"], environment["observation"]
+    )
+    identity["observation_policy_sha256"] = canonical_hash(
+        identity["observation_policy"]
+    )
+    identity["environment_sha256"] = canonical_hash(environment["profile"])
+    command = [
+        "/native",
+        "/input",
+        str(directory / "endpoint.json"),
+        *campaign.CONTROLS,
+    ]
+    plan = {
+        "argv": command,
+        "environment": environment,
+        "profile_sha256": identity["environment_sha256"],
+    }
+    atomic_json(directory / "execution_plan.json", plan)
+    atomic_json(
+        directory / "child_environment.json",
+        {
+            "schema": CHILD_SCHEMA,
+            "status": "PREPARED_FOR_EXEC",
+            "pid": 1765,
+            "argv": command,
+            "environment": environment,
+            "environment_sha256": canonical_hash(environment),
+        },
+    )
+    for script in ("cc_tile_child.py", "cc_tile_environment.py"):
+        (directory / script).write_bytes(
+            Path(campaign.__file__).with_name(script).read_bytes()
+        )
+    libraries = {
+        "libgenerativeqc.so.0": {
+            "path": "/mock-library",
+            "sha256": identity["library_sha256"],
+            "file_identity": {
+                "st_dev": 0,
+                "st_ino": 1,
+                "st_size": 4,
+                "st_mtime_ns": 1,
+                "st_ctime_ns": 1,
+            },
+        }
+    }
     artifacts = {
         path.name: {"sha256": checksum(path), "size": path.stat().st_size}
         for path in directory.iterdir()
     }
-    identity = fixture()[0]["identity"]
-    identity["oracle_sha256"] = checksum(directory / "oracle.json")
-    identity["oracle_input_sha256"] = identity["input_sha256"]
     receipt = {
-        "schema": "generativeqc.cc-tile-campaign.v1",
+        "schema": "generativeqc.cc-tile-campaign.v2",
+        "clock_schema": campaign.CLOCK_SCHEMA,
         "identity": identity,
         "diagnostic": diagnostic,
+        "command": command,
+        "native_pid": 1765,
+        "execution_environment": environment,
+        "execution_environment_sha256": canonical_hash(environment),
+        "child_environment_verified": True,
+        "loader_libraries": libraries,
+        "native_bindings": {"executable": "/native", "libraries": libraries},
+        "launcher_sha256": {
+            script: checksum(directory / script)
+            for script in ("cc_tile_child.py", "cc_tile_environment.py")
+        },
         "outcome": "PASS",
         "exit_code": 0,
         "binary_identity_unchanged": True,
@@ -558,9 +685,13 @@ def test_campaign_runner_retains_frozen_oracle_and_rejects_changed_inputs(
     for key, path in paths.items():
         identity[f"{key}_sha256"] = checksum(path)
     identity["oracle_input_sha256"] = identity["input_sha256"]
-    identity["environment_sha256"] = hashlib.sha256(
-        json.dumps(environment, sort_keys=True).encode()
-    ).hexdigest()
+    identity["environment_profile"] = profile_environment(os.environ)
+    observation = execution_environment(os.environ)["observation"]
+    identity["observation_policy"] = observation_policy(observation, observation)
+    identity["observation_policy_sha256"] = canonical_hash(
+        identity["observation_policy"]
+    )
+    identity["environment_sha256"] = canonical_hash(identity["environment_profile"])
     identity_path = tmp_path / "identity.json"
     identity_path.write_text(json.dumps(identity))
     output = tmp_path / "run"
@@ -590,7 +721,7 @@ def test_campaign_runner_retains_frozen_oracle_and_rejects_changed_inputs(
         pid = 1765
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
 
         def wait(self, timeout: int) -> int:
             if changed:
@@ -598,6 +729,7 @@ def test_campaign_runner_retains_frozen_oracle_and_rejects_changed_inputs(
             return 0
 
     monkeypatch.setattr("benchmarks.cc_tile_pipeline_campaign.subprocess.Popen", Native)
+    mock_native_bindings(monkeypatch)
     if changed:
         with pytest.raises(ValueError, match="changed during endpoint"):
             campaign_main()
@@ -621,6 +753,7 @@ def campaign_invocation(
 ) -> tuple[dict[str, Path], Path, bytes]:
     """Tiny frozen inputs; endpoint bytes have an independent science fixture."""
     fixture_run = campaign_run(tmp_path, "fixture", diagnostic=False)
+    mock_native_bindings(monkeypatch)
     paths = {"oracle": fixture_run / "oracle.json"}
     for key in ("input", "library", "executable"):
         paths[key] = tmp_path / key
@@ -638,9 +771,13 @@ def campaign_invocation(
     for key, path in paths.items():
         identity[f"{key}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     identity["oracle_input_sha256"] = identity["input_sha256"]
-    identity["environment_sha256"] = hashlib.sha256(
-        json.dumps(environment, sort_keys=True).encode()
-    ).hexdigest()
+    identity["environment_profile"] = profile_environment(os.environ)
+    observation = execution_environment(os.environ)["observation"]
+    identity["observation_policy"] = observation_policy(observation, observation)
+    identity["observation_policy_sha256"] = canonical_hash(
+        identity["observation_policy"]
+    )
+    identity["environment_sha256"] = canonical_hash(identity["environment_profile"])
     identity_path = tmp_path / "identity.json"
     identity_path.write_text(json.dumps(identity))
     output = tmp_path / "run"
@@ -685,7 +822,7 @@ def test_campaign_interrupt_reaps_only_owned_child(
 
     class Native:
         def __init__(self, command: list[str], **kwargs: Any) -> None:
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             self.child = real_popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"], **kwargs
             )
@@ -716,11 +853,7 @@ def test_campaign_interrupt_reaps_only_owned_child(
         )
         assert receipt["failure"]["type"] == failure_type.__name__
         assert receipt["elapsed_wall_ns"] > 0
-        assert set(receipt["artifacts"]) == {
-            "native.log",
-            "endpoint.json",
-            "oracle.json",
-        }
+        assert set(receipt["artifacts"]) == CAMPAIGN_ARTIFACTS
         for name, artifact in receipt["artifacts"].items():
             raw = (output / name).read_bytes()
             assert artifact == {
@@ -777,7 +910,7 @@ def test_campaign_finalization_retains_failure_and_remaining_inventory(
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
             nonlocal alive
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             alive = True
 
         def wait(self, timeout: int | None = None) -> int:
@@ -836,7 +969,7 @@ def test_campaign_cleanup_failures_preserve_original_and_attempt_bounded_reap(
         pid = 1765
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             self.failed = False
 
         def wait(self, timeout: int | None = None) -> int:
@@ -862,7 +995,7 @@ def test_campaign_cleanup_failures_preserve_original_and_attempt_bounded_reap(
         "OSError",
         "TimeoutExpired",
     }
-    assert {"endpoint.json", "oracle.json", "native.log"} == set(receipt["artifacts"])
+    assert CAMPAIGN_ARTIFACTS == set(receipt["artifacts"])
 
 
 @pytest.mark.parametrize("wait_fails", [False, True])
@@ -883,7 +1016,7 @@ def test_campaign_receipt_io_failure_preserves_original_and_durable_receipt(
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
             nonlocal alive
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             alive = True
 
         def wait(self, timeout: int | None = None) -> int:
@@ -969,7 +1102,7 @@ def test_campaign_diagnostic_close_preserves_wait_failure_and_teardown_scope(
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
             nonlocal alive
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             alive = True
 
         def wait(self, timeout: int | None = None) -> int:
@@ -1011,7 +1144,7 @@ def test_campaign_changed_identity_does_not_replace_wait_failure(
         pid = 1765
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             self.finished = False
 
         def wait(self, timeout: int | None = None) -> int:
@@ -1032,7 +1165,7 @@ def test_campaign_changed_identity_does_not_replace_wait_failure(
     assert receipt["input_identity_unchanged"] is False
     assert receipt["binary_identity_unchanged"] is True
     assert "finalization_errors" not in receipt
-    assert {"endpoint.json", "oracle.json", "native.log"} == set(receipt["artifacts"])
+    assert CAMPAIGN_ARTIFACTS == set(receipt["artifacts"])
 
 
 @pytest.mark.parametrize(
@@ -1203,7 +1336,7 @@ def test_campaign_artifact_inventory_fails_closed(
         pid = 1765
 
         def __init__(self, command: list[str], **kwargs: Any) -> None:
-            Path(command[2]).write_bytes(endpoint)
+            fake_endpoint(command, kwargs, endpoint)
             self.killed = False
 
         def wait(self, timeout: int | None = None) -> int:
@@ -1233,3 +1366,448 @@ def test_campaign_artifact_inventory_fails_closed(
     for artifact_name, metadata in receipt["artifacts"].items():
         raw = (output / artifact_name).read_bytes()
         assert metadata == {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+
+
+def malformed_profile(profile: dict, defect: str) -> dict:
+    changed = deepcopy(profile)
+    values = changed["variables"]
+    if defect == "missing":
+        del values["CUBLAS_WORKSPACE_CONFIG"]
+    elif defect == "presence":
+        values["CUBLAS_WORKSPACE_CONFIG"]["present"] = 1
+    elif defect == "absent-empty":
+        values["CUBLAS_WORKSPACE_CONFIG"] = {"present": False, "value": ""}
+    elif defect == "present-null":
+        values["CUBLAS_WORKSPACE_CONFIG"] = {"present": True, "value": None}
+    else:
+        values["CUBLAS_WORKSPACE_CONFIG"]["unknown"] = "extra"
+    return changed
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing", "presence", "absent-empty", "present-null", "extra"]
+)
+def test_attribution_rejects_equal_malformed_environment_with_refreshed_hashes(
+    defect: str,
+) -> None:
+    trace, receipt = fixture()
+    for packet in (trace, receipt):
+        profile = malformed_profile(packet["identity"]["environment_profile"], defect)
+        packet["identity"]["environment_profile"] = profile
+        packet["identity"]["environment_sha256"] = canonical_hash(profile)
+        packet["execution_environment"]["profile"] = deepcopy(profile)
+        packet["execution_environment_sha256"] = canonical_hash(
+            packet["execution_environment"]
+        )
+    with pytest.raises(ValueError):
+        summarize(trace, receipt)
+
+
+@pytest.mark.parametrize("side", [0, 1])
+def test_attribution_rejects_missing_actual_execution_environment(side: int) -> None:
+    packets = fixture()
+    del packets[side]["execution_environment"]
+    with pytest.raises(ValueError):
+        summarize(*packets)
+
+
+def rewrite_execution(directory: Path, receipt: dict, execution: dict) -> None:
+    receipt["execution_environment"] = execution
+    receipt["execution_environment_sha256"] = canonical_hash(execution)
+    for name in ("execution_plan.json", "child_environment.json"):
+        item = json.loads((directory / name).read_text())
+        item["environment"] = execution
+        if name == "child_environment.json":
+            item["environment_sha256"] = canonical_hash(execution)
+        atomic_json(directory / name, item)
+        receipt["artifacts"][name] = {
+            "sha256": checksum(directory / name),
+            "size": (directory / name).stat().st_size,
+        }
+    atomic_json(directory / "receipt.json", receipt)
+
+
+def test_two_clean_samples_cannot_mix_logging_controls(tmp_path: Path) -> None:
+    runs = [
+        campaign_run(tmp_path, name, diagnostic=name == "diagnostic")
+        for name in ["a", "bb", "diagnostic"]
+    ]
+    policy = json.loads((runs[0] / "receipt.json").read_text())["identity"][
+        "observation_policy"
+    ]
+    policy["clean"]["CUBLAS_LOGINFO_DBG"] = {"present": True, "value": "0"}
+    for i, directory in enumerate(runs):
+        receipt = json.loads((directory / "receipt.json").read_text())
+        receipt["identity"]["observation_policy"] = policy
+        receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+        execution = receipt["execution_environment"]
+        if i < 2:
+            execution["observation"]["CUBLAS_LOGINFO_DBG"] = {
+                "present": True,
+                "value": str(i),
+            }
+        rewrite_execution(directory, receipt, execution)
+    with pytest.raises(ValueError, match="observation controls"):
+        compare_runs(runs)
+
+
+def test_clean_preload_is_rejected_even_if_declared_and_rehashed(
+    tmp_path: Path,
+) -> None:
+    directory = campaign_run(tmp_path, "clean", diagnostic=False)
+    receipt = json.loads((directory / "receipt.json").read_text())
+    policy = receipt["identity"]["observation_policy"]
+    policy["clean"]["LD_PRELOAD"] = {"present": True, "value": "/not-clean.so"}
+    receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+    receipt["execution_environment"]["observation"]["LD_PRELOAD"] = policy["clean"][
+        "LD_PRELOAD"
+    ]
+    rewrite_execution(directory, receipt, receipt["execution_environment"])
+    from benchmarks.cc_tile_pipeline_campaign_report import read_run
+
+    with pytest.raises(ValueError, match="clean samples"):
+        read_run(directory)
+
+
+def test_declared_run_specific_log_paths_preserve_clean_recipe(tmp_path: Path) -> None:
+    runs = [
+        campaign_run(tmp_path, name, diagnostic=name == "diagnostic")
+        for name in ["a", "bb", "diagnostic"]
+    ]
+    policy = json.loads((runs[0] / "receipt.json").read_text())["identity"][
+        "observation_policy"
+    ]
+    for role in ("clean", "diagnostic"):
+        policy[role]["CUSOLVER_LOG_FILE"] = {
+            "present": True,
+            "value": "$RUN_DIR/cusolver.log",
+        }
+    for directory in runs:
+        receipt = json.loads((directory / "receipt.json").read_text())
+        receipt["identity"]["observation_policy"] = policy
+        receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+        receipt["execution_environment"]["observation"]["CUSOLVER_LOG_FILE"] = {
+            "present": True,
+            "value": str(directory) + "/cusolver.log",
+        }
+        rewrite_execution(directory, receipt, receipt["execution_environment"])
+    assert compare_runs(runs)["status"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing", "presence", "absent-empty", "present-null", "extra"]
+)
+def test_campaign_reader_rejects_three_equal_malformed_environment_profiles(
+    tmp_path: Path, defect: str
+) -> None:
+    runs = [
+        campaign_run(tmp_path, name, diagnostic=name == "diagnostic")
+        for name in ["a", "bb", "diagnostic"]
+    ]
+    for directory in runs:
+        receipt_path = directory / "receipt.json"
+        receipt = json.loads(receipt_path.read_text())
+        profile = malformed_profile(receipt["identity"]["environment_profile"], defect)
+        receipt["identity"]["environment_profile"] = profile
+        receipt["identity"]["environment_sha256"] = canonical_hash(profile)
+        receipt_path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError):
+        compare_runs(runs)
+
+
+def test_workspace_absent_and_empty_have_distinct_frozen_identities() -> None:
+    absent = profile_environment({})
+    empty = profile_environment({"CUBLAS_WORKSPACE_CONFIG": ""})
+    assert canonical_hash(absent) != canonical_hash(empty)
+    assert absent["variables"]["CUBLAS_WORKSPACE_CONFIG"] == {
+        "present": False,
+        "value": None,
+    }
+    assert empty["variables"]["CUBLAS_WORKSPACE_CONFIG"] == {
+        "present": True,
+        "value": "",
+    }
+
+
+def test_campaign_observer_controls_are_separate_and_retained(tmp_path: Path) -> None:
+    runs = [
+        campaign_run(tmp_path, name, diagnostic=name == "diagnostic")
+        for name in ["a", "bb", "diagnostic"]
+    ]
+    directory = runs[-1]
+    receipt = json.loads((directory / "receipt.json").read_text())
+    execution = receipt["execution_environment"]
+    execution["observation"]["LD_PRELOAD"] = {
+        "present": True,
+        "value": "/qualified-observer.so",
+    }
+    policy = deepcopy(receipt["identity"]["observation_policy"])
+    policy["diagnostic"] = deepcopy(execution["observation"])
+    for other in runs[:-1]:
+        clean_receipt = json.loads((other / "receipt.json").read_text())
+        clean_receipt["identity"]["observation_policy"] = policy
+        clean_receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+        atomic_json(other / "receipt.json", clean_receipt)
+    receipt["identity"]["observation_policy"] = policy
+    receipt["identity"]["observation_policy_sha256"] = canonical_hash(policy)
+    receipt["execution_environment_sha256"] = canonical_hash(execution)
+    plan = json.loads((directory / "execution_plan.json").read_text())
+    plan["environment"] = execution
+    child = json.loads((directory / "child_environment.json").read_text())
+    child["environment"] = execution
+    child["environment_sha256"] = canonical_hash(execution)
+    atomic_json(directory / "execution_plan.json", plan)
+    atomic_json(directory / "child_environment.json", child)
+    for name in ["execution_plan.json", "child_environment.json"]:
+        receipt["artifacts"][name] = {
+            "sha256": checksum(directory / name),
+            "size": (directory / name).stat().st_size,
+        }
+    atomic_json(directory / "receipt.json", receipt)
+    assert compare_runs(runs)["status"] == "PASS"
+    assert (
+        json.loads((directory / "child_environment.json").read_text())["environment"][
+            "observation"
+        ]["LD_PRELOAD"]["value"]
+        == "/qualified-observer.so"
+    )
+
+
+def test_campaign_parent_change_after_snapshot_cannot_change_child_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", "changed-parent")
+            fake_endpoint(command, kwargs, endpoint)
+
+        def wait(self, timeout: int) -> int:
+            return 0
+
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    assert campaign_main() == 0
+    receipt = json.loads((output / "receipt.json").read_text())
+    child = json.loads((output / "child_environment.json").read_text())
+    assert child["environment"] == receipt["execution_environment"]
+
+
+def test_campaign_child_override_fails_even_with_refreshed_child_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            changed = dict(kwargs)
+            changed["env"] = {
+                **kwargs["env"],
+                "CUBLAS_WORKSPACE_CONFIG": "changed-child",
+            }
+            fake_endpoint(command, changed, endpoint)
+
+        def wait(self, timeout: int) -> int:
+            return 0
+
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    with pytest.raises(ValueError):
+        campaign_main()
+    assert json.loads((output / "receipt.json").read_text())["outcome"] == "FAIL"
+
+
+@pytest.mark.parametrize(
+    ("child_pid", "parent_pid"), [(1, True), (True, 1), (0, 0), (-1, -1)]
+)
+def test_child_binding_requires_two_positive_integer_pids(
+    child_pid: object, parent_pid: object
+) -> None:
+    from benchmarks.cc_tile_environment import validate_child
+
+    execution = execution_environment({})
+    plan = {
+        "argv": ["/native"],
+        "environment": execution,
+        "profile_sha256": canonical_hash(execution["profile"]),
+    }
+    child = {
+        "schema": CHILD_SCHEMA,
+        "status": "PREPARED_FOR_EXEC",
+        "pid": child_pid,
+        "argv": plan["argv"],
+        "environment": execution,
+        "environment_sha256": canonical_hash(execution),
+    }
+    with pytest.raises(ValueError):
+        validate_child(child, plan, parent_pid)
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing", "not-object", "bad-file-id", "wrong-executable"]
+)
+def test_campaign_reader_rejects_invalid_actual_execution_bindings(
+    tmp_path: Path, defect: str
+) -> None:
+    from benchmarks.cc_tile_pipeline_campaign_report import read_run
+
+    directory = campaign_run(tmp_path, "bound", diagnostic=False)
+    receipt = json.loads((directory / "receipt.json").read_text())
+    if defect == "missing":
+        del receipt["native_bindings"]
+    elif defect == "not-object":
+        receipt["loader_libraries"] = []
+        receipt["native_bindings"]["libraries"] = []
+    elif defect == "bad-file-id":
+        receipt["loader_libraries"]["libgenerativeqc.so.0"]["file_identity"][
+            "st_ino"
+        ] = True
+        receipt["native_bindings"]["libraries"] = receipt["loader_libraries"]
+    else:
+        receipt["native_bindings"]["executable"] = "/different"
+    atomic_json(directory / "receipt.json", receipt)
+    with pytest.raises(ValueError):
+        read_run(directory)
+
+
+def test_slow_parent_attestation_is_excluded_from_child_completion_wall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    _, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+    real_supervisor = campaign.NativeSupervisor
+    state = {"main_clock": 100}
+    observed = {}
+
+    def supervisor(process: Any, deadline: float) -> Any:
+        instance = real_supervisor(process, deadline)
+        observed["supervisor"] = instance
+        return instance
+
+    def clock() -> int:
+        return (
+            state["main_clock"]
+            if threading.current_thread() is threading.main_thread()
+            else 200
+        )
+
+    def delayed_attestation(pid: int, executable: Path, libraries: dict) -> dict:
+        assert observed["supervisor"].finished.wait(2)
+        state["main_clock"] = 1000
+        return {"executable": str(executable.resolve()), "libraries": libraries}
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            fake_endpoint(command, kwargs, endpoint)
+
+        def wait(self, timeout: float) -> int:
+            return 0
+
+    monkeypatch.setattr(campaign, "NativeSupervisor", supervisor)
+    monkeypatch.setattr(campaign, "observe_native", delayed_attestation)
+    monkeypatch.setattr(campaign.time, "perf_counter_ns", clock)
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    assert campaign_main() == 0
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["process_wall_ns"] == 100
+    assert receipt["attestation_wall_ns"] == 900
+
+
+def test_child_watchdog_cleanup_does_not_wait_for_parent_attestation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    _, output, endpoint = campaign_invocation(tmp_path, monkeypatch)
+    killed = threading.Event()
+    original = subprocess.TimeoutExpired("native", 1800)
+
+    class Native:
+        pid = 1765
+
+        def __init__(self, command: list[str], **kwargs: Any) -> None:
+            fake_endpoint(command, kwargs, endpoint)
+
+        def wait(self, timeout: float) -> int:
+            if killed.is_set():
+                assert timeout <= 10
+                return -9
+            assert 0 <= timeout <= 1800
+            raise original
+
+        def kill(self) -> None:
+            killed.set()
+
+    def delayed_attestation(pid: int, executable: Path, libraries: dict) -> dict:
+        assert killed.wait(2), "parent attestation must not postpone child watchdog"
+        return {"executable": str(executable.resolve()), "libraries": libraries}
+
+    monkeypatch.setattr(campaign, "observe_native", delayed_attestation)
+    monkeypatch.setattr(campaign.subprocess, "Popen", Native)
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
+        campaign_main()
+    assert caught.value is original
+    assert json.loads((output / "receipt.json").read_text())["outcome"] == "TIMEOUT"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux same-PID exec contract")
+@pytest.mark.parametrize("workspace", [None, "", ":16:8"])
+def test_real_exec_workspace_inheritance(tmp_path: Path, workspace: str | None) -> None:
+    from benchmarks.cc_tile_environment import validate_child, validate_execution
+
+    supplied = {
+        key: os.environ[key]
+        for key in ("PATH", "LD_LIBRARY_PATH", "LANG", "LC_ALL", "LC_CTYPE")
+        if key in os.environ
+    }
+    supplied.update(OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    if workspace is not None:
+        supplied["CUBLAS_WORKSPACE_CONFIG"] = workspace
+    environment = execution_environment(supplied)
+    profile_hash = canonical_hash(environment["profile"])
+    native = tmp_path / "actual.json"
+    program = "import json,os,sys;json.dump({'pid':os.getpid(),'present':'CUBLAS_WORKSPACE_CONFIG' in os.environ,'value':os.environ.get('CUBLAS_WORKSPACE_CONFIG')},open(sys.argv[1],'w'))"
+    plan = {
+        "argv": [sys.executable, "-c", program, str(native)],
+        "environment": environment,
+        "profile_sha256": profile_hash,
+    }
+    for name in ("cc_tile_child.py", "cc_tile_environment.py"):
+        (tmp_path / name).write_bytes(
+            Path(campaign.__file__).with_name(name).read_bytes()
+        )
+    atomic_json(tmp_path / "plan.json", plan)
+    witness = tmp_path / "child.json"
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(tmp_path / "cc_tile_child.py"),
+            str(tmp_path / "plan.json"),
+            str(witness),
+        ],
+        env=validate_execution(environment, profile_hash),
+    )
+    assert process.wait(timeout=20) == 0
+    validate_child(json.loads(witness.read_text()), plan, process.pid)
+    assert json.loads(native.read_text()) == {
+        "pid": process.pid,
+        "present": workspace is not None,
+        "value": workspace,
+    }
+
+
+@pytest.mark.parametrize("side", [0, 1])
+def test_attribution_rejects_missing_observer_field_with_fresh_hash(side: int) -> None:
+    packets = fixture()
+    del packets[side]["execution_environment"]["observation"]["LD_PRELOAD"]
+    packets[side]["execution_environment_sha256"] = canonical_hash(
+        packets[side]["execution_environment"]
+    )
+    with pytest.raises(ValueError):
+        summarize(*packets)

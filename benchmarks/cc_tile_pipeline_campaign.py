@@ -14,14 +14,41 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 from contextlib import nullcontext
 from pathlib import Path
 
 try:
     from benchmarks._retention import raw_output_path
+    from benchmarks.cc_tile_environment import (
+        NativeSupervisor,
+        atomic_json,
+        canonical_hash,
+        execution_environment,
+        file_identity,
+        observe_native,
+        validate_child,
+        validate_execution,
+        validate_observation,
+        validate_observation_policy,
+        validate_profile,
+    )
 except ModuleNotFoundError:
     from _retention import raw_output_path
+    from cc_tile_environment import (
+        NativeSupervisor,
+        atomic_json,
+        canonical_hash,
+        execution_environment,
+        file_identity,
+        observe_native,
+        validate_child,
+        validate_execution,
+        validate_observation,
+        validate_observation_policy,
+        validate_profile,
+    )
 
 # Positional contract of benchmarks/df_ccsdt_force_endpoint.cpp, args 3..31.
 # Explicitly disable forces, lifecycle repetitions and all mixed precision.
@@ -71,6 +98,7 @@ WORK = (
     "ccsd_q_operations",
     "reference_iterations",
 )
+CLOCK_SCHEMA = "generativeqc.supervised-child-wall.v1"
 
 
 def checksum(path: Path) -> str:
@@ -106,6 +134,12 @@ def check_identity(identity: dict) -> None:
             raise ValueError(f"missing campaign identity: {key}")
     if identity.get("oracle_input_sha256") != identity["input_sha256"]:
         raise ValueError("same-Hamiltonian independent oracle input receipt required")
+    validate_profile(
+        identity.get("environment_profile"), identity["environment_sha256"]
+    )
+    validate_observation_policy(
+        identity.get("observation_policy"), identity.get("observation_policy_sha256")
+    )
 
 
 def check_science(record: dict, oracle: dict) -> dict:
@@ -181,24 +215,21 @@ def main() -> int:
     identity = json.loads(args.identity.read_text())
     check_identity(identity)
     # These are the only environment values recorded; never serialize credentials.
-    environment = {
-        key: os.environ.get(key)
-        for key in (
-            "OMP_NUM_THREADS",
-            "OPENBLAS_NUM_THREADS",
-            "MKL_NUM_THREADS",
-            "CUDA_VISIBLE_DEVICES",
-            "LD_LIBRARY_PATH",
-        )
-    }
+    environment = execution_environment(os.environ)
+    native_environment = validate_execution(environment, identity["environment_sha256"])
+    validate_observation(
+        environment,
+        identity["observation_policy"],
+        identity["observation_policy_sha256"],
+        args.diagnostic,
+        str(args.output.resolve()),
+    )
     if any(
-        environment[key] != "1"
+        native_environment.get(key) != "1"
         for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
     ):
         raise ValueError("one numerical-library thread required")
-    environment_sha = hashlib.sha256(
-        json.dumps(environment, sort_keys=True).encode()
-    ).hexdigest()
+    environment_sha = canonical_hash(environment["profile"])
     if identity.get("environment_sha256") != environment_sha:
         raise ValueError("execution environment differs from frozen receipt")
     for key, path in (
@@ -221,6 +252,7 @@ def main() -> int:
         capture_output=True,
         text=True,
         check=True,
+        env=native_environment,
     )
     matches = [
         line.split("=>", 1)[1].strip().split(" (", 1)[0]
@@ -229,6 +261,24 @@ def main() -> int:
     ]
     if len(matches) != 1 or Path(matches[0]).resolve() != args.library.resolve():
         raise ValueError("native loader does not select the frozen library")
+    loader_libraries = {}
+    for line in loader.stdout.splitlines():
+        if "=>" not in line or not any(
+            name in line
+            for name in ("libgenerativeqc", "libcublas", "libcusolver", "libcudart")
+        ):
+            continue
+        name, selected = line.split("=>", 1)
+        path = Path(selected.strip().split(" (", 1)[0]).resolve()
+        before = file_identity(path)
+        digest = checksum(path)
+        if file_identity(path) != before:
+            raise ValueError("loader library changed during preflight hashing")
+        loader_libraries[name.strip()] = {
+            "path": str(path),
+            "sha256": digest,
+            "file_identity": before,
+        }
     output = args.output.resolve() / "endpoint.json"
     command = [
         str(args.executable.resolve()),
@@ -237,15 +287,41 @@ def main() -> int:
         *CONTROLS,
     ]
     receipt = {
-        "schema": "generativeqc.cc-tile-campaign.v1",
+        "schema": "generativeqc.cc-tile-campaign.v2",
         "identity": identity,
         "command": command,
         "diagnostic": args.diagnostic,
         "outcome": "INCOMPLETE",
-        "clock": "perf_counter_ns, separate from Nsight ns clock",
+        "clock": "supervised child completion; includes witness/exec startup, excludes parent attestation/finalization tail; separate from Nsight clock",
+        "clock_schema": CLOCK_SCHEMA,
         "forces_requested": False,
         "loader_library": str(args.library.resolve()),
+        "loader_libraries": loader_libraries,
+        "execution_environment": environment,
+        "execution_environment_sha256": canonical_hash(environment),
     }
+    # Freeze the launcher dependencies in this immutable run directory. Its
+    # Python imports resolve beside the copied script, not an ambient package.
+    for name in ("cc_tile_child.py", "cc_tile_environment.py"):
+        (args.output / name).write_bytes(Path(__file__).with_name(name).read_bytes())
+    receipt["launcher_sha256"] = {
+        name: checksum(args.output / name)
+        for name in ("cc_tile_child.py", "cc_tile_environment.py")
+    }
+    plan = {
+        "argv": command,
+        "environment": environment,
+        "profile_sha256": environment_sha,
+    }
+    plan_path = args.output / "execution_plan.json"
+    child_path = args.output / "child_environment.json"
+    atomic_json(plan_path, plan)
+    launch_command = [
+        sys.executable,
+        str(args.output.resolve() / "cc_tile_child.py"),
+        str(plan_path.resolve()),
+        str(child_path.resolve()),
+    ]
     receipt_path = args.output / "receipt.json"
     pending_receipt_path = args.output / "receipt.json.tmp"
 
@@ -256,6 +332,8 @@ def main() -> int:
 
     write_receipt()
     process = None
+    supervisor = None
+    attestation_started = False
     finished = False
     failure = None
     log = None
@@ -282,21 +360,53 @@ def main() -> int:
         started = time.perf_counter_ns()
         with scope:
             try:
+                deadline = time.monotonic() + 1800
                 process = subprocess.Popen(
-                    command, stdout=log, stderr=subprocess.STDOUT
+                    launch_command,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=native_environment,
                 )
+                supervisor = NativeSupervisor(process, deadline)
+                supervisor.start()
                 receipt["native_pid"] = process.pid
                 write_receipt()
-                rc = process.wait(timeout=1800)
+                attestation_started = True
+                attestation_start = time.perf_counter_ns()
+                receipt["native_bindings"] = observe_native(
+                    process.pid, args.executable, loader_libraries
+                )
+                receipt["attestation_wall_ns"] = (
+                    time.perf_counter_ns() - attestation_start
+                )
+                supervisor.join(max(0, deadline - time.monotonic()) + 10)
+                if not supervisor.finished.is_set():
+                    raise subprocess.TimeoutExpired(launch_command, 1800)
+                if supervisor.failure is not None:
+                    raise supervisor.failure
+                rc = supervisor.returncode
                 finished = True
             except BaseException as error:
                 # Remember the original error before diagnostic scope teardown.
+                if (
+                    attestation_started
+                    and supervisor is not None
+                    and supervisor.failure is not None
+                    and error is not supervisor.failure
+                ):
+                    retain_error("parent attestation", error)
+                    failure = supervisor.failure
+                    raise failure from error
                 failure = error
                 raise
             finally:
                 # Kill/reap only our child, also on interrupts and receipt errors.
                 # Keep teardown inside the diagnostic complete-process interval.
-                if process is not None and not finished:
+                if (
+                    process is not None
+                    and not finished
+                    and not (supervisor is not None and supervisor.cleanup_attempted)
+                ):
                     for stage, action in (
                         ("child kill", process.kill),
                         ("child reap", lambda: process.wait(timeout=10)),
@@ -306,11 +416,27 @@ def main() -> int:
                         except BaseException as error:  # noqa: BLE001
                             # Cleanup must continue without replacing the failure.
                             retain_error(stage, error)
+                if supervisor is not None and not supervisor.join(10):
+                    retain_error(
+                        "child supervisor",
+                        TimeoutError("child wait did not finish after bounded cleanup"),
+                    )
+                if supervisor is not None:
+                    for stage, error in supervisor.cleanup_errors:
+                        retain_error(stage, error)
+                    if (
+                        supervisor.failure is not None
+                        and failure is not supervisor.failure
+                    ):
+                        retain_error("child wait", supervisor.failure)
         receipt["exit_code"] = rc
-        receipt["process_wall_ns"] = time.perf_counter_ns() - started
+        receipt["process_wall_ns"] = supervisor.ended_ns - started
         if rc != 0:
             receipt["outcome"] = "FAIL"
             return 2
+        child = json.loads(child_path.read_text())
+        validate_child(child, plan, process.pid)
+        receipt["child_environment_verified"] = True
         record = json.loads(output.read_text())
         receipt["science"] = check_science(record, oracle)
         receipt["outcome"] = receipt["science"]["status"]
@@ -338,6 +464,23 @@ def main() -> int:
                 "type": type(failure).__name__,
                 "message": str(failure),
             }
+        for name, expected in receipt["launcher_sha256"].items():
+            try:
+                if checksum(args.output / name) != expected:
+                    raise ValueError("child launcher changed during endpoint")
+            except BaseException as error:  # noqa: BLE001
+                retain_error(f"launcher {name}", error)
+        for name, item in loader_libraries.items():
+            try:
+                if (
+                    checksum(Path(item["path"])) != item["sha256"]
+                    or file_identity(Path(item["path"])) != item["file_identity"]
+                ):
+                    raise ValueError(
+                        "prehashed provider binding changed during endpoint"
+                    )
+            except BaseException as error:  # noqa: BLE001
+                retain_error(f"provider {name}", error)
         identity_matches = {}
         for key, path in (
             ("library_sha256", args.library),
@@ -378,9 +521,15 @@ def main() -> int:
             # Directory failure still permits an attempted terminal receipt.
             retain_error("artifact inventory", error)
         if receipt["outcome"] == "PASS":
-            for name in {"endpoint.json", "oracle.json", "native.log"} - receipt[
-                "artifacts"
-            ].keys():
+            for name in {
+                "endpoint.json",
+                "oracle.json",
+                "native.log",
+                "execution_plan.json",
+                "child_environment.json",
+                "cc_tile_child.py",
+                "cc_tile_environment.py",
+            } - receipt["artifacts"].keys():
                 retain_error(
                     f"artifact {name}",
                     ValueError("required campaign artifact unavailable"),

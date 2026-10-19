@@ -21,10 +21,24 @@ from typing import Any
 
 try:
     from benchmarks._retention import raw_output_path
+    from benchmarks.cc_tile_environment import (
+        canonical_hash,
+        validate_execution,
+        validate_observation,
+        validate_observation_policy,
+        validate_profile,
+    )
 except ModuleNotFoundError:
     from _retention import raw_output_path
+    from cc_tile_environment import (
+        canonical_hash,
+        validate_execution,
+        validate_observation,
+        validate_observation_policy,
+        validate_profile,
+    )
 
-SCHEMA = "generativeqc.cc-tile-attribution.v1"
+SCHEMA = "generativeqc.cc-tile-attribution.v2"
 KINDS = ("producer", "kernel", "copy", "memset", "wait")
 IDENTITY = (
     "source_commit",
@@ -52,6 +66,8 @@ def read_nsys(database: Path, receipt: dict) -> dict:
     NVTX producer ranges require exact labels and thread IDs from the capture
     recipe. Never infer producer CPU work from the spaces between GPU kernels.
     """
+    validate_identity(receipt.get("identity", {}), receipt.get("identity", {}))
+    _validate_environment(receipt)
     bound = receipt["nsys"]
     if checksum(database) != bound.get(
         "sqlite_sha256"
@@ -249,6 +265,10 @@ def read_nsys(database: Path, receipt: dict) -> dict:
         "capture": receipt["capture"],
         "coverage": coverage,
         "events": events,
+        "execution_environment": receipt.get("execution_environment"),
+        "execution_environment_sha256": receipt.get("execution_environment_sha256"),
+        "diagnostic": receipt.get("diagnostic"),
+        "run_directory": receipt.get("run_directory"),
     }
     host_wait_segments = partition(host_waits, start, end)
     trace["extraction"] = {
@@ -297,6 +317,18 @@ def interval(row: dict, start: int, end: int) -> tuple[int, int]:
 
 def validate_identity(actual: dict, expected: dict) -> None:
     """Compare an independently retained receipt, not self-reported labels."""
+    for identity in (actual, expected):
+        validate_profile(
+            identity.get("environment_profile"), identity.get("environment_sha256")
+        )
+        validate_observation_policy(
+            identity.get("observation_policy"),
+            identity.get("observation_policy_sha256"),
+        )
+    if actual["environment_profile"] != expected["environment_profile"]:
+        raise ValueError("semantic environment profiles differ")
+    if actual["observation_policy"] != expected["observation_policy"]:
+        raise ValueError("observation recipes differ")
     for key in IDENTITY:
         value = actual.get(key)
         if not isinstance(value, str) or not value or value != expected.get(key):
@@ -305,6 +337,20 @@ def validate_identity(actual: dict, expected: dict) -> None:
             raise ValueError(f"invalid SHA256: {key}")
         if key == "source_commit" and not re.fullmatch(r"[0-9a-f]{40}", value):
             raise ValueError("invalid source commit")
+
+
+def _validate_environment(packet: dict) -> None:
+    execution = packet.get("execution_environment")
+    validate_execution(execution, packet["identity"]["environment_sha256"])
+    validate_observation(
+        execution,
+        packet["identity"]["observation_policy"],
+        packet["identity"]["observation_policy_sha256"],
+        packet.get("diagnostic"),
+        packet.get("run_directory"),
+    )
+    if canonical_hash(execution) != packet.get("execution_environment_sha256"):
+        raise ValueError("actual execution environment hash mismatch")
 
 
 def partition(events: list[dict], start: int, end: int) -> list[dict]:
@@ -345,6 +391,10 @@ def summarize(trace: dict, receipt: dict) -> dict:
     if trace.get("schema") != SCHEMA or receipt.get("schema") != SCHEMA:
         raise ValueError("unsupported trace/receipt schema")
     validate_identity(trace.get("identity", {}), receipt.get("identity", {}))
+    for packet in (trace, receipt):
+        _validate_environment(packet)
+    if trace["execution_environment"] != receipt["execution_environment"]:
+        raise ValueError("trace and independent execution environments differ")
     window = trace["endpoint"]
     if window != receipt.get("endpoint"):
         raise ValueError("endpoint boundary differs from independent receipt")
