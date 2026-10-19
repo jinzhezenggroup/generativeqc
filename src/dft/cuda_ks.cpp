@@ -1610,6 +1610,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes,
               sum(eigensolver->host_bytes(), eigensolver->metadata_bytes()));
+      // Reserve the mandatory secondary transport before optional primary AO maps.
+      // A map allocation miss must still be able to retry the dense primary arena.
+      if (!host_unfused && options.nonlocal_grid)
+        check(runtime::resource_cuda_malloc(&nonlocal_xc_arena, nonlocal_xc_layout.device_bytes));
       if (resource.xc_device_bytes) {
         bool host_oom = false;
         auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
@@ -1651,7 +1655,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
               sum(resource.grid_device_bytes, nonlocal_grid.cuda_view().device_bytes);
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);
-          check(runtime::resource_cuda_malloc(&nonlocal_xc_arena, nonlocal_xc_layout.device_bytes));
           // VV10 needs only total rho/grad-rho and their GGA AO pullback. The
           // qualified zero-scaled PBE transport supplies those without adding
           // PBE energy or requiring WB97M-V component-scaling capability.

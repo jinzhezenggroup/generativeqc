@@ -157,6 +157,9 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         density=np.eye(2),
         grid=NS(points=np.ones((2, 3)), weights=np.ones(2)),
     )
+    source.nonlocal_grid = state.grid
+    source.nonlocal_grid_spec = source.grid_spec
+    source.nonlocal_atomic_weights = source.atomic_weights
     basis = NS(
         identity="basis",
         geometry="geometry",

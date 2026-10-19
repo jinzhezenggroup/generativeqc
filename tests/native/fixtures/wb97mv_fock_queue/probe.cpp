@@ -37,6 +37,11 @@ void run(unsigned spins, bool fitted) {
   dft::CudaKsWb97mvResponse owner;
   std::string detail;
   queue_test::reset_action();
+  auto independent = token;
+  independent.identity.model.nonlocal_grid = 2;
+  expect(owner.prepare(batch, 0, independent, {}, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+         "independent-grid coupled response must fail closed");
+  expect(queue_test::pending.empty(), "unsupported response queued numerical work");
   queue_test::valid_fock_binding = false;
   expect(owner.prepare(batch, 0, token, {}, detail) != GENERATIVEQC_STATUS_SUCCESS,
          "physical model accepted a binding without an owner");

@@ -110,7 +110,7 @@ struct Owner {
  DeviceXC* xc=nullptr;
  int* nonlocal_correlation=nullptr;
  int nonlocal_domain=0;
- int basis=0,grid=0,stream=0;
+ int basis=0,grid=0,nonlocal_grid=0,stream=0;
  unsigned spins=1;
  std::uint32_t functional=0;
  std::size_t n=2,matrix=4,elements=4;
