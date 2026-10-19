@@ -35,8 +35,8 @@ The legacy binary scalar product tests unity after conversion to float. Exact
 fractions distinct from one can therefore disappear during capture. A local
 adapter guard uses the existing `Graph.multiply_many` only for those operands,
 covering multiplication, constant division, unary minus and subtraction. Ordinary
-binary construction is retained to bound this repair; canonical identity
-compatibility is checked separately. Erroneous old capture envelopes fail replay validation
+binary construction is retained to bound this repair; mathematical compatibility
+is checked separately from the explicit schema transition. Erroneous old capture envelopes fail replay validation
 instead of being reinterpreted. This does not repair or qualify generic research
 Graph AD's existing simplification limits; that remains a later qualification.
 
@@ -48,13 +48,22 @@ new constant in the append-only capture graph and validate the canonical graph
 again, directly from Fraction bit lengths. This also rejects oversized constants
 that a parent would later eliminate, while retaining bounded folded formulas.
 
+The prototype v1 payload used allocation-sensitive topological indices after
+constant folding, so isomorphic reachable DAGs could hash differently. Schema v2
+serializes by operation, exact payload and child structure, ordering commutative
+children structurally before assigning postorder indices. This is data ordering,
+not another algebra or a polynomial-equivalence solver. The version change
+intentionally invalidates prototype identities; v1 and noncanonical envelopes
+are rejected rather than silently reidentified. Mathematical and FP64 diagnostic
+compatibility are audited separately from serialized identity compatibility.
+
 ## Rejected alternatives
 
 - Python decorators/callback tracing: cannot reliably reject hidden global state,
   control flow or unbounded loops without a substantially larger capture contract.
 - Accepting caller Graph handles: exposes mutable ownership, mixed graphs and
   undeclared variables at the public boundary.
-- Fractional powers and density denominators in v1: require explicit boundary and
+- Fractional powers and density denominators in the bounded language: require explicit boundary and
   derivative-domain policy, particularly at zero minority spin and vacuum.
 - A parallel polynomial/AD engine: violates the existing scalar mathematical owner.
 - Reusing `FunctionalSpec` or naming a built-in: would imply scientific admission
@@ -62,7 +71,7 @@ that a parent would later eliminate, while retaining bounded folded formulas.
 
 ## Invariants
 
-V1 accepts only the documented bounded syntax, rejects sigma/tau, and defines
+V2 accepts only the documented bounded syntax, rejects sigma/tau, and defines
 per-volume atomic units. No native kernel, SCF callback, oracle fallback or
 production entitlement follows from construction or evaluation. Both CPU and
 CUDA compilation, SCF and forces remain UNQUALIFIED. Semantic identity includes

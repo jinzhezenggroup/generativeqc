@@ -11,6 +11,7 @@ from fractions import Fraction
 
 import pytest
 from generativeqc.extensions import method, xc
+from generativeqc_compiler.common.provenance import canonical_hash
 
 
 @pytest.mark.parametrize(
@@ -310,3 +311,61 @@ def test_bounded_folded_constants_remain_replayable(source: str, expected: int) 
         xc.UserExpression.loads(expression.dumps()).to_payload()
         == expression.to_payload()
     )
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [
+        ("(rho_a*2)*3", "rho_a*6"),
+        ("(rho_a+2)+3", "rho_a+5"),
+        ("rho_a+(rho_b*2)*3", "rho_a+rho_b*6"),
+        ("(rho_b*5)*7+(rho_a*2)*3", "rho_b*35+rho_a*6"),
+        ("rho_a*(2*3)", "(rho_a*2)*3"),
+        ("(rho_a+rho_b)+2+3", "5+(rho_b+rho_a)"),
+    ],
+)
+def test_folded_isomorphic_dags_have_one_canonical_identity(
+    left: str, right: str
+) -> None:
+    a, b = xc.expression(left), xc.expression(right)
+    assert a.identity == b.identity
+    assert a.to_payload()["canonical"] == b.to_payload()["canonical"]
+    for rho_a, rho_b in ((0, 0), (0.2, 0.03), (2, 3)):
+        assert a.evaluate(rho_a=rho_a, rho_b=rho_b) == b.evaluate(
+            rho_a=rho_a, rho_b=rho_b
+        )
+    assert xc.UserExpression.loads(a.dumps()).identity == b.identity
+
+
+@pytest.mark.parametrize(
+    "left,right",
+    [("rho_a*6", "rho_a*7"), ("rho_a*6", "rho_b*6"), ("rho_a+6", "rho_a*6")],
+)
+def test_structural_order_keeps_distinct_mathematics_distinct(
+    left: str, right: str
+) -> None:
+    assert xc.expression(left).identity != xc.expression(right).identity
+
+
+def test_current_schema_rejects_prototype_envelopes_without_reidentifying() -> None:
+    payload = xc.expression("rho_a*6").to_payload()
+    assert payload["canonical"]["schema"] == "generativeqc.xc-expression.v2"
+    payload["canonical"]["schema"] = "generativeqc.xc-expression.v1"
+    payload["identity"] = canonical_hash(payload["canonical"])
+    with pytest.raises(ValueError, match="mismatch"):
+        xc.UserExpression.loads(json.dumps(payload))
+
+
+def test_replay_rejects_noncanonical_isomorphic_node_order() -> None:
+    payload = xc.expression("rho_a*6").to_payload()
+    canonical = payload["canonical"]
+    nodes = canonical["nodes"]
+    assert not nodes[0][1] and not nodes[1][1]
+    nodes[0], nodes[1] = nodes[1], nodes[0]
+    remap = {0: 1, 1: 0}
+    for node in nodes:
+        node[1] = [remap.get(i, i) for i in node[1]]
+    canonical["root"] = remap.get(canonical["root"], canonical["root"])
+    payload["identity"] = canonical_hash(canonical)
+    with pytest.raises(ValueError, match="mismatch"):
+        xc.UserExpression.loads(json.dumps(payload))

@@ -6,7 +6,7 @@ orphan: true
 
 `generativeqc.extensions.xc.expression(source, *, name="user-expression")`
 captures a restricted string declaration once as an immutable `UserExpression`.
-This is schema `generativeqc.xc-expression.v1`, a prerequisite for issue #2330.
+This is schema `generativeqc.xc-expression.v2`, a prerequisite for issue #2330.
 It accepts neither Python functions nor Array API callbacks, decorators, foreign
 `Expr` objects, or caller-owned graphs. The parser does not execute user code and
 is not a general security sandbox for arbitrary Python.
@@ -40,12 +40,12 @@ tail regularization, unit conversion, or implicit spin averaging.
 The vocabulary reserved for later slices is `sigma_aa = grad(rho_a).grad(rho_a)`,
 `sigma_ab = grad(rho_a).grad(rho_b)`, `sigma_bb = grad(rho_b).grad(rho_b)`
 (bohr^-8), and `tau_a`, `tau_b = (1/2) sum_i occupation_i |grad(orbital_i)|^2`
-per spin (bohr^-5). All five are rejected by v1. There is no GGA or meta-GGA
+per spin (bohr^-5). All five are rejected by v2. There is no GGA or meta-GGA
 admission. Total `rho`, vector fields, arrays and undeclared inputs are rejected.
 
 Output is energy **per volume**, hartree/bohr^3, not energy per particle.
 Coefficients carry the corresponding atomic units; dimensional analysis is the
-declarant's responsibility. V1 has no per-particle constructor or conversion at
+declarant's responsibility. V2 has no per-particle constructor or conversion at
 zero density. It does not define integrated energy, XC potential, or forces.
 
 Point inputs are Python `float` (binary64) or integers converted to binary64;
@@ -95,16 +95,21 @@ Exact coefficient capture does not qualify arbitrary exported Graph derivatives:
 existing research AD simplification limits remain outside this contract.
 
 The semantic identity hashes the versioned contract and reachable canonical
-nodes with remapped indices, following existing XC graph identity conventions.
+nodes with structural postorder indices. Commutative child ordering depends on
+operation, exact payload and child structure, rather than allocation history.
+Constant-folded isomorphic DAGs therefore share identity.
 It includes spin, units, energy convention and finite-domain policy. It excludes
 the descriptive name and original source spelling, paths, timestamps and bytecode.
-Associatively reordered equal declarations may share identity; v1 is not a
+Associatively reordered equal declarations may share identity; v2 is not a
 complete polynomial-equivalence solver. Name `PBE` confers no built-in identity
 or qualification. Mathematical changes surviving canonicalization change identity.
 
 `to_payload()` and `xc.inspect()` return detached audit copies. Serialization
 retains original source, name, canonical payload and semantic identity; `loads`
 rebuilds and verifies their relation rather than trusting supplied graph nodes.
+Only the current v2 canonical envelope is accepted. Prototype v1 envelopes and
+noncanonical node orderings are rejected, rather than silently rehashed or
+reinterpreted; explicitly reconstruct a declaration from its source when needed.
 Copying and process replay preserve identity. Audit source provenance is separate
 from semantic identity, so equal mathematics may retain different declarations.
 

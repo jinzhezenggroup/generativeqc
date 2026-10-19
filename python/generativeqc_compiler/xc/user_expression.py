@@ -11,7 +11,7 @@ from fractions import Fraction
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.expr import Expr, Graph
 
-SCHEMA = "generativeqc.xc-expression.v1"
+SCHEMA = "generativeqc.xc-expression.v2"
 FEATURES = ("rho_a", "rho_b")
 MAX_SOURCE = 4096
 MAX_AST = 256
@@ -143,8 +143,33 @@ def _capture(source: str) -> tuple[Graph, Expr]:
 
 
 def _payload(graph: Graph, root: Expr) -> dict:
-    order = graph.topological_order((root,))
-    indices = {identifier: index for index, identifier in enumerate(order)}
+    graph.node(root)
+    keys: dict[int, tuple] = {}
+
+    def structural_key(identifier: int) -> tuple:
+        if identifier not in keys:
+            node = graph.nodes[identifier]
+            children = tuple(structural_key(i) for i in node.arguments)
+            if node.operation in ("add", "multiply"):
+                children = tuple(sorted(children))
+            keys[identifier] = node.operation, str(node.payload), children
+        return keys[identifier]
+
+    nodes: list[list] = []
+    indices: dict[int, int] = {}
+
+    def visit(identifier: int) -> int:
+        if identifier not in indices:
+            node = graph.nodes[identifier]
+            arguments = node.arguments
+            if node.operation in ("add", "multiply"):
+                arguments = tuple(sorted(arguments, key=structural_key))
+            references = [visit(i) for i in arguments]
+            indices[identifier] = len(nodes)
+            nodes.append([node.operation, references, str(node.payload)])
+        return indices[identifier]
+
+    root_index = visit(root.identifier)
     return {
         "schema": SCHEMA,
         "features": list(FEATURES),
@@ -154,15 +179,8 @@ def _payload(graph: Graph, root: Expr) -> dict:
         "dtype": "float64",
         "domain": "finite nonnegative rho; finite pointwise result; no clipping",
         "language": "rho-polynomial-degree-8; constant-division; powers-0..4",
-        "nodes": [
-            [
-                graph.nodes[i].operation,
-                [indices[j] for j in graph.nodes[i].arguments],
-                str(graph.nodes[i].payload),
-            ]
-            for i in order
-        ],
-        "root": indices[root.identifier],
+        "nodes": nodes,
+        "root": root_index,
     }
 
 
