@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from generativeqc_compiler.common.provenance import canonical_hash
 
 from .program import output_set
@@ -17,26 +15,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+    from generativeqc_compiler.common.cuda_runtime import CudaArtifact
     from generativeqc_compiler.integral.expr import Expr, Graph
-
-    from .user_expression_native import NativeUserExpression
 
 MAX_DERIVATIVE_GRAPH = 8192
 MAX_POINTS = 65536
-
-
-def validate_inputs(features: np.ndarray) -> np.ndarray:
-    """Own a bounded FP64 snapshot, including both unused declared inputs."""
-    if not isinstance(features, np.ndarray) or features.dtype != np.float64:
-        raise TypeError("expression features require a float64 ndarray")
-    if features.ndim != 2 or features.shape[0] != 2:
-        raise ValueError("expression features require shape [2, point]")
-    if features.shape[1] > MAX_POINTS:
-        raise ValueError("expression batch exceeds point budget")
-    x = np.array(features, dtype=np.float64, order="C", copy=True)
-    if not np.all(np.isfinite(x)) or np.any(x < 0):
-        raise ValueError("rho inputs require finite nonnegative values")
-    return x
 
 
 def _check_graph(graph: Graph) -> None:
@@ -63,9 +46,14 @@ class UserExpressionProgram:
 
     expression: UserExpression
     order: int = 2
-    features = FEATURES
+
+    @property
+    def features(self) -> tuple[str, ...]:
+        """Return the two immutable declared spin-density ingredient names."""
+        return FEATURES
 
     def __post_init__(self) -> None:
+        """Validate the sealed declaration, derivative order and graph budgets."""
         if type(self.expression) is not UserExpression:
             raise TypeError("program requires a sealed UserExpression")
         output_set(self, self.order)
@@ -73,6 +61,7 @@ class UserExpressionProgram:
 
     @property
     def outputs(self) -> tuple[tuple[int, ...], ...]:
+        """Return ordered energy, feature gradient and packed Hessian labels."""
         return output_set(self, self.order)
 
     def scalar_graph(self) -> tuple[Graph, tuple[Expr, ...]]:
@@ -97,9 +86,11 @@ class UserExpressionProgram:
 
     @property
     def identity(self) -> str:
+        """Hash the detached canonical derivative program and output contract."""
         return canonical_hash(self.to_payload())
 
     def to_payload(self) -> dict:
+        """Return detached canonical mathematics and bounded output metadata."""
         graph, roots = self.scalar_graph()
         reachable = graph.topological_order(roots)
         indices = {node: i for i, node in enumerate(reachable)}
@@ -121,8 +112,13 @@ class UserExpressionProgram:
 
     def compile(
         self, *, compiler: CppCompilerAdapter, cache: str | Path
-    ) -> NativeUserExpression:
-        """Explicit standalone native CPU compilation; no method registration."""
-        from .user_expression_native import NativeUserExpression
+    ) -> CudaArtifact:
+        """Compile a verified CPU artifact without loading or executing it.
 
-        return NativeUserExpression(self, compiler=compiler, cache=cache)
+        The shared artifact type also serves CPU compilers; its name does not
+        imply a CUDA target. Runtime allocation and FFI belong to the public
+        runtime adapter constructed by ``extensions.xc.compile_expression``.
+        """
+        from .user_expression_native import compile_native
+
+        return compile_native(self, compiler=compiler, cache=cache)

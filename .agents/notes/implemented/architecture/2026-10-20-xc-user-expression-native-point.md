@@ -60,6 +60,65 @@ explicit refusal, not a silent change of backend or output contract.
 
 ## Evidence and remaining scope
 
+### Pre-merge ownership correction
+
+Review of the initial standalone adapter identified that its compiler-owned
+class both compiled and executed the native ABI. Existing `xc/native.py` has
+similar Python FFI precedent, but that precedent does not override the scoped
+compiler/runtime ownership rule. This slice does not migrate that existing
+adapter or claim to repair its broader ownership debt.
+
+The corrected design keeps canonical graphs, scalar emission and artifact-only
+compilation in the compiler. `UserExpressionProgram.compile` never imports the
+public runtime, loads a DSO or allocates point buffers. The public-runtime owner
+`generativeqc/_xc_user_expression.py` owns NumPy validation/snapshots, CDLL and
+function lifetime, scratch, calls and immutable result publication. The public
+`xc.compile_expression` factory connects this runtime to the compiler recipe.
+The two factories and actual program/runtime classes are explicitly exported
+and covered by the existing public contract manifest rather than bypassing it.
+
+The fixed count/pointer/input-domain checks, batch loop and result-finiteness
+boundary belong to the new `src/dft/xc_user_expression_point.hpp` template. It
+contains no XC mathematics or AD; `ScalarCEmitter` supplies only the scalar
+lambda's roots. The template is a declared wheel asset. Compilation stages a
+checked copy beside the source under its stable basename and passes it through
+`compile_runtime(headers=...)`, so checkout/installed resolution has equal
+logical source/header identities without absolute asset paths. The native
+schema deliberately advances to v2; prior standalone generated artifacts do
+not qualify the changed runtime source. Missing installed assets, staged-header
+tampering and stale artifact metadata fail closed. No shared cache, existing XC
+domain, catalogue, CMake, Graph or old native adapter changes are required.
+
+Moving only the Python class would leave the fixed execution template in the
+compiler; keeping `program.compile` as a lazy reverse import of the public
+runtime would violate the dependency boundary. Both alternatives were rejected.
+Fresh source-matched point/batch execution is required after this correction;
+the 121-pass receipt below describes the earlier baseline, not the new template.
+
+The corrected source completed **125 passed / zero skipped** twice on the same
+slice-owned Linux CPU. All 30 program controls remain active, including 14 native
+cases. New executable controls prohibit public-runtime imports, CDLL loading and
+native-output allocation during generation, prohibit DSO loading during compiler
+artifact preparation, and compare actual checkout/declared-installed-asset
+compilation and point execution. Installed resolution has no checkout fallback;
+missing assets, modified staged headers and stale artifact metadata are refused.
+All 11 measured source/test/header/config/doc SHA256 values matched the staged LF
+blobs. Each run recorded 16 compiler and 16 link driver calls through sccache:
+the first had 16 object misses, the replay 16 object hits, with zero compilation
+failures. The separate corrected-source receipt bundle is
+`24b71a9aeb0872b73aafac0c097ffaa530c5a5f8b180b600db6a582c62f35263`
+in ignored `build/2627-ownership-native-receipts.tar`. The earlier receipts are
+retained independently and do not transfer qualification to the changed source.
+All four documentation helper suites also passed on the corrected source in a
+separate docs environment: 50 public-contract, 15 Python API docs, 4 Sphinx link
+and 23 native-contract tests, with zero skips. Full public Python/Ruff and native
+contract checkers passed; compiler structure remained 570 modules / zero errors.
+Preparing these docs tests first exposed a missing README in the minimal transfer;
+that environment failure was retained and repaired using same-base repository
+assets, not production edits. The docs dependency-download command timed out while
+its original pip PID continued; the existing process was monitored to completion
+without a duplicate install or changes to the scientific qualification environment.
+
 `tests/python/test_xc_user_expression_program.py` exercises complete native CPU
 point and batch calls against independent 70-digit Decimal energies and hand
 gradients/Hessians, finite differences and spin/per-particle negative controls.

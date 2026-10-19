@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import copy
 import ctypes as ct
+import json
 import shutil
+import subprocess
 import sys
 from dataclasses import FrozenInstanceError
 from decimal import Decimal, localcontext
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc._xc_user_expression import _validate_inputs as validate_inputs
 from generativeqc.extensions import method, xc
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.xc.program import validate_features
@@ -20,11 +23,7 @@ from generativeqc_compiler.xc.user_expression_native import emit_native
 from generativeqc_compiler.xc.user_expression_program import (
     MAX_POINTS,
     UserExpressionProgram,
-    validate_inputs,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 FORMULA = "-rho_a**4/7 + rho_b**3/5 + rho_a*rho_b/3 + rho_a/11 + 2"
 
@@ -69,7 +68,7 @@ def test_complete_point_and_batch_decimal_oracle(
     compiler: CppCompilerAdapter, tmp_path: Path, order: int, rows: int
 ) -> None:
     program = xc.expression_program(xc.expression(FORMULA), order=order)
-    native = program.compile(compiler=compiler, cache=tmp_path)
+    native = xc.compile_expression(program, compiler=compiler, cache=tmp_path)
     x = np.array([[0, 1, 0, 0.4, 1e-12, 2], [0, 0, 1, 0.1, 1e-30, 3]])
     expected = np.stack([oracle(a, b)[:rows] for a, b in x.T], axis=1)
     np.testing.assert_allclose(native.evaluate(x), expected, rtol=4e-15, atol=1e-40)
@@ -89,8 +88,8 @@ def test_complete_point_and_batch_decimal_oracle(
 def test_native_finite_difference_and_negative_control(
     compiler: CppCompilerAdapter, tmp_path: Path
 ) -> None:
-    native = xc.expression_program(xc.expression(FORMULA)).compile(
-        compiler=compiler, cache=tmp_path
+    native = xc.compile_expression(
+        xc.expression_program(xc.expression(FORMULA)), compiler=compiler, cache=tmp_path
     )
     a, b, h = 0.4, 0.1, 1e-5
     actual = native.point(rho_a=a, rho_b=b)
@@ -116,8 +115,8 @@ def test_native_finite_difference_and_negative_control(
 def test_constant_still_validates_both_declared_inputs(
     compiler: CppCompilerAdapter, tmp_path: Path, source: str, value: int
 ) -> None:
-    native = xc.expression_program(xc.expression(source)).compile(
-        compiler=compiler, cache=tmp_path
+    native = xc.compile_expression(
+        xc.expression_program(xc.expression(source)), compiler=compiler, cache=tmp_path
     )
     np.testing.assert_array_equal(
         native.point(rho_a=0, rho_b=0), [value, 0, 0, 0, 0, 0]
@@ -153,7 +152,7 @@ def test_native_near_unity_exact_coefficients(
     assert graph.node(roots[3]).payload == 2 * Fraction(
         9007199254740993, 9007199254740992
     )
-    native = program.compile(compiler=compiler, cache=tmp_path)
+    native = xc.compile_expression(program, compiler=compiler, cache=tmp_path)
     np.testing.assert_allclose(
         native.point(rho_a=0.5, rho_b=0.3), [0.35, 1, 1 / 3, 2, 0, 0], rtol=1e-15
     )
@@ -162,8 +161,10 @@ def test_native_near_unity_exact_coefficients(
 def test_overflow_does_not_publish_or_poison_previous_result(
     compiler: CppCompilerAdapter, tmp_path: Path
 ) -> None:
-    native = xc.expression_program(xc.expression("rho_a**4 + rho_b")).compile(
-        compiler=compiler, cache=tmp_path
+    native = xc.compile_expression(
+        xc.expression_program(xc.expression("rho_a**4 + rho_b")),
+        compiler=compiler,
+        cache=tmp_path,
     )
     previous = native.point(rho_a=1, rho_b=2)
     before = previous.copy()
@@ -176,8 +177,10 @@ def test_overflow_does_not_publish_or_poison_previous_result(
 def test_native_count_pointer_boundaries_and_maximum_batch(
     compiler: CppCompilerAdapter, tmp_path: Path
 ) -> None:
-    native = xc.expression_program(xc.expression("rho_a + 2*rho_b")).compile(
-        compiler=compiler, cache=tmp_path
+    native = xc.compile_expression(
+        xc.expression_program(xc.expression("rho_a + 2*rho_b")),
+        compiler=compiler,
+        cache=tmp_path,
     )
     assert native._function(None, 0, None, 0, 0) == 0
     for counts in [(0, 6, 1), (2, 5, 1), (2, 6, 1), (0, 0, MAX_POINTS + 1)]:
@@ -263,7 +266,7 @@ def test_source_identity_and_native_cache_replay(
     compiler: CppCompilerAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     program = xc.expression_program(xc.expression(FORMULA))
-    first = program.compile(compiler=compiler, cache=tmp_path)
+    first = xc.compile_expression(program, compiler=compiler, cache=tmp_path)
     from hashlib import sha256
 
     source, metadata = emit_native(program)
@@ -274,8 +277,122 @@ def test_source_identity_and_native_cache_replay(
         pytest.fail("artifact hit attempted compilation")
 
     monkeypatch.setattr(CppCompilerAdapter, "compile_shared", forbidden)
-    second = program.compile(compiler=compiler, cache=tmp_path)
+    second = xc.compile_expression(program, compiler=compiler, cache=tmp_path)
     assert second.artifact.library == first.artifact.library
     np.testing.assert_array_equal(
         second.point(rho_a=0.4, rho_b=0.1), first.point(rho_a=0.4, rho_b=0.1)
     )
+
+
+def test_generation_never_imports_runtime_or_allocates_native_buffers() -> None:
+    script = """
+import builtins, ctypes, sys
+import numpy as np
+sys.path.insert(0, sys.argv[1])
+original = builtins.__import__
+def guarded(name, *args, **kwargs):
+    if name == "generativeqc" or name.startswith("generativeqc."):
+        raise AssertionError("generation imported the public runtime")
+    return original(name, *args, **kwargs)
+def forbidden(*args, **kwargs):
+    raise AssertionError("generation loaded a DSO or allocated runtime output")
+builtins.__import__ = guarded
+ctypes.CDLL = forbidden
+np.empty = forbidden
+from generativeqc_compiler.xc.user_expression import UserExpression
+from generativeqc_compiler.xc.user_expression_program import UserExpressionProgram
+from generativeqc_compiler.xc.user_expression_native import emit_native
+source, metadata = emit_native(UserExpressionProgram(UserExpression("rho_a*rho_b")))
+assert source and metadata["runtime_headers"]
+"""
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            script,
+            str(Path(__file__).resolve().parents[2] / "python"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def test_compiler_artifact_does_not_load_library(
+    compiler: CppCompilerAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    program = xc.expression_program(xc.expression(FORMULA))
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("compiler operation attempted to load a runtime DSO")
+
+    monkeypatch.setattr(ct, "CDLL", forbidden)
+    artifact = program.compile(compiler=compiler, cache=tmp_path)
+    assert artifact.metadata["identity"]["backend"] == "cpu"
+    assert set(artifact.metadata["identity"]["headers"]) == {
+        "xc_user_expression_point.hpp"
+    }
+
+
+def test_installed_asset_identity_execution_and_missing_asset(
+    compiler: CppCompilerAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tomllib
+    from generativeqc_compiler.common import paths
+    from generativeqc_compiler.xc.user_expression_native import RUNTIME_HEADER
+
+    root = Path(__file__).resolve().parents[2]
+    program = xc.expression_program(xc.expression(FORMULA))
+    source, metadata = emit_native(program)
+    checkout = xc.compile_expression(
+        program, compiler=compiler, cache=tmp_path / "checkout-cache"
+    )
+    config = tomllib.loads((root / "pyproject.toml").read_text())
+    destination = config["tool"]["scikit-build"]["wheel"]["force-include"][
+        RUNTIME_HEADER
+    ]
+    installed = tmp_path / "installed"
+    header = installed / destination
+    header.parent.mkdir(parents=True)
+    shutil.copyfile(root / RUNTIME_HEADER, header)
+    monkeypatch.setattr(paths, "PACKAGE", installed / "generativeqc_compiler")
+    with pytest.raises(ValueError, match="source checkout"):
+        paths.source_root()
+    assert paths.asset_path(RUNTIME_HEADER) == header
+    assert emit_native(program) == (source, metadata)
+    runtime = xc.compile_expression(
+        program, compiler=compiler, cache=tmp_path / "installed-cache"
+    )
+    assert (
+        runtime.artifact.metadata["identity"] == checkout.artifact.metadata["identity"]
+    )
+    assert runtime.artifact.metadata["key"] == checkout.artifact.metadata["key"]
+    np.testing.assert_allclose(
+        runtime.point(rho_a=0.4, rho_b=0.1), oracle(0.4, 0.1), rtol=4e-15
+    )
+    header.unlink()
+    with pytest.raises(FileNotFoundError, match="missing compiler input"):
+        xc.compile_expression(
+            program, compiler=compiler, cache=tmp_path / "installed-cache"
+        )
+
+
+def test_header_tamper_and_stale_artifact_are_rejected(
+    compiler: CppCompilerAdapter, tmp_path: Path
+) -> None:
+    program = xc.expression_program(xc.expression(FORMULA))
+    cache = tmp_path / "header"
+    program.compile(compiler=compiler, cache=cache)
+    (header,) = (cache / "source").glob("*/xc_user_expression_point.hpp")
+    header.write_text("// altered staged runtime header\n")
+    with pytest.raises(ValueError, match="source identity mismatch"):
+        program.compile(compiler=compiler, cache=cache)
+    artifact = program.compile(compiler=compiler, cache=tmp_path / "artifact")
+    path = artifact.library.parent / "artifact.json"
+    payload = json.loads(path.read_text())
+    payload["identity"]["headers"]["xc_user_expression_point.hpp"] = "stale-header"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="runtime cache integrity failure"):
+        program.compile(compiler=compiler, cache=tmp_path / "artifact")

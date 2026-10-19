@@ -121,6 +121,7 @@ It neither compiles code nor grants native SCF, force, response or CUDA admissio
 Explicit compiled CPU point/batch programs use the separate API below;
 compilation alone does not qualify a formula scientifically.
 
+(xc-expression-native)=
 ### Explicit native CPU point/batch programs
 
 `xc.expression_program(formula, order=0|1|2)` builds a separate immutable scalar
@@ -135,7 +136,8 @@ import numpy as np
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 
 program = xc.expression_program(formula, order=2)
-native = program.compile(
+native = xc.compile_expression(
+    program,
     compiler=CppCompilerAdapter(Path("/usr/bin/g++")),
     cache=Path("/absolute/persistent/compiler-cache"),
 )
@@ -149,6 +151,22 @@ compiler/cache adapter; it does not load the full native library. A verified
 The compiled artifact records source, toolchain and binary identity. Artifact
 hits replay without compiling; source/binary integrity checks remain active.
 The current adapter uses the existing Unix-style C++ shared-library toolchain.
+
+`UserExpressionProgram` owns only the immutable mathematical recipe, detached
+graphs, output labels and identity. Its `compile(compiler=..., cache=...)` method
+returns a hash-verified compiled artifact without loading a DSO or allocating
+point buffers. `xc.compile_expression(program, compiler=..., cache=...)` returns
+a `NativeUserExpression` owned by the Python runtime, which retains the loaded
+library/function and owns input snapshots, output scratch and publication.
+The fixed batch loop and pointer/count/finite-domain checks live in
+`src/dft/xc_user_expression_point.hpp`; canonical scalar roots are emitted by the
+compiler. This introduces no alternate mathematical engine or user callback.
+The header is a declared wheel asset. A checked copy is staged beside generated
+source under its logical basename, preserving source/header identity across
+checkout and installed resolution. Missing assets and corrupt staged source,
+header or compiled artifacts fail explicitly. No checkout fallback repairs an
+installed package with a missing asset. A cache miss also reports missing or
+failed compiler/cache prerequisites instead of choosing an interpreter.
 
 Rows are energy density (hartree/bohr^3), then `d/d rho_a`, `d/d rho_b`, then the
 packed upper Hessian `(aa, ab, bb)`. Order zero returns one row, order one three,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from fractions import Fraction
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
@@ -12,6 +12,13 @@ from generativeqc_compiler.xc.spec import COMPONENTS, FunctionalSpec, Unsupporte
 from generativeqc_compiler.xc.spec import functional as _functional
 from generativeqc_compiler.xc.user_expression import UserExpression
 from generativeqc_compiler.xc.user_expression_program import UserExpressionProgram
+
+from generativeqc._xc_user_expression import NativeUserExpression
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 
 API_VERSION = 1
 Coefficient = int | str | Fraction
@@ -90,6 +97,18 @@ def expression_program(
     return UserExpressionProgram(formula, order=order)
 
 
+def compile_expression(
+    program: UserExpressionProgram, *, compiler: CppCompilerAdapter, cache: str | Path
+) -> NativeUserExpression:
+    """Construct the runtime-owned native CPU point/batch adapter.
+
+    Compilation requires a supported host compiler and verified cache launcher
+    on a miss. The explicit program supplies all mathematics and bounds; this
+    factory adds no functional catalogue, SCF, force, response or CUDA admission.
+    """
+    return NativeUserExpression(program, compiler=compiler, cache=cache)
+
+
 def inspect(spec: FunctionalSpec | UserExpression) -> dict:
     """Return a detached, versioned description of a public XC extension."""
     if isinstance(spec, UserExpression):
@@ -162,11 +181,15 @@ __all__ = [
     "API_VERSION",
     "Coefficient",
     "FunctionalSpec",
+    "NativeUserExpression",
     "UnsupportedXC",
     "UserExpression",
+    "UserExpressionProgram",
     "capability",
+    "compile_expression",
     "compose",
     "expression",
+    "expression_program",
     "inspect",
     "named",
 ]
