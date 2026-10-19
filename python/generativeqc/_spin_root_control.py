@@ -203,6 +203,7 @@ def _recover_spin_root(
     *,
     preferred_distance: typing.Callable | None = None,
     work: _Work | None = None,
+    retained_numeric_bytes: int = 0,
 ) -> tuple:
     """One shared restart controller; callbacks own their existing native SCF."""
     work = _Work(policy.maximum_actions) if work is None else work
@@ -214,8 +215,10 @@ def _recover_spin_root(
         + 20 * initial.operator.dimension
     )
     if (
-        reference.overlap.shape[0] > policy.maximum_ao
-        or reserved > policy.memory_budget_bytes
+        type(retained_numeric_bytes) is not int
+        or retained_numeric_bytes < 0
+        or reference.overlap.shape[0] > policy.maximum_ao
+        or reserved + retained_numeric_bytes > policy.memory_budget_bytes
     ):
         raise SpinRootUnqualified(
             "complete recovery numeric budget rejected before execution"

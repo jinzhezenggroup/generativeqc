@@ -32,8 +32,8 @@ class SpinRootPolicy:
 
     Curvatures and energies are Hartree, angles radians, and projector distances
     dimensionless Hilbert-space Frobenius norms. Numeric bytes cover this
-    controller's references/response/rotation scratch; native SCF arenas use the
-    calculator's separate resource contract. No CUDA or default promotion.
+    controller's references/response/rotation scratch; native SCF/J-K/correlation arenas use their
+    separate resource contracts. No CUDA or default promotion.
     """
 
     recover: bool = True

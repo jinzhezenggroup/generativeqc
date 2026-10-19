@@ -62,7 +62,7 @@ radians. The force is minus the nuclear gradient. `SpinRootPolicy` defaults boun
 AO count (32), complete real dimension (128), response plus nonlinear model
 actions (4096), signed rotations (six SCF attempts), and controller numeric memory
 (256 MiB). Numeric memory covers references/response/rotation buffers; native
-SCF/correlation arenas retain the calculator's resource contract. These are work
+SCF/J-K/correlation arenas retain their existing resource contracts. These are work
 and admission limits, not endpoint performance guarantees. Tolerances and policy
 identity are retained with the receipt.
 

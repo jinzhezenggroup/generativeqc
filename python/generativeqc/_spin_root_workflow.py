@@ -233,6 +233,7 @@ def stable_singlepoint(
         distance = None
         projection_receipts = []
         work = _Work(policy.maximum_actions)
+        retained_numeric_bytes = 0
         if previous is not None:
             if (
                 2 * (initial.reference.numeric_bytes + initial.workspace_bytes)
@@ -283,6 +284,10 @@ def stable_singlepoint(
             seed = immutable(np.asarray(seed))
             proposal = _evaluate(initial, seed, work)
             continued = solve(seed, proposal.energy)
+            # ExitStack still retains the closed cold model's Python buffers.
+            retained_numeric_bytes = (
+                initial.reference.numeric_bytes + initial.workspace_bytes
+            )
             initial.close()
             initial = continued
 
@@ -297,7 +302,12 @@ def stable_singlepoint(
                 return direct, "same"
 
         winner, first, spectrum, work, distinct, equivalents = _recover_spin_root(
-            initial, solve, policy, preferred_distance=distance, work=work
+            initial,
+            solve,
+            policy,
+            preferred_distance=distance,
+            work=work,
+            retained_numeric_bytes=retained_numeric_bytes,
         )
         relation, root_distance = "initial", None
         if distance is not None:
@@ -357,7 +367,7 @@ def stable_singlepoint(
             "fixed_density_evaluations": work.fixed_density_evaluations,
             "scf_restarts": work.scf_restarts,
             "projection": projection_receipts,
-            "numeric_memory_scope": "controller/reference/response buffers; native SCF has the calculator resource contract",
+            "numeric_memory_scope": "controller/reference/response buffers; native SCF/J-K/correlation arenas have their existing resource contracts",
         }
         identity = canonical_hash(diagnostics)
         eigenvalues = spectrum.eigenvalues

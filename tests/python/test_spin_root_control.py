@@ -235,3 +235,18 @@ def test_reference_arrays_are_immutable_and_model_budget_does_not_alias() -> Non
         SpinRootPolicy(angles=(0.4, 0.2))
     with pytest.raises(TypeError):
         SpinRootPolicy(recover=1)
+
+
+def test_closed_continuation_staging_buffers_remain_in_controller_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = Model(_symmetric())
+
+    def forbidden(*args: typing.Any) -> None:
+        raise AssertionError("retained-buffer rejection must precede model actions")
+
+    monkeypatch.setattr(model, "evaluate", forbidden)
+    with pytest.raises(SpinRootUnqualified, match="budget"):
+        _recover_spin_root(
+            model, solve, SpinRootPolicy(), retained_numeric_bytes=1 << 40
+        )
