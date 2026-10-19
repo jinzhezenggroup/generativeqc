@@ -31,6 +31,15 @@ index types rather than Python's coercive `True == 1 == 1.0` equality. Decoder o
 encoder recursion failures inside the length budget become the public validation
 exception; they do not escape through a separate runtime-error contract.
 
+The legacy binary scalar product tests unity after conversion to float. Exact
+fractions distinct from one can therefore disappear during capture. A local
+adapter guard uses the existing `Graph.multiply_many` only for those operands,
+covering multiplication, constant division, unary minus and subtraction. Ordinary
+binary construction is retained to bound this repair; canonical identity
+compatibility is checked separately. Erroneous old capture envelopes fail replay validation
+instead of being reinterpreted. This does not repair or qualify generic research
+Graph AD's existing simplification limits; that remains a later qualification.
+
 ## Rejected alternatives
 
 - Python decorators/callback tracing: cannot reliably reject hidden global state,

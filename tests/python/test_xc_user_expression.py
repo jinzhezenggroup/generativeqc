@@ -7,6 +7,7 @@ import subprocess
 import sys
 from dataclasses import FrozenInstanceError
 from decimal import Decimal, localcontext
+from fractions import Fraction
 
 import pytest
 from generativeqc.extensions import method, xc
@@ -232,3 +233,47 @@ def test_replay_rejects_canonical_index_type_aliases(field: str) -> None:
         payload["canonical"]["nodes"][1][1][0] = False
     with pytest.raises(ValueError, match="mismatch"):
         xc.UserExpression.loads(json.dumps(payload))
+
+
+@pytest.mark.parametrize("denominator", [8, 2**53, 10**20, 2**200])
+def test_exact_rational_capture_before_fp64_evaluation(denominator: int) -> None:
+    n = denominator
+    coefficient = Fraction(1) + Fraction(1, n)
+    cases = (
+        (f"(1+1/{n})*{n}-{n}", coefficient * n - n),
+        (f"{n}*(1+1/{n})-{n}", n * coefficient - n),
+        (f"(-(1+1/{n})+1)*{n}", (-coefficient + 1) * n),
+        (f"(1-(1+1/{n}))*{n}", (1 - coefficient) * n),
+        (f"((1+1/{n})/(1+1/{n})-1)*{n}", (coefficient / coefficient - 1) * n),
+    )
+    for source, expected in cases:
+        expression = xc.expression(source)
+        assert expression.evaluate(rho_a=0, rho_b=0) == float(expected)
+        assert expression.identity == xc.expression(str(expected)).identity
+        assert (
+            xc.UserExpression.loads(expression.dumps()).identity == expression.identity
+        )
+
+
+@pytest.mark.parametrize("denominator", [8, 2**53, 10**20, 2**200])
+def test_near_unity_coefficients_survive_sealed_graph_exports(denominator: int) -> None:
+    n = denominator
+    coefficient = Fraction(1) + Fraction(1, n)
+    for source, expected in (
+        (f"(1+1/{n})*rho_a", coefficient),
+        (f"rho_a/(1+1/{n})", 1 / coefficient),
+        (f"-(1+1/{n})*rho_a", -coefficient),
+        (f"(1-(1+1/{n}))*rho_a", 1 - coefficient),
+    ):
+        expression = xc.expression(source)
+        graph, root = expression.scalar_graph()
+        coefficients = [
+            graph.nodes[i].payload
+            for i in graph.topological_order((root,))
+            if graph.nodes[i].operation == "constant"
+        ]
+        assert coefficients == [expected]
+        assert expression.identity != xc.expression("rho_a").identity
+        assert (
+            xc.UserExpression.loads(expression.dumps()).identity == expression.identity
+        )

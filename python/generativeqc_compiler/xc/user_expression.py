@@ -49,6 +49,20 @@ def _capture(source: str) -> tuple[Graph, Expr]:
         pending.extend((child, depth + 1) for child in ast.iter_child_nodes(node))
     graph = Graph()
 
+    def product(left: Expr, right: Expr) -> Expr:
+        # Preserve ordinary binary construction and its canonical identity. Only
+        # bypass its legacy FP64 unity shortcut for an exact non-unity value.
+        for operand in (left, right):
+            node = graph.node(operand)
+            if (
+                node.operation == "constant"
+                and isinstance(node.payload, Fraction)
+                and node.payload != 1
+                and float(node.payload) == 1.0
+            ):
+                return graph.multiply_many((left, right))
+        return left * right
+
     def visit(node: ast.AST) -> tuple[Expr, int, Fraction | None]:
         constant = None
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
@@ -63,23 +77,25 @@ def _capture(source: str) -> tuple[Graph, Expr]:
         ):
             result, degree, constant = visit(node.operand)
             if isinstance(node.op, ast.USub):
-                result = -result
+                result = product(graph.constant(-1), result)
                 constant = -constant if constant is not None else None
         elif isinstance(node, ast.BinOp):
             left, ld, lc = visit(node.left)
             right, rd, rc = visit(node.right)
             if isinstance(node.op, (ast.Add, ast.Sub)):
                 subtract = isinstance(node.op, ast.Sub)
-                result = left - right if subtract else left + right
+                if subtract:
+                    right = product(graph.constant(-1), right)
+                result = left + right
                 degree = max(ld, rd)
                 if lc is not None and rc is not None:
                     constant = lc - rc if subtract else lc + rc
             elif isinstance(node.op, ast.Mult):
-                result, degree = left * right, ld + rd
+                result, degree = product(left, right), ld + rd
                 if lc is not None and rc is not None:
                     constant = lc * rc
             elif isinstance(node.op, ast.Div) and rc is not None and rc != 0:
-                result, degree = left * graph.constant(_coefficient(1 / rc)), ld
+                result, degree = product(left, graph.constant(_coefficient(1 / rc))), ld
                 if lc is not None:
                     constant = lc / rc
             elif (

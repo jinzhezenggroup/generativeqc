@@ -89,6 +89,8 @@ canonicalization, evaluation, and symbolic differentiation. It introduces no
 alternate scientific algebra or derivative engine. `scalar_graph()` returns a
 fresh detached graph for compiler research; mutating it cannot change the sealed
 formula. It does not confer permission to use that graph in a native method.
+Exact coefficient capture does not qualify arbitrary exported Graph derivatives:
+existing research AD simplification limits remain outside this contract.
 
 The semantic identity hashes the versioned contract and reachable canonical
 nodes with remapped indices, following existing XC graph identity conventions.
