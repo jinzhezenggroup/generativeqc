@@ -288,7 +288,11 @@ def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None
         if owned is None:
             return False
         path = Path(f"/proc/{owned['pid']}/stat")
-        return path.exists() and path.read_text().split()[2] not in ("Z", "X")
+        try:
+            state = path.read_text().split()[2]
+        except FileNotFoundError:
+            return False
+        return state not in ("Z", "X")
 
     try:
         deadline = time.monotonic() + 3
