@@ -90,15 +90,18 @@ GENERATIVEQC_ERI_SHARED_HD constexpr bool md_j_hierarchy_leaf_index(
   return md_j_hierarchy_index(layout, width, primitive / width, index);
 }
 
-/** Linear FP64 hierarchy bounds, never log-compressed public-AO masks. q and
- * minimum are respectively maxima of the public pair's maximum and minimum
- * Schwarz bounds. qd bounds q times that pair's density bound. Internal nodes
- * take maxima of each field; `minimum` is NOT a minimum over the node. These
- * bounds can only reject work conservatively. Density is retained separately
- * so coarse screening preserves the leaf multiplication order (q_out*q_in)*d:
- * qd alone may differ at a rounded threshold or underflow boundary.
- * Exact public-AO/leaf admission
- * remains owned by the source consumer and is not replaced by this hierarchy. */
+/** Recipe-specific linear FP64 hierarchy bounds, never log-compressed masks.
+ * Reference nodes take maxima of all fields: q/minimum are the public pair's
+ * maximum/minimum Schwarz bounds, qd bounds q*density. Here `minimum` is NOT a
+ * minimum over the node. Density preserves the leaf order (q_out*q_in)*d;
+ * qd alone can differ at rounded thresholds or underflow boundaries.
+ * Primitive nodes instead retain maximum output norm q, maximum represented
+ * source norm qd, and MINIMUM downward-rounded allowance/q in `minimum`.
+ * Infinity is neutral threshold padding; inactive sources have zero qd.
+ * The recipe is fixed by the owner. Legacy merge/density helpers below apply
+ * only to reference bounds; the primitive consumer owns its threshold reduction.
+ * Either hierarchy may only reject work conservatively; leaf admission remains
+ * owned by the source consumer. */
 struct MdJScreenBound {
   double q{}, qd{}, minimum{}, density{};
 };

@@ -206,3 +206,8 @@ upstream heuristic cutoffs are not equivalent to our absolute cumulative cap;
 this difference neither justifies declaring performance parity nor proves that
 all remaining cost is necessary. Revisit discarded schedules only with a changed
 workload or demonstrated complete endpoint gains.
+
+The [threshold hierarchy and residency follow-up](2026-10-20-md-j-threshold-residency.md)
+moves target thresholds into the hierarchy and replaces the coarse/global target
+allowance with conservative minimum-threshold admission, retaining the source
+prefix's global allowance and the same scientific cap.

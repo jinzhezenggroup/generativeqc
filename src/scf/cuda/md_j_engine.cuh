@@ -16,8 +16,8 @@ namespace {
 /** Each output AO pair has target_count primitive products and at most
  * primitive_count sources. Apportioning by that actual target multiplicity
  * bounds the sum of omitted absolute contributions by min(tolerance,1e-12).
- * Coarse nodes and active prefixes use the global maximum multiplicity, so
- * their smaller allowance remains valid for every leaf. This bounds
+ * Source-prefix admission uses the global maximum multiplicity; target and
+ * tile admission reuse the actual-target thresholds. This bounds
  * screening error, independently of FP64 accumulation error. */
 __host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening,
                                                            std::size_t target_count = 0) {
@@ -44,9 +44,19 @@ __global__ void md_j_engine_pair_loc(MdJView md, unsigned angular) {
   primitive.hermite_offset = md.pair_loc_offsets[angular] + position * md_j_hermite_count(angular);
 }
 
-/** One warp constructs every level for 32 leaves, including explicit zero
- * padding. Geometry q/minima are immutable; qD/density are refreshed on the
- * owning stream for every density. No reduction reads another warp's scratch. */
+/** Divide outward once per target. A rejected source has q_source below a
+ * downward-rounded allowance/q_target, so its contribution is below allowance.
+ * Zero tolerance and unknown output norms retain every nonzero source. */
+__device__ inline double md_j_engine_source_threshold(double output_norm, double allowance) {
+  if (allowance == 0.0 || !(output_norm >= 0.0) || output_norm == kMdJBoundInfinity) return 0.0;
+  if (output_norm == 0.0) return INFINITY;
+  return __ddiv_rd(allowance, output_norm);
+}
+
+/** One warp constructs every level for 32 leaves, including neutral padding.
+ * Primitive nodes retain minimum target thresholds and maximum source norms;
+ * reference nodes retain maxima of all fields. Refresh on the owning stream
+ * for every density/window. No reduction reads another warp's scratch. */
 __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t begin,
                                       std::size_t end, double screening = 0.0) {
   const auto position = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -54,6 +64,9 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
   if (position >= layout.aligned) return;  // padded size is a whole number of warps
   auto* output = md.hierarchy + md.hierarchy_layout.bucket_offsets[angular];
   MdJScreenBound bound{};
+  // Primitive nodes reduce the minimum source threshold. Infinite padding is
+  // its neutral element; reference nodes retain their legacy maximum minimum.
+  if (md.primitive_bounds) bound.minimum = INFINITY;
   if (position < layout.count) {
     const auto index = md.ordered_primitives[md.class_offsets[angular] + position];
     const auto primitive = md.primitives[index];
@@ -67,10 +80,13 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
         // bounds the actual precontracted Hermite source, not q times a shell
         // density envelope. Either direction can keep this q-sorted position.
         bound.qd = output[position].qd;
+        const auto pair = md.pairs[primitive.pair];
+        bound.minimum = md_j_engine_source_threshold(
+            bound.q,
+            md_j_primitive_allowance(md, screening, pair.primitive_end - pair.primitive_begin));
         const auto allowance = md_j_primitive_allowance(md, screening);
-        const bool target =
-            md.primitive_screen->maximum_source_norm != 0.0 &&
-            md_j_bound_product_up(bound.q, md.primitive_screen->maximum_source_norm) >= allowance;
+        const bool target = md.primitive_screen->maximum_source_norm != 0.0 &&
+                            md.primitive_screen->maximum_source_norm >= bound.minimum;
         const bool source = bound.qd != 0.0 && md_j_bound_product_up(md.primitive_maximum_bound,
                                                                      bound.qd) >= allowance;
         if (target || source)
@@ -83,7 +99,9 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
     const unsigned stride = 1U << (level - 1);
     bound.q = fmax(bound.q, __shfl_down_sync(0xffffffffU, bound.q, stride));
     bound.qd = fmax(bound.qd, __shfl_down_sync(0xffffffffU, bound.qd, stride));
-    bound.minimum = fmax(bound.minimum, __shfl_down_sync(0xffffffffU, bound.minimum, stride));
+    const double neighbor_minimum = __shfl_down_sync(0xffffffffU, bound.minimum, stride);
+    bound.minimum = md.primitive_bounds ? fmin(bound.minimum, neighbor_minimum)
+                                        : fmax(bound.minimum, neighbor_minimum);
     bound.density = fmax(bound.density, __shfl_down_sync(0xffffffffU, bound.density, stride));
     if (position % (2 * stride) == 0)
       output[layout.offsets[level] + position / (2 * stride)] = bound;
@@ -122,15 +140,15 @@ __device__ inline bool md_j_engine_tile_admitted(MdJView md, unsigned bra_angula
   const auto ket =
       md.hierarchy[md.hierarchy_layout.bucket_offsets[ket_angular] +
                    ket_layout.offsets[md_j_hierarchy_level(schedule.ket_width)] + task.ket_tile];
-  // Node minima are maxima of leaf minima: multiplication is monotone, so
+  // Reference node minima are maxima of leaf minima: multiplication is monotone, so
   // even the same nearest-rounded comparison conservatively encloses leaves.
   if (!md.primitive_bounds && bra.minimum * ket.minimum < screening) return false;
-  const auto allowance =
-      md.primitive_bounds ? md_j_primitive_allowance(md, screening)
-                          : __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
   if (md.primitive_bounds)
-    return (ket.qd != 0.0 && md_j_bound_product_up(bra.q, ket.qd) >= allowance) ||
-           (bra.qd != 0.0 && md_j_bound_product_up(ket.q, bra.qd) >= allowance);
+    // A tile can contribute only if some source reaches some target threshold.
+    // These max-source/min-threshold reductions conservatively enclose every
+    // leaf comparison, including unknown bounds and a zero screening cutoff.
+    return (ket.qd != 0.0 && ket.qd >= bra.minimum) || (bra.qd != 0.0 && bra.qd >= ket.minimum);
+  const double allowance = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
   return (ket.density != 0.0 && md_j_screen_density_bound(bra, ket) >= allowance) ||
          (bra.density != 0.0 && md_j_screen_density_bound(ket, bra) >= allowance);
 }
@@ -148,37 +166,40 @@ struct MdJEngineCachedPair {
   double source_norm, source_threshold, bank_padding;
 };
 
-/** Divide outward once per target. A rejected source has q_source below a
- * downward-rounded allowance/q_target, so its contribution is below allowance.
- * Zero tolerance and unknown output norms retain every nonzero source. */
-__device__ inline double md_j_engine_source_threshold(double output_norm, double allowance) {
-  if (allowance == 0.0 || !(output_norm >= 0.0) || output_norm == kMdJBoundInfinity) return 0.0;
-  if (output_norm == 0.0) return INFINITY;
-  return __ddiv_rd(allowance, output_norm);
-}
-
 /** Stage the fields consumed by every source/component lane once per tile.
  * Original primitive/transform identity remains in its resident owner. */
 __device__ inline MdJEngineCachedPair md_j_engine_cached_pair(MdJView md, unsigned angular,
-                                                              std::size_t position,
-                                                              double screening) {
+                                                              std::size_t position) {
   const auto primitive = md.primitives[md.ordered_primitives[md.class_offsets[angular] + position]];
   const auto pair = md.pairs[primitive.pair];
   const auto bound = md.hierarchy[md.hierarchy_layout.bucket_offsets[angular] + position];
-  const auto threshold =
-      md.primitive_bounds
-          ? md_j_engine_source_threshold(
-                bound.q,
-                md_j_primitive_allowance(md, screening, pair.primitive_end - pair.primitive_begin))
-          : 0.0;
   return {primitive.exponent,
           primitive.product,
           primitive.hermite_offset,
           primitive.pair,
           pair.system,
           bound.qd,
-          threshold,
+          md.primitive_bounds ? bound.minimum : 0.0,
           0.0};
+}
+
+/** Bound registers to the blocks that the actual shared footprint can retain.
+ * A 96-KiB scheduling envelope leaves headroom in the measured sm_120 SM's
+ * 100-KiB shared pool. The eight-block ceiling avoids an aggressive register
+ * target on tiny sources. Only sm_120 uses this qualified compiler hint; other
+ * architectures retain the compiler default. It does not change admission. */
+template <unsigned BraAngular, unsigned KetAngular>
+__host__ __device__ constexpr unsigned md_j_engine_resident_blocks() {
+  constexpr auto schedule = md_j_tile_schedule(BraAngular, KetAngular);
+  constexpr auto bra = md_j_hermite_count(BraAngular), ket = md_j_hermite_count(KetAngular);
+  constexpr auto bytes = sizeof(MdJEngineCachedPair) * (schedule.bra_width + schedule.ket_width) +
+                         sizeof(double) * (schedule.bra_width * bra + 2 * schedule.ket_width * ket +
+                                           md_j_source_lanes(BraAngular, KetAngular) *
+                                               md_j_hermite_count(BraAngular + KetAngular)) +
+                         kMdJSourceControlBytes;
+  constexpr auto blocks = (96U << 10) / bytes;
+  static_assert(blocks > 0, "MD-J shared footprint exceeds the scheduling envelope");
+  return blocks < 8 ? blocks : 8;
 }
 
 /** Bounded reciprocal consumer with upstream-style quartet/component lanes.
@@ -188,8 +209,12 @@ __device__ inline MdJEngineCachedPair md_j_engine_cached_pair(MdJView md, unsign
  * output one writer. Thus no per-source shared floating-point atomic is needed.
  * All barriers remain outside divergent source/screening branches. */
 template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
-__global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, std::size_t begin,
-                                      std::size_t end, double screening) {
+__global__
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1200
+__launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, KetAngular>()))
+#endif
+    void md_j_engine_potential(MdJView md, MdJTileInventory inventory, std::size_t begin,
+                               std::size_t end, double screening) {
   constexpr auto schedule = md_j_tile_schedule(BraAngular, KetAngular);
   constexpr auto bra_width = schedule.bra_width, ket_width = schedule.ket_width;
   constexpr auto bra_components = md_j_hermite_count(BraAngular);
@@ -240,9 +265,9 @@ __global__ void md_j_engine_potential(MdJView md, MdJTileInventory inventory, st
       continue;
     }
     for (unsigned slot = threadIdx.x; slot < task.bra_count; slot += blockDim.x)
-      bra_cache[slot] = md_j_engine_cached_pair(md, BraAngular, task.bra_begin + slot, screening);
+      bra_cache[slot] = md_j_engine_cached_pair(md, BraAngular, task.bra_begin + slot);
     for (unsigned slot = threadIdx.x; slot < task.ket_count; slot += blockDim.x)
-      ket_cache[slot] = md_j_engine_cached_pair(md, KetAngular, task.ket_begin + slot, screening);
+      ket_cache[slot] = md_j_engine_cached_pair(md, KetAngular, task.ket_begin + slot);
     __syncthreads();
     for (unsigned i = threadIdx.x; i < bra_width * bra_components; i += blockDim.x) {
       const auto slot = i / bra_components;
