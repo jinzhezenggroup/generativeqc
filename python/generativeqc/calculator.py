@@ -167,8 +167,8 @@ class Calculator:
         ccsd_damping: float = 0.0,
         ccsd_level_shift: float = 0.0,
         ccsd_frozen_core: int = 0,
-        max_iterations: int = 100,
-        energy_tolerance: float = 1.0e-10,
+        max_iterations: int = 50,
+        energy_tolerance: float = 1.0e-9,
         density_tolerance: float = 1.0e-8,
         diis_history: int = 8,
         screening_tolerance: float | None = None,
@@ -195,10 +195,10 @@ class Calculator:
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
 
-        ``initial_guess="auto"`` selects native Modified Huckel for FP64
-        all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
-        Older libraries retain their previously supported default. Other domains retain
-        Hcore, as does a batch containing an unsupported element. Explicit
+        ``initial_guess="auto"`` prefers MINAO for eligible FP64 all-electron
+        restricted direct HF/KS cold starts. Qualified CUDA RHF and fitted HF/KS
+        domains without MINAO retain native Huckel; other domains use Hcore.
+        Explicit
         ``None`` disables preparation; existing densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
@@ -800,7 +800,7 @@ class Calculator:
         self._density_tolerance = float(density_tolerance)
         self._diis_history = int(diis_history)
         if screening_tolerance is None:
-            screening_tolerance = 0.0 if self._method in _CORRELATED_METHODS else 1e-12
+            screening_tolerance = 0.0 if self._method in _CORRELATED_METHODS else 1e-13
         self._screening_tolerance = float(screening_tolerance)
         if self._method in _CORRELATED_METHODS:
             if self._screening_tolerance != 0:

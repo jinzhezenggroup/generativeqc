@@ -83,13 +83,13 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
     )
     auto = Calculator(method, "sto-3g", device="cpu", **options)
     core = Calculator(method, "sto-3g", device="cpu", initial_guess=None, **options)
-    assert auto.initial_guess == InitialGuessSpec("huckel")
+    assert auto.initial_guess == InitialGuessSpec("minao")
     assert core.initial_guess is None
     assert auto.capabilities == core.capabilities
-    assert auto._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 6
+    assert auto._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 4
     assert not core._method_descriptor(systems=[WATER]).initial_guess
     assert (
-        auto._method_descriptor(systems=[WATER, HEAVY]).initial_guess.contents.kind == 6
+        auto._method_descriptor(systems=[WATER, HEAVY]).initial_guess.contents.kind == 4
     )
     automatic_plan = auto._resource_request(
         [WATER], properties=("energy",), ks_options=auto.ks_options
@@ -98,7 +98,7 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
         method,
         "sto-3g",
         device="cpu",
-        initial_guess=InitialGuessSpec("huckel"),
+        initial_guess=InitialGuessSpec("minao"),
         **options,
     )
     explicit_plan = explicit._resource_request(
@@ -106,8 +106,8 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
     )
     assert automatic_plan.candidates == explicit_plan.candidates
     schedule = json.loads(automatic_plan.identity.schedule)
-    assert schedule["initial_guess_execution"] == "native-auto-huckel-cpu-v1"
-    assert schedule["initial_guess_resolved_kinds"] == [5]
+    assert schedule["initial_guess_execution"] == "native-auto-cpu-v1"
+    assert schedule["initial_guess_resolved_kinds"] == [3]
 
 
 @pytest.mark.parametrize(
@@ -148,7 +148,7 @@ def test_mixed_native_batch_resolves_each_item(native: None, method: str) -> Non
         failed = batch.execute([[(float("nan"), 0, 0)], None], properties=("energy",))
         replay = batch.execute(strict=True, properties=("energy",))
     assert all(item.converged for item in result.items)
-    assert result.items[0].initial_guess["kind"] == "huckel"
+    assert result.items[0].initial_guess["kind"] == "minao"
     assert result.items[0].initial_guess["outcome"] == "used"
     assert result.items[1].initial_guess is None
     if method == "rhf":
@@ -194,7 +194,7 @@ def test_mixed_resource_plan_and_exact_budget(native: None, method: str) -> None
         systems, charges=[0, 18], properties=("energy",), ks_options=core.ks_options
     )
     assert json.loads(request.identity.schedule)["initial_guess_resolved_kinds"] == [
-        5,
+        3,
         0,
     ]
     for candidate, baseline in zip(request.candidates, target.candidates, strict=True):
@@ -276,7 +276,7 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
     systems = [[("He", (0, 0, 0))], [("Na", (0, 0, 0))]]
     automatic = Calculator(method, basis, device="cpu", **options)
     core = Calculator(method, basis, device="cpu", initial_guess=None, **options)
-    assert automatic.initial_guess == InitialGuessSpec("huckel")
+    assert automatic.initial_guess == InitialGuessSpec("minao")
     assert automatic.capabilities == core.capabilities
     request = automatic._resource_request(
         systems,
@@ -285,7 +285,7 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
         ks_options=automatic.ks_options,
     )
     assert json.loads(request.identity.schedule)["initial_guess_resolved_kinds"] == [
-        5,
+        3,
         0,
     ]
     with core.prepare_batch(systems, charges=[0, -1]) as batch:
@@ -356,9 +356,9 @@ def test_cpu_default_endpoint_and_warm_precedence(native: None, method: str) -> 
     with Calculator(**options).prepare_batch([WATER]) as batch:
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
-    assert cold.initial_guess["kind"] == "huckel"
+    assert cold.initial_guess["kind"] == "minao"
     assert cold.initial_guess["outcome"] == "used"
-    assert cold.initial_guess["preliminary_fock_builds"] > 0
+    assert cold.initial_guess["preliminary_fock_builds"] == 0
     assert cold.initial_guess["target_attempts"] == 1
     assert warm.initial_guess["outcome"] == "existing_density"
     assert warm.initial_guess["preparation_seconds"] == 0
@@ -410,16 +410,16 @@ def test_cuda_default_endpoint_and_unsupported_domains(native: None) -> None:
         "density_tolerance": 1e-10,
     }
     auto = Calculator(**options)
-    explicit = Calculator(**options, initial_guess=InitialGuessSpec("huckel"))
+    explicit = Calculator(**options, initial_guess=InitialGuessSpec("minao"))
     core = Calculator(**options, initial_guess=None)
-    assert auto.initial_guess == InitialGuessSpec("huckel")
+    assert auto.initial_guess == InitialGuessSpec("minao")
     for calculator in (auto, explicit):
         with pytest.raises(NotImplementedError, match="global-hybrid"):
             calculator._resource_request([WATER], ks_options=calculator.ks_options)
     resource_options = options | {"method": "pbe-rks"}
     resource_auto = Calculator(**resource_options)
     resource_explicit = Calculator(
-        **resource_options, initial_guess=InitialGuessSpec("huckel")
+        **resource_options, initial_guess=InitialGuessSpec("minao")
     )
     assert resource_auto._resource_request(
         [WATER], ks_options=resource_auto.ks_options
@@ -432,7 +432,7 @@ def test_cuda_default_endpoint_and_unsupported_domains(native: None) -> None:
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
     assert cold.initial_guess["outcome"] == "used"
-    assert cold.initial_guess["preliminary_fock_builds"] > 0
+    assert cold.initial_guess["preliminary_fock_builds"] == 0
     assert warm.initial_guess["outcome"] == "existing_density"
     for result in (cold, warm):
         assert result.energy == pytest.approx(baseline.energy, abs=1e-9)

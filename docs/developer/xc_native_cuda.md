@@ -45,6 +45,11 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+The ordinary CUDA SCF local-AO cutoff is now `1e-10` (formerly `1e-16`),
+matching GPU4PySCF's numeric `AO_THRESHOLD`. AO sampling and tile grouping
+semantics still differ. Stationary-force AO cutoffs are unchanged.
+
+
 Strict-FP64 integration retains three published totals and three private
 rounding-correction words for XC energy and the two spin populations. One full
 32-thread warp reduces each channel with lane-local compensated sums and a

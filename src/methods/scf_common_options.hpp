@@ -19,14 +19,14 @@ inline scf::ScfOptions common_scf_options(const generativeqc_method_descriptor& 
   scf::ScfOptions options;
   options.application_precision_budget = application_precision_budget(descriptor);
   options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
-  options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
+  options.max_iterations = descriptor.max_iterations == 0 ? 50 : descriptor.max_iterations;
   options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
   options.energy_tolerance =
-      descriptor.energy_tolerance > 0.0 ? descriptor.energy_tolerance : 1.0e-10;
+      descriptor.energy_tolerance > 0.0 ? descriptor.energy_tolerance : 1.0e-9;
   options.density_tolerance =
       descriptor.density_tolerance > 0.0 ? descriptor.density_tolerance : 1.0e-8;
   options.screening_tolerance =
-      descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-12;
+      descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-13;
   return options;
 }
 

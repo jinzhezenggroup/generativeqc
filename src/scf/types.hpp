@@ -106,11 +106,11 @@ struct ScfOptions {
    * source retains the incumbent shared-grid path, including explicit equality. */
   std::optional<dft::GridSpec> nonlocal_grid_spec;
   const dft::MolecularGrid* nonlocal_grid{};
-  unsigned max_iterations{100};
+  unsigned max_iterations{50};
   unsigned diis_history{8};
-  double energy_tolerance{1.0e-10};
+  double energy_tolerance{1.0e-9};
   double density_tolerance{1.0e-8};
-  double screening_tolerance{1.0e-12};
+  double screening_tolerance{1.0e-13};
   /** Optional screened FP64 iteration stage for a nonresident CUDA physical
    * reference. Schwarz and density-weighted J/K gates share this cutoff;
    * final reference publication requires a fresh unscreened SCF refinement.

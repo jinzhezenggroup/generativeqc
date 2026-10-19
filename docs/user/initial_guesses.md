@@ -1,18 +1,13 @@
 # Cold-start initial guesses
 
-`Calculator` defaults to `initial_guess="auto"`. It selects native Modified
-Hückel for FP64, all-electron H-Ar, restricted **CPU/CUDA HF/KS** cold starts,
-including density-fitted (DF) targets.
-Other domains keep the ordinary Hcore guess. An already available explicit,
-imported or warm density always takes precedence. Use `initial_guess=None` to
-restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
-preparation limits. The low-level C API remains explicit-policy driven.
-Automatic selection also requires the supported preliminary-guess schema and a
-positive Hückel provider bit from `generativeqc_initial_guess_capabilities_v1()`.
-CUDA RHF and DF additionally require their respective target-domain capability
-bits; an older provider bit alone does not imply those integrations. Libraries
-without the new provider retain their previous exact-domain MINAO default when
-advertised, otherwise Hcore. Missing queries and unknown schemas retain Hcore.
+`Calculator` defaults to `initial_guess="auto"`. It prefers **MINAO** in
+eligible FP64 all-electron H-Ar restricted direct CPU HF/KS and CUDA KS cold
+starts, matching GPU4PySCF 1.8.1 where supported. CUDA RHF and restricted
+DF HF/KS can retain Modified Hückel when MINAO is unsupported; other domains
+use Hcore. The user can restore Hcore with `initial_guess=None` and select
+Hückel explicitly with `InitialGuessSpec("huckel")`. Imported/warm densities
+always take precedence. The low-level C ABI and native capability checks remain
+unchanged; no new MINAO backend support is implied.
 Explicit `InitialGuessSpec` requests retain native provider/domain checks.
 
 Native CPU automatic admission resolves each item's element, ECP and population

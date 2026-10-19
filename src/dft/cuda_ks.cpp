@@ -1485,6 +1485,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_AO_DISCOVERY accepts host or device");
     const bool select_ao = !disable_ao && capable_local_ao;
     constexpr std::size_t ao_map_host_budget = 64U << 20;
+    // Same numeric cutoff as GPU4PySCF; local AO map semantics differ.
+    constexpr double ao_selection_cutoff = 1.0e-10;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
     // Public ledgers reserve dense XC, later fleet owners and force storage,
@@ -1666,7 +1668,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
         if (admit_ao) {
-          if (!xc->select_local_ao(1e-16, ao_map_host_budget,
+          if (!xc->select_local_ao(ao_selection_cutoff, ao_map_host_budget,
                                    device_discovery ? CudaXcAoDiscovery::DeviceChunks
                                                     : CudaXcAoDiscovery::HostTiles))
             throw std::logic_error("admitted native SCF AO selection failed its resource check");
@@ -1738,7 +1740,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;
         if (!admit_ao) {
-          prepared_ao_work.cutoff = select_ao ? 1e-16 : 0;
+          prepared_ao_work.cutoff = select_ao ? ao_selection_cutoff : 0;
           prepared_ao_work.tiles = 1 + (xc_layout.npoint - 1) / xc_layout.tile_points;
           prepared_ao_work.min_active = prepared_ao_work.max_active = xc_layout.nao;
           prepared_ao_work.active_sum = product(prepared_ao_work.tiles, xc_layout.nao);

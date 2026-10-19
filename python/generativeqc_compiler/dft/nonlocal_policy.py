@@ -1,12 +1,11 @@
 """Explicit molecular VV10 density domain; raw fixed-grid kernels stay strict.
 
-PySCF 2.14.0 pyscf/dft/numint.py::_vv10nlc uses rho >= 1e-8 in
-both pair domains. This is a numerical quadrature policy, not a density floor
-or a change to the VV10 kernel. It does not qualify derivatives across a
-changing active set. Source: https://pyscf.org/_modules/pyscf/dft/numint.html
+GPU4PySCF 1.8.1 uses rho >= 1e-10 for VV10 pair-domain admission in
+SCF and gradients. The same threshold does not equate grid or pair semantics.
+Source: https://github.com/pyscf/gpu4pyscf/blob/v1.8.1/gpu4pyscf/dft/numint.py
 """
 
 from fractions import Fraction
 
-MOLECULAR_VV10_DENSITY_POLICY = "vv10-molecular-rho-ge-1e-8-v1"
-MOLECULAR_VV10_DENSITY_THRESHOLD = Fraction(1, 100000000)
+MOLECULAR_VV10_DENSITY_POLICY = "vv10-molecular-rho-ge-1e-10-v2"
+MOLECULAR_VV10_DENSITY_THRESHOLD = Fraction(1, 10000000000)

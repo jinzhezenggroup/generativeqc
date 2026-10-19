@@ -122,7 +122,7 @@ struct ResolvedFockBuild {
   FockBuildSpec spec{};
   FockBackend backend{FockBackend::Cpu};
   FockSchedule schedule{FockSchedule::CpuReference};
-  double screening_tolerance{1.0e-12};
+  double screening_tolerance{1.0e-13};
   double metric_relative_threshold{};
   FockPrecision precision{FockPrecision::Float64};
   bool operator==(const ResolvedFockBuild&) const = default;
@@ -144,7 +144,7 @@ FockCosxSpec make_cosx_v1_spec(std::size_t radial_points = 48, std::size_t angul
 FockBuildSpec make_hf_fock_spec(FockSpin spin,
                                 FockApproximation approximation = FockApproximation::Exact);
 ResolvedFockBuild resolve_fock_build(FockBuildSpec spec, FockBackend backend,
-                                     double screening_tolerance = 1.0e-12,
+                                     double screening_tolerance = 1.0e-13,
                                      double metric_relative_threshold = 1.0e-10);
 /** Reject forged/noncanonical execution state before calling any provider. */
 void validate_resolved_fock_build(const ResolvedFockBuild& strategy);

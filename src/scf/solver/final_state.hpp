@@ -52,7 +52,7 @@ struct PhysicalFockFrame {
 
 struct FinalStateLimits {
   double density_tolerance{1e-8};
-  double energy_tolerance{1e-10};
+  double energy_tolerance{1e-9};
   // Zero permits validation only; requests above 64 are invalid. This is a
   // bounded final correction, not another unbounded SCF driver.
   unsigned maximum_corrections{4};
