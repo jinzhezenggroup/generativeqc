@@ -178,6 +178,62 @@ is 262,144, configurable up to 1,048,576. Graph traversal additionally limits th
 total nodes per definition (`--graph-node-limit`, at most 4096) and nesting depth
 (`--graph-depth-limit`, at most 16); both bounds are independently pinned.
 
+### qz single-GPU Job allocation proof
+
+The prepared collector also accepts an explicit qz Job receipt. Never set a
+synthetic `SLURM_JOB_ID` on qz. The default Slurm route retains its existing
+single-visible-device checks. qz currently requires one running Job instance,
+one full GPU, and CUDA 12.9 runtime with a compatible driver; Notebook and MIG
+allocations are rejected by this adapter.
+
+On the operator host with the optional Inspire SDK, retain a live snapshot:
+
+```bash
+python benchmarks/qualify_residency_qz.py --no-env-file --account qz \
+  --workspace '<selected workspace>' --job '<your running Job>' \
+  --python /opt/generativeqc-reuse/venv/bin/python --output allocation.json
+```
+
+The command only reads the selected Job, its instances, and a bounded container
+probe. It retains API Job/Project/Workspace IDs, instance, node, assigned GPU
+count, and the container GPU UUID. It rejects assignment changes across its
+observations. Set `CUDA_VISIBLE_DEVICES=0` in the Job command before probing;
+retain the platform-provided `NVIDIA_VISIBLE_DEVICES` UUID unchanged. The native
+collector resolves visible ordinal zero through its pinned library and checks
+the actual PCI-selected full GPU UUID against both the snapshot and container
+visibility. It also requires the snapshot's API instance name to equal the
+actual container hostname.
+
+Activity, graph and source-observer constructors independently validate the qz
+receipt before enabling capture. They require the qualified native library
+separately from the collector DSO; graph/source handles must identify that same
+native library. A platform label or Boolean bypass is not an allocation proof.
+
+Copy the reviewed receipt to the same project shared path without changing its
+bytes. Add `--qz-receipt /absolute/path/allocation.json` and the independently
+retained `--qz-receipt-sha256 <digest printed by snapshot>` to **both** `--pin`
+and `--capture` above. The prepared contract schema is now
+`generativeqc.cupti-prepared.v2`; old contracts must be pinned again. The receipt
+must be no older than two hours at pinning and completion. Its hash, API IDs,
+visibility, CUDA runtime/driver versions, and the presence/value of
+`CUBLAS_WORKSPACE_CONFIG` and `CUDA_DEVICE_ORDER` are checked again after capture.
+Any special workspace configuration must be explicitly applied to the actual
+child environment and reported with the resulting evidence.
+
+Receipt SHA-256 proves integrity of a reviewed observation, not authenticity of
+an arbitrary JSON document. Keep the independently obtained API observation and
+operator command evidence; do not replace them with hand-written IDs or claim
+cryptographic scheduler attestation. Query Job status/instances again after the
+run and retain the final platform observation beside the device artifacts.
+An intact capture still exits **2 / INCOMPLETE** and does not assert zero round
+trips, full payload lineage, complete implicit waits, or an endpoint speedup.
+
+The optional DF compatibility test accepts the same proof through
+`GENERATIVEQC_QZ_ALLOCATION_RECEIPT` and
+`GENERATIVEQC_QZ_ALLOCATION_SHA256`; its real host-staged compatibility counters,
+independent fixture comparisons, and INCOMPLETE verdict remain required.
+Host negative controls are in `tests/python/test_cupti_qz_receipts.py`.
+
 ### Observed replay work ratchet
 
 The optional `--work-ratchet` selects independently reviewed limits for the exact
