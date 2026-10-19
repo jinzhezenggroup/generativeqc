@@ -11,7 +11,7 @@ regular-expression recorder. Harmless CUDA source refactoring could break the
 test without changing admission behavior.
 
 The existing internal `scf/cuda/scf_diis_kernels.hpp` now holds the inline host
-preflight in its private `detail` namespace.
+preflight in its private `ordered_gram_admission` namespace.
 The production wrapper calls it immediately before its unchanged kernel launch.
 The host test includes and calls this function normally. The existing native
 CUDA test also calls the public launcher with each required binding absent,
@@ -34,6 +34,7 @@ and one retain their copy-only/null-history/null-cache exception.
 | Extracted guard text must compile with an inserted recorder | Original 13 rejections and three valid/disabled cases retained; 37 rejections now cover each required pointer, both shape signs, geometry, history and alias errors |
 | Addressability guard spelling | Python unbounded-integer byte products determine acceptance around exact storage boundaries, including copy-only histories |
 | Host validation may inspect borrowed state | NaN/inactive/invalid-count state remains untouched; non-host-readable sentinel addresses are admitted without dereferencing |
+| The launch header composes with existing HF includes | Compile the real SCF task-layout and launch headers together under the consumer's namespace import and call the existing empty-topology admission contract |
 
 The original 378 arithmetic cases remain intact: capacities 2 through 64,
 bitwise ordered results, independent long-double oracle, wrap, retirement,
@@ -55,6 +56,10 @@ wrapper: all 37 invalid cases submitted no work, valid/disabled/poison cases
 reached the launch recorder, and stream/shared-memory/normalization/work and
 optional kernel arguments retained their values. This is host wiring evidence,
 not execution of the kernel.
+The recorder qualification requires each admitted public-wrapper call to reach
+the recorder exactly once; removing its submission increment fails a separate
+negative control. A test-driver adaptation miss or silent runtime refusal cannot
+therefore masquerade as successful packet qualification.
 
 Opt-in qualification removed each of the 13 shape/geometry/input conditions,
 eight enabled-history pointer conditions, exact alias rejection, history extent,
@@ -71,6 +76,15 @@ completed its 11 public-launcher rejection cases, then returned its established
 device-gate code 77. No GPU execution, synchronization, complete SCF endpoint,
 scientific acceptance or performance improvement is inferred from these checks.
 CI/review/merge status must be read from the current PR separately.
+
+The first PR head's complete CUDA package build exposed a namespace-composition
+failure that the isolated DIIS translation unit did not cover. A generic nested
+`cuda_execution::detail` became ambiguous with existing `scf::detail` after the
+HF consumer imported `cuda_execution`. The header-composition probe reproduced
+that exact compile failure. A dedicated ordered-Gram namespace resolves it
+without changing the HF consumer or scientific implementation. Keep this
+composition regression and the failed-head CI receipt; an isolated successful
+CUDA compile does not replace the complete package build gate.
 
 Local qualification scripts and raw logs are opt-in ignored artifacts, not
 permanent required-CI source-spelling/fingerprint checks. Remote receipts are

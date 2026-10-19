@@ -11,7 +11,7 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-namespace detail {
+namespace ordered_gram_admission {
 
 /** Host preflight shared by the ordered CUDA launcher and host contract tests.
  * Pointers are borrowed device addresses: inspect only nullness/exact aliasing,
@@ -44,7 +44,7 @@ inline void validate_ordered_gram_launch(dim3 grid, dim3 block, std::int32_t bat
     throw std::invalid_argument("ordered Gram history size exceeds addressable storage");
 }
 
-}  // namespace detail
+}  // namespace ordered_gram_admission
 
 /** Form deterministic block partials for the history including the current
  * residual, before its circular slot is overwritten. The caller lends

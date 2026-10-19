@@ -414,10 +414,10 @@ void launch_update_diis_cached_gram(
     double* residual_history, double* linear_system, double* coefficients,
     std::uint32_t* history_count, std::uint32_t* history_head, double* effective_fock,
     double* gram_cache, bool normalize_metric, tensor::RingGramWork* work) {
-  detail::validate_ordered_gram_launch(grid, block, batch_size, nbf, matrices_per_system,
-                                       history_capacity, fock, residual, active, fock_history,
-                                       residual_history, linear_system, coefficients, history_count,
-                                       history_head, effective_fock, gram_cache);
+  ordered_gram_admission::validate_ordered_gram_launch(
+      grid, block, batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
+      fock_history, residual_history, linear_system, coefficients, history_count, history_head,
+      effective_fock, gram_cache);
   update_diis_kernel<false, false, true><<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active, fock_history,
       residual_history, linear_system, coefficients, history_count, history_head, effective_fock,
