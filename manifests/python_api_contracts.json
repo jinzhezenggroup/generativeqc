@@ -5576,6 +5576,14 @@
         "behavior": "docstring"
       }
     },
+    "generativeqc/ks.py:KsOptions.has_separate_nonlocal_grid": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/reference/python_contracts.md#python-options-values"
+      }
+    },
     "generativeqc/ks.py:KsOptions.identity": {
       "kind": "function",
       "profile": "accessor",

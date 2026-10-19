@@ -103,6 +103,30 @@ without a CPU partition fallback. The ordinary `MolecularGrid` constructor remai
 independent CPU reference.
 See the [CUDA quadrature decision](../../.agents/notes/implemented/performance/2026-09-23-cuda-molecular-quadrature.md).
 
+### Independent nonlocal quadrature
+
+The public `KsOptions.nonlocal_grid` controls VV10/rVV10 separately from `grid`.
+The [Python contract](../reference/python_contracts.md) owns its supported
+endpoints and limits. Preparation compares complete normalized prescriptions;
+matching point counts alone never select the shared-grid optimization.
+
+A distinct prescription creates a second immutable molecular-grid owner and
+sizes the VV10 plan and density-feature arrays from that owner. CUDA reuses the
+qualified zero-scaled PBE GGA transport for the secondary density/AO assembly:
+VV10 needs only total rho/grad-rho and their GGA pullback, so this transport adds
+no PBE energy and does not require WB97M-V component scaling. The physical XC
+rule continues to own semilocal energy, potential and electron diagnostics.
+Only the separately integrated nonlocal energy and AO potential are added to
+the physical Fock model, propagating errors from either source.
+
+The stationary snapshot authenticates both prescriptions and exports exact
+secondary points, weights, atom owners and atomic measures. CUDA forces borrow
+the token-bound secondary grid and SCF features; the two geometry traversals
+share bounded AO scratch, not collocation tasks or active maps. Their separate
+partition-response accumulators use the corresponding partition iteration
+count and tolerance. Shared-grid execution retains its incumbent combined pass.
+See the [independent-grid decision](../../.agents/notes/implemented/numerics/2026-10-19-independent-vv10-grids.md).
+
 `grid.explicit(max_points=...)` is a guarded small-grid exporter. `ExplicitGrid`
 stores exact points, weights, owners, provenance and a verified content hash.
 The default `identity_version=1` and version-1 JSON import retain the historical

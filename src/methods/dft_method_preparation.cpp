@@ -211,10 +211,11 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     if (ks_input->struct_size < sizeof(generativeqc_ks_options) ||
         ks_input->abi_version != GENERATIVEQC_ABI_VERSION)
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
-    if (ks_input->struct_size > sizeof(generativeqc_ks_options) &&
-        ks_input->struct_size < sizeof(dft::ApplicationPrecisionKsOptions))
+    if (ks_input->struct_size != sizeof(generativeqc_ks_options) &&
+        ks_input->struct_size != sizeof(dft::ApplicationPrecisionKsOptions) &&
+        ks_input->struct_size != sizeof(dft::NonlocalGridKsOptions))
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
-                        "incomplete application precision extension");
+                        "unknown or incomplete KS options extension");
     if (ks_input->struct_size >= sizeof(dft::ApplicationPrecisionKsOptions)) {
       const auto& application =
           *reinterpret_cast<const dft::ApplicationPrecisionKsOptions*>(ks_input);
@@ -533,6 +534,21 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
     }
   }
   dft::validate_grid_spec(grid);
+  if (input.struct_size == sizeof(dft::NonlocalGridKsOptions)) {
+    const auto& extension = *reinterpret_cast<const dft::NonlocalGridKsOptions*>(&input);
+    if (extension.version != 1 || extension.reserved != 0 || !extension.grid ||
+        extension.grid->struct_size != sizeof(generativeqc_ks_options))
+      throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "invalid nonlocal grid extension");
+    if (!execution_plan.nonlocal_correlation)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "a nonlocal grid requires a nonlocal correlation term");
+    auto nonlocal_descriptor = descriptor;
+    nonlocal_descriptor.ks_options = extension.grid;
+    auto nonlocal_options = options;
+    const auto nonlocal_grid =
+        ks_grid_options(nonlocal_descriptor, nonlocal_options, execution_plan);
+    if (nonlocal_grid != grid) options.nonlocal_grid_spec = nonlocal_grid;
+  }
   return grid;
 }
 

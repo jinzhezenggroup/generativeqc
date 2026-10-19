@@ -158,8 +158,9 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
                   options.semilocal_exchange_scale, options.semilocal_correlation_scale);
   dft::nlc::SpinVv10Integral nonlocal;
   if (nonlocal_correlation)
-    nonlocal = dft::nlc::integrate_vv10_uks(basis, grid, alpha, beta, *nonlocal_correlation,
-                                            options.xc_tile_points, nonlocal_domain);
+    nonlocal = dft::nlc::integrate_vv10_uks(
+        basis, options.nonlocal_grid ? *options.nonlocal_grid : grid, alpha, beta,
+        *nonlocal_correlation, options.xc_tile_points, nonlocal_domain);
   if (xc.potential[0].size() != out.fock.alpha.size() ||
       xc.potential[1].size() != out.fock.beta.size() ||
       (nonlocal_correlation && (nonlocal.potential[0].size() != out.fock.alpha.size() ||
@@ -633,7 +634,8 @@ ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan
                          const std::vector<double>* initial_density) {
   require_wb97mv_composition(primary.strategy(), correction.strategy(), nonlocal.parameters());
   if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-      nonlocal.resources().point_count != grid.point_count())
+      nonlocal.resources().point_count !=
+          (options.nonlocal_grid ? options.nonlocal_grid->point_count() : grid.point_count()))
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_uks_impl(primary, &correction, basis, grid, options,
                       SpinXcEvaluator(evaluate_wb97mv_xc_uks, dft::SemilocalFamily::Wb97mv),

@@ -247,6 +247,8 @@ def reference_engine(
     spin: int = 0,
     xc: str = "WB97M_V",
     full_fock: bool = False,
+    nonlocal_spec: typing.Any = None,
+    charge: int = 0,
 ) -> typing.Any:
     """Build an independent GPU4PySCF engine on the same moving quadrature.
 
@@ -262,7 +264,15 @@ def reference_engine(
 
     if spec.partition_iterations != 3:
         raise ValueError("GPU4PySCF comparator requires three Becke iterations")
-    mol = gto.M(atom=atoms, unit="Bohr", basis=basis, spin=spin, cart=False, verbose=0)
+    mol = gto.M(
+        atom=atoms,
+        unit="Bohr",
+        basis=basis,
+        spin=spin,
+        charge=charge,
+        cart=False,
+        verbose=0,
+    )
     engine = (uks.UKS if spin else rks.RKS)(mol)
     engine.xc = xc
     # Reconstruct the stated quadrature independently from its public spec.
@@ -354,6 +364,17 @@ def reference_engine(
     engine.max_cycle = 180
     if full_fock:
         configure_reference_full_fock(engine)
+    if nonlocal_spec is not None and nonlocal_spec != spec:
+        independent = reference_engine(
+            atoms,
+            basis,
+            nonlocal_spec,
+            spin=spin,
+            xc=xc,
+            full_fock=full_fock,
+            charge=charge,
+        )
+        engine.nlcgrids = independent.nlcgrids
     return engine
 
 
@@ -395,6 +416,7 @@ def main() -> None:
     )
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
+    parser.add_argument("--nonlocal-grid", type=int, nargs=3)
     parser.add_argument(
         "--grid-pruning", choices=("auto", "none", "radial-v1"), default="auto"
     )
@@ -424,6 +446,11 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
     spec = benchmark_grid_spec(args.grid, atoms, args.grid_pruning)
+    nonlocal_spec = (
+        benchmark_grid_spec(args.nonlocal_grid, atoms, args.grid_pruning)
+        if args.nonlocal_grid is not None
+        else None
+    )
     record = {
         "schema": "generativeqc.readme-wb97mv.v1",
         "status": "running",
@@ -433,6 +460,11 @@ def main() -> None:
         "method": "WB97M-V/RKS",
         "endpoint": "SCF energy plus analytic forces",
         "grid": asdict(spec),
+        **(
+            {"nonlocal_grid": asdict(nonlocal_spec)}
+            if nonlocal_spec is not None
+            else {}
+        ),
         "warm_start_policy": fixed_warm_start_policy(),
         "native_samples": [],
         "reference_samples": [],
@@ -454,7 +486,9 @@ def main() -> None:
         )
         record["environment"]["accelerator"] = cuda_accelerator_metadata(cp)
         started = perf_counter()
-        reference = reference_engine(atoms, "def2-svp", spec)
+        reference = reference_engine(
+            atoms, "def2-svp", spec, nonlocal_spec=nonlocal_spec
+        )
         record["reference_prepare_seconds"] = perf_counter() - started
         if not args.reference_only:
             save("native/prepare")
@@ -464,7 +498,7 @@ def main() -> None:
                 basis="def2-svp",
                 device="cuda",
                 basis_representation="spherical",
-                ks_options=KsOptions(grid=spec),
+                ks_options=KsOptions(grid=spec, nonlocal_grid=nonlocal_spec),
                 energy_tolerance=1e-11,
                 density_tolerance=1e-9,
                 screening_tolerance=1e-12,

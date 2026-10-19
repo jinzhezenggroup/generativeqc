@@ -508,10 +508,11 @@ dft::XcIntegral evaluate_cam_b3lyp_xc_rks(const dft::AoBasis& basis, const dft::
 template <class PrimaryPlan>
 RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
                            const dft::AoBasis& basis, const dft::MolecularGrid& grid,
-                           const Matrix& density, RksXcEvaluator evaluate_xc,
-                           const char* method_name, dft::XcDensitySource source,
-                           std::size_t retained_capacity, std::size_t tile, double exchange_scale,
-                           double correlation_scale, dft::nlc::Vv10Plan* nonlocal_correlation,
+                           const dft::MolecularGrid& nonlocal_grid, const Matrix& density,
+                           RksXcEvaluator evaluate_xc, const char* method_name,
+                           dft::XcDensitySource source, std::size_t retained_capacity,
+                           std::size_t tile, double exchange_scale, double correlation_scale,
+                           dft::nlc::Vv10Plan* nonlocal_correlation,
                            dft::nlc::Vv10DensityDomain nonlocal_domain,
                            const dft::RksAoCache* ao_cache,
                            std::optional<dft::XcIntegral> xc_override = std::nullopt) {
@@ -542,8 +543,8 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
   result.density_diagnostic = xc.density_diagnostic;
   dft::nlc::Vv10Integral nonlocal;
   if (nonlocal_correlation)
-    nonlocal = dft::nlc::integrate_vv10_rks(basis, grid, density, *nonlocal_correlation, tile, {},
-                                            nonlocal_domain);
+    nonlocal = dft::nlc::integrate_vv10_rks(basis, nonlocal_grid, density, *nonlocal_correlation,
+                                            tile, {}, nonlocal_domain);
   // The semilocal/nonlocal AO tiles and potentials are live together with
   // these J/Fock buffers. Their reported peaks exclude borrowed D/factors.
   const auto scientific_peak =
@@ -798,8 +799,9 @@ ScfResult run_rks(
           require_full_xc));
     }
     auto physical =
-        evaluate_rks(plan, long_range_correction, basis, grid, current_density, evaluate_xc,
-                     method_name, {options.xc_density_route, factor.get(), identity},
+        evaluate_rks(plan, long_range_correction, basis, grid,
+                     options.nonlocal_grid ? *options.nonlocal_grid : grid, current_density,
+                     evaluate_xc, method_name, {options.xc_density_route, factor.get(), identity},
                      runtime::add_capacity(retained_capacity(current_density), extra_live_bytes),
                      options.xc_tile_points, options.semilocal_exchange_scale,
                      options.semilocal_correlation_scale, nonlocal_correlation, nonlocal_domain,
@@ -1193,7 +1195,8 @@ ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan
                          const std::vector<double>* initial_density) {
   require_wb97mv_composition(primary.strategy(), correction.strategy(), nonlocal.parameters());
   if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-      nonlocal.resources().point_count != grid.point_count())
+      nonlocal.resources().point_count !=
+          (options.nonlocal_grid ? options.nonlocal_grid->point_count() : grid.point_count()))
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_rks(primary, &correction, basis, grid, options, initial_density,
                  RksXcEvaluator(evaluate_wb97mv_xc_rks, dft::SemilocalFamily::Wb97mv), "WB97M-V",
