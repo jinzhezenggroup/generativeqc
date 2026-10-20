@@ -23,6 +23,7 @@ from generativeqc_compiler.tensor import (
     Symmetry,
     TensorSpec,
     add,
+    constant,
     input_tensor,
     multiply,
 )
@@ -77,41 +78,42 @@ def test_resident_source_keeps_the_ordinary_abi() -> None:
 
 
 def _transfer_program(kind: str) -> typing.Any:
-    if kind == "pair":
-        return doubled_pair_program()
-    # Unequal lengths and item sizes catch slot swaps and hardcoded FP64 spans.
+    # Control tensors have no floating validation or computation launches. Use
+    # their real lowering rather than patching private emitter dependencies.
+    counts = (6, 36) if kind == "two" else (0 if kind == "empty" else 3, 5, 2)
     inputs = []
-    for name, dtype, count in (
-        ("a", "float32", 0 if kind == "empty" else 3),
-        ("b", "float64", 5),
-        ("c", "int64", 2),
-    ):
+    for name, count in zip(("a", "b", "c"), counts, strict=False):
         index = Index(name, IndexSpace(name, "occupied", count))
         inputs.append(
             input_tensor(
                 name,
                 TensorSpec(
                     (index,),
-                    dtype=dtype,
-                    representation="general"
-                    if dtype == "int64"
-                    else "restricted_spatial",
+                    dtype="int64",
+                    representation="general",
                     role="parameter",
                     differentiable=False,
                 ),
             )
         )
-    return Program({f"out_{i}": value for i, value in enumerate(reversed(inputs))})
+    outputs = {f"out_{i}": value for i, value in enumerate(reversed(inputs))}
+    # CUDA plan identity requires a floating dtype. An empty literal admits the
+    # real plan without floating input validation, initialization or arithmetic.
+    empty = Index("empty", IndexSpace("empty", "occupied", 0))
+    outputs["empty_literal"] = constant(
+        (), TensorSpec((empty,), role="constant", differentiable=False)
+    )
+    return Program(outputs)
 
 
-@pytest.fixture(params=["pair", "mixed", "empty"])
+@pytest.fixture(params=["two", "reordered", "empty"])
 def resident_host(
     request: pytest.FixtureRequest,
     tmp_path: Path,
     native_cxx: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> typing.Any:
-    """A real generated resident ABI, with CUDA/owner/kernel dependencies stubbed."""
+    """A real generated resident ABI, with only CUDA/owner emission stubbed."""
     plan = plan_cuda(_transfer_program(request.param), TARGET, max_bytes=1 << 26)
     lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch)
     return plan, lib
@@ -237,10 +239,23 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
         lib.host_destroy(owner)
 
 
-def test_resident_spans_match_the_pinned_plan_offsets(
+def test_resident_spans_match_the_pinned_plan_offsets() -> None:
+    """Spans are compiled from pinned offsets; the planner must pin them."""
+    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
+    assert all(plan.steps[i].last_use == len(plan.steps) for i in plan.inputs)
+    source = resident_source(plan)
+    for i in plan.inputs:
+        step = plan.steps[i]
+        assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
+    for _, i in plan.outputs:
+        step = plan.steps[i]
+        assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
+
+
+def test_resident_control_span_transfers(
     resident_host: typing.Any,
 ) -> None:
-    """Execute generated slot/byte/offset mappings against raw host memory."""
+    """Execute generated int64 control span mappings against raw host memory."""
     _assert_resident_spans(*resident_host)
 
 
@@ -248,7 +263,7 @@ def test_resident_spans_match_the_pinned_plan_offsets(
     os.environ.get("VIBEQC_RESIDENT_HOST_CONTROLS") != "1",
     reason="opt-in generated-source metamorphic/mutation controls",
 )
-@pytest.mark.parametrize("mutation", ["format", "offset", "length", "status"])
+@pytest.mark.parametrize("mutation", ["format", "abi", "offset", "length", "status"])
 def test_resident_host_oracle_controls(
     mutation: str,
     tmp_path: Path,
@@ -256,7 +271,7 @@ def test_resident_host_oracle_controls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Harmless spelling survives; actual ABI/transfer damage is detected."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
+    plan = plan_cuda(_transfer_program("reordered"), TARGET, max_bytes=1 << 26)
 
     def transform(source: str) -> str:
         if mutation == "format":
@@ -270,6 +285,11 @@ def test_resident_host_oracle_controls(
                 "return generativeqc_resident::transfer(",
                 "return 0 * generativeqc_resident::transfer(",
             )
+        if mutation == "abi":
+            return source.replace(
+                'extern "C" int resident_abi() { return 1; }',
+                'extern "C" int resident_abi() { return 2; }',
+            )
         field = 0 if mutation == "offset" else 1
 
         def corrupt(match: re.Match[str]) -> str:
@@ -280,6 +300,10 @@ def test_resident_host_oracle_controls(
         return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
 
     lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch, transform)
+    if mutation == "abi":
+        with pytest.raises(AssertionError):
+            _assert_resident_abi(plan, lib)
+        return
     _assert_resident_abi(plan, lib)
     if mutation == "format":
         _assert_resident_spans(plan, lib)

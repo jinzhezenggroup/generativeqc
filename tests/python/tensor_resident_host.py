@@ -1,6 +1,8 @@
 """Compile the complete resident wrapper with explicit host dependency seams.
 
-Only ordinary emission, validation kernels and computation launches are replaced.
+Only ordinary emission is replaced with the host owner/CUDA dependency fixture.
+Int64 passthrough plans with an empty floating literal require no kernels/launches;
+their normal production emitters run without being patched.
 The resident exports/span tables come from resident_source; transfer/checked come
 from a byte-for-byte copy of the production cuda_resident.cuh. This is not a CUDA
 kernel, numerical, ordinary-emitter, or production Context lifecycle test.
@@ -36,8 +38,6 @@ def build_resident_host(
             "emit_cuda",
             lambda *a, **k: '#include "cuda_runtime.cuh"\n',
         )
-        patch.setattr(cuda_resident_emit, "_validation_body", lambda plan: ("", []))
-        patch.setattr(cuda_resident_emit, "_emit_launch", lambda *a: "")
         source = cuda_resident_emit.resident_source(plan)
     if transform:
         source = transform(source)

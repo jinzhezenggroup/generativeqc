@@ -5,13 +5,16 @@ Date: 2026-10-20
 
 ## Decision
 
-Replace two source-spelling assertions in `test_tensor_cuda_resident.py` with
-compiled execution of the complete `resident_source` result. During generation,
-the test explicitly injects the ordinary emitter, validation-kernel emitter and
-computation-launch emitter dependencies. It does not extract or reconstruct
-resident function bodies or span rows. The generated exports and tables remain
-the subject under test, together with an unchanged copy of production
-`src/tensor/cuda_resident.cuh` and `metrics.hpp`.
+Replace only the resident ABI declaration source assertion in
+`test_tensor_cuda_resident.py` with compiled execution of the complete
+`resident_source` result. The test injects the existing outer ordinary-emission
+boundary with a host owner/CUDA dependency fixture. Actual int64 passthrough
+control plans include an empty floating literal required by normal CUDA precision
+admission. They need no floating-input validation or computation launches; their
+normal production emitters run without patching private helpers. The test does not
+extract or reconstruct resident function bodies or span rows. The generated
+exports and control-span tables remain the subject under test, together with an
+unchanged copy of production `src/tensor/cuda_resident.cuh` and `metrics.hpp`.
 
 The dependency fixture supplies host storage, CUDA API responses and an owner.
 It queues copies until synchronization, so a missing synchronization cannot pass
@@ -27,20 +30,23 @@ arithmetic/symmetry, ordinary-emitter or scientific numerical qualification.
 - Upload distinct raw bytes and compare the entire arena against an independent
   Python bytearray, including untouched gaps. Independently seed the entire arena
   before testing downloads, avoiding a matching upload/download bug cancelling
-  itself out. Test unequal lengths, FP32/FP64/int64 item sizes and empty spans.
+  itself out. Test multiple unequal-length int64 control slots and empty spans.
+  These cases do not qualify FP32/FP64 spans or computed-output storage.
 - Exercise invalid slots, incorrect byte lengths, null owners/host buffers,
   allocation offset/extent bounds, injected copy/synchronization/device errors,
   nonzero statuses, diagnostics and stream draining. Preserve the input pin gate.
 - Opt-in `VIBEQC_RESIDENT_HOST_CONTROLS=1` accepts formatting and private table
-  renaming while rejecting generated offset, length and status corruption using
-  the same behavioral oracle. These controls intentionally edit generated text;
+  renaming while rejecting ABI-version, generated offset, length and status
+  corruption using the same behavioral oracle. These controls edit generated text;
   they are not a required-CI private spelling/hash gate.
 
 ## Boundaries retained
 
-The ordinary ABI source assertion is deliberately retained: replacing ordinary
-emission with an owner seam cannot prove ordinary exports. All other arithmetic,
-symmetry, post-run, lifetime, dependency-integrity and GPU numerical tests remain.
+The ordinary ABI and doubled-pair computed-output span source assertions are
+deliberately retained: replacing ordinary emission with an owner seam cannot
+prove ordinary exports, and int64 passthrough plans cannot replace the original
+floating/computed-output span guard. All arithmetic, symmetry, post-run,
+lifetime, dependency-integrity and GPU numerical tests remain.
 No production generator/runtime, mathematics, resource default or selector changes
 are part of this slice. Parent issue #2296 remains open.
 
@@ -52,12 +58,27 @@ or ccache executable. Preserve compiler-cache statistics, finite compile/link
 timeouts and exact source provenance. Windows prerequisite skips do not establish
 Linux host acceptance. Run the opt-in controls separately from ordinary CI.
 
-The source-matched Linux qualification used Python 3.11, G++ 12.3 and sccache
-0.16.0: the resident file with controls passed all 24 cases; the final related
-resident/planner/FP32/compiler-identity/compiler-structure/GEMM/integer-cost gate
-passed 154 cases with 19 explicit CUDA-device opt-in skips. The compiler cache
-recorded 10 compilations/misses and no failures, not cache hits. Ruff, formatting
-and whitespace checks also passed.
+The initial `b94da4079` implementation passed 24 resident cases and a related
+154-pass/19-CUDA-opt-in-skip Linux gate with Python 3.11, G++ 12.3 and sccache
+0.16.0 (10 compilations/misses, no failures). However, review P1
+`PRRT_kwDOUFEw6s6uNDqj` correctly identified that patching private validation and
+launch helper names would still reject a harmless rename. Those results do not
+qualify the subsequent narrower head. The final slice removes both private
+patches and restores the original doubled-pair span assertion; it requires its
+own source-matched Linux gate and latest-head review.
+
+The first pure-int64 revision failed before compilation (5 failed, 6 setup
+errors): `program_precision` requires a floating value for plan identity. The
+replacement uses a legitimate zero-element floating constant through the public
+TensorIR API. It does not bypass precision admission, initialize floating data or
+qualify any nonempty floating span.
+
+The final narrower sources passed the Linux gate with 156 cases and 19 explicit
+CUDA-device opt-in skips, including all 26 resident cases (five opt-in controls).
+The cache recorded 11 compilations/misses and zero compilation failures.
+The three qualified test/helper/fixture LF hashes were checked against the
+committed blobs. The compiler/runtime boundary remains host-only; this result
+does not qualify ordinary emission, floating validation, kernels or science.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
