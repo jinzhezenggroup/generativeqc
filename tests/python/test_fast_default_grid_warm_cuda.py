@@ -85,6 +85,8 @@ def test_default_fast_frozen_and_moved_physical_endpoints(functional: str) -> No
                     else:
                         assert observed.precision["mixed_stage_fock_builds"] > 0
                         prepared.set_warm_start_updates(False)
-                    coordinates = None
+                    # None always means the preparation geometry, not the last
+                    # explicit geometry. Repeat the moved coordinates so this
+                    # assertion compares forces for the same physical system.
     finally:
         calculator.clear_cache()

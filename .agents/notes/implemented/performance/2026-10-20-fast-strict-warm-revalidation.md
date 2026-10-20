@@ -39,3 +39,29 @@ checkpoint; no universal Fast speedup or README production ranking follows.
 Revisit source reuse and force scheduling if eliminating the mixed restart still
 leaves warm Fast slower. Keep those measured causes separate from the stopping
 policy and from independent audit requirements.
+
+## Follow-up diagnosis: strict final consumers
+
+Source `6bce35757` eliminates the mixed warm restart on n1 jobs 11201/11202:
+96-atom PBE/PBE0 warm each take one SCF iteration and the state-bound strict
+warm admission, with no independent endpoint audit. Default warm medians are
+10.227/10.940 s. In the same jobs and binary, explicitly enabling the existing
+resident final-state proof and relative-density force schedule gives 6.776/7.864 s.
+These are diagnostic selector comparisons, not final default performance claims.
+
+Both default selectors incorrectly used historical SCF precision instead of the
+arithmetic of their own consumers. The final-state proof now admits strict FP64
+refinement following mixed proposals, retaining all model, token, scratch and
+physical validation gates. The force selector consumes the actual per-invocation
+precision request. Strict Python fallback and FP64 retry paths can use the
+existing spatial source schedule; any requested mixed force component retains
+the incumbent route. No convergence thresholds or operator approximations change.
+
+The policy/host suites pass 198 tests, including executable precision combinations
+for the force consumer. The first GPU test exposed an invalid pure-J range-field
+lookup, fixed in `6bce35757`; endpoint probes also required the missing SPD AOT
+packages. A later apparent moved-force error occurred in Standard as well:
+`execute(None)` selects the preparation geometry, not the preceding explicit
+geometry. Keep the moved coordinates on every replay. The diagnostic confirms
+the actual moved PBE endpoint passes the original independent force gates.
+GPU qualification of the final default selectors remains pending here.
