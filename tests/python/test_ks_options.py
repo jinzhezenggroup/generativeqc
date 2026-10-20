@@ -628,6 +628,17 @@ def test_semantic_abi_serializes_nonlocal_primitive_without_named_method_branch(
     )
     native = native_ks_options(options)
     assert native.has_nonlocal_correlation == 1
+    # Resolve the plan, not its method name, when selecting an implicit NLC grid.
+    tight = resolve_ks_options(
+        "pbe-rks", KsOptions(composition=graph, grid_accuracy="tight")
+    )
+    assert tight.grid == GridSpec.treutler(4)
+    assert tight.nonlocal_grid == GridSpec.treutler(3)
+    assert tight.has_separate_nonlocal_grid
+    transport = native_ks_options(tight)
+    assert transport.nonlocal_grid_version == 1
+    assert transport.nonlocal_grid.contents.grid_version == 4
+    assert transport.nonlocal_grid.contents.radial_points == 3
     assert (
         native.nonlocal_variant,
         native.nonlocal_b,

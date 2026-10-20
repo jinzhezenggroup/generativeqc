@@ -4,8 +4,10 @@
 ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA.
 All supported KS compositions default to level-3 Treutler/Ahlrichs radial,
 Lebedev angular and NWChem-pruned grids, with Treutler radius-adjusted Becke
-partitions. An omitted VV10 grid uses the same prescription. Explicit
-`GridSpec` v1--v3 prescriptions retain their previous behavior. The existing compiler
+partitions. For VV10/rVV10, an omitted nonlocal grid stays at Treutler level 3
+even when the XC grid is tightened to level 4; default level-3 XC/VV10 grids
+still share their storage. Explicit `GridSpec` v1--v3 XC prescriptions retain
+their previous shared-grid behavior unless a distinct nonlocal grid is given. The existing compiler
 `FunctionalSpec` and `GridSpec` are reused, with an explicit native SCF
 tail/spin domain; a second functional catalog is not introduced.
 
@@ -53,8 +55,14 @@ Completed results expose the resolved grid and physical iteration records in
 [`ks_diagnostic`](../developer/ks_diagnostics.md).
 
 Use `GridSpec.treutler(level=3)` to select the default family explicitly;
-levels 0--9 are supported for H--Lr. `grid_accuracy="tight"` selects level 4.
-The level is identical for energy and force requests. Fixed element tables
+levels 0--9 are supported for H--Lr. `grid_accuracy="tight"` selects level 4
+for XC, but leaves an omitted VV10/rVV10 grid at level 3. Supplying a nonlocal
+grid explicitly always takes precedence; supplying the same level-4 grid for
+both opts back into the shared-grid path. When an explicitly selected
+Treutler XC level differs from 3, omitted VV10 uses level 3 too.
+The grid prescriptions are identical for energy and force requests.
+Independent grids currently do not support Hessians/HVPs, coupled response or
+explicit resource-ledger planning. Fixed element tables
 and shell pruning do not depend on geometry or density; points move with their
 owner atoms and analytic responses differentiate the adjusted partition.
 PySCF is not required at runtime. The pinned numerical tables are from
