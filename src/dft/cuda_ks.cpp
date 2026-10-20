@@ -1911,13 +1911,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     stabilize_occupations = false;
     final_closure = false;
     // A resident, same-model warm proposal already passed the strict physical
-    // gates. Re-evaluate it in FP64 before perturbing it with approximate XC:
+    // gates. Re-evaluate it in FP64 before perturbing it with approximate J/K or XC:
     // a converged frozen replay should not manufacture another mixed SCF.
     // This selects arithmetic, not convergence: every ordinary energy,
     // density and residual gate still runs. Cold/external/moved seeds retain
     // the admitted warmup, and ordinary AUTO keeps its incumbent contract.
-    strict_refinement =
-        use_warm && options.application_precision_budget[0] > 0.0 && experimental_mixed_point;
+    strict_refinement = use_warm && options.application_precision_budget[0] > 0.0 &&
+                        (experimental_mixed_point || budget_fock);
     pending_mixed_coulomb = false;
     pending_mixed_exchange = false;
     pending_mixed_range_exchange = false;
