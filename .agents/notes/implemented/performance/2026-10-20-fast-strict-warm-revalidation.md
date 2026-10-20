@@ -106,5 +106,38 @@ ledgers retain the ordinary-provider fallback and separately rebased energy.
 The replay decision follows the next consumer's arithmetic, including the
 existing application-budget strict warm rule, and explicitly verifies that
 the retained source is FP64. Physical publication and force gates are unchanged.
-GPU qualification and endpoint measurements for this extension are pending;
-it does not yet establish an additional performance claim.
+Source `3cd1b5ee8` and core SHA256
+`da2094b0b5edfc811a425999d1c7e7ad376628a03832a3c2195de9a8685de485`
+complete independent Standard/Fast WB97M-V Direct12/48/96 cold plus three
+warm populations. Every repeat passes the unchanged energy/force gates,
+reference grid stability and CPU/GPU spots. Native and reference producer
+identities remain distinct. This source precedes the separate VV10
+1e-10-domain change; no combined-source README claim follows.
+
+| Atoms | Standard cold/warm (s) | Fast cold/warm (s) |
+| --- | ---: | ---: |
+| 12 | 12.038 / 0.882 | 7.345 / 0.872 |
+| 48 | 107.981 / 6.895 | 87.212 / 6.672 |
+| 96 | 637.585 / 44.755 | 273.163 / 39.498 |
+
+Warm entries are three-repeat medians, not selected minima; the 12-atom
+warm difference is too small for a robust speed claim. All warm results
+execute one strict Fock and no independent implicit endpoint audit. The
+96-atom observation is 2.334x cold and 1.133x warm versus same-build Standard,
+not a universal Fast guarantee. The optional source retains its capacity
+refusal and does not promise residence at every size.
+
+357 host tests pass. Four real-GPU default Fast range-lifetime tests check
+actual value consumption, zero warm construction, and selection/capacity/
+bucket/replay invalidation. A separate PBE frozen/moved CPU-reference test
+passes. The first expanded physical suite hit its 25-minute limit after
+four cases: a bounded diagnostic identifies the new CPU water-12 oracle's
+VV10 pair sum as the cost. Keep that failed attempt. The practical test
+uses an independent GPU4PySCF water-12 oracle plus a water-3 CPU/GPU
+cross-check, preserving all frozen/moved observable gates. Its complete
+rerun passes all 26 GPU tests in Slurm 11435, including the independent
+frozen/moved oracle, retained values, new geometry, capacity refusal, and
+policy-change fallbacks. The exact test overlay hash is retained with the
+source-matched runtime build. Raw qualification, six complete populations,
+independent references, profiling, failed attempts and build/cache provenance
+are in `benchmarks/results/fast-range-warm-20261021/`.

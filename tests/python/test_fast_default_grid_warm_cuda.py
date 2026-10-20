@@ -25,14 +25,37 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def oracle(atoms: tuple, functional: str) -> tuple[float, np.ndarray]:
-    """Independent CPU quadrature and full analytic moving-grid response."""
+def oracle(
+    atoms: tuple, functional: str, *, backend: str = "cpu"
+) -> tuple[float, np.ndarray]:
+    """Independent quadrature and full analytic moving-grid response.
+
+    The VV10 molecular case uses GPU4PySCF, cross-checked below against CPU
+    PySCF on water-3. Its CPU pair sum otherwise dominates this test before
+    the native replay is reached. Both references retain explicit numerical
+    gates; neither supplies a density to the native calculation.
+    """
     from pyscf import dft, gto
 
     molecule = gto.M(atom=atoms, basis="def2-svp", unit="Bohr", verbose=0)
-    engine = dft.RKS(molecule)
+    cp = None
+    if backend == "cuda":
+        import cupy as cp
+        from gpu4pyscf.dft.rks import RKS
+
+        from benchmarks.readme_wb97mv import configure_reference_full_fock
+
+        engine = RKS(molecule)
+        # Tight independent reference solves must not inherit incremental
+        # residual drift. This is outside the timed default-engine benchmark.
+        configure_reference_full_fock(engine)
+    else:
+        engine = dft.RKS(molecule)
     engine.xc = functional
     engine.grids.level = 4
+    if functional == "WB97M-V":
+        engine.nlcgrids.level = 3
+        engine.small_rho_cutoff = 0
     engine.conv_tol = 1e-11
     engine.conv_tol_grad = 1e-7
     engine.direct_scf_tol = 1e-14
@@ -40,7 +63,8 @@ def oracle(atoms: tuple, functional: str) -> tuple[float, np.ndarray]:
     assert engine.converged
     gradient = engine.nuc_grad_method()
     gradient.grid_response = True
-    return energy, -gradient.kernel()
+    forces = -gradient.kernel()
+    return energy, cp.asnumpy(forces) if cp is not None else np.asarray(forces)
 
 
 @pytest.mark.parametrize("functional", ("PBE", "PBE0", "R2SCAN", "M06-2X", "WB97M-V"))
@@ -56,6 +80,14 @@ def test_default_fast_frozen_and_moved_physical_endpoints(functional: str) -> No
         )
         for i, (symbol, position) in enumerate(atoms)
     )
+    if functional == "WB97M-V":
+        spot = scaling_cases()["water-3"].atoms
+        cpu_energy, cpu_forces = oracle(spot, functional)
+        gpu_energy, gpu_forces = oracle(spot, functional, backend="cuda")
+        difference = cpu_forces - gpu_forces
+        assert abs(cpu_energy - gpu_energy) / len(spot) < 0.25e-5
+        assert np.max(np.abs(difference)) < 0.25e-4
+        assert np.sqrt(np.mean(difference**2)) < 0.25 * 3e-5
     calculator = PrecisionCalculator(
         policy="fast",
         method=functional.lower() + "-rks",
@@ -66,7 +98,11 @@ def test_default_fast_frozen_and_moved_physical_endpoints(functional: str) -> No
     try:
         with calculator.prepare_batch([atoms], warm_start=True) as prepared:
             for geometry_index, geometry in enumerate((atoms, moved)):
-                energy, forces = oracle(geometry, functional)
+                energy, forces = oracle(
+                    geometry,
+                    functional,
+                    backend="cuda" if functional == "WB97M-V" else "cpu",
+                )
                 prepared.set_warm_start_updates(True)
                 coordinates = (
                     None
