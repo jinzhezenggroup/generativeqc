@@ -137,8 +137,9 @@ def test_native_public_mode_and_default_grid_selection(
                 )
 
 
+@pytest.mark.parametrize("method", ("hf", "pbe"))
 def test_reference_defaults_and_frozen_warm_density(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    method: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A warm call gets the same cold seed even if a previous solve changes it."""
     import sys
@@ -177,7 +178,11 @@ def test_reference_defaults_and_frozen_warm_density(
             asnumpy=np.asarray,
         ),
     )
-    monkeypatch.setitem(sys.modules, "gpu4pyscf.dft", SimpleNamespace(rks=None))
+    monkeypatch.setitem(
+        sys.modules,
+        "gpu4pyscf.dft",
+        SimpleNamespace(rks=SimpleNamespace(RKS=lambda mol: engine)),
+    )
     monkeypatch.setitem(
         sys.modules,
         "gpu4pyscf.scf",
@@ -187,7 +192,7 @@ def test_reference_defaults_and_frozen_warm_density(
         sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=lambda **kw: kw))
     )
     args = SimpleNamespace(
-        method="hf", mode="direct", arm="gpu4pyscf", inputs=tmp_path, warm_repeats=3
+        method=method, mode="direct", arm="gpu4pyscf", inputs=tmp_path, warm_repeats=3
     )
     rows = []
     runner.run_reference(args, [("H", (0, 0, 0))] * 3, {}, rows.append)
@@ -198,24 +203,42 @@ def test_reference_defaults_and_frozen_warm_density(
     assert all(row["settings"]["energy_tolerance"] == 1e-9 for row in rows)
     assert all(row["settings"]["orbital_gradient_tolerance"] is None for row in rows)
     assert all(row["effective_potential_builds"] == 1 for row in rows)
+    assert all(
+        row["settings"]["force_grid_response"] == (None if method == "hf" else True)
+        for row in rows
+    )
 
 
-def test_fast_reference_reads_actual_candidate_controls(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    candidate = SimpleNamespace(
-        _energy_tolerance=1e-10, _density_tolerance=1e-8, clear_cache=lambda: None
+def test_reference_variant_is_rejected_before_execution(tmp_path: Path) -> None:
+    args = SimpleNamespace(arm="gpu4pyscf-fast")
+    with pytest.raises(ValueError, match="default GPU4PySCF"):
+        runner.run_reference(args, [], {}, lambda row: None)
+
+
+def test_readme_excludes_archived_reference_variant(tmp_path: Path) -> None:
+    render([receipt(arm) for arm in runner.ARMS], tmp_path)
+    svg = (tmp_path / "direct.svg").read_text()
+    assert "GPU4PySCF Fast" not in svg
+    assert "GenerativeQC Fast" in svg
+    assert "GPU4PySCF Default" in svg
+
+
+def test_shared_observable_gates_keep_force_maximum_and_rms_separate() -> None:
+    """One large force error cannot hide in a small RMS or a larger molecule."""
+    from benchmarks.readme_defaults_accuracy import errors
+
+    reference = {"energy": -75.0, "forces": np.zeros((96, 3))}
+    observed = np.zeros((96, 3))
+    assert errors(-75 + 5e-4, observed, reference, 96)["passed"]
+    observed[0, 0] = 2e-4
+    checked = errors(-75, observed, reference, 96)
+    assert not checked["passed"]
+    assert (
+        checked["force_rms_hartree_per_bohr"]
+        < runner.COMMON_GATES["force_rms_hartree_per_bohr"]
     )
-    facade = SimpleNamespace(
-        capabilities=SimpleNamespace(supported_properties=("energy", "forces")),
-        _candidate_for=lambda props: (candidate, "fp64", ["strict_route"]),
-        clear_cache=lambda: None,
-    )
-    monkeypatch.setattr(runner, "native_calculator", lambda *args: facade)
-    controls = runner.fast_thresholds("hf", "df", tmp_path)
-    assert controls["energy_tolerance"] == 1e-10
-    assert controls["density_tolerance"] == 1e-8
-    assert controls["candidate_precision"] == "fp64"
+    observed[0, 0] = np.nan
+    assert not errors(-75, observed, reference, 96)["passed"]
 
 
 @pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])

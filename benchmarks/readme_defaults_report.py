@@ -15,7 +15,7 @@ import statistics
 from pathlib import Path
 
 from benchmarks._retention import raw_output_path
-from benchmarks.readme_defaults import ARMS, METHODS, SCHEMA, SIZES
+from benchmarks.readme_defaults import ARMS, MEASUREMENT_ARMS, METHODS, SCHEMA, SIZES
 
 LABELS = {
     "hf": "HF",
@@ -33,7 +33,7 @@ ARM_LABELS = {
     "gpu4pyscf": "GPU4PySCF Default",
     "gpu4pyscf-fast": "GPU4PySCF Fast",
 }
-COLORS = dict(zip(ARMS, ("#1768ac", "#00a087", "#d95f02", "#a65eaf"), strict=True))
+COLORS = dict(zip(MEASUREMENT_ARMS, ("#1768ac", "#00a087", "#d95f02"), strict=True))
 
 
 def checked_sample(sample: dict, record: dict) -> None:
@@ -136,7 +136,9 @@ def reduce_record(record: dict) -> dict:
     return result
 
 
-def render(records: list[dict], destination: Path) -> list[dict]:
+def render(
+    records: list[dict], destination: Path, *, qualifications: list[dict] | None = None
+) -> list[dict]:
     """Render absolute latencies; leave missing points as visible curve gaps."""
     import matplotlib
 
@@ -148,6 +150,16 @@ def render(records: list[dict], destination: Path) -> list[dict]:
     indexed = {(r["mode"], r["method"], r["arm"], r["atoms"]): r for r in rows}
     if len(indexed) != len(rows):
         raise ValueError("duplicate measurement population")
+    if qualifications is not None:
+        from benchmarks.readme_defaults_qualification import identity
+
+        gates = {q["receipt_sha256"]: q for q in qualifications}
+        if len(gates) != len(qualifications) or set(gates) != {
+            identity(r) for r in records
+        }:
+            raise ValueError("qualification does not bind exactly these receipts")
+        for record, row in zip(records, rows, strict=True):
+            row["qualification"] = gates[identity(record)]
     revisions = {row["source_revision"] for row in rows}
     if len(revisions) != 1 or None in revisions:
         raise ValueError("mixed or missing measured revisions")
@@ -165,18 +177,25 @@ def render(records: list[dict], destination: Path) -> list[dict]:
         }
     ):
         for mode in ("direct", "df"):
-            fig, axes = plt.subplots(4, 2, figsize=(10.8, 12), sharex=True)
+            fig, axes = plt.subplots(2, 4, figsize=(15, 6.8))
             for ax, method in zip(axes.flat, METHODS, strict=True):
-                for arm in ARMS:
+                for arm in MEASUREMENT_ARMS:
                     for phase, style, marker in (
-                        ("cold", "-", "o"),
-                        ("warm", "--", "s"),
+                        ("cold", "--", "s"),
+                        ("warm", "-", "o"),
                     ):
                         values, lower, upper = [], [], []
                         for size in SIZES:
-                            population = indexed.get((mode, method, arm, size), {}).get(
-                                phase
-                            )
+                            row = indexed.get((mode, method, arm, size), {})
+                            population = row.get(phase)
+                            if (
+                                qualifications is not None
+                                and row.get("qualification", {})
+                                .get(phase, {})
+                                .get("status")
+                                != "qualified"
+                            ):
+                                population = None
                             value = population["median"] if population else math.nan
                             values.append(value)
                             lower.append(
@@ -196,18 +215,22 @@ def render(records: list[dict], destination: Path) -> list[dict]:
                             lw=1.4,
                             capsize=2,
                         )
-                ax.set(title=LABELS[method], yscale="log", xscale="log", xticks=SIZES)
+                basis = (
+                    "def2-mTZVPP · D4 + gCP" if method == "r2scan-3c" else "def2-SVP"
+                )
+                ax.set_title(
+                    f"{LABELS[method]}\n{basis}", fontsize=11, loc="left", pad=10
+                )
+                ax.set(yscale="log", xscale="log", xticks=SIZES)
+                ax.set_xlabel("Atoms in water cluster")
+                ax.set_ylabel("Energy + forces (s)")
                 ax.set_xticklabels([str(size) for size in SIZES])
                 ax.minorticks_off()
                 ax.grid(axis="y", alpha=0.18)
                 ax.spines[["top", "right"]].set_visible(False)
-            for ax in axes[-1]:
-                ax.set_xlabel("Atoms in water cluster")
-            for ax in axes[:, 0]:
-                ax.set_ylabel("Complete energy + forces (s)")
             handles = [
                 Line2D([], [], color=COLORS[arm], lw=2, label=ARM_LABELS[arm])
-                for arm in ARMS
+                for arm in MEASUREMENT_ARMS
                 if any(
                     row["mode"] == mode and row["arm"] == arm and row["cold"]
                     for row in rows
@@ -225,48 +248,28 @@ def render(records: list[dict], destination: Path) -> list[dict]:
                         label=label,
                     )
                     for style, marker, label in (
-                        ("-", "o", "Cold"),
-                        ("--", "s", f"Warm median ({warm_repeats} calls)"),
+                        ("--", "s", "Cold"),
+                        ("-", "o", f"Warm ({warm_repeats} calls)"),
                     )
                 ]
             )
             fig.legend(
                 handles=handles,
                 loc="upper center",
-                bbox_to_anchor=(0.5, 0.955),
-                ncol=3 if mode == "direct" else 2,
+                bbox_to_anchor=(0.5, 1.0),
+                ncol=len(handles),
                 frameon=False,
-            )
-            fig.suptitle(
-                f"{'Direct' if mode == 'direct' else 'Density fitting'} · Default-grid endpoint latency · RTX 5090",
-                fontsize=15,
-                y=0.985,
             )
             fig.text(
                 0.5,
-                0.015,
-                "def2-SVP; r²SCAN-3c: def2-mTZVPP + D4/gCP. Default force response differs; accuracy unqualified.",
+                0.018,
+                f"{'Direct' if mode == 'direct' else 'Density fitting'} · RTX 5090 · cold includes setup · warm: frozen cold density · bars: min–max"
+                + (" · gaps: unqualified" if qualifications is not None else ""),
                 ha="center",
                 fontsize=9,
                 color="#555555",
             )
-            if mode == "df" and not any(
-                row["mode"] == "df"
-                and row["arm"] in ("standard", "fast")
-                and row["cold"] is not None
-                for row in rows
-            ):
-                fig.text(
-                    0.5,
-                    0.907,
-                    "GenerativeQC DF unavailable: the default auxiliary basis contains unsupported g shells.",
-                    ha="center",
-                    fontsize=10,
-                    color="#555555",
-                )
-            fig.tight_layout(
-                rect=(0, 0.035, 1, 0.9 if mode == "direct" else 0.88), h_pad=2
-            )
+            fig.tight_layout(rect=(0, 0.06, 1, 0.93), h_pad=2, w_pad=2)
             svg = destination / f"{mode}.svg"
             fig.savefig(svg, metadata={"Date": None})
             # Matplotlib emits trailing blanks inside multiline SVG paths.
@@ -279,7 +282,7 @@ def render(records: list[dict], destination: Path) -> list[dict]:
     return rows
 
 
-def load_records(paths: list[Path]) -> list[dict]:
+def load_records(paths: list[Path], *, schema: str = SCHEMA) -> list[dict]:
     """Accept raw receipts or retained compressed bundles for exact offline replay."""
     records = []
     for path in paths:
@@ -291,7 +294,7 @@ def load_records(paths: list[Path]) -> list[dict]:
         value = json.loads(data)
         if isinstance(value, list):
             records.extend(value)
-        elif value.get("schema") == SCHEMA:
+        elif value.get("schema") == schema:
             records.append(value)
     return records
 
@@ -299,22 +302,37 @@ def load_records(paths: list[Path]) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipts", type=Path, nargs="+", required=True)
+    parser.add_argument("--oracles", type=Path, nargs="+")
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
-    rows = render(load_records(args.receipts), args.output)
+    records = load_records(args.receipts)
+    qualifications = None
+    if args.oracles:
+        from benchmarks.readme_defaults_qualification import ORACLE_SCHEMA, qualify
+
+        qualifications = qualify(
+            records, load_records(args.oracles, schema=ORACLE_SCHEMA)
+        )
+    rows = render(records, args.output, qualifications=qualifications)
+    if qualifications is not None:
+        (args.output / "qualification.json").write_text(
+            json.dumps(qualifications, indent=2, allow_nan=False) + "\n"
+        )
     (args.output / "summary.json").write_text(
         json.dumps(rows, indent=2, allow_nan=False) + "\n"
     )
     lines = [
         "# Default endpoint timings",
         "",
-        "Absolute latency; no equal-accuracy speedup is inferred.",
+        "Absolute latency; qualification is limited to the sampled static geometries."
+        if qualifications is not None
+        else "Absolute latency; accuracy unverified.",
         "",
         "| Mode | Method | Atoms | Engine | Cold (s) | Warm median [range] (s) | Status |",
         "|---|---|---:|---|---:|---|---|",
     ]
     for row in sorted(
-        rows,
+        [row for row in rows if row["arm"] in MEASUREMENT_ARMS],
         key=lambda r: (
             r["mode"],
             list(METHODS).index(r["method"]),
@@ -329,13 +347,16 @@ def main() -> None:
             if warm
             else "—"
         )
+        status = row["status"]
+        if qualifications is not None:
+            status += "; accuracy " + row["qualification"]["status"]
         lines.append(
-            f"| {row['mode']} | {LABELS[row['method']]} | {row['atoms']} | {ARM_LABELS[row['arm']]} | {cold} | {warm_text} | {row['status']} |"
+            f"| {row['mode']} | {LABELS[row['method']]} | {row['atoms']} | {ARM_LABELS[row['arm']]} | {cold} | {warm_text} | {status} |"
         )
     (args.output / "timings.md").write_text("\n".join(lines) + "\n")
     identities = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in args.receipts
+        for path in [*args.receipts, *(args.oracles or [])]
     }
     (args.output / "receipt-identities.json").write_text(
         json.dumps(identities, indent=2) + "\n"

@@ -6,13 +6,14 @@ rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
 ## README production comparisons
 
-The README also reports **default-configuration endpoint latency**, when that is
-the requested experiment. Such plots retain stock grid and force-response
-settings, disclose any Fast convergence mapping, and carry no matched-accuracy
-or fastest-qualified-configuration claim. Their raw receipts must still retain
-complete endpoints, warm populations, executed controls, work and provenance.
-The accuracy-qualified production ranking described below remains a separate
-claim; default timing observations do not satisfy its qualification gates.
+The README can report **default-grid endpoint latency** when that is the
+requested experiment. Keep stock XC/VV10 quadratures and disclose force-response
+or solver overrides. Engines may retain their native convergence criteria while
+being checked against common observable error gates; unlike residual definitions
+must not be equated numerically. Retain complete endpoints, warm populations,
+executed controls, work and provenance. Qualification limited to sampled static
+geometries must say so. Default timings alone do not establish the broader
+accuracy-qualified production ranking or fastest-configuration claim below.
 
 An accuracy-qualified HF/DFT headline comparison measures the cost of reaching a common
 scientific accuracy target with each engine's best qualified production

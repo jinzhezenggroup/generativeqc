@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-20
 
+Superseded for the active README refresh by
+[default alignment and observable qualification](2026-10-20-readme-default-alignment-and-ranking-reversal.md).
+The measurements below remain historical evidence; the reference Fast profile
+and unequal force-response settings are not part of the replacement campaign.
+
 ## Problem
 
 The requested README refresh fixes GPU4PySCF's default XC and VV10 grids and

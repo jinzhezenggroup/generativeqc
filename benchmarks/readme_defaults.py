@@ -1,10 +1,10 @@
 """Default-grid README endpoints, adapted from the #2623 comparison protocol.
 
 Each process owns one method/size/DF/engine population: one fresh cold E+F and
-three warm E+F calls from its own frozen cold density. Defaults are untouched
-except GPU4PySCF Fast's convergence thresholds, taken from the actual native
-Fast candidate. These are default latency measurements, not equal-accuracy or
-equal-force-work speedups (stock GPU4PySCF omits moving-grid response).
+three warm E+F calls from its own frozen cold density. Both engines retain their
+default XC/VV10 grids and native convergence policies, with complete moving-grid
+response. Common energy/force gates qualify the endpoints independently of the
+engines' unlike residual definitions.
 """
 
 from __future__ import annotations
@@ -21,7 +21,15 @@ from typing import Any
 
 from benchmarks._retention import raw_output_path
 
-SCHEMA = "generativeqc.readme-defaults.v1"
+SCHEMA = "generativeqc.readme-defaults.v2"
+# A size-normalized energy gate keeps the water series comparable; force gates
+# are intensive. These are declared before measurement and applied equally to
+# Standard, Fast and GPU4PySCF against independent tighter references.
+COMMON_GATES = {
+    "energy_abs_per_atom_hartree": 1e-5,
+    "force_max_abs_hartree_per_bohr": 1e-4,
+    "force_rms_hartree_per_bohr": 3e-5,
+}
 METHODS = {
     "hf": ("rhf", None),
     "pbe": ("pbe-rks", "PBE"),
@@ -32,7 +40,10 @@ METHODS = {
     "m06-2x": ("m06-2x-rks", "M06-2X"),
     "wb97m-v": ("wb97m-v-rks", "WB97M_V"),
 }
+# Retained receipts include an abandoned reference variant. New measurements
+# and README plots use only the three requested profiles.
 ARMS = ("standard", "fast", "gpu4pyscf", "gpu4pyscf-fast")
+MEASUREMENT_ARMS = ("standard", "fast", "gpu4pyscf")
 SIZES = (3, 12, 48, 96)
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -203,29 +214,6 @@ def native_calculator(method: str, arm: str, mode: str, inputs: Path) -> Any:
     )
 
 
-def fast_thresholds(method: str, mode: str, inputs: Path) -> dict:
-    """Read real candidate controls, including strict HF/DF fallback controls.
-
-    GPU4PySCF exposes orbital-gradient convergence, whereas native exposes
-    density RMS. Copy the numerical thresholds to their public counterparts;
-    retain this distinction rather than claiming identical residual norms.
-    """
-    facade = native_calculator(method, "fast", mode, inputs)
-    candidate, precision, reasons = facade._candidate_for(
-        facade.capabilities.supported_properties
-    )
-    result = {
-        "energy_tolerance": candidate._energy_tolerance,
-        "density_tolerance": candidate._density_tolerance,
-        "candidate_precision": precision,
-        "route_reasons": reasons,
-        "mapping": "native energy -> conv_tol; native density RMS -> conv_tol_grad (orbital gradient)",
-    }
-    candidate.clear_cache()
-    facade.clear_cache()
-    return result
-
-
 def grid_settings(grid: Any) -> dict | None:
     """Snapshot actual reference grid rules, including a distinct VV10 grid."""
     if grid is None:
@@ -319,6 +307,7 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
                     "precision_validation": validation.to_dict()
                     if validation
                     else None,
+                    "batch_precision_validation": batch.precision_validation,
                     "ks_diagnostic": item.ks_diagnostic.to_payload()
                     if item.ks_diagnostic
                     else None,
@@ -336,18 +325,14 @@ def run_native(args: Any, atoms: Any, record: dict, retain: Any) -> None:
 
 
 def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
-    """Keep every stock control except explicitly requested Fast tolerances."""
+    """Include grid response while preserving native reference convergence/SCF."""
+    if args.arm != "gpu4pyscf":
+        raise ValueError("only the default GPU4PySCF reference is measured")
     import cupy as cp
     from gpu4pyscf.dft import rks
     from gpu4pyscf.scf import hf
     from pyscf import gto
 
-    controls = (
-        fast_thresholds(args.method, args.mode, args.inputs)
-        if args.arm.endswith("-fast")
-        else None
-    )
-    record["fast_convergence_mapping"] = controls
     cp.cuda.runtime.deviceSynchronize()
     started = perf_counter()
     mol = gto.M(
@@ -364,9 +349,6 @@ def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
         engine.xc = METHODS[args.method][1]
     if args.mode == "df":
         engine = engine.density_fit()
-    if controls:
-        engine.conv_tol = controls["energy_tolerance"]
-        engine.conv_tol_grad = controls["density_tolerance"]
     seed = None
     # Count executed effective-potential builds without changing their arguments,
     # caching, precision, screening, or the stock initial guess.
@@ -389,6 +371,8 @@ def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
         if not engine.converged:
             raise RuntimeError("GPU4PySCF SCF did not converge")
         gradient = engine.nuc_grad_method()
+        if args.method != "hf":
+            gradient.grid_response = True
         forces = -cp.asnumpy(gradient.kernel())
         correction_energy = None
         if args.method == "r2scan-3c":
@@ -452,7 +436,7 @@ def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("arm", choices=(*ARMS, "inputs"))
+    parser.add_argument("arm", choices=(*MEASUREMENT_ARMS, "inputs"))
     parser.add_argument("--method", choices=METHODS)
     parser.add_argument("--mode", choices=("direct", "df"), default="direct")
     parser.add_argument("--atoms", type=int, choices=SIZES, default=3)
@@ -507,9 +491,15 @@ def main(argv: list[str] | None = None) -> None:
             "cold": "constructor+prepare+SCF+forces+host-export",
             "warm": "same-owner; frozen engine-local cold density",
             "grid_overrides": False,
-            "force_response_overrides": False,
+            "force_response_overrides": True,
+            "convergence": "native engine/profile defaults; common observable gates",
+            "residual_definitions": {
+                "generativeqc": "density RMS",
+                "gpu4pyscf": "orbital gradient norm",
+            },
             "moved_geometry": False,
             "accuracy_qualification": "unverified",
+            "common_observable_gates": COMMON_GATES,
         },
         "samples": [],
     }
