@@ -424,14 +424,6 @@
       "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
     },
     {
-      "bytes": 162452,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/promotion.json",
-      "role": "decision-or-audit-record",
-      "sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745"
-    },
-    {
       "bytes": 143684,
       "classification": "required-compact-accepted-evidence",
       "family": "issue283-host-response",
