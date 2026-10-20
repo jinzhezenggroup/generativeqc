@@ -216,3 +216,47 @@ def test_fast_reference_reads_actual_candidate_controls(
     assert controls["energy_tolerance"] == 1e-10
     assert controls["density_tolerance"] == 1e-8
     assert controls["candidate_precision"] == "fp64"
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_offline_report_rejects_retained_output_before_reading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
+) -> None:
+    """Replay must not overwrite accepted evidence, even through path aliases."""
+    import sys
+
+    from benchmarks import _retention, readme_defaults_report
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "summary.json"
+    existing.write_text("original evidence")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("invalid output reached receipt reading or rendering")
+
+    monkeypatch.setattr(readme_defaults_report, "load_records", forbidden)
+    monkeypatch.setattr(readme_defaults_report, "render", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "readme_defaults_report",
+            "--receipts",
+            "missing.json",
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        readme_defaults_report.main()
+    assert error.value.code == 2
+    assert existing.read_text() == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
