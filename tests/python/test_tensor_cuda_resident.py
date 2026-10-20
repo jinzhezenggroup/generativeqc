@@ -9,6 +9,7 @@ suite.
 
 import ctypes
 import os
+import random
 import re
 import typing
 from pathlib import Path
@@ -132,7 +133,7 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         before = lib.host_synchronizations()
         assert lib.resident_run(owner, 0, result, error, len(error)) == 0, error.value
         assert lib.host_synchronizations() > before
-        assert lib.host_pending_copies() == 0
+        assert lib.host_pending_work() == 0
         assert lib.host_copy_matches(0)
         assert metrics.owned_device_bytes == 4096
         for failure in (1, 2, 3):
@@ -143,7 +144,7 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert lib.resident_run(owner, 0, result, error, len(error)) != 0
                 assert b"injected" in error.value
                 assert lib.host_synchronizations() > before
-                assert lib.host_pending_copies() == 0
+                assert lib.host_pending_work() == 0
             finally:
                 lib.host_failure(0)
         for pointer, metrics in ((None, result), (owner, None)):
@@ -193,7 +194,7 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 lib.resident_upload(owner, slot, host, size, error, len(error)) == 0
             ), error.value
             assert lib.host_synchronizations() > before
-            assert lib.host_pending_copies() == 0
+            assert lib.host_pending_work() == 0
             if size:
                 assert lib.host_copy_matches(1)
             expected[step.offset : step.offset + size] = payload
@@ -201,7 +202,18 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
 
         # Seed the whole arena independently: downloads cannot accidentally pass
         # by undoing an equally incorrect upload mapping.
-        raw = bytes((j * 29 + 11) % 256 for j in range(capacity))
+        raw = random.Random(2296).randbytes(capacity)
+        # Require distinguishable windows for every nonempty output length.
+        lengths = {
+            s.node.spec.size * s.node.spec.itemsize
+            for s in slots[1]
+            if s.node.spec.size
+        }
+        for length in lengths:
+            assert (
+                len({raw[j : j + length] for j in range(capacity - length + 1)})
+                == capacity - length + 1
+            )
         ctypes.memmove(arena, raw, capacity)
         for slot, step in enumerate(slots[1]):
             size = step.node.spec.size * step.node.spec.itemsize
@@ -212,7 +224,7 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 lib.resident_download(owner, slot, host, size, error, len(error)) == 0
             ), error.value
             assert lib.host_synchronizations() > before
-            assert lib.host_pending_copies() == 0
+            assert lib.host_pending_work() == 0
             if size:
                 assert lib.host_copy_matches(0)
                 assert host.raw == raw[step.offset : step.offset + size]
@@ -230,6 +242,18 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 (owner, len(steps), host, size),
                 (owner, slot, host, size + 1),
                 (owner, slot, None, size),
+                (
+                    owner,
+                    slot + (1 << (ctypes.sizeof(ctypes.c_size_t) * 8 - 1)),
+                    host,
+                    size,
+                ),
+                (
+                    owner,
+                    slot,
+                    host,
+                    size + (1 << (ctypes.sizeof(ctypes.c_size_t) * 8 - 1)),
+                ),
             )
             for args in cases:
                 error.value = b""
@@ -297,6 +321,11 @@ def test_resident_control_span_transfers(
         "run_kind",
         "run_status",
         "begin_record",
+        "status_reset",
+        "late_reset",
+        "narrow_slot",
+        "narrow_bytes",
+        "output_offset",
         "run_endpoints",
         "event_position",
         "early_sync",
@@ -355,6 +384,53 @@ def test_resident_host_oracle_controls(
             return source.replace(
                 "cuda_check(cudaEventRecord(ctx.begin, ctx.stream));", ""
             )
+        if mutation == "status_reset":
+            return source.replace(
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));",
+                "",
+            )
+        if mutation == "late_reset":
+            return source.replace(
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));",
+                "",
+            ).replace(
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));",
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));"
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));",
+            )
+        if mutation == "narrow_slot":
+            return source.replace("size_t slot", "unsigned int slot")
+        if mutation == "narrow_bytes":
+            return source.replace("size_t bytes,", "unsigned int bytes,")
+        if mutation == "output_offset":
+            steps = [plan.steps[i] for i in plan.inputs]
+            outputs = [plan.steps[i] for _, i in plan.outputs]
+            capacity = (
+                max(
+                    s.offset + s.node.spec.size * s.node.spec.itemsize
+                    for s in steps + outputs
+                )
+                + 64
+            )
+            target = next(
+                s
+                for s in outputs
+                if s.node.spec.size
+                and s.offset + 256 + s.node.spec.size * s.node.spec.itemsize <= capacity
+            )
+            size = target.node.spec.size * target.node.spec.itemsize
+            before, marker, after = source.partition(
+                "static const Span resident_outputs[] ="
+            )
+            return (
+                before
+                + marker
+                + after.replace(
+                    f"{{{target.offset}ULL,{size}ULL}}",
+                    f"{{{target.offset + 256}ULL,{size}ULL}}",
+                    1,
+                )
+            )
         if mutation == "run_endpoints":
             return source.replace(
                 "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
@@ -406,6 +482,8 @@ def test_resident_host_oracle_controls(
         "run_kind",
         "run_status",
         "begin_record",
+        "status_reset",
+        "late_reset",
         "run_endpoints",
         "event_position",
         "early_sync",

@@ -168,11 +168,45 @@ injections with fresh diagnostics and drained queues; an ignored-readback-status
 control checks that nonzero API responses are not swallowed. These are status
 transport checks, not synthetic tensor arithmetic.
 
-The final source-matched Linux gate passed 165 cases with 19 explicit CUDA-device
+The `b7b3647a2` source-matched Linux gate passed 165 cases with 19 explicit CUDA-device
 opt-in skips, including all 35 resident cases and fourteen opt-in controls. The
 qualified test/helper/fixture LF hashes match the committed blobs. Full-gate
 cache evidence records 20 compilations/misses, zero failures; this is not timing,
 device or scientific acceptance.
+
+Review `PRRT_kwDOUFEw6s6uOMrb` identified that zero-initialized fake error storage
+masked removal of the per-run reset. The owner now starts with a nonzero stale
+status in every byte. Copies and fills share one FIFO work queue, so a late reset
+cannot retroactively alter an earlier readback; this models only CUDA transport
+primitives, not kernels. Missing-reset and late-reset controls require a healthy
+run to reject the stale-status behavior. The pending-work observer covers both
+operations, without requiring any fixed number of calls.
+
+The existing invalid-slot/length cases also exercise the high bit of public
+`size_t` arguments, using the original small buffers. Optional ABI-narrowing
+controls verify that a 32-bit slot or byte-count parameter cannot silently
+truncate those invalid values into valid transfers.
+
+The former affine download seed repeated every 256 bytes, matching planned
+alignment and masking an output-only offset shift. Adding a linear block term
+still admits some unaligned collisions. Use a fixed-seed non-affine byte stream
+and verify unique windows for every nonempty output length over each current
+small arena. The output-only `+256` control selects a nonempty output row whose
+shifted span remains within capacity and leaves the input table unchanged, so
+rejection must come from actual download mapping rather than bounds or upload
+damage. Old-oracle comparisons omit the newly added seed-quality assertion so
+it cannot masquerade as detection of the download defect.
+
+The final combined source-matched Linux gate passed 170 cases with 19 explicit
+CUDA-device opt-in skips, including all 40 resident cases and nineteen controls.
+The missing-reset control fails against the prior zero-status fixture; the
+late-reset control also fails against its immediate-fill variant with a nonzero
+seed. The output-only shift fails against the former periodic download oracle
+without the new data-quality guard. All three RED receipts report `DID NOT RAISE`.
+The old fixture comparison uses only a statistics-query naming adapter, not
+different transfer behavior. Restore the final sources: the five affected
+reset/download/ABI-width controls then pass, and all three source hashes match
+the full gate. Full-gate cache delta: 25 compilations/misses, zero failures.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child

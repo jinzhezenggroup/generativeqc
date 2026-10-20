@@ -98,7 +98,7 @@ def build_resident_host(
         "host_static_ready": (None, [ctypes.c_void_p, ctypes.c_int]),
         "host_failure": (None, [ctypes.c_int]),
         "host_synchronizations": (ctypes.c_int, []),
-        "host_pending_copies": (ctypes.c_size_t, []),
+        "host_pending_work": (ctypes.c_size_t, []),
         "host_clear_copy_kinds": (None, []),
         "host_copy_matches": (ctypes.c_int, [ctypes.c_int]),
     }
