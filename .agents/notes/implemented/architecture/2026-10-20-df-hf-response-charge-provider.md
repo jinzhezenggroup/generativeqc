@@ -71,6 +71,15 @@ energy/force results must be retained separately with their source/library/input
 output identities and original acceptance gates. Required CI and exact-head
 independent review are separate delivery gates.
 
+The full-API dot/host-ablation fixture explicitly selects the existing `dense`
+response route. An unset selector means `auto`, which may legitimately execute
+occupied factor-first metric products without metric-dot counters. Binding the
+fixture to its asserted operation keeps every RHF/UHF, representation, budget,
+dot, numerical, resource and host-switch check unchanged. Production `auto` and
+the separate occupied/fitted replay tests remain unchanged. The initial H200
+AUTO invocation's work-counter failure is retained separately: its first E/F
+comparison passed, but that did not make the complete work gate pass.
+
 ## Consequences and revisit conditions
 
 This is one ownership/cleanliness slice of #1890, with no performance or default
