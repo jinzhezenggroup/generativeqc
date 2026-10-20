@@ -145,6 +145,10 @@ def render(
     records: list[dict], destination: Path, *, qualifications: list[dict] | None = None
 ) -> list[dict]:
     """Render absolute latencies; leave missing points as visible curve gaps."""
+    if len({record.get("schema") for record in records}) > 1:
+        raise ValueError("mixed measurement protocols")
+    if any(record.get("schema") != SCHEMA for record in records):
+        raise ValueError("historical receipts require their pinned v1 renderer")
     import matplotlib
 
     matplotlib.use("Agg")
@@ -168,8 +172,6 @@ def render(
     revisions = {row["source_revision"] for row in rows}
     if len(revisions) != 1 or None in revisions:
         raise ValueError("mixed or missing measured revisions")
-    if len({record["schema"] for record in records}) != 1:
-        raise ValueError("mixed measurement protocols")
     repeat_counts = {record["warm_repeats"] for record in records}
     if len(repeat_counts) != 1:
         raise ValueError("mixed warm repeat counts")

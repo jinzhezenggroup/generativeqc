@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 8605,
+      "bytes": 9347,
       "path": "README.md",
       "role": "summary",
-      "sha256": "9065278475aee50ea11f95547f23bdde15d5a513251720d587da84cf481df1d3"
+      "sha256": "9d4edb7c48125d172e8008287587a88bf16f3672f800f60b459c7c06c1c11979"
     },
     {
       "bytes": 2788,
@@ -93,13 +93,9 @@
   ],
   "reproduction": {
     "command": [
-      "python",
-      "-m",
-      "benchmarks.readme_defaults_report",
-      "--receipts",
-      "benchmarks/results/readme-defaults-20261020/receipts.json.xz",
-      "--output",
-      ".artifacts/readme-defaults-replay"
+      "bash",
+      "-euc",
+      "git worktree add --detach .artifacts/readme-defaults-v1 9f3fa27a2017600b8ef986ac2cfc3545e85dfd29; cd .artifacts/readme-defaults-v1; PYTHONPATH=python:. python -m benchmarks.readme_defaults_report --receipts benchmarks/results/readme-defaults-20261020/receipts.json.xz --output .artifacts/readme-defaults-replay"
     ]
   },
   "schema": "generativeqc.benchmark-publication.v1",

@@ -1,7 +1,8 @@
 # README default-configuration endpoints (2026-10-20)
 
-[Direct figure](../../../assets/readme-direct-defaults.svg) ·
-[DF figure](../../../assets/readme-df-defaults.svg) · [All timings](timings.md)
+Superseded by the [qualified README comparison](../readme-unified-20261021/README.md).
+This historical campaign retains its [original timings](timings.md); the current
+README figures use the replacement campaign's measurements.
 
 ## Results
 
@@ -134,13 +135,26 @@ srun --partition=main --nodelist=node1 --gres=gpu:5090:1 \
 
 Set `PYTHONPATH`, `GENERATIVEQC_LIBRARY` and toolchain paths as in `run-n1.sh`.
 The frozen auxiliary payloads are also retained in `auxiliary-inputs.json.xz`.
-Offline replay needs Python, NumPy and Matplotlib, with no GPU or oracle:
+Offline replay needs Python, NumPy and Matplotlib 3.10.9, with no GPU or oracle.
+The current three-profile v2 renderer does not accept these historical v1
+receipts. Replay their original four-profile renderer from the already-published,
+reviewed source below; do not relabel the receipts as v2. Run from the repository
+root with that Git object available locally (no automatic download):
 
 ```bash
-PYTHONPATH=python:. python -m benchmarks.readme_defaults_report \
-  --receipts benchmarks/results/readme-defaults-20261020/receipts.json.xz \
-  --output .artifacts/readme-defaults-replay
+git worktree add --detach .artifacts/readme-defaults-v1 \
+  9f3fa27a2017600b8ef986ac2cfc3545e85dfd29
+(
+  cd .artifacts/readme-defaults-v1
+  PYTHONPATH=python:. python -m benchmarks.readme_defaults_report \
+    --receipts benchmarks/results/readme-defaults-20261020/receipts.json.xz \
+    --output .artifacts/readme-defaults-replay
+)
 ```
+
+Use a fresh worktree destination. Replayed files are
+under `.artifacts/readme-defaults-v1/.artifacts/readme-defaults-replay`;
+this does not modify the current v2 protocol or retained measurements.
 
 The renderer retains median/range variability, rejects missing warm repeats and
 never substitutes old measurements. `publication.json` authenticates the

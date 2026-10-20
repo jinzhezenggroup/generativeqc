@@ -17,7 +17,7 @@ from benchmarks.readme_defaults_qualification import (
     identity,
     qualify,
 )
-from benchmarks.readme_defaults_report import render
+from benchmarks.readme_defaults_report import reduce_record, render
 
 
 def campaign() -> tuple[dict, list[dict]]:
@@ -253,3 +253,21 @@ def test_plot_qualification_cannot_be_reused_for_different_timings(
     record["samples"][0]["seconds"] = 1
     with pytest.raises(ValueError, match="bind exactly"):
         render([record], tmp_path, qualifications=qualifications)
+
+
+def test_historical_four_profile_reduction_does_not_promote_to_v2(
+    tmp_path: Path,
+) -> None:
+    """Old timings remain readable, but cannot inherit new accuracy or plots."""
+    record, oracles = campaign()
+    record.update(schema="generativeqc.readme-defaults.v1", arm="gpu4pyscf-fast")
+    original = deepcopy(record)
+    reduced = reduce_record(record)
+    assert reduced["arm"] == "gpu4pyscf-fast"
+    assert reduced["cold"]["median"] == 2
+    assert reduced["warm"]["seconds"] == [2, 2, 2]
+    assert record == original
+    with pytest.raises(ValueError, match="current three-profile"):
+        qualify([record], oracles)
+    with pytest.raises(ValueError, match="pinned v1 renderer"):
+        render([record], tmp_path)
