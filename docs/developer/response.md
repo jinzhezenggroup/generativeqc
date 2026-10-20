@@ -283,9 +283,25 @@ Explicit vector engines, device providers, solution consumers, general
 preconditioners, zero-dimensional problems and blocked multi-RHS solves retain
 their existing controllers. An absent library/additive protocol also preserves
 compatibility. A selected library's load error or native solve failure is not
-permission to retry Python arithmetic. Multi-RHS scheduling remains Python-owned; eligible CPU recycle-space projection
-and replacement use the native owner described below. This is not a complete
+permission to retry Python arithmetic. Eligible CPU `sequential` multi-RHS
+scheduling is also native: the controller streams an admitted prefix through
+the existing bound response owner, then publishes workspace refusals for the
+remaining tail without applying its operators. It validates live leases even
+for zero RHS and refused requests. Eligible CPU recycle-space projection and
+replacement use the native owner described below. Recycled/block scheduling
+and the value-only RHS-rank SVD remain Python-owned; this is not a complete
 native molecular Hessian/HVP endpoint.
+
+The sequence bridge borrows validated FP64 RHS storage read-only, supporting
+positive element-aligned strides and repeated columns. A noncontiguous column
+uses one bounded, tracked staging vector rather than a second whole-matrix
+copy; admission precedes its allocation. Foreign dtype, negative/unaligned
+strides and existing non-host domains retain the compatibility schedule.
+Native publication is synchronous: only detached solution/basis copies remain
+charged between requests; history copies and publisher object bookkeeping
+have separate budgets. Current solver/publication-copy overlap is covered by
+the GMRES workspace bound. The reported peak also includes required bytes for
+refused requests; it is not a full physical endpoint allocation measurement.
 
 Native and compatibility controllers solve the same scientific linear problem
 and require the true, unpreconditioned residual to meet the requested tolerance.

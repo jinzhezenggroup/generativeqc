@@ -179,6 +179,7 @@ class Calculator:
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
         _application_precision_budget: typing.Any = None,
+        _correlation_convergence_budget: typing.Any = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -603,6 +604,23 @@ class Calculator:
             self._precision_mode = precision_modes[str(precision).lower()]
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
+        # CBS convergence allowances share the size-tagged transport, but have
+        # a separate capability and never request lower-precision arithmetic.
+        self._correlation_convergence_budget = _correlation_convergence_budget
+        if _correlation_convergence_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(_correlation_convergence_budget, TargetErrorBudget):
+                raise TypeError("correlation convergence requires a TargetErrorBudget")
+            if _application_precision_budget is not None:
+                raise ValueError("correlation and arithmetic budgets are exclusive")
+            if self._method not in {
+                _native.METHOD_MP2,
+                _native.METHOD_RCCSD,
+                _native.METHOD_RCCSD_T,
+                _native.METHOD_DF_RCCSD_T,
+            }:
+                raise ValueError("correlation convergence requires closed-shell MP2/CC")
         self._application_precision_budget = _application_precision_budget
         if _application_precision_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -737,9 +755,17 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
+            from ._correlation_convergence import convergence_limits
+
             for name, value, upper in (
                 ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                ("ccsd_residual_tolerance", ccsd_residual_tolerance, 1e-9),
+                (
+                    "ccsd_residual_tolerance",
+                    ccsd_residual_tolerance,
+                    convergence_limits(_correlation_convergence_budget)[
+                        "ccsd_residual_tolerance"
+                    ],
+                ),
             ):
                 if not np.isfinite(value) or not 0.0 < value <= upper:
                     raise ValueError(
@@ -822,6 +848,29 @@ class Calculator:
             if self._method == _native.METHOD_GFN2_XTB
             else None
         )
+        if self._correlation_convergence_budget is not None:
+            query = getattr(
+                self._library, "generativeqc_correlation_convergence_version_v1", None
+            )
+            if query is None:
+                raise NotImplementedError(
+                    "native library lacks correlated convergence transport"
+                )
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 1:
+                raise NotImplementedError(
+                    "unsupported native correlated convergence transport"
+                )
+            if (
+                self._method == _native.METHOD_DF_RCCSD_T
+                and getattr(
+                    self._library, "generativeqc_calculation_get_cc_precision_v1", None
+                )
+                is None
+            ):
+                raise NotImplementedError(
+                    "native library lacks correlated FP32 telemetry"
+                )
         self._ks_options_version = 0
         if self._application_precision_budget is not None:
             query = getattr(
@@ -1339,6 +1388,8 @@ class Calculator:
                 )
             )
         budget = getattr(self, "_application_precision_budget", None)
+        if budget is None:
+            budget = getattr(self, "_correlation_convergence_budget", None)
         descriptor_type = (
             _native.ApplicationPrecisionMethodDescriptor
             if budget is not None
@@ -1566,11 +1617,12 @@ class Calculator:
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
-        """Select the correlation source's domain, not generic DF-HF exports.
+        """Select an explicitly linked auxiliary domain, never orbital admission.
 
         The physical correlation source and its nuclear pullback support
         auxiliary g shells. Both preflight and native shell expansion must
-        use that same scoped policy; other DF consumers retain their limits.
+        use that same scoped policy. HF/KS uses a separate role for its complete
+        value/first-derivative owner; older libraries retain their f boundary.
         """
         if (
             operator in {"df_metric", "df_three_center"}
@@ -1593,6 +1645,18 @@ class Calculator:
             and getattr(self, "_composite_rks_second_order", False)
         ):
             return "wb97mv_df_values"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order in (0, 1)
+            and self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            and (
+                self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
+                or self._ks_options is not None
+            )
+            and hasattr(self._library, "generativeqc_scf_auxiliary_system_create_v1")
+        ):
+            return "scf_df"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -1677,6 +1741,18 @@ class Calculator:
                         )
                     }
                     if budget is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "correlation_convergence_budget": (
+                            self._correlation_convergence_budget.energy_abs,
+                            self._correlation_convergence_budget.force_max_abs,
+                            self._correlation_convergence_budget.force_rms,
+                        )
+                    }
+                    if getattr(self, "_correlation_convergence_budget", None)
+                    is not None
                     else {}
                 ),
                 "target_accuracy": self._target_accuracy.to_dict()
@@ -2065,7 +2141,11 @@ class Calculator:
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
                 if auxiliary_consumer == "correlation_df"
-                else "generativeqc_ks_auxiliary_system_create_v1",
+                else (
+                    "generativeqc_scf_auxiliary_system_create_v1"
+                    if auxiliary_consumer == "scf_df"
+                    else "generativeqc_ks_auxiliary_system_create_v1"
+                ),
                 None,
             )
             if create_system is None:

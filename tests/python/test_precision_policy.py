@@ -3,7 +3,7 @@
 import ctypes
 import json
 import typing
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, fields, replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -23,6 +23,7 @@ from generativeqc import (
     TargetErrorBudget,
 )
 from generativeqc import precision_policy as implementation
+from generativeqc.batch import BatchItemResult
 
 from tools.generativeqc_validation.native_registry_stub import install_registry_stub
 
@@ -350,6 +351,88 @@ def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
     assert "budget_fock_failed_fp64_fallback" in report.fallback_reasons
     assert report.solves[0].error == "RuntimeError: injected Fock failure"
     assert report.solves[0].iterations is None and report.solves[0].fock_builds is None
+
+
+@pytest.mark.parametrize(
+    "missing",
+    (None, "cold", "fallback", "inventory", "mixed", "exchange", "audit", "state"),
+)
+@pytest.mark.parametrize("explicit_target", (False, True))
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks"))
+def test_fast_strict_warm_requires_complete_state_bound_evidence(
+    backend: SimpleNamespace, missing: str | None, explicit_target: bool, method: str
+) -> None:
+    """Strict warm work avoids another solve only with a complete native proof.
+
+    Incomplete inventories and stale audits exercise the safe fallback; an
+    explicit observable target still costs an independent reference endpoint.
+    """
+    work = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": missing != "inventory",
+        "effective_bits": 64,
+        "mixed_stage_fock_builds": 0,
+        "strict_stage_fock_builds": 1,
+        "final_residual_audits": int(missing != "audit"),
+        "returned_state_identity": "owner:epoch:returned",
+        "scf_fock_timeline": [
+            {"kind": "strict_fock", "state": "owner:epoch:returned", "count": 1},
+            {
+                "kind": "final_audit",
+                "state": "stale" if missing == "state" else "owner:epoch:returned",
+                "count": 1,
+            },
+        ],
+        "operators": [
+            {
+                "name": name,
+                "storage": "fp64",
+                "compute": "fp32" if missing == "mixed" else "fp64",
+                "accumulation": "fp64",
+                "reduction": "fp64",
+                "arithmetic_mode": "strict",
+                "count": int(not (name == "exchange_k" and missing == "exchange")),
+            }
+            for name in (
+                "coulomb_j",
+                "exchange_k",
+                "xc",
+                "fock_assembly",
+                "physical_residual",
+            )
+        ],
+    }
+    native = result(executed_backend="cuda", precision=work)
+    candidate = BatchItemResult(
+        index=0,
+        status=0,
+        status_message="",
+        bucket_id=0,
+        warm_start_used=missing != "cold",
+        warm_start_fallback=missing == "fallback",
+        **{
+            field.name: getattr(native, field.name)
+            for field in fields(BatchItemResult)
+            if hasattr(native, field.name)
+        },
+    )
+    backend.outputs = [candidate, result(executed_backend="cuda")]
+    policy = PrecisionPolicy("fast", target=ENERGY if explicit_target else None)
+    calculator = PrecisionCalculator(method=method, device="cuda", policy=policy)
+    calculator._fast_native = True
+    calculator._fast_fock = True
+    from generativeqc.ks import resolve_ks_options
+
+    calculator._candidate._ks_options = resolve_ks_options(method, KsOptions())
+    report = calculator.singlepoint(ATOMS).precision_validation
+    admitted = (
+        missing is None or (missing == "exchange" and method == "pbe-rks")
+    ) and not explicit_target
+    assert report.solve_count == (1 if admitted else 2)
+    assert report.status == (
+        "qualified_budget_fock_strict_warm" if admitted else "observed_met"
+    )
 
 
 @pytest.mark.parametrize(

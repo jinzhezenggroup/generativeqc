@@ -130,12 +130,70 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
     )
 
 
+def _budget_fock_strict_warm_admitted(
+    calculator: Calculator, result: typing.Any
+) -> bool:
+    """Accept a fully revalidated FP64 warm endpoint without inventing mixed work.
+
+    A prepared warm seed can already satisfy the budget's physical SCF gates.
+    Repeating an approximate proposal merely to prove positive FP32 work would
+    perturb that seed. Require a complete strict operator census and a fresh
+    physical audit bound to the returned state instead. Missing/legacy evidence,
+    cold results and mixed attempts retain the incumbent audit fallback.
+    Explicit observable targets are handled by the caller and never use this
+    qualification shortcut. This is not a per-call observable-error estimate.
+    """
+    options = getattr(calculator, "_ks_options", None)
+    work = result.precision or {}
+    if (
+        options is None
+        or getattr(options, "_method_ir", None) is None
+        or getattr(result, "warm_start_used", False) is not True
+        or getattr(result, "warm_start_fallback", True) is not False
+        or work.get("operator_work_counters_valid") is not True
+        or work.get("complete") is not True
+        or work.get("operator_inventory_complete") is not True
+        or work.get("effective_bits") != 64
+        or work.get("mixed_stage_fock_builds") != 0
+        or work.get("strict_stage_fock_builds", 0) < 1
+        or work.get("final_residual_audits", 0) < 1
+        or (work.get("gradient") and work["gradient"].get("returned_mode") != "fp64")
+    ):
+        return False
+    required = {"coulomb_j", "xc", "fock_assembly", "physical_residual"}
+    if options.coefficients[2] != 0 or options.has_range_exchange:
+        required.add("exchange_k")
+    if options.execution_plan.nonlocal_correlation:
+        required.add("nonlocal_correlation")
+    observed = set()
+    for operator in work.get("operators", ()):
+        if operator.get("count", 0) <= 0:
+            continue
+        if operator.get("arithmetic_mode") != "strict" or any(
+            operator.get(field) != "fp64"
+            for field in ("storage", "compute", "accumulation", "reduction")
+        ):
+            return False
+        observed.add(operator.get("name"))
+    identity = work.get("returned_state_identity")
+    events = work.get("scf_fock_timeline", ())
+    # The same returned density must own both the strict physical Fock and its
+    # audit. A historical audit from a different generation cannot authorize it.
+    bound = {
+        event.get("kind")
+        for event in events
+        if identity and event.get("state") == identity and event.get("count", 0) > 0
+    }
+    return required <= observed and {"strict_fock", "final_audit"} <= bound
+
+
 @dataclass(frozen=True)
 class PrecisionPolicy:
     """Select arithmetic by application budget, or request explicit audits.
 
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
-    native FP32 admission. It is not a measured per-call error certificate.
+    native FP32 admission. CCSDTCBSCalculator also uses this allowance for
+    final FP64 convergence limits. It is not a measured per-call error certificate.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
     Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
@@ -695,7 +753,10 @@ class PrecisionCalculator:
         Audits suspend that plan with bounded host seed storage; later execution
         restores only its own seeds, never an auditor's density. Candidate batch
         timing is shared, not invented per-item or divided equally among items.
-        ``maximum_seed_bytes`` bounds numeric seed staging when an audit is needed.
+        Auditors may warm from their own same-geometry, same-control densities;
+        every audit still recomputes its observables. ``maximum_seed_bytes``
+        bounds combined candidate and auditor numeric seed staging. Optional
+        audit history is discarded when that bound cannot accommodate it.
         """
         from ._precision_batch import PreparedPrecisionBatch
 
@@ -950,16 +1011,26 @@ class PrecisionCalculator:
                 route_reasons.append("geometry_correction_not_qualified")
         if self.policy.profile == "fast" and target is None:
             work = candidate.precision or {}
+            strict_warm = (
+                fast_native
+                and self._fast_fock
+                and _budget_fock_strict_warm_admitted(candidate_calculator, candidate)
+            )
             if (
                 fast_native
                 and self._fast_fock
-                and _budget_fock_work_admitted(candidate_calculator, work)
+                and (
+                    strict_warm
+                    or _budget_fock_work_admitted(candidate_calculator, work)
+                )
             ):
                 validation = PrecisionValidation(
                     self.policy.profile,
                     None,
                     model,
-                    "qualified_budget_fock",
+                    "qualified_budget_fock_strict_warm"
+                    if strict_warm
+                    else "qualified_budget_fock",
                     tuple(route_reasons),
                     (),
                     (),

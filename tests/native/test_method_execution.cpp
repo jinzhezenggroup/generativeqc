@@ -239,6 +239,8 @@ void batch_policy(generativeqc_backend backend, bool unrestricted, bool cc_diagn
   auto neighbor = source;
   for (auto& atom : neighbor.atoms) atom.position[0] = 1;
   generativeqc_method_descriptor descriptor{};
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.struct_size = sizeof(descriptor);
   const methods::Capabilities capabilities{};
   auto batch = methods::prepare_correlated_batch(
       capabilities, context, {source, neighbor}, descriptor, true, prepare_probe, "probe",

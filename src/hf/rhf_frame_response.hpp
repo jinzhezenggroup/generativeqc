@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/correlation_convergence.hpp"
 #include "hf/reference.hpp"
 #include "hf/rhf_frame_identity.hpp"
 #include "hf/rhf_frame_recycle.hpp"
@@ -131,6 +132,7 @@ struct RHFFrameResponseOptions {
     options.true_residual_every = options.restart;
     return options;
   }();
+  core::CorrelationConvergence convergence;
 };
 
 struct RHFFrameResponseResult {

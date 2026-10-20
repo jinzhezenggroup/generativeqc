@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 
+#include "methods/application_precision.hpp"
 #include "methods/batch_capabilities.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/execution_failure.hpp"
@@ -39,6 +40,7 @@ class CorrelatedPreparedBatch : public PreparedBatch,
         warm_states_(systems_.size()) {
     if (!factory_ || systems_.empty())
       throw std::invalid_argument("correlated batch requires a factory and systems");
+    descriptor_.struct_size = sizeof(descriptor_);
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
     owners_.reserve(size());
@@ -179,6 +181,11 @@ std::unique_ptr<PreparedBatch> prepare_correlated_batch(
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     bool warm_starts_enabled, CorrelatedCalculationFactory factory, std::string_view name,
     generativeqc_method reference_method, bool indexed_buckets, bool cc_diagnostics) {
+  // Batch owners currently copy only the legacy descriptor prefix. Reject an
+  // allowance before copying rather than losing it or reading past that copy.
+  if (detail::application_precision_budget(descriptor) != std::array<double, 3>{})
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "correlated convergence budgets require single-point groups");
   if (cc_diagnostics)
     return std::make_unique<CcPreparedBatch>(capabilities, context, std::move(systems), descriptor,
                                              warm_starts_enabled, factory, name, reference_method,

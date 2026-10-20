@@ -134,6 +134,12 @@ operator and derivative order where applicable.
 | Scalar Gaussian ECP direct RHF/UHF | Nuclear 0 or 1 | s/p/d orbitals; see [ECP contract](ecp.md) | s/p/d orbitals; see [ECP contract](ecp.md) |
 | Modified nuclear charge, other derivatives/operators/backends | — | Rejected | Rejected |
 
+Complete CUDA HF/KS DF calculations additionally admit fitting auxiliaries
+through g for values and first nuclear derivatives. Their scoped `scf_df`
+consumer uses the native six-term spherical expansion and bounded nuclear
+response; generic standalone exports and orbital admission retain the table's
+limits. See [density-fitted DFT](dft_density_fitting.md).
+
 Public HF energy-plus-force endpoints preflight both values and first nuclear
 derivatives. `eligible` states that a generic mathematical route exists. Native
 shape/resource constraints, device availability, SCF convergence and the

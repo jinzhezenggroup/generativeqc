@@ -414,6 +414,27 @@ generativeqc_status generativeqc_calculation_get_correlation_diagnostic(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+// Private v1 telemetry: six copied counters, independent of the frozen public
+// performance descriptor. Query while the calculation and its owner are alive.
+generativeqc_status generativeqc_calculation_get_cc_precision_v1(
+    const generativeqc_calculation* calculation, uint64_t* values, uint32_t count) {
+  if (!calculation || !values || count != 6) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  try {
+    const auto value = calculation->plan->cc_performance_diagnostic();
+    if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    values[0] = value->ccsd_fp32_requested;
+    values[1] = value->ccsd_fp32_executed;
+    values[2] = value->ccsd_fp32_refused;
+    values[3] = value->ccsd_fp32_evaluations;
+    values[4] = value->ccsd_fp32_gemm_calls;
+    values[5] = value->ccsd_fp32_cast_elements;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&calculation->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_calculation_get_cc_performance_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_cc_performance_diagnostic* out) {
   if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

@@ -18,6 +18,10 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 
+#if GENERATIVEQC_HAS_CUDA
+#include "scf/cuda/warm_density.hpp"
+#endif
+
 namespace generativeqc::scf {
 namespace {
 
@@ -672,7 +676,12 @@ void FleetPlan::restore_warm_states(std::vector<std::optional<HfWarmState>> stat
       throw std::invalid_argument("invalid checkpoint state dimensions or diagnostics");
     auto source = systems_[i];
     apply_coordinates(source, state.coordinates);
-    validate_hf_warm_density(source, method_, state.density);
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_fock_enabled_ || cuda_density_fitting_enabled_)
+      validate_hf_warm_density_cuda(source, method_, state.density, device_id_);
+    else
+#endif
+      validate_hf_warm_density(source, method_, state.density);
   }
   // Every allocation/validation above completes before this no-throw commit.
   // A pre-existing device seed/energy must never supersede an imported seed.

@@ -72,7 +72,7 @@ struct Owner {
   bool pending_mixed_nonlocal = true;
   bool pending_mixed_point = true;
   bool pending_mixed_contractions = true;
-  bool experimental_mixed_point{};
+  bool experimental_mixed_point{}, budget_fock{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
     std::array<double, 3> application_precision_budget{};

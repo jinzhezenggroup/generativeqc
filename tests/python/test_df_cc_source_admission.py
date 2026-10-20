@@ -26,6 +26,7 @@ PRELUDE = r"""
 #include <string>
 #include <vector>
 #include "cc/df_source.hpp"
+#include "cc/phase_observation.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/topology.hpp"
@@ -277,7 +278,8 @@ int main(int argc, char** argv) {
 @pytest.fixture(scope="module")
 def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("df-source-admission")
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
         pytest.skip("C++ compiler and ccache required")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
