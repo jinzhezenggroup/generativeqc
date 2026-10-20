@@ -159,7 +159,7 @@ generates the semilocal feature Hessian, weighted VV10 pair gradient/JVP and
 nuclear-repulsion HVP. The shared nonlocal-pair owner supplies the VV10 primal;
 both moving pair legs, local scales, beta term and quadrature measures are
 included. The semilocal owner supplies the pinned WB97M-V work thresholds and
-smooth long-range expression. Worker floors and the `rho >= 1e-8` VV10 active
+smooth long-range expression. Worker floors and the `rho >= 1e-10` VV10 active
 set retain the native fixed-branch convention. These are local derivatives,
 not derivatives of a discontinuous change of grid or active set.
 
