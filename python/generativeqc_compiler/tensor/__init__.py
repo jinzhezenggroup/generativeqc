@@ -65,6 +65,13 @@ from .ir import (
     transpose,
     where,
 )
+from .materialization import (
+    MaterializationDecision,
+    MaterializationFootprint,
+    MaterializationPlan,
+    materialization_footprint,
+    plan_materializations,
+)
 from .optimize import PASSES, optimize, prepare_for_backend, rewrite
 from .precision import (
     CastBoundary,
@@ -158,6 +165,9 @@ __all__ = [
     "IndexedTensorLayout",
     "JVPProgram",
     "JVPResult",
+    "MaterializationDecision",
+    "MaterializationFootprint",
+    "MaterializationPlan",
     "Node",
     "NodeComplexity",
     "PackedLayout",
@@ -199,9 +209,11 @@ __all__ = [
     "linearize",
     "log",
     "lower_precision",
+    "materialization_footprint",
     "multiply",
     "node_complexity",
     "optimize",
+    "plan_materializations",
     "power",
     "prepare_for_backend",
     "reassociate_einsums",
