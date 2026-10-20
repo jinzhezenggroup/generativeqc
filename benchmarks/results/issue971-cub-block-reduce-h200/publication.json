@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 58406,
-      "path": "evidence.json",
+      "bytes": 6518,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "61a1248d33fe174ee01d7a3c6627e3ce695f33f74e7171e29eecc4bfa9ea3d51"
+      "sha256": "f57419b096bcf12551f385fc37005ea56e7281d10f498d6847f6a54613fa82d8"
     },
     {
       "bytes": 11934,
@@ -19,10 +19,10 @@
       "sha256": "6c1a5e92fbd5a274d4cdf936409318c3142488d5ef6529d6c4b99eab9b2840ce"
     },
     {
-      "bytes": 104938,
-      "path": "tuning-evidence.json",
+      "bytes": 10991,
+      "path": "tuning-evidence.json.gz",
       "role": "samples",
-      "sha256": "9130a3676f27be7e2772e3923f7eca9eb95355de6b010778e48434f994635772"
+      "sha256": "9ecfb19962bd188e7a29cc00188b9ab231555b517ece79dd0c14282acbd6f336"
     }
   ],
   "reproduction": {
