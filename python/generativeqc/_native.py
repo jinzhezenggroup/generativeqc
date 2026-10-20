@@ -1405,15 +1405,20 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             void_pp,
         ]
         library.generativeqc_system_create_basis_template_v1.restype = ctypes.c_int
-    if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
-        library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
+    for name in (
+        "generativeqc_correlation_auxiliary_system_create_v1",
+        "generativeqc_ks_auxiliary_system_create_v1",
+        "generativeqc_scf_auxiliary_system_create_v1",
+    ):
+        create_auxiliary = getattr(library, name, None)
+        if create_auxiliary is None:
+            continue
+        create_auxiliary.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(SystemDescriptor),
             void_pp,
         ]
-        library.generativeqc_correlation_auxiliary_system_create_v1.restype = (
-            ctypes.c_int
-        )
+        create_auxiliary.restype = ctypes.c_int
     library.generativeqc_system_create_ecp.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(SystemDescriptor),

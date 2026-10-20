@@ -51,8 +51,8 @@ const char* generativeqc_context_last_error(const generativeqc_context* context)
 static generativeqc_status create_system_impl(generativeqc_context* context,
                                               const generativeqc_system_descriptor* descriptor,
                                               generativeqc_system** system,
-                                              bool correlation_auxiliary,
-                                              bool ks_auxiliary = false) {
+                                              bool correlation_auxiliary, bool ks_auxiliary = false,
+                                              bool scf_auxiliary = false) {
   if (context == nullptr || system == nullptr || descriptor == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -78,6 +78,7 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
     auto candidate = std::make_unique<generativeqc_system>();
     candidate->correlation_auxiliary = correlation_auxiliary;
     candidate->ks_auxiliary = ks_auxiliary;
+    candidate->scf_auxiliary = scf_auxiliary;
     candidate->data.charge = descriptor->charge;
     candidate->data.multiplicity = descriptor->multiplicity;
     candidate->data.basis_representation = generativeqc::api::native_basis_representation(
@@ -93,9 +94,10 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
     for (std::uint32_t i = 0; i < descriptor->shell_count; ++i) {
       const generativeqc_shell& shell = descriptor->shells[i];
       if (context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
-          shell.angular_momentum > (correlation_auxiliary || ks_auxiliary ? 4U : 3U)) {
+          shell.angular_momentum >
+              (correlation_auxiliary || ks_auxiliary || scf_auxiliary ? 4U : 3U)) {
         context->last_detail =
-            correlation_auxiliary || ks_auxiliary
+            correlation_auxiliary || ks_auxiliary || scf_auxiliary
                 ? "CUDA source-only auxiliary shells support l<=4"
                 : "CUDA basis execution supports l<=3; g shells require CPU reference";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -147,6 +149,15 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_auxiliary_system_create_v1(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system) {
   return create_system_impl(context, descriptor, system, false, true);
+}
+
+/** Private bridge to complete CUDA HF/KS DF, including auxiliary-g response.
+ * The handle remains forbidden as an orbital basis or a correlation auxiliary;
+ * generic system creation and standalone bulk exports retain their own bounds. */
+GENERATIVEQC_API generativeqc_status generativeqc_scf_auxiliary_system_create_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    generativeqc_system** system) {
+  return create_system_impl(context, descriptor, system, false, false, true);
 }
 
 void generativeqc_system_destroy(generativeqc_system* system) { delete system; }
