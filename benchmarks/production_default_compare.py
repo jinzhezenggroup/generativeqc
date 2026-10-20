@@ -30,6 +30,20 @@ ENDPOINT = "constructor-scf-energy-analytic-force-host-export"
 # Receipt protocol identity, not an override passed to a calculator. A host
 # regression compares this snapshot with PrecisionPolicy("fast").budget.
 DEFAULT_FAST_BUDGET = {"energy_abs": 1e-5, "force_max_abs": 1e-4, "force_rms": 3e-5}
+# Receipt protocol identity, not a grid override passed to either calculator.
+# Version 4 carries the level in radial_points and zeroes the angular wire fields.
+NATIVE_DEFAULT_GRID = {
+    "rule": "native-implicit-Treutler-Lebedev-NWChem",
+    "version": 4,
+    "level": 3,
+    "radial_rule": "treutler-ahlrichs",
+    "angular_rule": "lebedev",
+    "partition": "becke-treutler",
+    "radial_points": 3,
+    "angular_polar": 0,
+    "angular_azimuth": 0,
+    "pruning": "nwchem",
+}
 METHODS = {
     "lda": ("lda-rks", "LDA_X,LDA_C_PW"),
     "pbe": ("pbe-rks", "PBE"),
@@ -148,6 +162,23 @@ def _grid_point_count(grid: Any) -> int | None:
     return len(points) if points is not None else None
 
 
+def _native_default_grid_settings(settings: dict[str, Any], method: str) -> bool:
+    grid = settings.get("xc_grid")
+    return (
+        isinstance(grid, dict)
+        and all(
+            type(grid.get(key)) is type(value) and grid[key] == value
+            for key, value in NATIVE_DEFAULT_GRID.items()
+        )
+        and type(grid.get("points")) is int
+        and grid["points"] > 0
+        and settings.get("grid_source") == "implicit-native-default"
+        and "nonlocal_grid_inherits_xc" in settings
+        and settings["nonlocal_grid_inherits_xc"]
+        is (True if method == "wb97m-v" else None)
+    )
+
+
 def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     """Time Standard/Fast constructor, cold SCF, complete forces and host output."""
     import cupy as cp
@@ -191,10 +222,6 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     else:
         validation_info = None
     grid = candidate.ks_options.grid
-    if grid.version != 4 or grid.level != 3 or grid.pruning != "nwchem":
-        raise RuntimeError(
-            "default native Treutler/Lebedev level-3 grid is not in effect"
-        )
     guess = candidate.initial_guess
     initial = result.initial_guess if isinstance(result.initial_guess, dict) else None
     work = result.precision or {}
@@ -244,6 +271,11 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
             else None
         ),
     }
+    if not _native_default_grid_settings(settings, method):
+        raise RuntimeError(
+            "default native Treutler/Lebedev level-3 grid or VV10 inheritance "
+            "is not in effect"
+        )
     sample = {
         "seconds": seconds,
         "energy": float(result.energy),
@@ -621,11 +653,8 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
             or not _positive_number(settings["xc_grid"].get("points"))
             or (
                 engine in NATIVE_ARMS
-                and (
-                    settings["xc_grid"].get("version") != 4
-                    or settings["xc_grid"].get("level") != 3
-                    or settings["xc_grid"].get("pruning") != "nwchem"
-                    or settings.get("grid_source") != "implicit-native-default"
+                and not _native_default_grid_settings(
+                    settings, record["problem"]["method"]
                 )
             )
             or (

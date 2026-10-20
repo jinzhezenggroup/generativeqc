@@ -24,13 +24,27 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
                 "rule": arm,
                 "points": 200 + i,
                 **(
-                    {"version": 4, "level": 3, "pruning": "nwchem"}
+                    {
+                        "rule": "native-implicit-Treutler-Lebedev-NWChem",
+                        "version": 4,
+                        "level": 3,
+                        "radial_rule": "treutler-ahlrichs",
+                        "angular_rule": "lebedev",
+                        "partition": "becke-treutler",
+                        "radial_points": 3,
+                        "angular_polar": 0,
+                        "angular_azimuth": 0,
+                        "pruning": "nwchem",
+                    }
                     if arm in runner.NATIVE_ARMS
                     else {}
                 ),
             },
             **(
-                {"grid_source": "implicit-native-default"}
+                {
+                    "grid_source": "implicit-native-default",
+                    "nonlocal_grid_inherits_xc": None,
+                }
                 if arm in runner.NATIVE_ARMS
                 else {}
             ),
@@ -266,14 +280,22 @@ def test_native_default_grid_is_implicit_after_2626(method: str) -> None:
     }.intersection(args)
 
 
-@pytest.mark.parametrize("method", ("pbe0-rks", "wb97m-v-rks", "r2scan-rks"))
+@pytest.mark.parametrize("method", ("lda", "pbe", "pbe0", "wb97m-v", "r2scan"))
 def test_production_ks_default_is_treutler_level3(method: str) -> None:
     from generativeqc import GridSpec, KsOptions
     from generativeqc.ks import resolve_ks_options
 
     assert GridSpec().version == 1  # The explicit legacy tensor prescription.
-    resolved = resolve_ks_options(method, KsOptions())
+    resolved = resolve_ks_options(runner.METHODS[method][0], KsOptions())
     assert resolved.grid == GridSpec.treutler(level=3)
+    assert resolved.nonlocal_grid is None
+    grid = resolved.grid
+    actual = {
+        key: getattr(grid, key) for key in runner.NATIVE_DEFAULT_GRID if key != "rule"
+    }
+    assert actual == {
+        key: value for key, value in runner.NATIVE_DEFAULT_GRID.items() if key != "rule"
+    }
 
 
 def test_r2scan3c_has_canonical_basis_and_full_corrections() -> None:
@@ -464,14 +486,9 @@ def test_fast_reports_actual_strict_fallback_not_automatic_fp32(
 ) -> None:
     """Default Fast fallback and all its solves belong to the timed endpoint."""
     import numpy as np
+    from generativeqc import GridSpec
 
-    grid = SimpleNamespace(
-        version=1,
-        radial_points=48,
-        angular_polar=16,
-        angular_azimuth=32,
-        pruning="none",
-    )
+    grid = GridSpec.treutler(level=3)
     candidate = SimpleNamespace(
         ks_options=SimpleNamespace(grid=grid),
         initial_guess=SimpleNamespace(kind="huckel"),
@@ -1037,3 +1054,126 @@ def test_rejects_legacy_native_grids_in_default_comparison(fault: str) -> None:
         grid["pruning"] = "none"
     with pytest.raises(ValueError, match="missing executed settings"):
         runner.compare(gpu, standard, fast)
+
+
+@pytest.mark.parametrize("arm_index", (1, 2))
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("rule", "native-resolved-GridSpec"),
+        ("version", 4.0),
+        ("level", 3.0),
+        ("radial_rule", "rational-legendre"),
+        ("angular_rule", "legendre-trapezoid"),
+        ("partition", "becke-equal-radius"),
+        ("radial_points", 48),
+        ("radial_points", 3.0),
+        ("angular_polar", 16),
+        ("angular_polar", False),
+        ("angular_azimuth", 32),
+        ("angular_azimuth", 0.0),
+        ("points", 200.0),
+        ("points", True),
+    ),
+)
+def test_native_default_grid_rejects_contradictory_metadata(
+    arm_index: int, field: str, value: Any
+) -> None:
+    records = receipts()
+    comparison = runner.compare(*records)
+    records[arm_index]["samples"][1]["settings"]["xc_grid"][field] = value
+    with pytest.raises(ValueError, match="missing executed settings"):
+        runner.compare(*records)
+    with pytest.raises(ValueError, match="missing executed settings"):
+        runner.main_table_markdown([comparison])
+
+
+@pytest.mark.parametrize("field", tuple(runner.NATIVE_DEFAULT_GRID))
+def test_native_default_grid_requires_complete_metadata(field: str) -> None:
+    records = receipts()
+    del records[1]["samples"][0]["settings"]["xc_grid"][field]
+    with pytest.raises(ValueError, match="missing executed settings"):
+        runner.compare(*records)
+
+
+@pytest.mark.parametrize("arm_index", (1, 2))
+@pytest.mark.parametrize("value", (False, None, "true", 1, "missing"))
+def test_wb97mv_default_receipt_requires_implicit_vv10_inheritance(
+    arm_index: int, value: Any
+) -> None:
+    records = receipts()
+    for arm, record in zip(runner.ARMS, records, strict=True):
+        record["problem"] = runner.problem_identity("wb97m-v", [("H", (0, 0, 0))])
+        if arm in runner.NATIVE_ARMS:
+            for sample in record["samples"]:
+                sample["settings"]["nonlocal_grid_inherits_xc"] = True
+    comparison = runner.compare(*records)
+    assert comparison["problem"]["method"] == "wb97m-v"
+    settings = records[arm_index]["samples"][1]["settings"]
+    if value == "missing":
+        del settings["nonlocal_grid_inherits_xc"]
+    else:
+        settings["nonlocal_grid_inherits_xc"] = value
+    with pytest.raises(ValueError, match="missing executed settings"):
+        runner.compare(*records)
+    with pytest.raises(ValueError, match="missing executed settings"):
+        runner.main_table_markdown([comparison])
+
+
+@pytest.mark.parametrize("nonlocal_level", (None, 3, 4))
+def test_native_sampler_records_and_requires_implicit_vv10_inheritance(
+    monkeypatch: pytest.MonkeyPatch, nonlocal_level: int | None
+) -> None:
+    from generativeqc import GridSpec
+
+    grid = GridSpec.treutler(level=3)
+    result = SimpleNamespace(
+        converged=True,
+        executed_backend="cuda",
+        energy=-1.0,
+        forces=[[0.0, 0.0, 0.0]],
+        iterations=12,
+        initial_guess=None,
+        precision_validation=None,
+        precision={},
+        ks_diagnostic=SimpleNamespace(grid_points=200),
+    )
+    calculator = SimpleNamespace(
+        ks_options=SimpleNamespace(
+            grid=grid,
+            nonlocal_grid=(
+                None if nonlocal_level is None else GridSpec.treutler(nonlocal_level)
+            ),
+        ),
+        initial_guess=None,
+        _max_iterations=100,
+        _energy_tolerance=1e-10,
+        _density_tolerance=1e-8,
+        _diis_history=8,
+        _screening_tolerance=1e-12,
+        _library=SimpleNamespace(_name="/tmp/fake-native-library.so"),
+        singlepoint=lambda atoms, properties: result,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "cupy",
+        SimpleNamespace(
+            cuda=SimpleNamespace(
+                runtime=SimpleNamespace(deviceSynchronize=lambda: None)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        runner, "make_native_calculator", lambda method, arm: calculator
+    )
+    atoms = [("H", (0.0, 0.0, 0.0))]
+    if nonlocal_level is not None:
+        with pytest.raises(RuntimeError, match="VV10 inheritance"):
+            runner.native_sample("wb97m-v", atoms, "standard")
+    else:
+        sample = runner.native_sample("wb97m-v", atoms, "standard")
+        assert sample["settings"]["nonlocal_grid_inherits_xc"] is True
+        assert sample["settings"]["xc_grid"] == {
+            **runner.NATIVE_DEFAULT_GRID,
+            "points": 200,
+        }
