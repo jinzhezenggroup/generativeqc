@@ -173,6 +173,12 @@ string bytes, key order and parsed values are unchanged. Exact old/new hashes
 and a search of all tracked bytes plus decompressed xz are in the receipt. No
 prior measurement was deleted or retimed.
 
+The [low-order follow-up](2026-10-20-md-j-low-order-series.md) extends the
+positive series to the existing order-1–4 domains after separate qualification.
+It also records actual upstream/native source censuses and negative wider-tile
+and upstream-threshold experiments; the historical measurements here remain
+unchanged.
+
 ## Revisit when
 
 Profile the remaining semantic work, Boys domain distribution and lane
