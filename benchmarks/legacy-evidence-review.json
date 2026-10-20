@@ -368,44 +368,12 @@
       "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c"
     },
     {
-      "bytes": 163839,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/baseline-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "b6d64658b7af26627a3eb91da6d0186b7223259bc70daca7a310c3d89c05d0fb"
-    },
-    {
-      "bytes": 164181,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/candidate-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "8b714e66cc0efb7a41d5bafcf20aef88cd2a2cadfdf987427104419a38daa71a"
-    },
-    {
-      "bytes": 164181,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/compatibility/candidate-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "76342f9fc7c4486428d813fee960699c637a7842e9a17f688d8ff89b2991ce16"
-    },
-    {
       "bytes": 142575,
       "classification": "required-compact-accepted-evidence",
       "family": "ecp-projector-171",
       "path": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip",
       "role": "legacy-evidence-archive",
       "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
-    },
-    {
-      "bytes": 152798,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-real-f-171",
-      "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
-      "role": "source-provenance",
-      "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
       "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",

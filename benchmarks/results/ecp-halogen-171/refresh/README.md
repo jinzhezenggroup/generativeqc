@@ -82,3 +82,10 @@ The parent directory retains the separately labeled historical 2026-09-18 run.
 This qualifies the declared Br/I states and geometries only. It does not enable
 DFT forces, DF/ECP, spin-orbit or general heavy-element chemistry, repair AuH+
 SCF state selection, or extend the 16-AO CUDA HF budget inventory. Refs #171.
+
+Source inventories are stored losslessly in
+`benchmarks/results/ecp-source-inventories.json.xz`. Adjacent `.storage.json`
+files bind the original bytes and the JSON bundle member. Decode with
+`json.loads(lzma.decompress(bundle.read_bytes()))["files"][original_path]`
+and encode that string as UTF-8 to recover the exact original JSON. Historical
+raw manifest checksums continue to describe their original run files.
