@@ -64,4 +64,17 @@ packages. A later apparent moved-force error occurred in Standard as well:
 `execute(None)` selects the preparation geometry, not the preceding explicit
 geometry. Keep the moved coordinates on every replay. The diagnostic confirms
 the actual moved PBE endpoint passes the original independent force gates.
-GPU qualification of the final default selectors remains pending here.
+At source `798f9ddd7`, Slurm job 11382 passes all four frozen/moved GPU tests
+against independent CPU level-4 energy and full moving-grid forces. Jobs
+11383/11384 and same-build Standard controls 11389/11390 retain complete
+96-atom cold plus three warm populations. Every sample passes energy/atom 1e-5,
+force maximum 1e-4 and force RMS 3e-5 against the independently stable dense
+reference; the CPU/GPU spot and grid-stability checks use one quarter of those
+gates. Producer identities are retained separately, not relabeled.
+
+Same-build Standard/Fast cold/warm seconds are PBE 41.169/6.776 versus
+34.479/6.709 and PBE0 42.546/8.340 versus 38.393/7.842. PBE warm differs by
+only about one percent and does not establish a robust universal speedup.
+HF/DF fallback audits and auxiliary-g response performance remain outside this
+change. Raw receipts, failed attempts, reference arrays and validation are in
+`benchmarks/results/fast-warm-20261020/`.
