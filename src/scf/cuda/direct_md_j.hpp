@@ -24,7 +24,8 @@ struct MdSourceTask {
 inline constexpr std::size_t kMdSourceFixedBytes =
     sizeof(double) + sizeof(std::uint32_t) + sizeof(unsigned long long);
 
-/** One unordered shell pair; primitive products retain their ordered contraction. */
+/** One unordered shell pair. Same-shell primitive exchange is folded into the
+ * cached E transforms; distinct shells retain every ordered primitive product. */
 struct MdJPair {
   std::int32_t system, first, second;
   std::int32_t first_ao, second_ao, first_count, second_count;

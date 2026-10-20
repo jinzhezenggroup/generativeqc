@@ -143,11 +143,22 @@ struct MdJHost {
     if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
         host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
       return false;
+    // A same-shell primitive pair has identical spatial products under
+    // exchanging its two primitive indices. Store one triangular descriptor;
+    // the cached E transform carries the off-diagonal multiplicity of two.
+    // Distinct shells retain every ordered product, including coincident atoms.
+    auto primitive_census = static_cast<std::size_t>(host.shell_pair_primitive_offsets.back());
+    for (std::size_t pair = 0; pair < total_pairs; ++pair) {
+      const auto shell = host.shell_pair_first[pair];
+      if (shell != host.shell_pair_second[pair]) continue;
+      const auto count = static_cast<std::size_t>(host.shell_primitive_offsets[shell + 1] -
+                                                  host.shell_primitive_offsets[shell]);
+      primitive_census -= count * (count - 1) / 2;
+    }
     bytes = kMdSourceFixedBytes + (work_counts ? sizeof(MdJWorkCounts) : 0) +
             direct_jk_product(total_pairs,
                               sizeof(MdJPair) + 3 * sizeof(double) + sizeof(std::uint32_t));
-    bytes += direct_jk_product(host.shell_pair_primitive_offsets.back(),
-                               sizeof(MdJPrimitive) + sizeof(std::uint32_t));
+    bytes += direct_jk_product(primitive_census, sizeof(MdJPrimitive) + sizeof(std::uint32_t));
     bytes += direct_jk_product(host.system_shell_offsets.size(), 3 * sizeof(std::int64_t));
     if (bytes > available) return false;
     std::map<MdTransformShell, std::size_t> signatures;
@@ -191,8 +202,11 @@ struct MdJHost {
         transform_slots.insert(transform_slots.end(), layout.slots.begin(), layout.slots.end());
         map = maps.emplace(signature, std::make_pair(offset, layout.values)).first;
       }
-      const auto primitive_count =
-          host.shell_pair_primitive_offsets[index + 1] - host.shell_pair_primitive_offsets[index];
+      const auto shell_primitives =
+          host.shell_primitive_offsets[first + 1] - host.shell_primitive_offsets[first];
+      const auto primitive_count = first == second ? shell_primitives * (shell_primitives + 1) / 2
+                                                   : host.shell_pair_primitive_offsets[index + 1] -
+                                                         host.shell_pair_primitive_offsets[index];
       const auto pair_hermites = direct_jk_product(primitive_count, count);
       const auto pair_transforms = direct_jk_product(primitive_count, map->second.second);
       const auto extra_bytes =
@@ -210,6 +224,7 @@ struct MdJHost {
            first_primitive < host.shell_primitive_offsets[first + 1]; ++first_primitive) {
         for (auto second_primitive = host.shell_primitive_offsets[second];
              second_primitive < host.shell_primitive_offsets[second + 1]; ++second_primitive) {
+          if (first == second && second_primitive > first_primitive) continue;
           primitives.push_back({static_cast<std::uint32_t>(index),
                                 first_primitive,
                                 second_primitive,
