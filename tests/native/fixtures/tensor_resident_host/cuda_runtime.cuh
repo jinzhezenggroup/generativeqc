@@ -167,7 +167,7 @@ struct Context {
   void check_device() {
     if (failure == 3) throw std::runtime_error("injected device mismatch");
   }
-  size_t device_delta() { return live_device_delta; }
+  uint64_t device_delta() const { return live_device_delta; }
   template <class F>
   void section(int, double&, F f) {
     f();
