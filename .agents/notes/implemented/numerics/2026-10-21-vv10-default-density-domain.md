@@ -3,6 +3,9 @@
 Status: implemented and qualified on the recorded endpoint domain
 Date: 2026-10-21
 
+Supersedes the density cutoff in the
+[original WB97M-V composition decision](../architecture/2026-09-22-wb97mv-self-consistent-composition.md#explicit-nonlocal-density-domain).
+
 ## Problem
 
 Treutler/Lebedev/NWChem grid alignment left an active-domain mismatch: native
