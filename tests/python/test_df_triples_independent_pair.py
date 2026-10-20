@@ -111,9 +111,11 @@ def test_actual_owner_grouping_preserves_every_seed_in_strict_and_fallback_domai
     tmp_path: Path,
 ) -> None:
     """Compile the actual owner loop, including its six-entry fallback storage."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("C++ compiler and ccache required")
+        pytest.skip("C++ compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     owner = (ROOT / "src/cc/df_triples_cuda.cu").read_text()
     visit = owner[owner.index("auto visit_tile =") :]
     loop = visit[
@@ -130,8 +132,10 @@ def test_actual_owner_grouping_preserves_every_seed_in_strict_and_fallback_domai
 #include <stdexcept>
 #include <vector>
 #include "generated.hpp"
+#include "cc/phase_observation.hpp"
+namespace phase_observation=generativeqc::cc::phase_observation;
 namespace generated_df=generativeqc::cc::triples::generated_df;
-struct Context { unsigned char arena[64]{}; };
+struct Context { unsigned char arena[64]{}; void* stream{}; };
 struct Inputs {};
 struct Execution {
   double* moments;
@@ -167,6 +171,8 @@ int main() {
                 p.paired_pointer_bytes=strict && admitted ? 48 : 0;
                 struct { std::size_t moment_gemms{}; } result;
                 Context context; Inputs in;
+                std::size_t canonical_tile=0;
+                phase_observation::PanelSources panel_source_ids{};
                 double panels[3]{},storage[6]{}; double* moments=storage;
                 Execution execution{moments,refusal,{}};
                 const auto panel_slot_for=[](std::size_t) { return std::size_t{0}; };
@@ -226,9 +232,11 @@ def test_actual_owner_optional_allocation_retry_is_preexecution_and_typed(
     tmp_path: Path,
 ) -> None:
     """Inject allocation failures into the exact in-place preparation boundary."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("C++ compiler and ccache required")
+        pytest.skip("C++ compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     owner = (ROOT / "src/cc/df_triples_cuda.cu").read_text()
     preparation = owner[
         owner.index(

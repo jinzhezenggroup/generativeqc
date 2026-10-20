@@ -1911,13 +1911,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     stabilize_occupations = false;
     final_closure = false;
     // A resident, same-model warm proposal already passed the strict physical
-    // gates. Re-evaluate it in FP64 before perturbing it with approximate XC:
+    // gates. Re-evaluate it in FP64 before perturbing it with approximate J/K or XC:
     // a converged frozen replay should not manufacture another mixed SCF.
     // This selects arithmetic, not convergence: every ordinary energy,
     // density and residual gate still runs. Cold/external/moved seeds retain
     // the admitted warmup, and ordinary AUTO keeps its incumbent contract.
-    strict_refinement =
-        use_warm && options.application_precision_budget[0] > 0.0 && experimental_mixed_point;
+    strict_refinement = use_warm && options.application_precision_budget[0] > 0.0 &&
+                        (experimental_mixed_point || budget_fock);
     pending_mixed_coulomb = false;
     pending_mixed_exchange = false;
     pending_mixed_range_exchange = false;
@@ -3710,9 +3710,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         final_spec.coulomb.op == scf::FockOperator::FullRange && !final_spec.exchange.present &&
         (final_spec.coulomb.approximation == scf::FockApproximation::Exact ||
          final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
+    // AUTO can propose mixed iterates and then close with fresh FP64 F[D].
+    // The final proof consumes that strict frame; the historical proposal
+    // schedule does not change its algebra or relax any token/numerical gate.
+    const bool strict_final_arithmetic =
+        !precision_schedule.any_lower_precision() || strict_refinement;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(),
-        full_range_coulomb_only);
+        n, spins, direct_global_hybrid, strict_final_arithmetic, full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&

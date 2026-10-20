@@ -15,6 +15,7 @@
 #include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/correlation_convergence.hpp"
 #include "methods/df_rccsdt_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
@@ -45,7 +46,7 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
   Mp2Prepared(Capabilities caps, core::ContextState& context, core::System system,
               std::optional<core::System> auxiliary, scf::ScfOptions options, std::size_t budget,
               std::size_t reference_capacity, double threshold, bool density_fitted,
-              bool fitted_cuda)
+              bool fitted_cuda, core::CorrelationConvergence convergence)
       : PreparedCalculation(context.requested_backend, context.device_id),
         caps_(caps),
         context_(context),
@@ -55,6 +56,7 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
         budget_(budget),
         reference_capacity_(reference_capacity),
         threshold_(threshold),
+        convergence_(convergence),
         density_fitted_(density_fitted),
         fitted_cuda_(fitted_cuda) {}
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
@@ -305,7 +307,7 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
         }
         response::GmresOptions response_options;
         response_options.relative_tolerance = 1e-10;
-        response_options.absolute_tolerance = 1e-12;
+        response_options.absolute_tolerance = convergence_.response_solve();
         response_options.restart = 30;
         response_options.max_iterations = 200;
         struct ForceCache {
@@ -556,6 +558,7 @@ class Mp2Prepared final : public PreparedCalculation, public ReferenceSeededCalc
   std::size_t budget_;
   std::size_t reference_capacity_;
   double threshold_;
+  core::CorrelationConvergence convergence_;
   bool density_fitted_{};
   bool fitted_cuda_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
@@ -661,11 +664,13 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
       !std::isfinite(d.density_tolerance) || d.density_tolerance < 0)
     throw std::invalid_argument("invalid MP2 reference convergence threshold");
   scf::ScfOptions options;
+  const auto convergence = correlation_convergence(d);
   options.max_iterations = d.max_iterations ? d.max_iterations : 100;
   options.diis_history = d.diis_history ? d.diis_history : 8;
-  options.energy_tolerance = d.energy_tolerance > 0 ? std::min(d.energy_tolerance, 1e-11) : 1e-11;
+  options.energy_tolerance =
+      d.energy_tolerance > 0 ? std::min(d.energy_tolerance, convergence.scf_energy()) : 1e-11;
   options.density_tolerance =
-      d.density_tolerance > 0 ? std::min(d.density_tolerance, 1e-11) : 1e-11;
+      d.density_tolerance > 0 ? std::min(d.density_tolerance, convergence.scf_density()) : 1e-11;
   options.screening_tolerance = 0;
   options.compute_forces = false;
   options.export_physical_reference = true;
@@ -719,7 +724,8 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RI-MP2 DF reference state exceeds numeric memory budget");
   return std::make_unique<Mp2Prepared>(caps, context, system, std::move(auxiliary), options, budget,
-                                       reference_capacity, threshold, density_fitted, fitted_cuda);
+                                       reference_capacity, threshold, density_fitted, fitted_cuda,
+                                       convergence);
 }
 
 std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilities,

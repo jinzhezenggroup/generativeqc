@@ -284,8 +284,10 @@ def test_native_ks_final_validation_default_is_audited(
         ),
         (
             "src/methods/dft_method.cpp",
-            "options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
-            "options_.precision_mode == GENERATIVEQC_PRECISION_AUTO",
+            # Arithmetic is covered by the compiled force-consumer policy test;
+            # the inventory continues to reject widened model admission.
+            "system_.ecp_terms.empty()",
+            "true",
         ),
     ],
 )

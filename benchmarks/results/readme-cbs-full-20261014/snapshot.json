@@ -1,0 +1,53 @@
+{
+  "file_count": 9,
+  "files": [
+    {
+      "bytes": 9094,
+      "path": "benchmarks/results/readme-cbs-full-20261014/README.md",
+      "sha256": "db7f743adf81a55e150fd4a1b380507329a615ab642284d319b619bcf5e66cf3"
+    },
+    {
+      "bytes": 20862,
+      "path": "benchmarks/results/readme-cbs-full-20261014/df-cbs.svg",
+      "sha256": "217f1233cf99b9434b0e5f18a52eb31952a58677a42c7faf3ae22fd5bc8f8953"
+    },
+    {
+      "bytes": 17631,
+      "path": "benchmarks/results/readme-cbs-full-20261014/manifest.json",
+      "sha256": "2a6c2bba55cf9e27290f1fcd891f89e81d414fa9261f1d4283f28b2fcfa2c8f0"
+    },
+    {
+      "bytes": 1816,
+      "path": "benchmarks/results/readme-cbs-full-20261014/qualification-driver.py.xz",
+      "sha256": "6a926320e961e4967eb732ae6c64eae8045f835828ba87ea85de08e08c814722"
+    },
+    {
+      "bytes": 31220,
+      "path": "benchmarks/results/readme-cbs-full-20261014/qualified-source.patch.xz",
+      "sha256": "85adbb2a0fb2789fb9cbace15477c90e919c62f1cd0052fdfb54a653a991d413"
+    },
+    {
+      "bytes": 38772,
+      "path": "benchmarks/results/readme-cbs-full-20261014/summary.json.xz",
+      "sha256": "eec1f826a6ba5b362a2062a97e52da6e87f5d142e9fa384072825effb6611cc4"
+    },
+    {
+      "bytes": 63432,
+      "path": "benchmarks/results/readme-cbs-full-20261014/supplement.json.xz",
+      "sha256": "11b677aac0a2e524bf80c57811efd9fd38c0eab8230ed094ed98990bd1784425"
+    },
+    {
+      "bytes": 2060,
+      "path": "benchmarks/results/readme-cbs-full-20261014/timings.md",
+      "sha256": "90a449ed511264b782d1877084f31f549c3a6cad3157b6e17d323269422087b9"
+    },
+    {
+      "bytes": 2724,
+      "path": "benchmarks/results/readme-cbs-full-20261014/verify.py",
+      "sha256": "eff0d7e0ebc0504221a5dc8249915f27a0a3707f597209b279983857b684c9cc"
+    }
+  ],
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "eac2de2b33544b104bb318e53aa02aecbea5009f",
+  "total_bytes": 187611
+}

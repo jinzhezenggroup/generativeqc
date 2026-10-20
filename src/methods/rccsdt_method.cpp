@@ -22,6 +22,7 @@
 #include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/correlation_convergence.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
@@ -56,6 +57,8 @@ class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededC
         execution_(std::move(execution)),
         system_(std::move(system)) {
     descriptor_ = descriptor;
+    convergence_ = correlation_convergence(descriptor);
+    descriptor_.struct_size = sizeof(descriptor_);
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
   }
@@ -116,7 +119,9 @@ class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededC
     auto state = run_rccsd_native_state(
         execution_, system_, descriptor_, &cpu_exact_plan_,
         initial_state ? &initial_state->density : nullptr, warm_start_fallback, warm_capacity,
-        nullptr, false, true, execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr);
+        nullptr, false, true, execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr,
+        8, true, false, std::nullopt, cc::SolverOptions{}.df_mixed_precision_switch_residual, false,
+        false, convergence_);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -445,7 +450,7 @@ class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededC
           if (compute_forces) {
             response::GmresOptions options;
             options.relative_tolerance = 1e-10;
-            options.absolute_tolerance = 1e-12;
+            options.absolute_tolerance = convergence_.response_solve();
             options.restart = 30;
             options.max_iterations = 200;
             auto force = run_companion([&](std::size_t budget) {
@@ -515,6 +520,7 @@ class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededC
   runtime::ExecutionContext execution_;
   core::System system_;
   generativeqc_method_descriptor descriptor_{};
+  core::CorrelationConvergence convergence_;
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   CorrelatedCudaReferencePlan cuda_reference_plan_;
   std::optional<generativeqc_correlation_diagnostic> last_;

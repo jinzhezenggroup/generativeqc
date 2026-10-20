@@ -69,6 +69,7 @@ PLAN_STANDINS = r"""
 #include <string>
 #include <vector>
 #include "methods/correlated_cuda_reference.hpp"
+#include "core/correlation_convergence.hpp"
 int live_phase_owners = 0;
 int destroyed_plans = 0;
 struct PhaseOwner {
@@ -798,6 +799,7 @@ void mp2_probe(int failure, std::size_t warm_capacity) {
   const bool density_fitted_ = false, fitted_cuda_ = false, cuda = true;
   const bool reference_plan_reused = true;
   const double threshold_ = 1e-12;
+  const core::CorrelationConvergence convergence_{};
   struct { double density_fitting_relative_threshold = 1e-10; } options_;
   struct { int device_id = 0; } context_;
   core::System system_;

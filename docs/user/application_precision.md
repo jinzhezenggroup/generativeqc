@@ -434,14 +434,19 @@ with calculator.prepare_batch([atoms], warm_start=True) as batch:
 Qualified Fast and untargeted Standard (FP64) retain the native plan and its own warm
 densities, without seed exports or extra audits. Audited items trigger bounded
 host staging of **candidate-owned** seeds and release the candidate device plan
-before constructing independent, cold FP64 auditors. The next call lazily
+before constructing independent FP64 auditors. The next call lazily
 rebuilds the candidate plan and restores only those seeds. An auditor's density
 never becomes a candidate seed, even when its energy/forces replace a rejected
 candidate. Native restoration validates the source density/overlap and reruns
 SCF at the requested target coordinates. Frozen seeds retain their original
 source coordinates across movement and audits.
-Source-overlap validation can use native host work; its cost is included in
-resume time. This is not a PySCF or reference-oracle production dependency.
+Auditors retain only their own same-geometry, same-control density proposals;
+every audit still reruns SCF and recomputes the requested observables. Tighter
+fallback verification starts cold. Freezing updates freezes both independent
+histories. Geometry or control changes discard the affected audit seed.
+Source-overlap validation uses native host work and bounded CUDA eigensolvers
+for CUDA HF/KS; its cost is included in resume time. The existing physical
+admission gates and near-asymmetric host fallback remain unchanged.
 
 An admitted application-XC warmup does not perturb a converged resident seed
 merely to execute FP32 work again. Same-model resident replays begin in FP64 and
@@ -450,14 +455,16 @@ can still use budget-selected FP32. Cold, external and geometry-rebuilt seeds
 retain the admitted mixed warmup. Arithmetic records describe what ran: a strict
 warm SCF does not claim mixed SCF work or a refinement that did not occur.
 
-`maximum_seed_bytes` (default 256 MiB) caps numeric seed staging. The bound is
+`maximum_seed_bytes` (default 256 MiB) caps combined candidate/auditor numeric
+seed staging. The bound is
 checked conservatively for all prepared slots **before** the native query can
 materialize resident densities. Staging and validation scratch must also fit
 the current `ResourcePlan`'s host headroom; auditors reserve that host storage
 from the same budget, including an explicitly supplied resource plan.
-Unavailable seed transport or insufficient headroom fails the affected audited
-items rather than silently discarding warm history. `warm_start=False` needs no
-seed transport. `clear_warm_starts()` also clears suspended seeds.
+Unavailable candidate seed transport or insufficient candidate headroom fails
+the affected audited items. Optional audit history falls back to a complete
+cold audit when its storage cannot fit. `warm_start=False` needs no seed
+transport. `clear_warm_starts()` clears both suspended histories.
 
 Each item carries a schema-2 `PrecisionValidation`. Shared candidate time and
 per-item endpoint time are `None`, not an invented division of fleet latency.

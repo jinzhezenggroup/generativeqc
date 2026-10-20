@@ -128,7 +128,11 @@ class CorrelationResult:
 
 @dataclass(frozen=True)
 class CcPerformanceResult:
-    """Observational native coupled-cluster phase and semantic-work telemetry."""
+    """Native CC phase/work and executed FP32 auxiliary-warmup telemetry.
+
+    Optional FP32 fields are unavailable on older libraries and batch owners;
+    a requested policy alone never supplies executed counters.
+    """
 
     reference_seconds: float
     problem_seconds: float
@@ -155,6 +159,12 @@ class CcPerformanceResult:
     diis_gram_calls: int
     diis_coefficient_calls: int
     diis_combine_calls: int
+    ccsd_fp32_requested: bool | None = None
+    ccsd_fp32_executed: bool | None = None
+    ccsd_fp32_refused: bool | None = None
+    ccsd_fp32_evaluations: int | None = None
+    ccsd_fp32_gemm_calls: int | None = None
+    ccsd_fp32_cast_elements: int | None = None
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,51 @@
+{
+  "base_revision": "eac2de2b33544b104bb318e53aa02aecbea5009f",
+  "local_changes": true,
+  "file_sha256": {
+    "benchmarks/ccsdt_cbs_endpoint.py": "5a2df64ecd14b71306dbe024f645fb4e6e2e5a807be164b22fbf1e6c309999e9",
+    "benchmarks/readme_cbs.py": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+    "benchmarks/run_readme_cbs_benchmarks.sh": "17db36f3ff88062c6f021f01245b1e15eedcb152371f7e40348cffb8ee17ab67",
+    "python/generativeqc/_api_types.py": "cab9ef8d50f3c5d70539576dafd0444939911e9554f8dc2aa114f16b508b796e",
+    "python/generativeqc/_correlation_convergence.py": "8bfedb38e4bbcea63b4255d914529b163886c2f77edd997b436b27303d0a2336",
+    "python/generativeqc/_result_translation.py": "a575b05286091a73ba0c05899b88ba33afc061421792220562e21ec1217136d0",
+    "python/generativeqc/calculator.py": "1efd45d2d2e709d824a72dc7d6f9df973c6390cf74b309429d256ab2978f7e57",
+    "python/generativeqc/cbs.py": "4b5272cce6a2f42117418c41740ea3a334e02d40c93635209a69d137f29d0106",
+    "python/generativeqc/precision_policy.py": "5bca79235404e3de2c658782a4a5abd5665a310b428f884cdf2bf4045e794fc6",
+    "src/api/c_api_calculation.cpp": "a286656c5cf7e9d0d6f11d11c55be2300783d55b7b4a10c6fef96baa4dd7aef5",
+    "src/api/c_api_common.cpp": "37b274310fcec4607492adf0c674b6f74b856bd05c77c1e0282979e3efbaaaf3",
+    "src/cc/cuda_solver.cu": "455703c7bad63d0b6a31293856dd017e78c0c41fd888582a38e062411e534732",
+    "src/cc/lambda_response.cpp": "443f98e2c1bf4cb59021e2f283815ea5bf0d32d0a43e6f22a2e6c6b081b3b66b",
+    "src/cc/lambda_response.hpp": "66b749feb15618a408772be3bca0b1bd7ac989030255eafb23f83ce9a37b407f",
+    "src/cc/rccsdt_force.cpp": "392364606029f970fe29622df638dc334c10ac235e7bb067d8528ac16149a3b2",
+    "src/cc/solver.cpp": "ef3e949779298f9d2bc949c28e317e54dd5520da286707dd076710e032e38443",
+    "src/cc/solver.hpp": "701ed63d6dc1104f0b869e6ae32b1be64ca098cc76ba5730ebfed95509a42b31",
+    "src/core/correlation_convergence.hpp": "5daa8467b2c5635b89c1517e382e79cbc94f2984f68ab5dcce6a25f847d2f836",
+    "src/hf/rhf_frame_response.cu": "ac0d2727960e0612f50f0bfa5f75e86713a69ea3e3a8556a903c99b81e16ea85",
+    "src/hf/rhf_frame_response.hpp": "12ab17b7571bb86e641ed42662bf918bde58a25e58f7eff878f3c3a8736f6e4d",
+    "src/methods/application_precision.hpp": "9392bbe3ae00408644b1b1a49f9f4161b214f332c8a837a10f43890391be7125",
+    "src/methods/correlated_batch.cpp": "4444c33d63213352aa6586f3d289aed3c01a86e492d3b94f31e50121d3a5c04d",
+    "src/methods/correlation_convergence.hpp": "1fd20d43286a36f6023e36702ddcaa1f23f51f34c2930e7ef9c8d31adf6f0ba9",
+    "src/methods/df_ccsdt_force.cu": "083b31eaa88c77340241961ef8e268ce1aad15f12b40a5cbb56dd6a7dc9f33c5",
+    "src/methods/df_ccsdt_force.hpp": "b2216a09d61b2193a0dd320c0d97a7a5fb78815c4e0ea8b9c7e98bf088f62346",
+    "src/methods/df_rccsdt_method.cpp": "a2b140c2d1a07ba0ad3861d8350292112b2d1c9839d65c98977e78905fb66e54",
+    "src/methods/method.hpp": "ab0a0e5eb4372f894e2a49ede68c368042e8ae856204521a9857b8dfdf16e4b0",
+    "src/methods/mp2_method.cpp": "43d4e7d2310b9f363731e5ca0ccd8a5857398ec86bca6e6dd5075b3027ddceda",
+    "src/methods/rccsd_method.cpp": "db136bfcc13bfcbb169f7baa9b8a8e0de51ff2d9bf8951e21837d9e3dba35b5f",
+    "src/methods/rccsd_method.hpp": "2328846272ae964abfed33b6f963b6f845a68c067856aa3ab3f8528670f07f88",
+    "src/methods/rccsdt_method.cpp": "c8b737f0ce7bc5af6a9b3078975523af82ab0f7c5e4529b83be940a21116aabb",
+    "src/methods/registry.cpp": "96552230e50f04b409df7597699540f3d54b2436ac4e062e19e91cfde6951a22"
+  },
+  "compiler": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "cuda_compiler": "/group/software/cuda-12.9.1/bin/nvcc",
+  "cuda_architecture": "120",
+  "build_type": "Release",
+  "compiler_cache": "ccache 4.5.1",
+  "library_sha256": "0d6ec6ff673a6f3c1d1aefe8f561fa6ccf47f2e3bc803f449c200bbd44812743",
+  "variant": "Fast requests FP32 DF-CCSD auxiliary preconvergence plus relaxed physical convergence",
+  "documentation_only_final_sha256": {
+    "python/generativeqc/precision_policy.py": "e8a3c318ead5445ba369634c61fe94c8f589671e7acfa938dedbd050893df5f3"
+  },
+  "analysis_file_sha256": {
+    "tools/render_readme_cbs.py": "09bd4f71dc4f3cfa8436c3ea7c6fc2d642156dd50e223865d74abb202fca89e3"
+  }
+}

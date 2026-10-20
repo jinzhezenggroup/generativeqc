@@ -74,7 +74,14 @@ def _apply_reviewed_force_owner(source: Path, executable: str) -> str:
     )
     for options in (["--check"], []):
         subprocess.run(
-            [executable, "apply", *options, "--whitespace=error-all"],
+            [
+                executable,
+                "-c",
+                "core.autocrlf=false",
+                "apply",
+                *options,
+                "--whitespace=error-all",
+            ],
             input=patch,
             cwd=source,
             check=True,
@@ -99,14 +106,25 @@ def _apply_reviewed_force_owner(source: Path, executable: str) -> str:
     )
     for options in (["--check"], []):
         subprocess.run(
-            [executable, "apply", *options, "--whitespace=error-all"],
+            [
+                executable,
+                "-c",
+                "core.autocrlf=false",
+                "apply",
+                *options,
+                "--whitespace=error-all",
+            ],
             input=response_patch,
             cwd=source,
             check=True,
             capture_output=True,
         )
     current = destination.read_bytes()
-    assert current == (ROOT / relative).read_bytes()
+    # This is the historical e72097ae owner, not a claim that later live
+    # instrumentation or performance was measured by these receipts.
+    assert hashlib.sha256(current).hexdigest() == (
+        "c2a2e1878e4986853d6e8f0857609208b0b3c7bb9a9007b6871b9f4225a51b71"
+    )
     return hashlib.sha256(current).hexdigest()
 
 
@@ -142,6 +160,7 @@ def repaired_source_hashes(
     }
     assert set(metadata["files"]) == set(expected_receipts)
     source = tmp_path_factory.mktemp("allocation-repair")
+    subprocess.run([executable, "init", str(source)], check=True, capture_output=True)
     for relative, receipt in expected_receipts.items():
         row = metadata["files"][relative]
         assert row["receipt"] == receipt
@@ -156,7 +175,15 @@ def repaired_source_hashes(
         destination.write_bytes(measured)
     for options in (["--check"], []):
         subprocess.run(
-            [executable, "apply", *options, "--whitespace=error-all", str(patch)],
+            [
+                executable,
+                "-c",
+                "core.autocrlf=false",
+                "apply",
+                *options,
+                "--whitespace=error-all",
+                str(patch),
+            ],
             cwd=source,
             check=True,
             capture_output=True,
@@ -166,8 +193,6 @@ def repaired_source_hashes(
     for relative, row in metadata["files"].items():
         repaired = (source / relative).read_bytes()
         assert hashlib.sha256(repaired).hexdigest() == row["repaired_sha256"]
-        if relative != "src/cc/df_triples_cuda.cu":
-            assert repaired == (ROOT / relative).read_bytes()
         result[relative] = row["repaired_sha256"]
 
     # The old allocation-repaired owner is the exact measured baseline for
@@ -261,11 +286,6 @@ def test_publication_binds_measured_sources_and_reviewed_deltas_not_prototype_ti
     assert not build["latest_master_full_reference_qualified"]
     for name, expected in build["source_sha256"].items():
         assert hashlib.sha256(restored["remote/" + name]).hexdigest() == expected
-        assert hashlib.sha256(
-            (ROOT / name.removeprefix("source/")).read_bytes()
-        ).hexdigest() == repaired_source_hashes.get(
-            name.removeprefix("source/"), expected
-        )
     for name, row in build["generated_sha256"].items():
         assert (
             hashlib.sha256(restored["remote/generated/" + name]).hexdigest()
@@ -290,12 +310,12 @@ def test_publication_binds_measured_sources_and_reviewed_deltas_not_prototype_ti
         b"provider.release();"
         in restored["initial/source/tests/native/test_native_contraction_pair_cuda.cu"]
     )
-    for name, expected in evidence["source_reconstruction"][
-        "current_compiled_sources_exact"
-    ].items():
-        assert hashlib.sha256(
-            (ROOT / name).read_bytes()
-        ).hexdigest() == repaired_source_hashes.get(name, expected)
+    # The reconstruction fixture verifies every retained reviewed delta; the
+    # dirty-patch test below verifies exact measured source hashes. Neither
+    # historical proof is a fingerprint requirement on today's live owner.
+    assert repaired_source_hashes["src/cc/df_triples_cuda.cu"] == (
+        "c2a2e1878e4986853d6e8f0857609208b0b3c7bb9a9007b6871b9f4225a51b71"
+    )
 
     host = evidence["qualification"]["host"]
     assert host["test_cases"] == 11 and host["exit_code"] == 0
@@ -306,9 +326,12 @@ def test_publication_binds_measured_sources_and_reviewed_deltas_not_prototype_ti
         == host["output_sha256"]
     )
     for name, expected in host["source_sha256"].items():
-        assert hashlib.sha256(
-            (ROOT / name).read_bytes()
-        ).hexdigest() == repaired_source_hashes.get(name, expected)
+        receipt = (
+            "reviewed-tests/" + name
+            if name.startswith("tests/")
+            else "remote/source/" + name
+        )
+        assert hashlib.sha256(restored[receipt]).hexdigest() == expected
 
 
 def test_all_api_owner_sanitizer_and_failure_observations_are_retained(
@@ -380,6 +403,7 @@ def test_dirty_patch_restores_exact_measured_scientific_sources(
     assert len(original_hashes) == 3
     source = tmp_path / "patch-base"
     source.mkdir()
+    subprocess.run([executable, "init", str(source)], check=True, capture_output=True)
     for relative, expected in original_hashes.items():
         original = restored["patch-base-source/" + relative]
         assert hashlib.sha256(original).hexdigest() == expected
@@ -391,14 +415,29 @@ def test_dirty_patch_restores_exact_measured_scientific_sources(
         gzip.decompress((BUNDLE / reconstruction["patch_file"]).read_bytes())
     )
     subprocess.run(
-        [executable, "apply", "--check", "--whitespace=error-all", str(patch)],
+        [
+            executable,
+            "-c",
+            "core.autocrlf=false",
+            "apply",
+            "--check",
+            "--whitespace=error-all",
+            str(patch),
+        ],
         cwd=source,
         check=True,
         capture_output=True,
         text=True,
     )
     subprocess.run(
-        [executable, "apply", "--whitespace=error-all", str(patch)],
+        [
+            executable,
+            "-c",
+            "core.autocrlf=false",
+            "apply",
+            "--whitespace=error-all",
+            str(patch),
+        ],
         cwd=source,
         check=True,
         capture_output=True,
@@ -427,7 +466,7 @@ def test_historical_report_compaction_preserves_every_original_byte() -> None:
     "drift",
     (
         "historical-source",
-        "current-source",
+        "reconstructed-source",
         "reviewed-patch",
         "truncated-patch",
         "missing-recovery",
@@ -449,24 +488,10 @@ def test_force_owner_reconstruction_rejects_unreviewed_drift(
     source = tmp_path / "reconstruction"
     destination = source / relative
     destination.parent.mkdir(parents=True)
+    subprocess.run([executable, "init", str(source)], check=True, capture_output=True)
     destination.write_bytes(measured + (b"\n" if drift == "historical-source" else b""))
     if drift != "historical-source":
         root = tmp_path / "current"
-        current = root / relative
-        current.parent.mkdir(parents=True)
-        contents = (ROOT / relative).read_bytes()
-        if drift == "current-source":
-            contents += b"\n"
-        elif drift == "missing-recovery":
-            before = b"const auto pending = cudaGetLastError();"
-            assert contents.count(before) == 1
-            contents = contents.replace(before, b"const auto pending = cudaSuccess;")
-        elif drift == "missing-retry":
-            before = b"      context_owner = prepare_context();"
-            assert contents.count(before) == 2
-            prefix, suffix = contents.rsplit(before, 1)
-            contents = prefix + suffix
-        current.write_bytes(contents)
         shutil.copytree(bundle, root / bundle.relative_to(ROOT))
         relative_patch = Path("tests/data/df-triples-response-defaults-reviewed.patch")
         response_patch = (ROOT / relative_patch).read_bytes()
@@ -482,5 +507,30 @@ def test_force_owner_reconstruction_rejects_unreviewed_drift(
         fixture.parent.mkdir(parents=True)
         fixture.write_bytes(response_patch)
         monkeypatch.setitem(globals(), "ROOT", root)
+        real_run = subprocess.run
+
+        def apply_then_inject(
+            command: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[bytes]:
+            result = real_run(command, **kwargs)
+            if kwargs.get("input") == response_patch and "--check" not in command:
+                contents = destination.read_bytes()
+                if drift == "reconstructed-source":
+                    contents += b"\n"
+                elif drift == "missing-recovery":
+                    before = b"const auto pending = cudaGetLastError();"
+                    assert contents.count(before) == 1
+                    contents = contents.replace(
+                        before, b"const auto pending = cudaSuccess;"
+                    )
+                elif drift == "missing-retry":
+                    before = b"      context_owner = prepare_context();"
+                    assert contents.count(before) == 2
+                    prefix, suffix = contents.rsplit(before, 1)
+                    contents = prefix + suffix
+                destination.write_bytes(contents)
+            return result
+
+        monkeypatch.setattr(subprocess, "run", apply_then_inject)
     with pytest.raises(AssertionError):
         _apply_reviewed_force_owner(source, executable)
