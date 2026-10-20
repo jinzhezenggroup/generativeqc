@@ -1,0 +1,106 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Bounded Lambda warmup retains FP64 publication gates and passes the scoped independent/Standard controls and refusal tests; repeated C4 endpoints support the optimization, without a universal speedup claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 9433,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "26380f9f4663d5103ba555d3857ee81ae382c15d40170abaa516e0fd319320eb"
+    },
+    {
+      "bytes": 907,
+      "path": "baseline-environment.sh",
+      "role": "reproduction",
+      "sha256": "eed0d5512915d60f46dcf7131cc243a331056581c34da987d024c353757d4577"
+    },
+    {
+      "bytes": 580,
+      "path": "c6-ablation.sh",
+      "role": "reproduction",
+      "sha256": "0a2e8d61fc7ef9f51308ea0eba2a8ab4170d1a5f845a3b1cf6452ebc3194c2d8"
+    },
+    {
+      "bytes": 908,
+      "path": "candidate-environment.sh",
+      "role": "reproduction",
+      "sha256": "22440147927cd7c8a4ca74f43a70b99bf8cedb9e202475f3bcaf31793a85d680"
+    },
+    {
+      "bytes": 811,
+      "path": "cohort.sh",
+      "role": "reproduction",
+      "sha256": "0ef03be8195be9c39ed2d04f21b3b56e8496d9a64308453e7460282f5a3c7600"
+    },
+    {
+      "bytes": 12252,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "6d33b3e2c3ac0f251cba0e01cc9303a27f4956ec890a339d12852503cd74fa28"
+    },
+    {
+      "bytes": 627,
+      "path": "python-preload.sh",
+      "role": "reproduction",
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "bytes": 97144,
+      "path": "qualification.json.xz",
+      "role": "samples",
+      "sha256": "562065f5b276f5f661e42574c404c96b4be45e2135fc5ce7054c6f43333145ae"
+    },
+    {
+      "bytes": 5128,
+      "path": "qualified-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "1041f0d068ff98273ecb783d463b796a12ccbb67444d696504dbca436e27919b"
+    },
+    {
+      "bytes": 892,
+      "path": "readme-pair.sh",
+      "role": "reproduction",
+      "sha256": "c0f527836773cdb0f9f4bd16c93835961612aa651f7caf7b6e4e0efac159b357"
+    },
+    {
+      "bytes": 60380,
+      "path": "summary.json.xz",
+      "role": "samples",
+      "sha256": "169ca92b27832a1ad95df9d2a064a0686cd488290c22c7bd81aed3f7272613c2"
+    },
+    {
+      "bytes": 6599,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "3b18b9e5a3b0202ffbadf70bae51decfa0c640e5f5ea3164fbde42d6dd54089e"
+    },
+    {
+      "bytes": 11079,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "fbd1aa232f6e6addf7ae290c9baed4199bb1c920aba79ceaeeb490018b254317"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=01:10:00",
+      "bash",
+      "readme-pair.sh",
+      "7"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "5e0257826b65fcab52c02df4f364a643d20304c1"
+  }
+}

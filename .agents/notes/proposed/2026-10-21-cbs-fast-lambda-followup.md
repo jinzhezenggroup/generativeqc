@@ -63,3 +63,10 @@ triples and TZ response separately before selecting additional mixed consumers.
 - [Original Fast decision](../implemented/numerics/2026-10-20-ccsdt-cbs-fast-convergence.md)
 - [Existing Lambda mixed warmup](../implemented/performance/2026-10-11-df-lambda-mixed-warmup.md)
 - [PR #2648](https://github.com/jinzhezenggroup/generativeqc/pull/2648)
+
+## Superseded by qualified implementation
+
+The [CBS Fast Lambda decision](../implemented/performance/2026-10-21-cbs-fast-lambda.md)
+implements the Q32-preserving candidate with actual arithmetic telemetry and
+broader qualification. The screen above remains historical evidence; its
+measurements are not relabelled as measurements of the final implementation.

@@ -167,13 +167,13 @@ gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
 correlation within each basis group. Timings cover the
 complete two-group E+F endpoint, not just SCF or summed component timings.
 [Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
-convergence and defaults to FP32 DF-CCSD preconvergence, followed by FP64
-residual checks and response. The curves use one fresh
+convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
+by FP64 final solves, independent residual checks and response. The curves use one fresh
 complete call per mode and molecule, with the same binary and GPU within each
 pair; they do not imply a speedup for every case. All Fast points pass
 constituent and composite energy/full-force checks against Standard.
-See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-fast-20261020/timings.md)
-and [inputs, independent checks and limitations](benchmarks/results/readme-cbs-fast-20261020/README.md).
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-lambda-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-lambda-20261021/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
 identical-Hamiltonian speedup measurements.

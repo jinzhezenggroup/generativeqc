@@ -128,7 +128,8 @@ exits. DF accuracy, stock reference convergence, cold/changed/energy-only and
 small/UHF external coverage, unprofiled memory/transfer accounting, unequal
 auxiliary bases and constrained-memory comparisons remain #206 work.
 
-The candidate and preliminary matrix `retained-samples.json` records are now
+The candidate, preliminary and historical Pulay matrix `retained-samples.json`
+records are now
 stored losslessly as `retained-samples.json.gz`. Adjacent `.storage.json` receipts
 pin the original merged Git blobs and both byte identities. `gzip -dc` restores
 every original byte, including failed verdicts and all seven paired samples;

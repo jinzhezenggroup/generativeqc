@@ -353,6 +353,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
     lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
     lambda_options.df_mixed_precision = lambda_mixed_precision;
+    // Record the actual executing owner's request, including resource refusal.
+    result.primal.lambda_fp32_requested = lambda_mixed_precision;
     lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
     lambda_options.convergence = state.convergence;
     lambda_options.cc_tolerance = state.convergence.cc_residual();
@@ -932,11 +934,16 @@ DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& executi
   // Switch well before the selected physical residual threshold; only the
   // subsequent FP64 epoch and independent replay can publish convergence.
   const bool mixed = convergence.relaxed() && !demand.mp2;
+  const bool lambda_mixed = mixed && forces;
+  // The experimental Lambda owner halves the requested cap for its shared
+  // FP32 scratch epoch. Compensate here to preserve the ordinary Q32 ceiling
+  // for the later FP64 solve/audit. Its bounded planner may still choose less.
+  const std::size_t lambda_cap = lambda_mixed ? 64 : 32;
   const double mixed_switch = std::max(cc::SolverOptions{}.df_mixed_precision_switch_residual,
                                        100.0 * convergence.cc_residual());
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, 32, 0, {}, true, false, true, false, true, {}, 30, true,
-                             true, true, nullptr, true, mixed, false, false, mixed_switch, demand,
-                             convergence);
+                             true, true, lambda_cap, 0, {}, true, false, true, false, true, {}, 30,
+                             true, true, true, nullptr, true, mixed, lambda_mixed, false,
+                             mixed_switch, demand, convergence);
 }
 }  // namespace generativeqc::methods::detail

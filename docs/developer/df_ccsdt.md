@@ -29,9 +29,14 @@ The public `CCSDTCBSCalculator(policy="fast")` requests FP32 auxiliary CCSD
 warmup at every shape and selects relaxed convergence limits for the reference,
 CCSD and force response. Its switch residual is
 `max(default_switch, 100 * selected_cc_residual)`; the existing 24-evaluation
-limit and resource/provider refusal apply. Lambda, triples and response remain
-FP64. A private six-counter query reports requested/executed/refused FP32,
-evaluations, GEMMs and casts without enlarging the frozen public descriptor.
+limit and resource/provider refusal apply. Force calls also request the bounded
+Lambda warm start described below; triples and final response remain FP64.
+A private six-counter CCSD query reports requested/executed/refused FP32,
+evaluations, GEMMs and casts. The separate `get_df_response_v1` extension copies
+12 Lambda request/work/capacity counters and three phase times without enlarging
+the frozen public descriptor. It is unavailable for energy-only/conventional
+endpoints and old libraries. Shared transpose action counts exclude independent
+audit actions; Lambda phase time includes preparation, solve, audit and VJPs.
 The complete
 policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#fast-convergence).
 A copied `core::CorrelationConvergence` travels through the prepared group,
@@ -111,7 +116,9 @@ live warmup high-water mark, never merely the total device allocation.
 
 ### Internal Lambda mixed-precision preconvergence
 
-`LambdaOptions::df_mixed_precision` is a separate, default-off CUDA experiment.
+`LambdaOptions::df_mixed_precision` is a separate CUDA control, default-off for
+supplied problems and standalone endpoints. Grouped CBS Fast force calls enable
+it by default; Standard and energy-only calls keep it off.
 Only the compiler-owned staged auxiliary transpose uses uniform FP32 storage
 and pedantic FP32 contractions during a bounded GMRES warm start. Its core
 adjoint, primal state, RHS, packed host Krylov algebra, diagonal preconditioner
@@ -128,8 +135,10 @@ remain unchanged. Nonfinite failures propagate without publication or a quiet
 strict retry.
 
 The opt-in halves the requested strict auxiliary Q batch, down to one Q; default
-FP64 callers retain the original schedule. Immutable FP32 factors/amplitudes
-and dynamic cut seeds borrow a tail of the existing shared strict scratch
+FP64 callers retain the original schedule. CBS Fast requests a cap of 64 so
+this halving preserves the ordinary Q32 ceiling instead of doubling subsequent
+strict solve/audit tile work; bounded planning can still choose a smaller batch.
+Immutable FP32 factors/amplitudes and dynamic cut seeds borrow a tail of the existing shared strict scratch
 lease, outside every warmup core/auxiliary/tau scratch high-water mark. There
 is no new owned device allocation. Begin the single-use epoch only after fresh FP64
 primal/RHS work; permanently finish it before any strict replay/audit/VJP can

@@ -563,6 +563,54 @@ def test_fast_plot_precision_provenance_includes_bounded_fp64_fallback(
         attach_fast(control, fast)
 
 
+@pytest.mark.parametrize("cc_executed", (True, False))
+@pytest.mark.parametrize("lambda_executed", (True, False))
+def test_lambda_provenance_requires_measured_work(
+    cc_executed: bool, lambda_executed: bool
+) -> None:
+    """Either native FP32 owner may make a mixed result; requests alone cannot."""
+    control, fast = paired_records()
+    sample = fast["points"][0]["native"]["samples"][0]
+    sample["convergence"].update(
+        arithmetic_request="df_ccsd_fp32_preconvergence",
+        arithmetic="mixed" if cc_executed or lambda_executed else "fp64",
+        lambda_arithmetic_request="df_lambda_fp32_preconvergence",
+        lambda_arithmetic="mixed" if lambda_executed else "fp64",
+    )
+    cc = next(c["result"] for c in sample["components"] if c["method"] == "df-ccsd(t)")
+    work = cc["cc_performance"] = {
+        "ccsd_fp32_requested": True,
+        "ccsd_fp32_executed": cc_executed,
+        "ccsd_fp32_refused": not cc_executed,
+        "ccsd_fp32_evaluations": int(cc_executed),
+        "ccsd_fp32_gemm_calls": 10 * cc_executed,
+        "ccsd_fp32_cast_elements": 100 * cc_executed,
+        "lambda_fp32_requested": True,
+        "lambda_fp32_executed": lambda_executed,
+        "lambda_fp32_refused": not lambda_executed,
+        "lambda_fp32_iterations": 2 * lambda_executed,
+        "lambda_fp64_iterations": 3,
+        "lambda_fp32_actions": 4 * lambda_executed,
+        "lambda_fp64_actions": 5,
+        "lambda_fp32_gemm_calls": 20 * lambda_executed,
+        "lambda_fp32_cast_elements": 100 * lambda_executed,
+        "lambda_auxiliary_batch_size": 32,
+        "lambda_numeric_capacity_bytes": 4096,
+        "lambda_owned_device_bytes": 2048,
+    }
+    attach_fast(control, fast)
+    provenance = fast["points"][0]["standard_comparison"][0]["arithmetic"]
+    assert provenance["lambda"]["executed"] is lambda_executed
+    assert completed_times(fast["points"][0]) == [9.0]
+    work["lambda_fp32_executed"] = not lambda_executed
+    with pytest.raises(ValueError, match="Lambda FP32 counters disagree"):
+        attach_fast(control, fast)
+    work["lambda_fp32_executed"] = lambda_executed
+    work.pop("lambda_fp64_actions")
+    with pytest.raises(ValueError, match="Lambda FP32 request lacks native"):
+        attach_fast(control, fast)
+
+
 @pytest.mark.parametrize(
     "campaign", ("readme-cbs-fast-20261020", "cbs-fast-diagnosis-20261021")
 )
@@ -586,3 +634,24 @@ def test_frozen_verifier_allows_only_reduction_roundoff(campaign: str) -> None:
     assert not same({**expected, "errors": [5e-9 + 1e-12]}, expected)
     assert not same({**expected, "errors": [float("nan")]}, expected)
     assert not same({**expected, "extra": None}, expected)
+
+
+def test_lambda_receipt_composite_reduction_roundoff_is_bounded() -> None:
+    """A portable derived energy diagnostic cannot excuse changed forces or gates."""
+    import runpy
+
+    verifier = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results/cbs-fast-lambda-20261021/verify.py"
+        )
+    )
+    compare = verifier["same_composite_errors"]
+    terms = np.array([-76.0, 25.0, -25.0, -0.3, 0.2])
+    expected = {"energy_abs": 1e-9, "force_max_abs": 1e-8, "force_rms": 1e-9}
+    actual = dict(expected, energy_abs=float(1e-9 + np.spacing(76.1)))
+    assert compare(actual, expected, terms)
+    assert not compare(dict(expected, energy_abs=1e-8), expected, terms)
+    assert not compare(dict(expected, force_max_abs=2e-8), expected, terms)
+    assert not compare(dict(expected, energy_abs=float("nan")), expected, terms)
+    assert not compare({"energy_abs": 1e-9}, expected, terms)
