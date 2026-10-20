@@ -330,7 +330,11 @@ def _binary_einsum(
 
 
 def _reassociate_node(
-    node: Node, *, max_operands: int, max_intermediate_axes: dict[str, int]
+    node: Node,
+    *,
+    max_operands: int,
+    max_intermediate_axes: dict[str, int],
+    require_degree_reduction: bool = True,
 ) -> Node:
     if node.op != "einsum" or len(node.inputs) < 3 or len(node.inputs) > max_operands:
         return node
@@ -443,7 +447,11 @@ def _reassociate_node(
         return node
     direct_degree = _monomial(domains.values()).degree
     best = min(plans[full_mask], key=_plan_key)
-    return best.node if best.max_degree < direct_degree else node
+    return (
+        best.node
+        if not require_degree_reduction or best.max_degree < direct_degree
+        else node
+    )
 
 
 def reassociate_einsums(

@@ -363,6 +363,55 @@ floating-point reduction order. Programs carrying an explicit
 `precision_execution` contract currently fail closed under reassociation until
 intermediate-node precision propagation is defined.
 
+### Consumer-aware materialization plans
+
+`plan_materializations(program)` reports high-degree retained outputs, opaque
+sources and materialize-then-consume boundaries. With
+`allow_reassociation=True`, it can select a lower-storage plan for a single-use
+real-FP64 einsum producer consumed by another einsum. The pass substitutes visible
+factors, renames private dummy indices, combines exact rational coefficients and
+reuses the existing bounded contraction-tree search. Public output specifications
+and input roles/differentiability are preserved. Default optimization/preparation
+does not invoke this pass.
+
+`plan.program` is the selected executable TensorIR; `plan.to_payload()` binds
+the original and selected logical identities, before/after work and storage
+footprints, each considered candidate and its selection/rejection reason.
+Footprints report symbolic degrees/monomials, the existing concrete arithmetic
+work estimate, caller-input bytes, distinct public-output bytes, the sum of
+non-input logical materializations, and the simultaneous-live logical peak.
+The peak includes caller inputs and inclusive producer/last-reader lifetimes
+from the shared storage analyzer. Dead inspection definitions do not execute.
+These are logical dense models, not allocator, physical-view, provider-workspace,
+transfer or detached-publication measurements.
+
+Selection requires nonincreasing symbolic work degree, concrete work estimate
+and logical live peak, plus strictly lower total materialization bytes.
+`max_materialized_bytes` further bounds the candidate's total non-input
+materializations; failure retains the original program and reports rejection.
+It is not a runtime workspace allowance or a guarantee that the retained program
+fits. `max_candidates`, `max_operands` and `max_intermediate_axes` bound search
+and allowed new intermediates. Inventory is refreshed after accepted rewrites.
+
+Public dense outputs, repeated producer edges, multiple readers, view/nonlinear
+consumers, repeated Einstein labels, non-FP64 arithmetic and explicit
+`precision_execution` contracts retain their materialization. Reassociation
+permission admits changed floating-point reduction/coefficient order; it does
+not establish an error bound for every input or a production backend.
+`available_rules=()` demonstrates an unavailable compiler rule and retains the
+original plan. Opaque four-index sources receive a `factorized-source`
+recommendation requiring explicit factor/consumer, alias, derivative and resource
+contracts; logical shape alone never proves separability or exact-zero support.
+The shared advisory materialization diagnostics remain independent of this
+consumer-substitution proof.
+
+The acceptance workload is one explicit auxiliary slice of the DF-CC ladder
+`ac,ijcd,bd->ijab`, initially expressed through a visible `vvvv` product.
+Independent dense arithmetic, generated and interpreted AD, finite differences,
+serialization and refusal/resource gates live in
+`tests/python/test_tensor_materialization.py`. This compiler-only API does not
+change production CC/MP2 routes or claim a CUDA/complete-endpoint speedup.
+
 Constant folding is deliberately limited to scalar rational add/multiply/divide
 subgraphs. The replacement must reproduce the original dtype result bit for
 bit; cancellation, overflow, signed-zero changes, or invalid division cannot
