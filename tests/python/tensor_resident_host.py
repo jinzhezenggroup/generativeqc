@@ -91,7 +91,12 @@ def build_resident_host(
                 ctypes.c_size_t,
             ],
         ),
-        "host_owner": (ctypes.c_void_p, [ctypes.c_size_t]),
+        "host_owner": (ctypes.c_void_p, [ctypes.c_size_t, ctypes.c_size_t]),
+        "host_status_marker": (None, [ctypes.c_int]),
+        "host_metrics": (
+            None,
+            [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+        ),
         "host_destroy": (None, [ctypes.c_void_p]),
         "host_arena": (ctypes.c_void_p, [ctypes.c_void_p]),
         "host_capacity": (None, [ctypes.c_void_p, ctypes.c_size_t]),

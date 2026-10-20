@@ -257,9 +257,9 @@ thread behind. This is owned-host-mutex admission, not general production Contex
 lifecycle or GPU concurrency qualification.
 
 After real input uploads and before the independent download seed, a real
-passthrough `resident_run` must preserve the complete tensor arena. A control
-retargets only status reset/readback to the arena and is rejected by this public
-upload/run combination; no additional private status-member getter is required.
+passthrough `resident_run` must preserve tensor data and all padding outside the
+reserved status int. A control retargets status reset/readback to tensor data and
+is rejected; no additional private status-member getter is required.
 
 A positive split-readback control exposed an implementation-shape constraint in
 the former per-transaction byte-count observer: a legal contiguous 2+2 status
@@ -270,6 +270,24 @@ mapping, accepting legal fragments, orderings and duplicate coverage without a
 fixed call count or transaction size. Zero/short/inconsistent coverage remains
 rejected. The former observer's positive RED receipt is distinct from negative
 damage controls; source qualification must use the corrected coverage oracle.
+
+Reviews `PRRT_kwDOUFEw6s6uQ4WQ`, `PRRT_kwDOUFEw6s6uQ4WW` and
+`PRRT_kwDOUFEw6s6uQ4Wd` exposed remaining fixture gaps after tree `70c419bc`.
+That earlier tree's 200-pass receipt does not qualify these corrections.
+The fixture now places the status int inside the actual plan allocation's final
+alignment reservation, matching production Context aliasing. Only those four
+status bytes may change after a kernel-free run; tensor bytes and the remaining
+padding remain fully checked. An opt-in positive arena-relative status expression
+must pass, while a wrong reserved offset and retargeting to tensor data must fail.
+
+A dependency-level fault injects positive and negative nonzero status markers
+after queued resets and before readback. The real resident export must report
+failure with a fresh diagnostic, drain work and recover on the following healthy
+call. This transports a marker, not a simulated TensorIR numerical result. Damage
+controls drop the error branch or change its host destination. Distinct nonzero
+provider/prepare/live resource inputs verify public metric forwarding, including
+both sides of the observed=max(prepare,live) rule. These are metadata contracts,
+not actual device allocation measurements or performance qualification.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child

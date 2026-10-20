@@ -8,6 +8,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -20,6 +21,7 @@ struct DeviceRange {
   const void* owner;
   std::uintptr_t begin;
   size_t bytes;
+  int* status;
 };
 inline std::vector<DeviceRange> device_ranges;
 inline bool device_bytes(const void* pointer, size_t bytes) {
@@ -48,6 +50,7 @@ inline std::map<int, EventRecord> events;
 inline size_t submitted = 0;
 inline int next_event = 0;
 inline int failure = 0, synchronizations = 0;
+inline int status_marker = 0;
 struct CopyObservation {
   int kind;
   size_t bytes;
@@ -77,9 +80,13 @@ inline int finish_work(size_t watermark) {
   }
   for (const auto& work : pending) {
     if (work.sequence > watermark) continue;
-    if (work.kind == WorkKind::copy)
+    if (work.kind == WorkKind::copy) {
+      // Inject a transport marker after preceding queued resets, before readback.
+      // This dependency fault never evaluates a TensorIR arithmetic operation.
+      if (status_marker)
+        for (const auto& range : device_ranges) *range.status = status_marker;
       std::memcpy(work.to, work.from, work.bytes);
-    else
+    } else
       std::memset(work.to, work.value, work.bytes);
   }
   pending.erase(std::remove_if(pending.begin(), pending.end(),
@@ -135,15 +142,17 @@ struct Context {
   std::mutex mutex;
   std::vector<unsigned char> storage;
   unsigned char* arena;
-  int arithmetic_error = 0x01010101;  // A stale status, nonzero in every byte.
-  int* error = &arithmetic_error;
+  int* error;
+  size_t live_device_delta = 0;
   int device = 0, stream = 73, begin = ++next_event, end = ++next_event;
   bool static_ready = true;
   Metrics metrics;
-  explicit Context(size_t bytes) : storage(bytes, 0xa5), arena(storage.data()) {
+  Context(size_t bytes, size_t error_offset) : storage(bytes, 0xa5), arena(storage.data()) {
+    if (error_offset % alignof(int) || error_offset > bytes || sizeof(int) > bytes - error_offset)
+      throw std::runtime_error("invalid host status reservation");
+    error = new (arena + error_offset) int(0x01010101);
     metrics.owned_device_bytes = bytes;
-    device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(arena), bytes});
-    device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(error), sizeof(int)});
+    device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(arena), bytes, error});
     events[begin] = {stream, 0, false};
     events[end] = {stream, 0, false};
   }
@@ -158,7 +167,7 @@ struct Context {
   void check_device() {
     if (failure == 3) throw std::runtime_error("injected device mismatch");
   }
-  size_t device_delta() { return 0; }
+  size_t device_delta() { return live_device_delta; }
   template <class F>
   void section(int, double&, F f) {
     f();
@@ -216,7 +225,16 @@ extern "C" int host_mutex_held(void* p) { return static_cast<MutexHold*>(p)->act
 extern "C" void host_release_mutex(void* p) { delete static_cast<MutexHold*>(p); }
 extern "C" size_t host_work_sequence() { return submitted; }
 
-extern "C" void* host_owner(size_t bytes) { return new Context(bytes); }
+extern "C" void* host_owner(size_t bytes, size_t error_offset) {
+  return new Context(bytes, error_offset);
+}
+extern "C" void host_status_marker(int value) { status_marker = value; }
+extern "C" void host_metrics(void* p, size_t provider, size_t prepare, size_t live) {
+  auto& ctx = *static_cast<Context*>(p);
+  ctx.metrics.provider_retained_bytes = provider;
+  ctx.metrics.prepare_device_delta = prepare;
+  ctx.live_device_delta = live;
+}
 extern "C" void host_destroy(void* p) {
   // Negative controls can omit a drain. Discard their fake borrowed pointers.
   pending.clear();

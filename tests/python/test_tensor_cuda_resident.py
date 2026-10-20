@@ -29,7 +29,7 @@ from generativeqc_compiler.tensor import (
     input_tensor,
     multiply,
 )
-from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import ALIGNMENT, plan_cuda
 from generativeqc_compiler.tensor.cuda_resident import (
     DeviceTensor,
     _check_lease,
@@ -127,12 +127,13 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
     error = ctypes.create_string_buffer(256)
     metrics = _Metrics()
     result = ctypes.byref(metrics)
-    owner = lib.host_owner(4096)
+    capacity = plan.allocation_bytes
+    owner = lib.host_owner(capacity, capacity - ALIGNMENT)
     try:
         _assert_resident_busy(
             lib,
             owner,
-            4096,
+            capacity,
             lambda: lib.resident_run(owner, 0, result, error, len(error)),
             error,
         )
@@ -144,7 +145,26 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         assert lib.host_pending_work() == 0
         assert lib.host_copy_matches(0)
         assert lib.host_copy_covers(ctypes.sizeof(ctypes.c_int))
-        assert metrics.owned_device_bytes == 4096
+        for prepare, live in ((211, 307), (503, 401)):
+            lib.host_metrics(owner, 109, prepare, live)
+            assert lib.resident_run(owner, 0, result, error, len(error)) == 0
+            assert metrics.owned_device_bytes == capacity
+            assert metrics.provider_retained_bytes == 109
+            assert metrics.prepare_device_delta == prepare
+            assert metrics.observed_device_delta == max(prepare, live)
+        for marker in (-3, 5):
+            lib.host_status_marker(marker)
+            error.value = b""
+            before = lib.host_synchronizations()
+            try:
+                assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+                assert error.value
+                assert lib.host_synchronizations() > before
+                assert lib.host_pending_work() == 0
+            finally:
+                lib.host_status_marker(0)
+            error.value = b""
+            assert lib.resident_run(owner, 0, result, error, len(error)) == 0
         for failure in (1, 2, 3):
             lib.host_failure(failure)
             error.value = b""
@@ -212,19 +232,16 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
         [plan.steps[i] for i in plan.inputs],
         [plan.steps[i] for _, i in plan.outputs],
     )
-    capacity = (
-        max(
-            s.offset + s.node.spec.size * s.node.spec.itemsize
-            for steps in slots
-            for s in steps
-        )
-        + 64
-    )
-    owner = lib.host_owner(capacity)
+    capacity = plan.allocation_bytes
+    error_offset = capacity - ALIGNMENT
+    owner = lib.host_owner(capacity, error_offset)
     error = ctypes.create_string_buffer(256)
     arena = lib.host_arena(owner)
     try:
         expected = bytearray([0xA5] * capacity)
+        expected[error_offset : error_offset + ctypes.sizeof(ctypes.c_int)] = bytes(
+            ctypes.c_int(0x01010101)
+        )
         for slot, step in enumerate(slots[0]):
             size = step.node.spec.size * step.node.spec.itemsize
             payload = bytes((j * 17 + slot * 43) % 256 for j in range(size))
@@ -259,11 +276,14 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert guard.raw == b"\xcc"
                 assert ctypes.string_at(arena, capacity) == expected
 
-        # A real passthrough run must preserve the actual uploaded tensor arena.
+        # Only the reserved status int may change during this kernel-free run.
         metrics = _Metrics()
         assert (
             lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error)) == 0
         ), error.value
+        expected[error_offset : error_offset + ctypes.sizeof(ctypes.c_int)] = bytes(
+            ctypes.c_int(0)
+        )
         assert ctypes.string_at(arena, capacity) == expected
         assert lib.host_pending_work() == 0
 
@@ -405,6 +425,14 @@ def test_resident_control_span_transfers(
     [
         "format",
         "split_status",
+        "arena_status",
+        "wrong_status_offset",
+        "ignored_arithmetic_status",
+        "wrong_status_host",
+        "provider_metric",
+        "prepare_metric",
+        "observed_prepare_only",
+        "observed_live_only",
         "abi",
         "diagnostic",
         "run_sync",
@@ -441,6 +469,41 @@ def test_resident_host_oracle_controls(
     plan = plan_cuda(_transfer_program("reordered"), TARGET, max_bytes=1 << 26)
 
     def transform(source: str) -> str:
+        if mutation in ("arena_status", "wrong_status_offset"):
+            offset = plan.allocation_bytes - ALIGNMENT
+            if mutation == "wrong_status_offset":
+                offset += ctypes.sizeof(ctypes.c_int)
+            return source.replace(
+                "ctx.error", f"reinterpret_cast<int*>(p + {offset}ULL)"
+            )
+        if mutation == "ignored_arithmetic_status":
+            return source.replace("if (arithmetic_error)", "if (false)")
+        if mutation == "wrong_status_host":
+            return source.replace(
+                "int arithmetic_error = 0;", "int arithmetic_error = 0, unrelated = 0;"
+            ).replace(
+                "cudaMemcpyAsync(&arithmetic_error,", "cudaMemcpyAsync(&unrelated,"
+            )
+        if mutation in ("provider_metric", "prepare_metric"):
+            field = (
+                "provider_retained_bytes"
+                if mutation == "provider_metric"
+                else "prepare_device_delta"
+            )
+            return source.replace(
+                f"metrics.{field} = ctx.metrics.{field};", f"metrics.{field} = 0;"
+            )
+        if mutation in ("observed_prepare_only", "observed_live_only"):
+            value = (
+                "ctx.metrics.prepare_device_delta"
+                if mutation == "observed_prepare_only"
+                else "ctx.device_delta()"
+            )
+            return re.sub(
+                r"std::max\(ctx.metrics.prepare_device_delta,\s*ctx.device_delta\(\)\)",
+                value,
+                source,
+            )
         if mutation == "format":
             return (
                 source.replace("resident_inputs", "input_spans")
@@ -619,12 +682,20 @@ def test_resident_host_oracle_controls(
         "early_sync",
         "run_busy",
         "blocking_busy",
+        "status_target",
+        "wrong_status_offset",
+        "ignored_arithmetic_status",
+        "wrong_status_host",
+        "provider_metric",
+        "prepare_metric",
+        "observed_prepare_only",
+        "observed_live_only",
     ):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)
         return
     _assert_resident_abi(plan, lib)
-    if mutation in ("format", "split_status"):
+    if mutation in ("format", "split_status", "arena_status"):
         _assert_resident_spans(plan, lib)
     else:
         with pytest.raises(AssertionError):
