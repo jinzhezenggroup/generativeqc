@@ -64,8 +64,10 @@ struct Owner {
   uint64_t restricted_point_batches{}, restricted_point_count{}, general_point_batches{},
       general_point_count{};
   uint64_t fp32_geometry_batches{}, fp32_geometry_points{};
-  bool retains_becke_pair_state() const {
-    return bool(phased_storage) ||
+  bool retains_becke_pair_state(bool fp32_geometry = false) const {
+    // FP32 point transport uses the bounded kernels even when FP64 phase
+    // storage is reserved. Count the executed schedule, not reserved panels.
+    return (bool(phased_storage) && !fp32_geometry) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
   }
   bool binary_scaled_becke_active() const {
@@ -1391,7 +1393,8 @@ static int stationary_geometry_molecular_resident_weights_enqueue_impl(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->retains_becke_pair_state(fp32_geometry) ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
