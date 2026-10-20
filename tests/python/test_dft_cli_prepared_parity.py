@@ -53,23 +53,26 @@ def test_python_cli_energy_force_and_moved_geometry(
 
     monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", forbidden)
     charge, multiplicity = (1, 2) if method.endswith("uks") else (0, 1)
+    registered = method in ("pbe-rks", "pbe-uks")
+    grid = GridSpec.treutler() if registered else GridSpec()
     calculator = Calculator(
         method=method,
         device="cpu",
         basis="sto-3g",
         density_fitting=fitting,
-        ks_options=KsOptions(grid=GridSpec()),
+        ks_options=KsOptions(grid=grid),
         max_iterations=200,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
     )
-    # Composed SDK models have their own public grid default. Match scientific
-    # inputs explicitly rather than treating a default-grid difference as an
-    # execution difference. Legacy PBE carriers already use GridSpec defaults.
-    grid = GridSpec()
+    # Registered PBE carriers use the native default; the existing CLI only
+    # exposes explicit grids for generated compositions. Preserve legacy-grid
+    # coverage on those compositions alongside the new default tests below.
     grid_flags = (
-        [
+        []
+        if registered
+        else [
             "--grid-radial-points",
             str(grid.radial_points),
             "--grid-polar-points",
@@ -77,8 +80,6 @@ def test_python_cli_energy_force_and_moved_geometry(
             "--grid-azimuth-points",
             str(grid.angular_azimuth),
         ]
-        if method not in ("pbe-rks", "pbe-uks")
-        else []
     )
     # The native child gets neither an interpreter nor a compiler on PATH.
     # Python remains the test driver and only invokes the already built CLI.
@@ -149,3 +150,79 @@ def test_python_cli_energy_force_and_moved_geometry(
                 assert python.forces is None
                 energies.append(python.energy)
     assert abs(energies[1] - energies[0]) > 1e-6
+
+
+@pytest.mark.parametrize(
+    "method,level",
+    [("pbe-rks", None), ("pbe0-rks", None), ("pbe0-rks", 0), ("pbe0-rks", 3)],
+)
+def test_treutler_cli_default_and_level(
+    cli: Path, tmp_path: Path, method: str, level: int | None
+) -> None:
+    """Omitted SDK options and explicit CLI levels match the Python descriptor."""
+    atoms = [("O", (0, 0, 0)), ("H", (0, 1.4, 1.1)), ("H", (0, -1.4, 1.1))]
+    options = None if level is None else KsOptions(grid=GridSpec.treutler(level))
+    expected = Calculator(
+        method=method,
+        basis="sto-3g",
+        device="cpu",
+        ks_options=options,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    ).singlepoint(atoms, properties=("energy", "forces"))
+    xyz = tmp_path / "water.xyz"
+    xyz.write_text("3\nBohr\nO 0 0 0\nH 0 1.4 1.1\nH 0 -1.4 1.1\n")
+    arguments = [
+        str(cli),
+        "run",
+        str(xyz),
+        "--method",
+        method,
+        "--basis",
+        "sto-3g",
+        "--backend",
+        "cpu",
+        "--units",
+        "bohr",
+        "--forces",
+        "--json",
+        "--energy-tolerance",
+        "1e-12",
+        "--density-tolerance",
+        "1e-10",
+    ]
+    if level is not None:
+        arguments += ["--grid-level", str(level)]
+    result = subprocess.run(
+        arguments, capture_output=True, text=True, timeout=90, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    actual = json.loads(result.stdout)
+    assert actual["energy_hartree"] == pytest.approx(expected.energy, abs=2e-10)
+    np.testing.assert_allclose(
+        actual["forces_hartree_per_bohr"], expected.forces, atol=2e-9, rtol=0
+    )
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--grid-level", "10"],
+        ["--grid-level", "3", "--grid-radial-points", "24"],
+        ["--grid-polar-points", "8", "--grid-level", "3"],
+    ],
+)
+def test_cli_rejects_ambiguous_grid_families(
+    cli: Path, tmp_path: Path, flags: list[str]
+) -> None:
+    xyz = tmp_path / "h2.xyz"
+    xyz.write_text("2\nBohr\nH 0 0 0\nH 0 0 1.4\n")
+    result = subprocess.run(
+        [str(cli), "run", str(xyz), "--method", "pbe-rks", *flags],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "grid" in result.stderr

@@ -20,7 +20,18 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
     for i in (0, 1):
         settings = {
             "initial_guess": "minao" if arm == "gpu4pyscf" else "huckel",
-            "xc_grid": {"rule": arm, "points": 200 + i},
+            "xc_grid": {
+                "rule": arm,
+                "points": 200 + i,
+                **(
+                    {"version": 4, "level": 3, "pruning": "nwchem"}
+                    if arm in runner.NATIVE_ARMS else {}
+                ),
+            },
+            **(
+                {"grid_source": "implicit-native-default"}
+                if arm in runner.NATIVE_ARMS else {}
+            ),
             "selected_candidate_precision": "fp64" if arm == "standard" else "auto",
         }
         observation: dict[str, Any] = {
@@ -78,7 +89,7 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
             "scf_overrides": False,
             "initial_guess_overrides": False,
             "reference_grid_overrides": False,
-            "native_required_hybrid_GridSpec": False,
+            "native_explicit_grid_overrides": False,
             "fast_default_policy": "fast" if arm == "fast" else None,
             "force_grid_response_override": False,
         },
@@ -238,16 +249,11 @@ def test_native_constructor_is_default_and_fast_uses_real_policy(
         runner.make_native_calculator("pbe", "invented")
 
 
-def test_hybrid_grid_is_mandatory_api_input_not_reference_grid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake = SimpleNamespace(
-        GridSpec=lambda: "default-native-grid",
-        KsOptions=lambda **kwargs: SimpleNamespace(**kwargs),
-    )
-    monkeypatch.setitem(sys.modules, "generativeqc", fake)
-    args = runner.native_constructor_kwargs("pbe0")
-    assert args["ks_options"].grid == "default-native-grid"
+@pytest.mark.parametrize("method", ("pbe0", "wb97m-v", "pbe", "r2scan"))
+def test_native_default_grid_is_implicit_after_2626(method: str) -> None:
+    args = runner.native_constructor_kwargs(method)
+    assert "ks_options" not in args
+    assert args["basis"] == "def2-svp"
     assert not {
         "max_iterations",
         "energy_tolerance",
@@ -256,6 +262,16 @@ def test_hybrid_grid_is_mandatory_api_input_not_reference_grid(
         "initial_guess",
         "precision",
     }.intersection(args)
+
+
+@pytest.mark.parametrize("method", ("pbe0-rks", "wb97m-v-rks", "r2scan-rks"))
+def test_production_ks_default_is_treutler_level3(method: str) -> None:
+    from generativeqc import GridSpec, KsOptions
+    from generativeqc.ks import resolve_ks_options
+
+    assert GridSpec().version == 1  # The explicit legacy tensor prescription.
+    resolved = resolve_ks_options(method, KsOptions())
+    assert resolved.grid == GridSpec.treutler(level=3)
 
 
 def test_r2scan3c_has_canonical_basis_and_full_corrections() -> None:
@@ -1004,4 +1020,18 @@ def test_composite_receipts_require_complete_canonical_provenance(fault: str) ->
         else:
             correction["d4"]["s9"] = 1.0
     with pytest.raises(ValueError):
+        runner.compare(gpu, standard, fast)
+
+
+@pytest.mark.parametrize("fault", ("legacy_version", "wrong_level", "no_pruning"))
+def test_rejects_legacy_native_grids_in_default_comparison(fault: str) -> None:
+    gpu, standard, fast = receipts()
+    grid = standard["samples"][0]["settings"]["xc_grid"]
+    if fault == "legacy_version":
+        grid["version"] = 1
+    elif fault == "wrong_level":
+        grid["level"] = 4
+    else:
+        grid["pruning"] = "none"
+    with pytest.raises(ValueError, match="missing executed settings"):
         runner.compare(gpu, standard, fast)

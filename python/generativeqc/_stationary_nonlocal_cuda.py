@@ -72,9 +72,12 @@ def resident_nonlocal_geometry(
         )
     if resident_grid.device != grid.device_id or resident_grid.point_count != count:
         raise ValueError("resident molecular-grid lease differs from stationary grid")
-    if count % sources.natom:
-        raise ValueError("molecular grid point count is not atom-major uniform")
-    points_per_atom = count // sources.natom
+    spec = (
+        state._source.nonlocal_grid_spec if nonlocal_only else state._source.grid_spec
+    )
+    points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+    if points_per_atom and count != sources.natom * points_per_atom:
+        raise ValueError("molecular grid point count differs from its prescription")
     if len(raw_weights) != count:
         raise ValueError("resident nonlocal raw quadrature size differs")
     if type(ao_count) is not int or ao_count <= 0:
@@ -346,10 +349,12 @@ def resident_split_nonlocal_geometry(
         raise ValueError(
             "semilocal resident grid differs from its stationary quadrature"
         )
-    if count % sources.natom:
-        raise NotImplementedError(
-            "split stationary grids require atom-major uniform rules"
-        )
+    # Each owner retains its own prefix topology: the XC and VV10 rules may
+    # have different element-dependent shell counts even at the same level.
+    spec = source.grid_spec
+    points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+    if points_per_atom and count != sources.natom * points_per_atom:
+        raise ValueError("molecular grid point count differs from its prescription")
     ao_maps, ao_domain = arguments.get("ao_maps"), arguments.get("ao_domain")
     if ao_maps is not None:
         ao_maps.reset_work()
@@ -373,7 +378,7 @@ def resident_split_nonlocal_geometry(
             sources.geometry_molecular_resident_weights(
                 task,
                 begin,
-                count // sources.natom,
+                points_per_atom,
                 resident_grid.weights + begin * 8,
                 state.grid.weights[begin:end],
                 resident_grid.atomic_weights + begin * 8,

@@ -129,11 +129,11 @@ int main() {
       if(cooperative)
         geometry_cooperative_kernel<false,Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr,false);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr,false,nullptr);
       else
         geometry_kernel<Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,false);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,false,nullptr);
     };
     auto reduce=[&] {
       std::vector<double> output(9*na);
@@ -214,6 +214,7 @@ int main() {
 
 def test_emitted_team_vote_completes_reads_before_the_next_failure(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
     """A slow reader of a successful vote must not see the next vote's failure."""
     from test_stationary_task_work_budget import _block
@@ -285,23 +286,20 @@ int main() {
 """
     )
     binary = tmp_path / "vote"
-    compiled = subprocess.run(
-        [
-            compiler,
+    obj = tmp_path / "vote.o"
+    compiled = native_cxx.compile_object(
+        source,
+        obj,
+        args=[
             "-std=c++20",
             "-pthread",
             "-O2",
             "-ffp-contract=off",
-            str(source),
-            "-o",
-            str(binary),
         ],
-        check=False,
-        capture_output=True,
-        text=True,
         timeout=30,
     )
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    native_cxx.link([obj], binary, args=["-pthread"], timeout=30)
     result = subprocess.run(
         [str(binary)], capture_output=True, text=True, timeout=5, check=False
     )

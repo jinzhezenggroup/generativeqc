@@ -3,6 +3,8 @@
 This is the standalone performance benchmark for **three actual user-facing
 modes**, not a numerical-alignment campaign. It does not change production
 settings or reinterpret historical matched-grid README results.
+This protocol was updated for merged PR #2626; old v2 timing receipts
+are rejected rather than reclassified as new level-3 default data.
 
 The only scientific inputs shared between all three arms are the molecule,
 charge/spin, functional, exact orbital basis and direct/non-DF calculation.
@@ -21,12 +23,21 @@ The *entire* public Fast call is timed, and its validation status, internal
 solve count, requested precision and selected controls are recorded. Calling
 Calculator(precision="auto") would **not** represent this Fast mode.
 
-The native hybrid/range-separated public API currently requires an explicit
-KsOptions(grid=GridSpec()) because an implicit hybrid production grid policy
-is not published. Both Standard and Fast receive that *native default
-GridSpec()*; GPU4PySCF receives its own completely unmodified grid.
-This exception is prominently recorded and is not represented as a pure
-zero-argument native hybrid run.
+After merged PR #2626, **all native KS methods**, including PBE0,
+WB97M-V and r2SCAN-3c, resolve an omitted grid to native version-4,
+level-3 Treutler/Ahlrichs radial + Lebedev angular + NWChem pruning,
+with Treutler-adjusted Becke partitions. An omitted VV10 grid inherits
+the XC prescription. Standard and Fast receive **no explicit grid**
+from the benchmark, and must report the actual resolved level-3 grid.
+`GridSpec()` is still the old version-1 tensor quadrature and must not
+be passed to claim a production-default comparison. GPU4PySCF receives
+its own unchanged default level-3 quadrature.
+
+This eliminates the former tensor-vs-Treutler *default rule* mismatch;
+it does not prove the same point ordering/padding, rho thresholds, SCF
+stopping or analytic force-response conventions. Existing independent
+strict energy/force qualification and performance rebenchmarking remain
+necessary.
 
 Supported methods: LDA, PBE, PBE0, r2SCAN, **r2SCAN-3c** and WB97M-V.
 

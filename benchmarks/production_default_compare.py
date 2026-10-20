@@ -23,8 +23,8 @@ from typing import Any
 
 from benchmarks._retention import raw_output_path
 
-SCHEMA = "generativeqc.production-default-ef.v2"
-COMPARISON_SCHEMA = "generativeqc.production-default-comparison.v2"
+SCHEMA = "generativeqc.production-default-ef.v3"
+COMPARISON_SCHEMA = "generativeqc.production-default-comparison.v3"
 PHASE = "fresh-owner"
 ENDPOINT = "constructor-scf-energy-analytic-force-host-export"
 # Receipt protocol identity, not an override passed to a calculator. A host
@@ -38,7 +38,6 @@ METHODS = {
     "r2scan-3c": ("r2scan-3c-rks", "R2SCAN"),
     "wb97m-v": ("wb97m-v-rks", "WB97M_V"),
 }
-REQUIRED_NATIVE_GRID = frozenset(("pbe0", "wb97m-v"))
 ARMS = ("gpu4pyscf", "standard", "fast")
 NATIVE_ARMS = ("standard", "fast")
 SIZES = (3, 6, 12, 24, 48, 96)
@@ -64,7 +63,7 @@ def problem_identity(method: str, atoms: Any) -> dict[str, Any]:
 
 
 def native_constructor_kwargs(method: str) -> dict[str, Any]:
-    """Pass only scientific inputs and the mandatory hybrid API grid spec."""
+    """Pass model/basis/device; let native select its implicit level-3 grid."""
     if method not in METHODS:
         raise ValueError("unknown native method")
     kwargs: dict[str, Any] = {
@@ -75,11 +74,8 @@ def native_constructor_kwargs(method: str) -> dict[str, Any]:
     if method != "r2scan-3c":
         kwargs["basis"] = "def2-svp"
     # Canonical r2SCAN-3c selects its pinned def2-mTZVPP internally.
-    if method in REQUIRED_NATIVE_GRID:
-        from generativeqc import GridSpec, KsOptions
-
-        # No qualified automatic hybrid grid exists in the public native API.
-        kwargs["ks_options"] = KsOptions(grid=GridSpec())
+    # In #2626 an omitted grid resolves to v4 Treutler/Lebedev/NWChem level 3,
+    # including PBE0 and WB97M-V. GridSpec() is still a LEGACY v1 grid.
     return kwargs
 
 
@@ -195,6 +191,10 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
     else:
         validation_info = None
     grid = candidate.ks_options.grid
+    if grid.version != 4 or grid.level != 3 or grid.pruning != "nwchem":
+        raise RuntimeError(
+            "default native Treutler/Lebedev level-3 grid is not in effect"
+        )
     guess = candidate.initial_guess
     initial = result.initial_guess if isinstance(result.initial_guess, dict) else None
     work = result.precision or {}
@@ -218,15 +218,22 @@ def native_sample(method: str, atoms: Any, arm: str) -> dict[str, Any]:
         "diis_history": candidate._diis_history,
         "screening_tolerance": candidate._screening_tolerance,
         "xc_grid": {
-            "rule": "native-resolved-GridSpec",
+            "rule": "native-implicit-Treutler-Lebedev-NWChem",
             "version": grid.version,
+            "level": grid.level,
+            "radial_rule": grid.radial_rule,
+            "angular_rule": grid.angular_rule,
+            "partition": grid.partition,
             "radial_points": grid.radial_points,
             "angular_polar": grid.angular_polar,
             "angular_azimuth": grid.angular_azimuth,
             "pruning": grid.pruning,
             "points": getattr(result.ks_diagnostic, "grid_points", None),
         },
-        "mandatory_explicit_hybrid_GridSpec": method in REQUIRED_NATIVE_GRID,
+        "grid_source": "implicit-native-default",
+        "nonlocal_grid_inherits_xc": (
+            candidate.ks_options.nonlocal_grid is None if method == "wb97m-v" else None
+        ),
         "force_grid_response": True,
         "vv10_density": (
             {
@@ -412,9 +419,7 @@ def _checked_protocol(record: dict[str, Any], engine: str) -> None:
         "scf_overrides": False,
         "initial_guess_overrides": False,
         "reference_grid_overrides": False,
-        "native_required_hybrid_GridSpec": (
-            engine in NATIVE_ARMS and problem["method"] in REQUIRED_NATIVE_GRID
-        ),
+        "native_explicit_grid_overrides": False,
         "fast_default_policy": "fast" if engine == "fast" else None,
         "force_grid_response_override": False,
     }
@@ -614,6 +619,15 @@ def _checked_samples(record: dict[str, Any], engine: str) -> list[dict[str, Any]
             or not isinstance(settings.get("xc_grid"), dict)
             or not isinstance(settings["xc_grid"].get("rule"), str)
             or not _positive_number(settings["xc_grid"].get("points"))
+            or (
+                engine in NATIVE_ARMS
+                and (
+                    settings["xc_grid"].get("version") != 4
+                    or settings["xc_grid"].get("level") != 3
+                    or settings["xc_grid"].get("pruning") != "nwchem"
+                    or settings.get("grid_source") != "implicit-native-default"
+                )
+            )
             or (
                 engine in NATIVE_ARMS
                 and settings.get("selected_candidate_precision") not in ("fp64", "auto")
@@ -835,7 +849,7 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("render requires --comparisons")
         comparisons = [json.loads(path.read_text()) for path in args.comparisons]
         if any(
-            record.get("schema") != "generativeqc.production-default-comparison.v2"
+            record.get("schema") != COMPARISON_SCHEMA
             for record in comparisons
         ):
             raise ValueError("cannot render an unverified/older comparison schema")
@@ -922,9 +936,7 @@ def main(argv: list[str] | None = None) -> None:
             "scf_overrides": False,
             "initial_guess_overrides": False,
             "reference_grid_overrides": False,
-            "native_required_hybrid_GridSpec": (
-                arm in NATIVE_ARMS and args.method in REQUIRED_NATIVE_GRID
-            ),
+            "native_explicit_grid_overrides": False,
             "fast_default_policy": "fast" if arm == "fast" else None,
             "force_grid_response_override": False,
         },

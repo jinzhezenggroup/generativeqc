@@ -26,6 +26,10 @@ INCREMENTAL_SELECTORS = (
     "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
 )
 KS_INVENTORY_METHODS = ("lda-rks", "lda-uks", "pbe-rks", "pbe-uks")
+# Independent PySCF 2.14 level-3 Treutler-Ahlrichs/NWChem grid, no density
+# pruning: 9808 points per H. v4 stores a level and zero angular placeholders,
+# so multiplying the descriptor fields does not count its pruned grid points.
+DEFAULT_H2_GRID_POINTS = 2 * 9808
 
 
 def canonical(value: object) -> str:
@@ -673,7 +677,7 @@ class RuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(run.returncode, 0, run.stderr)
                 plan = json.loads(run.stdout)
-                radial, polar, azimuth = plan["controls"]["grid"]
+                radial, polar, _ = plan["controls"]["grid"]
                 item = (
                     2,
                     2,
@@ -683,7 +687,7 @@ class RuntimeTests(unittest.TestCase):
                     2 if method.endswith("uks") else 1,
                     0,
                     0,
-                    2 * radial * polar * azimuth,
+                    DEFAULT_H2_GRID_POINTS,
                     radial,
                     polar,
                     256,
@@ -752,7 +756,7 @@ class RuntimeTests(unittest.TestCase):
                     run = self.resources(*arguments)
                     self.assertEqual(run.returncode, 0, run.stderr)
                     plan = json.loads(run.stdout)
-                    radial, polar, azimuth = plan["controls"]["grid"]
+                    radial, polar, _ = plan["controls"]["grid"]
                     item = (
                         2,
                         2,
@@ -762,7 +766,7 @@ class RuntimeTests(unittest.TestCase):
                         2 if method.endswith("uks") else 1,
                         0,
                         0,
-                        2 * radial * polar * azimuth,
+                        DEFAULT_H2_GRID_POINTS,
                         radial,
                         polar,
                         256,
@@ -857,7 +861,7 @@ class RuntimeTests(unittest.TestCase):
                 run = self.resources("--method", method)
                 self.assertEqual(run.returncode, 0, run.stderr)
                 plan = json.loads(run.stdout)
-                radial, polar, azimuth = plan["controls"]["grid"]
+                radial, polar, _ = plan["controls"]["grid"]
                 shape = (ctypes.c_uint64 * 17)(
                     2,
                     2,
@@ -867,7 +871,7 @@ class RuntimeTests(unittest.TestCase):
                     2 if method.endswith("uks") else 1,
                     0,
                     0,
-                    2 * radial * polar * azimuth,
+                    DEFAULT_H2_GRID_POINTS,
                     radial,
                     polar,
                     256,
@@ -1044,14 +1048,6 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(result.stderr, baseline.stderr)
 
     def test_registered_ks_inventory_uses_native_execution_grid(self) -> None:
-        probe = subprocess.run(
-            [str(PROBE), "--native-grid"],
-            text=True,
-            capture_output=True,
-            check=True,
-            timeout=30,
-        )
-        native_grid = json.loads(probe.stdout)
         for method in ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"):
             for backend in ("cpu", "cuda"):
                 with self.subTest(method=method, backend=backend):
@@ -1060,10 +1056,11 @@ class RuntimeTests(unittest.TestCase):
                     if backend == "cpu":
                         self.assertEqual(result.returncode, 0, result.stderr)
                     plan = json.loads(result.stdout)
-                    self.assertEqual(plan["controls"]["grid"], native_grid)
+                    self.assertEqual(plan["controls"]["grid_version"], 4)
+                    self.assertEqual(plan["controls"]["grid"], [3, 0, 0])
                     if method == "pbe-rks" and backend == "cpu":
                         # Eligible restricted GGA retains 32 bytes per point/AO.
-                        grid_cache = 32 * 2 * math.prod(native_grid) * 2
+                        grid_cache = 32 * DEFAULT_H2_GRID_POINTS * 2
                         self.assertGreaterEqual(
                             plan["item_inventory"]["scf_workspace"], grid_cache
                         )

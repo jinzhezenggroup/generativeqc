@@ -39,16 +39,19 @@ inline dim3 blockIdx{0,0,0},threadIdx{0,0,0},blockDim{1,1,1},gridDim{1,1,1};
 #include <cstdlib>
 #include <iostream>
 using namespace generativeqc::generated::quadrature;
-template<unsigned It> int run(double sep,double tolerance) {
+template<unsigned It> int run(double sep,double tolerance,double adjustment) {
   constexpr size_t count=4;
   const double centers[6]{0,0,0,sep,0,0};
   std::array<double,6> geometry{-123,0,0,0,0,456};
   geometry_kernel(centers,2,tolerance,geometry.data()+1);
   const double distances[8]{sep*.25,sep*.5,sep*.75,1,sep*.75,sep*.5,sep*.25,1};
   std::array<double,10> logs{}; logs.front()=-123;logs.back()=456;
-  partition_kernel<It>(count,2,distances,geometry.data()+1,logs.data()+1);
+  const double adjustments[4]{0,-adjustment,adjustment,0};
+  partition_kernel<It>(count,2,distances,geometry.data()+1,logs.data()+1,
+                       adjustment==0?nullptr:adjustments);
   for(size_t p=0;p<count;++p) {
-    const double mu=sep>tolerance?fmin(1.,fmax(-1.,(distances[count+p]-distances[p])/sep)):0.;
+    double mu=sep>tolerance?fmin(1.,fmax(-1.,(distances[count+p]-distances[p])/sep)):0.;
+    if(sep>tolerance) mu+=adjustment*(1-mu*mu);
     const double pair=fmin(1.,fmax(0.,becke<It>(mu)));
     for(size_t a=0;a<2;++a) {
       const double expected=a?pair:1-pair,actual=exp(logs[1+a*count+p]);
@@ -63,9 +66,10 @@ template<unsigned It> int run(double sep,double tolerance) {
   return 0;
 }
 int main(int argc,char**argv) {
-  if(argc!=3)return 99;
+  if(argc!=4)return 99;
   const double sep=std::strtod(argv[1],nullptr),tol=std::strtod(argv[2],nullptr);
-  return run<1>(sep,tol)||run<2>(sep,tol)||run<3>(sep,tol)||run<4>(sep,tol)||run<5>(sep,tol);
+  const double adjustment=std::strtod(argv[3],nullptr);
+  return run<1>(sep,tol,adjustment)||run<2>(sep,tol,adjustment)||run<3>(sep,tol,adjustment)||run<4>(sep,tol,adjustment)||run<5>(sep,tol,adjustment);
 }
 """
     cpp = directory / "partition.cpp"
@@ -86,6 +90,7 @@ int main(int argc,char**argv) {
     return binary
 
 
+@pytest.mark.parametrize("adjustment", (0.0, -0.25, 0.25))
 @pytest.mark.parametrize(
     "separation,tolerance",
     [
@@ -99,8 +104,10 @@ int main(int argc,char**argv) {
     ],
 )
 def test_emitted_partition_retains_finite_quotient_boundary(
-    partition_binary: Path, separation: float, tolerance: float
+    partition_binary: Path, separation: float, tolerance: float, adjustment: float
 ) -> None:
     subprocess.run(
-        [str(partition_binary), str(separation), str(tolerance)], check=True, timeout=10
+        [str(partition_binary), str(separation), str(tolerance), str(adjustment)],
+        check=True,
+        timeout=10,
     )

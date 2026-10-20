@@ -246,9 +246,13 @@ macro(generativeqc_register_host_generated_sources target)
     ADD_TO_TARGET
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_quadrature_cuda.py"
     OUTPUTS "${GENERATIVEQC_QUADRATURE_HEADER}"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_atomic_grid.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/quadrature_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/grid_response_ir.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/treutler.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/atomic_grid_native.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/data/treutler-lebedev.json"
     ARGS --output "${GENERATIVEQC_QUADRATURE_HEADER}"
     COMMENT "Generating bounded CUDA molecular quadrature")
   set(GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER
@@ -1106,6 +1110,19 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
+
+  set(GENERATIVEQC_MD_J_ENGINE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_engine.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_md_j_engine_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_md_j_engine.py"
+    OUTPUTS "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+    ARGS --output "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
+    COMMENT "Generating compact reference-aligned MD Coulomb engine")
 
   set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")

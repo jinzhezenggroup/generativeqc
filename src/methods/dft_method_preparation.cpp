@@ -493,8 +493,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
 dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
                               scf::ScfOptions& options,
                               const NativeKsExecutionPlan& execution_plan) {
-  dft::GridSpec grid;
+  dft::GridSpec grid = dft::default_grid_spec();
   if (!descriptor.ks_options) return grid;
+  // Explicit legacy descriptors must not inherit the default's Bragg radii.
+  if (descriptor.ks_options->grid_version != 4) grid = dft::GridSpec{};
   const auto& input = *descriptor.ks_options;
   if (input.struct_size < sizeof(generativeqc_ks_options) ||
       input.abi_version != GENERATIVEQC_ABI_VERSION)

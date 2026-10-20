@@ -28,6 +28,8 @@ struct CudaKsResidentGridBinding {
   unsigned partition_iterations{};
   double coincident_tolerance{};
   std::uint64_t quadrature_owner{};
+  const std::uint64_t* atom_offsets{};
+  const double* atomic_radii{};
 
   bool operator==(const CudaKsResidentGridBinding&) const = default;
 

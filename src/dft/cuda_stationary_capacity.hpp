@@ -46,7 +46,7 @@ inline CudaStationaryCapacity cuda_stationary_capacity(const CudaStationaryBindi
                                                        std::size_t grid_points,
                                                        std::size_t tile_points,
                                                        bool mixed_grid = false) {
-  if (!binding.numeric_bytes || !atoms || !grid_points || grid_points % atoms || !tile_points)
+  if (!binding.numeric_bytes || !atoms || !grid_points || !tile_points)
     throw std::invalid_argument("invalid native stationary capacity shape");
   CudaStationaryCapacity capacity;
   capacity.tile_points = std::min(tile_points, grid_points);

@@ -433,7 +433,11 @@
     "generativeqc.SpinRootReference": "generativeqc/spin_roots.py:SpinRootReference",
     "generativeqc.SpinRootResult": "generativeqc/spin_roots.py:SpinRootResult",
     "generativeqc.extensions.xc.UserExpression": "generativeqc_compiler/xc/user_expression.py:UserExpression",
-    "generativeqc.extensions.xc.expression": "generativeqc/extensions/xc.py:expression"
+    "generativeqc.extensions.xc.expression": "generativeqc/extensions/xc.py:expression",
+    "generativeqc.extensions.xc.NativeUserExpression": "generativeqc/_xc_user_expression.py:NativeUserExpression",
+    "generativeqc.extensions.xc.UserExpressionProgram": "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram",
+    "generativeqc.extensions.xc.compile_expression": "generativeqc/extensions/xc.py:compile_expression",
+    "generativeqc.extensions.xc.expression_program": "generativeqc/extensions/xc.py:expression_program"
   },
   "declarations": {
     "generativeqc/_api_types.py:Atom": {
@@ -7991,6 +7995,44 @@
         "values": "docs/user/ks_options.md#angular-pruning"
       }
     },
+    "generativeqc_compiler/dft/grid.py:GridSpec.atom_offsets": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/ks_options.md#treutler-grid-errors",
+        "ownership": "docs/user/ks_options.md#treutler-grid-ownership",
+        "values": "docs/user/ks_options.md#treutler-grid-values"
+      }
+    },
+    "generativeqc_compiler/dft/grid.py:GridSpec.level": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ks_options.md#treutler-grid-values"
+      }
+    },
+    "generativeqc_compiler/dft/grid.py:GridSpec.partition_radii": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/ks_options.md#treutler-grid-errors",
+        "ownership": "docs/user/ks_options.md#treutler-grid-ownership",
+        "values": "docs/user/ks_options.md#treutler-grid-values"
+      }
+    },
+    "generativeqc_compiler/dft/grid.py:GridSpec.point_count": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/ks_options.md#treutler-grid-errors",
+        "ownership": "docs/user/ks_options.md#treutler-grid-ownership",
+        "values": "docs/user/ks_options.md#treutler-grid-values"
+      }
+    },
     "generativeqc_compiler/dft/grid.py:GridSpec.points_per_atom": {
       "kind": "function",
       "profile": "accessor",
@@ -7998,6 +8040,16 @@
         "behavior": "docstring",
         "ownership": "docs/reference/python_contracts.md#python-options-ownership",
         "values": "docs/user/ks_options.md#angular-pruning"
+      }
+    },
+    "generativeqc_compiler/dft/grid.py:GridSpec.treutler": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/ks_options.md#treutler-grid-errors",
+        "ownership": "docs/user/ks_options.md#treutler-grid-ownership",
+        "values": "docs/user/ks_options.md#treutler-grid-values"
       }
     },
     "generativeqc_compiler/method/dispersion.py:D3Spec": {
@@ -9093,6 +9145,147 @@
         "errors": "docs/developer/custom_xc_expressions.md#xc-expression-errors",
         "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-ownership",
         "values": "docs/developer/custom_xc_expressions.md#xc-expression-values"
+      }
+    },
+    "generativeqc/_xc_user_expression.py:NativeUserExpression": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/_xc_user_expression.py:NativeUserExpression.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/_xc_user_expression.py:NativeUserExpression.evaluate": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/_xc_user_expression.py:NativeUserExpression.point": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/_xc_user_expression.py:NativeUserExpression.program": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/extensions/xc.py:compile_expression": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/extensions/xc.py:expression_program": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.__post_init__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.compile": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "backends": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.features": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.identity": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.outputs": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.scalar_graph": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram.to_payload": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
+        "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
       }
     }
   }

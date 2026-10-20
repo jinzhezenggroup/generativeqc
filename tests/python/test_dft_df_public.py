@@ -141,9 +141,21 @@ def pyscf_energy_gradient(
     owners = np.asarray(state.grid.owners)
     atomic_weights = np.asarray(state._source.atomic_weights)
     mf.xc = functional
+    # Set partition inputs before explicit arrays: PySCF invalidates its grid
+    # when radii_adjust or atomic_radii changes.
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for z, radius in spec.element_radii:
+            radii[z] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = points
     mf.grids.weights = weights
-    mf.grids.radii_adjust = None
     atomic_grid = {
         mol.atom_symbol(a): (
             points[owners == a] - mol.atom_coord(a),
@@ -158,6 +170,8 @@ def pyscf_energy_gradient(
     mf.max_cycle = 200
     mf.kernel()
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, points)
+    np.testing.assert_array_equal(mf.grids.weights, weights)
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
     return mf.e_tot, np.asarray(gradient.kernel())

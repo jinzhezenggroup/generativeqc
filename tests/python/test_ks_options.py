@@ -23,7 +23,6 @@ from generativeqc_compiler.dft.grid import (
     GRID_POLICY_RADII_SOURCE,
     GRID_POLICY_UPSTREAM_REVISION,
     MolecularGrid,
-    grid_policy_provenance,
 )
 from generativeqc_compiler.method import (
     MethodSpec,
@@ -79,78 +78,38 @@ def test_production_grid_policy_is_resolved_element_aware_and_versioned() -> Non
     derivative = GridPolicy().resolve("pbe-rks", derivative_order=1)
     derivative_profile = GridPolicy().profile("pbe-rks", derivative_order=1)
 
-    assert lda.grid.version == pbe.grid.version == tight.grid.version == 3
-    assert lda.grid.pruning == pbe.grid.pruning == tight.grid.pruning == "radial-v1"
-    assert (
-        lda.grid.radial_points,
-        lda.grid.angular_polar,
-        lda.grid.angular_azimuth,
-    ) == (
-        64,
-        20,
-        40,
-    )
-    assert (
-        pbe.grid.radial_points,
-        pbe.grid.angular_polar,
-        pbe.grid.angular_azimuth,
-    ) == (
-        64,
-        16,
-        32,
-    )
-    assert tight.grid == derivative
-    assert derivative_profile.pruning == "radial-v1"
+    assert lda.grid == pbe.grid == derivative == GridSpec.treutler(3)
+    assert tight.grid == GridSpec.treutler(4)
+    assert derivative_profile.pruning == "nwchem"
     assert derivative_profile.screening == "none"
-    assert derivative_profile.topology == "atom-radial-polar-azimuth"
-    assert (
-        tight.grid.radial_points,
-        tight.grid.angular_polar,
-        tight.grid.angular_azimuth,
-    ) == (
-        72,
-        24,
-        48,
-    )
+    assert derivative_profile.topology == "atom-radial-lebedev"
+    assert pbe.grid.point_count((1, 8)) == 23890
     radii = dict(pbe.grid.element_radii)
-    assert len(radii) == 86
-    assert radii[1] != 1.0
-    assert radii[26] > 0.0  # representative transition metal, Fe
-    assert radii[54] > 0.0  # representative heavier element, Xe
-    assert lda.identity != pbe.identity
-    assert pbe.identity != tight.identity
-    assert pbe.to_payload()["grid"]["version"] == 3
+    assert len(radii) == 103
+    assert lda.identity != pbe.identity != tight.identity
+    assert pbe.to_payload()["grid"]["version"] == 4
     assert pbe.to_payload()["grid_provenance"] == GridPolicy().provenance
-    assert pbe.to_payload()["grid_provenance"] == grid_policy_provenance(pbe.grid)
     assert GridSpec(**pbe.to_payload()["grid"]) == pbe.grid
     changed_provenance = json.loads(json.dumps(pbe.to_payload()))
-    changed_provenance["grid_provenance"]["upstream_revision"] = "different"
+    changed_provenance["grid_provenance"]["upstream"] = "different"
     assert canonical_hash(changed_provenance) != pbe.identity
-
     native = native_ks_options(pbe)
-    assert native.grid_version == 3
+    assert native.grid_version == 4 and native.radial_points == 3
+    assert native.angular_polar == native.angular_azimuth == 0
     assert native.element_radius_count == 119
-    assert native.element_radii[26] == pytest.approx(radii[26], rel=0, abs=0)
-    assert native.element_radii[87] == 0.0
-
-    custom_points = replace(pbe.grid, radial_points=pbe.grid.radial_points + 1)
-    custom_radii = replace(
-        pbe.grid,
-        element_radii=tuple(
-            (z, radius * 1.01 if z == 1 else radius)
-            for z, radius in pbe.grid.element_radii
+    assert native.element_radii[26] == radii[26]
+    assert native.element_radii[104] == 0.0
+    for custom in (
+        GridSpec.treutler(2),
+        replace(
+            pbe.grid,
+            element_radii=tuple(
+                (z, r * 1.01 if z == 1 else r) for z, r in pbe.grid.element_radii
+            ),
         ),
-    )
-    for custom in (custom_points, custom_radii):
-        provenance = grid_policy_provenance(custom)
-        assert provenance == {
-            "policy_version": 3,
-            "contract": "explicit-grid-v3",
-            "pruning": "radial-v1",
-        }
-        resolved_custom = resolve_ks_options("pbe-rks", KsOptions(grid=custom))
-        assert resolved_custom.to_payload()["grid_provenance"] == provenance
-        assert resolved_custom.identity != pbe.identity
+    ):
+        resolved = resolve_ks_options("pbe-rks", KsOptions(grid=custom))
+        assert resolved.grid == custom and resolved.identity != pbe.identity
 
 
 def test_production_grid_radii_match_pinned_provenance_and_unknowns_fail_closed() -> (
@@ -159,7 +118,7 @@ def test_production_grid_radii_match_pinned_provenance_and_unknowns_fail_closed(
     from generativeqc_compiler.geometry._gfn1_data import GFN1_GEOMETRY_ELEMENT_ROWS
 
     source = [row[1] for row in GFN1_GEOMETRY_ELEMENT_ROWS]
-    policy = GridPolicy()
+    policy = GridPolicy(pruning="radial-v1")
     spec = policy.resolve("lda-rks")
     assert GRID_POLICY_RADII_SOURCE.endswith(
         "92b32fada844a337204b84f2d961473bad5737240765eb8d0727a62827de5111"
@@ -177,7 +136,7 @@ def test_production_grid_radii_match_pinned_provenance_and_unknowns_fail_closed(
 
 
 def test_grid_policy_capability_boundaries_fail_closed() -> None:
-    policy = GridPolicy()
+    policy = GridPolicy(pruning="radial-v1")
     for method in (
         "r2scan-rks",
         "r2scan-uks",
@@ -345,9 +304,8 @@ def test_unsupported_compositions_and_policy_fail_before_native_load(
 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
-def test_unqualified_hybrid_default_grid_fails_closed(method: str) -> None:
-    with pytest.raises(NotImplementedError, match="explicit GridSpec"):
-        resolve_ks_options(method)
+def test_hybrid_default_grid_uses_treutler(method: str) -> None:
+    assert resolve_ks_options(method).grid == GridSpec.treutler()
 
 
 def test_semantic_ks_abi_lowers_pbe0_primitives_directly() -> None:

@@ -185,26 +185,110 @@ def test_native_matches_independent_scf(
     assert native.physical_residual_rms is not None
     assert native.physical_residual_rms < 1e-9
     assert native.executed_backend == ("cpu_reference" if device == "cpu" else "cuda")
-    energies = []
-    for guess in ("minao", "1e"):
-        reference = dft.RKS(mol) if restricted else dft.UKS(mol)
-        reference.xc = "PBE" if functional == "pbe" else "LDA_X,LDA_C_PW"
-        reference.grids.coords = np.array(grid.points)
-        reference.grids.weights = np.array(grid.weights)
-        reference.small_rho_cutoff = 0
-        reference.conv_tol = 1e-12 if hydroxyl else 1e-13
-        reference.conv_tol_grad = 1e-9
-        reference.max_cycle = 150
-        reference.init_guess = guess
-        reference.kernel()
-        assert reference.converged, f"independent {guess} solution is unverified"
-        density = reference.make_rdm1()
-        fock = reference.get_fock(dm=density)
-        overlap = reference.get_ovlp()
-        residual = fock @ density @ overlap - overlap @ density @ fock
-        assert np.max(np.sqrt(np.mean(residual**2, axis=(-2, -1)))) < 1e-9
-        energies.append(reference.e_tot)
-        assert abs(native.energy - reference.e_tot) < 1e-8
-    # These stable cases reach one energy branch from distinct independent
-    # guesses, with the explicit C2v reference subgroup for degenerate OH.
-    assert abs(energies[0] - energies[1]) < 1e-8
+    # Axial OH has degenerate pi orientations in the continuum, but a finite
+    # Lebedev grid distinguishes the axis and diagonal C2v subgroups. Enumerate
+    # those two geometric branches before looking at the native energy; neither
+    # ordinary SCF convergence nor this test promises the global minimum.
+    angles = (
+        (0.0, np.pi / 4)
+        if hydroxyl and calculator.ks_options.grid.version == 4
+        else (0.0,)
+    )
+    symmetry_orbitals = mol.symm_orb
+    native_density = None
+    if len(angles) > 1 and functional == "pbe":
+        from generativeqc._dft_gradient import StationaryKsState
+        from generativeqc_compiler.dft import NativeAO
+
+        with (
+            calculator.prepare_batch(
+                [atoms], charges=[charge], multiplicities=[multiplicity]
+            ) as batch,
+            NativeAO(
+                atoms, basis=calculator._basis, charge=charge, multiplicity=multiplicity
+            ) as ao,
+        ):
+            replay = batch.execute(strict=True, properties=("energy",)).items[0]
+            assert abs(replay.energy - native.energy) < 1e-10
+            state = StationaryKsState.from_native(batch, ao)
+            try:
+                # Native Cartesian AOs are individually normalized; libcint's
+                # Cartesian d functions retain their angular normalization.
+                scale = np.sqrt(
+                    np.diag(state.overlap) / np.diag(mol.intor("int1e_ovlp"))
+                )
+                np.testing.assert_allclose(
+                    state.overlap,
+                    mol.intor("int1e_ovlp") * scale[:, None] * scale[None, :],
+                    atol=2e-13,
+                    rtol=0,
+                )
+                native_density = state.density * scale[:, None] * scale[None, :]
+            finally:
+                state._source.close()
+    branches = []
+    for angle in angles:
+        if hydroxyl:
+            from pyscf.symm.geom import rotation_mat
+
+            rotation = mol.ao_rotation_matrix(rotation_mat((0.0, 0.0, 1.0), angle))
+            mol.symm_orb = [rotation @ block for block in symmetry_orbitals]
+        energies = []
+        for guess in ("minao", "1e"):
+            reference = dft.RKS(mol) if restricted else dft.UKS(mol)
+            reference.xc = "PBE" if functional == "pbe" else "LDA_X,LDA_C_PW"
+            reference.grids.coords = np.array(grid.points)
+            reference.grids.weights = np.array(grid.weights)
+            reference.small_rho_cutoff = 0
+            reference.conv_tol = 1e-12 if hydroxyl else 1e-13
+            reference.conv_tol_grad = 1e-9
+            reference.max_cycle = 150
+            reference.init_guess = guess
+            reference.kernel()
+            assert reference.converged, f"independent {guess} solution is unverified"
+            density = reference.make_rdm1()
+            fock = reference.get_fock(dm=density)
+            overlap = reference.get_ovlp()
+            residual = fock @ density @ overlap - overlap @ density @ fock
+            assert np.max(np.sqrt(np.mean(residual**2, axis=(-2, -1)))) < 1e-9
+            energies.append(reference.e_tot)
+            if native_density is not None:
+                _assert_independent_stationary_state(
+                    reference, native_density, native.energy
+                )
+                with pytest.raises(AssertionError, match="independent energy"):
+                    _assert_independent_stationary_state(
+                        reference, native_density, native.energy + 1e-6
+                    )
+                perturbed = native_density.copy()
+                perturbed[0, 0, 1] += 1e-4
+                perturbed[0, 1, 0] += 1e-4
+                with pytest.raises(
+                    AssertionError, match="independent (energy|residual)"
+                ):
+                    _assert_independent_stationary_state(
+                        reference, perturbed, native.energy
+                    )
+        assert abs(energies[0] - energies[1]) < 1e-8
+        branches.append(energies)
+    assert any(
+        all(abs(native.energy - energy) < 1e-8 for energy in branch)
+        for branch in branches
+    ), (native.energy, branches)
+    assert not any(
+        all(abs(native.energy + 1e-6 - energy) < 1e-8 for energy in branch)
+        for branch in branches
+    ), "off-branch energy corruption escaped the independent reference gate"
+
+
+def _assert_independent_stationary_state(
+    reference: typing.Any, density: np.ndarray, energy: float
+) -> None:
+    """Validate the published density without independently reconverging it."""
+    assert abs(reference.energy_tot(dm=density) - energy) < 1e-8, "independent energy"
+    fock = reference.get_fock(dm=density)
+    overlap = reference.get_ovlp()
+    residual = fock @ density @ overlap - overlap @ density @ fock
+    assert np.max(np.sqrt(np.mean(residual**2, axis=(-2, -1)))) < 1e-9, (
+        "independent residual"
+    )

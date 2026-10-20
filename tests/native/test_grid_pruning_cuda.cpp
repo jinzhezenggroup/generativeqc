@@ -33,7 +33,7 @@ void close(double actual, double expected, double absolute, double relative, con
 void qualify(const generativeqc::core::System& system, const generativeqc::dft::GridSpec& spec) {
   using namespace generativeqc;
   const dft::MolecularGrid reference(system, spec);
-  const auto count = system.atoms.size() * dft::grid_points_per_atom(spec);
+  const auto count = dft::grid_point_count(system, spec);
   double minimum_separation = std::numeric_limits<double>::infinity();
   for (std::size_t first = 0; first < system.atoms.size(); ++first)
     for (std::size_t second = 0; second < first; ++second) {
@@ -55,7 +55,9 @@ void qualify(const generativeqc::core::System& system, const generativeqc::dft::
     const auto raw = reference.atomic_weights();
     const auto view = actual.cuda_view();
     require(bool(view) && view.point_count == count, "missing resident pruned grid");
-    require(ledger->peak == capacity && ledger->live == dft::cuda_resident_grid_bytes(count),
+    require(ledger->peak <= capacity &&
+                ledger->live == dft::cuda_resident_grid_bytes(
+                                    count, spec.version == 4 ? system.atoms.size() : 0),
             "pruned allocation inventory differs");
     std::vector<double> resident_raw(count), resident_points(3 * count), resident_weights(count);
     require(cudaMemcpy(resident_raw.data(), view.atomic_weights, count * sizeof(double),
@@ -133,6 +135,11 @@ int main() {
       for (auto& atom : system.atoms)
         for (double& coordinate : atom.position) coordinate += shift;
       qualify(system, spec);
+    }
+    auto treutler = generativeqc::dft::default_grid_spec();
+    for (unsigned level : {0U, 1U, 3U, 9U}) {
+      treutler.radial_points = level;
+      qualify(system, treutler);
     }
     system.atoms[1].position = system.atoms[0].position;
     qualify(system, spec);

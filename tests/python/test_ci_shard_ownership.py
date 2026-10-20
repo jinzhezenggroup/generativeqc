@@ -153,6 +153,110 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    module = "tests/python/test_df_shell_units.py"
+    ordinary = [f"tests/python/test_probe_{index}.py" for index in range(9)]
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*ordinary, *([module] if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "untracked":
+        (tmp_path / module).touch()
+    elif presence == "missing":
+        (tmp_path / module).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    owners = [
+        shard for shard, (_, targets, _) in selections.items() if module in targets
+    ]
+    assert owners == (["ecp-forces"] if tracked else [])
+    assert selections["ecp-forces"][0] == "loadfile"
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        assert selections[shard][1] == [
+            path for path in inventory[bucket::3] if path != module
+        ]
+    assert not any(
+        module in argument
+        for _, _, arguments in selections.values()
+        for argument in arguments
+    )
+
+
+@pytest.mark.parametrize("event", ("pull_request", "schedule"))
+def test_df_shell_units_execute_once_with_one_shared_fixture_owner(
+    event: str, tmp_path: Path
+) -> None:
+    """Qualify the selected scheduler with fast competing files and a slow fixture."""
+    module = "tests/python/test_df_shell_units.py"
+    distribution, targets, arguments = _selection(event, "ecp-forces")
+    assert module in targets
+    assert not any(module in argument for argument in arguments)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (tmp_path / module).write_text(
+        "import json, os, time\nfrom pathlib import Path\nimport pytest\n"
+        "@pytest.fixture(scope='module')\n"
+        "def shared():\n"
+        "    with Path('setups.jsonl').open('a') as output:\n"
+        "        output.write(json.dumps(os.environ['PYTEST_XDIST_WORKER']) + '\\n')\n"
+        "    time.sleep(0.15)\n    return 7\n"
+        "@pytest.mark.parametrize('value', range(10))\n"
+        "def test_complete(shared, value):\n"
+        "    assert shared == 7\n"
+        "    with Path('cases.jsonl').open('a') as output:\n"
+        "        output.write(json.dumps([os.environ['PYTEST_XDIST_WORKER'], value]) + '\\n')\n",
+        encoding="utf-8",
+    )
+    for index in range(7):
+        (directory / f"test_other_{index}.py").write_text(
+            "import pytest\n@pytest.mark.parametrize('value', range(12))\n"
+            "def test_other(value):\n    assert value >= 0\n",
+            encoding="utf-8",
+        )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "xdist.plugin",
+            "-n",
+            "4",
+            f"--dist={distribution}",
+            "-q",
+            "tests/python",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=90,
+        env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_ADDOPTS": ""},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    setups = [
+        json.loads(line)
+        for line in (tmp_path / "setups.jsonl").read_text().splitlines()
+    ]
+    cases = [
+        json.loads(line) for line in (tmp_path / "cases.jsonl").read_text().splitlines()
+    ]
+    assert len(setups) == 1
+    assert {worker for worker, _ in cases} == set(setups)
+    assert Counter(value for _, value in cases) == Counter(range(10))
+    assert "94 passed" in result.stdout
+
+
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))
 def test_nightly_heavy_tests_move_without_duplicate_or_missing_owners(
     event: str,

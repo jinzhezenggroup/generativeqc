@@ -208,6 +208,12 @@ def test_native_consumer_rejects_stale_or_unknown_proofs(
             "int stationary_geometry_molecular_resident_weights_enqueue_v2(",
         )
     )
+    native = (
+        "namespace generativeqc_stationary_cuda {\n"
+        + _block(header, "bool stationary_grid_span(")
+        + "\n}\n"
+        + native
+    )
     native, count = re.subn(
         r"geometry_reduce\s*<<<.*?>>>\(.*?\);", "++reductions;", native, flags=re.DOTALL
     )
@@ -392,7 +398,7 @@ int launches,reductions; bool proof_selected;
 namespace generativeqc_stationary_cuda {
 constexpr size_t stationary_ao_jets=10,stationary_xc_source=0;
 struct Owner {
-  size_t aos=4,atoms=12,points=8,geometry_lanes=8,geometry_peak_lanes{};
+  size_t aos=4,atoms=12,points=8,geometry_lanes=8,geometry_peak_lanes{},molecular_points{};
   bool geometry_pending{};
   int geometry_stream{};
   double *centers{},*partial{},*scratch{},*sources{};
@@ -423,7 +429,7 @@ _NATIVE_DRIVER = r"""
 int main() {
   using namespace generativeqc_stationary_cuda;
   double value{}; int error{};
-  for(int mode=0;mode<7;++mode) {
+  for(int mode=0;mode<11;++mode) {
     Owner owner; owner.context.error=&error;
     generativeqc::dft::GridTaskView view;
     view.features=view.ao=view.points=&value;
@@ -432,15 +438,20 @@ int main() {
     const uint64_t flags=mode==3?2:mode==1?0:1;
     if(mode==4) view.features=nullptr;
     if(mode==5) view.npoint=0;
+    size_t offset=0,per_atom=4;
+    if(mode==7) { owner.molecular_points=2; per_atom=0; }
+    if(mode==8) per_atom=0;
+    if(mode==9) offset=48;
+    if(mode==10) per_atom=SIZE_MAX;
     const int status=mode==6
         ?stationary_geometry_molecular_resident_weights_enqueue(
-            &owner,&view,&value,0,4,&value,&value,nullptr,0)
+            &owner,&view,&value,offset,per_atom,&value,&value,nullptr,0)
         :stationary_geometry_molecular_resident_weights_enqueue_v2(
-            &owner,&view,&value,0,4,&value,&value,generation,flags,nullptr,0);
-    assert(status==int(mode==2 || mode==3 || mode==4));
-    const bool submitted=mode==0 || mode==1 || mode==6;
+            &owner,&view,&value,offset,per_atom,&value,&value,generation,flags,nullptr,0);
+    assert(status==int(mode==2 || mode==3 || mode==4 || mode>=8));
+    const bool submitted=mode==0 || mode==1 || mode==6 || mode==7;
     assert(launches==int(submitted) && reductions==int(submitted));
-    if(submitted) assert(proof_selected==(mode==0));
+    if(submitted) assert(proof_selected==(mode==0 || mode==7));
   }
 }
 """

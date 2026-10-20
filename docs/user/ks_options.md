@@ -2,8 +2,10 @@
 
 `Calculator(method="lda-rks" | "pbe-rks" | "lda-uks" | "pbe-uks",
 ks_options=...)` snapshots a `KsOptions` object for CPU and CUDA.
-LDA/PBE production grids enable radial angular pruning by default. Explicit
-`GridSpec` v1/v2 prescriptions retain their unpruned behavior. The existing compiler
+All supported KS compositions default to level-3 Treutler/Ahlrichs radial,
+Lebedev angular and NWChem-pruned grids, with Treutler radius-adjusted Becke
+partitions. An omitted VV10 grid uses the same prescription. Explicit
+`GridSpec` v1--v3 prescriptions retain their previous behavior. The existing compiler
 `FunctionalSpec` and `GridSpec` are reused, with an explicit native SCF
 tail/spin domain; a second functional catalog is not introduced.
 
@@ -50,47 +52,94 @@ Neither route computes tau or higher AO jets.
 Completed results expose the resolved grid and physical iteration records in
 [`ks_diagnostic`](../developer/ks_diagnostics.md).
 
-`GridSpec` selects the radial/polar/azimuth counts, partition iterations,
-coincident-center tolerance and per-element radial scales. The native grid
-uses the same rational-Legendre radial rule, Legendre-trapezoid angular rule
-and equal-radius Becke partition as the reference. Element radii scale radial
-points and radial Jacobians; they do not add a heteronuclear partition
-correction. Versions 1 and 2 remain unpruned; version 3 explicitly opts into
-the angular-pruning contract described next. Density screening is separate.
+Use `GridSpec.treutler(level=3)` to select the default family explicitly;
+levels 0--9 are supported for H--Lr. `grid_accuracy="tight"` selects level 4.
+The level is identical for energy and force requests. Fixed element tables
+and shell pruning do not depend on geometry or density; points move with their
+owner atoms and analytic responses differentiate the adjusted partition.
+PySCF is not required at runtime. The pinned numerical tables are from
+PySCF 2.14.0; see [third-party notices](../../THIRD_PARTY_NOTICES.md).
+
+Point counts depend on the element. Use `spec.point_count(atomic_numbers)`
+instead of `points_per_atom` for this family. No zero-weight alignment padding
+is added. Signed Lebedev weights are preserved.
+
+`GridSpec(...)` still constructs an explicit legacy tensor grid. Versions 1
+and 2 use rational-Legendre radial and Legendre-trapezoid angular rules, with
+an equal-radius Becke partition; version 3 adds `radial-v1` angular pruning.
+Their element radii scale radial points and Jacobians. These legacy grids
+remain available for reproducibility and elements outside the new table.
+
+The native descriptor layout is unchanged. Version 4 stores level in
+`radial_points` and requires both angular fields to be zero. A null radius
+table selects the pinned Bragg radii; an explicit table supplies partition
+radii, while radial nodes and pruning retain the pinned element rules.
+`KsGrid{}` and omitted native KS options select version 4, level 3.
+
 Changing the grid changes the discrete energy. Changing `tile_points` changes
 the schedule, capacity and FP64 reduction order. With local-AO maps, larger
 block unions can also admit additional AO tail work; complete numerical gates
 remain necessary even though the grid and cutoff are unchanged.
 
+(treutler-grid-values)=
+## Grid descriptor helper values
+
+`GridSpec.treutler(level=3)` returns a frozen version-4 descriptor with pinned
+partition radii for H--Lr. Its level must be a Python integer from 0 through 9.
+The `level` property returns that integer for version 4 and `None` for legacy
+descriptors; it is not a radial-node count.
+
+`spec.point_count(atomic_numbers)` consumes an iterable and returns the total
+integer point count without constructing quadrature. Version 4 uses each
+element's shell sizes; legacy versions count the entries with their uniform
+per-atom prescription. `spec.atom_offsets(atoms)` consumes atom objects exposing
+`atomic_number` and returns an immutable tuple of atom-major prefix offsets,
+starting at zero and ending at the total point count. Empty inputs yield zero
+points and the offset tuple `(0,)`.
+
+`spec.partition_radii(atoms)` returns an immutable tuple of per-atom partition
+radii in Bohr for version 4, preserving atom order and explicit radius overrides.
+It returns `None` for legacy equal-radius partitions. These helpers do not use
+coordinates, charge or spin, and do not construct a molecular grid.
+
+(treutler-grid-errors)=
+## Grid descriptor helper errors
+
+The Treutler constructor rejects non-integer levels, including booleans, and
+levels outside 0--9 with `ValueError`. Version-4 point counting and offsets
+likewise reject atomic numbers that are not Python integers in 1--103 with
+`ValueError`. Atom-based helpers require objects exposing `atomic_number`.
+For an explicitly constructed version-4 descriptor with an incomplete radius
+table, `partition_radii` raises `KeyError` when a requested element is absent;
+it does not invent a radius. The `level` property has no additional validation
+or failure branch after descriptor construction.
+
+(treutler-grid-ownership)=
+## Grid descriptor helper ownership
+
+The constructor returns an independent frozen descriptor. Counts, levels,
+offsets and per-atom radii are immutable Python values with no borrowed native
+storage or device lifetime. Input iterables are consumed by the corresponding
+helper but are not retained or mutated. The helpers require no native library,
+GPU, or PySCF installation; numerical tables belong to the installed package.
+
 (angular-pruning)=
 ## Angular pruning
 
-`GridPolicy` and the default LDA/PBE `KsOptions` use the version-3 `radial-v1`
-prescription. The standard profile also increases radial resolution relative to
-v2; LDA uses additional angular resolution. These changes preserve the retained
-energy/force gates on the qualified water fixtures, rather than assuming that
-fewer points alone justify a default. Pruning is not automatically promoted to
-hybrid, meta-GGA or VV10 profiles. Select the retained unpruned policy explicitly
-when reproducing v2 calculations:
+The legacy `radial-v1` policy is selected explicitly:
 
 ```python
-from dataclasses import replace
-from generativeqc import Calculator, GridPolicy, KsOptions
+from generativeqc import GridPolicy, GridSpec
 
+current = GridSpec.treutler(level=3)
+legacy = GridPolicy(pruning="radial-v1").resolve("pbe-rks")
 unpruned = GridPolicy(pruning="none").resolve("pbe-rks")
-pruned = GridPolicy().resolve("pbe-rks")
-print(unpruned.points_per_atom, pruned.points_per_atom)
-calculator = Calculator(
-    method="pbe-rks",
-    device="cuda",
-    ks_options=KsOptions(grid=pruned),
-)
 ```
 
 Version 3 requires a finite positive radial scale for every element actually
 used. For an isolated angular-pruning experiment on a fixed v2 grid, use
 `replace(unpruned, version=3, pruning="radial-v1")` instead; this differs from
-selecting the newly qualified default radial/angular maxima. Custom radial
+selecting the legacy policy's radial/angular maxima. Custom radial
 counts, radii and angular orders remain explicit inputs.
 Maximum version-3 orders are 128 polar and 512 azimuth points. Unsupported
 prescriptions fail validation rather than silently disabling pruning. Native
@@ -131,14 +180,14 @@ This CPU oracle checks LDA/PBE energy and grid-responsive analytic gradients
 against a dense grid whose stability is checked against a denser grid. Pruned
 standard/tight profiles must meet the unchanged unpruned accuracy gates while
 reducing point counts. It is not a VV10, large-system or GPU performance claim.
-The matched-grid runners default to `--grid-pruning auto`: LDA/PBE select the
-production policy for both native and GPU4PySCF; other methods retain unpruned
-diagnostic grids until independently qualified. `--grid-pruning none` selects
+The existing matched-grid runners retain `--grid-pruning auto`: LDA/PBE select
+the legacy `radial-v1` policy for both native and GPU4PySCF; other methods use
+unpruned diagnostic grids. `--grid-pruning none` selects
 the retained unpruned policy. Explicit `--grid NR NP NA` counts preserve the
 historical one-Bohr radial scales. `README_BENCHMARK_GRID_PRUNING` forwards this
 choice through `benchmarks/run_readme_dft_benchmarks.sh`.
 
-For an independent production-grid comparison, use
+For the legacy angular-pruning comparison, use
 `python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
 inside a finite Slurm GPU allocation with a source-matched Release library and
 GPU4PySCF installed. This runner uses GPU4PySCF's **own NWChem-pruned grids**,

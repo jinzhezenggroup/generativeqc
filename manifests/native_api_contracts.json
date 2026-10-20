@@ -650,10 +650,10 @@
         "tile_points"
       ],
       "field_declarations": [
-        "std :: uint32_t version { 1 } ;",
-        "std :: uint32_t radial_points { 64 } ;",
-        "std :: uint32_t angular_polar { 12 } ;",
-        "std :: uint32_t angular_azimuth { 24 } ;",
+        "std :: uint32_t version { 4 } ;",
+        "std :: uint32_t radial_points { 3 } ;",
+        "std :: uint32_t angular_polar { 0 } ;",
+        "std :: uint32_t angular_azimuth { 0 } ;",
         "std :: uint32_t partition_iterations { 3 } ;",
         "double coincident_tolerance { 1.0 e - 12 } ;",
         "std :: uint64_t tile_points { 256 } ;"

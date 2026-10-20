@@ -206,6 +206,11 @@ constexpr bool stationary_restricted_point_capable=true;
 bool stationary_fp32_point_capable=true, restricted_capable=true;
 bool stationary_restricted_point_selected(bool requested) { return requested && restricted_capable; }
 struct Owner {
+  bool adjusted_partition{};
+  size_t molecular_points{};
+  size_t* atom_offsets{};
+  double* atomic_radii{};
+  int64_t* point_atoms{};
   bool phased_storage{}, becke_primitive{}, becke_normalize_cooperative{}, profile{}, scaled{};
   int becke_primitive_mode{}, becke_threads_per_point=32, geometry_threads=128;
   size_t becke_shared_bytes=256, launches{}, restricted_point_batches{}, restricted_point_count{};
@@ -233,18 +238,23 @@ void cuda_check(int status) { if(status) throw std::runtime_error("launch failur
 int cudaEventSynchronize(int) { return 0; }
 template<class... Args> void profile_record(Args...) {}
 template<class... Args> void profile_elapsed(Args...) {}
+void stationary_grid_owners(const size_t*,size_t,size_t,size_t,int64_t*) {
+  assert(false);  // This matrix does not bind a molecular-grid descriptor.
+}
 template<class Arithmetic,class... Args> void geometry_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=false;
   selected_precomputed=false;
   if constexpr(std::is_same_v<Arithmetic,double>)
-    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
+    selected_bound=std::get<sizeof...(Args)-2>(std::tuple(args...));
+  assert(std::get<sizeof...(Args)-1>(std::tuple(args...))==nullptr);
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Precomputed,class Arithmetic,class... Args> void geometry_cooperative_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=true;
   selected_precomputed=Precomputed;
   if constexpr(!Precomputed && std::is_same_v<Arithmetic,double>)
-    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
+    selected_bound=std::get<sizeof...(Args)-2>(std::tuple(args...));
+  assert(std::get<sizeof...(Args)-1>(std::tuple(args...))==nullptr);
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Bound,class... Args> void geometry_point_kernel(Args... args) {
