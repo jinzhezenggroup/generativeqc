@@ -23,8 +23,10 @@ pytestmark = pytest.mark.skipif(
 def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
     waters: int, method: str, monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """Exercise both native-small and provider eigensolvers without a seed repair.
+    """Exercise provider eigensolvers without a seed repair.
 
+    The def2-SVP water and tetramer have 24 and 96 spherical AOs, respectively,
+    both above the native-small solver's 16-AO limit.
     PySCF supplies an independent AO metric. Its inverse maps analytic
     orthonormal ensemble spectra into AO densities; no target SCF density is
     used to manufacture the valid/invalid occupation fixtures.

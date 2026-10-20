@@ -59,8 +59,9 @@ subsequent trace/accounting edits have a separate final build identity.
   pre-fix observation by at most 4.55e-12 Eh; maximum force difference is below
   5e-13 Eh/Bohr. These are diagnostic comparisons, not new README rankings.
 - 166 precision-policy/ownership/work-validity host tests passed.
-- Four real CUDA RHF/UHF physical-admission cases passed, spanning small-native
-  and provider dimensions. An independent PySCF overlap constructs valid and
+- Four real CUDA RHF/UHF physical-admission cases passed at provider dimensions
+  (24 and 96 spherical AOs, both above the 16-AO native-small limit).
+  An independent PySCF overlap constructs valid and
   negative-occupation ensembles; rejected imports preserve all prior states.
   The near-asymmetric legacy acceptance is also exercised.
 - A real tetramer audit replay passes independent PySCF energy/force gates and
