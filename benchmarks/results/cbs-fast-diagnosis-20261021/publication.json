@@ -1,0 +1,81 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Limited screen identifies a promising Lambda candidate and a slower handoff; no production default promotion or homepage replacement.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 6102,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "b4ef98d8fe84b1f436b5d64201718b84abb816bd90725859ed24b5dc09f35013"
+    },
+    {
+      "bytes": 756,
+      "path": "candidate-patches.json.xz",
+      "role": "source-patch",
+      "sha256": "0a7a1e9c7c3f657ad3b616c46718dff9457e791e5fe92cd464466b25dc42e166"
+    },
+    {
+      "bytes": 391,
+      "path": "clean-cohort.sh",
+      "role": "reproduction",
+      "sha256": "61555dc4400f900e5ea50ff6b9b14084bb2f8b60a6b4f26a83f53fd9ae7f3a8d"
+    },
+    {
+      "bytes": 3184,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "b48f77a9aaed717a868194aec3e6d7098b84a676063f65ec0e8f0a2466ff2dda"
+    },
+    {
+      "bytes": 13156,
+      "path": "profiles.json.xz",
+      "role": "samples",
+      "sha256": "785cbf820e5cd1c558dcfc80632a1e33b210b3fcce6f1a50b232bc7a945d2b6a"
+    },
+    {
+      "bytes": 1535,
+      "path": "run-candidate.sh",
+      "role": "reproduction",
+      "sha256": "6a7d19a724859f0d43fd30dfb7ee18d1c2583e3f03a782514b2ef2b0d9518e0a"
+    },
+    {
+      "bytes": 28508,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "63ae4606695f9b1f3dbc5eda84f35fcd00204c197cb318afd386868e8b69ad88"
+    },
+    {
+      "bytes": 928,
+      "path": "source.json.xz",
+      "role": "input",
+      "sha256": "fd662dfb3cc4b53ed12831d62d1b9646b183931c784de689cbae553c047d8f04"
+    },
+    {
+      "bytes": 4071,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "3cf7cde93f73f4da1614b912f73c10342551a814b4f9b7334ae1475145d79e4c"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:15:00",
+      "bash",
+      "clean-cohort.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "6339327feda0e28d961f45f3c6f5944730f1024d"
+  }
+}
