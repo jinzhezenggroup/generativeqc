@@ -235,14 +235,17 @@ _RADIAL_PREFIX = r"""/** Produce choose(Order+3,3) strided R(0,t,u,v) values, t/
 // default preserves the compact scalar layout used by independent math probes.
 template <unsigned Order, unsigned Stride = 1>
 __device__ inline void md_engine_radial(double rho, Vec3<double> p, Vec3<double> q,
-                                        double* output) {
+                                        double* output, double prefactor = 1.0) {
   static_assert(Order <= 8, "MD s/p/d radial order must not exceed eight");
   static_assert(Stride > 0);
   const Vec3<double> difference{p.x - q.x, p.y - q.y, p.z - q.z};
   double seeds[Order + 1];
   boys_values<Order>(rho * (difference.x * difference.x + difference.y * difference.y +
                             difference.z * difference.z), seeds);
-  double factor = 1.0;
+  // Linearity permits one source prefactor in the seeds instead of one
+  // multiply for every output dot. A unit prefactor retains the original
+  // unscaled oracle/compatibility lowering and its rounding order.
+  double factor = prefactor;
   for (unsigned n = 0; n <= Order; ++n) {
     seeds[n] *= factor;
     factor *= -2.0 * rho;

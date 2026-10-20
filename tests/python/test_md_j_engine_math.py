@@ -371,8 +371,9 @@ def test_displacement_reversal_has_exact_cartesian_parity(
     "directions", (0, 1, 2, 3), ids=("neither", "forward", "reverse", "both")
 )
 @pytest.mark.parametrize("lanes", (1, 7, 32))
+@pytest.mark.parametrize("scaled", (False, True), ids=("unscaled", "scaled-seeds"))
 def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
-    md_engine: Any, bra: int, ket: int, directions: int, lanes: int
+    md_engine: Any, bra: int, ket: int, directions: int, lanes: int, scaled: bool
 ) -> None:
     """Includes all 15 canonical angular pairs and the ten reversed views."""
     counts = (math.comb(bra + 3, 3), math.comb(ket + 3, 3))
@@ -390,7 +391,7 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
             exponents,
             positions,
             density,
-            directions,
+            directions | (8 if scaled else 0),
             lanes,
             values,
             cooperative,
@@ -401,7 +402,12 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
     for output in (values, cooperative, reference):
         np.testing.assert_array_equal(output[[0, -1]], (23.5, -71.25))
     np.testing.assert_allclose(values[1:-1], reference[1:-1], rtol=3e-13, atol=3e-13)
-    np.testing.assert_array_equal(values, cooperative)
+    if scaled:
+        # Moving the common prefactor changes rounding, not the mathematical
+        # contraction. Both independent oracle gates below remain unchanged.
+        np.testing.assert_allclose(values, cooperative, rtol=3e-13, atol=3e-13)
+    else:
+        np.testing.assert_array_equal(values, cooperative)
     if not directions & 1:
         np.testing.assert_array_equal(values[1 : 1 + counts[0]], np.zeros(counts[0]))
     if not directions & 2:
@@ -438,8 +444,9 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
 
 
 @pytest.mark.parametrize("angular", range(5))
+@pytest.mark.parametrize("scaled", (False, True))
 def test_self_source_uses_full_forward_weight_without_reciprocal_half(
-    md_engine: Any, angular: int
+    md_engine: Any, angular: int, scaled: bool
 ) -> None:
     count = math.comb(angular + 3, 3)
     exponents = np.asarray((0.61, 0.61))
@@ -453,7 +460,7 @@ def test_self_source_uses_full_forward_weight_without_reciprocal_half(
             exponents,
             positions,
             density,
-            1 | 4,
+            1 | 4 | (8 if scaled else 0),
             32,
             *outputs,
         )
@@ -462,9 +469,44 @@ def test_self_source_uses_full_forward_weight_without_reciprocal_half(
     np.testing.assert_allclose(
         outputs[0][1:-1], outputs[2][1:-1], rtol=3e-14, atol=1e-14
     )
-    np.testing.assert_array_equal(outputs[0][1:-1], outputs[1][1:-1])
+    if scaled:
+        np.testing.assert_allclose(
+            outputs[0][1:-1], outputs[1][1:-1], rtol=3e-13, atol=3e-13
+        )
+    else:
+        np.testing.assert_array_equal(outputs[0][1:-1], outputs[1][1:-1])
     np.testing.assert_array_equal(outputs[0][count + 1 : -1], np.zeros(count))
     assert np.linalg.norm(outputs[0][1 : count + 1]) > 0
+
+
+@pytest.mark.parametrize(("bra", "ket"), ANGULAR_PAIRS)
+@pytest.mark.parametrize("exponent_scale", (1e-6, 1e6))
+def test_seed_prefactor_range_against_full_auxiliary(
+    md_engine: Any, bra: int, ket: int, exponent_scale: float
+) -> None:
+    """Scale moves across many decades without changing the dimensionless roots.
+
+    The independent full auxiliary retains late output scaling. Rescaling the
+    displacement keeps cancellation and all angular components exercised in
+    both very diffuse and very tight primitive domains.
+    """
+    size = math.comb(bra + 3, 3) + math.comb(ket + 3, 3)
+    exponents = np.asarray((0.17, 3.1)) * exponent_scale
+    positions = np.asarray((0.31, -0.17, 0.51, -0.19, 0.43, -0.07)) / math.sqrt(
+        exponent_scale
+    )
+    density = np.random.default_rng(91 + 5 * bra + ket).normal(size=size + 7)
+    outputs = [np.full(size + 2, np.nan) for _ in range(3)]
+    assert (
+        md_engine.contract_values(
+            bra, ket, exponents, positions, density, 3 | 8, 7, *outputs
+        )
+        == 0
+    )
+    assert np.isfinite(outputs[0][1:-1]).all()
+    np.testing.assert_allclose(
+        outputs[0][1:-1], outputs[2][1:-1], rtol=3e-12, atol=1e-290
+    )
 
 
 def test_generation_is_standalone_deterministic_and_preserves_unchanged_output(
@@ -549,11 +591,17 @@ void contract_impl(const double* exponent, const double* position, const double*
   MdJView md{};
   md.density = const_cast<double*>(density);
   const bool forward = flags & 1U, reverse = flags & 2U;
-  md_engine_contract<B,K>(bra, ket, md, forward, reverse, result + 1, result + 1 + nb);
+  if (!(flags & 8U))
+    md_engine_contract<B,K>(bra, ket, md, forward, reverse, result + 1, result + 1 + nb);
   const double rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
   const double prefactor = 2.0 * pow(kPi, 2.5) /
       (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
   double radial[md_j_hermite_count(B + K)];
+  if (flags & 8U) {
+    md_engine_radial<B+K>(rho, bra.product, ket.product, radial, prefactor);
+    md_engine_contract_radial<B,K>(radial, density + bra.hermite_offset,
+        density + ket.hermite_offset, forward, reverse, result + 1, result + 1 + nb);
+  }
   md_engine_radial<B+K>(rho, bra.product, ket.product, radial);
   for (unsigned lane = 0; lane < lanes; ++lane)
     md_engine_contract_radial<B,K>(radial, density + bra.hermite_offset,
