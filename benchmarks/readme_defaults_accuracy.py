@@ -1,7 +1,8 @@
 """Independent, untimed accuracy qualification for the default README campaign.
 
-Fresh tighter direct calculations at two denser grids give one common target
-for Direct and DF endpoints. They never supply production densities or timings.
+Fresh tighter direct calculations at two denser XC grids give one common target
+for Direct and DF endpoints, with a separate VV10 grid-stability check.
+They never supply production densities or timings.
 Small CPU/PySCF spot checks independently validate the GPU oracle implementation.
 """
 
@@ -72,11 +73,18 @@ def solve(method: str, atoms: Any, *, backend: str, level: int) -> dict:
     if method != "hf":
         engine.xc = METHODS[method][1]
         engine.grids.level = level
-        # VV10 has its own quadrature. Test two denser nonlocal levels too;
-        # these overrides belong exclusively to the accuracy reference.
+        # VV10 has its own quadrature. Check nonlocal levels 2/3 independently;
+        # GPU4PySCF 1.8.1 already defaults to level 3, so these are not both
+        # denser than the timed grid. These are untimed reference controls.
         engine.nlcgrids.level = level - 2
         engine.small_rho_cutoff = 0
     configure_reference_full_fock(engine)
+    if backend == "cpu":
+        # PySCF's range-separated get_k needs the direct-SCF optimizer even
+        # when rebuilding full-density Focks. The wrapper still omits dm_last
+        # and vhf_last, preventing delta-density reuse; this flag only restores
+        # construction of the CPU integral prescreener (not GPU timing policy).
+        engine.direct_scf = True
     energy = float(engine.kernel())
     if not engine.converged:
         raise RuntimeError(f"accuracy oracle did not converge ({engine.cycles} cycles)")

@@ -246,6 +246,9 @@ def native_settings(calculator: Any, result: Any) -> dict:
         "nonlocal_grid_inherits_xc": ks.nonlocal_grid is None
         if ks is not None
         else None,
+        "nonlocal_density_policy": ks.to_payload().get("nonlocal_density_policy")
+        if ks is not None
+        else None,
         "force_grid_response": True if ks is not None else None,
     }
 
@@ -388,6 +391,9 @@ def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
             "orbital_gradient_tolerance": float(engine.conv_tol_grad)
             if engine.conv_tol_grad is not None
             else None,
+            "orbital_gradient_tolerance_resolved": float(engine.conv_tol_grad)
+            if engine.conv_tol_grad is not None
+            else math.sqrt(engine.conv_tol),
             "max_iterations": int(engine.max_cycle),
             "diis_history": int(engine.diis_space),
             "initial_guess": str(engine.init_guess),
@@ -402,6 +408,18 @@ def run_reference(args: Any, atoms: Any, record: dict, retain: Any) -> None:
             else None,
             "auxbasis_response": getattr(gradient, "auxbasis_response", None),
         }
+        if args.method != "hf":
+            settings["small_rho_cutoff"] = float(engine.small_rho_cutoff)
+        if args.method == "wb97m-v":
+            # Quadrature equality alone does not imply the same active VV10
+            # domain. Snapshot both consumers without changing their defaults.
+            from gpu4pyscf.dft import numint
+            from gpu4pyscf.grad import rks as gradient_rks
+
+            settings["nonlocal_density_thresholds"] = {
+                "scf": float(numint.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD),
+                "forces": float(gradient_rks.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD),
+            }
         if args.mode == "df":
             actual = engine.with_df.auxmol._basis
             expected = json.loads(
@@ -478,6 +496,15 @@ def main(argv: list[str] | None = None) -> None:
         "source_revision": args.source_revision,
         "runner_sha256": digest(Path(__file__)),
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "thread_controls": {
+            name: os.environ.get(name)
+            for name in (
+                "OMP_NUM_THREADS",
+                "OPENBLAS_NUM_THREADS",
+                "MKL_NUM_THREADS",
+                "SLURM_CPUS_PER_TASK",
+            )
+        },
         "accelerator": cuda_accelerator_metadata(cp),
         "environment": environment_metadata(
             distributions={

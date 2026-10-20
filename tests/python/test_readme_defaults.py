@@ -154,6 +154,7 @@ def test_reference_defaults_and_frozen_warm_density(
         init_guess="minao",
         direct_scf=True,
         direct_scf_tol=1e-13,
+        small_rho_cutoff=0,
         get_veff=lambda: None,
     )
     seeds = []

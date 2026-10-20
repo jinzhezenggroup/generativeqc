@@ -77,6 +77,76 @@ default incremental Fock failed PBE/PBE0 warm and r2SCAN-3c cold convergence at
 optimization would not resolve the intended comparison. Full-density rebuilding
 belongs only to the separately labeled strict accuracy oracle.
 
+## Additional configuration audit
+
+The following distinctions were checked against the executed launchers,
+measurement receipts and installed GPU4PySCF 1.8.1 source. They must accompany
+the diagnosis rather than be silently treated as convergence effects:
+
+- Native Standard uses energy 1e-10, density change 1e-8 and, for the CUDA KS
+  physical closure, RMS/maximum residual gates bounded by 1e-9. GPU4PySCF uses
+  energy 1e-9 and an unset `conv_tol_grad`, resolved by its solver to
+  `sqrt(conv_tol)` (approximately 3.16e-5). These measure different quantities;
+  its extra convergence check also has its own relaxed thresholds. Native
+  Direct budget-Fock Fast selects energy 1e-6, density 1e-4 and screening 1e-10;
+  these controls do not apply to every HF/DF fallback.
+- Native Huckel versus reference MINAO initialization remains an inherent
+  engine difference, not a newly changed setting. Default native incremental
+  Direct J/K is disabled; GPU4PySCF retains its default incremental behavior.
+- Matching VV10 quadrature does **not** match its active density domain.
+  Native `MOLECULAR_VV10_DENSITY_THRESHOLD` is 1e-8, while installed GPU4PySCF
+  `NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD` is 1e-10 in both SCF and forces. The old
+  matched WB97M-V comparator explicitly imposed 1e-8 on both engines. The
+  current driver leaves the reference default untouched. This difference
+  remains unresolved and must not be described as complete VV10 alignment.
+  Actual current WB97M-V reference receipts report level 3 for both XC and
+  nonlocal grids; do not substitute a remembered default from another version.
+- Ordinary DFT `small_rho_cutoff` is 0 in both historical and current reference
+  receipts. Removing its explicit assignment causes no effective change here;
+  it is separate from the VV10 active-density threshold above.
+- The historical refresh launcher and WB97M-V reference supplement set
+  OMP/OpenBLAS/MKL threads to 8. The current aligned launcher sets all three
+  to 1 for every engine. This is a real historical-protocol difference whose
+  performance contribution has not been isolated. The same-binary ablations
+  keep their environment fixed, so this does not explain their within-run
+  configuration effects.
+- The historical build records GCC 11.4, whereas the current frozen build
+  uses GCC 13.3; both use CUDA 12.9.1, Release/sm120 and FastCompile OFF. The
+  current build explicitly reports scalar CPU linear algebra. No claim about
+  a historical BLAS regression follows without corresponding old linkage
+  evidence and a controlled experiment.
+- Historical sampling used five warm repeats plus moved populations and
+  separate small-system priming. The replacement uses three frozen-density
+  warm repeats and omits moved populations. Both count complete E+F endpoints
+  with setup in cold. Historical explicit WB97M-V DF/96 resource overrides
+  are not part of the new default-resource population.
+
+These observations are an audit of existing measurements, not permission to
+alter their recorded controls or source identities. Common observable gates
+still require completed qualification; they do not imply identical operators,
+active domains, stopping algorithms or work.
+
+### Follow-up thread and oracle checks
+
+Paired n1 jobs 11052/11053 use the same frozen binary and default controls at
+one and eight CPU threads, one cold and three frozen-density warm repeats.
+Native PBE cold changes 41.39 to 41.08 s and warm median 6.82 to 6.54 s;
+PBE0 cold changes 49.37 to 49.31 s and warm 8.39 to 8.14 s. Reference PBE
+changes 16.31 to 15.96 s cold and 5.61 to 5.60 s warm. Thread count does not
+reverse those rankings. These are diagnostic populations, not replacements for
+the recorded one-thread campaign. Raw paired receipts and launchers remain in
+`.artifacts/settings-audit/` and n1 `/data/jzzeng/readme-settings-audit-20261020/`.
+
+The CPU WB97M-V spot oracle initially failed because PySCF's range-only `get_k`
+needs its direct-SCF prescreener even during full-density rebuilding. Preserve
+the wrapper that omits previous-density/potential inputs, but keep CPU
+`direct_scf=True` to construct that optimizer. The separate rerun passes the
+CPU/GPU spot gate (maximum force difference about 2.01e-9 Eh/Bohr). With the
+unchanged dense-grid stability and observable gates, the 96-atom Direct
+WB97M-V Standard, Fast and reference populations all qualify. Standard warm
+45.44 s versus reference 120.96 s supports a roughly 2.66x speedup specifically
+for this static warm population. Cold and other-method limitations remain.
+
 ## Fast work and remaining performance limits
 
 At frozen source `02337e0cf3d94915a352d5056f6d09d27fe353f2`, 96-atom Direct
