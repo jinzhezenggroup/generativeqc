@@ -180,6 +180,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
       src/scf/cuda/hf_initial_guess.cpp
+      src/scf/cuda/warm_density.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/rhf_resident_values.cpp

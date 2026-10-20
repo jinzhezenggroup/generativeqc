@@ -14,7 +14,7 @@ import numpy as np
 from . import _native
 from ._api_types import Atom
 from .batch import BatchResult
-from .checkpoint import _descriptor, _pointer, _resource_check
+from .checkpoint import _descriptor, _pointer, _resource_check, _restore_states
 from .precision_policy import PrecisionBudgetError, _model_identity, _solve_record
 
 
@@ -51,10 +51,10 @@ def _seed_capacity(batch: Any) -> tuple[int, int]:
 
 
 class _SeedLease:
-    """Detach only this candidate's seeds before releasing its device owner.
+    """Detach only the supplying solver's seeds before releasing its device owner.
 
     The historical HF-named native ABI also implements KS warm states. This is
-    same-model in-process transport, not a portable checkpoint or an audit seed.
+    same-model in-process transport, never transport between candidate and audit.
     Native restoration validates source overlap/occupations and always reruns
     the target SCF. Numeric staging and its validation scratch are bounded.
     """
@@ -131,9 +131,7 @@ class _SeedLease:
             _resource_check(batch, self.numeric_bytes, self.largest_density_bytes)
             _native.check(
                 batch._library,
-                batch._library.generativeqc_batch_restore_hf_warm_states(
-                    batch._batch, self.states, batch.system_count
-                ),
+                _restore_states(batch, self.states),
                 context=batch._context,
             )
         batch._warm_state = deepcopy(self.metadata)
@@ -174,6 +172,9 @@ class PreparedPrecisionBatch:
         self._model_cache: list[tuple[tuple[Atom, ...], str] | None] = [
             None for _ in self._systems
         ]
+        # One independent audit seed per slot, never a result cache. Tighter
+        # fallback verification remains cold and cannot overwrite this history.
+        self._audit_seeds: list[_SeedLease | None] = [None for _ in self._systems]
         from .ecp import resolve_ecp
 
         if any(
@@ -249,6 +250,18 @@ class PreparedPrecisionBatch:
     def _resume(self) -> None:
         if self._owner is not None:
             return
+        # Optional audit history must not crowd out candidate reconstruction.
+        # Charge all detached arrays and worst-case validation scratch together
+        # against the original plan, before allocating a new native owner.
+        if self.resource_plan is not None:
+            leases = [lease for lease in [self._seeds, *self._audit_seeds] if lease]
+            extra = sum(lease.reserved_host_bytes for lease in leases)
+            limit = self.resource_plan.budget.limits().get("host")
+            if (
+                limit is not None
+                and self.resource_plan.peak_bytes.get("host", 0) + extra > limit
+            ):
+                self._audit_seeds = [None] * self.system_count
         owner = self._calculator.prepare_batch(self._systems, **self._options)
         try:
             if self._seeds is not None:
@@ -345,8 +358,19 @@ class PreparedPrecisionBatch:
                             [atoms],
                             charges=[self._charges[index]],
                             multiplicities=[self._multiplicities[index]],
-                            warm_start=False,
+                            warm_start=self._options.get("warm_start", True),
                         ) as owner:
+                            lease = self._audit_seeds[index]
+                            reusable = role == "fp64_audit"
+                            if lease is not None and (
+                                lease.signature != calculator._model_signature()
+                                or lease.systems != (atoms,)
+                            ):
+                                self._audit_seeds[index] = lease = None
+                            if reusable and lease is not None:
+                                lease.restore(owner, updates=self._updates)
+                            else:
+                                owner.set_warm_start_updates(self._updates)
                             observed = owner.execute(
                                 strict=False, properties=requested
                             ).items[0]
@@ -354,22 +378,41 @@ class PreparedPrecisionBatch:
                                 status=observed.status,
                                 fock_builds=observed.fock_builds,
                                 iterations=observed.iterations,
+                                warm_start_used=observed.warm_start_used,
                             )
                             if not observed.succeeded:
                                 raise RuntimeError(observed.status_message)
-                        observed = replace(observed, index=index)
-                        record = _solve_record(
-                            calculator,
-                            observed,
-                            role=role,
-                            precision=precision,
-                            seconds=None,
-                            requested=requested,
-                            atom_count=len(atoms),
-                            backend=backend,
-                        )
+                            observed = replace(observed, index=index)
+                            record = _solve_record(
+                                calculator,
+                                observed,
+                                role=role,
+                                precision=precision,
+                                seconds=None,
+                                requested=requested,
+                                atom_count=len(atoms),
+                                backend=backend,
+                            )
+                            if reusable and self._updates:
+                                # Drop the old copy before staging a replacement.
+                                # Retention is optional: a small seed/host budget
+                                # keeps the complete cold audit instead of failing
+                                # an otherwise valid observable calculation.
+                                self._audit_seeds[index] = lease = None
+                                occupied = self._seeds.numeric_bytes + sum(
+                                    seed.numeric_bytes
+                                    for seed in self._audit_seeds
+                                    if seed
+                                )
+                                try:
+                                    self._audit_seeds[index] = _SeedLease(
+                                        owner, self._maximum_seed_bytes - occupied
+                                    )
+                                except (MemoryError, NotImplementedError):
+                                    pass
                     attempt["completed"] = True
                 except BaseException as error:
+                    self._audit_seeds[index] = None
                     attempt["error"] = f"{type(error).__name__}: {error}"
                     raise
                 finally:
@@ -510,6 +553,17 @@ class PreparedPrecisionBatch:
                         # snapshot as the candidate's final movement total.
                         self._transport = (None,) * self.system_count
                         try:
+                            bound, _ = _seed_capacity(self._owner)
+                            if (
+                                bound
+                                + sum(
+                                    seed.numeric_bytes
+                                    for seed in self._audit_seeds
+                                    if seed
+                                )
+                                > self._maximum_seed_bytes
+                            ):
+                                self._audit_seeds = [None] * self.system_count
                             seeds = _SeedLease(self._owner, self._maximum_seed_bytes)
                         except BaseException:
                             # Even a partial export can materialize resident
@@ -531,7 +585,15 @@ class PreparedPrecisionBatch:
                         suspension_seconds += perf_counter() - began
                 return self._facade._reference(
                     tighter=tighter,
-                    _host_reservation=(budget, self._seeds.reserved_host_bytes),
+                    _host_reservation=(
+                        budget,
+                        self._seeds.reserved_host_bytes
+                        + sum(
+                            seed.reserved_host_bytes
+                            for seed in self._audit_seeds
+                            if seed
+                        ),
+                    ),
                 )
 
             items = []
@@ -567,6 +629,9 @@ class PreparedPrecisionBatch:
                     "seed_bytes_retained": 0
                     if self._seeds is None
                     else self._seeds.numeric_bytes,
+                    "audit_seed_bytes_retained": sum(
+                        seed.numeric_bytes for seed in self._audit_seeds if seed
+                    ),
                     "scope": "complete-fleet-and-sequential-independent-audits",
                 },
             )
@@ -575,7 +640,7 @@ class PreparedPrecisionBatch:
             return result
 
     def set_warm_start_updates(self, enabled: bool) -> None:
-        """Freeze or update candidate-owned proposals without importing audit seeds."""
+        """Freeze or update both independent histories without exchanging seeds."""
         with self._facade._lock:
             self._ensure_open()
             if self._owner is not None:
@@ -583,12 +648,13 @@ class PreparedPrecisionBatch:
             self._updates = bool(enabled)
 
     def clear_warm_starts(self) -> None:
-        """Discard native or suspended candidate seeds without closing the plan."""
+        """Discard candidate and independent audit seeds without closing the plan."""
         with self._facade._lock:
             self._ensure_open()
             if self._owner is not None:
                 self._owner.clear_warm_starts()
             self._seeds = None
+            self._audit_seeds = [None] * self.system_count
 
     def close(self) -> None:
         """Drain and release native residency and detached seed ownership."""
@@ -597,6 +663,7 @@ class PreparedPrecisionBatch:
                 self._owner.close()
                 self._owner = None
             self._seeds = None
+            self._audit_seeds.clear()
             self._model_cache.clear()
             self._closed = True
 
