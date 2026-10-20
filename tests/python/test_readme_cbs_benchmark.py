@@ -561,3 +561,23 @@ def test_fast_plot_precision_provenance_includes_bounded_fp64_fallback(
     cc["cc_performance"].pop("ccsd_fp32_evaluations")
     with pytest.raises(ValueError, match="lacks native"):
         attach_fast(control, fast)
+
+
+def test_frozen_verifier_allows_only_reduction_roundoff() -> None:
+    """Portable derived diagnostics must retain exact gates and raw integrity."""
+    import runpy
+
+    module = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results/readme-cbs-fast-20261020/verify.py"
+        )
+    )
+    same = module["same_diagnostics"]
+    expected = {"accuracy_gate": True, "errors": [5e-9], "count": 1}
+    assert same({**expected, "errors": [5e-9 + 1e-18]}, expected)
+    assert not same({**expected, "accuracy_gate": False}, expected)
+    assert not same({**expected, "count": 1.0}, expected)
+    assert not same({**expected, "errors": [5e-9 + 1e-12]}, expected)
+    assert not same({**expected, "errors": [float("nan")]}, expected)
+    assert not same({**expected, "extra": None}, expected)

@@ -12,6 +12,27 @@ from tools.generativeqc_validation.record import load_publication_record
 from tools.render_readme_cbs import attach_fast, completed_times, qualification, table
 
 
+def same_diagnostics(actual: object, expected: object) -> bool:
+    """Allow only reduction roundoff; raw receipt bytes and gates stay exact."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(
+            same_diagnostics(value, expected[key]) for key, value in actual.items()
+        )
+    if isinstance(actual, list):
+        return len(actual) == len(expected) and all(
+            same_diagnostics(a, b) for a, b in zip(actual, expected, strict=True)
+        )
+    if isinstance(actual, float):
+        return (
+            math.isfinite(actual)
+            and math.isfinite(expected)
+            and math.isclose(actual, expected, rel_tol=0.0, abs_tol=1e-15)
+        )
+    return actual == expected
+
+
 def main() -> None:
     """Recompute every scientific/control gate from the retained raw results."""
     root = Path(__file__).resolve().parent
@@ -33,14 +54,16 @@ def main() -> None:
                 qualification(sample, native["protocol"], point["reference"])
                 for sample in native["samples"]
             ]
-            assert checks == point["checks"]
+            assert same_diagnostics(checks, point["checks"])
             assert all(c["execution_gate"] for c in checks)
         checked = [
             p["carbon"] for p in series["points"] if p["checks"][0]["accuracy_gate"]
         ]
         assert checked == [2], checked
     attach_fast(summary, summary["fast"])
-    assert summary == original, "stored matched-control diagnostics differ"
+    assert same_diagnostics(summary, original), (
+        "stored matched-control diagnostics differ"
+    )
     assert all(completed_times(point) for point in summary["fast"]["points"])
     for point in summary["fast"]["points"]:
         assert point["native"]["samples"][0]["convergence"]["arithmetic_request"] == (

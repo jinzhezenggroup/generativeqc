@@ -73,10 +73,10 @@
       "sha256": "9e9e0ae9676e9ad45591ee8643841d040a9c76879f34456c9ac1a73bc4798dcf"
     },
     {
-      "bytes": 4390,
+      "bytes": 5251,
       "path": "verify.py",
       "role": "reproduction",
-      "sha256": "7f3e7bea85fd5822867ab2da2068cb690e41789afb4a48ccdf317ebdf60d9ae9"
+      "sha256": "c9b39f93eb4929abb28e4e5809db1b73213550fcd99b8bacfcf0b0d8ff547641"
     }
   ],
   "reproduction": {
