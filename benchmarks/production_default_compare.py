@@ -848,10 +848,7 @@ def main(argv: list[str] | None = None) -> None:
         if not args.comparisons:
             parser.error("render requires --comparisons")
         comparisons = [json.loads(path.read_text()) for path in args.comparisons]
-        if any(
-            record.get("schema") != COMPARISON_SCHEMA
-            for record in comparisons
-        ):
+        if any(record.get("schema") != COMPARISON_SCHEMA for record in comparisons):
             raise ValueError("cannot render an unverified/older comparison schema")
         args.output.parent.mkdir(parents=True, exist_ok=True)
         table = main_table_markdown(comparisons)

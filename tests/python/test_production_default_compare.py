@@ -25,12 +25,14 @@ def receipt(arm: str, *, grid_response: bool | None = None) -> dict[str, Any]:
                 "points": 200 + i,
                 **(
                     {"version": 4, "level": 3, "pruning": "nwchem"}
-                    if arm in runner.NATIVE_ARMS else {}
+                    if arm in runner.NATIVE_ARMS
+                    else {}
                 ),
             },
             **(
                 {"grid_source": "implicit-native-default"}
-                if arm in runner.NATIVE_ARMS else {}
+                if arm in runner.NATIVE_ARMS
+                else {}
             ),
             "selected_candidate_precision": "fp64" if arm == "standard" else "auto",
         }
