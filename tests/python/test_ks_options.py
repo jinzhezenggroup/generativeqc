@@ -635,7 +635,7 @@ def test_semantic_abi_serializes_nonlocal_primitive_without_named_method_branch(
     assert tight.grid == GridSpec.treutler(4)
     assert tight.nonlocal_grid == GridSpec.treutler(3)
     assert tight.has_separate_nonlocal_grid
-    transport = native_ks_options(tight)
+    transport = native_ks_options(tight)._extension_owner
     assert transport.nonlocal_grid_version == 1
     assert transport.nonlocal_grid.contents.grid_version == 4
     assert transport.nonlocal_grid.contents.radial_points == 3
