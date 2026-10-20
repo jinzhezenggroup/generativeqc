@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-10-19
 
+The private-packet claims in the original evidence below are superseded by the
+2026-10-20 post-merge correction at the end of this note.
+
 ## Problem and decision
 
 Refs #2296. The original host test sliced a CUDA wrapper by signature/namespace
@@ -118,3 +121,47 @@ Extend real-device qualification for any kernel, synchronization, math, cache
 lifetime or dispatch change. Host recording cannot qualify those changes.
 Preserve the reducer rationale in
 [the endpoint integration note](2026-10-10-ordered-diis-endpoint-integration.md).
+
+## Post-merge correction: private packet is not the public ABI (2026-10-20)
+
+PR #2621 merged as `1e0aed564c27af8a2fd6b7cb3ee93e71d1691fd7` while
+review thread `PRRT_kwDOUFEw6s6uBPJ8` remained unresolved. The historical
+payload/routing claims above describe that delivered observer, not the corrected
+admission contract. The recorder decoded positions 0 through 19 of a private
+kernel packet; a consistent reorder of the final two producer parameters and
+their call arguments made the required test fail despite preserving semantics.
+Not naming the kernel was insufficient to make this a public-ABI test.
+
+The corrected recorder treats the private packet as opaque. It retains the
+explicit public grid, block, shared-memory size and stream checks, actual DSO
+interception, zero submissions on rejection and mandatory positive submission.
+It removes private packet decoding, the memcpy helper and expected payload
+fields. Public admission, all 37 rejections, three original admissions, borrowed
+state, unreadable addresses, optional-input invocation and the independent
+300-case byte oracle remain. The original 378 arithmetic cases, existing device
+output tests, production code, CMake and required CI configuration are unchanged.
+
+The opt-in producer reorder is migration evidence, not a new permanent source
+shape or packet schema gate. The diagnostic API-only observer accepts both the
+original producer and its consistent reorder, and rejects admission-nbf
+misrouting. Private kernel-nbf misrouting survives that observer: no-GPU
+admission cannot establish kernel data, normalization or work-record routing.
+The earlier claim that all 29 controls are rejected must not be transferred to
+the corrected observer. Current device-routing qualification is UNAVAILABLE;
+retaining the existing device-output test does not constitute a new GPU PASS.
+The finite test-contract correction neither changes production numerics nor
+relaxes their independent device/scientific acceptance gates. Refs #2296; its
+remaining migrations stay open.
+
+The complete cleaned driver was subsequently compiled from a snapshot based on
+`27b79cc8006ec65ff721a259986a7b9c23db1a34`. All 2,382 archived input files were
+checked against their Git blobs with LF conversion disabled. Baseline and
+corrected component-DSO CTests pass; the unchanged arithmetic pytest passes its
+378 scenarios. The corrected driver also passes helper rename and consistent
+private-parameter reorder. All 25 guard mutations, wrapper bypass, admission-nbf
+misrouting and missing interception are rejected (28 controls); private
+kernel-nbf misrouting survives as expected. Clang-format passes. Verified
+sccache 0.16.0 launcher commands and before/after statistics are retained with
+the opt-in receipts under `postmerge-lf-receipts` in the directory above.
+This local component build retains the earlier generated SDK and does not
+replace required CI execution against the complete production shared library.
