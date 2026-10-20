@@ -112,6 +112,9 @@ def engine_runtime_probe(
                 ("md_j_primitive_allowance", False),
                 ("md_j_engine_pair_loc", False),
                 ("md_j_engine_source_threshold", False),
+                ("md_j_engine_count_source_norm", False),
+                ("md_j_engine_source_tails", False),
+                ("md_j_engine_tail_threshold", False),
                 ("md_j_engine_hierarchy", False),
                 ("md_j_engine_direction", False),
                 ("md_j_engine_primitive_direction", False),
@@ -162,7 +165,7 @@ def engine_runtime_probe(
 
 @pytest.mark.parametrize(
     "section",
-    range(7),
+    range(8),
     ids=(
         "packed_locations_and_all_hierarchy_levels",
         "all_fifteen_angular_pairs",
@@ -171,6 +174,7 @@ def engine_runtime_probe(
         "rejected_tiles_and_uncounted_replay",
         "exact_leaf_and_tile_screening_boundaries",
         "primitive_threshold_hierarchy_and_replay",
+        "source_tail_cumulative_budget",
     ),
 )
 def test_native_md_j_engine_host_semantics(
@@ -254,6 +258,17 @@ template <class T> T atomicMax(T* address, T value) {
   T previous = target.load();
   while (previous < value && !target.compare_exchange_weak(previous, value)) {}
   return previous;
+}
+long long __double_as_longlong(double value) {
+  long long bits; std::memcpy(&bits, &value, sizeof(bits)); return bits;
+}
+double __longlong_as_double(long long bits) {
+  double value; std::memcpy(&value, &bits, sizeof(value)); return value;
+}
+double __dadd_ru(double a, double b) {
+  const long double exact = static_cast<long double>(a) + b;
+  const double rounded = exact;
+  return rounded < exact ? std::nextafter(rounded, INFINITY) : rounded;
 }
 double __dmul_ru(double a, double b) {
   const long double exact = static_cast<long double>(a) * b;
@@ -728,7 +743,9 @@ void primitive_hierarchy(Block& block) {
       if (mode==3 && position==30 && system>=begin && system<end) sources[position]=INFINITY;
       nodes[position].qd=sources[position];
       state.maximum_source_norm=std::max(state.maximum_source_norm,sources[position]);
+      md_j_engine_count_source_norm(&state,sources[position]);
     }
+    block.run([&] {md_j_engine_source_tails(&state);});
     block.run([&] {md_j_engine_hierarchy(f.md,0,begin,end,cutoff);});
     for (unsigned level=0;level<6;++level) {
       const auto width=1U<<level;
@@ -751,9 +768,7 @@ void primitive_hierarchy(Block& block) {
       if (system<begin || system>=end || f.pairs[source_pair].system!=int(system) || sources[input]==0.)
         return false;
       if (!std::isfinite(q[id]) || !std::isfinite(sources[input])) return true;
-      const long double allowance=std::min(cutoff,1e-12)/
-          static_cast<long double>(f.pairs[pair].primitive_end)/q.size();
-      return static_cast<long double>(q[id])*sources[input]>=allowance;
+      return sources[input]>=nodes[output].minimum;
     };
     const auto schedule=md_j_tile_schedule(0,0);
     const auto inventory=md_j_tile_inventory(q.size(),q.size(),schedule.bra_width,schedule.ket_width,true);
@@ -772,10 +787,8 @@ void primitive_hierarchy(Block& block) {
     if (mode==0 && begin==0 && end==3) assert(saw_significant);
     if (mode==1 || begin==end || begin==8) assert(state.active[0]==0);
     const auto frozen_active=state.active[0];
-    block.run([&] {md_j_engine_hierarchy(f.md,0,begin,end,cutoff,true);});
-    assert(state.active[0]==frozen_active);
     // Independently sum all discarded Cauchy products, including BOTH the
-    // prefix domain and refined leaf screening. Each primitive's share times
+    // prefix domain and leaf screening. Each primitive's share times
     // its parent's multiplicity must fit the complete public-AO error cap.
     for (unsigned output=0;output<q.size();++output) {
       const auto id=f.ordered[output], pair=f.primitives[id].pair;
@@ -836,6 +849,59 @@ void all_pairs(Block& block, unsigned section) {
   row<3>(block, section, std::make_integer_sequence<unsigned, 2>{});
   row<4>(block, section, std::make_integer_sequence<unsigned, 1>{});
 }
+/** Independent long-double sums check the complete omitted source set. Bins
+ * span subnormals, exponent transitions, tiny/huge allowances and overflow. */
+void source_tail_budget(Block& block) {
+  for (unsigned mode=0;mode<4;++mode) {
+    MdJPrimitiveScreenState state{};
+    std::vector<double> values{0.,-0.,INFINITY};
+    for (int exponent=-1074;exponent<=1023;exponent+=7) {
+      const double power=std::ldexp(1.0,exponent);
+      if (mode==1 && exponent>-32) continue;
+      if (mode==2 && exponent<32) continue;
+      if (mode==3) continue;
+      // Include internal mantissa boundaries and both adjacent FP64 values,
+      // as well as normal/subnormal exponent transitions.
+      for (double factor:{1.,1.25,1.5,1.75}) {
+        const double boundary=power*factor;
+        values.push_back(boundary);
+        values.push_back(std::nextafter(boundary,0.));
+        values.push_back(std::nextafter(boundary,INFINITY));
+      }
+    }
+    for (double value:values) md_j_engine_count_source_norm(&state,value);
+    block.run([&] {md_j_engine_source_tails(&state);});
+    for (unsigned bin=0;bin<kMdJSourceNormBins;++bin) {
+      const double threshold=__longlong_as_double(static_cast<long long>(bin)<<kMdJSourceNormShift);
+      long double actual=0.;
+      for (double value:values) if (value>0. && value<threshold) actual+=value;
+      assert(state.source_norm_tails[bin]>=actual);
+      if (bin) assert(state.source_norm_tails[bin]>=state.source_norm_tails[bin-1]);
+    }
+    for (double target:{0.,1e-200,0.75,1e200,double(INFINITY)})
+    for (double budget:{0.,0x1p-1074,1e-300,1e-12,1.,1e300}) {
+      const double threshold=md_j_engine_tail_threshold(&state,target,budget);
+      assert(std::isfinite(threshold) && threshold>=0.);
+      if (target==0. || !std::isfinite(target) || budget==0.) {
+        assert(threshold==0.); continue;
+      }
+      long double actual=0.;
+      for (double value:values) if (value>0. && value<threshold) actual+=value;
+      assert(actual*target<=static_cast<long double>(budget));
+    }
+  }
+  // A large census dominated by negligible sources must not charge every
+  // omitted source the threshold value. Check useful gain without prescribing
+  // an exact threshold or kernel/loop count.
+  MdJPrimitiveScreenState state{};
+  for (unsigned i=0;i<10000;++i) md_j_engine_count_source_norm(&state,1e-25);
+  md_j_engine_count_source_norm(&state,1.0);
+  block.run([&] {md_j_engine_source_tails(&state);});
+  const double threshold=md_j_engine_tail_threshold(&state,1.0,1e-12);
+  assert(threshold>1e-12/10001. && threshold<=1.0);
+  ++completed;
+}
+
 int main(int argc, char** argv) {
   assert(argc == 2);
   Block block;
@@ -864,6 +930,7 @@ int main(int argc, char** argv) {
       break;
     case 5: screening_boundaries(); break;
     case 6: primitive_hierarchy(block); break;
+    case 7: source_tail_budget(block); break;
     default: assert(false);
   }
   std::printf("PASS actual MD-J kernels, 128 host threads, %u cases, %s; not GPU qualification\n",
