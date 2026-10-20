@@ -12,6 +12,10 @@ namespace generativeqc::scf {
  */
 struct DfShellBasisView {
   DfDerivativeBasisView basis;
+  // Both orbital and auxiliary metadata may use six-term packing when the
+  // complete auxiliary basis includes g. This view still dispatches only its
+  // s/p/d/f shell subset, retaining original public AO offsets.
+  std::size_t expansion_terms{3};
   const std::int32_t* shell_ids{};
   const std::int64_t* ao_offsets{};
   std::size_t begin[4]{}, count[4]{};

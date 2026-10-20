@@ -281,6 +281,11 @@
       "owner": "README default-grid complete endpoint measurements",
       "reason": "All 256 stock-configuration receipts retain actual E/F arrays, cold/warm samples, Fast audit/fallback work, all 64 unsupported DF populations and the partial reference warm failure. No scientific qualification is inferred; large logs stay ignored and limits are unchanged.",
       "review_document": "benchmarks/results/readme-defaults-20261020/README.md"
+    },
+    "df-g-shell-20261021": {
+      "owner": "default auxiliary-g response partition qualification",
+      "reason": "Lossless original20 complete endpoint samples, dense independent references, baseline comparisons,34-test GPU result and failed packaging attempt, source/library/cache identities and executed shell/g-remainder work trace. No external archive or increased storage budget. Six existing evidence payloads are losslessly compressed to keep the aggregate cap.",
+      "review_document": "benchmarks/results/df-g-shell-20261021/README.md"
     }
   },
   "files": [
@@ -571,6 +576,46 @@
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
+    },
+    {
+      "path": "benchmarks/results/df-g-shell-20261021/receipts.json.xz",
+      "family": "df-g-shell-20261021",
+      "bytes": 169040,
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts"
+    },
+    {
+      "bytes": 163839,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ecp-policy-171",
+      "path": "benchmarks/results/ecp-policy-171/baseline-source-identity.json",
+      "role": "source-provenance",
+      "sha256": "b6d64658b7af26627a3eb91da6d0186b7223259bc70daca7a310c3d89c05d0fb"
+    },
+    {
+      "bytes": 164181,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ecp-policy-171",
+      "path": "benchmarks/results/ecp-policy-171/candidate-source-identity.json",
+      "role": "source-provenance",
+      "sha256": "8b714e66cc0efb7a41d5bafcf20aef88cd2a2cadfdf987427104419a38daa71a"
+    },
+    {
+      "bytes": 164181,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ecp-policy-171",
+      "path": "benchmarks/results/ecp-policy-171/compatibility/candidate-source-identity.json",
+      "role": "source-provenance",
+      "sha256": "76342f9fc7c4486428d813fee960699c637a7842e9a17f688d8ff89b2991ce16"
+    },
+    {
+      "bytes": 152798,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ecp-real-f-171",
+      "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
+      "role": "source-provenance",
+      "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
