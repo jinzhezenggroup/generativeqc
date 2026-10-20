@@ -150,6 +150,10 @@ def render(records: list[dict], destination: Path) -> list[dict]:
     revisions = {row["source_revision"] for row in rows}
     if len(revisions) != 1 or None in revisions:
         raise ValueError("mixed or missing measured revisions")
+    repeat_counts = {record["warm_repeats"] for record in records}
+    if len(repeat_counts) != 1:
+        raise ValueError("mixed warm repeat counts")
+    warm_repeats = next(iter(repeat_counts))
     destination.mkdir(parents=True, exist_ok=True)
     with plt.rc_context(
         {
@@ -221,7 +225,7 @@ def render(records: list[dict], destination: Path) -> list[dict]:
                     )
                     for style, marker, label in (
                         ("-", "o", "Cold"),
-                        ("--", "s", "Warm median (3 calls)"),
+                        ("--", "s", f"Warm median ({warm_repeats} calls)"),
                     )
                 ]
             )

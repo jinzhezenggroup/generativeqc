@@ -101,6 +101,11 @@ def test_renderer_rejects_mixed_revisions_and_duplicate_populations(
         render([one, two], tmp_path)
     with pytest.raises(ValueError, match="duplicate"):
         render([one, one], tmp_path)
+    two["source_revision"] = one["source_revision"]
+    two["warm_repeats"] = 2
+    two["samples"].pop()
+    with pytest.raises(ValueError, match="warm repeat"):
+        render([one, two], tmp_path)
 
 
 def test_native_public_mode_and_default_grid_selection(
