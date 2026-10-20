@@ -78,6 +78,10 @@ extern "C" int pipeline_j(unsigned nshell,unsigned nbf,const double* positions,
     pair.primitive_begin=primitives.size();
     for(auto a=primitive_offsets[first];a<primitive_offsets[first+1];++a)
       for(auto b=primitive_offsets[second];b<primitive_offsets[second+1];++b) {
+        // The production transform represents both exchanged primitives for a
+        // same-shell off-diagonal pair. Feed it that triangular inventory;
+        // independent libcint still determines the expected full contracted J.
+        if(first==second && b>a) continue;
         MdJPrimitive primitive{};
         primitive.pair=pairs.size(); primitive.first=a; primitive.second=b;
         primitive.transform_offset=transform_count;
