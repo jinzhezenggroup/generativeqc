@@ -32,7 +32,8 @@ if TYPE_CHECKING:
         NonlocalCorrelationSpec,
     )
 
-THRESHOLD = 1e-8
+# Exercise the current molecular domain, including its exact inclusive boundary.
+THRESHOLD = 1e-10
 COEFFICIENT = Fraction(3, 5)
 
 
