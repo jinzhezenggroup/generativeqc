@@ -563,14 +563,19 @@ def test_fast_plot_precision_provenance_includes_bounded_fp64_fallback(
         attach_fast(control, fast)
 
 
-def test_frozen_verifier_allows_only_reduction_roundoff() -> None:
+@pytest.mark.parametrize(
+    "campaign", ("readme-cbs-fast-20261020", "cbs-fast-diagnosis-20261021")
+)
+def test_frozen_verifier_allows_only_reduction_roundoff(campaign: str) -> None:
     """Portable derived diagnostics must retain exact gates and raw integrity."""
     import runpy
 
     module = runpy.run_path(
         str(
             Path(__file__).resolve().parents[2]
-            / "benchmarks/results/readme-cbs-fast-20261020/verify.py"
+            / "benchmarks/results"
+            / campaign
+            / "verify.py"
         )
     )
     same = module["same_diagnostics"]

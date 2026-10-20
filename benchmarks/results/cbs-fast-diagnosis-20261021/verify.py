@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,27 @@ from benchmarks.df_lambda_core_reuse_ablation import trace_categories
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_json
 from tools.render_readme_cbs import constituents, qualification
+
+
+def same_diagnostics(actual: object, expected: object) -> bool:
+    """Allow only reduction roundoff; raw receipt bytes and gates stay exact."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(
+            same_diagnostics(value, expected[key]) for key, value in actual.items()
+        )
+    if isinstance(actual, list):
+        return len(actual) == len(expected) and all(
+            same_diagnostics(a, b) for a, b in zip(actual, expected, strict=True)
+        )
+    if isinstance(actual, float):
+        return (
+            math.isfinite(actual)
+            and math.isfinite(expected)
+            and math.isclose(actual, expected, rel_tol=0.0, abs_tol=1e-15)
+        )
+    return actual == expected
 
 
 def main() -> None:
@@ -52,7 +74,7 @@ def main() -> None:
             else None
         )
         check = qualification(sample, receipt["protocol"], oracle)
-        assert check == data["checks"][name]
+        assert same_diagnostics(check, data["checks"][name])
         assert check["execution_gate"] and check["accuracy_gate"] is not False
         if receipt["policy"] != "fast":
             continue
@@ -74,7 +96,7 @@ def main() -> None:
             budget = sample["convergence"][
                 "budget" if key == "composite" else "component_budget"
             ]
-            assert recorded == dict(errors, budget=budget)
+            assert same_diagnostics(recorded, dict(errors, budget=budget))
             assert all(value <= budget[k] for k, value in errors.items())
     with tempfile.TemporaryDirectory() as directory:
         for name, profile in profiles.items():
