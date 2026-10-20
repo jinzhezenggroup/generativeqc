@@ -261,6 +261,16 @@ passthrough `resident_run` must preserve the complete tensor arena. A control
 retargets only status reset/readback to the arena and is rejected by this public
 upload/run combination; no additional private status-member getter is required.
 
+A positive split-readback control exposed an implementation-shape constraint in
+the former per-transaction byte-count observer: a legal contiguous 2+2 status
+readback ran successfully but was rejected for not using one full-width call.
+There is no single-SDK-transaction requirement here. The observer now validates
+complete native-status byte coverage under a consistent contiguous device/host
+mapping, accepting legal fragments, orderings and duplicate coverage without a
+fixed call count or transaction size. Zero/short/inconsistent coverage remains
+rejected. The former observer's positive RED receipt is distinct from negative
+damage controls; source qualification must use the corrected coverage oracle.
+
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
 test timed out. That run was interrupted and is not an acceptance result. A later

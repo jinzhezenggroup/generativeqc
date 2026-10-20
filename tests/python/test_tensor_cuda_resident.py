@@ -143,7 +143,7 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         assert lib.host_synchronizations() > before
         assert lib.host_pending_work() == 0
         assert lib.host_copy_matches(0)
-        assert lib.host_copy_bytes_match(ctypes.sizeof(ctypes.c_int))
+        assert lib.host_copy_covers(ctypes.sizeof(ctypes.c_int))
         assert metrics.owned_device_bytes == 4096
         for failure in (1, 2, 3):
             lib.host_failure(failure)
@@ -404,6 +404,7 @@ def test_resident_control_span_transfers(
     "mutation",
     [
         "format",
+        "split_status",
         "abi",
         "diagnostic",
         "run_sync",
@@ -445,6 +446,16 @@ def test_resident_host_oracle_controls(
                 source.replace("resident_inputs", "input_spans")
                 .replace("resident_outputs", "output_spans")
                 .replace("ULL,", "ULL,\n  ")
+            )
+        if mutation == "split_status":
+            return source.replace(
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream));",
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int)/2,"
+                "cudaMemcpyDeviceToHost,ctx.stream));"
+                "cuda_check(cudaMemcpyAsync(reinterpret_cast<unsigned char*>(&arithmetic_error)+sizeof(int)/2,"
+                "reinterpret_cast<unsigned char*>(ctx.error)+sizeof(int)/2,sizeof(int)-sizeof(int)/2,"
+                "cudaMemcpyDeviceToHost,ctx.stream));",
             )
         if mutation == "status":
             return source.replace(
@@ -613,7 +624,7 @@ def test_resident_host_oracle_controls(
             _assert_resident_abi(plan, lib)
         return
     _assert_resident_abi(plan, lib)
-    if mutation == "format":
+    if mutation in ("format", "split_status"):
         _assert_resident_spans(plan, lib)
     else:
         with pytest.raises(AssertionError):

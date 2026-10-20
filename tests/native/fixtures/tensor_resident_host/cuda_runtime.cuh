@@ -51,11 +51,13 @@ inline int failure = 0, synchronizations = 0;
 struct CopyObservation {
   int kind;
   size_t bytes;
+  std::uintptr_t source, target;
 };
 inline std::vector<CopyObservation> copies;
 inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, int stream) {
   if (stream != 73) throw std::runtime_error("wrong owner stream");
-  copies.push_back({kind, bytes});
+  copies.push_back(
+      {kind, bytes, reinterpret_cast<std::uintptr_t>(from), reinterpret_cast<std::uintptr_t>(to)});
   if (bytes && (!to || !from)) return 7;
   const bool dst_device = device_bytes(to, bytes), src_device = device_bytes(from, bytes);
   const bool roles_match = kind == cudaMemcpyHostToDevice     ? dst_device && !src_device
@@ -237,8 +239,23 @@ extern "C" int host_copy_matches(int upload) {
          std::all_of(copies.begin(), copies.end(),
                      [expected](const CopyObservation& copy) { return copy.kind == expected; });
 }
-extern "C" int host_copy_bytes_match(size_t bytes) {
-  return !copies.empty() &&
-         std::all_of(copies.begin(), copies.end(),
-                     [bytes](const CopyObservation& copy) { return copy.bytes == bytes; });
+extern "C" int host_copy_covers(size_t bytes) {
+  // Complete contiguous object coverage, independent of SDK transaction shape.
+  for (const auto& origin : copies) {
+    if (origin.kind != cudaMemcpyDeviceToHost || !origin.bytes ||
+        !device_bytes(reinterpret_cast<const void*>(origin.source), bytes))
+      continue;
+    std::vector<bool> covered(bytes, false);
+    for (const auto& copy : copies) {
+      if (copy.kind != cudaMemcpyDeviceToHost || copy.source < origin.source ||
+          copy.target < origin.target)
+        continue;
+      const auto offset = copy.source - origin.source;
+      if (copy.target - origin.target != offset || offset >= bytes || copy.bytes > bytes - offset)
+        continue;
+      std::fill(covered.begin() + offset, covered.begin() + offset + copy.bytes, true);
+    }
+    if (std::all_of(covered.begin(), covered.end(), [](bool byte) { return byte; })) return 1;
+  }
+  return 0;
 }
