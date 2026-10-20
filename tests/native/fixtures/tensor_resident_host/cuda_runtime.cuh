@@ -2,7 +2,9 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -11,38 +13,84 @@
 #include "metrics.hpp"
 
 enum { cudaMemcpyHostToDevice, cudaMemcpyDeviceToHost, cudaMemcpyDeviceToDevice };
+struct DeviceRange {
+  const void* owner;
+  std::uintptr_t begin;
+  size_t bytes;
+};
+inline std::vector<DeviceRange> device_ranges;
+inline bool device_bytes(const void* pointer, size_t bytes) {
+  const auto address = reinterpret_cast<std::uintptr_t>(pointer);
+  return std::any_of(device_ranges.begin(), device_ranges.end(), [&](const DeviceRange& range) {
+    return address >= range.begin && address - range.begin <= range.bytes &&
+           bytes <= range.bytes - (address - range.begin);
+  });
+}
 struct PendingCopy {
   void* to;
   const void* from;
   size_t bytes;
+  size_t sequence;
+};
+struct EventRecord {
+  int stream;
+  size_t watermark;
 };
 inline std::vector<PendingCopy> pending;
+inline std::map<int, EventRecord> events;
+inline size_t submitted = 0;
+inline int next_event = 0;
 inline int failure = 0, synchronizations = 0;
 inline std::vector<int> copy_kinds;
 inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, int stream) {
   if (stream != 73) throw std::runtime_error("wrong owner stream");
   copy_kinds.push_back(kind);
+  if (bytes && (!to || !from)) return 7;
+  const bool dst_device = device_bytes(to, bytes), src_device = device_bytes(from, bytes);
+  const bool roles_match = kind == cudaMemcpyHostToDevice     ? dst_device && !src_device
+                           : kind == cudaMemcpyDeviceToHost   ? !dst_device && src_device
+                           : kind == cudaMemcpyDeviceToDevice ? dst_device && src_device
+                                                              : false;
+  if (!roles_match) return 7;
   if (failure == 1) return 7;
-  pending.push_back({to, from, bytes});
+  pending.push_back({to, from, bytes, ++submitted});
   return 0;
 }
-inline int cudaStreamSynchronize(int stream) {
-  if (stream != 73) throw std::runtime_error("wrong owner stream");
+inline int finish_copies(size_t watermark) {
   ++synchronizations;
   if (failure == 2) {
     pending.clear();
     return 7;
   }
-  for (auto copy : pending) std::memcpy(copy.to, copy.from, copy.bytes);
-  pending.clear();
+  pending.erase(std::remove_if(pending.begin(), pending.end(),
+                               [=](const PendingCopy& copy) {
+                                 if (copy.sequence > watermark) return false;
+                                 std::memcpy(copy.to, copy.from, copy.bytes);
+                                 return true;
+                               }),
+                pending.end());
   return 0;
 }
-inline int cudaMemsetAsync(void* p, int value, size_t bytes, int) {
+inline int cudaStreamSynchronize(int stream) {
+  if (stream != 73) throw std::runtime_error("wrong owner stream");
+  return finish_copies(submitted);
+}
+inline int cudaMemsetAsync(void* p, int value, size_t bytes, int stream) {
+  if (stream != 73 || !device_bytes(p, bytes)) return 7;
   std::memset(p, value, bytes);
   return 0;
 }
-inline int cudaEventRecord(int, int) { return 0; }
-inline int cudaEventSynchronize(int) { return cudaStreamSynchronize(73); }
+inline int cudaEventRecord(int event, int stream) {
+  if (stream != 73) return 7;
+  events[event] = {stream, submitted};
+  return 0;
+}
+inline int cudaEventSynchronize(int event) {
+  const auto record = events.find(event);
+  if (record != events.end() && record->second.stream != 73) return 7;
+  // A recorded event captures preceding work, not later stream submissions.
+  return finish_copies(record == events.end() ? 0 : record->second.watermark);
+}
 inline int cudaEventElapsedTime(float* time, int, int) {
   *time = 0;
   return 0;
@@ -64,11 +112,21 @@ struct Context {
   unsigned char* arena;
   int arithmetic_error = 0;
   int* error = &arithmetic_error;
-  int device = 0, stream = 73, begin = 0, end = 0;
+  int device = 0, stream = 73, begin = ++next_event, end = ++next_event;
   bool static_ready = true;
   Metrics metrics;
   explicit Context(size_t bytes) : storage(bytes, 0xa5), arena(storage.data()) {
     metrics.owned_device_bytes = bytes;
+    device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(arena), bytes});
+    device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(error), sizeof(int)});
+  }
+  ~Context() {
+    device_ranges.erase(
+        std::remove_if(device_ranges.begin(), device_ranges.end(),
+                       [this](const DeviceRange& range) { return range.owner == this; }),
+        device_ranges.end());
+    events.erase(begin);
+    events.erase(end);
   }
   void check_device() {
     if (failure == 3) throw std::runtime_error("injected device mismatch");

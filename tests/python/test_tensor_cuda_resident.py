@@ -284,6 +284,8 @@ def test_resident_control_span_transfers(
         "diagnostic",
         "run_sync",
         "run_kind",
+        "run_endpoints",
+        "event_position",
         "early_sync",
         "kind",
         "offset",
@@ -329,6 +331,18 @@ def test_resident_host_oracle_controls(
                 "cudaMemcpyDeviceToHost, ctx.stream",
                 "cudaMemcpyHostToDevice, ctx.stream",
             )
+        if mutation == "run_endpoints":
+            return source.replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                "cudaMemcpyAsync(ctx.error, &arithmetic_error, sizeof(int),",
+            )
+        if mutation == "event_position":
+            return source.replace(
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));", ""
+            ).replace(
+                "int arithmetic_error = 0;",
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream)); int arithmetic_error = 0;",
+            )
         if mutation == "early_sync":
             return source.replace(
                 "cuda_check(cudaEventSynchronize(ctx.end));", ""
@@ -361,7 +375,15 @@ def test_resident_host_oracle_controls(
         transform,
         header_transform=wrong_kind if mutation == "kind" else None,
     )
-    if mutation in ("abi", "diagnostic", "run_sync", "run_kind", "early_sync"):
+    if mutation in (
+        "abi",
+        "diagnostic",
+        "run_sync",
+        "run_kind",
+        "run_endpoints",
+        "event_position",
+        "early_sync",
+    ):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)
         return

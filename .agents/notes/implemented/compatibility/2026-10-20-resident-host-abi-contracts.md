@@ -125,10 +125,38 @@ control changes only that generated readback direction, independently of the
 copied-header upload/download direction control. This tests status transport,
 not arithmetic correctness or device execution.
 
-With that readback-kind check, the final source-matched Linux gate passed 161
+With that readback-kind check, the `4aae37118` Linux gate passed 161
 cases with 19 explicit CUDA-device opt-in skips, including all 31 resident cases
 and ten opt-in controls. Test/helper/fixture committed LF blobs were checked
 against the qualified source hashes; the host-only boundary remains unchanged.
+
+Reviews `PRRT_kwDOUFEw6s6uNo4I` and `PRRT_kwDOUFEw6s6uNo4Q` identified two more
+dependency-model gaps: zero-valued reversed status-copy endpoints could pass, and
+an end event recorded before the readback incorrectly drained later copies. The
+fake owner now registers its arena and error storage as logical device ranges;
+the CUDA copy dependency rejects direction/endpoint mismatches. Events capture
+their stream and a monotonic copy-queue watermark, and event synchronization only
+completes that captured prefix. Distinct event identities avoid conflating begin
+and end. Stream synchronization still drains all submitted copies. This models
+only the required host transport boundary, not a general CUDA runtime or kernels.
+
+Dedicated opt-in controls reverse the generated status-copy pointers and move end
+event recording ahead of the readback. The queue semantics follow the
+[CUDA 12.9.1 event API](https://docs.nvidia.com/cuda/archive/12.9.1/cuda-runtime-api/group__CUDART__EVENT.html):
+recording captures existing work, later submissions are excluded, and a newly
+created unrecorded event has no captured work. Logical endpoint admission follows
+the public [copy-direction contract](https://docs.nvidia.com/cuda/archive/12.9.1/cuda-runtime-api/group__CUDART__MEMORY.html),
+without claiming an exact device error code.
+
+The complete source-matched Linux gate with this dependency model passed 163
+cases with 19 explicit CUDA-device opt-in skips, including all 33 resident cases
+and twelve opt-in controls. Against the previous `4aae37118` dependency fixture,
+the two new controls fail with `DID NOT RAISE AssertionError`, reproducing both
+false positives. Restore the qualified fixture before using the acceptance gate;
+these old-model red results are retained negative evidence, not final acceptance.
+After restoring the qualified source hashes, both controls passed (2 passed,
+31 deselected). The full-gate cache delta was 18 compilations/misses and zero
+failures; this establishes cache use rather than cache hits or GPU acceptance.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
