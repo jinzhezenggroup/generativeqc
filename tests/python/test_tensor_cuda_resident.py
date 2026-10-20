@@ -128,10 +128,12 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
     owner = lib.host_owner(4096)
     try:
         # Calls resolve every required public export with its actual C signature.
+        lib.host_clear_copy_kinds()
         before = lib.host_synchronizations()
         assert lib.resident_run(owner, 0, result, error, len(error)) == 0, error.value
         assert lib.host_synchronizations() > before
         assert lib.host_pending_copies() == 0
+        assert lib.host_copy_matches(0)
         assert metrics.owned_device_bytes == 4096
         for pointer, metrics in ((None, result), (owner, None)):
             error.value = b""
@@ -281,6 +283,7 @@ def test_resident_control_span_transfers(
         "abi",
         "diagnostic",
         "run_sync",
+        "run_kind",
         "early_sync",
         "kind",
         "offset",
@@ -321,6 +324,11 @@ def test_resident_host_oracle_controls(
             )
         if mutation == "run_sync":
             return source.replace("cuda_check(cudaEventSynchronize(ctx.end));", "")
+        if mutation == "run_kind":
+            return source.replace(
+                "cudaMemcpyDeviceToHost, ctx.stream",
+                "cudaMemcpyHostToDevice, ctx.stream",
+            )
         if mutation == "early_sync":
             return source.replace(
                 "cuda_check(cudaEventSynchronize(ctx.end));", ""
@@ -353,7 +361,7 @@ def test_resident_host_oracle_controls(
         transform,
         header_transform=wrong_kind if mutation == "kind" else None,
     )
-    if mutation in ("abi", "diagnostic", "run_sync", "early_sync"):
+    if mutation in ("abi", "diagnostic", "run_sync", "run_kind", "early_sync"):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)
         return

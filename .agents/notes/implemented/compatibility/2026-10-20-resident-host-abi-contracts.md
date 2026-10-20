@@ -111,12 +111,24 @@ mask it; negative-fixture destruction discards fake pending borrowed pointers
 rather than accessing expired stack readback storage. No production code changes
 are needed for these test-contract repairs.
 
-The resulting source-matched Linux gate passed 160 cases with 19 explicit
+The `f57eb109a` source-matched Linux gate passed 160 cases with 19 explicit
 CUDA-device opt-in skips, including all 30 resident cases and nine opt-in
 controls. Wrong copy kinds, missing drains and early drains are rejected while
 the harmless table-renaming/format control passes. The normal-gate production
 resident/metrics headers remain unchanged; test/helper/fixture LF blob hashes
 match the qualified sources. This remains host evidence only.
+
+Review `PRRT_kwDOUFEw6s6uNf7G` identified the same direction-observation gap for
+the generated arithmetic-status readback. The run oracle now clears prior copy
+observations and requires every observed copy kind to be D2H. A dedicated opt-in
+control changes only that generated readback direction, independently of the
+copied-header upload/download direction control. This tests status transport,
+not arithmetic correctness or device execution.
+
+With that readback-kind check, the final source-matched Linux gate passed 161
+cases with 19 explicit CUDA-device opt-in skips, including all 31 resident cases
+and ten opt-in controls. Test/helper/fixture committed LF blobs were checked
+against the qualified source hashes; the host-only boundary remains unchanged.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
