@@ -182,3 +182,34 @@ over-convergence or hidden behind substituted auxiliaries.
 - Original default campaign: `benchmarks/results/readme-defaults-20261020/`.
 - PR #2647: default auxiliary admission and bounded warm/auditor density reuse.
 - `docs/maintainer/performance_engineering.md` for production qualification scope.
+
+## Follow-up: isolate default auxiliary and VV10 active-domain effects
+
+Same-binary n1 PBE-DF/48 diagnostic profiles retain source `02337e0cf`, the
+same orbital basis, quadrature, strict native controls and CPU thread settings.
+Changing only the auxiliary input from historical cc-pVDZ-JKFIT to the reference
+selection def2-SVP-JKFIT changes cold/warm from 13.320/2.571 s to 31.530/19.083 s.
+The old fit contains 1856 AOs and auxiliary angular momentum through f; the
+reference default contains 1808 AOs and oxygen g. Executed shell response changes
+from enabled to disabled. Three-center response increases from 0.134 to 16.602 s;
+SCF in the default warm endpoint takes only 0.237 s. This isolates an algorithmic
+fallback triggered by the default angular domain, not too many SCF iterations or
+simply a larger auxiliary dimension. Neither diagnostic fit replaces the default
+README auxiliary. Native g support is numerically complete but not yet fast.
+
+The separate WB97M-V Direct/48 reference diagnostic preserves default grids,
+convergence, incremental Fock and complete force response. Changing both SCF and
+force VV10 density cutoffs from GPU4PySCF's 1e-10 to native's current 1e-8 changes
+cold 96.362 to 94.722 s and warm median 32.342 to 31.812 s, with identical 9/1
+cold/warm SCF cycles. The roughly 1.6% warm effect does not explain the measured
+several-fold native warm advantage. The active-domain mismatch still exists;
+this experiment does not authorize describing the defaults as identical.
+
+Supplementary references refine unstable XC pairs to 5/6 (M06-2X) and 7/8
+(r2SCAN-3c) without changing any observable gate. WB97M-V adds VV10 4/5 at XC5/6;
+the larger reference is still bounded by its Slurm allocation. Offline
+qualification accepts complete consecutive denser pairs and compares CPU/GPU
+spots only at identical XC/VV10 levels. Earlier unstable, failed and partial
+receipts remain retained. The main 192-population campaign and its slower Fast
+baseline remain immutable; new Fast implementation results use distinct source
+and binary identities.

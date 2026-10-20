@@ -97,6 +97,34 @@ def test_one_inaccurate_warm_repeat_rejects_the_warm_population() -> None:
     assert q["warm"]["status"] == q["status"] == "failed"
 
 
+def test_denser_reference_uses_matching_cpu_grid_and_unchanged_gates() -> None:
+    """Finer references may resolve instability but never relax acceptance."""
+    record, oracles = campaign()
+    for sample, level in zip(oracles[0]["samples"], (5, 6), strict=True):
+        sample["level"] = sample["xc_grid"]["level"] = level
+    assert qualify([record], oracles)[0]["status"] == "qualified"
+    oracles[0]["samples"][1]["forces"][0][0] = 1e-3
+    assert qualify([record], oracles)[0]["status"] == "unverified"
+
+
+def test_mismatched_cpu_spot_grid_stays_unverified() -> None:
+    """Different quadratures cannot establish CPU/GPU implementation parity."""
+    record, oracles = campaign()
+    sample = oracles[1]["samples"][0]
+    sample["level"] = sample["xc_grid"]["level"] = 6
+    assert qualify([record], oracles)[0]["status"] == "unverified"
+
+
+@pytest.mark.parametrize("levels", [(3, 4), (5, 5), (6, 5), (5, 7)])
+def test_incomplete_or_coarse_reference_pair_is_rejected(levels: tuple) -> None:
+    """Reference refinement still requires two consecutive dense grids."""
+    record, oracles = campaign()
+    for sample, level in zip(oracles[0]["samples"], levels, strict=True):
+        sample["level"] = sample["xc_grid"]["level"] = level
+    with pytest.raises(ValueError, match="dense-grid"):
+        qualify([record], oracles)
+
+
 @pytest.mark.parametrize("failure", ["missing_cpu", "grid_unstable", "cpu_disagrees"])
 def test_untrusted_reference_cannot_qualify_production(failure: str) -> None:
     record, oracles = campaign()

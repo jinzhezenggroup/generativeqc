@@ -66,15 +66,23 @@ def _oracle(record: dict) -> None:
         raise ValueError("oracle grid stability margin differs")
     if record["status"] != "complete":
         return
-    expected = (
-        [None]
+    levels = [sample.get("level") for sample in record["samples"]]
+    # A failed grid-stability check requires denser independent references,
+    # not a larger error allowance. Preserve the original 4/5 receipts while
+    # admitting an explicitly selected, complete pair of finer grid levels.
+    valid_levels = (
+        levels == [None]
         if record["method"] == "hf"
-        else [5]
-        if record["backend"] == "cpu"
-        else [4, 5]
+        else all(type(level) is int and 4 <= level <= 9 for level in levels)
+        and (
+            len(levels) == 1
+            if record["backend"] == "cpu"
+            else len(levels) == 2 and levels[1] == levels[0] + 1
+        )
     )
-    if [sample.get("level") for sample in record["samples"]] != expected:
+    if not valid_levels:
         raise ValueError("incomplete dense-grid reference population")
+    nonlocal_levels = []
     for sample in record["samples"]:
         checked_sample(sample, {"atoms": record["atoms"], "arm": "gpu4pyscf"})
         controls = sample.get("controls", {})
@@ -91,11 +99,13 @@ def _oracle(record: dict) -> None:
             and (sample.get("xc_grid") or {}).get("level") != sample["level"]
         ):
             raise ValueError("oracle XC grid does not match its declared level")
-        if (
-            record["method"] == "wb97m-v"
-            and (sample.get("nonlocal_grid") or {}).get("level") != sample["level"] - 2
-        ):
-            raise ValueError("oracle VV10 grid does not match its declared level")
+        if record["method"] == "wb97m-v":
+            nonlocal_level = (sample.get("nonlocal_grid") or {}).get("level")
+            if type(nonlocal_level) is not int or not 2 <= nonlocal_level <= 9:
+                raise ValueError("oracle VV10 grid is missing or too coarse")
+            nonlocal_levels.append(nonlocal_level)
+    if len(nonlocal_levels) == 2 and nonlocal_levels[1] != nonlocal_levels[0] + 1:
+        raise ValueError("incomplete VV10 grid stability pair")
 
 
 def qualify(records: list[dict], oracles: list[dict]) -> list[dict]:
@@ -173,9 +183,20 @@ def qualify(records: list[dict], oracles: list[dict]) -> list[dict]:
                 stability.append(
                     _comparison(*samples, oracle["atoms"], fraction=STABILITY_FRACTION)
                 )
-        spot = _comparison(
-            cpu["samples"][-1], gpu["samples"][-1], 3, fraction=STABILITY_FRACTION
-        )
+        cpu_sample = cpu["samples"][-1]
+        # Compare implementations at identical quadratures. A CPU level-5 spot
+        # can still validate the level-5 member of a new GPU 5/6 stability pair.
+        gpu_spots = [
+            sample
+            for sample in gpu["samples"]
+            if sample["level"] == cpu_sample["level"]
+            and (sample.get("nonlocal_grid") or {}).get("level")
+            == (cpu_sample.get("nonlocal_grid") or {}).get("level")
+        ]
+        if len(gpu_spots) != 1:
+            result["reasons"].append("CPU/GPU spot quadratures differ")
+            continue
+        spot = _comparison(cpu_sample, gpu_spots[0], 3, fraction=STABILITY_FRACTION)
         result.update(grid_stability=stability, cpu_gpu_spot=spot)
         if not spot["passed"] or not all(s["passed"] for s in stability):
             result["reasons"].append(
