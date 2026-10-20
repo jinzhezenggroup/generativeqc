@@ -1,6 +1,6 @@
 # Decision: retain shell reuse around an auxiliary-g remainder
 
-Status: implemented, qualification pending
+Status: implemented, qualified on the recorded endpoint domain
 Date: 2026-10-20
 
 ## Problem and evidence
@@ -33,8 +33,31 @@ force gates and the explicit generic fallback remain mandatory.
 
 ## Qualification
 
-Pending: independent CPU complete E/F and translation gates for the full,
-partial, packet and generic routes; larger default-auxiliary cold/warm endpoints
-with source/response work accounting. No default performance claim follows
-until those checks pass. The generic g remainder can still dominate large cases;
-full g shell sharing is a distinct future optimization.
+Source `33461b49e` passes all 34 GPU tests in Slurm job 11404: independent
+complete E/F and translation gates for full, partial, packet and generic routes,
+plus existing default-auxiliary HF/KS Standard/Fast and open-shell endpoints.
+The first attempt passed 19 tests before finding a missing UKS AOT package;
+the separately retained rerun adds that package without changing the core hash.
+
+All four samples of PBE/PBE0 DF48/96 and r2SCAN-3c DF48 pass the unchanged
+energy/atom 1e-5, maximum force 1e-4 and RMS force 3e-5 gates against independent
+stable direct references. Grid stability and CPU/GPU spots use one quarter of
+those gates. Each candidate also agrees with the earlier native default-fit
+population. Oracle and native source identities remain distinct and unchanged.
+
+| Method / atoms | Previous cold / warm median (s) | Candidate (s) |
+| --- | ---: | ---: |
+| pbe / 48 | 30.577 / 19.133 | 17.129 / 5.555 |
+| pbe / 96 | 167.194 / 129.270 | 68.180 / 29.708 |
+| pbe0 / 48 | 50.469 / 38.167 | 23.380 / 10.897 |
+| pbe0 / 96 | 304.197 / 255.253 | 104.991 / 56.309 |
+| r2scan-3c / 48 | 101.397 / 70.632 | 57.032 / 26.899 |
+
+Exact timings and numerical errors are retained in the evidence bundle. These
+separate complete-endpoint populations are diagnostic comparisons, not an
+interleaved statistical comparison or proof of superiority to GPU4PySCF.
+The separately traced PBE48 warm three-center response decreases from 16.602 s
+to 3.140 s, with positive shell and auxiliary-g remainder work. The generic
+g remainder can still dominate large cases; full g shell sharing is a distinct
+future optimization. r2SCAN-3c DF96 and WB97M-V DF96 resource/work limits remain
+unresolved and are outside the completed endpoint qualification above.
