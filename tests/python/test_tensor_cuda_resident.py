@@ -7,10 +7,14 @@ instead of swallowing it. Real-device numerical parity is a separate opt-in
 suite.
 """
 
+import ctypes
+import os
+import re
 import typing
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.common.cuda_runtime import _Metrics
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import (
     Index,
@@ -29,6 +33,7 @@ from generativeqc_compiler.tensor.cuda_resident import (
     _resident_dependency_logical_name,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+from tensor_resident_host import build_resident_host
 
 TARGET = cuda_target_info("sm_80")
 
@@ -71,31 +76,216 @@ def test_resident_source_keeps_the_ordinary_abi() -> None:
     assert "tensor static data is not initialized" in external
 
 
-def test_resident_source_declares_the_resident_abi() -> None:
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    for entry in (
-        "resident_plan_identity",
-        "resident_abi",
-        "resident_upload",
-        "resident_run",
-        "resident_download",
+def _transfer_program(kind: str) -> typing.Any:
+    if kind == "pair":
+        return doubled_pair_program()
+    # Unequal lengths and item sizes catch slot swaps and hardcoded FP64 spans.
+    inputs = []
+    for name, dtype, count in (
+        ("a", "float32", 0 if kind == "empty" else 3),
+        ("b", "float64", 5),
+        ("c", "int64", 2),
     ):
-        assert entry in source, entry
-    assert "return 1;" in source
+        index = Index(name, IndexSpace(name, "occupied", count))
+        inputs.append(
+            input_tensor(
+                name,
+                TensorSpec(
+                    (index,),
+                    dtype=dtype,
+                    representation="general"
+                    if dtype == "int64"
+                    else "restricted_spatial",
+                    role="parameter",
+                    differentiable=False,
+                ),
+            )
+        )
+    return Program({f"out_{i}": value for i, value in enumerate(reversed(inputs))})
 
 
-def test_resident_spans_match_the_pinned_plan_offsets() -> None:
-    """Spans are compiled from pinned offsets; the planner must pin them."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
+@pytest.fixture(params=["pair", "mixed", "empty"])
+def resident_host(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> typing.Any:
+    """A real generated resident ABI, with CUDA/owner/kernel dependencies stubbed."""
+    plan = plan_cuda(_transfer_program(request.param), TARGET, max_bytes=1 << 26)
+    lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch)
+    return plan, lib
+
+
+def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
+    assert lib.resident_plan_identity().decode() == plan.identity + ":resident-abi-v1"
+    assert lib.resident_abi() == 1
+    error = ctypes.create_string_buffer(256)
+    metrics = _Metrics()
+    result = ctypes.byref(metrics)
+    owner = lib.host_owner(4096)
+    try:
+        # Calls resolve every required public export with its actual C signature.
+        assert lib.resident_run(owner, 0, result, error, len(error)) == 0, error.value
+        assert metrics.owned_device_bytes == 4096
+        for pointer, metrics in ((None, result), (owner, None)):
+            error.value = b""
+            assert lib.resident_run(pointer, 0, metrics, error, len(error)) != 0
+            assert error.value
+        lib.host_static_ready(owner, 0)
+        before = lib.host_synchronizations()
+        assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+        assert error.value
+        assert lib.host_synchronizations() > before
+    finally:
+        lib.host_destroy(owner)
+
+
+def test_resident_source_declares_the_resident_abi(resident_host: typing.Any) -> None:
+    _assert_resident_abi(*resident_host)
+
+
+def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
     assert all(plan.steps[i].last_use == len(plan.steps) for i in plan.inputs)
-    source = resident_source(plan)
-    for i in plan.inputs:
-        step = plan.steps[i]
-        assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
-    for _, i in plan.outputs:
-        step = plan.steps[i]
-        assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
+    slots = (
+        [plan.steps[i] for i in plan.inputs],
+        [plan.steps[i] for _, i in plan.outputs],
+    )
+    capacity = (
+        max(
+            s.offset + s.node.spec.size * s.node.spec.itemsize
+            for steps in slots
+            for s in steps
+        )
+        + 64
+    )
+    owner = lib.host_owner(capacity)
+    error = ctypes.create_string_buffer(256)
+    arena = lib.host_arena(owner)
+    try:
+        expected = bytearray([0xA5] * capacity)
+        for slot, step in enumerate(slots[0]):
+            size = step.node.spec.size * step.node.spec.itemsize
+            payload = bytes((j * 17 + slot * 43) % 256 for j in range(size))
+            host = ctypes.create_string_buffer(payload) if size else None
+            before = lib.host_synchronizations()
+            assert (
+                lib.resident_upload(owner, slot, host, size, error, len(error)) == 0
+            ), error.value
+            assert lib.host_synchronizations() > before
+            expected[step.offset : step.offset + size] = payload
+            assert ctypes.string_at(arena, capacity) == expected
+
+        # Seed the whole arena independently: downloads cannot accidentally pass
+        # by undoing an equally incorrect upload mapping.
+        raw = bytes((j * 29 + 11) % 256 for j in range(capacity))
+        ctypes.memmove(arena, raw, capacity)
+        for slot, step in enumerate(slots[1]):
+            size = step.node.spec.size * step.node.spec.itemsize
+            host = ctypes.create_string_buffer(size) if size else None
+            before = lib.host_synchronizations()
+            assert (
+                lib.resident_download(owner, slot, host, size, error, len(error)) == 0
+            ), error.value
+            assert lib.host_synchronizations() > before
+            if size:
+                assert host.raw == raw[step.offset : step.offset + size]
+            assert ctypes.string_at(arena, capacity) == raw
+
+        for transfer, steps in zip(
+            (lib.resident_upload, lib.resident_download), slots, strict=True
+        ):
+            step = max((s for s in steps if s.node.spec.size), key=lambda s: s.offset)
+            slot = steps.index(step)
+            size = step.node.spec.size * step.node.spec.itemsize
+            host = ctypes.create_string_buffer(bytes([0xCC] * (size + 1)))
+            cases = (
+                (None, slot, host, size),
+                (owner, len(steps), host, size),
+                (owner, slot, host, size + 1),
+                (owner, slot, None, size),
+            )
+            for args in cases:
+                error.value = b""
+                assert transfer(*args, error, len(error)) != 0
+                assert error.value
+                assert ctypes.string_at(arena, capacity) == raw
+                assert host.raw == bytes([0xCC] * (size + 1)) + b"\0"
+            # Both bounds checks: offset outside arena; extent beyond arena.
+            for limit in (max(0, step.offset - 1), step.offset + size - 1):
+                lib.host_capacity(owner, limit)
+                error.value = b""
+                before = lib.host_synchronizations()
+                assert transfer(owner, slot, host, size, error, len(error)) != 0
+                assert error.value
+                assert lib.host_synchronizations() > before
+                assert ctypes.string_at(arena, capacity) == raw
+            lib.host_capacity(owner, capacity)
+            for failure in (1, 2, 3):
+                lib.host_failure(failure)
+                error.value = b""
+                before = lib.host_synchronizations()
+                try:
+                    assert transfer(owner, slot, host, size, error, len(error)) != 0
+                    assert b"injected" in error.value
+                    assert lib.host_synchronizations() > before
+                    assert ctypes.string_at(arena, capacity) == raw
+                    assert host.raw == bytes([0xCC] * (size + 1)) + b"\0"
+                finally:
+                    lib.host_failure(0)
+    finally:
+        lib.host_destroy(owner)
+
+
+def test_resident_spans_match_the_pinned_plan_offsets(
+    resident_host: typing.Any,
+) -> None:
+    """Execute generated slot/byte/offset mappings against raw host memory."""
+    _assert_resident_spans(*resident_host)
+
+
+@pytest.mark.skipif(
+    os.environ.get("VIBEQC_RESIDENT_HOST_CONTROLS") != "1",
+    reason="opt-in generated-source metamorphic/mutation controls",
+)
+@pytest.mark.parametrize("mutation", ["format", "offset", "length", "status"])
+def test_resident_host_oracle_controls(
+    mutation: str,
+    tmp_path: Path,
+    native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Harmless spelling survives; actual ABI/transfer damage is detected."""
+    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
+
+    def transform(source: str) -> str:
+        if mutation == "format":
+            return (
+                source.replace("resident_inputs", "input_spans")
+                .replace("resident_outputs", "output_spans")
+                .replace("ULL,", "ULL,\n  ")
+            )
+        if mutation == "status":
+            return source.replace(
+                "return generativeqc_resident::transfer(",
+                "return 0 * generativeqc_resident::transfer(",
+            )
+        field = 0 if mutation == "offset" else 1
+
+        def corrupt(match: re.Match[str]) -> str:
+            values = [int(match[1]), int(match[2])]
+            values[field] += 1
+            return f"{{{values[0]}ULL,{values[1]}ULL}}"
+
+        return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
+
+    lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch, transform)
+    _assert_resident_abi(plan, lib)
+    if mutation == "format":
+        _assert_resident_spans(plan, lib)
+    else:
+        with pytest.raises(AssertionError):
+            _assert_resident_spans(plan, lib)
 
 
 def test_resident_run_propagates_the_ordinary_status() -> None:
