@@ -135,6 +135,7 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         assert lib.host_synchronizations() > before
         assert lib.host_pending_work() == 0
         assert lib.host_copy_matches(0)
+        assert lib.host_copy_bytes_match(ctypes.sizeof(ctypes.c_int))
         assert metrics.owned_device_bytes == 4096
         for failure in (1, 2, 3):
             lib.host_failure(failure)
@@ -199,6 +200,13 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert lib.host_copy_matches(1)
             expected[step.offset : step.offset + size] = payload
             assert ctypes.string_at(arena, capacity) == expected
+            if not size:
+                guard = ctypes.create_string_buffer(b"\xcc", 1)
+                assert (
+                    lib.resident_upload(owner, slot, guard, 0, error, len(error)) == 0
+                )
+                assert guard.raw == b"\xcc"
+                assert ctypes.string_at(arena, capacity) == expected
 
         # Seed the whole arena independently: downloads cannot accidentally pass
         # by undoing an equally incorrect upload mapping.
@@ -229,6 +237,13 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert lib.host_copy_matches(0)
                 assert host.raw == raw[step.offset : step.offset + size]
             assert ctypes.string_at(arena, capacity) == raw
+            if not size:
+                guard = ctypes.create_string_buffer(b"\xcc", 1)
+                assert (
+                    lib.resident_download(owner, slot, guard, 0, error, len(error)) == 0
+                )
+                assert guard.raw == b"\xcc"
+                assert ctypes.string_at(arena, capacity) == raw
 
         for transfer, steps in zip(
             (lib.resident_upload, lib.resident_download), slots, strict=True
@@ -243,6 +258,9 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 (owner, slot, host, size + 1),
                 (owner, slot, host, size - 1),
                 (owner, slot, None, size),
+                (owner, slot, None, 0),
+                (owner, len(steps), None, 0),
+                (None, slot, None, 0),
                 (
                     owner,
                     slot + (1 << (ctypes.sizeof(ctypes.c_size_t) * 8 - 1)),
@@ -321,6 +339,8 @@ def test_resident_control_span_transfers(
         "run_sync",
         "run_kind",
         "run_status",
+        "zero_status_bytes",
+        "short_status_bytes",
         "begin_record",
         "status_reset",
         "late_reset",
@@ -380,6 +400,12 @@ def test_resident_host_oracle_controls(
                 "                                   cudaMemcpyDeviceToHost, ctx.stream));",
                 "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
                 "                                   cudaMemcpyDeviceToHost, ctx.stream);",
+            )
+        if mutation in ("zero_status_bytes", "short_status_bytes"):
+            count = "0" if mutation == "zero_status_bytes" else "sizeof(int) - 1"
+            return source.replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                f"cudaMemcpyAsync(&arithmetic_error, ctx.error, {count},",
             )
         if mutation == "begin_record":
             return source.replace(
@@ -482,6 +508,8 @@ def test_resident_host_oracle_controls(
         "run_sync",
         "run_kind",
         "run_status",
+        "zero_status_bytes",
+        "short_status_bytes",
         "begin_record",
         "status_reset",
         "late_reset",

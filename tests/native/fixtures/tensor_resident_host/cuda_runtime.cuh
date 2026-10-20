@@ -12,7 +12,7 @@
 
 #include "metrics.hpp"
 
-enum { cudaMemcpyHostToDevice, cudaMemcpyDeviceToHost, cudaMemcpyDeviceToDevice };
+enum { cudaMemcpyHostToDevice = 1, cudaMemcpyDeviceToHost = 2, cudaMemcpyDeviceToDevice = 3 };
 struct DeviceRange {
   const void* owner;
   std::uintptr_t begin;
@@ -45,10 +45,14 @@ inline std::map<int, EventRecord> events;
 inline size_t submitted = 0;
 inline int next_event = 0;
 inline int failure = 0, synchronizations = 0;
-inline std::vector<int> copy_kinds;
+struct CopyObservation {
+  int kind;
+  size_t bytes;
+};
+inline std::vector<CopyObservation> copies;
 inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, int stream) {
   if (stream != 73) throw std::runtime_error("wrong owner stream");
-  copy_kinds.push_back(kind);
+  copies.push_back({kind, bytes});
   if (bytes && (!to || !from)) return 7;
   const bool dst_device = device_bytes(to, bytes), src_device = device_bytes(from, bytes);
   const bool roles_match = kind == cudaMemcpyHostToDevice     ? dst_device && !src_device
@@ -174,9 +178,15 @@ extern "C" void host_static_ready(void* p, int ready) {
 extern "C" void host_failure(int mode) { failure = mode; }
 extern "C" int host_synchronizations() { return synchronizations; }
 extern "C" size_t host_pending_work() { return pending.size(); }
-extern "C" void host_clear_copy_kinds() { copy_kinds.clear(); }
+extern "C" void host_clear_copy_kinds() { copies.clear(); }
 extern "C" int host_copy_matches(int upload) {
   const int expected = upload ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToHost;
-  return !copy_kinds.empty() && std::all_of(copy_kinds.begin(), copy_kinds.end(),
-                                            [expected](int kind) { return kind == expected; });
+  return !copies.empty() &&
+         std::all_of(copies.begin(), copies.end(),
+                     [expected](const CopyObservation& copy) { return copy.kind == expected; });
+}
+extern "C" int host_copy_bytes_match(size_t bytes) {
+  return !copies.empty() &&
+         std::all_of(copies.begin(), copies.end(),
+                     [bytes](const CopyObservation& copy) { return copy.bytes == bytes; });
 }

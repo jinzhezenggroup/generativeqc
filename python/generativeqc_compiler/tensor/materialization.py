@@ -12,6 +12,7 @@ import typing
 from dataclasses import dataclass
 from fractions import Fraction
 
+from generativeqc_compiler.common.materialization import MaterializationRuleRequest
 from generativeqc_compiler.common.storage import (
     BufferOp,
     BufferValue,
@@ -25,13 +26,15 @@ from .complexity import (
     node_complexity,
 )
 from .ir import Node, _infer
-from .program import Program
-from .types import checked_size
+from .program import Program, node_hashes
+from .types import checked_size, spec_to_payload
 
 if typing.TYPE_CHECKING:
     from collections.abc import Mapping
 
 RULE = "single-consumer-einsum"
+SUM_RULE = "distribute-add-einsum"
+RULES = (RULE, SUM_RULE)
 RESOURCE_SCOPE = (
     "Dense immutable SSA values in dependency order, inclusive producer/last-reader "
     "lifetimes; inputs remain caller-owned and outputs remain live through return. "
@@ -135,6 +138,7 @@ class MaterializationDecision:
     before: MaterializationFootprint
     candidate: MaterializationFootprint | None = None
     candidate_hash: str | None = None
+    request: MaterializationRuleRequest | None = None
 
     def to_payload(self) -> dict[str, typing.Any]:
         """Return data-only identities, resource scope and planning evidence."""
@@ -149,6 +153,7 @@ class MaterializationDecision:
             if self.candidate is None
             else self.candidate.to_payload(),
             "candidate_hash": self.candidate_hash,
+            "request": None if self.request is None else self.request.to_payload(),
         }
 
 
@@ -261,20 +266,108 @@ def _contexts(program: Program) -> tuple[tuple[Node, tuple[Node, ...]], ...]:
     )
 
 
+def _rule_request(
+    program: Program,
+    producer: Node,
+    consumers: tuple[Node, ...],
+    *,
+    allow_reassociation: bool,
+    max_materialized_bytes: int | None,
+    baseline: MaterializationFootprint,
+    max_operands: int,
+    max_distribution_terms: int,
+    limits: dict[str, int],
+) -> MaterializationRuleRequest:
+    names = program.debug_names
+    hashes = node_hashes(program.live_nodes)
+    return MaterializationRuleRequest(
+        origin="tensor-ir",
+        source_identity=program.logical_hash,
+        subject={"name": names[producer], "op": producer.op},
+        producer={
+            "identity": hashes[producer],
+            "spec": spec_to_payload(producer.spec, logical=True),
+            "attributes": producer.attrs,
+            "alias_policy": "immutable SSA; physical input aliases are not assumed",
+        },
+        consumers=tuple(
+            {
+                "identity": hashes[user],
+                "op": user.op,
+                "name": names[user],
+                "spec": spec_to_payload(user.spec, logical=True),
+                "attributes": user.attrs,
+                "operand_positions": [
+                    i for i, child in enumerate(user.inputs) if child is producer
+                ],
+            }
+            for user in consumers
+        ),
+        retained_output=producer in program.outputs.values(),
+        allow_reassociation=allow_reassociation,
+        precision_contract=program.provenance.get("precision_execution"),
+        max_materialized_bytes=max_materialized_bytes,
+        constraints={
+            "max_work_degree": baseline.max_work_degree,
+            "max_concrete_work": baseline.concrete_work,
+            "max_logical_live_bytes": baseline.peak_live_bytes,
+            "strictly_below_materialized_bytes": baseline.materialized_bytes,
+            "max_operands": max_operands,
+            "max_distribution_terms": max_distribution_terms,
+            "max_intermediate_axes": limits,
+        },
+    )
+
+
+def _distribute(
+    producer: Node,
+    consumer: Node,
+    *,
+    max_operands: int,
+    max_intermediate_axes: dict[str, int],
+) -> Node:
+    """Distribute only visible private einsums, using the existing tree owner."""
+    position = consumer.inputs.index(producer)
+    branches = []
+    for term in producer.inputs:
+        inputs = consumer.inputs[:position] + (term,) + consumer.inputs[position + 1 :]
+        branch = Node(
+            "einsum",
+            inputs,
+            _infer("einsum", inputs, consumer.attrs, consumer.spec),
+            consumer.attributes,
+        )
+        branches.append(
+            _reassociate_node(
+                _substitute(term, branch),
+                max_operands=max_operands,
+                max_intermediate_axes=max_intermediate_axes,
+                require_degree_reduction=False,
+            )
+        )
+    attrs = {"coefficients": producer.attrs["coefficients"]}
+    inputs = tuple(branches)
+    return Node(
+        "add", inputs, _infer("add", inputs, attrs, consumer.spec), tuple(attrs.items())
+    )
+
+
 def plan_materializations(
     program: Program,
     *,
     allow_reassociation: bool = False,
-    available_rules: tuple[str, ...] = (RULE,),
+    available_rules: tuple[str, ...] = RULES,
     max_operands: int = 6,
     max_candidates: int = 32,
+    max_distribution_terms: int = 4,
     max_materialized_bytes: int | None = None,
     max_intermediate_axes: Mapping[str, int] | None = None,
 ) -> MaterializationPlan:
     """Select proven lower-storage single-use contraction plans.
 
-    Only immutable FP64 einsums without repeated labels are substituted.
-    Multi-reader, retained-output and view/opaque consumers remain materialized.
+    Immutable FP64 einsums and bounded sums of private visible einsums may be
+    substituted into one einsum consumer. Repeated labels, shared terms, public
+    outputs and view/opaque consumers retain their materialization.
     Algebraic reassociation is explicit opt-in, including factor distribution.
     A precision-execution contract is a barrier, even with that opt-in.
 
@@ -291,9 +384,11 @@ def plan_materializations(
         raise ValueError("max_operands must lie in [3, 8]")
     if type(max_candidates) is not int or max_candidates < 1:
         raise ValueError("max_candidates must be positive")
+    if type(max_distribution_terms) is not int or not 1 <= max_distribution_terms <= 8:
+        raise ValueError("max_distribution_terms must lie in [1, 8]")
     if (
         not isinstance(available_rules, tuple)
-        or any(rule != RULE for rule in available_rules)
+        or any(rule not in RULES for rule in available_rules)
         or len(set(available_rules)) != len(available_rules)
     ):
         raise ValueError("unrecognized or duplicate materialization rule")
@@ -327,14 +422,26 @@ def plan_materializations(
         users = tuple(dict.fromkeys(reader_edges))
         edges = len(reader_edges)
         baseline = materialization_footprint(current)
-        rule = RULE
+        rule = SUM_RULE if producer.op == "add" else RULE
+        factors = producer.inputs if producer.op == "add" else (producer,)
+        request = _rule_request(
+            current,
+            producer,
+            users,
+            allow_reassociation=allow_reassociation,
+            max_materialized_bytes=max_materialized_bytes,
+            baseline=baseline,
+            max_operands=max_operands,
+            max_distribution_terms=max_distribution_terms,
+            limits=limits,
+        )
         reason = ""
         status = "retained"
         candidate = None
         candidate_hash = None
         if producer in current.outputs.values():
             reason = "retained-output: the caller explicitly requests the dense tensor"
-        elif producer.op != "einsum":
+        elif producer.op not in ("einsum", "add"):
             rule = "factorized-source"
             status = "requires-provider"
             reason = (
@@ -350,30 +457,54 @@ def plan_materializations(
             reason = "reduction-order: explicit algebraic reassociation permission is required"
         elif "precision_execution" in current.provenance:
             reason = "precision-execution: arithmetic contracts for new intermediates are undefined"
-        elif RULE not in available_rules:
+        elif rule not in available_rules:
             reason = "unsupported-provider: no available compiler rule can execute this request"
-        elif any(node.spec.dtype != "float64" for node in (producer, users[0])):
+        elif any(
+            node.spec.dtype != "float64" for node in (*factors, producer, users[0])
+        ):
             reason = (
                 "precision-domain: only real FP64 contraction substitution is admitted"
             )
+        elif producer.op == "add" and len(factors) > max_distribution_terms:
+            reason = "distribution-bound: sum exceeds the finite term limit"
+        elif any(term.op != "einsum" for term in factors):
+            status = "requires-provider"
+            reason = "factorization-boundary: every distributed term must expose exact einsum factors"
+        elif producer.op == "add" and any(
+            term in current.outputs.values()
+            or sum(node.inputs.count(term) for node in current.live_nodes) != 1
+            for term in factors
+        ):
+            reason = "shared-value: distributing shared or retained terms would duplicate their production"
         elif any(
             len(labels) != len(set(labels))
-            for node in (producer, users[0])
+            for node in (*factors, users[0])
             for labels in node.attrs["labels"]
         ):
             reason = "diagonal-domain: repeated-label contraction substitution is not admitted"
-        elif len(producer.inputs) + len(users[0].inputs) - 1 > max_operands:
+        elif any(
+            len(term.inputs) + len(users[0].inputs) - 1 > max_operands
+            for term in factors
+        ):
             reason = (
                 "search-bound: combined contraction exceeds the finite operand limit"
             )
         else:
             consumer = users[0]
-            fused = _substitute(producer, consumer)
-            root = _reassociate_node(
-                fused,
-                max_operands=max_operands,
-                max_intermediate_axes=limits,
-                require_degree_reduction=False,
+            root = (
+                _distribute(
+                    producer,
+                    consumer,
+                    max_operands=max_operands,
+                    max_intermediate_axes=limits,
+                )
+                if producer.op == "add"
+                else _reassociate_node(
+                    _substitute(producer, consumer),
+                    max_operands=max_operands,
+                    max_intermediate_axes=limits,
+                    require_degree_reduction=False,
+                )
             )
             proposed = _replace(current, consumer, root)
             candidate = materialization_footprint(proposed)
@@ -409,6 +540,7 @@ def plan_materializations(
                 baseline,
                 candidate,
                 candidate_hash,
+                request,
             )
         )
     return MaterializationPlan(

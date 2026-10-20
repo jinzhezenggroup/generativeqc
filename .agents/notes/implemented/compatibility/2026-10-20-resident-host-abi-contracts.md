@@ -220,6 +220,32 @@ replace latest-head required CI. After adding short-length rejection, the final
 source-matched Linux host gate again passed 170 cases with 19 explicit device
 opt-in skips; its three qualified LF blobs match the submitted sources.
 
+Review `PRRT_kwDOUFEw6s6uO7I0` found that zero/short status copies could preserve
+the initialized local zero while still satisfying direction and completion. Copy
+observations now carry byte counts as well as kinds, and the run oracle requires
+the complete native `int` status object. Dedicated zero/short-count controls
+exercise that transport contract without generating a numerical kernel error.
+
+Zero-length calls still validate owner, slot and exact span length. The existing
+cases reject null-owner, out-of-range-slot and nonempty-span requests even when
+both host pointer and requested byte count are zero. Legitimate empty spans accept
+either null or a nonnull one-byte guard buffer with zero count, preserving the
+guard and arena.
+
+Before delivery the branch normally integrates protected upstream `457a47955`
+(#2640 materialization-rule contracts, after #2637) without modifying those
+owners' code. Its TensorIR import/materialization delta requires fresh host
+qualification; earlier counts are not transferred to that integrated tree.
+The dependency constants explicitly match public CUDA 12.9.1 encodings
+H2D=1, D2H=2 and D2D=3 ([SDK types](https://docs.nvidia.com/cuda/archive/12.9.1/cuda-runtime-api/group__CUDART__TYPES.html)).
+The symbolic comparisons do not rely on a private enum layout; this correction
+does not extend the fixture into other CUDA APIs.
+The final integration qualification uses a full archive of the reviewed staged
+Git tree in a fresh immutable directory, not an old `HEAD` archive with only test
+overlays. Its ignored manifest records the complete tree and selected producer,
+runtime and test blob/byte identities. The resulting commit must retain that
+exact candidate tree; delivery still requires latest-head CI and formal review.
+
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
 test timed out. That run was interrupted and is not an acceptance result. A later
