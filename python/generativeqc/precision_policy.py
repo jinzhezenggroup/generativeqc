@@ -161,7 +161,7 @@ def _budget_fock_strict_warm_admitted(
     ):
         return False
     required = {"coulomb_j", "xc", "fock_assembly", "physical_residual"}
-    if options.coefficients[2] != 0 or options.execution_plan.range_exchange:
+    if options.coefficients[2] != 0 or options.has_range_exchange:
         required.add("exchange_k")
     if options.execution_plan.nonlocal_correlation:
         required.add("nonlocal_correlation")

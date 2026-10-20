@@ -358,8 +358,9 @@ def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
     (None, "cold", "fallback", "inventory", "mixed", "exchange", "audit", "state"),
 )
 @pytest.mark.parametrize("explicit_target", (False, True))
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks"))
 def test_fast_strict_warm_requires_complete_state_bound_evidence(
-    backend: SimpleNamespace, missing: str | None, explicit_target: bool
+    backend: SimpleNamespace, missing: str | None, explicit_target: bool, method: str
 ) -> None:
     """Strict warm work avoids another solve only with a complete native proof.
 
@@ -418,13 +419,16 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
     )
     backend.outputs = [candidate, result(executed_backend="cuda")]
     policy = PrecisionPolicy("fast", target=ENERGY if explicit_target else None)
-    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy=policy)
+    calculator = PrecisionCalculator(method=method, device="cuda", policy=policy)
+    calculator._fast_native = True
     calculator._fast_fock = True
     from generativeqc.ks import resolve_ks_options
 
-    calculator._candidate._ks_options = resolve_ks_options("pbe0-rks", KsOptions())
+    calculator._candidate._ks_options = resolve_ks_options(method, KsOptions())
     report = calculator.singlepoint(ATOMS).precision_validation
-    admitted = missing is None and not explicit_target
+    admitted = (
+        missing is None or (missing == "exchange" and method == "pbe-rks")
+    ) and not explicit_target
     assert report.solve_count == (1 if admitted else 2)
     assert report.status == (
         "qualified_budget_fock_strict_warm" if admitted else "observed_met"
