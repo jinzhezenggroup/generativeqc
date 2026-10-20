@@ -9,7 +9,8 @@ correlation-only-DF variant. Prepared batches remain unsupported.
 
 ### Native mixed-precision preconvergence
 
-Native CUDA DF endpoints default to automatic CCSD warmup selection. The
+Standalone correlation-only CUDA DF-CCSD(T) endpoints without companions
+default to automatic CCSD warmup selection. The
 contraction-dominated domain with at least 9 occupied and 128 virtual orbitals
 requests mixed warmup; smaller and low-occupied systems retain FP64 to avoid
 conversion, launch and strict-history-restart overhead. The existing CUDA owner
@@ -19,6 +20,27 @@ remain unchanged. The internal native `std::optional<bool>` request defaults to
 `std::nullopt` (auto); explicit `true` and `false` retain mixed and strict
 ablations at every size. Supplied-Hamiltonian `SolverOptions.df_mixed_precision`
 remains an explicit opt-in independent of the native default policy.
+
+The grouped owner `run_df_correlation_group_native` selects FP64 CCSD and Lambda
+for Standard. It serves same-reference companion calls, DF-CBS,
+correlation-only DF-MP2, and full DF-HF endpoints (including standalone full-DF
+CCSD(T)). Those callers do not inherit the standalone CCSD warmup default.
+The public `CCSDTCBSCalculator(policy="fast")` requests FP32 auxiliary CCSD
+warmup at every shape and selects relaxed convergence limits for the reference,
+CCSD and force response. Its switch residual is
+`max(default_switch, 100 * selected_cc_residual)`; the existing 24-evaluation
+limit and resource/provider refusal apply. Lambda, triples and response remain
+FP64. A private six-counter query reports requested/executed/refused FP32,
+evaluations, GEMMs and casts without enlarging the frozen public descriptor.
+The complete
+policy and error-allocation contract is in [the CBS guide](../user/ccsdt_cbs.md#fast-convergence).
+A copied `core::CorrelationConvergence` travels through the prepared group,
+solver result, Lambda and frame-response owners, including MP2 companions.
+Its private size-tagged budget transport has a separate native capability
+symbol from mean-field arithmetic admission. Decode the extension before
+copying a legacy descriptor prefix. Prepared batches reject this allowance.
+Selecting `precision="auto"` on a correlated `Calculator` remains unsupported;
+the internal warmup policy is distinct from convergence selection.
 
 The mixed schedule evaluates the existing auxiliary primal graph with FP32 storage,
 pedantic FP32 GEMMs and round-to-nearest scalar arithmetic during warmup.
@@ -43,7 +65,7 @@ FP64 slots and optional qualified occupied-pair workspace; it never allocates a
 second batched arena. Pair projection keeps the original physical error bound
 and may refuse states that do not meet that bound.
 Neither mixed residuals nor rounded cuts can certify convergence: the original
-energy/residual tolerances and independent expanded FP64 replay still apply.
+selected energy/residual tolerances and independent expanded FP64 replay still apply.
 The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear
 derivatives remain FP64 consumers. Resource refusal retains strict execution; numerical
 failure is reported, not hidden by a retry. Warmup need not converge to either

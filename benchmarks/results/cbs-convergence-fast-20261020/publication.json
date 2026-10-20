@@ -1,0 +1,99 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent conventional and DF errors pass declared allowances for the retained FP64 convergence-only ablation; final mixed Fast has separate source-matched qualification.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 3170,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "1c55f9e19d0e290c08e22cdd6bb2afd4160adc8575912f83486d0eddf1e2469e"
+    },
+    {
+      "bytes": 1232,
+      "path": "budget-edges.json.xz",
+      "role": "samples",
+      "sha256": "3419030fd80f29bc56588f143f8ebc529e79813a0f71fed19be9daa4f6699ef6"
+    },
+    {
+      "bytes": 13268,
+      "path": "df-water-paired.json.xz",
+      "role": "samples",
+      "sha256": "31dff1d4b19beaa38ba5561b45ee032fffa730f6fbb2721a061b0d9aafc19876"
+    },
+    {
+      "bytes": 4192,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "e63388dca40b55759337c6acabec7f8dc385a4e6db4aabbaf228f8fb5cda51ee"
+    },
+    {
+      "bytes": 5752,
+      "path": "h2-dz-tz-fast.json.xz",
+      "role": "samples",
+      "sha256": "0d4c8d3f8cf882408dbf085427e6917fcfe3ba1bc6086ed8fcaaa125088e8e41"
+    },
+    {
+      "bytes": 5644,
+      "path": "h2-dz-tz-standard.json.xz",
+      "role": "samples",
+      "sha256": "e0bf461e720c5f52d3ab4bc734a697ed47f136dbae5a3ea81172465eb328ce22"
+    },
+    {
+      "bytes": 14640,
+      "path": "qualified-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "5c39da5b90a48209fca16930bb67ccb8758aeab420b428570beb90cfccd47601"
+    },
+    {
+      "bytes": 3061,
+      "path": "source-manifest.json",
+      "role": "input",
+      "sha256": "951515bcc795fdb5c5e785fb9f0304ecc25a6c578101bb245cecddae04913f5e"
+    },
+    {
+      "bytes": 1126,
+      "path": "validation.json",
+      "role": "summary",
+      "sha256": "3952d94a04541a99e7ac9883f01766d708b28e21c11055768444bbb058a95455"
+    },
+    {
+      "bytes": 6196,
+      "path": "water-algebra-fast.json.xz",
+      "role": "samples",
+      "sha256": "36c7c776c4b753210adebd1707aa5023817eccab7239f8e7a655f23771319b12"
+    },
+    {
+      "bytes": 6080,
+      "path": "water-algebra-standard.json.xz",
+      "role": "samples",
+      "sha256": "88d4fd4747d323f7458247e54c0c7ecca21d48de9ac3e2732430869b153c3aed"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/ccsdt_cbs_endpoint.py",
+      "--policy",
+      "fast",
+      "--case",
+      "water-algebra",
+      "--device",
+      "cuda",
+      "--repeats",
+      "3",
+      "--oracle",
+      "--work",
+      "--output",
+      ".artifacts/cbs-fast-water.json"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "eac2de2b33544b104bb318e53aa02aecbea5009f"
+  }
+}

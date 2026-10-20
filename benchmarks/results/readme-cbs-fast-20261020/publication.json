@@ -1,0 +1,101 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All complete observations and scoped numerical checks retained; one API-cold observation per case/policy is insufficient for statistical speedup promotion.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 8115,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "b66465c22bd190a8a2f40659b104bf978c2ea530230f2f05a53bbedfe9e208ec"
+    },
+    {
+      "bytes": 13332,
+      "path": "df-water-paired.json.xz",
+      "role": "samples",
+      "sha256": "10c2c7678bc8e71ac579819a49091eee94d9abd6fc5088b32f4e4ff6d42154b1"
+    },
+    {
+      "bytes": 897,
+      "path": "environment.sh",
+      "role": "reproduction",
+      "sha256": "c15b076cbb6bcfc7561f7974ea2e3371f0bc69cc8a3762b60ec55427e139dd77"
+    },
+    {
+      "bytes": 9740,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "29ba94bf12b69690d05b8d2c7778fa9ea28d7d012ec82ad4dd1f929b988dfb9f"
+    },
+    {
+      "bytes": 627,
+      "path": "python-preload.sh",
+      "role": "reproduction",
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "bytes": 21852,
+      "path": "qualified-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "092552c50f726da6442bfa04604b6c6cdb4006524623a47c847d859f1633043c"
+    },
+    {
+      "bytes": 921,
+      "path": "readme-pair.sh",
+      "role": "reproduction",
+      "sha256": "530cf1f8cff541489d8491ab8bbaffb4e7a59c3071846814a815e0893b5c0f8a"
+    },
+    {
+      "bytes": 4188,
+      "path": "source-manifest.json",
+      "role": "input",
+      "sha256": "0500a2571643ded814a6b449e5c7812e2ab0138d78e38cbdc704f786f6262153"
+    },
+    {
+      "bytes": 59680,
+      "path": "summary.json.xz",
+      "role": "samples",
+      "sha256": "75d4b900b4a0d29d8b8512c3ef89cc45a11fc95524d8569d66e3c07fd1b6cc71"
+    },
+    {
+      "bytes": 5741,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "89aec8f69aa6ee7fdfcbfed7136afd2be4a08fd8a243e2fe499892b227bf222c"
+    },
+    {
+      "bytes": 2534,
+      "path": "validation.json",
+      "role": "summary",
+      "sha256": "9e9e0ae9676e9ad45591ee8643841d040a9c76879f34456c9ac1a73bc4798dcf"
+    },
+    {
+      "bytes": 4390,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "7f3e7bea85fd5822867ab2da2068cb690e41789afb4a48ccdf317ebdf60d9ae9"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=02:05:00",
+      "bash",
+      "readme-pair.sh",
+      "7"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "eac2de2b33544b104bb318e53aa02aecbea5009f"
+  }
+}

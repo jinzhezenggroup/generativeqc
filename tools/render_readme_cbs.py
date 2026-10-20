@@ -127,15 +127,37 @@ def qualification(sample: dict, protocol: dict, reference: dict | None) -> dict:
         if execution
         else None
     )
+    # Fast's native stopping policy has an observable allowance. A normalized
+    # force projection is bounded by either its max norm or its RMS norm; this
+    # remains a directional check, never a claim of independent vector coverage.
+    convergence = sample.get("convergence", {})
+    limits = {}
+    for key in rows:
+        budget = convergence.get("budget" if key == "composite" else "component_budget")
+        limits[key] = {
+            "energy": budget["energy_abs"] if budget else ENERGY_GATE,
+            "directional": min(
+                budget["force_max_abs"] * float(np.abs(direction).sum()),
+                budget["force_rms"] * math.sqrt(direction.size)
+                if budget.get("force_rms") is not None
+                else math.inf,
+            )
+            if budget
+            else DIRECTION_GATE,
+        }
     result.update(
         accuracy_gate=bool(
             execution
-            and maximum_energy <= ENERGY_GATE
-            and maximum_force <= DIRECTION_GATE
+            and all(
+                error["energy"] <= limits[key]["energy"]
+                and max(error["directional_derivatives"]) <= limits[key]["directional"]
+                for key, error in errors.items()
+            )
         ),
         maximum_energy_error_hartree=maximum_energy,
         maximum_directional_error_hartree_per_bohr=maximum_force,
         component_errors=errors,
+        component_limits=limits,
     )
     return result
 
@@ -171,6 +193,117 @@ def collect(directory: Path, carbon: int) -> dict:
     return point
 
 
+def arithmetic_provenance(sample: dict, protocol: dict) -> dict | None:
+    """Check actual FP32 work; older convergence-only receipts remain explicit.
+
+    A resource-refused request is valid FP64 execution, not mixed execution.
+    Missing telemetry cannot substantiate a new FP32 preconvergence claim.
+    """
+    convergence = sample.get("convergence", {})
+    if "arithmetic_request" not in convergence:
+        return None
+    request = convergence["arithmetic_request"]
+    if request == "fp64":
+        if convergence.get("arithmetic") != "fp64":
+            raise ValueError("FP64 request has inconsistent arithmetic provenance")
+        return {"arithmetic": "fp64"}
+    if request != "df_ccsd_fp32_preconvergence":
+        raise ValueError("unknown arithmetic request")
+    cc = constituents(sample, protocol)["low/df-ccsd(t)"].get("cc_performance") or {}
+    flags = ("requested", "executed", "refused")
+    counts = ("evaluations", "gemm_calls", "cast_elements")
+    if (
+        any(type(cc.get(f"ccsd_fp32_{key}")) is not bool for key in flags)
+        or cc.get("ccsd_fp32_requested") is not True
+        or any(
+            type(cc.get(f"ccsd_fp32_{key}")) is not int or cc[f"ccsd_fp32_{key}"] < 0
+            for key in counts
+        )
+    ):
+        raise ValueError("FP32 request lacks native arithmetic telemetry")
+    mixed = cc["ccsd_fp32_executed"] and cc["ccsd_fp32_gemm_calls"] > 0
+    arithmetic = "mixed" if mixed else "fp64"
+    if convergence.get("arithmetic") != arithmetic or (
+        mixed and (cc["ccsd_fp32_refused"] or cc["ccsd_fp32_evaluations"] == 0)
+    ):
+        raise ValueError("FP32 counters disagree with reported arithmetic")
+    return {
+        "arithmetic": arithmetic,
+        **{key: cc[f"ccsd_fp32_{key}"] for key in (*flags, *counts)},
+    }
+
+
+def attach_fast(summary: dict, fast: dict) -> None:
+    """Attach measured Fast points only after matched-source full-vector checks.
+
+    Standard is a convergence control, not an independent scientific oracle.
+    Both its existing independent checks and the Fast checks remain in the
+    receipt. A failed or missing control cannot authorize a plotted Fast time.
+    """
+    controls = {point["carbon"]: point for point in summary["points"]}
+    for point in fast["points"]:
+        control = controls.get(point["carbon"])
+        point["standard_comparison"] = []
+        candidate = point.get("native")
+        standard = control.get("native") if control else None
+        if candidate is None or standard is None:
+            continue
+        for field in (
+            "protocol",
+            "source_revision",
+            "driver_sha256",
+            "library_sha256",
+            "gpu",
+        ):
+            if not candidate.get(field) or not standard.get(field):
+                raise ValueError(f"Fast/Standard {field} provenance is missing")
+            if candidate.get(field) != standard.get(field):
+                raise ValueError(
+                    f"Fast/Standard {field} differs for C{point['carbon']}"
+                )
+        if candidate.get("policy") != "fast" or standard.get("policy") != "standard":
+            raise ValueError("comparison requires explicit Fast and Standard receipts")
+        if not completed_times(control):
+            continue
+        baseline = constituents(standard["samples"][0], standard["protocol"])
+        for index, sample in enumerate(candidate["samples"]):
+            if not point["checks"][index]["execution_gate"]:
+                point["standard_comparison"].append({"passed": False, "components": {}})
+                continue
+            convergence = sample.get("convergence", {})
+            if convergence.get("requested_policy") != "fast":
+                raise ValueError("Fast receipt lacks executed convergence provenance")
+            errors = {}
+            accepted = True
+            for key, row in constituents(sample, candidate["protocol"]).items():
+                budget = convergence.get(
+                    "budget" if key == "composite" else "component_budget"
+                )
+                if not budget:
+                    raise ValueError("Fast receipt lacks observable allowances")
+                delta = np.asarray(row["forces"]) - np.asarray(baseline[key]["forces"])
+                values = {
+                    "energy_abs": abs(row["energy"] - baseline[key]["energy"]),
+                    "force_max_abs": float(np.max(np.abs(delta))),
+                    "force_rms": float(np.sqrt(np.mean(delta**2))),
+                }
+                passed = all(
+                    math.isfinite(value)
+                    and (budget[name] is None or value <= budget[name])
+                    for name, value in values.items()
+                )
+                errors[key] = {**values, "budget": budget, "passed": passed}
+                accepted = accepted and passed
+            point["standard_comparison"].append(
+                {
+                    "passed": accepted,
+                    "components": errors,
+                    "arithmetic": arithmetic_provenance(sample, candidate["protocol"]),
+                }
+            )
+    summary["fast"] = fast
+
+
 def completed_times(point: dict, phase: str = "cold") -> list[float]:
     """Never average an incomplete replay population or plot failed accuracy."""
     native = point["native"]
@@ -184,6 +317,11 @@ def completed_times(point: dict, phase: str = "cold") -> list[float]:
         indices = range(1, len(native["samples"]))
     else:
         raise ValueError("unknown endpoint phase")
+    if "standard_comparison" in point and (
+        len(point["standard_comparison"]) < len(native["samples"])
+        or any(not point["standard_comparison"][index]["passed"] for index in indices)
+    ):
+        return []
     if any(
         not point["checks"][index]["execution_gate"]
         or point["checks"][index]["accuracy_gate"] is False
@@ -202,6 +340,12 @@ def outcome(point: dict) -> str:
             if point["checks"][0]["accuracy_gate"]
             else "unchecked ‡"
         )
+    if (
+        "standard_comparison" in point
+        and point["native"]
+        and point["native"]["samples"]
+    ):
+        return "Fast control missing/failed"
     if point["checks"]:
         return "numerical gate failed"
     exit_code = point.get("native_outcome", {}).get("exit_code")
@@ -214,6 +358,8 @@ def outcome(point: dict) -> str:
 
 def table(summary: dict) -> str:
     """Display complete API cold calls, with work diagnostics kept alongside."""
+    if "fast" in summary:
+        return comparison_table(summary)
     lines = [
         "# DF-CCSD(T)/CBS complete energy + analytic forces",
         "",
@@ -288,6 +434,73 @@ def table(summary: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def comparison_table(summary: dict) -> str:
+    """Retain complete observations, vector differences and CC/response work."""
+    lines = [
+        "# Standard and Fast DF-CCSD(T)/CBS",
+        "",
+        reference_label(summary),
+        "",
+        "One API-cold complete E+F observation per policy and molecule; same binary and GPU within each pair.",
+        "Fast differences are against Standard, not independent oracle errors. Constituent budgets also apply.",
+        "",
+        "| Alkane | Standard (s) | Fast (s) | Max composite ΔE (Eh) | Max force difference (Eh/Bohr) | RMS force difference (Eh/Bohr) | Fast control |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    controls = {point["carbon"]: point for point in summary["points"]}
+    for point in summary["fast"]["points"]:
+        st, ft = completed_times(controls[point["carbon"]]), completed_times(point)
+        checks = point.get("standard_comparison", [])
+        values = checks[0]["components"].get("composite", {}) if checks else {}
+        cells = [f"{times[0]:.3f}" if times else "—" for times in (st, ft)]
+        cells += [
+            f"{values[key]:.3e}" if key in values else "—"
+            for key in ("energy_abs", "force_max_abs", "force_rms")
+        ]
+        status = "passed" if ft else outcome(point)
+        lines.append(f"| C{point['carbon']} | " + " | ".join(cells) + f" | {status} |")
+    lines += [
+        "",
+        "## Fast arithmetic",
+        "",
+        "FP32 counts cover auxiliary CCSD preconvergence; final checks and response use FP64.",
+        "Unknown means the older receipt did not record precision telemetry.",
+        "",
+        "| Alkane | Executed arithmetic | FP32 refused | FP32 evaluations | FP32 GEMMs | Cast elements |",
+        "| --- | --- | --- | ---: | ---: | ---: |",
+    ]
+    for point in summary["fast"]["points"]:
+        checks = point.get("standard_comparison", [])
+        precision = (checks[0].get("arithmetic") if checks else None) or {}
+        cells = [
+            str(precision.get(key, "unknown"))
+            for key in (
+                "arithmetic",
+                "refused",
+                "evaluations",
+                "gemm_calls",
+                "cast_elements",
+            )
+        ]
+        lines.append(f"| C{point['carbon']} | " + " | ".join(cells) + " |")
+    for name, series in (("Standard", summary), ("Fast", summary["fast"])):
+        # The existing single-series table contains actual semantic counters,
+        # independent checks and per-group timings without double-counting companions.
+        plain = {key: value for key, value in series.items() if key != "fast"}
+        lines += [
+            "",
+            f"## {name} diagnostics",
+            "",
+            table(plain)
+            .replace(
+                "# DF-CCSD(T)/CBS complete energy + analytic forces",
+                "### Complete endpoints",
+            )
+            .replace("## Observed work", "### Observed work"),
+        ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render(summary: dict, destination: Path, *, readme_style: bool = False) -> None:
     """Plot only measured complete calls; gaps retain an explicit outcome label."""
     import matplotlib
@@ -300,48 +513,67 @@ def render(summary: dict, destination: Path, *, readme_style: bool = False) -> N
         {"svg.fonttype": "none", "svg.hashsalt": SCHEMA, "font.family": "DejaVu Sans"}
     )
     figure, axes = plt.subplots(figsize=(10, 4.8))
-    values = [completed_times(point) for point in summary["points"]]
-    axes.plot(
-        [point["carbon"] for point in summary["points"]],
-        [times[0] if times else math.nan for times in values],
-        color="#087e8b",
-        linewidth=1.6,
-    )
-    for point, times in zip(summary["points"], values, strict=True):
-        carbon = point["carbon"]
-        if times:
-            checked = point["checks"][0]["accuracy_gate"]
-            label = f"{times[0]:.1f} s"
-            if not readme_style and not checked:
-                label += " ‡"
-            axes.plot(
-                carbon,
-                times[0],
-                marker="o",
-                color="#087e8b",
-                markerfacecolor="#087e8b" if (readme_style or checked) else "white",
-            )
-            axes.annotate(
-                label,
-                (carbon, times[0]),
-                xytext=(0, 10),
-                textcoords="offset points",
-                ha="center",
-                fontsize=9,
-            )
-        else:
-            axes.text(
-                carbon,
-                0.04,
-                outcome(point).split(":")[0],
-                transform=axes.get_xaxis_transform(),
-                rotation=90,
-                va="bottom",
-                ha="center",
-                fontsize=9,
-                color="#93422e",
-            )
-    if any(values):
+    series = [("Standard", summary, "#087e8b", "o")]
+    if "fast" in summary:
+        series.append(("Fast", summary["fast"], "#e07824", "s"))
+    measured = {
+        name: {point["carbon"]: completed_times(point) for point in data["points"]}
+        for name, data, _, _ in series
+    }
+    any_values = False
+    for name, data, color, marker in series:
+        values = [measured[name][point["carbon"]] for point in data["points"]]
+        any_values = any_values or any(values)
+        axes.plot(
+            [point["carbon"] for point in data["points"]],
+            [times[0] if times else math.nan for times in values],
+            color=color,
+            linewidth=1.6,
+            label=name,
+        )
+        for point, times in zip(data["points"], values, strict=True):
+            carbon = point["carbon"]
+            if times:
+                checked = point["checks"][0]["accuracy_gate"]
+                label = f"{times[0]:.1f} s"
+                offset = 10 if name == "Standard" else -17
+                # Place labels outside the pair even when Fast is slower.
+                # Fixed per-policy offsets overlap on crossing curves.
+                peer = measured.get("Fast" if name == "Standard" else "Standard", {})
+                if peer.get(carbon) and times[0] != peer[carbon][0]:
+                    offset = 10 if times[0] > peer[carbon][0] else -17
+                if not readme_style and not checked:
+                    label += " ‡"
+                axes.plot(
+                    carbon,
+                    times[0],
+                    marker=marker,
+                    color=color,
+                    markerfacecolor=color if (readme_style or checked) else "white",
+                )
+                axes.annotate(
+                    label,
+                    (carbon, times[0]),
+                    xytext=(0, offset),
+                    textcoords="offset points",
+                    ha="center",
+                    fontsize=9,
+                    color=color if len(series) > 1 else "black",
+                )
+            else:
+                axes.text(
+                    carbon,
+                    0.04 if name == "Standard" else 0.42,
+                    (name + ": " if len(series) > 1 else "")
+                    + outcome(point).split(":")[0],
+                    transform=axes.get_xaxis_transform(),
+                    rotation=90,
+                    va="bottom",
+                    ha="center",
+                    fontsize=9,
+                    color="#93422e",
+                )
+    if any_values:
         axes.set_yscale("log")
         axes.margins(y=0.22)
     axes.set(
@@ -352,7 +584,9 @@ def render(summary: dict, destination: Path, *, readme_style: bool = False) -> N
         title="DF-CCSD(T)/CBS · cc-pV[D,T]Z + DZ correction · RTX 5090",
     )
     axes.grid(axis="y", alpha=0.2)
-    if not readme_style:
+    if "fast" in summary:
+        axes.legend(fontsize=9, loc="upper left")
+    elif not readme_style:
         axes.legend(
             handles=[
                 Line2D(
@@ -376,7 +610,11 @@ def render(summary: dict, destination: Path, *, readme_style: bool = False) -> N
             fontsize=8,
             loc="upper left",
         )
-    footer = reference_label(summary) + " One cold call; compiler caches retained."
+    footer = reference_label(summary) + (
+        "\nOne cold call per policy; same-build pairs. Fast timings require full-vector checks against Standard."
+        if "fast" in summary
+        else " One cold call; compiler caches retained."
+    )
     if not readme_style:
         footer += (
             "\nIncomplete/failed E+F has no plotted time. "
@@ -401,6 +639,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", type=Path)
     parser.add_argument("--summary", type=Path)
+    parser.add_argument("--fast-runs", type=Path)
+    parser.add_argument("--fast-summary", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--readme-only",
@@ -422,6 +662,18 @@ def main() -> None:
         }
     else:
         summary = json.loads(lzma.decompress(args.summary.read_bytes()))
+    if args.fast_runs and args.fast_summary:
+        parser.error("choose --fast-runs or --fast-summary")
+    if args.fast_runs or args.fast_summary:
+        fast = (
+            {
+                "schema": SCHEMA,
+                "points": [collect(args.fast_runs, carbon) for carbon in range(1, 8)],
+            }
+            if args.fast_runs
+            else json.loads(lzma.decompress(args.fast_summary.read_bytes()))
+        )
+        attach_fast(summary, fast)
     args.output.mkdir(parents=True, exist_ok=True)
     if args.readme_only:
         render(summary, args.output / "readme-cbs-performance.svg", readme_style=True)

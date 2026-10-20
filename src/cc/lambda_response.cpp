@@ -165,10 +165,12 @@ bool fill_lambda_diagonal_preconditioner(const Problem& p,
 }  // namespace detail
 
 void validate_lambda_options(const LambdaOptions& options) {
+  options.convergence.validate();
   // Unused warmup controls must not narrow the original strict FP64 domain.
   if (!std::isfinite(options.cc_tolerance) || options.cc_tolerance <= 0.0 ||
-      options.cc_tolerance > 1e-9 || !std::isfinite(options.lambda_tolerance) ||
-      options.lambda_tolerance <= 0.0 || options.lambda_tolerance > 1e-9 || !options.max_bytes ||
+      options.cc_tolerance > options.convergence.cc_residual() ||
+      !std::isfinite(options.lambda_tolerance) || options.lambda_tolerance <= 0.0 ||
+      options.lambda_tolerance > options.convergence.lambda_residual() || !options.max_bytes ||
       !options.df_auxiliary_batch_limit ||
       (options.df_mixed_precision &&
        (!std::isfinite(options.df_mixed_precision_warmup_tolerance) ||

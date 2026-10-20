@@ -120,7 +120,11 @@ def test_full_df_complete_energy_force_and_companions(
         owner.clear_cache()
 
 
-def test_full_df_cbs_complete_directional_derivative() -> None:
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize("hf_reference", ("exact", "df"))
+def test_full_df_cbs_complete_directional_derivative(
+    policy: str, hf_reference: str
+) -> None:
     """The composite and every basis group use the same explicit RI-JK model."""
     bases = ("sto-3g", "cc-pvdz")
     auxiliaries = ("def2-svp", "cc-pvdz-jkfit")
@@ -130,19 +134,40 @@ def test_full_df_cbs_complete_directional_derivative() -> None:
             for name, cardinal in zip(bases, (2, 3), strict=True)
         ),
         auxiliary_bases=tuple(basis_snapshot(name, [1]) for name in auxiliaries),
-        hf_reference="df",
+        hf_reference=hf_reference,
+        policy=policy,
         device="cuda",
         calculator_options={"correlation_memory_budget_bytes": 2 << 30},
     )
     result = workflow.singlepoint(HYDROGEN)
     assert result.converged and result.forces is not None
-    assert result.basis_metadata["hf_reference"] == "df"
+    assert result.basis_metadata["hf_reference"] == hf_reference
     assert len(result.execution_groups) == 2
+    cc = next(
+        c.result.cc_performance for c in result.components if c.method == "df-ccsd(t)"
+    )
+    assert cc is not None
+    assert cc.ccsd_fp32_requested is (policy == "fast")
+    if policy == "fast":
+        assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
+        assert cc.ccsd_fp32_executed and not cc.ccsd_fp32_refused
+        assert cc.ccsd_fp32_evaluations > 0 and cc.ccsd_fp32_gemm_calls > 0
+        assert result.convergence["arithmetic"] == "mixed"
+    else:
+        assert not cc.ccsd_fp32_executed and cc.ccsd_fp32_gemm_calls == 0
 
     def oracle(atoms: tuple | list) -> float:
         """Assemble the independent focal-point model, not production components."""
-        low = energies(atoms, bases[0], auxiliaries[0], triples=True, df_reference=True)
-        high = energies(atoms, bases[1], auxiliaries[1], df_reference=True)
+        low = energies(
+            atoms,
+            bases[0],
+            auxiliaries[0],
+            triples=True,
+            df_reference=hf_reference == "df",
+        )
+        high = energies(
+            atoms, bases[1], auxiliaries[1], df_reference=hf_reference == "df"
+        )
         return (
             sum(
                 weight * value["rhf"]
