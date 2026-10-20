@@ -179,6 +179,7 @@ class Calculator:
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
         _application_precision_budget: typing.Any = None,
+        _correlation_convergence_budget: typing.Any = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -603,6 +604,23 @@ class Calculator:
             self._precision_mode = precision_modes[str(precision).lower()]
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
+        # CBS convergence allowances share the size-tagged transport, but have
+        # a separate capability and never request lower-precision arithmetic.
+        self._correlation_convergence_budget = _correlation_convergence_budget
+        if _correlation_convergence_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(_correlation_convergence_budget, TargetErrorBudget):
+                raise TypeError("correlation convergence requires a TargetErrorBudget")
+            if _application_precision_budget is not None:
+                raise ValueError("correlation and arithmetic budgets are exclusive")
+            if self._method not in {
+                _native.METHOD_MP2,
+                _native.METHOD_RCCSD,
+                _native.METHOD_RCCSD_T,
+                _native.METHOD_DF_RCCSD_T,
+            }:
+                raise ValueError("correlation convergence requires closed-shell MP2/CC")
         self._application_precision_budget = _application_precision_budget
         if _application_precision_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -737,9 +755,17 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
+            from ._correlation_convergence import convergence_limits
+
             for name, value, upper in (
                 ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                ("ccsd_residual_tolerance", ccsd_residual_tolerance, 1e-9),
+                (
+                    "ccsd_residual_tolerance",
+                    ccsd_residual_tolerance,
+                    convergence_limits(_correlation_convergence_budget)[
+                        "ccsd_residual_tolerance"
+                    ],
+                ),
             ):
                 if not np.isfinite(value) or not 0.0 < value <= upper:
                     raise ValueError(
@@ -822,6 +848,29 @@ class Calculator:
             if self._method == _native.METHOD_GFN2_XTB
             else None
         )
+        if self._correlation_convergence_budget is not None:
+            query = getattr(
+                self._library, "generativeqc_correlation_convergence_version_v1", None
+            )
+            if query is None:
+                raise NotImplementedError(
+                    "native library lacks correlated convergence transport"
+                )
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 1:
+                raise NotImplementedError(
+                    "unsupported native correlated convergence transport"
+                )
+            if (
+                self._method == _native.METHOD_DF_RCCSD_T
+                and getattr(
+                    self._library, "generativeqc_calculation_get_cc_precision_v1", None
+                )
+                is None
+            ):
+                raise NotImplementedError(
+                    "native library lacks correlated FP32 telemetry"
+                )
         self._ks_options_version = 0
         if self._application_precision_budget is not None:
             query = getattr(
@@ -1339,6 +1388,8 @@ class Calculator:
                 )
             )
         budget = getattr(self, "_application_precision_budget", None)
+        if budget is None:
+            budget = getattr(self, "_correlation_convergence_budget", None)
         descriptor_type = (
             _native.ApplicationPrecisionMethodDescriptor
             if budget is not None
@@ -1690,6 +1741,18 @@ class Calculator:
                         )
                     }
                     if budget is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "correlation_convergence_budget": (
+                            self._correlation_convergence_budget.energy_abs,
+                            self._correlation_convergence_budget.force_max_abs,
+                            self._correlation_convergence_budget.force_rms,
+                        )
+                    }
+                    if getattr(self, "_correlation_convergence_budget", None)
+                    is not None
                     else {}
                 ),
                 "target_accuracy": self._target_accuracy.to_dict()

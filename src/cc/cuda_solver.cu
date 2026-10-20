@@ -1248,6 +1248,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   validate_options(options);
   Owner owner(p, options, device);
   SolverResult result;
+  result.convergence = options.convergence;
   result.reason = "maximum RCCSD iterations reached";
   result.correlation_energy = std::numeric_limits<double>::quiet_NaN();
   result.total_energy = std::numeric_limits<double>::quiet_NaN();

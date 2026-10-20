@@ -1,5 +1,12 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-20 CCSD(T)/CBS Fast campaign](readme-cbs-fast-20261020/README.md)
+compares complete Standard/Fast QM7 C1–C7 calls with the same binary and GPU
+within each pair. Fast combines relaxed convergence with default FP32 DF-CCSD
+preconvergence and FP64 physical checks/response. Constituent and
+composite energy/full-force differences pass the declared allowances; independent
+C2 directional checks and single-observation timing limits remain explicit.
+
 The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
 separates shared J/K, nonlocal packet and native-force gains from remaining
 small-system slowdowns, with source-bound independent accuracy and work counts.

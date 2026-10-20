@@ -1,10 +1,13 @@
 # Full DF-HF/RI-JK CCSD(T)/CBS: complete QM7 C1–C7 E+F
 
-![Complete full-DF CBS E+F](df-cbs.svg)
-
-See [complete timings and semantic work](timings.md),
-[normalized publication receipts](summary.json.xz), and
-[source, build and receipt provenance](manifest.json).
+See [complete timings and semantic work](timings.md). This historical campaign
+was replaced on the homepage by the
+[matched Standard/Fast campaign](../readme-cbs-fast-20261020/README.md).
+Its original plot, receipts, source patch and manifest remain recoverable from
+the published Git revision pinned in [snapshot.json](snapshot.json), with every
+original byte count and SHA-256 recorded. Recovery of all nine original files
+and the original scientific verifier was checked before retiring these payloads
+from the current tree. No measurements or scientific gates have been changed.
 
 ## Scientific endpoint
 
@@ -65,7 +68,7 @@ numerical budget after 606.662 s. This was **not** a completed E+F time or a
 measured GPU OOM. The retained RI-JK allowance alone conservatively reserves up
 to 8 GiB across host/device owners. The primary series reruns **all seven**
 molecules with 32 GiB, not just a favorable replacement for one point.
-The [compact supplement](supplement.json.xz) retains the 24-GiB endpoint records and
+The recoverable `supplement.json.xz` retains the 24-GiB endpoint records and
 failure. Failed runtime imports before native work are also separate from the
 primary timing series; no partial outcome acquires a completion time.
 Intermediate exact-reference whole-shell observations are retained in the
@@ -142,12 +145,18 @@ as another model. Full original run bundles, traces and qualification logs stay
 in ignored local artifacts, not Git. The manifest records the local archive and
 member hashes; no external archive or release has been published.
 
-Replay the figure without CUDA or PySCF:
+Restore and replay the original figure without CUDA or PySCF. The recovery tool
+does not fetch implicitly; a shallow clone must first fetch the revision named
+in `snapshot.json`:
 
 ```bash
-PYTHONPATH=.:python python benchmarks/results/readme-cbs-full-20261014/verify.py
+python tools/restore_retained_evidence.py \
+  --manifest benchmarks/results/readme-cbs-full-20261014/snapshot.json \
+  --all --output .artifacts/readme-cbs-full-history
+PYTHONPATH=.:python python \
+  .artifacts/readme-cbs-full-history/benchmarks/results/readme-cbs-full-20261014/verify.py
 PYTHONPATH=.:python python -m tools.render_readme_cbs \
-  --summary benchmarks/results/readme-cbs-full-20261014/summary.json.xz \
+  --summary .artifacts/readme-cbs-full-history/benchmarks/results/readme-cbs-full-20261014/summary.json.xz \
   --output .artifacts/readme-cbs-full-replay
 ```
 
