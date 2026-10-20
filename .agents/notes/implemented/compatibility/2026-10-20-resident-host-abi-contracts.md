@@ -186,6 +186,8 @@ The existing invalid-slot/length cases also exercise the high bit of public
 `size_t` arguments, using the original small buffers. Optional ABI-narrowing
 controls verify that a 32-bit slot or byte-count parameter cannot silently
 truncate those invalid values into valid transfers.
+Short (`size - 1`) and long (`size + 1`) transfers are both rejected, preserving
+exact extent equality rather than just an upper bound.
 
 The former affine download seed repeated every 256 bytes, matching planned
 alignment and masking an output-only offset shift. Adding a linear block term
@@ -207,6 +209,16 @@ The old fixture comparison uses only a statistics-query naming adapter, not
 different transfer behavior. Restore the final sources: the five affected
 reset/download/ABI-width controls then pass, and all three source hashes match
 the full gate. Full-gate cache delta: 25 compilations/misses, zero failures.
+
+The superseded `b7b3647a2` CI run 39380033113 was not green: core-b job
+118488566953 failed `test_owned_descendant_is_retired[True]` when reading
+`/proc/<pid>/stat` raised `ProcessLookupError` instead of the caught
+`FileNotFoundError`. That test's blob was identical in the baseline, this branch
+and then-current upstream. The independently owned fix in still-open draft
+#2250 was not merged or duplicated here. This negative CI receipt does not
+replace latest-head required CI. After adding short-length rejection, the final
+source-matched Linux host gate again passed 170 cases with 19 explicit device
+opt-in skips; its three qualified LF blobs match the submitted sources.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child

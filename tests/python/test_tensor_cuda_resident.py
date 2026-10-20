@@ -241,6 +241,7 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 (None, slot, host, size),
                 (owner, len(steps), host, size),
                 (owner, slot, host, size + 1),
+                (owner, slot, host, size - 1),
                 (owner, slot, None, size),
                 (
                     owner,
