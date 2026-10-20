@@ -7,10 +7,16 @@ instead of swallowing it. Real-device numerical parity is a separate opt-in
 suite.
 """
 
+import ctypes
+import os
+import random
+import re
+import time
 import typing
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.common.cuda_runtime import _Metrics
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import (
     Index,
@@ -19,16 +25,18 @@ from generativeqc_compiler.tensor import (
     Symmetry,
     TensorSpec,
     add,
+    constant,
     input_tensor,
     multiply,
 )
-from generativeqc_compiler.tensor.cuda_plan import plan_cuda
+from generativeqc_compiler.tensor.cuda_plan import ALIGNMENT, plan_cuda
 from generativeqc_compiler.tensor.cuda_resident import (
     DeviceTensor,
     _check_lease,
     _resident_dependency_logical_name,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+from tensor_resident_host import build_resident_host
 
 TARGET = cuda_target_info("sm_80")
 
@@ -71,18 +79,321 @@ def test_resident_source_keeps_the_ordinary_abi() -> None:
     assert "tensor static data is not initialized" in external
 
 
-def test_resident_source_declares_the_resident_abi() -> None:
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    for entry in (
-        "resident_plan_identity",
-        "resident_abi",
-        "resident_upload",
-        "resident_run",
-        "resident_download",
-    ):
-        assert entry in source, entry
-    assert "return 1;" in source
+def _transfer_program(kind: str) -> typing.Any:
+    # Control tensors have no floating validation or computation launches. Use
+    # their real lowering rather than patching private emitter dependencies.
+    counts = (6, 36) if kind == "two" else (0 if kind == "empty" else 3, 5, 2)
+    inputs = []
+    for name, count in zip(("a", "b", "c"), counts, strict=False):
+        index = Index(name, IndexSpace(name, "occupied", count))
+        inputs.append(
+            input_tensor(
+                name,
+                TensorSpec(
+                    (index,),
+                    dtype="int64",
+                    representation="general",
+                    role="parameter",
+                    differentiable=False,
+                ),
+            )
+        )
+    outputs = {f"out_{i}": value for i, value in enumerate(reversed(inputs))}
+    # CUDA plan identity requires a floating dtype. An empty literal admits the
+    # real plan without floating input validation, initialization or arithmetic.
+    empty = Index("empty", IndexSpace("empty", "occupied", 0))
+    outputs["empty_literal"] = constant(
+        (), TensorSpec((empty,), role="constant", differentiable=False)
+    )
+    return Program(outputs)
+
+
+@pytest.fixture(params=["two", "reordered", "empty"])
+def resident_host(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> typing.Any:
+    """A real generated resident ABI, with only CUDA/owner emission stubbed."""
+    plan = plan_cuda(_transfer_program(request.param), TARGET, max_bytes=1 << 26)
+    lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch)
+    return plan, lib
+
+
+def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
+    assert lib.resident_plan_identity().decode() == plan.identity + ":resident-abi-v1"
+    assert lib.resident_abi() == 1
+    error = ctypes.create_string_buffer(256)
+    metrics = _Metrics()
+    result = ctypes.byref(metrics)
+    capacity = plan.allocation_bytes
+    owner = lib.host_owner(capacity, capacity - ALIGNMENT)
+    try:
+        _assert_resident_busy(
+            lib,
+            owner,
+            capacity,
+            lambda: lib.resident_run(owner, 0, result, error, len(error)),
+            error,
+        )
+        # Calls resolve every required public export with its actual C signature.
+        lib.host_clear_copy_kinds()
+        before = lib.host_synchronizations()
+        assert lib.resident_run(owner, 0, result, error, len(error)) == 0, error.value
+        assert lib.host_synchronizations() > before
+        assert lib.host_pending_work() == 0
+        assert lib.host_copy_matches(0)
+        assert lib.host_copy_covers(ctypes.sizeof(ctypes.c_int))
+        for prepare, live in ((211, 307), (503, 401)):
+            lib.host_metrics(owner, 109, prepare, live)
+            assert lib.resident_run(owner, 0, result, error, len(error)) == 0
+            assert metrics.owned_device_bytes == capacity
+            assert metrics.provider_retained_bytes == 109
+            assert metrics.prepare_device_delta == prepare
+            assert metrics.observed_device_delta == max(prepare, live)
+        for marker in (-3, 5):
+            lib.host_status_marker(marker)
+            error.value = b""
+            before = lib.host_synchronizations()
+            try:
+                assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+                assert error.value
+                assert lib.host_synchronizations() > before
+                assert lib.host_pending_work() == 0
+            finally:
+                lib.host_status_marker(0)
+            error.value = b""
+            assert lib.resident_run(owner, 0, result, error, len(error)) == 0
+        for failure in (1, 2, 3):
+            lib.host_failure(failure)
+            error.value = b""
+            before = lib.host_synchronizations()
+            try:
+                assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+                assert b"injected" in error.value
+                assert lib.host_synchronizations() > before
+                assert lib.host_pending_work() == 0
+            finally:
+                lib.host_failure(0)
+        for pointer, metrics in ((None, result), (owner, None)):
+            error.value = b""
+            assert lib.resident_run(pointer, 0, metrics, error, len(error)) != 0
+            assert error.value
+        lib.host_static_ready(owner, 0)
+        error.value = b""
+        before = lib.host_synchronizations()
+        assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+        assert b"not initialized" in error.value
+        assert lib.host_synchronizations() > before
+    finally:
+        lib.host_destroy(owner)
+
+
+def test_resident_source_declares_the_resident_abi(resident_host: typing.Any) -> None:
+    _assert_resident_abi(*resident_host)
+
+
+def _assert_resident_busy(
+    lib: ctypes.CDLL,
+    owner: typing.Any,
+    capacity: int,
+    operation: typing.Callable[[], int],
+    error: typing.Any,
+    host: typing.Any = None,
+) -> None:
+    """Reject without admitted work while another real host thread owns the mutex."""
+    arena = lib.host_arena(owner)
+    before = ctypes.string_at(arena, capacity)
+    host_before = None if host is None else host.raw
+    sequence, pending = lib.host_work_sequence(), lib.host_pending_work()
+    holder = lib.host_hold_mutex(owner)
+    assert holder, "finite owner-mutex handshake failed"
+    try:
+        assert lib.host_mutex_held(holder)
+        error.value = b""
+        start = time.monotonic()
+        status = operation()
+        elapsed = time.monotonic() - start
+        assert elapsed < 3.0, "busy admission blocked instead of returning promptly"
+        assert status != 0
+        assert b"busy" in error.value
+        assert ctypes.string_at(arena, capacity) == before
+        assert host is None or host.raw == host_before
+        assert lib.host_work_sequence() == sequence
+        assert lib.host_pending_work() == pending
+    finally:
+        lib.host_release_mutex(holder)
+
+
+def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
+    assert all(plan.steps[i].last_use == len(plan.steps) for i in plan.inputs)
+    slots = (
+        [plan.steps[i] for i in plan.inputs],
+        [plan.steps[i] for _, i in plan.outputs],
+    )
+    capacity = plan.allocation_bytes
+    error_offset = capacity - ALIGNMENT
+    owner = lib.host_owner(capacity, error_offset)
+    error = ctypes.create_string_buffer(256)
+    arena = lib.host_arena(owner)
+    try:
+        expected = bytearray([0xA5] * capacity)
+        expected[error_offset : error_offset + ctypes.sizeof(ctypes.c_int)] = bytes(
+            ctypes.c_int(0x01010101)
+        )
+        for slot, step in enumerate(slots[0]):
+            size = step.node.spec.size * step.node.spec.itemsize
+            payload = bytes((j * 17 + slot * 43) % 256 for j in range(size))
+            host = ctypes.create_string_buffer(payload) if size else None
+            if slot == 0:
+                _assert_resident_busy(
+                    lib,
+                    owner,
+                    capacity,
+                    lambda slot=slot, host=host, size=size: lib.resident_upload(
+                        owner, slot, host, size, error, len(error)
+                    ),
+                    error,
+                    host,
+                )
+            lib.host_clear_copy_kinds()
+            before = lib.host_synchronizations()
+            assert (
+                lib.resident_upload(owner, slot, host, size, error, len(error)) == 0
+            ), error.value
+            assert lib.host_synchronizations() > before
+            assert lib.host_pending_work() == 0
+            if size:
+                assert lib.host_copy_matches(1)
+            expected[step.offset : step.offset + size] = payload
+            assert ctypes.string_at(arena, capacity) == expected
+            if not size:
+                guard = ctypes.create_string_buffer(b"\xcc", 1)
+                assert (
+                    lib.resident_upload(owner, slot, guard, 0, error, len(error)) == 0
+                )
+                assert guard.raw == b"\xcc"
+                assert ctypes.string_at(arena, capacity) == expected
+
+        # Only the reserved status int may change during this kernel-free run.
+        metrics = _Metrics()
+        assert (
+            lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error)) == 0
+        ), error.value
+        expected[error_offset : error_offset + ctypes.sizeof(ctypes.c_int)] = bytes(
+            ctypes.c_int(0)
+        )
+        assert ctypes.string_at(arena, capacity) == expected
+        assert lib.host_pending_work() == 0
+
+        # Seed the whole arena independently: downloads cannot accidentally pass
+        # by undoing an equally incorrect upload mapping.
+        raw = random.Random(2296).randbytes(capacity)
+        # Require distinguishable windows for every nonempty output length.
+        lengths = {
+            s.node.spec.size * s.node.spec.itemsize
+            for s in slots[1]
+            if s.node.spec.size
+        }
+        for length in lengths:
+            assert (
+                len({raw[j : j + length] for j in range(capacity - length + 1)})
+                == capacity - length + 1
+            )
+        ctypes.memmove(arena, raw, capacity)
+        for slot, step in enumerate(slots[1]):
+            size = step.node.spec.size * step.node.spec.itemsize
+            host = ctypes.create_string_buffer(size) if size else None
+            if slot == 0:
+                _assert_resident_busy(
+                    lib,
+                    owner,
+                    capacity,
+                    lambda slot=slot, host=host, size=size: lib.resident_download(
+                        owner, slot, host, size, error, len(error)
+                    ),
+                    error,
+                    host,
+                )
+            lib.host_clear_copy_kinds()
+            before = lib.host_synchronizations()
+            assert (
+                lib.resident_download(owner, slot, host, size, error, len(error)) == 0
+            ), error.value
+            assert lib.host_synchronizations() > before
+            assert lib.host_pending_work() == 0
+            if size:
+                assert lib.host_copy_matches(0)
+                assert host.raw == raw[step.offset : step.offset + size]
+            assert ctypes.string_at(arena, capacity) == raw
+            if not size:
+                guard = ctypes.create_string_buffer(b"\xcc", 1)
+                assert (
+                    lib.resident_download(owner, slot, guard, 0, error, len(error)) == 0
+                )
+                assert guard.raw == b"\xcc"
+                assert ctypes.string_at(arena, capacity) == raw
+
+        for transfer, steps in zip(
+            (lib.resident_upload, lib.resident_download), slots, strict=True
+        ):
+            step = max((s for s in steps if s.node.spec.size), key=lambda s: s.offset)
+            slot = steps.index(step)
+            size = step.node.spec.size * step.node.spec.itemsize
+            host = ctypes.create_string_buffer(bytes([0xCC] * (size + 1)))
+            cases = (
+                (None, slot, host, size),
+                (owner, len(steps), host, size),
+                (owner, slot, host, size + 1),
+                (owner, slot, host, size - 1),
+                (owner, slot, None, size),
+                (owner, slot, None, 0),
+                (owner, len(steps), None, 0),
+                (None, slot, None, 0),
+                (
+                    owner,
+                    slot + (1 << (ctypes.sizeof(ctypes.c_size_t) * 8 - 1)),
+                    host,
+                    size,
+                ),
+                (
+                    owner,
+                    slot,
+                    host,
+                    size + (1 << (ctypes.sizeof(ctypes.c_size_t) * 8 - 1)),
+                ),
+            )
+            for args in cases:
+                error.value = b""
+                assert transfer(*args, error, len(error)) != 0
+                assert error.value
+                assert ctypes.string_at(arena, capacity) == raw
+                assert host.raw == bytes([0xCC] * (size + 1)) + b"\0"
+            # Both bounds checks: offset outside arena; extent beyond arena.
+            for limit in (max(0, step.offset - 1), step.offset + size - 1):
+                lib.host_capacity(owner, limit)
+                error.value = b""
+                before = lib.host_synchronizations()
+                assert transfer(owner, slot, host, size, error, len(error)) != 0
+                assert error.value
+                assert lib.host_synchronizations() > before
+                assert ctypes.string_at(arena, capacity) == raw
+            lib.host_capacity(owner, capacity)
+            for failure in (1, 2, 3):
+                lib.host_failure(failure)
+                error.value = b""
+                before = lib.host_synchronizations()
+                try:
+                    assert transfer(owner, slot, host, size, error, len(error)) != 0
+                    assert b"injected" in error.value
+                    assert lib.host_synchronizations() > before
+                    assert ctypes.string_at(arena, capacity) == raw
+                    assert host.raw == bytes([0xCC] * (size + 1)) + b"\0"
+                finally:
+                    lib.host_failure(0)
+    finally:
+        lib.host_destroy(owner)
 
 
 def test_resident_spans_match_the_pinned_plan_offsets() -> None:
@@ -96,6 +407,299 @@ def test_resident_spans_match_the_pinned_plan_offsets() -> None:
     for _, i in plan.outputs:
         step = plan.steps[i]
         assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
+
+
+def test_resident_control_span_transfers(
+    resident_host: typing.Any,
+) -> None:
+    """Execute generated int64 control span mappings against raw host memory."""
+    _assert_resident_spans(*resident_host)
+
+
+@pytest.mark.skipif(
+    os.environ.get("VIBEQC_RESIDENT_HOST_CONTROLS") != "1",
+    reason="opt-in generated-source metamorphic/mutation controls",
+)
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "format",
+        "split_status",
+        "arena_status",
+        "wrong_status_offset",
+        "ignored_arithmetic_status",
+        "wrong_status_host",
+        "provider_metric",
+        "prepare_metric",
+        "observed_prepare_only",
+        "observed_live_only",
+        "abi",
+        "diagnostic",
+        "run_sync",
+        "run_kind",
+        "run_status",
+        "zero_status_bytes",
+        "short_status_bytes",
+        "begin_record",
+        "status_reset",
+        "late_reset",
+        "narrow_slot",
+        "narrow_bytes",
+        "output_offset",
+        "run_busy",
+        "transfer_busy",
+        "blocking_busy",
+        "status_target",
+        "run_endpoints",
+        "event_position",
+        "early_sync",
+        "kind",
+        "offset",
+        "length",
+        "status",
+    ],
+)
+def test_resident_host_oracle_controls(
+    mutation: str,
+    tmp_path: Path,
+    native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Harmless spelling survives; actual ABI/transfer damage is detected."""
+    plan = plan_cuda(_transfer_program("reordered"), TARGET, max_bytes=1 << 26)
+
+    def transform(source: str) -> str:
+        if mutation in ("arena_status", "wrong_status_offset"):
+            offset = plan.allocation_bytes - ALIGNMENT
+            if mutation == "wrong_status_offset":
+                offset += ctypes.sizeof(ctypes.c_int)
+            return source.replace(
+                "ctx.error", f"reinterpret_cast<int*>(p + {offset}ULL)"
+            )
+        if mutation == "ignored_arithmetic_status":
+            return source.replace("if (arithmetic_error)", "if (false)")
+        if mutation == "wrong_status_host":
+            return source.replace(
+                "int arithmetic_error = 0;", "int arithmetic_error = 0, unrelated = 0;"
+            ).replace(
+                "cudaMemcpyAsync(&arithmetic_error,", "cudaMemcpyAsync(&unrelated,"
+            )
+        if mutation in ("provider_metric", "prepare_metric"):
+            field = (
+                "provider_retained_bytes"
+                if mutation == "provider_metric"
+                else "prepare_device_delta"
+            )
+            return source.replace(
+                f"metrics.{field} = ctx.metrics.{field};", f"metrics.{field} = 0;"
+            )
+        if mutation in ("observed_prepare_only", "observed_live_only"):
+            value = (
+                "ctx.metrics.prepare_device_delta"
+                if mutation == "observed_prepare_only"
+                else "ctx.device_delta()"
+            )
+            return re.sub(
+                r"std::max\(ctx.metrics.prepare_device_delta,\s*ctx.device_delta\(\)\)",
+                value,
+                source,
+            )
+        if mutation == "format":
+            return (
+                source.replace("resident_inputs", "input_spans")
+                .replace("resident_outputs", "output_spans")
+                .replace("ULL,", "ULL,\n  ")
+            )
+        if mutation == "split_status":
+            return source.replace(
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream));",
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int)/2,"
+                "cudaMemcpyDeviceToHost,ctx.stream));"
+                "cuda_check(cudaMemcpyAsync(reinterpret_cast<unsigned char*>(&arithmetic_error)+sizeof(int)/2,"
+                "reinterpret_cast<unsigned char*>(ctx.error)+sizeof(int)/2,sizeof(int)-sizeof(int)/2,"
+                "cudaMemcpyDeviceToHost,ctx.stream));",
+            )
+        if mutation == "status":
+            return source.replace(
+                "return generativeqc_resident::transfer(",
+                "return 0 * generativeqc_resident::transfer(",
+            )
+        if mutation == "abi":
+            return source.replace(
+                'extern "C" int resident_abi() { return 1; }',
+                'extern "C" int resident_abi() { return 2; }',
+            )
+        if mutation == "diagnostic":
+            return source.replace(
+                "generativeqc_tensor::error_text(error, size, e.what()); return 1;",
+                "return 1;",
+            )
+        if mutation == "run_sync":
+            return source.replace("cuda_check(cudaEventSynchronize(ctx.end));", "")
+        if mutation == "run_kind":
+            return source.replace(
+                "cudaMemcpyDeviceToHost, ctx.stream",
+                "cudaMemcpyHostToDevice, ctx.stream",
+            )
+        if mutation == "run_status":
+            return source.replace(
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream));",
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream);",
+            )
+        if mutation == "status_target":
+            return source.replace(
+                "cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream)",
+                "cudaMemsetAsync(p, 0, sizeof(int), ctx.stream)",
+            ).replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                "cudaMemcpyAsync(&arithmetic_error, p, sizeof(int),",
+            )
+        if mutation in ("zero_status_bytes", "short_status_bytes"):
+            count = "0" if mutation == "zero_status_bytes" else "sizeof(int) - 1"
+            return source.replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                f"cudaMemcpyAsync(&arithmetic_error, ctx.error, {count},",
+            )
+        if mutation == "begin_record":
+            return source.replace(
+                "cuda_check(cudaEventRecord(ctx.begin, ctx.stream));", ""
+            )
+        if mutation == "status_reset":
+            return source.replace(
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));",
+                "",
+            )
+        if mutation == "late_reset":
+            return source.replace(
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));",
+                "",
+            ).replace(
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));",
+                "cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));"
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));",
+            )
+        if mutation == "narrow_slot":
+            return source.replace("size_t slot", "unsigned int slot")
+        if mutation == "narrow_bytes":
+            return source.replace("size_t bytes,", "unsigned int bytes,")
+        if mutation == "output_offset":
+            steps = [plan.steps[i] for i in plan.inputs]
+            outputs = [plan.steps[i] for _, i in plan.outputs]
+            capacity = (
+                max(
+                    s.offset + s.node.spec.size * s.node.spec.itemsize
+                    for s in steps + outputs
+                )
+                + 64
+            )
+            target = next(
+                s
+                for s in outputs
+                if s.node.spec.size
+                and s.offset + 256 + s.node.spec.size * s.node.spec.itemsize <= capacity
+            )
+            size = target.node.spec.size * target.node.spec.itemsize
+            before, marker, after = source.partition(
+                "static const Span resident_outputs[] ="
+            )
+            return (
+                before
+                + marker
+                + after.replace(
+                    f"{{{target.offset}ULL,{size}ULL}}",
+                    f"{{{target.offset + 256}ULL,{size}ULL}}",
+                    1,
+                )
+            )
+        if mutation == "run_endpoints":
+            return source.replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                "cudaMemcpyAsync(ctx.error, &arithmetic_error, sizeof(int),",
+            )
+        if mutation == "event_position":
+            return source.replace(
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream));", ""
+            ).replace(
+                "int arithmetic_error = 0;",
+                "cuda_check(cudaEventRecord(ctx.end, ctx.stream)); int arithmetic_error = 0;",
+            )
+        if mutation == "early_sync":
+            return source.replace(
+                "cuda_check(cudaEventSynchronize(ctx.end));", ""
+            ).replace(
+                "int arithmetic_error = 0;",
+                "cuda_check(cudaEventSynchronize(ctx.end)); int arithmetic_error = 0;",
+            )
+        if mutation == "kind":
+            return source
+        if mutation == "run_busy":
+            return source.replace("if (!lock.owns_lock()) {", "if (false) {")
+        if mutation == "blocking_busy":
+            return source.replace("ctx.mutex, std::try_to_lock", "ctx.mutex")
+        if mutation == "transfer_busy":
+            return source
+        field = 0 if mutation == "offset" else 1
+
+        def corrupt(match: re.Match[str]) -> str:
+            values = [int(match[1]), int(match[2])]
+            values[field] += 1
+            return f"{{{values[0]}ULL,{values[1]}ULL}}"
+
+        return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
+
+    def wrong_kind(header: str) -> str:
+        if mutation == "transfer_busy":
+            return header.replace("if (!lock.owns_lock()) {", "if (false) {")
+        return header.replace(
+            "upload ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToHost",
+            "upload ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice",
+        )
+
+    lib = build_resident_host(
+        plan,
+        tmp_path,
+        native_cxx,
+        monkeypatch,
+        transform,
+        header_transform=wrong_kind if mutation in ("kind", "transfer_busy") else None,
+    )
+    if mutation in (
+        "abi",
+        "diagnostic",
+        "run_sync",
+        "run_kind",
+        "run_status",
+        "zero_status_bytes",
+        "short_status_bytes",
+        "begin_record",
+        "status_reset",
+        "late_reset",
+        "run_endpoints",
+        "event_position",
+        "early_sync",
+        "run_busy",
+        "blocking_busy",
+        "status_target",
+        "wrong_status_offset",
+        "ignored_arithmetic_status",
+        "wrong_status_host",
+        "provider_metric",
+        "prepare_metric",
+        "observed_prepare_only",
+        "observed_live_only",
+    ):
+        with pytest.raises(AssertionError):
+            _assert_resident_abi(plan, lib)
+        return
+    _assert_resident_abi(plan, lib)
+    if mutation in ("format", "split_status", "arena_status"):
+        _assert_resident_spans(plan, lib)
+    else:
+        with pytest.raises(AssertionError):
+            _assert_resident_spans(plan, lib)
 
 
 def test_resident_run_propagates_the_ordinary_status() -> None:
