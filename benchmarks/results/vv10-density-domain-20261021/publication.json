@@ -29,6 +29,12 @@
       "path": "validation.json",
       "role": "evidence",
       "sha256": "b85eeaaa2970e0ca934b2aabf64357f4e29ad50c3e5f77ce42d298a8535a97f0"
+    },
+    {
+      "bytes": 1932,
+      "path": "reference-default-check.json",
+      "role": "summary",
+      "sha256": "f7b5e2c387d5318d2ebbeaccbc94e24b29d50466e3fc176c45d745ee1f8fd559"
     }
   ],
   "reproduction": {
