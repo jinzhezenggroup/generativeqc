@@ -405,13 +405,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * rebased incumbent energy. No density, Fock or force evaluation is skipped. */
   bool retain_range_source_for_replay(bool use_warm) const {
     const auto replay = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY");
+    // Admission follows the next warm consumer, not the cold proposal's
+    // precision schedule. Application-budget warm revalidation starts strict;
+    // it may borrow a strict lease, but never relabel a mixed recurrence lease.
+    const bool strict_warm = !precision_schedule.any_lower_precision() ||
+                             (options.application_precision_budget[0] > 0.0 &&
+                              (experimental_mixed_point || budget_fock));
     return use_warm && range_source_active() && std::isfinite(range_warm_energy) &&
-           (replay.empty() || replay == "1") &&
+           !phase_source->mixed_recurrence() && strict_warm && (replay.empty() || replay == "1") &&
            range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == range_selection_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
-           !precision_schedule.any_lower_precision() && !runtime::active_device_resource_ledger;
+           !runtime::active_device_resource_ledger;
   }
 
   bool range_source_active() const noexcept {
@@ -505,11 +511,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // consumers even after a geometry move. Warm calls only retain an existing
     // audited source; they never construct a quartic one for a single Fock.
     // Complete endpoints qualify screened SPD sources on substantial grids.
-    // The short budget-confirmation tail cannot amortize a second quartic
-    // source after retiring the mixed lease. Explicit residency requests still
-    // exercise strict sources; automatic refinement retains streamed values.
-    if (automatic_range && (!nonlocal_outer_active || strict_refinement ||
-                            xc_layout.npoint < 65536 || maximum_angular > 2))
+    // Application-budget refinement publishes a strict lease for both its
+    // remaining target work and same-owner warm consumers. The mixed lease is
+    // retired first, so the existing 4-GiB and complete-resource bounds still
+    // apply to one optional source. Ordinary AUTO keeps its streamed tail.
+    const bool budget_range_refinement = strict_refinement && budget_fock && budget_stationarity;
+    if (automatic_range &&
+        (!nonlocal_outer_active || (strict_refinement && !budget_range_refinement) ||
+         xc_layout.npoint < 65536 || maximum_angular > 2))
       return;
     const bool source_cold_phase = cold || (automatic_range && nonlocal_outer_active);
     const auto buckets = direct_jk_resident_bucket_policy(
