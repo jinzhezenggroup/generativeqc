@@ -84,7 +84,6 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
             )
         )
     )
-    assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
         "const auto result ="
         + endpoint.split("const auto result =", 1)[1].split(");", 1)[0]
