@@ -69,7 +69,7 @@ def compressed_json(path: Path) -> tuple[dict, bytes]:
     decoded = bounded_gzip(closed_bytes(path))
     value = json.loads(decoded)
     require(isinstance(value, dict), "compressed evidence must be an object")
-    canonical_hash(value)  # Reject nonfinite nested values.
+    json.dumps(value, allow_nan=False)  # Reject nonfinite nested values.
     return value, decoded
 
 
@@ -374,6 +374,7 @@ def main() -> int:
                 "status": "UNAVAILABLE",
                 "reason": str(error),
             }
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             atomic_json(args.output, result)
             return 1
     if args.campaign is not None:
@@ -389,6 +390,7 @@ def main() -> int:
             result["full_evidence_reproduction"] = (
                 "PASS_TOOLING_RECONSTRUCTION_AND_ORIGINAL_RAW_REPLAY"
             )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(args.output, result)
     return 0
 

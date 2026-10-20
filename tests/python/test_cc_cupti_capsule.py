@@ -159,7 +159,7 @@ def test_full_evidence_requires_both_original_raw_and_tooling_recovery(
         "recover_tooling_sources",
         lambda *args: {"status": "PASS_RECONSTRUCTED_17_MEASURED_TOOLING_INPUTS"},
     )
-    output = tmp_path / "result.json"
+    output = tmp_path / "new" / "nested" / "result.json"
     argv = [
         "capsule",
         "--capsule",
@@ -206,7 +206,7 @@ def test_unavailable_source_stops_full_replay_without_claiming_pass(
 
     monkeypatch.setattr(module, "recover_tooling_sources", missing)
     monkeypatch.setattr(module, "audit_campaign", forbidden)
-    output = tmp_path / "unavailable.json"
+    output = tmp_path / "new" / "nested" / "unavailable.json"
     monkeypatch.setattr(
         sys,
         "argv",
@@ -255,3 +255,15 @@ def test_compressed_input_remains_bounded_and_regular(
         os.mkfifo(path)
     with pytest.raises(InvalidTrace):
         compressed_json(path)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_compressed_input_rejects_nonfinite_nested_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: float
+) -> None:
+    from benchmarks import cc_cupti_capsule as module
+
+    raw = gzip.compress(json.dumps({"metadata": {"value": value}}).encode())
+    monkeypatch.setattr(module, "closed_bytes", lambda _: raw)
+    with pytest.raises(ValueError):
+        module.compressed_json(tmp_path / "capsule.json.gz")
