@@ -1,5 +1,11 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-20 default-grid README refresh](readme-defaults-20261020/README.md)
+retains 765 complete cold/warm E+F calls across all eight HF/DFT methods,
+including public Standard/Fast modes. Native DF rejects the reference's default
+g-shell auxiliary basis; those failures remain explicit. These are stock
+latencies with different force-response conventions, not qualified speedups.
+
 The [2026-10-16 shared Fast qualification](shared-fast-20261016/README.md)
 separates shared J/K, nonlocal packet and native-force gains from remaining
 small-system slowdowns, with source-bound independent accuracy and work counts.

@@ -1,0 +1,110 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Stock endpoint latencies are retained; equal-accuracy production ranking is not qualified. Native DF rejects g auxiliary shells and one reference warm population failed.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 8605,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "9065278475aee50ea11f95547f23bdde15d5a513251720d587da84cf481df1d3"
+    },
+    {
+      "bytes": 2788,
+      "path": "auxiliary-inputs.json.xz",
+      "role": "input",
+      "sha256": "f6c99fa09941636314e695d4c419b181d9f12ea833947a450ea71a21687977a4"
+    },
+    {
+      "bytes": 1195,
+      "path": "build-aot-n1.py",
+      "role": "reproduction",
+      "sha256": "c71d831241fabb97b61a1ac124cf89cbdd1e1ff08a2de2b08e4e312936e22b73"
+    },
+    {
+      "bytes": 2037,
+      "path": "build-n1.sh",
+      "role": "reproduction",
+      "sha256": "33bbdf84abe8c47d84d602e84ce851a1860ad0359978564c3603c5183fbdf74a"
+    },
+    {
+      "bytes": 5463,
+      "path": "build-settings.json",
+      "role": "summary",
+      "sha256": "b550037b7e2a4f79802c3c435d94c0670ff777e8a73c5829d169abed6961fc06"
+    },
+    {
+      "bytes": 8084,
+      "path": "compiler-cache.json",
+      "role": "summary",
+      "sha256": "25a70e7145bc714f7667df411c9ba93b7bd66e53077379ced6c9f2711b600a3f"
+    },
+    {
+      "bytes": 21064,
+      "path": "job-outcomes.json.xz",
+      "role": "summary",
+      "sha256": "73c8a5b9ea0338e754ea17ec3343bfad620cc9061c59d3eb281b18c459eac6b6"
+    },
+    {
+      "bytes": 1682,
+      "path": "launch-n1.py",
+      "role": "reproduction",
+      "sha256": "70789b901163ae98c63ac13a1c41ad2e2056efd061fb4df8e9bb751d5e7bb3f5"
+    },
+    {
+      "bytes": 21407,
+      "path": "measurement-driver.patch",
+      "role": "source-patch",
+      "sha256": "84b422a9a2af6ffa9c52dd618af121080f003707a604f21cb761d22e8107de21"
+    },
+    {
+      "bytes": 1036,
+      "path": "provenance.json",
+      "role": "summary",
+      "sha256": "0c2fd3efccb4dea01d4efce751af6a398c7ec36854812334792945b71b8fb53b"
+    },
+    {
+      "bytes": 594836,
+      "path": "receipts.json.xz",
+      "role": "samples",
+      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb"
+    },
+    {
+      "bytes": 834,
+      "path": "run-n1.sh",
+      "role": "reproduction",
+      "sha256": "0118f78b1bed14039202a8bf7b29fad439e19665b2d4af64ac66f07a998088ad"
+    },
+    {
+      "bytes": 21781,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "962134c95cd8dd9c0d8d48da6fc982ca65a363a2507b97a5e397905e24550e56"
+    },
+    {
+      "bytes": 5532,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "1a363500aee068fb397faf39b458ae12ca4b205ff9b149b7a9978b670f94843d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.readme_defaults_report",
+      "--receipts",
+      "benchmarks/results/readme-defaults-20261020/receipts.json.xz",
+      "--output",
+      ".artifacts/readme-defaults-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "e5fa4d2f0cd13775327261a0b6ced1eab6006c62"
+  }
+}

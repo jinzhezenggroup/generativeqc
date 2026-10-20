@@ -102,6 +102,8 @@ def reduce_record(record: dict) -> dict:
         cold=None,
         warm=None,
     )
+    if str(record.get("error", "")).startswith("NotImplementedError:"):
+        result["status"] = "unsupported"
     for phase in ("cold", "warm"):
         rows = [row for row in samples if row["phase"] == phase]
         required = 1 if phase == "cold" else record["warm_repeats"]
@@ -201,6 +203,10 @@ def render(records: list[dict], destination: Path) -> list[dict]:
             handles = [
                 Line2D([], [], color=COLORS[arm], lw=2, label=ARM_LABELS[arm])
                 for arm in ARMS
+                if any(
+                    row["mode"] == mode and row["arm"] == arm and row["cold"]
+                    for row in rows
+                )
             ]
             handles.extend(
                 [
@@ -223,7 +229,7 @@ def render(records: list[dict], destination: Path) -> list[dict]:
                 handles=handles,
                 loc="upper center",
                 bbox_to_anchor=(0.5, 0.955),
-                ncol=3,
+                ncol=3 if mode == "direct" else 2,
                 frameon=False,
             )
             fig.suptitle(
@@ -239,8 +245,31 @@ def render(records: list[dict], destination: Path) -> list[dict]:
                 fontsize=9,
                 color="#555555",
             )
-            fig.tight_layout(rect=(0, 0.035, 1, 0.9), h_pad=2)
-            fig.savefig(destination / f"{mode}.svg", metadata={"Date": None})
+            if mode == "df" and not any(
+                row["mode"] == "df"
+                and row["arm"] in ("standard", "fast")
+                and row["cold"] is not None
+                for row in rows
+            ):
+                fig.text(
+                    0.5,
+                    0.907,
+                    "GenerativeQC DF unavailable: the default auxiliary basis contains unsupported g shells.",
+                    ha="center",
+                    fontsize=10,
+                    color="#555555",
+                )
+            fig.tight_layout(
+                rect=(0, 0.035, 1, 0.9 if mode == "direct" else 0.88), h_pad=2
+            )
+            svg = destination / f"{mode}.svg"
+            fig.savefig(svg, metadata={"Date": None})
+            # Matplotlib emits trailing blanks inside multiline SVG paths.
+            # Newlines already delimit path tokens; stripping blanks preserves
+            # the drawing while keeping generated assets clean in Git diffs.
+            svg.write_text(
+                "\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n"
+            )
             plt.close(fig)
     return rows
 

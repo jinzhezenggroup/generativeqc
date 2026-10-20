@@ -6,7 +6,15 @@ rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
 ## README production comparisons
 
-The README's headline HF/DFT comparison measures the cost of reaching a common
+The README also reports **default-configuration endpoint latency**, when that is
+the requested experiment. Such plots retain stock grid and force-response
+settings, disclose any Fast convergence mapping, and carry no matched-accuracy
+or fastest-qualified-configuration claim. Their raw receipts must still retain
+complete endpoints, warm populations, executed controls, work and provenance.
+The accuracy-qualified production ranking described below remains a separate
+claim; default timing observations do not satisfy its qualification gates.
+
+An accuracy-qualified HF/DFT headline comparison measures the cost of reaching a common
 scientific accuracy target with each engine's best qualified production
 configuration, not the cost of executing an artificially identical amount of
 work. Here, "best" means the fastest configuration among the documented,
