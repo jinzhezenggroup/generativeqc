@@ -696,7 +696,10 @@ class PrecisionCalculator:
         Audits suspend that plan with bounded host seed storage; later execution
         restores only its own seeds, never an auditor's density. Candidate batch
         timing is shared, not invented per-item or divided equally among items.
-        ``maximum_seed_bytes`` bounds numeric seed staging when an audit is needed.
+        Auditors may warm from their own same-geometry, same-control densities;
+        every audit still recomputes its observables. ``maximum_seed_bytes``
+        bounds combined candidate and auditor numeric seed staging. Optional
+        audit history is discarded when that bound cannot accommodate it.
         """
         from ._precision_batch import PreparedPrecisionBatch
 

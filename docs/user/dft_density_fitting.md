@@ -7,6 +7,11 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
+CUDA HF/KS accepts orbital shells through f and fitting auxiliaries through g
+(`l=4`) for energies and first nuclear derivatives, including spherical JKFIT
+bases. Auxiliary-center and metric response use the native bounded derivative
+owner. This does not extend orbital-g or higher-derivative support.
+
 Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
 under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes
 only the initial density: the molecular fitted operators, auxiliary basis,

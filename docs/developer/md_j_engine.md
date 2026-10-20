@@ -33,7 +33,7 @@ or screening equivalence with upstream.
 
 | Stage | Pinned GPU4PySCF | Integrated GenerativeQC equivalent and compatibility choice |
 | --- | --- | --- |
-| Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity plus every ordered primitive product. Resident sparse weighted E transforms factor the contraction, normalization and Cartesian/spherical maps without materializing dense C. This reuses the established transform pipeline. |
+| Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity and folds same-shell primitive exchange. Distinct shells retain all ordered products. Resident sparse weighted E transforms factor contraction, normalization and Cartesian/spherical maps without materializing dense C. |
 | Pair layout | `j_engine.py`: `(li,lj)` pair mappings sorted by `q_cond`, packed `pair_loc` | Within total-angular classes 0–4, a deterministic active-prefix, descending-q, primitive-ID permutation drives packed Hermite intervals. `md_j_engine_pair_loc` rewrites only Hermite offsets. Original shell/primitive identities and transform slots stay valid. Total-angular grouping is sufficient after the separate bra/ket E transforms; it is not upstream's raw-shell ordering. |
 | Density precontraction | `lib/gvhf-md/contract_Et.cu`: `Et_dot_dm` | Existing `md_j_density` contracts the actual public density into resident primitive Hermite density using cached E. UKS uses alpha+beta; nonsymmetric density retains both AO directions. |
 | Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, a recipe-specific minimum field, and density. Reference nodes maximize leaf Schwarz minima; primitive nodes minimize target source thresholds. The reference recipe preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. The complete primitive recipe uses the precontracted source norm described below at both coarse and leaf decisions. |
@@ -74,9 +74,20 @@ compiler-emitted Hermite norms. Absolute coefficient sums remain valid for
 signed/general contractions. The bound belongs to each primitive, rather than
 being copied from its contracted parent.
 
+Within a single shell, exchanging primitive indices leaves the Gaussian product
+unchanged. The MD owner stores only one of `(p,q)` and `(q,p)`, and its cached E
+transform includes a factor of two when `p != q`. Diagonal primitive pairs keep
+unit weight. The product center is the shell center. J density precontraction,
+AO projection and the shared exact J/K source consumer all use this same
+weighted transform. Distinct shells, including different contraction columns
+on the same atom, retain every ordered product. All retained MD recipes use
+this inventory; the non-MD fallback is unchanged.
+
 Let `epsilon = min(screening_tolerance, 1e-12)`, `m` be the target's
-original-shell-pair primitive multiplicity, and `N` the complete primitive
-census. Each target receives an allowance `epsilon/m`, rounded down. Its
+retained primitive multiplicity within its original shell pair, and `N` the
+complete retained primitive census. Norms include the folded E weights, so the
+omission certificate covers the original contracted J. Each target receives
+an allowance `epsilon/m`, rounded down. Its
 source threshold is the larger of two independently certified choices:
 
 - the uniform threshold `(epsilon/(m*N))/q_target`, rounded down;

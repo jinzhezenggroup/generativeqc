@@ -224,3 +224,8 @@ spends the whole target allowance, so additional omissions need a joint proof
 or an explicitly accounted remaining budget. Do not weaken screening or infer
 per-Fock J from complete energy/force time divided by iterations. Revisit wider
 tiles only with new evidence for their actual limiting cost.
+
+The subsequent [same-shell primitive exchange decision](2026-10-20-md-j-same-shell-fold.md)
+removes duplicate primitive products while retaining this radial arithmetic and
+the cumulative omission certificate. It also records further screening-budget
+and ordering experiments, including negative results.
