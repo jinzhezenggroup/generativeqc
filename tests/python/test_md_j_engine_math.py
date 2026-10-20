@@ -124,6 +124,8 @@ def md_engine(tmp_path_factory: pytest.TempPathFactory) -> Any:
     owner.contract_values.restype = ctypes.c_int
     owner.primitive_norm.argtypes = [ctypes.c_double, ctypes.c_uint, ctypes.c_uint]
     owner.primitive_norm.restype = ctypes.c_double
+    owner.boys_seeds.argtypes = [ctypes.c_uint, ctypes.c_double, array, array]
+    owner.boys_seeds.restype = ctypes.c_int
     return owner
 
 
@@ -361,9 +363,58 @@ def test_compact_radial_matches_full_auxiliary_and_high_precision(
     np.testing.assert_array_equal(compact[[0, -1]], (23.5, -71.25))
     expected, bound = _closed_radial(order, rho, tuple(displacement))
     assert np.all(np.isfinite(compact[1:-1]))
-    np.testing.assert_allclose(compact[1:-1], full, rtol=2e-14, atol=1e-290)
-    error = np.abs(compact[1:-1] - expected)
-    assert np.all(error <= 3e-12 * bound + 1e-290), (order, rho, argument, error.max())
+    # The compact and full owners now use different FP64 Boys evaluation
+    # orders. Near a zero derivative, relative agreement with another rounded
+    # recurrence is not an accuracy oracle. Keep the original independent
+    # absolute-term bound and require BOTH implementations to satisfy it.
+    for actual in (compact[1:-1], full):
+        error = np.abs(actual - expected)
+        assert np.all(error <= 3e-12 * bound + 1e-290), (
+            order,
+            rho,
+            argument,
+            error.max(),
+        )
+
+
+@pytest.mark.parametrize("order", range(9))
+def test_boys_reciprocal_and_default_against_high_precision(
+    md_engine: Any, order: int
+) -> None:
+    """Qualify seeds directly at both sides of every retained branch boundary.
+
+    The default is exercised too: other direct/derivative consumers retain
+    its rounding and do not opt in to the compact J arithmetic.
+    """
+    boundaries = (1e-8, 0.25, 0.75, 1.25, 2.0, 6.0)
+    arguments = [0.0, 1e-300, 1e-12, 0.1, 1.0, 10.0, 100.0, 1e4]
+    arguments += [
+        neighbor
+        for value in boundaries
+        for neighbor in (
+            math.nextafter(value, 0.0),
+            value,
+            math.nextafter(value, math.inf),
+        )
+    ]
+    for argument in arguments:
+        reused, retained = np.empty(order + 1), np.empty(order + 1)
+        assert md_engine.boys_seeds(order, argument, reused, retained) == 0
+        with mp.workdps(80):
+            t = mp.mpf(argument)
+            exact = np.asarray(
+                [
+                    float(
+                        mp.mpf(1) / (2 * n + 1)
+                        if t == 0
+                        else mp.gammainc(mp.mpf(n) + mp.mpf("0.5"), 0, t)
+                        / (2 * t ** (mp.mpf(n) + mp.mpf("0.5")))
+                    )
+                    for n in range(order + 1)
+                ]
+            )
+        for actual in (reused, retained):
+            np.testing.assert_allclose(actual, exact, rtol=3e-12, atol=1e-290)
 
 
 @pytest.mark.parametrize("order", range(9))
@@ -568,6 +619,20 @@ PROBE = r"""
 #include "scf/cuda/coulomb_auxiliary.cuh"
 #include "scf/cuda/md_hermite_index.cuh"
 using namespace generativeqc::scf::cuda_execution;
+
+template<unsigned Order>
+void boys_impl(double t, double* reused, double* retained) {
+  boys_values<Order, double, true>(t, reused);
+  boys_values<Order>(t, retained);
+}
+extern "C" int boys_seeds(unsigned order, double t, double* reused, double* retained) {
+  switch (order) {
+#define CASE(N) case N: boys_impl<N>(t, reused, retained); return 0
+    CASE(0); CASE(1); CASE(2); CASE(3); CASE(4); CASE(5); CASE(6); CASE(7); CASE(8);
+#undef CASE
+  }
+  return -1;
+}
 
 template<unsigned Order>
 void radial_impl(double rho, const double* d, double* compact, double* full) {
