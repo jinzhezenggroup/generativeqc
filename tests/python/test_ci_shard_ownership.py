@@ -157,11 +157,25 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
-    event: str, presence: str, tmp_path: Path
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_shell_units.py", "ecp-forces"),
+        ("tests/python/test_treutler_endpoints.py", "posthf"),
+    ),
+)
+def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
+    event: str, presence: str, module: str, owner: str, tmp_path: Path
 ) -> None:
-    module = "tests/python/test_df_shell_units.py"
-    ordinary = [f"tests/python/test_probe_{index}.py" for index in range(9)]
+    ordinary = [
+        "tests/python/test_aaa.py",
+        "tests/python/test_df_aaa.py",
+        "tests/python/test_df_zzz.py",
+        *[f"tests/python/test_probe_{index}.py" for index in range(3)],
+        "tests/python/test_treutler_aaa.py",
+        "tests/python/test_treutler_zzz.py",
+        "tests/python/test_zzz.py",
+    ]
     tracked = presence in {"tracked", "missing"}
     inventory = sorted([*ordinary, *([module] if tracked else [])])
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
@@ -178,8 +192,8 @@ def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
     owners = [
         shard for shard, (_, targets, _) in selections.items() if module in targets
     ]
-    assert owners == (["ecp-forces"] if tracked else [])
-    assert selections["ecp-forces"][0] == "loadfile"
+    assert owners == ([owner] if tracked else [])
+    assert selections[owner][0] == "loadfile"
     for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         assert selections[shard][1] == [
             path for path in inventory[bucket::3] if path != module
@@ -192,12 +206,18 @@ def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
 
 
 @pytest.mark.parametrize("event", ("pull_request", "schedule"))
-def test_df_shell_units_execute_once_with_one_shared_fixture_owner(
-    event: str, tmp_path: Path
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_shell_units.py", "ecp-forces"),
+        ("tests/python/test_treutler_endpoints.py", "posthf"),
+    ),
+)
+def test_measured_module_executes_once_with_one_shared_fixture_owner(
+    event: str, module: str, owner: str, tmp_path: Path
 ) -> None:
     """Qualify the selected scheduler with fast competing files and a slow fixture."""
-    module = "tests/python/test_df_shell_units.py"
-    distribution, targets, arguments = _selection(event, "ecp-forces")
+    distribution, targets, arguments = _selection(event, owner)
     assert module in targets
     assert not any(module in argument for argument in arguments)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
@@ -1150,18 +1170,19 @@ def _prioritized_posthf_targets(targets: list[str], root: Path) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "event", ("pull_request", "merge_group", "schedule", "workflow_dispatch")
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("shard", SHARDS)
 def test_measured_file_priority_only_changes_routine_posthf_scheduling(
     event: str, shard: str
 ) -> None:
     distribution, selected, extra = _selection(event, shard)
-    prioritized = shard == "posthf" and event in {"pull_request", "merge_group"}
+    prioritized = shard == "posthf" and event in {"pull_request", "push", "merge_group"}
     assert ("--no-loadscope-reorder" in extra) == prioritized
     if prioritized:
         assert distribution == "loadfile"
-        assert selected[:4] == [
+        assert selected[:5] == [
+            "tests/python/test_treutler_endpoints.py",
             "tests/python/test_uccsd_lambda.py",
             "tests/python/test_uccsd_t_owner.py",
             "tests/python/test_uccsd_physical_response.py",
@@ -1235,10 +1256,10 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         encoding="utf-8",
     )
     priority = [
+        "test_treutler_endpoints.py",
         "test_uccsd_lambda.py",
         "test_uccsd_t_owner.py",
         "test_uccsd_physical_response.py",
-        "test_dft_complete_cpu.py",
     ]
     ordinary = [f"test_future_{index}.py" for index in range(4)]
     for name in [*priority, *ordinary]:
