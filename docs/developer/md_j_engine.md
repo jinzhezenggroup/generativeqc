@@ -74,12 +74,24 @@ compiler-emitted Hermite norms. Absolute coefficient sums remain valid for
 signed/general contractions. The bound belongs to each primitive, rather than
 being copied from its contracted parent.
 
-Each directed primitive product receives an omission allowance of
-`min(screening_tolerance, 1e-12) / (target_pair_primitives * primitive_count)`.
-The target multiplicity is the actual number of ordered primitive products in
-that output's original shell pair. Source-prefix admission retains the smaller
-allowance based on the global maximum target multiplicity. Target-prefix and
-coarse tile admission use the actual-target thresholds described below.
+Let `epsilon = min(screening_tolerance, 1e-12)`, `m` be the target's
+original-shell-pair primitive multiplicity, and `N` the complete primitive
+census. Prefix admission first uses `epsilon / (2*m*N)`, rounded down.
+Source-prefix admission uses the global maximum target multiplicity; target
+admission uses its actual multiplicity. After all five angular prefixes are
+frozen, let `A` be the sum of their lengths. A second device-only hierarchy pass
+refreshes leaf thresholds and node minima with census `min(N, 2*A)`; an empty
+prefix uses `N` and schedules no source tasks. It never enlarges the prefixes.
+
+When `2*A < N`, every excluded-prefix direction has a valid share of half the
+budget, and every omitted retained direction has a share of the other half:
+at most `m*N` products at `epsilon/(2*m*N)` plus `m*A` products at
+`epsilon/(2*m*A)`. When `2*A >= N`, the original `epsilon/(m*N)` uniform
+allowance bounds all omitted directions, including stricter prefix omissions.
+Thus the complete absolute screening error for every public J entry remains
+bounded by `epsilon`. Prefix lengths conservatively include inactive gaps and
+other systems; no exact nonzero-source census or host readback is needed.
+
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
 the represented Hermite source and is stored in the existing hierarchy's `qD`
@@ -87,9 +99,9 @@ field. It is not capped by the uncontracted primitive norm times the shell
 density envelope: precontraction rounding near underflow can make that envelope
 smaller than the norm of the stored source. The output primitive norm times
 this source bound bounds the directed contribution to any output AO. A tile
-stages the source norm and a cached downward-rounded ratio
-`allowance / output_norm`. The hierarchy computes this threshold once per
-primitive per replay, reduces its minimum across each node, and uses infinity
+stages the source norm and the second pass's cached downward-rounded ratio
+`allowance / output_norm`. Each hierarchy pass computes its threshold once per
+primitive, reduces its minimum across each node, and uses infinity
 for inactive/padded targets. A tile is rejected only when neither direction
 has a nonzero maximum source norm at or above the opposite minimum target
 threshold. The inner loop applies the same leaf threshold. This avoids repeated allowance divisions and bound products for
@@ -108,7 +120,9 @@ primitive remains in the prefix if it can contribute as either an output or a
 source. Target admission compares the global maximum source norm with its
 actual threshold; source admission uses the global maximum output norm and
 maximum target multiplicity. The rectangular/triangular
-work inventory is constructed from those prefixes.
+work inventory is constructed from those frozen prefixes. The second pass
+reuses their resident census to refine screening within the retained domain;
+both passes execute in stream order and are refreshed on every replay.
 Small geometry bounds cannot restore a quadratic traversal over the entire
 unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
 changing density magnitude never relies on pointer identity. All ordinary E,
@@ -152,6 +166,10 @@ Memory-bounded traversal alone is not evidence of work or performance improvemen
 
 Source lanes form a two-dimensional bra/ket batch. Each source has one radial
 recurrence owner; component lanes read that source's strided compact simplex.
+The common Coulomb prefactor is folded into the Boys seed scale before the
+linear radial recurrence, sharing it across both admitted directions and
+removing one multiplication per output dot. This changes FP64 rounding order;
+the unscaled generated entry point remains available for independent comparison.
 Bra partials remain in registers across ket batches, then reuse the radial
 workspace for reduction. Ket partials reduce across contiguous bra shuffle
 groups before a single writer updates each shared element. Global atomics

@@ -13,22 +13,23 @@
 namespace generativeqc::scf::cuda_execution {
 namespace {
 
-/** Each output AO pair has target_count primitive products and at most
- * primitive_count sources. Apportioning by that actual target multiplicity
- * bounds the sum of omitted absolute contributions by min(tolerance,1e-12).
- * Source-prefix admission uses the global maximum multiplicity; target and
- * tile admission reuse the actual-target thresholds. This bounds
- * screening error, independently of FP64 accumulation error. */
+/** Divide a capped omission budget by the target multiplicity and source
+ * census, rounding down. Zero counts select the complete owner census. A
+ * caller using a smaller census must separately certify omitted sources;
+ * the two hierarchy passes below partition that total budget explicitly.
+ * This bounds screening, independently of FP64 accumulation error. */
 __host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening,
-                                                           std::size_t target_count = 0) {
+                                                           std::size_t target_count = 0,
+                                                           std::size_t source_count = 0) {
   if (!target_count) target_count = md.maximum_pair_primitives;
+  if (!source_count) source_count = md.primitive_count;
 #ifdef __CUDA_ARCH__
   return __ddiv_rd(__ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(target_count)),
-                   double(md.primitive_count));
+                   double(source_count));
 #else
   return std::nextafter(
       std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(target_count), 0.0) /
-          double(md.primitive_count),
+          double(source_count),
       0.0);
 #endif
 }
@@ -58,7 +59,8 @@ __device__ inline double md_j_engine_source_threshold(double output_norm, double
  * reference nodes retain maxima of all fields. Refresh on the owning stream
  * for every density/window. No reduction reads another warp's scratch. */
 __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t begin,
-                                      std::size_t end, double screening = 0.0) {
+                                      std::size_t end, double screening = 0.0,
+                                      bool refine_thresholds = false) {
   const auto position = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   const auto layout = md.hierarchy_layout.buckets[angular];
   if (position >= layout.aligned) return;  // padded size is a whole number of warps
@@ -81,16 +83,33 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
         // density envelope. Either direction can keep this q-sorted position.
         bound.qd = output[position].qd;
         const auto pair = md.pairs[primitive.pair];
+        double budget = screening;
+        std::size_t source_count = md.primitive_count;
+        if (refine_thresholds) {
+          // All five prefix kernels have completed on this stream. Charge at
+          // most half the total omission allowance to their excluded domain,
+          // then share the other half over this frozen source superset. When
+          // that share would be smaller than the original uniform allowance,
+          // use the full census: every prefix omission also meets that bound.
+          std::size_t active = 0;
+          for (unsigned angular = 0; angular < 5; ++angular)
+            active += md.primitive_screen->active[angular];
+          if (active && active <= md.primitive_count / 2) source_count = 2 * active;
+        } else {
+          budget = __ddiv_rd(fmin(screening, kMdJDensityErrorCap), 2.0);
+        }
         bound.minimum = md_j_engine_source_threshold(
-            bound.q,
-            md_j_primitive_allowance(md, screening, pair.primitive_end - pair.primitive_begin));
-        const auto allowance = md_j_primitive_allowance(md, screening);
-        const bool target = md.primitive_screen->maximum_source_norm != 0.0 &&
-                            md.primitive_screen->maximum_source_norm >= bound.minimum;
-        const bool source = bound.qd != 0.0 && md_j_bound_product_up(md.primitive_maximum_bound,
-                                                                     bound.qd) >= allowance;
-        if (target || source)
-          atomicMax(md.primitive_screen->active + angular, static_cast<unsigned>(position + 1));
+            bound.q, md_j_primitive_allowance(md, budget, pair.primitive_end - pair.primitive_begin,
+                                              source_count));
+        if (!refine_thresholds) {
+          const auto allowance = md_j_primitive_allowance(md, budget);
+          const bool target = md.primitive_screen->maximum_source_norm != 0.0 &&
+                              md.primitive_screen->maximum_source_norm >= bound.minimum;
+          const bool source = bound.qd != 0.0 && md_j_bound_product_up(md.primitive_maximum_bound,
+                                                                       bound.qd) >= allowance;
+          if (target || source)
+            atomicMax(md.primitive_screen->active + angular, static_cast<unsigned>(position + 1));
+        }
       }
     }
   }
@@ -305,18 +324,18 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
                            ? md_j_engine_primitive_direction(bra.source_norm, ket.source_threshold)
                            : md_j_engine_direction(md, ket.pair, bra.pair, screening));
             if (forward || reverse) {
+              prefactor = 2.0 * pow(kPi, 2.5) /
+                          (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
               if (component_lane == 0) {
                 const auto rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
                 md_engine_radial<BraAngular + KetAngular, sources>(rho, bra.product, ket.product,
-                                                                   radial + source_lane);
+                                                                   radial + source_lane, prefactor);
                 if constexpr (CountWork) {
                   ++roots;
                   forwards += forward;
                   reverses += reverse;
                 }
               }
-              prefactor = 2.0 * pow(kPi, 2.5) /
-                          (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
             }
           }
         }
@@ -325,10 +344,8 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
           for (unsigned slot = 0; slot < bra_outputs; ++slot) {
             const auto component = slot * components + component_lane;
             if (component < bra_components)
-              bra_values[slot] +=
-                  prefactor *
-                  md_engine_forward_component<BraAngular, KetAngular, sources>(
-                      radial + source_lane, ket_density + ket_slot * ket_components, component);
+              bra_values[slot] += md_engine_forward_component<BraAngular, KetAngular, sources>(
+                  radial + source_lane, ket_density + ket_slot * ket_components, component);
           }
         // Every physical lane participates in each shuffle, including padded
         // tails and screened sources. Only bra_lane==0 writes the shared sum;
@@ -337,9 +354,8 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
           const auto component = slot * components + component_lane;
           double value = 0.0;
           if (reverse && component < ket_components)
-            value = prefactor *
-                    md_engine_reverse_component<BraAngular, KetAngular, sources>(
-                        radial + source_lane, bra_density + bra_slot * bra_components, component);
+            value = md_engine_reverse_component<BraAngular, KetAngular, sources>(
+                radial + source_lane, bra_density + bra_slot * bra_components, component);
           for (unsigned stride = bra_lanes / 2; stride; stride /= 2)
             value += __shfl_down_sync(0xffffffffU, value, stride, bra_lanes);
           if (bra_lane == 0 && ket_slot < task.ket_count && component < ket_components)
@@ -424,6 +440,18 @@ void launch_md_j_engine(cudaStream_t stream, MdJView md, std::size_t begin, std:
     md_j_engine_hierarchy<<<static_cast<unsigned>((aligned + 127) / 128), 128, 0, stream>>>(
         md, angular, begin, end, screening);
     runtime::cuda_resource_check(cudaPeekAtLastError());
+  }
+  if (md.primitive_screen) {
+    // Rebuild thresholds/minima only after every prefix is final. This remains
+    // device-only and replay-safe, including empty windows and captured graphs.
+    for (unsigned angular = 0; angular < 5; ++angular) {
+      const auto count = md.hierarchy_layout.buckets[angular].count;
+      const auto aligned = (count + 31) / 32 * 32;
+      if (!aligned) continue;
+      md_j_engine_hierarchy<<<static_cast<unsigned>((aligned + 127) / 128), 128, 0, stream>>>(
+          md, angular, begin, end, screening, true);
+      runtime::cuda_resource_check(cudaPeekAtLastError());
+    }
   }
   launch_md_j_engine_class<0, 0>(stream, md, begin, end, screening);
   launch_md_j_engine_class<0, 1>(stream, md, begin, end, screening);

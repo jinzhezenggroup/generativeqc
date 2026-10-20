@@ -710,7 +710,7 @@ void primitive_hierarchy(Block& block) {
   }
   const auto layout=f.md.hierarchy_layout.buckets[0];
   auto* nodes=f.md.hierarchy;
-  for (double cutoff:{0.,1e-12,0.02}) for (unsigned mode:{0U,1U,2U,0U,3U})
+  for (double cutoff:{0.,1e-12,0.02}) for (unsigned mode:{0U,1U,2U,0U,3U,4U})
   for (auto window:{std::pair{0U,3U},std::pair{1U,2U},std::pair{1U,1U},std::pair{8U,9U}}) {
     const auto [begin,end]=window;
     state={}; f.md.primitive_maximum_bound=0.;
@@ -719,10 +719,12 @@ void primitive_hierarchy(Block& block) {
       const auto id=f.ordered[position], pair=f.primitives[id].pair;
       q[id]=position%7==0?0.:0.125*(1+position%11);
       if (mode==3 && position==31) q[id]=INFINITY;
+      if (mode==4 && position>=8) q[id]=1e-15;
       f.md.primitive_maximum_bound=std::max(f.md.primitive_maximum_bound,q[id]);
       const auto system=unsigned(f.pairs[pair].system);
       sources[position]=mode==1 || system<begin || system>=end?0.:
           mode==2?(position==32?2e-14:0.):(position%4)*1e-14;
+      if (mode==4) sources[position]=position<8 && system>=begin && system<end?5e-14:0.;
       if (mode==3 && position==30 && system>=begin && system<end) sources[position]=INFINITY;
       nodes[position].qd=sources[position];
       state.maximum_source_norm=std::max(state.maximum_source_norm,sources[position]);
@@ -769,6 +771,35 @@ void primitive_hierarchy(Block& block) {
     }
     if (mode==0 && begin==0 && end==3) assert(saw_significant);
     if (mode==1 || begin==end || begin==8) assert(state.active[0]==0);
+    const auto frozen_active=state.active[0];
+    block.run([&] {md_j_engine_hierarchy(f.md,0,begin,end,cutoff,true);});
+    assert(state.active[0]==frozen_active);
+    // Independently sum all discarded Cauchy products, including BOTH the
+    // prefix domain and refined leaf screening. Each primitive's share times
+    // its parent's multiplicity must fit the complete public-AO error cap.
+    for (unsigned output=0;output<q.size();++output) {
+      const auto id=f.ordered[output], pair=f.primitives[id].pair;
+      const auto system=unsigned(f.pairs[pair].system);
+      if (system<begin || system>=end) continue;
+      long double omitted=0.;
+      for (unsigned input=0;input<q.size();++input) {
+        const auto source_pair=f.primitives[f.ordered[input]].pair;
+        if (sources[input]==0. || f.pairs[source_pair].system!=int(system)) continue;
+        const bool kept=output<frozen_active && input<frozen_active &&
+            sources[input]>=nodes[output].minimum;
+        if (!kept) omitted+=static_cast<long double>(q[id])*sources[input];
+      }
+      assert(omitted*f.pairs[pair].primitive_end<=std::min(cutoff,1e-12));
+    }
+    for (unsigned long long index=0;index<inventory.tasks;++index) {
+      MdJTileTask task{}; assert(md_j_decode_tile(inventory,index,task));
+      const bool admitted=md_j_engine_tile_admitted(f.md,0,0,schedule,task,cutoff);
+      for (unsigned i=task.bra_begin;i<task.bra_begin+task.bra_count;++i)
+      for (unsigned j=task.ket_begin;j<task.ket_begin+task.ket_count;++j)
+        if (i<frozen_active && j<frozen_active &&
+            ((sources[j]!=0. && sources[j]>=nodes[i].minimum) ||
+             (sources[i]!=0. && sources[i]>=nodes[j].minimum))) assert(admitted);
+    }
     f.check();
   }
   ++completed;
