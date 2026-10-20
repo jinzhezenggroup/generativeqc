@@ -48,14 +48,14 @@ inline cublasStatus_t df_occupied_project_panel(
   const long long nr = static_cast<long long>(n) * rank;
   const long long rr = static_cast<long long>(rank) * rank;
   const double one = 1, zero = 0;
-  auto status = cublasDgemmStridedBatched(
-      blas, CUBLAS_OP_N, CUBLAS_OP_N, n, rank, n, &one,
-      panels, n, matrix, coefficients, n, 0, &zero, temporary, n, nr, count);
+  auto status = generativeqc_tensor::submit_column_batched_gemm({
+      blas, false, false, n, rank, n, &one,
+      panels, n, matrix, coefficients, n, 0, &zero, temporary, n, nr, count});
   if (status != CUBLAS_STATUS_SUCCESS) return status;
-  return cublasDgemmStridedBatched(
-      blas, CUBLAS_OP_T, CUBLAS_OP_N, rank, rank, n, &one,
+  return generativeqc_tensor::submit_column_batched_gemm({
+      blas, true, false, rank, rank, n, &one,
       coefficients, n, 0, temporary, n, nr, &zero,
-      projected + static_cast<std::size_t>(begin) * rr, rank, rr, count);
+      projected + static_cast<std::size_t>(begin) * rr, rank, rr, count});
 }
 
 /** Finish the exact fitted occupied projection from the final-K linear
@@ -73,8 +73,9 @@ inline cublasStatus_t df_occupied_finish_projection(
     return CUBLAS_STATUS_INVALID_VALUE;
   const int ar = auxiliary * rank;
   const double one = 1, zero = 0;
-  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ar, rank, n, &one,
-                     linear, ar, coefficients, n, &zero, pair_major, ar);
+  return generativeqc_tensor::submit_column_gemm({
+      blas, false, false, ar, rank, n, &one,
+      linear, ar, coefficients, n, &zero, pair_major, ar});
 }
 
 inline cublasStatus_t df_occupied_to_metric_eigenbasis(
@@ -83,10 +84,10 @@ inline cublasStatus_t df_occupied_to_metric_eigenbasis(
   if (auxiliary <= 0 || rank_squared <= 0 || !eigenvectors || !projected || !eigenfactors)
     return CUBLAS_STATUS_INVALID_VALUE;
   const double one = 1, zero = 0;
-  return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_T,
-                     auxiliary, rank_squared, auxiliary, &one,
-                     eigenvectors, auxiliary, projected, rank_squared,
-                     &zero, eigenfactors, auxiliary);
+  return generativeqc_tensor::submit_column_gemm({
+      blas, true, true, auxiliary, rank_squared, auxiliary, &one,
+      eigenvectors, auxiliary, projected, rank_squared,
+      &zero, eigenfactors, auxiliary});
 }
 
 /** Full-rank fitted B already contains one inverse root. Apply the immutable
@@ -101,10 +102,10 @@ inline cublasStatus_t df_occupied_apply_metric_root(
       !fitted || projected == fitted)
     return CUBLAS_STATUS_INVALID_VALUE;
   const double one = 1, zero = 0;
-  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N,
-                     rank_squared, auxiliary, auxiliary, &one,
-                     projected, rank_squared, inverse_root, auxiliary,
-                     &zero, fitted, rank_squared);
+  return generativeqc_tensor::submit_column_gemm({
+      blas, false, false, rank_squared, auxiliary, auxiliary, &one,
+      projected, rank_squared, inverse_root, auxiliary,
+      &zero, fitted, rank_squared});
 }
 
 /** Diagonal-first coordinates for a symmetric occupied matrix. The first
@@ -167,9 +168,9 @@ inline cublasStatus_t df_occupied_from_metric_eigenbasis(
   if (auxiliary <= 0 || rank_squared <= 0 || !eigenvectors || !eigenfactors || !projected)
     return CUBLAS_STATUS_INVALID_VALUE;
   const double one = 1, zero = 0;
-  return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_T,
-                     rank_squared, auxiliary, auxiliary, &one,
-                     eigenfactors, auxiliary, eigenvectors, auxiliary,
-                     &zero, projected, rank_squared);
+  return generativeqc_tensor::submit_column_gemm({
+      blas, true, true, rank_squared, auxiliary, auxiliary, &one,
+      eigenfactors, auxiliary, eigenvectors, auxiliary,
+      &zero, projected, rank_squared});
 }
 """
