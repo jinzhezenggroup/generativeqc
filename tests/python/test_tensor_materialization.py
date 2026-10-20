@@ -410,3 +410,49 @@ def test_rebuilt_downstream_consumers_are_reconsidered_without_stale_proofs() ->
     np.testing.assert_allclose(
         execute(plan.program, feeds).outputs["out"], expected, rtol=3e-13, atol=3e-13
     )
+
+
+def _large_legal_contraction() -> Program:
+    # Shape-only: source storage is about 68 GiB, but an unneeded search subset
+    # combining z and x would require exactly 2**63 bytes. Never allocate arrays.
+    n = IndexSpace("n", "ao", 128)
+    g = IndexSpace("g", "auxiliary", 65536)
+    a, b = _input("a", (n, n)), _input("b", (n, n))
+    z = _input("z", (n, n, n, n))
+    x, y = _input("x", (g, g)), _input("y", (g, g))
+    dense = einsum("ac,bd->abcd", a, b)
+    return Program({"out": einsum("abcd,abcd,gh,gh->", dense, z, x, y)})
+
+
+def test_oversized_search_subset_does_not_discard_legal_alternatives() -> None:
+    source = _large_legal_contraction()
+    source_json = source.dumps()
+    plan = plan_materializations(source, allow_reassociation=True)
+    assert _selected(plan)
+    assert plan.after.materialized_bytes < plan.before.materialized_bytes
+    assert plan.after.peak_live_bytes <= plan.before.peak_live_bytes
+    assert plan.after.concrete_work <= plan.before.concrete_work
+    assert plan.after.input_bytes == plan.before.input_bytes
+    assert plan.after.output_bytes == plan.before.output_bytes == 8
+    assert source.dumps() == source_json
+
+
+@pytest.mark.parametrize(
+    "options,reason",
+    [
+        ({"max_materialized_bytes": 0}, "resource-budget"),
+        (
+            {"max_intermediate_axes": {"ao": 0, "auxiliary": 0}},
+            "work-regression",
+        ),
+    ],
+)
+def test_oversized_search_preserves_original_when_no_plan_is_admissible(
+    options: dict[str, typing.Any], reason: str
+) -> None:
+    source = _large_legal_contraction()
+    plan = plan_materializations(source, allow_reassociation=True, **options)
+    assert not _selected(plan)
+    assert plan.program.logical_hash == source.logical_hash
+    assert plan.after == plan.before
+    assert any(reason in decision.reason for decision in plan.decisions)

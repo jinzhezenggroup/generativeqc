@@ -17,6 +17,7 @@ from generativeqc_compiler.common import materialization
 from .ir import Node, _infer
 from .precision import remap_precision_execution
 from .program import Program
+from .types import MAX_ELEMENTS
 
 if typing.TYPE_CHECKING:
     from .types import Index
@@ -385,6 +386,13 @@ def _reassociate_node(
         if mask in plans:
             continue
         output_labels = retained_labels(mask)
+        output_elements = prod(
+            (domains[label].extent for label in output_labels), start=1
+        )
+        # Legal source tensors do not make every explored subset addressable.
+        # Prune before TensorSpec construction, preserving other legal trees.
+        if output_elements > MAX_ELEMENTS // node.spec.itemsize:
+            continue
         # A representation contract may forbid otherwise cheap intermediates
         # (for example, reconstructing four virtual axes from DF factors).
         # Prune this subset, not the entire search: another binary tree may
@@ -409,10 +417,6 @@ def _reassociate_node(
                         work_labels = tuple(dict.fromkeys(left.labels + right.labels))
                         work = _monomial(domains[label] for label in work_labels)
                         elements = prod(domains[label].extent for label in work_labels)
-                        output_elements = prod(
-                            (domains[label].extent for label in output_labels),
-                            start=1,
-                        )
                         coefficient = (
                             node.attrs["coefficient"] if mask == full_mask else (1, 1)
                         )
