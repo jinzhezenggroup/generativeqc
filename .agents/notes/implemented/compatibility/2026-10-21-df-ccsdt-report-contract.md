@@ -32,6 +32,12 @@ the complete report with a duplicate-key guard and compares its entire key set
 and values. This receipt does not implement a second JSON formatter or scientific
 result structure.
 
+Requested boolean options also need distinct bit-plane codewords, separate from
+the native boolean inputs. The initial fixture correlated several options; a
+temporary damaged copy reading `forces` for `lambda_primal_matrix_requested`
+incorrectly passed all 576 cases. Independent option codewords close that oracle
+gap without changing the production report or scientific call.
+
 ## Invariants
 
 - Either discarded-attempt flag makes all original work/count/time/peak fields

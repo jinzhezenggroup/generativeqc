@@ -326,9 +326,13 @@ int main(int argc, char** argv) {
   result.triples_gap.schedule = zero ? "" : "gap-\"g\"";
   result.triples_scalar_fusion.schedule = zero ? "" : "fusion-\\f";
   if (!zero) result.forces = {0.12345678901234566, -2.25, 3.5, -4.75, 5.125, -6.0};
-  DFCCSDTReportOptions options{31, 47, stage, bool(bit & 1), bool(bit & 2), bool(bit & 4),
+  // Separate codewords also distinguish every requested option from the native
+  // bool inputs (whose indices are below 231). Shared true/false patterns would
+  // let an incorrect option-to-field mapping pass this contract.
+  const auto requested = [bit](unsigned code) { return bool((code >> bit) & 1U); };
+  DFCCSDTReportOptions options{31, 47, stage, requested(240), requested(241), requested(242),
       1e-12, 1e-11, 37, 41, std::nullopt, 0.00012345678901234567, zero ? 6ULL : 17ULL + bit, 9.875,
-      bool(bit & 1), bool(bit & 2), bool(bit & 4), bool(bit & 1), bool(bit & 2), bool(bit & 4)};
+      requested(243), requested(244), requested(245), requested(246), requested(247), requested(248)};
   if (policy != 2) options.ccsd_mixed_precision = bool(policy);
   if (mode == 1 || mode == 3) {
     try { publish_df_ccsdt_force_report(argv[7], result, options); }
@@ -399,9 +403,9 @@ def test_complete_report(
                 lifecycle_stage=("cold", "warm", "moved-warm")[stage],
                 nbf=31,
                 naux=47,
-                forces_requested=int(bool(bit & 1)),
-                lambda_reduction_requested=int(bool(bit & 2)),
-                matrix_gemm_requested=int(bool(bit & 4)),
+                forces_requested=(240 >> bit) & 1,
+                lambda_reduction_requested=(241 >> bit) & 1,
+                matrix_gemm_requested=(242 >> bit) & 1,
                 reference_energy_tolerance=1e-12,
                 reference_density_tolerance=1e-11,
                 lambda_true_residual_interval=None if mask else 37,
@@ -413,12 +417,12 @@ def test_complete_report(
                 previous_endpoint_seconds=9.875,
                 resident_jk_discarded_attempt=int(bool(mask & 2)),
                 recycling_discarded_primal_attempt=int(bool(mask & 1)),
-                triples_w_fp32_requested=int(bool(bit & 1)),
-                lambda_core_reuse_requested=int(bool(bit & 2)),
-                lambda_audit_matrix_requested=int(bool(bit & 4)),
-                lambda_primal_matrix_requested=int(bool(bit & 1)),
-                lambda_serial_scratch_reuse_requested=int(bool(bit & 2)),
-                lambda_mixed_precision_requested=int(bool(bit & 4)),
+                triples_w_fp32_requested=(243 >> bit) & 1,
+                lambda_core_reuse_requested=(244 >> bit) & 1,
+                lambda_audit_matrix_requested=(245 >> bit) & 1,
+                lambda_primal_matrix_requested=(246 >> bit) & 1,
+                lambda_serial_scratch_reuse_requested=(247 >> bit) & 1,
+                lambda_mixed_precision_requested=(248 >> bit) & 1,
                 triples_w_candidate_identity="" if zero else 'candidate-"c"',
                 triples_w_precision_schedule_identity="" if zero else "precision-\\p",
                 triples_gap_schedule="" if zero else 'gap-"g"',
