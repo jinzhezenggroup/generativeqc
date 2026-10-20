@@ -258,6 +258,14 @@ measured_core_runtime_paths=(
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
   "${measured_core_runtime_paths[@]}"
+  # Run 39266084600 reached the 30-minute core-b cap in this module's
+  # late shared-emitter setup. Retain its modulo slot, but keep the whole
+  # module and fixture on the existing loadfile lane (1235 s that run).
+  tests/python/test_df_shell_units.py
+  # The complete CBS module took 309-329 s in recent CI. Keep its core
+  # slot, but transfer all cases and shared fixtures to posthf loadfile;
+  # run 38996287111 posthf finished its Python step in 1112 s.
+  tests/python/test_ccsdt_cbs_native.py
   tests/python/test_df_cc_native_solver.py
   tests/python/test_df_lambda_matrix.py
   tests/python/test_df_lambda_reduction.py
@@ -312,6 +320,10 @@ rebalance_paths=(
   # modulo slots while routing both full files to one parallel worksteal job.
   tests/python/test_uccsd_gradient.py
   tests/python/test_uccsd_t_gradient.py
+  # PR coverage runs 39134220090 / 39147166839 left core-a at its 30-minute
+  # cap while the intact RKS Hessian HVP took 1540-1561 s. Keep its modulo
+  # slot, but use the existing lighter force lane with early fresh startup.
+  tests/python/test_wb97mv_hessian.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -332,11 +344,15 @@ nightly_hessian_paths=(
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
 # Dedicated UCCSD force tests no longer occupy the broad core queues;
-# corrected Lambda stays an independent prioritized core-c owner.
-core_fresh_frontier_c=(
+# corrected Lambda stays an independent prioritized core-a owner.
+core_fresh_frontier_a=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
+  # Run 39378471974 timed out core-c with no recorded failures while core-a
+  # finished in 17m45s. Transfer the complete corrected-Lambda family
+  # (965 observed worker-seconds), preserving its priority and ordinary slots.
+  "${core_fresh_frontier_a[@]}"
   # Run 38867209562 delayed cold RKS water by 352 s behind corrected Lambda.
   # Keep all three fresh Hessian/Lambda families on distinct stable owners,
   # without removing their original slots from the ordinary modulo split.
@@ -368,9 +384,7 @@ core_hotspots_b=(
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
-  # The gradient and corrected-Lambda families must not share one late tail.
-  # Fresh function-scoped owners remain parallel, with every case retained.
-  "${core_fresh_frontier_c[@]}"
+  # Keep the complete order-five probe independent of corrected Lambda.
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )
@@ -398,17 +412,26 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${core_hotspots_c[@]}"; do
       pinned_core_owner["${path}"]=2
     done
-    # Start both function-scoped WB97M-V Hessian suites early: cold RKS water
-    # and UKS H3 HVPs otherwise become late tails. Their distinct pinned owners
-    # avoid corrected-Lambda startup contention on source and merge trees.
+    # Keep the remaining function-scoped UKS HVP and corrected Lambda early.
+    # The intact RKS Hessian suite now starts on the existing force lane.
     fresh_frontier_paths=(
-      tests/python/test_wb97mv_hessian.py
       tests/python/test_wb97mv_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a) target_bucket=0 ;;
+      core-a)
+        target_bucket=0
+        fresh_frontier_paths+=("${core_fresh_frontier_a[@]}")
+        ;;
       core-b) target_bucket=1 ;;
-      core-c) target_bucket=2; fresh_frontier_paths+=("${core_fresh_frontier_c[@]}") ;;
+      core-c)
+        target_bucket=2
+        # Run 39207592326 left the uncached order-five host probe until
+        # minute 27. Start its complete numerical/adapter gate early too;
+        # changing only priority preserves all owners, cases and time limits.
+        fresh_frontier_paths+=(
+          tests/python/test_direct_order5_sources.py
+        )
+        ;;
     esac
     test_targets=()
     declare -A selected_core=()
@@ -454,12 +477,14 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # single molecular oracle, independent finite difference, or failure gate.
     # Each test is function-scoped, so worksteal (not loadfile) parallelizes
     # these multi-minute complete-oracle parameterizations across four workers.
-    # Seed both frontiers across workers; naive collection order would cluster
-    # the first several expensive cases on one worker instead.
+    # The intact RKS Hessian suite shares this existing lighter lane. Put it
+    # first so its long water HVP starts before the complete force matrices;
+    # worksteal keeps their independent function-scoped cases parallel.
     dist_mode=worksteal
     test_targets=()
     force_priorities=()
     for path in \
+      tests/python/test_wb97mv_hessian.py \
       tests/python/test_uccsd_gradient.py \
       tests/python/test_uccsd_t_gradient.py; do
       # Select tracked files even when missing on disk, to fail closed; avoid
@@ -534,6 +559,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # These measured complete UCCSD owners keep all numerical/failure
     # gates and module-local oracle caches under the existing loadfile.
     for path in \
+      tests/python/test_ccsdt_cbs_native.py \
       tests/python/test_uccsd_lambda.py \
       tests/python/test_uccsd_t_owner.py \
       tests/python/test_uccsd_physical_response.py; do
@@ -568,6 +594,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Preserve all CPU/CUDA cases, oracles and cold/warm/rebound checks.
     if git ls-files --error-unmatch -- tests/python/test_mixed_rsh_df_forces.py >/dev/null 2>&1; then
       test_targets+=(tests/python/test_mixed_rsh_df_forces.py)
+    fi
+    # Keep the complete source-equivalence/cache-invalidation gate together.
+    # Its module-scoped emission must not be split across worksteal workers.
+    if git ls-files --error-unmatch -- tests/python/test_df_shell_units.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_df_shell_units.py)
     fi
     ;;
   compiler-heavy)

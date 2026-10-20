@@ -48,9 +48,9 @@ double checked_denominators(const core::ElectronicReferenceView& reference, doub
 
 }  // namespace
 
-UnrestrictedEnergy conventional_unrestricted_energy(
-    const hf::UnrestrictedPhysicalReference& owned,
-    const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold) {
+double validate_unrestricted_energy_input(const hf::UnrestrictedPhysicalReference& owned,
+                                          const integrals::ElectronInteractionSource& source,
+                                          double threshold) {
   const auto reference = owned.electronic_reference();
   core::validate_electronic_reference_shape(reference);
   if (reference.spin_channels != 2 || !std::isfinite(reference.energy))
@@ -67,8 +67,15 @@ UnrestrictedEnergy conventional_unrestricted_energy(
       throw std::invalid_argument("nonfinite UMP2 orbital energies");
   }
   // Check every active spin denominator before the first AO source read.
+  return checked_denominators(reference, threshold);
+}
+
+UnrestrictedEnergy conventional_unrestricted_energy(
+    const hf::UnrestrictedPhysicalReference& owned,
+    const integrals::ElectronInteractionSource& source, std::size_t budget, double threshold) {
   UnrestrictedEnergy result;
-  result.minimum_denominator = checked_denominators(reference, threshold);
+  result.minimum_denominator = validate_unrestricted_energy_input(owned, source, threshold);
+  const auto reference = owned.electronic_reference();
   if (budget == 0) throw std::length_error("UMP2 numeric memory budget is zero");
   posthf::NativeBlockProvider provider(source, owned, budget, 2);
   const std::array<std::size_t, 4> shape{1, 1, 1, 1};

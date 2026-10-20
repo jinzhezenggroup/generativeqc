@@ -21,7 +21,8 @@
 using cudaStream_t = void*;
 using cudaError_t = int;
 constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1, cudaErrorNotSupported = 2,
-              cudaErrorInvalidResourceHandle = 3, cudaErrorStreamCaptureUnsupported = 4;
+              cudaErrorInvalidResourceHandle = 3, cudaErrorStreamCaptureUnsupported = 4,
+              cudaErrorMemoryAllocation = 5;
 constexpr int cudaMemoryTypeDevice = 2, cudaMemcpyDeviceToHost = 1, cudaMemcpyDeviceToDevice = 2,
               cudaMemcpyHostToDevice = 3;
 using cudaStreamCaptureStatus = int;
@@ -43,6 +44,17 @@ inline bool returned{}, capturing{}, revoked{};
 inline bool valid_fock_binding{true};
 inline unsigned spins = 1;
 inline bool fitted{};
+enum class ResidentFailure {
+  none,
+  canonical_oom,
+  values_oom,
+  numerical,
+  unsupported,
+  creation_device
+};
+inline ResidentFailure resident_failure{};
+inline unsigned plan_creations{}, live_plans{}, range_replays{}, range_cached{};
+
 inline cudaStream_t stream = reinterpret_cast<void*>(8);
 inline std::vector<double> metadata(256);
 inline void reset_action(int failure = 0) {
@@ -115,7 +127,8 @@ void queue_kernel(unsigned blocks, unsigned threads, Function function) {
 
 using generativeqc_status = int;
 constexpr int GENERATIVEQC_STATUS_SUCCESS = 0, GENERATIVEQC_STATUS_INVALID_ARGUMENT = 1,
-              GENERATIVEQC_STATUS_NUMERICAL_FAILURE = 2;
+              GENERATIVEQC_STATUS_NUMERICAL_FAILURE = 2, GENERATIVEQC_STATUS_OUT_OF_MEMORY = 3,
+              GENERATIVEQC_STATUS_NOT_IMPLEMENTED = 4, GENERATIVEQC_STATUS_CUDA_ERROR = 5;
 namespace generativeqc {
 namespace core {
 struct System {};
@@ -197,22 +210,88 @@ inline generativeqc_status enqueue_cuda_density_fitting_raw_values(
     std::string&) {
   return cudaMemsetAsync(output, 0, pairs * 3 * sizeof(double), stream);
 }
-struct CudaDirectJkPlan {};
 struct CudaDirectJkDiagnostic {
-  std::size_t device_bytes{128};
+  std::size_t device_bytes{128}, resident_value_bytes{};
+  std::uint64_t resident_values_completed{};
+};
+struct CudaDirectJkPlan {
+  CudaDirectJkDiagnostic diagnostic;
+  bool canonical{true}, optional{};
+  FockOperator resident_operator{FockOperator::FullRange};
 };
 inline generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int, const std::vector<core::System>&, double, std::size_t, cudaStream_t,
-    CudaDirectJkPlan** plan, CudaDirectJkDiagnostic&, std::string&) {
+    CudaDirectJkPlan** plan, CudaDirectJkDiagnostic& diagnostic, std::string&) {
+  const bool optional = ++queue_test::plan_creations == 2;
+  if (optional && queue_test::resident_failure == queue_test::ResidentFailure::creation_device) {
+    *plan = nullptr;
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
+  }
   *plan = new CudaDirectJkPlan;
+  ++queue_test::live_plans;
+  (*plan)->optional = optional;
+  // Direct preparation recovers canonical-storage OOM on through-d sources:
+  // a successful plan may support replay without the canonical value layout.
+  (*plan)->canonical =
+      !optional || queue_test::resident_failure != queue_test::ResidentFailure::canonical_oom;
+  diagnostic = (*plan)->diagnostic;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
-inline void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) { delete plan; }
-inline bool cuda_direct_jk_linear_available(const CudaDirectJkPlan*) { return true; }
+inline void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) {
+  if (plan) --queue_test::live_plans;
+  delete plan;
+}
+inline bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) {
+  return plan && plan->canonical;
+}
+inline CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) {
+  return plan->diagnostic;
+}
+inline std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan* plan) {
+  return cuda_direct_jk_linear_available(plan) ? 64 : 0;
+}
+inline generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDirectJkPlan* plan,
+                                                                        std::size_t allowance,
+                                                                        std::uint32_t,
+                                                                        FockOperator op, double,
+                                                                        std::string& detail) {
+  if (!plan->canonical) {
+    detail = "compact resident values require the prepared Schwarz rows";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (plan->optional) {
+    using Failure = queue_test::ResidentFailure;
+    if (queue_test::resident_failure == Failure::values_oom)
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    if (queue_test::resident_failure == Failure::numerical)
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    if (queue_test::resident_failure == Failure::unsupported)
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (allowance < 64) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  if (!plan->diagnostic.resident_value_bytes) plan->diagnostic.device_bytes += 64;
+  plan->diagnostic.resident_value_bytes = 64;
+  plan->diagnostic.resident_values_completed = 8;
+  plan->resident_operator = op;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+inline generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
+                                                                  std::size_t allowance,
+                                                                  std::string& detail) {
+  return prepare_cuda_direct_jk_range_resident_values(plan, allowance, (1U << 28) - 1,
+                                                      FockOperator::FullRange, 0, detail);
+}
 inline generativeqc_status enqueue_cuda_direct_jk_compensated_device(
-    CudaDirectJkPlan*, FockBuildSpec, const double* density, std::size_t count, double* coulomb,
-    double* exchange, double*, std::size_t, int*, double, std::uint64_t* census, std::string&, bool,
-    const double* beta, double* beta_exchange, bool) {
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t count,
+    double* coulomb, double* exchange, double*, std::size_t, int*, double, std::uint64_t* census,
+    std::string&, bool allow_resident, const double* beta, double* beta_exchange, bool) {
+  if (spec.exchange.op == FockOperator::LongRange) {
+    if (allow_resident && plan->diagnostic.resident_value_bytes &&
+        plan->resident_operator == FockOperator::LongRange)
+      ++queue_test::range_cached;
+    else
+      ++queue_test::range_replays;
+  }
   queue_test::pending.emplace_back([=] {
     if (queue_test::returned) ++queue_test::late_reads;
     double alpha{}, minority{};
@@ -240,6 +319,7 @@ struct Model {
   int device{};
   double semilocal_exchange_scale{1}, semilocal_correlation_scale{1};
   std::optional<nlc::Correlation> nonlocal_correlation{nlc::Correlation{}};
+  std::optional<int> nonlocal_grid;
   nlc::Vv10DensityDomain nonlocal_density_domain{nlc::Vv10DensityDomain::MolecularV1};
   std::optional<scf::ResolvedFockBuild> range_correction;
 };

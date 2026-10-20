@@ -38,8 +38,8 @@ def _assert_cold_budget(workflow: str) -> None:
     job = _job(workflow)
     header = job.split("    steps:\n", 1)[0]
     build = _step(job, "Compile production CUDA and runtime CTest")
-    # The observed cold build was censored after 23m21s. Keep a bounded 30m
-    # compilation allowance, separate from at least 5m of non-build reserve.
+    # Retain both the final integration limit and the complete job ceiling.
+    # A prerequisite phase shares the latter; phase limits are not additive.
     assert _minutes(build) == 30
     assert _minutes(build) + 5 <= _minutes(header) <= 35
     assert "continue-on-error:" not in header
@@ -47,6 +47,10 @@ def _assert_cold_budget(workflow: str) -> None:
         (
             "Configure production CUDA compile check",
             "-DGENERATIVEQC_COMPILER_CACHE=ccache",
+        ),
+        (
+            "Compile production CUDA prerequisite archive",
+            "--target generativeqc_direct_native --parallel 3",
         ),
         (
             "Compile production CUDA and runtime CTest",
@@ -69,7 +73,9 @@ def _assert_cold_budget(workflow: str) -> None:
         assert "continue-on-error:" not in section
         positions.append(job.index(f"      - name: {name}\n"))
     assert positions == sorted(positions)
-    radial = _step(job, gates[2][0])
+    prerequisite = _step(job, gates[1][0])
+    assert _minutes(prerequisite) == 10
+    radial = _step(job, gates[3][0])
     assert (
         "test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device"
         in radial

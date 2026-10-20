@@ -199,6 +199,46 @@ def configure_reference_mixed_rsh_df(engine: typing.Any) -> None:
     )
 
 
+def benchmark_grid_spec(
+    shape: typing.Any,
+    atoms: typing.Any,
+    pruning: str = "auto",
+    *,
+    method: str = "wb97m-v",
+) -> typing.Any:
+    """Use qualified LDA/PBE defaults or preserve explicit diagnostic grid scales.
+
+    Explicit counts retain the historical one-Bohr radii. Automatic selection
+    does not promote another functional using LDA/PBE qualification evidence.
+    """
+    from generativeqc import Atom, GridPolicy, GridSpec
+
+    qualified = method in ("lda", "pbe", "lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
+    if pruning == "auto":
+        pruning = "radial-v1" if qualified else "none"
+    if shape is None and qualified:
+        return GridPolicy(pruning=pruning).resolve(method)
+    if shape is None:
+        shape = (48, 16, 32)
+
+    radii = (
+        ()
+        if pruning == "none"
+        else tuple(
+            (number, 1.0)
+            for number in sorted(
+                {Atom.from_value(atom).atomic_number for atom in atoms}
+            )
+        )
+    )
+    return GridSpec(
+        *shape,
+        element_radii=radii,
+        version=1 if pruning == "none" else 3,
+        pruning=pruning,
+    )
+
+
 def reference_engine(
     atoms: typing.Any,
     basis: typing.Any,
@@ -207,6 +247,8 @@ def reference_engine(
     spin: int = 0,
     xc: str = "WB97M_V",
     full_fock: bool = False,
+    nonlocal_spec: typing.Any = None,
+    charge: int = 0,
 ) -> typing.Any:
     """Build an independent GPU4PySCF engine on the same moving quadrature.
 
@@ -222,7 +264,15 @@ def reference_engine(
 
     if spec.partition_iterations != 3:
         raise ValueError("GPU4PySCF comparator requires three Becke iterations")
-    mol = gto.M(atom=atoms, unit="Bohr", basis=basis, spin=spin, cart=False, verbose=0)
+    mol = gto.M(
+        atom=atoms,
+        unit="Bohr",
+        basis=basis,
+        spin=spin,
+        charge=charge,
+        cart=False,
+        verbose=0,
+    )
     engine = (uks.UKS if spin else rks.RKS)(mol)
     engine.xc = xc
     # Reconstruct the stated quadrature independently from its public spec.
@@ -236,15 +286,71 @@ def reference_engine(
         (np.sqrt(1 - zz**2) * np.cos(pp), np.sqrt(1 - zz**2) * np.sin(pp), zz), axis=-1
     ).reshape(-1, 3)
     wa = np.repeat(wz * 2 * np.pi / len(phi), len(phi))
+    shell_rules = []
+    if spec.pruning == "radial-v1":
+        # Reconstruct the public prescription independently of native/compiler
+        # materialization. The custom atomic constructor owns pruning here;
+        # toggling GPU4PySCF's prune callback would not change these rules.
+        angular_rules = {}
+        for radial in range(spec.radial_points):
+            rank = 2 * radial + 1
+            divisor = (
+                4
+                if 5 * rank < 2 * spec.radial_points
+                or 7 * rank > 12 * spec.radial_points
+                else (
+                    2
+                    if 3 * rank < 2 * spec.radial_points
+                    or 4 * rank > 6 * spec.radial_points
+                    else 1
+                )
+            )
+            polar = (spec.angular_polar + divisor - 1) // divisor
+            azimuth = max(3, (spec.angular_azimuth + divisor - 1) // divisor)
+            shape = (polar, azimuth)
+            if shape not in angular_rules:
+                nodes, weights = np.polynomial.legendre.leggauss(polar)
+                heights, angles = np.meshgrid(
+                    nodes, np.arange(azimuth) * (2 * np.pi / azimuth), indexing="ij"
+                )
+                rings = np.sqrt(1 - heights**2)
+                angular_rules[shape] = (
+                    np.stack(
+                        (rings * np.cos(angles), rings * np.sin(angles), heights),
+                        axis=-1,
+                    ).reshape(-1, 3),
+                    np.repeat(weights * (2 * np.pi / azimuth), azimuth),
+                )
+            shell_rules.append(angular_rules[shape])
     table = {}
     radii = dict(spec.element_radii)
     for atom in range(mol.natm):
         symbol, number = mol.atom_symbol(atom), int(mol.atom_charge(atom))
         scale = radii.get(number, 1.0)
-        table[symbol] = (
-            cp.asarray((r[:, None, None] * directions * scale).reshape(-1, 3)),
-            cp.asarray((wr[:, None] * wa * scale**3).ravel()),
-        )
+        if spec.pruning == "none":
+            table[symbol] = (
+                cp.asarray((r[:, None, None] * directions * scale).reshape(-1, 3)),
+                cp.asarray((wr[:, None] * wa * scale**3).ravel()),
+            )
+        else:
+            table[symbol] = (
+                cp.asarray(
+                    np.concatenate(
+                        [
+                            radius * rule[0] * scale
+                            for radius, rule in zip(r, shell_rules, strict=True)
+                        ]
+                    )
+                ),
+                cp.asarray(
+                    np.concatenate(
+                        [
+                            measure * rule[1] * scale**3
+                            for measure, rule in zip(wr, shell_rules, strict=True)
+                        ]
+                    )
+                ),
+            )
     for grids in (engine.grids, engine.nlcgrids):
         grids.radii_adjust = None
         grids.becke_scheme = gen_grid.original_becke
@@ -258,6 +364,17 @@ def reference_engine(
     engine.max_cycle = 180
     if full_fock:
         configure_reference_full_fock(engine)
+    if nonlocal_spec is not None and nonlocal_spec != spec:
+        independent = reference_engine(
+            atoms,
+            basis,
+            nonlocal_spec,
+            spin=spin,
+            xc=xc,
+            full_fock=full_fock,
+            charge=charge,
+        )
+        engine.nlcgrids = independent.nlcgrids
     return engine
 
 
@@ -299,6 +416,10 @@ def main() -> None:
     )
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
+    parser.add_argument("--nonlocal-grid", type=int, nargs=3)
+    parser.add_argument(
+        "--grid-pruning", choices=("auto", "none", "radial-v1"), default="auto"
+    )
     parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--reference-only", action="store_true")
     args = parser.parse_args()
@@ -309,7 +430,7 @@ def main() -> None:
             "run through Slurm main with --gres=gpu:5090:1 and finite --time"
         )
     import cupy as cp
-    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc import Calculator, KsOptions
 
     from benchmarks._support import cuda_accelerator_metadata, environment_metadata
     from benchmarks.compare_gpu4pyscf_batch import (
@@ -324,10 +445,11 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
-    spec = GridSpec(
-        radial_points=args.grid[0],
-        angular_polar=args.grid[1],
-        angular_azimuth=args.grid[2],
+    spec = benchmark_grid_spec(args.grid, atoms, args.grid_pruning)
+    nonlocal_spec = (
+        benchmark_grid_spec(args.nonlocal_grid, atoms, args.grid_pruning)
+        if args.nonlocal_grid is not None
+        else None
     )
     record = {
         "schema": "generativeqc.readme-wb97mv.v1",
@@ -338,6 +460,11 @@ def main() -> None:
         "method": "WB97M-V/RKS",
         "endpoint": "SCF energy plus analytic forces",
         "grid": asdict(spec),
+        **(
+            {"nonlocal_grid": asdict(nonlocal_spec)}
+            if nonlocal_spec is not None
+            else {}
+        ),
         "warm_start_policy": fixed_warm_start_policy(),
         "native_samples": [],
         "reference_samples": [],
@@ -359,7 +486,9 @@ def main() -> None:
         )
         record["environment"]["accelerator"] = cuda_accelerator_metadata(cp)
         started = perf_counter()
-        reference = reference_engine(atoms, "def2-svp", spec)
+        reference = reference_engine(
+            atoms, "def2-svp", spec, nonlocal_spec=nonlocal_spec
+        )
         record["reference_prepare_seconds"] = perf_counter() - started
         if not args.reference_only:
             save("native/prepare")
@@ -369,7 +498,7 @@ def main() -> None:
                 basis="def2-svp",
                 device="cuda",
                 basis_representation="spherical",
-                ks_options=KsOptions(grid=spec),
+                ks_options=KsOptions(grid=spec, nonlocal_grid=nonlocal_spec),
                 energy_tolerance=1e-11,
                 density_tolerance=1e-9,
                 screening_tolerance=1e-12,

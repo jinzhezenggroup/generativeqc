@@ -981,6 +981,43 @@ class _CudaSources:
             },
         )
 
+    def configure_grid(self, spec: typing.Any, atoms: typing.Any) -> None:
+        """Bind immutable atom-major extents and adjusted-partition parameters.
+
+        Topology is copied once per scientific grid identity; moving centers
+        continue to use reset/rebind_geometry without rebuilding quadrature.
+        """
+        identity = (spec, tuple(a.atomic_number for a in atoms))
+        if getattr(self, "_grid_topology_identity", None) == identity:
+            return
+        offsets = np.asarray(spec.atom_offsets(atoms), dtype=np.uint64)
+        radii = spec.partition_radii(atoms)
+        function = self.library.stationary_grid_topology_v1
+        function.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        radius_array = None if radii is None else np.asarray(radii, dtype=np.float64)
+        self._call(
+            "stationary_grid_topology_v1",
+            self.handle,
+            offsets.ctypes.data_as(ct.c_void_p),
+            None if radius_array is None else _ptr(radius_array),
+            self.natom,
+        )
+        self._grid_offsets = offsets
+        self._grid_topology_identity = identity
+
+    def _molecular_owners(self, begin: int, count: int, per_atom: int) -> np.ndarray:
+        indices = np.arange(begin, begin + count, dtype=np.int64)
+        if per_atom:
+            return indices // per_atom
+        return np.searchsorted(self._grid_offsets, indices, side="right") - 1
+
     def enable_profile(self) -> None:
         if self.profile_device:
             return
@@ -1498,7 +1535,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1518,10 +1556,7 @@ class _CudaSources:
         ):
             raise ValueError("unsupported stationary semilocal functional")
         if self.profile_device:
-            owners = (
-                np.arange(owner_offset, owner_offset + view.npoint, dtype=np.int64)
-                // points_per_atom
-            )
+            owners = self._molecular_owners(owner_offset, view.npoint, points_per_atom)
             self.geometry(task, owners, weights, raw, functional=functional)
             return
         work = task.density_jets(_stationary_density_jet_count(functional))
@@ -1577,7 +1612,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1688,7 +1724,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1756,7 +1793,8 @@ class _CudaSources:
             type(owner_offset) is not int
             or owner_offset < 0
             or type(points_per_atom) is not int
-            or points_per_atom <= 0
+            or points_per_atom < 0
+            or (points_per_atom == 0 and not hasattr(self, "_grid_offsets"))
         ):
             raise ValueError("invalid molecular-grid owner interval")
         self.borrowed_streams.add(view.stream)
@@ -1783,10 +1821,7 @@ class _CudaSources:
         if not external_device.value:
             raise ValueError("resident nonlocal seed device pointer is null")
         if self.profile_device:
-            owners = (
-                np.arange(owner_offset, owner_offset + view.npoint, dtype=np.int64)
-                // points_per_atom
-            )
+            owners = self._molecular_owners(owner_offset, view.npoint, points_per_atom)
             self.geometry_external_device(
                 task,
                 owners,
@@ -3220,7 +3255,7 @@ def _complete_rks_cuda_gradient_diagnostic(
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
-    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
+    Domain: qualified real FP64 RKS/UKS compositions, native fixed-topology grid and
     distinct noncolliding centers. Enlarged domains require the shared native
     stationary integral owner. No CPKS is required. None for either whole-grid
     work guard admits the finite complete grid, retaining bounded submission
@@ -3658,6 +3693,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
             prepared._attempt_source_metrics = source_before
+        sources.configure_grid(spec, basis.atoms)
         if profile_device:
             ao.profile_stages()
         native_integral_components = None
@@ -3873,10 +3909,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                 raise ValueError(
                     "resident molecular-grid lease differs from stationary state"
                 )
-            points_per_atom = (
-                spec.radial_points * spec.angular_polar * spec.angular_azimuth
-            )
-            if points_per_atom <= 0 or grid_points != na * points_per_atom:
+            points_per_atom = 0 if spec.version == 4 else spec.points_per_atom
+            if grid_points != spec.point_count(a.atomic_number for a in basis.atoms):
                 raise ValueError(
                     "resident molecular grid is not the expected atom-major GridSpec"
                 )

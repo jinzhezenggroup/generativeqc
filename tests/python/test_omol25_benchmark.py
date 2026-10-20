@@ -678,3 +678,62 @@ def test_retention_uses_independent_gate_before_journaling(
             retain_endpoint_record(record, row, oracle, save)
     assert saved == [record]
     assert record["records"] == [row]
+
+
+@pytest.mark.parametrize("grid", [None, (48, 16, 32)])
+def test_optional_grid_cli_reaches_later_argument_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    grid: tuple[int, int, int] | None,
+) -> None:
+    from benchmarks.readme_omol25 import main
+
+    monkeypatch.setenv("SLURM_JOB_ID", "test-only-no-gpu")
+    arguments = [
+        "native",
+        "--atoms",
+        "3",
+        "--basis-file",
+        str(tmp_path / "basis.json"),
+        "--output",
+        str(tmp_path / "result.json"),
+    ]
+    if grid is not None:
+        arguments += ["--grid", *map(str, grid)]
+    with pytest.raises(SystemExit) as error:
+        main(argv=arguments)
+    assert error.value.code == 2
+    assert (
+        "native execution requires the independent --reference JSON"
+        in capsys.readouterr().err
+    )
+    assert not (tmp_path / "result.json").exists()
+
+
+@pytest.mark.parametrize("grid", [(0, 16, 32), (48, -1, 32), (48, 16, 0)])
+def test_explicit_invalid_grid_cli_still_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    grid: tuple[int, int, int],
+) -> None:
+    from benchmarks.readme_omol25 import main
+
+    monkeypatch.setenv("SLURM_JOB_ID", "test-only-no-gpu")
+    with pytest.raises(SystemExit) as error:
+        main(
+            argv=[
+                "native",
+                "--atoms",
+                "3",
+                "--basis-file",
+                str(tmp_path / "basis.json"),
+                "--grid",
+                *map(str, grid),
+                "--output",
+                str(tmp_path / "result.json"),
+            ]
+        )
+    assert error.value.code == 2
+    assert "repeats and grid dimensions must be positive" in capsys.readouterr().err

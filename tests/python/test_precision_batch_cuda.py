@@ -9,8 +9,10 @@ import numpy as np
 import pytest
 from generativeqc import (
     Calculator,
+    ObservableTarget,
     PrecisionCalculator,
     PrecisionPolicy,
+    TargetAccuracy,
     TargetErrorBudget,
 )
 from generativeqc._precision_batch import _SeedLease
@@ -36,6 +38,50 @@ METHODS = [
     for name in ("PBE", "PBE0", "B3LYP", "R2SCAN", "M06-2X")
     for fitted in (False, True)
 ] + [("HF", False), ("R2SCAN-3C", False)]
+
+
+def test_hf_audit_replay_preserves_independent_frozen_history() -> None:
+    """Warm both solvers separately and still execute a measured audit each time."""
+    case_name = "water-tetramer-def2-svp-spherical"
+    atoms = benchmark_cases()[case_name].atoms
+    energy, forces = hf_oracle(case_name, atoms)
+    target = TargetAccuracy(
+        (ObservableTarget("energy", "absolute", "Eh", absolute=1e-7),)
+    )
+    calculator = PrecisionCalculator(
+        policy=PrecisionPolicy("fp64", target=target), **hf_settings(case_name)
+    )
+    try:
+        with calculator.prepare_batch([atoms]) as prepared:
+            for replay in range(3):
+                result = prepared.execute(strict=True, properties=("energy", "forces"))
+                observed = result.items[0]
+                assert observed.energy == pytest.approx(energy, abs=1e-7)
+                np.testing.assert_allclose(observed.forces, forces, atol=1e-6, rtol=0)
+                assert observed.precision_validation.solve_count == 2
+                attempt = result.precision_validation["audit_calls"][0]
+                assert attempt["completed"] and attempt["iterations"] > 0
+                # Some HF owners expose no Fock census; keep it unknown.
+                assert attempt["fock_builds"] is None or attempt["fock_builds"] > 0
+                assert attempt["warm_start_used"] == bool(replay)
+                assert result.precision_validation["audit_seed_bytes_retained"] > 0
+                if replay == 0:
+                    prepared.set_warm_start_updates(False)
+                    candidate = [array.copy() for array in prepared._seeds.storage]
+                    auditor = [
+                        array.copy() for array in prepared._audit_seeds[0].storage
+                    ]
+                else:
+                    for actual, frozen in zip(
+                        prepared._seeds.storage, candidate, strict=True
+                    ):
+                        np.testing.assert_array_equal(actual, frozen)
+                    for actual, frozen in zip(
+                        prepared._audit_seeds[0].storage, auditor, strict=True
+                    ):
+                        np.testing.assert_array_equal(actual, frozen)
+    finally:
+        calculator.clear_cache()
 
 
 def inputs(functional: str, fitted: bool) -> dict:

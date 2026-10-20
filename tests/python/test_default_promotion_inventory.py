@@ -274,8 +274,8 @@ def test_native_ks_final_validation_default_is_audited(
         ),
         (
             "src/scf/cuda/direct_spd_force_schedule.hpp",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse",
-            "return true ? DirectSpdForceSchedule::SpatialReuse",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse",
+            "return true ? DirectSpdForceSchedule::DensityReuse",
         ),
         (
             "src/methods/dft_method.cpp",
@@ -898,8 +898,17 @@ def test_new_response_option_must_be_registered(
 @pytest.mark.parametrize(
     "relative,before,after",
     [
-        ("src/scf/cuda/direct_md_j.hpp", "128U << 20", "256U << 20"),
         ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
+        (
+            "src/scf/cuda/direct_jk.cpp",
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE")',
+            "nullptr",
+        ),
+        (
+            "src/scf/cuda/direct_jk.cpp",
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE")',
+            'std::getenv("GENERATIVEQC_MD_J_ENGINE_RENAMED")',
+        ),
         (
             "src/scf/cuda/direct_jk.cpp",
             "md_ready = !resident_source_only && !runtime::active_device_resource_ledger",
@@ -912,7 +921,7 @@ def test_new_response_option_must_be_registered(
         ),
     ],
 )
-def test_md_j_default_domain_and_optional_capacity_are_audited(
+def test_md_j_default_domain_and_opt_out_are_audited(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
     payload = _payload()

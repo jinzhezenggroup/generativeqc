@@ -13,7 +13,8 @@ struct CudaGridGeometryShape {
 
 struct CudaGridGeometryOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
-  std::size_t point_tile{64};
+  /** Bounded point-parallel Becke scratch; small explicit tiles remain valid. */
+  std::size_t point_tile{1024};
   std::uint64_t max_partition_pairs{16'777'216};
   std::uint64_t max_ao_jet_values{134'217'728};
   /** Conservative preparation bound: 20*points*AO*primitives*3 polynomial
@@ -27,11 +28,11 @@ struct CudaGridGeometryOptions {
   double reference_relative_tolerance{3e-11};
 };
 
-/** Immutable normalized AoBasis and native unpruned quadrature. Owner atoms
- * follow atom/radial/polar/azimuth order, with points_per_atom consecutive
- * points per atom. Atomic measures are the actual pre-partition CUDA source,
- * never weights divided by a possibly zero partition. The caller authenticates
- * all storage, extents and grid policy on the current device/ordinary stream.
+/** Immutable normalized AoBasis and native atom-major quadrature. Legacy
+ * grids use points_per_atom; version-4 grids use the retained atom_offsets
+ * and Treutler atomic_radii, with points_per_atom=0. Atomic measures are the actual pre-partition
+ * CUDA source, never weights divided by a possibly zero partition. The caller authenticates all
+ * storage, extents and grid policy on the current device/ordinary stream.
  */
 struct CudaGridGeometryReference {
   const double *basis{}, *points{}, *weights{}, *atomic_weights{};
@@ -39,6 +40,10 @@ struct CudaGridGeometryReference {
   cudaStream_t stream{};
   cudaError_t (*authenticate)(void*) noexcept {};
   void* owner{};
+  /** Optional native atom-prefix topology and positive Bragg partition radii.
+   * Required together when points_per_atom is zero; share the owner lease. */
+  const std::uint64_t* atom_offsets{};
+  const double* atomic_radii{};
 };
 
 struct CudaGridGeometryWork {

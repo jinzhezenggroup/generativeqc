@@ -1,462 +1,310 @@
-"""Compose native CUDA DF storage and source-regeneration alternatives.
+"""Presentation of the shared native CUDA DF numeric bucket/fleet inventory."""
 
-The current inventory is deliberately limited to small HF orbital spaces and
-auxiliary dimensions up to 128. Runtime-dependent solver storage has an explicit
-capacity allowance and is also charged by the native allocation ledger.
-"""
+from __future__ import annotations
 
+import ctypes
 import json
 import os
-import typing
-from dataclasses import asdict
+from typing import Any
 
+from generativeqc_compiler.common.native_call import checked_native_call
 from generativeqc_compiler.common.resources import (
     ResourceCandidate,
     ResourceEstimate,
     checked_bytes,
 )
 
-from .resources_df import (
-    density_fitting_diis_bytes,
-    density_fitting_source_bytes,
-    density_fitting_tile_plan,
+from .resources_df import density_fitting_value_layout
+
+_BUCKET_KEYS = (
+    "batch",
+    "nbf",
+    "naux",
+    "cartesian_nbf",
+    "cartesian_naux",
+    "coordinates",
+    "source_bytes",
+    "diis_device_bytes",
+    "occupied",
+    "rhf_occupied",
+    "host_metadata",
+    "preparation_minimum",
+    "preparation_retained",
+    "preparation_temporary",
+    "response_minimum",
+    "resident_response_capacity",
+    "response_capacity",
+    "response_host_capacity",
+    "resident_host_bytes",
+    "overlap_cache_host_bytes",
+    "ordinary_eigen_device_bytes",
+    "final_snapshot_device_bytes",
+    "final_selection_host_bytes",
+    "ordinary_eigen_host_workspace_bytes",
+    "resident_device_bytes",
+    "rhf_authorized",
 )
+_TILE_KEYS = (
+    "batch_tile",
+    "ao_pair_tile",
+    "auxiliary_tile",
+    "occupied_tile",
+    "peak_workspace_bytes",
+    "stores_full_three_center",
+    "budget_bytes",
+    "fixed_device_bytes",
+    "generated_source",
+    "rank_capacity",
+    "stored_factor_bytes",
+    "raw_factor_bytes",
+    "contraction_scratch_bytes",
+    "projection_capacity_elements",
+    "panel_capacity_elements",
+    "automatic_rhf_rank",
+    "value_layout_elements_per_system",
+    "dense_equivalent_elements_per_system",
+    "bounded_materialization_bytes",
+    "bounded_conversion_traffic_bytes",
+)
+_BUCKET_WIDTH = len(_BUCKET_KEYS) + 2 * len(_TILE_KEYS)
+
+
+def _tile(values: list[int], row: dict[str, Any], pair_storage: str) -> dict[str, Any]:
+    """Decode numeric capacities; the compiler supplies only the layout label."""
+    result = dict(zip(_TILE_KEYS, values, strict=True))
+    for key in ("stores_full_three_center", "generated_source"):
+        if result[key] not in (0, 1):
+            raise ValueError("native CUDA DF fleet returned invalid tile flags")
+        result[key] = bool(result[key])
+    if (
+        not 0 < result["batch_tile"] <= row["batch"]
+        or not 0 < result["ao_pair_tile"] <= row["nbf"] ** 2
+        or not 0 < result["auxiliary_tile"] <= row["naux"]
+        or not 0 < result["occupied_tile"] <= row["nbf"]
+        or result["peak_workspace_bytes"] < result["fixed_device_bytes"]
+        or (
+            result["budget_bytes"]
+            and result["peak_workspace_bytes"] > result["budget_bytes"]
+        )
+    ):
+        raise ValueError("native CUDA DF fleet returned incoherent tile capacity")
+    result["pair_storage"] = pair_storage
+    layout = density_fitting_value_layout(row["nbf"], row["naux"], pair_storage)
+    result["value_layout_identity"] = layout.identity
+    dense_elements = (
+        layout.dense_elements if pair_storage == "packed" else layout.storage_elements
+    )
+    if (
+        result["value_layout_elements_per_system"] != layout.storage_elements
+        or result["dense_equivalent_elements_per_system"] != dense_elements
+    ):
+        raise ValueError(
+            "native CUDA DF capacity disagrees with compiler layout contract"
+        )
+    if pair_storage == "packed":
+        factor = 8 * row["batch"] * layout.storage_elements
+        if (
+            result["stored_factor_bytes"] != factor
+            or result["raw_factor_bytes"] != factor
+        ):
+            raise ValueError(
+                "native packed DF factor disagrees with compiler layout contract"
+            )
+    return result
 
 
 def cuda_df_candidates(
-    library: typing.Any,
-    items: typing.Any,
+    library: Any,
+    items: Any,
     *,
-    diis_history: typing.Any,
-    device: typing.Any,
-    first_phase: typing.Any,
-    last_phase: typing.Any,
-    requested_budget: typing.Any = 0,
-) -> typing.Any:
-    """Return actual resident/source choices for the native fleet's buckets.
+    diis_history: Any,
+    device: Any,
+    first_phase: Any,
+    last_phase: Any,
+    requested_budget: Any = 0,
+) -> tuple[ResourceCandidate, ...]:
+    """Render authoritative native choices without Python capacity composition.
 
-    Buckets retain all their device plans. Temporary setup/force storage is
-    shared across serialized buckets; the existing one-item cold retry can
-    coexist with a warm bucket and has a separate reservation. Both provider
-    modes first use CUDA SCF, including graph capture for generated tiles,
-    with the existing CPU numerical recovery when the device solve fails.
-    The source's forward tensor may be resident when the native allowance fits;
-    response derivatives still use bounded regeneration. The source candidate's
-    ``recomputed`` mode describes that complete policy, not every forward tile.
+    All retained buckets coexist with serialized work and an independent cold
+    singleton retry. The existing CUDA SCF/CPU numerical-recovery contract is
+    unchanged. Only a missing symbol permits historical Python composition;
+    native rejection or an incoherent wire result is final, never a fallback.
     """
+    query = getattr(library, "generativeqc_resource_hf_df_cuda_fleet_v1", None)
+    if query is None:
+        from ._resources_hf_df_compat import cuda_df_candidates as legacy_candidates
+
+        return legacy_candidates(
+            library,
+            items,
+            diis_history=diis_history,
+            device=device,
+            first_phase=first_phase,
+            last_phase=last_phase,
+            requested_budget=requested_budget,
+        )
     storage = os.environ.get("GENERATIVEQC_DF_VALUE_STORAGE", "auto")
-    if storage not in ("auto", "dense", "packed", "packed-single"):
+    selectors = ("auto", "dense", "packed", "packed-single")
+    if storage not in selectors:
         raise ValueError(
             "GENERATIVEQC_DF_VALUE_STORAGE must be auto, dense, packed or packed-single"
         )
-    packed_values = storage in ("packed", "packed-single")
-    # The shape-only packed ABI conservatively charges raw + fitted factors.
-    # packed-single therefore receives a safe upper bound here; the native
-    # executable planner owns its lower single-factor allocation and auto
-    # promotion. Small inventory-v1 auto workloads remain dense/resident.
-    pair_storage = "packed" if packed_values else "dense"
-    occupied_exchange = os.environ.get("GENERATIVEQC_DF_EXCHANGE") == "occupied"
-    buckets = {}
-    for item in items:
-        orbital, auxiliary = item["orbital"], item["auxiliary"]
-        if orbital["nbf"] > 16 or auxiliary["nbf"] > 128:
-            raise NotImplementedError(
-                "CUDA DF inventory v1 requires <=16 orbital AOs and <=128 auxiliary AOs"
-            )
-        state = item["electrons"]
-        key = orbital["nbf"], state["nalpha"], state["nbeta"], orbital["primitives"]
-        buckets.setdefault(key, []).append(item)
-    groups = [buckets[key] for key in sorted(buckets)]
-    rows = []
-    for group in groups:
-        first = group[0]
-        o, a = first["orbital"], first["auxiliary"]
-        n, c, aux, ac = o["nbf"], o["cartesian_nbf"], a["nbf"], a["cartesian_nbf"]
-        b, d = len(group), 3 * first["atoms"]
-        if any(
-            (
-                item["orbital"]["cartesian_nbf"],
-                item["auxiliary"]["nbf"],
-                item["auxiliary"]["cartesian_nbf"],
-                item["atoms"],
-            )
-            != (c, aux, ac, first["atoms"])
-            for item in group
-        ):
-            raise NotImplementedError(
-                "CUDA DF bucket has incompatible Cartesian/auxiliary/atom dimensions"
-            )
-        source_bytes = density_fitting_source_bytes(
-            library,
-            batch=b,
-            atoms=sum(item["atoms"] for item in group),
-            shells=sum(
-                item["orbital"]["shells"] + item["auxiliary"]["shells"] + 1
-                for item in group
-            ),
-            cartesian_aos=b * (c + ac + 1),
-            primitives=sum(
-                item["orbital"]["primitives"] + item["auxiliary"]["primitives"] + 1
-                for item in group
-            ),
-            transforms=b * (n * c + aux * ac),
-        )
-        occupied = max(first["electrons"]["nalpha"], first["electrons"]["nbeta"], 1)
-        rhf_occupied = first["electrons"]["nalpha"] if first["spins"] == 1 else None
-        diis_bytes = density_fitting_diis_bytes(library, b, n, diis_history)
-        default_tile = density_fitting_tile_plan(
-            library,
-            b,
-            n,
-            aux,
-            occupied,
-            budget_bytes=0,
-            fixed_device_bytes=source_bytes + diis_bytes,
-            generated_source=True,
-            pair_storage=pair_storage,
-            rhf_occupied=rhf_occupied,
-        )
-        # Match the native matrix-only one-electron chunk preflight. Direct-ERI
-        # task tables are omitted by this exporter, leaving quadratic metadata.
-        preparation_metadata = 0
-        preparation_retained = 0
-        preparation_temporary = 0
-        metadata = 0
-        for item in group:
-            orbital, auxiliary = item["orbital"], item["auxiliary"]
-            pairs = orbital["shells"] * (orbital["shells"] + 1) // 2
-            packed = 512 * (
-                1
-                + item["atoms"]
-                + orbital["shells"]
-                + orbital["primitives"]
-                + c
-                + n
-                + pairs
-                + auxiliary["shells"]
-                + auxiliary["primitives"]
-            )
-            # Native preparation holds Cartesian/public outputs together and
-            # retains all preceding items while preparing the next singleton.
-            # This global request permits both properties, so use force data
-            # for the generated response owner even when a replay requests only E.
-            copies = 1
-            retained = packed + 8 * (2 * n * n * copies + d)
-            temporary = packed + 8 * (2 * c * c * copies + d + 4 * c * c + 1)
-            preparation_metadata += packed
-            preparation_retained += retained
-            preparation_temporary = max(preparation_temporary, temporary)
-            combined_shells = orbital["shells"] + auxiliary["shells"] + 1
-            combined_pairs = combined_shells * (combined_shells + 1) // 2
-            metadata += 2048 * (
-                1
-                + item["atoms"]
-                + combined_shells
-                + orbital["primitives"]
-                + auxiliary["primitives"]
-                + c
-                + ac
-                + combined_pairs
-                + combined_pairs**2
-            )
-        rows.append(
-            {
-                "batch": b,
-                "nbf": n,
-                "naux": aux,
-                "cartesian_nbf": c,
-                "cartesian_naux": ac,
-                "coordinates": d,
-                "source_bytes": source_bytes,
-                "diis_device_bytes": diis_bytes,
-                "occupied": occupied,
-                "rhf_occupied": rhf_occupied,
-                "host_metadata": metadata,
-                "preparation_minimum": preparation_metadata
-                + preparation_retained
-                + preparation_temporary,
-                "preparation_retained": preparation_retained,
-                "preparation_temporary": preparation_temporary,
-                "default_tile": default_tile,
-            }
-        )
-        # Source response owns packed AO metadata, four device metric matrices,
-        # density matrices and bounded auxiliary weights. The compatibility
-        # resident adapter retains its independent host spectral allowance.
-        # This LP64 capacity allowance covers vector growth for public s/p/d/f
-        # expansions (at most three Cartesian terms) without a CUDA context.
-        response_metadata = max(
-            256
-            * (
-                1
-                + item["atoms"]
-                + n
-                + aux
-                + item["orbital"]["primitives"]
-                + item["auxiliary"]["primitives"]
-            )
-            for item in group
-        )
-        response_spectral = 8 * (12 * aux * aux + 10 * aux + n * n)
-        # Three density terms cover UHF; its total-density matrix is included.
-        response_fixed = 8 * (3 * aux * aux + 6 * aux + 4 * n * n)
-        rows[-1]["response_minimum"] = response_metadata + 8 * (
-            4 * aux * aux + 9 * n * n + 6 * aux
-        )
-        rows[-1]["resident_response_capacity"] = response_metadata + max(
-            response_spectral, response_fixed + 16 * n * n * aux
-        )
-        # Include the caller's UHF total-density staging along with three
-        # uploaded terms. Device tiles are capped by the supplied half-budget.
-        rows[-1]["response_capacity"] = response_metadata + 8 * (
-            4 * aux * aux + (7 + 2 * aux) * n * n + 6 * aux
-        )
-        rows[-1]["response_host_capacity"] = response_metadata + 8 * n * n
-    source_budget = requested_budget or max(
-        max(
-            row["preparation_minimum"],
-            2 * row["default_tile"].peak_workspace_bytes,
-            2 * row["response_minimum"],
-        )
-        for row in rows
+    pair_storage = "packed" if storage in ("packed", "packed-single") else "dense"
+    expected_kinds = (
+        (2,) if pair_storage == "packed" else (1,) if requested_budget else (0, 1)
     )
-    choices = [("cuda-df-resident", 0, "resident", 0)] if requested_budget == 0 else []
-    choices.append(("cuda-df-source", source_budget, "recomputed", 1))
-    if packed_values:
-        # An explicit packed request must not be estimated as a dense owner or
-        # silently fall back to a different representation when its owners fail
-        # the budget. The native planner chooses its bounded Q panel first.
-        choices = [("cuda-df-packed", source_budget, "resident", 0)]
-    candidates = []
-    for name, sub_budget, mode, cost in choices:
-        source = sub_budget > 0
-        host_resident, device_resident, host_work, device_work, inventories = (
-            [],
-            [],
-            [],
-            [],
-            [],
+    checked_bytes(diis_history, "DF DIIS history")
+    checked_bytes(requested_budget, "DF sub-budget")
+    if diis_history > 2 ** (8 * ctypes.sizeof(ctypes.c_uint)) - 1:
+        raise ValueError("DF DIIS history exceeds the native unsigned domain")
+    items = tuple(items)
+    dimensions = []
+    for item in items:
+        orbital, auxiliary, state = (
+            item["orbital"],
+            item["auxiliary"],
+            item["electrons"],
         )
-        for row in rows:
-            b, n, aux, c, ac, d = (
-                row[key]
-                for key in (
-                    "batch",
-                    "nbf",
-                    "naux",
-                    "cartesian_nbf",
-                    "cartesian_naux",
-                    "coordinates",
-                )
-            )
-            tile = density_fitting_tile_plan(
-                library,
-                b,
-                n,
-                aux,
-                row["occupied"],
-                # Prepared requests admit energy and forces. Energy can use
-                # the full value allowance; this larger live set conservatively
-                # bounds the force plan's half-allowance scratch as well.
-                budget_bytes=sub_budget if source else 0,
-                fixed_device_bytes=(row["source_bytes"] if source else 0)
-                + row["diis_device_bytes"],
-                generated_source=source,
-                pair_storage=pair_storage,
-                rhf_occupied=row["rhf_occupied"],
-            )
-            force_tile = tile
-            if source:
-                force_tile = density_fitting_tile_plan(
-                    library,
-                    b,
-                    n,
-                    aux,
-                    row["occupied"],
-                    budget_bytes=max(1, sub_budget // 2),
-                    fixed_device_bytes=row["source_bytes"] + row["diis_device_bytes"],
-                    generated_source=True,
-                    pair_storage=pair_storage,
-                    rhf_occupied=row["rhf_occupied"],
-                )
-            pairs = (
-                min(n * n, max(n, (tile.ao_pair_tile // n) * n)) if source else n * n
-            )
-            q = tile.auxiliary_tile if source else aux
-            matrix, metric, tensor = (
-                8 * b * n * n,
-                8 * b * aux * aux,
-                8 * b * n * n * aux,
-            )
-            tile_bytes = 8 * pairs * q
-            # Actual queried metric/SCF workspaces are numeric allocations in
-            # the ledger. These explicit conservative allowances are shared
-            # with neither caller inputs nor opaque provider allocations.
-            solver = (64 << 20) + 16 * matrix + 128 * aux * aux
-            # Dense keeps its original capacity. Occupied mode reserves both
-            # spin factors at full rank; actual factors use nbf*max_occupied.
-            # Generation controls fit in the existing 1024-byte item allowance.
-            factors_reserved = occupied_exchange or bool(tile.automatic_rhf_rank)
-            persistent_device = (
-                (34 if factors_reserved else 32) * matrix
-                + 16 * b * aux
-                + solver
-                + 1024 * b
-            )
-            # One ordinary AO eigensystem serves the bucket serially. The
-            # native adapter checks queried device/host workspace against this
-            # allowance before allocation; neither uses the opaque allowance.
-            ordinary_eigen_workspace = (1 << 20) + 128 * n * n
-            ordinary_eigen_device = ordinary_eigen_workspace + 8 * (3 * n * n + n) + 5
-            persistent_device += ordinary_eigen_device
-            # Both full spin frames survive inactive launches; the independent
-            # single-item retry below receives its own complete snapshot share.
-            final_snapshot_device = b * (16 * (n * n + n) + 24)
-            persistent_device += final_snapshot_device
-            persistent_device += row["diis_device_bytes"]
-            # All value plans retain the original device metric eigensystem
-            # and inverse root for force response, transferred out of setup.
-            persistent_device += 2 * metric + 8 * b * aux
-            persistent_device += (
-                tile.stored_factor_bytes
-                + tile.raw_factor_bytes
-                + tile.contraction_scratch_bytes
-                + row["source_bytes"]
-                if packed_values
-                else (
-                    (
-                        tensor + 3 * tile_bytes
-                        if tile.stores_full_three_center
-                        else 4 * tile_bytes
-                    )
-                    + row["source_bytes"]
-                    if source
-                    else tensor + 3 * tile_bytes
-                )
-            )
-            setup = metric + 8 * b * aux + solver + 4 * b
-            # The promoted force consumer streams bounded weights. It owns no
-            # raw coordinate derivative tensors or coordinate-wise CUDA scratch.
-            # Retained values admit both the device path and explicit host
-            # diagnostic ablation under one conservative resource reservation.
-            force = (
-                min(row["response_capacity"], sub_budget // 2)
-                if source
-                else max(
-                    row["resident_response_capacity"],
-                    min(row["response_capacity"], 128 << 20),
-                )
-            )
-            generation = row["source_bytes"] + 8 * b * (
-                2 * c * c + (0 if source else ac * ac + c * c * ac)
-            )
-            persistent_host = row["host_metadata"] + 8 * b * (32 * n * n + 16 * d)
-            # One verified X and its exact S/geometry key per source survive
-            # value-plan rebuilds. Device SCF already reserves d_orthogonalizer;
-            # these are additional host copies only, retained through teardown.
-            overlap_cache_host = 2 * matrix + 8 * b * d
-            persistent_host += overlap_cache_host + ordinary_eigen_workspace + 64 * b
-            one_electron = 8 * b * (2 * n * n + d)
-            raw = 8 * b * (aux * aux + n * n * aux)
-            persistent_host += one_electron
-            if not source:
-                persistent_host += raw + tensor
-            scf = (
-                8
-                * b
-                * (
-                    # The DIIS-enabled bucket uploads S alongside its H/X/D
-                    # staging. It stays live until compact dispatch returns.
-                    129 * n * n
-                    + 4 * (diis_history + 1) * n * n
-                    + 4 * (diis_history + 1) ** 2
-                )
-            )
-            host_temporary = (
-                (64 << 20) + scf + one_electron + 64 * (metric // b) + 8 * (tensor // b)
-            )
-            host_temporary += 2 * row["host_metadata"] + (
-                2 * tile_bytes if source else 2 * raw + 8 * b * (ac * ac + c * c * ac)
-            )
-            if source and sub_budget < row["preparation_minimum"]:
-                raise ValueError(
-                    "DF sub-budget cannot hold the native one-electron preparation minimum"
-                )
-            if source and sub_budget // 2 < row["response_minimum"]:
-                raise ValueError(
-                    "DF sub-budget cannot hold the generated response minimum"
-                )
-            # Strict selection serializes one item. Reserve detached candidates,
-            # accepted outputs and validation/correction products explicitly;
-            # Two-spin candidate/correction/output frames may coexist (six
-            # epsilon vectors); eight vectors also cover the provider result.
-            # Matrix scratch includes canonical export products and both W.
-            final_selection_host = 8 * (32 * n * n + 8 * n)
-            host_temporary += final_selection_host
-            host_temporary = max(host_temporary, row["preparation_temporary"])
-            host_temporary += (
-                row["response_host_capacity"]
-                if source
-                else row["resident_response_capacity"]
-            )
-            host_resident.append(checked_bytes(persistent_host))
-            device_resident.append(checked_bytes(persistent_device))
-            host_work.append(checked_bytes(host_temporary))
-            # Reserve one additional complete item for existing cold numerical
-            # recovery. This is independent of allocation-failure retries.
-            # A batched RHF solve can retry a singleton. Query that method-aware
-            # plan separately instead of guessing eligibility from the batch.
-            retry_tile = density_fitting_tile_plan(
-                library,
+        dimensions.extend(
+            checked_bytes(value, "CUDA DF fleet shape")
+            for value in (
+                item["atoms"],
+                orbital["nbf"],
+                orbital["cartesian_nbf"],
+                orbital["shells"],
+                orbital["primitives"],
+                auxiliary["nbf"],
+                auxiliary["cartesian_nbf"],
+                auxiliary["shells"],
+                auxiliary["primitives"],
+                state["nalpha"],
+                state["nbeta"],
+                item["spins"],
                 1,
-                n,
-                aux,
-                row["occupied"],
-                budget_bytes=sub_budget if source else 0,
-                fixed_device_bytes=(row["source_bytes"] // b if source else 0)
-                + density_fitting_diis_bytes(library, 1, n, diis_history),
-                generated_source=source,
-                pair_storage=pair_storage,
-                rhf_occupied=row["rhf_occupied"],
             )
-            retry_factor_extra = (
-                2 * matrix // b
-                if retry_tile.automatic_rhf_rank and not factors_reserved
-                else 0
-            )
-            device_work.append(
-                checked_bytes(
-                    max(setup, force, generation)
-                    + (persistent_device - ordinary_eigen_device) // b
-                    # A separate single-item retry needs its own whole ordinary
-                    # workspace; this bucket-serialized capacity does not scale
-                    # down with the original batch's item count.
-                    + ordinary_eigen_device
-                    + solver
-                    + retry_factor_extra
+        )
+    shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.c_uint,
+        ctypes.c_uint64,
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    arguments = (
+        shapes,
+        len(shapes),
+        diis_history,
+        requested_budget,
+        selectors.index(storage),
+        int(os.environ.get("GENERATIVEQC_DF_EXCHANGE") == "occupied"),
+    )
+    header = (ctypes.c_uint64 * 3)()
+    checked_native_call(
+        query,
+        *arguments,
+        header,
+        len(header),
+        error_type=ValueError,
+        status_error_types={2: NotImplementedError},
+    )
+    buckets, choices, length = header
+    if (
+        not 0 < buckets <= len(items)
+        or choices != len(expected_kinds)
+        or length != 3 + choices * (8 + buckets * _BUCKET_WIDTH)
+    ):
+        raise ValueError("native CUDA DF fleet returned invalid schema")
+    output = (ctypes.c_uint64 * length)()
+    checked_native_call(
+        query,
+        *arguments,
+        output,
+        len(output),
+        error_type=ValueError,
+        status_error_types={2: NotImplementedError},
+    )
+    values = [checked_bytes(value, "native CUDA DF capacity") for value in output]
+    if values[:3] != list(header):
+        raise ValueError("native CUDA DF fleet changed its publication schema")
+    candidates = []
+    offset = 3
+    for expected_kind in expected_kinds:
+        (
+            kind,
+            sub_budget,
+            cost,
+            host,
+            host_work,
+            device_bytes,
+            device_work,
+            allowance,
+        ) = values[offset : offset + 8]
+        offset += 8
+        if (
+            kind != expected_kind
+            or (kind == 0) != (sub_budget == 0)
+            or (requested_budget and sub_budget != requested_budget)
+            or not host_work
+            or not device_work
+        ):
+            raise ValueError("native CUDA DF fleet returned invalid candidate")
+        source = sub_budget > 0
+        inventories = []
+        for _ in range(buckets):
+            row = dict(
+                zip(
+                    _BUCKET_KEYS,
+                    values[offset : offset + len(_BUCKET_KEYS)],
+                    strict=True,
                 )
             )
-            inventories.append(
-                {
-                    **{k: v for k, v in row.items() if k != "default_tile"},
-                    # Preserve the historical all-properties (force) route,
-                    # and expose the larger energy route used for the bound.
-                    "tiles": asdict(force_tile),
-                    "energy_tiles": asdict(tile),
-                    "force_tiles": asdict(force_tile),
-                    "resident_host_bytes": persistent_host,
-                    "overlap_cache_host_bytes": overlap_cache_host,
-                    "ordinary_eigen_device_bytes": ordinary_eigen_device,
-                    "final_snapshot_device_bytes": final_snapshot_device,
-                    "final_selection_host_bytes": final_selection_host,
-                    "ordinary_eigen_host_workspace_bytes": ordinary_eigen_workspace,
-                    "resident_device_bytes": persistent_device,
-                }
+            offset += len(_BUCKET_KEYS)
+            restricted = row.pop("rhf_authorized")
+            if (
+                restricted not in (0, 1)
+                or not row["batch"]
+                or not 0 < row["nbf"] <= 16
+                or not 0 < row["naux"] <= 128
+            ):
+                raise ValueError("native CUDA DF fleet returned invalid bucket")
+            if not restricted:
+                row["rhf_occupied"] = None
+            for route in ("energy_tiles", "force_tiles"):
+                row[route] = _tile(
+                    values[offset : offset + len(_TILE_KEYS)], row, pair_storage
+                )
+                expected_budget = (
+                    sub_budget if route == "energy_tiles" else sub_budget // 2
+                )
+                if (
+                    row[route]["budget_bytes"] != expected_budget
+                    or row[route]["generated_source"] != source
+                ):
+                    raise ValueError(
+                        "native CUDA DF fleet changed its budget/source contract"
+                    )
+                offset += len(_TILE_KEYS)
+            row["tiles"] = row["force_tiles"]
+            inventories.append(row)
+        if sum(row["batch"] for row in inventories) != len(items):
+            raise ValueError("native CUDA DF fleet omitted or duplicated items")
+        if host != sum(
+            row["resident_host_bytes"] for row in inventories
+        ) or device_bytes != sum(row["resident_device_bytes"] for row in inventories):
+            raise ValueError(
+                "native CUDA DF fleet returned inconsistent retained totals"
             )
         estimates = (
             ResourceEstimate(
                 "all DF bucket caches and native solver workspaces",
-                checked_bytes(sum(device_resident)),
+                device_bytes,
                 f"device:{device}",
                 first_phase,
                 last_phase,
@@ -465,14 +313,14 @@ def cuda_df_candidates(
             ),
             ResourceEstimate(
                 "largest serialized DF setup/force/retry workspace",
-                max(device_work),
+                device_work,
                 f"device:{device}",
                 first_phase,
                 last_phase,
             ),
             ResourceEstimate(
                 "all retained DF host state",
-                checked_bytes(sum(host_resident)),
+                host,
                 "pageable",
                 first_phase,
                 last_phase,
@@ -481,14 +329,14 @@ def cuda_df_candidates(
             ),
             ResourceEstimate(
                 "largest serialized DF host workspace",
-                max(host_work),
+                host_work,
                 "pageable",
                 first_phase,
                 last_phase,
             ),
             ResourceEstimate(
                 "opaque CUDA library retention allowance",
-                (256 << 20) * (len(rows) + 1),
+                allowance,
                 f"device:{device}",
                 first_phase,
                 last_phase,
@@ -496,22 +344,22 @@ def cuda_df_candidates(
                 accounting="runtime_allowance",
             ),
         )
-        layout_identities = sorted(
+        identities = sorted(
             {
-                inventory[route]["value_layout_identity"]
-                for inventory in inventories
+                row[route]["value_layout_identity"]
+                for row in inventories
                 for route in ("energy_tiles", "force_tiles")
             }
         )
         candidates.append(
             ResourceCandidate(
-                name,
-                mode,
+                ("cuda-df-resident", "cuda-df-source", "cuda-df-packed")[kind],
+                "recomputed" if kind == 1 else "resident",
                 estimates,
                 relative_cost=cost,
                 decisions=(
                     ("df_pair_storage", pair_storage),
-                    ("df_value_layout_identities", json.dumps(layout_identities)),
+                    ("df_value_layout_identities", json.dumps(identities)),
                     ("density_fitting_memory_budget_bytes", str(sub_budget)),
                     (
                         "batch_execution",

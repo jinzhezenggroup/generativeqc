@@ -49,6 +49,9 @@ from codegen_test_support import (
     write_production_bundle,
 )
 
+if typing.TYPE_CHECKING:
+    from conftest import NativeCxx
+
 
 @pytest.mark.parametrize("name", ("psps", "ppss"))
 def test_low_order_production_force_is_generated_by_common_rys2_pipeline(
@@ -976,22 +979,64 @@ def test_psss_force_math_is_unconditionally_generated() -> None:
     )
 
 
-def test_ssss_force_codegen_emits_only_independent_gradient_roots() -> None:
-    """Keep the native-adapter ssss helper free of unused value/center-four work."""
+def test_ssss_force_codegen_emits_only_independent_gradient_roots(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the three-center adapter with unused geometry poisoned, not suffix text."""
+    import subprocess
 
-    source = emit_low_order_weighted_header(inline_single_use=True)
-    begin = source.index("IndependentGradient ssss_force(")
-    end = source.index(
-        "}  // namespace generativeqc::scf::generated_weighted_eri", begin
+    from _cpp_source_support import cpp_function_definition, cpp_record_definition
+
+    generated = emit_low_order_weighted_header(inline_single_use=True)
+    source = tmp_path / "ssss-independent.cpp"
+    source.write_text(
+        "#include <cassert>\n#include <cmath>\n#include <limits>\n"
+        "#define __device__\n#define __forceinline__ inline\n"
+        + cpp_record_definition(generated, "Geometry")
+        + ";\n"
+        + cpp_record_definition(generated, "IndependentGradient")
+        + ";\n"
+        + cpp_function_definition(generated, "ssss_force")
+        + r"""
+int main() {
+  static_assert(sizeof(IndependentGradient) == 9 * sizeof(double));
+  Geometry geometry{};
+  const double poison = std::numeric_limits<double>::quiet_NaN();
+  geometry.inverse_two_p = geometry.inverse_two_q = poison;
+  geometry.rho = 0.7;
+  geometry.prefactor = -0.4;
+  geometry.boys[0] = 0.8;
+  geometry.boys[1] = 0.2;
+  for (unsigned order = 2; order < 14; ++order) geometry.boys[order] = poison;
+  const double scales[] = {0.25, 0.75, 0.6};
+  for (unsigned center = 0; center < 4; ++center)
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      geometry.shifts[center][axis] = poison;
+      geometry.decay[center][axis] = center == 3 ? poison : 0.11 * (center + 1) - 0.07 * axis;
+    }
+  for (unsigned center = 0; center < 3; ++center) geometry.product_scales[center] = scales[center];
+  geometry.product_scales[3] = poison;
+  for (unsigned axis = 0; axis < 3; ++axis) geometry.difference[axis] = 0.3 - 0.2 * axis;
+  const double weights[] = {-0.7};
+  const auto actual = ssss_force(geometry, weights);
+  for (unsigned center = 0; center < 3; ++center)
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      const double sign = center < 2 ? 1.0 : -1.0;
+      const double expected = weights[0] * geometry.prefactor * (
+          geometry.decay[center][axis] * geometry.boys[0]
+          - 2.0 * geometry.rho * sign * scales[center] * geometry.difference[axis] * geometry.boys[1]);
+      assert(std::isfinite(actual.center[center][axis]));
+      assert(std::abs(actual.center[center][axis] - expected) < 3e-15);
+    }
+}
+"""
     )
-    ssss_force = source[begin:end]
-    assert "result.value" not in ssss_force
-    assert "result.center[3]" not in ssss_force
-    assert "geometry.product_scales[3]" not in ssss_force
-    assert "geometry.decay[3]" not in ssss_force
-    for center in range(3):
-        for axis in range(3):
-            assert f"result.center[{center}][{axis}]" in ssss_force
+    executable = native_cxx.build_executable(
+        [source],
+        tmp_path / "ssss-independent",
+        compile_args=["-std=c++17", "-O2", "-ffp-contract=off"],
+    )
+    subprocess.run([executable], check=True, timeout=10)
 
 
 def test_ssss_force_retires_handwritten_math_and_selector() -> None:

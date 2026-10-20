@@ -205,8 +205,28 @@ void disabled_history(unsigned history) {
 }
 
 int main() {
-  if (!std::getenv("SLURM_JOB_ID")) return 77;
   try {
+    // Exercise the public production launcher, not only its host helper. Each
+    // required binding must throw before submitting work, even without a GPU.
+    for (unsigned missing = 0; missing < 11; ++missing) {
+      double storage[8]{};
+      std::uint8_t active = 1;
+      std::uint32_t count{}, head{};
+      bool rejected = false;
+      try {
+        generativeqc::scf::cuda_execution::launch_update_diis_cached_gram(
+            1, 32, 0, nullptr, 1, 3, 1, 2, missing == 0 ? nullptr : storage,
+            missing == 1 ? nullptr : storage + 1, missing == 2 ? nullptr : &active,
+            missing == 3 ? nullptr : storage + 2, missing == 4 ? nullptr : storage + 3,
+            missing == 5 ? nullptr : storage + 4, missing == 6 ? nullptr : storage + 5,
+            missing == 7 ? nullptr : &count, missing == 8 ? nullptr : &head,
+            missing == 9 ? nullptr : storage + 6, missing == 10 ? nullptr : storage + 7);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      if (!rejected) throw std::runtime_error("ordered launcher bypassed host admission");
+    }
+    if (!std::getenv("SLURM_JOB_ID")) return 77;
     invalid_history_state();
     disabled_history(0);
     disabled_history(1);

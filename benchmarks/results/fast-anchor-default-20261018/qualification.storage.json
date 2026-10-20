@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/fast-anchor-default-20261018/qualification.json",
+  "original_bytes": 54567,
+  "original_sha256": "74fb2b78c1c81a09a2e26ce85442a8bd11f54f139e4167b9303896f9f8243124",
+  "original_git_blob": "972f12fa15e263f551de51bb74bf3f16973fe49e",
+  "stored_path": "benchmarks/results/fast-anchor-default-20261018/qualification.json.xz",
+  "stored_bytes": 4368,
+  "stored_sha256": "4f718bc6875f17cc964b96129675d58c4f8b2670aff3f73b5061574e82a11e04",
+  "compression": "xz preset 9",
+  "scope": "Storage only. Complete original scientific evidence bytes, including every slower arm, first-use cost, gate, source identity and paired-state result, are retained unchanged."
+}

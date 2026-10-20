@@ -51,6 +51,9 @@ struct KsDerivativeSnapshot {
   std::vector<std::uint32_t> grid_owners;
   std::vector<double> atomic_weights;
   dft::CudaMolecularGridView resident_grid;
+  std::vector<double> nonlocal_points, nonlocal_weights, nonlocal_atomic_weights;
+  std::vector<std::uint32_t> nonlocal_grid_owners;
+  dft::CudaMolecularGridView nonlocal_resident_grid;
   std::uint64_t export_d2h_bytes{}, export_reads{}, export_synchronizations{};
 };
 

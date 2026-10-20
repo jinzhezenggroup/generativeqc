@@ -24,6 +24,9 @@ struct PhasedBeckeInput {
   generativeqc_grid_phased::Workspace work;
   const double* points;
   const double* centers;
+  // Immutable elemental radii, owned by the stationary topology. Null keeps
+  // the legacy equal-radius partition; every pair phase uses the same graph.
+  const double* atomic_radii;
   const int64_t* owners;
   size_t owner_offset, points_per_atom;
   double* seeds;
@@ -111,7 +114,7 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
   using namespace generativeqc_grid_phased;
   const auto indices = input.indices[blockIdx.y];
   const PreparedCenterGeometry<decltype(&local_ratio_prepared)> geometry{
-      input.center_pairs, local_ratio_prepared};
+      input.center_pairs, local_ratio_prepared, input.atomic_radii};
   bool valid;
   if constexpr (Reverse) {
     if constexpr (Normalized)

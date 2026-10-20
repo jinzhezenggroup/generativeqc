@@ -90,6 +90,103 @@ class OperandLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class LayoutTransfer:
+    """One same-storage affine copy before or after a contraction.
+
+    This is an execution obligation, not permission to reinterpret a pointer.
+    Logical read/write traffic is charged even for a fused implementation.
+    Casts remain separate precision obligations. Virtual expressions, aliased
+    ownership and overlapping destinations need another qualified lowering.
+    """
+
+    source: OperandLayout
+    destination: OperandLayout
+    dtype: str
+    stage: Literal["before", "after"]
+    implementation: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source, OperandLayout) or not isinstance(
+            self.destination, OperandLayout
+        ):
+            raise TypeError("layout transfer requires OperandLayout endpoints")
+        name(self.implementation, "layout transfer implementation")
+        if self.dtype not in ("float32", "float64"):
+            raise ValueError("unsupported layout transfer dtype")
+        if self.stage not in ("before", "after"):
+            raise ValueError("layout transfer stage must be before or after")
+        source, destination = self.source, self.destination
+        logical = lambda row: (
+            row.operand,
+            row.modes,
+            row.shape,
+            row.access,
+            row.triangle,
+            row.alias_group,
+        )
+        if logical(source) != logical(destination):
+            raise ValueError("layout transfer changes logical operand ownership")
+        if source.strides is None or destination.strides is None:
+            raise ValueError("layout transfer requires concrete affine endpoints")
+        if source.triangle != "full":
+            raise ValueError("layout transfer requires full ownership")
+        if source.alias_group is not None:
+            raise ValueError("layout transfer requires disjoint operand ownership")
+        # A copy has one writer per logical element, including padded/permuted
+        # destinations. This sufficient proof deliberately refuses ambiguous views.
+        for layout in (
+            (destination, source) if self.stage == "after" else (destination,)
+        ):
+            span = 1
+            assert layout.strides is not None
+            for stride, extent in sorted(
+                (s, n)
+                for s, n in zip(layout.strides, layout.shape, strict=True)
+                if n > 1
+            ):
+                if stride < span:
+                    raise ValueError("layout transfer written view may overlap")
+                span += (extent - 1) * stride
+        _ = (self.read_bytes, self.write_bytes, self.buffer_bytes)
+
+    @property
+    def read_bytes(self) -> int:
+        return checked_bytes(
+            prod(self.source.shape) * (4 if self.dtype == "float32" else 8),
+            "layout transfer read bytes",
+        )
+
+    @property
+    def write_bytes(self) -> int:
+        return self.read_bytes
+
+    @property
+    def buffer_bytes(self) -> int:
+        layout = self.destination if self.stage == "before" else self.source
+        assert layout.strides is not None
+        elements = (
+            1
+            + sum(
+                (n - 1) * s for n, s in zip(layout.shape, layout.strides, strict=True)
+            )
+            if all(layout.shape)
+            else 0
+        )
+        return checked_bytes(
+            elements * (4 if self.dtype == "float32" else 8),
+            "layout transfer buffer bytes",
+        )
+
+    def to_payload(self) -> dict:
+        return {
+            **asdict(self),
+            "read_bytes": self.read_bytes,
+            "write_bytes": self.write_bytes,
+            "buffer_bytes": self.buffer_bytes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class LoweringPrecision:
     """One admitted variant, referencing the shared precision schedule directly.
 
@@ -204,6 +301,7 @@ class CandidateExecution:
     temporary_bytes: int = 0
     cache_bytes: int = 0
     host_bytes: int = 0
+    layout_transfers: tuple[LayoutTransfer, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         if not isinstance(self.precision, LoweringPrecision) or not isinstance(
@@ -216,6 +314,16 @@ class CandidateExecution:
             raise TypeError("candidate layouts require OperandLayout")
         if len({layout.operand for layout in self.layouts}) != len(self.layouts):
             raise ValueError("candidate operand layouts must be unique")
+        transfers = tuple(self.layout_transfers)
+        if any(not isinstance(transfer, LayoutTransfer) for transfer in transfers):
+            raise TypeError("candidate layout transfers require LayoutTransfer")
+        if len({(t.source.operand, t.stage) for t in transfers}) != len(transfers):
+            raise ValueError("duplicate candidate layout transfer boundary")
+        object.__setattr__(
+            self,
+            "layout_transfers",
+            tuple(sorted(transfers, key=lambda t: (t.source.operand, t.stage))),
+        )
         for label in ("temporary_bytes", "cache_bytes", "host_bytes"):
             checked_bytes(getattr(self, label), label)
         if self.determinism not in DETERMINISM:
@@ -224,11 +332,17 @@ class CandidateExecution:
             raise TypeError("capture_safe must be boolean")
 
     def to_payload(self) -> dict:
-        return {
+        payload = {
             **asdict(self),
             "precision": self.precision.to_payload(),
             "topology": self.topology.to_payload(),
         }
+        payload.pop("layout_transfers")
+        if self.layout_transfers:
+            payload["layout_transfers"] = [
+                t.to_payload() for t in self.layout_transfers
+            ]
+        return payload
 
 
 @dataclass(frozen=True, slots=True)

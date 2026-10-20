@@ -192,7 +192,38 @@ materialization in this contract revision. Declared scientific symmetries remain
 owned by the source IR; adapters retain their identity rather than infer them
 from equal dimensions.
 
-`collect_lowering_candidates` collects ready and unsupported provider offers for
+
+### Physical layout transfers
+
+A provider offer that changes affine strides or demands stronger alignment must
+bind an explicit `common.lowering_contract.LayoutTransfer` to the request and
+execution views. Weaker alignment requirements can use the original allocation.
+Changed read operands require a `before` copy; changed write operands require an
+`after` publication copy. Read/write operands require both. Each record names the
+provider-owned copy implementation, dtype and exact endpoints, preserving logical
+modes, extents, effects and ownership.
+
+The initial transfer domain is same-storage floating affine copies with full,
+disjoint ownership and provably nonoverlapping destinations. Virtual values,
+aliased/triangular ownership and combined storage-cast/packing are rejected until
+their lowering is separately established. Copy destinations and contraction
+output buffers must have independent writers.
+
+Transfer diagnostics expose logical read/write bytes and the full padded affine
+buffer span. `LoweringCost.pack_bytes` must cover all transfer visits;
+`CandidateExecution.temporary_bytes` must cover simultaneously live converted
+buffers. A read/write buffer is charged once while both copy directions count
+toward traffic. These conservative logical counts do not assert physical DRAM
+traffic. Fused copying may have zero standalone pack time only when included in
+the kernel phase; unknown pack time remains unknown. Existing aggregate resource
+limits and complete preparation/replay cost selection still apply.
+
+The shared native portfolio emitter currently reports transfer-bearing recipes
+as unsupported because its runtime ABI has no generic transfer executor. It
+retains the unchanged-layout strict fallback. Abstract compiler ranking does not
+grant native execution or capture capability. An empty transfer list is omitted
+from serialization so existing no-transfer portfolios retain their identities.
+\n`collect_lowering_candidates` collects ready and unsupported provider offers for
 the **same complete request**. Providers can vary precision, physical layout,
 algorithm and `ScheduleTopology` fusion within that request. They cannot change
 logical axes, symmetry, alias ownership, publication type or numerical admission.

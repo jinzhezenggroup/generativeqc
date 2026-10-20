@@ -7,6 +7,7 @@
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/hermite_recurrence.cuh"
 #include "scf/cuda/md_hermite_index.cuh"
+#include "scf/cuda/md_j_engine.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -41,9 +42,13 @@ __global__ void md_j_density_bounds(DeviceBatch batch, MdJView md, std::size_t b
   }
   for (unsigned stride = kMdThreads / 2; stride; stride /= 2)
     maximum = fmax(maximum, __shfl_down_sync(0xffffffff, maximum, stride));
-  if (threadIdx.x == 0)
-    md.density_bounds[blockIdx.x] =
-        __dmul_ru(maximum, components * (pair.first == pair.second ? 1.0 : 2.0));
+  if (threadIdx.x == 0) {
+    const auto bound = __dmul_ru(maximum, components * (pair.first == pair.second ? 1.0 : 2.0));
+    md.density_bounds[blockIdx.x] = bound;
+    if (md.primitive_screen)
+      atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_density),
+                static_cast<unsigned long long>(__double_as_longlong(bound)));
+  }
 }
 
 __global__ void md_j_bounds(DeviceBatch batch, MdJView md, const double* bounds) {
@@ -97,7 +102,11 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
   const double beta = batch.primitive_exponents[primitive.second];
   const auto first = atom_position<double>(batch, batch.shell_atoms[pair.first], -1);
   const auto second = atom_position<double>(batch, batch.shell_atoms[pair.second], -1);
-  const auto product = product_center(alpha, first, beta, second);
+  // A same-shell product is exactly centered on that shell. Its triangular
+  // primitive inventory combines (p,q) with (q,p); using the exact center also
+  // removes irrelevant exponent-order rounding from that symmetry identity.
+  const auto product =
+      pair.first == pair.second ? first : product_center(alpha, first, beta, second);
   if (threadIdx.x == 0) {
     primitive.exponent = alpha + beta;
     primitive.product = product;
@@ -109,6 +118,8 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                  beta, coefficients[axis]);
   const double weight = batch.primitive_coefficients[primitive.first] *
                         batch.primitive_coefficients[primitive.second];
+  const double multiplicity =
+      pair.first == pair.second && primitive.first != primitive.second ? 2.0 : 1.0;
   if (threadIdx.x == 0) md.transforms[primitive.transform_offset] = weight * 0.0;
   const auto base = static_cast<std::int64_t>(pair.system) * batch.nbf;
   for (unsigned component = threadIdx.x;
@@ -137,9 +148,38 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                    coefficients[2].at(first_angular.z, second_angular.z, derivative.z);
         }
       }
-      md.transforms[primitive.transform_offset + slot] = weight * value;
+      // Scale the represented transform, after the original coefficient
+      // product, so J density/projection and the shared exact J/K consumer all
+      // receive the same folded primitive product without separate factors.
+      md.transforms[primitive.transform_offset + slot] = (weight * value) * multiplicity;
     }
   }
+}
+
+/** Use the compiler's Hermite norm on the cached, normalized public-AO E.
+ * Taking absolute values before summing is essential: cancellation in a
+ * contracted shell must never hide a large signed primitive contribution. */
+__global__ void md_j_primitive_bounds(MdJView md) {
+  const auto primitive = md.primitives[blockIdx.x];
+  const auto pair = md.pairs[primitive.pair];
+  double maximum = 0.0;
+  for (unsigned component = threadIdx.x;
+       component < static_cast<unsigned>(pair.first_count * pair.second_count);
+       component += blockDim.x) {
+    double norm = 0.0;
+    for (unsigned index = 0; index < pair.hermites; ++index) {
+      const double coefficient = fabs(md_j_transform(md, primitive, pair, component, index));
+      if (coefficient == 0.0) continue;
+      const double term =
+          __dmul_ru(coefficient, md_engine_hermite_norm(primitive.exponent, pair.angular, index));
+      norm = __dadd_ru(norm, term);
+      if (!isfinite(norm)) norm = INFINITY;
+    }
+    maximum = fmax(maximum, norm);
+  }
+  for (unsigned stride = kMdThreads / 2; stride; stride /= 2)
+    maximum = fmax(maximum, __shfl_down_sync(0xffffffffU, maximum, stride));
+  if (threadIdx.x == 0) md.primitive_bounds[blockIdx.x] = maximum;
 }
 
 __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, std::size_t end,
@@ -168,6 +208,39 @@ __global__ void md_j_density(DeviceBatch batch, MdJView md, std::size_t begin, s
     md.density[primitive.hermite_offset + index] = value;
     md.potential[primitive.hermite_offset + index] = 0.0;
   }
+}
+
+/** Bound the represented Hermite source after density precontraction. Taking
+ * absolute values here preserves cancellation within one primitive's source,
+ * while the triangle inequality still bounds its Coulomb norm. Cauchy-Schwarz
+ * with an output AO-pair norm therefore bounds each omitted directed product.
+ * This pass initializes every hierarchy leaf, including inactive windows,
+ * before the hierarchy/prefix kernels read it; captured replay refreshes all
+ * source norms. No additional per-primitive allocation is required. */
+__global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::size_t end) {
+  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= md.primitive_count) return;
+  const auto primitive = md.primitives[index];
+  const auto pair = md.pairs[primitive.pair];
+  double norm = 0.0;
+  if (pair.system >= begin && pair.system < end) {
+    for (unsigned component = 0; component < pair.hermites; ++component) {
+      const auto coefficient = fabs(md.density[primitive.hermite_offset + component]);
+      if (coefficient == 0.0) continue;
+      norm = __dadd_ru(
+          norm, __dmul_ru(coefficient,
+                          md_engine_hermite_norm(primitive.exponent, pair.angular, component)));
+    }
+    // Bound the stored source: the uncontracted Q*D envelope does not cover
+    // relative rounding amplification when precontraction becomes subnormal.
+    norm = md_j_nonnegative_bound(norm);
+  }
+  const auto position =
+      (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;
+  md.hierarchy[md.hierarchy_layout.bucket_offsets[pair.angular] + position].qd = norm;
+  md_j_engine_count_source_norm(md.primitive_screen, norm);
+  atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_source_norm),
+            static_cast<unsigned long long>(__double_as_longlong(norm)));
 }
 
 /** Reuse the existing MD/Boys mathematics, contracting density before any AO
@@ -309,6 +382,12 @@ cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, co
   md_j_transforms<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(batch, md);
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
+  if (md.primitive_bounds) {
+    md_j_primitive_bounds<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(md);
+    // Complete Hermite J has no residual AO-mask traversal to prepare.
+    md.residual_candidate_count = 0;
+    return cudaGetLastError();
+  }
   md.active_pair_offsets[0] = 0;
   for (unsigned angular = 0; angular <= 4; ++angular) {
     md_active_pairs<<<static_cast<unsigned>((md.pair_count + 127) / 128), 128, 0, stream>>>(
@@ -324,6 +403,13 @@ cudaError_t prepare_md_j(cudaStream_t stream, DeviceBatch batch, MdJView& md, co
     if (error != cudaSuccess) return error;
   }
   md.active_pair_count = md.active_pair_offsets[5];
+  if (md.reference_engine) {
+    // Reference pair_loc covers the complete decontracted inventory. The
+    // hierarchy performs conservative pruning without mutating pair identity.
+    md.residual_candidate_count =
+        screening > 0.0 ? md.active_pair_count * (md.active_pair_count + 1ULL) / 2 : 0;
+    return cudaSuccess;
+  }
   error = cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream);
   if (error != cudaSuccess) return error;
   md.class_offsets[0] = 0;
@@ -359,10 +445,22 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
                  std::size_t system_count, bool unrestricted, double screening,
                  const double* density, const double* beta, double* coulomb) {
   const auto end = system_begin + system_count;
+  if (md.primitive_screen)
+    runtime::cuda_resource_check(
+        cudaMemsetAsync(md.primitive_screen, 0, sizeof(MdJPrimitiveScreenState), stream));
   md_j_density_bounds<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
+  if (md.primitive_screen)
+    md_j_primitive_source_norms<<<static_cast<unsigned>((md.primitive_count + 127) / 128), 128, 0,
+                                  stream>>>(md, system_begin, end);
+  if (md.reference_engine) {
+    launch_md_j_engine(stream, md, system_begin, end, screening);
+    md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(
+        batch, md, system_begin, end, coulomb);
+    return;
+  }
   if (md.reciprocal) {
     launch_md_reciprocal_potential<0, 0>(stream, md, system_begin, end, screening);
     launch_md_reciprocal_potential<0, 1>(stream, md, system_begin, end, screening);

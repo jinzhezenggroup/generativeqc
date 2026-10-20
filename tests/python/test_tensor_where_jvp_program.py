@@ -669,3 +669,342 @@ def test_native_typed_abi_budget_failure_recovery_and_owner(
     np.testing.assert_array_equal(actual, saved)
     with pytest.raises(RuntimeError, match="closed"):
         owner.execute(graph, all_feeds)
+
+
+def reverse(program: Program, names: tuple = ("x", "y"), **options: Any) -> Any:
+    return transpose_program(
+        program, ("out",), inputs=names, allow_external_mask_where=True, **options
+    )
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("shape", [(), (4,), (0, 3)])
+def test_external_mask_vjp_nonlinear_fd_and_adjoint(
+    tmp_path: Path, backend: str, shape: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if backend == "native":
+        from generativeqc_compiler.tensor import autodiff, interpreter
+
+        def forbidden(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError("native VJP used reference execution or AD")
+
+        monkeypatch.setattr(interpreter, "execute", forbidden)
+        monkeypatch.setattr(autodiff, "vjp", forbidden)
+        monkeypatch.setattr(autodiff, "jvp", forbidden)
+    feeds = {
+        "c": np.arange(np.prod(shape, dtype=int)).reshape(shape) % 2 == 0,
+        "x": np.full(shape, 0.7),
+        "y": np.full(shape, 1.3),
+    }
+    primal = capture(lambda c, x, y: {"out": xp.where(c, xp.exp(x), xp.log(y))}, feeds)
+    derivative = reverse(primal)
+    weights = np.arange(feeds["x"].size, dtype=float).reshape(shape) * 0.2 + 0.3
+    dx, dy = np.full(shape, 0.2), np.full(shape, -0.3)
+    step = 1e-5
+    for mask in (feeds["c"], ~feeds["c"]):
+        current = {**feeds, "c": mask}
+        expected = {
+            "bar_x": np.where(mask, weights * np.exp(feeds["x"]), 0.0),
+            "bar_y": np.where(mask, 0.0, weights / feeds["y"]),
+        }
+        for graph in (
+            derivative.program,
+            optimize(derivative.program),
+            Program.loads(derivative.program.dumps()),
+        ):
+            result = run(graph, {**current, "bar_out": weights}, backend, tmp_path)
+            for name in ("bar_x", "bar_y"):
+                np.testing.assert_allclose(
+                    result[name], expected[name], rtol=2e-12, atol=2e-12
+                )
+            for name in ("x", "y"):
+                finite = np.empty(shape)
+                for index in np.ndindex(shape):
+                    plus = {key: value.copy() for key, value in current.items()}
+                    minus = {key: value.copy() for key, value in current.items()}
+                    plus[name][index] += step
+                    minus[name][index] -= step
+                    ep = np.where(mask, np.exp(plus["x"]), np.log(plus["y"]))
+                    em = np.where(mask, np.exp(minus["x"]), np.log(minus["y"]))
+                    finite[index] = np.sum(weights * (ep - em)) / (2 * step)
+                np.testing.assert_allclose(
+                    result[f"bar_{name}"], finite, rtol=2e-7, atol=2e-9
+                )
+            forward = generated(primal).program
+            tangent = run(
+                forward, {**current, "d_x": dx, "d_y": dy}, backend, tmp_path
+            )["d_out"]
+            np.testing.assert_allclose(
+                np.sum(weights * tangent),
+                np.sum(result["bar_x"] * dx) + np.sum(result["bar_y"] * dy),
+                rtol=2e-12,
+                atol=2e-12,
+            )
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("selector", ["input", "true", "false"])
+def test_external_mask_vjp_exact_selection_and_changed_mask(
+    tmp_path: Path, backend: str, selector: str
+) -> None:
+    tiny = np.nextafter(0.0, 1.0)
+    weight = np.array(
+        [-0.0, 0.0, -tiny, tiny, -np.finfo(float).max, np.finfo(float).max]
+    )
+    feeds = {
+        "c": np.arange(weight.size) % 2 == 0,
+        "x": np.ones(weight.shape),
+        "y": np.ones(weight.shape),
+    }
+
+    def expression(c: Any, x: Any, y: Any) -> dict:
+        return {"out": xp.where(c if selector == "input" else selector == "true", x, y)}
+
+    graph = reverse(capture(expression, feeds)).program
+    for candidate in (graph, optimize(graph), Program.loads(graph.dumps())):
+        for mask in (feeds["c"], ~feeds["c"]):
+            result = run(
+                candidate, {**feeds, "c": mask, "bar_out": weight}, backend, tmp_path
+            )
+            selected = (
+                mask
+                if selector == "input"
+                else np.full(weight.shape, selector == "true")
+            )
+            for name, condition in (("bar_x", selected), ("bar_y", ~selected)):
+                expected = np.asarray(
+                    [w if c else 0.0 for c, w in zip(condition, weight, strict=True)]
+                )
+                np.testing.assert_array_equal(
+                    result[name].view(np.uint64), expected.view(np.uint64)
+                )
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+def test_external_mask_vjp_broadcast_repeated_gather_and_shared_output(
+    tmp_path: Path, backend: str
+) -> None:
+    feeds = {
+        "c": np.array([[True], [False]]),
+        "x": np.array([[0.7, 0.9, 1.2]]),
+        "y": np.array([[1.3], [1.5]]),
+    }
+
+    def expression(c: Any, x: Any, y: Any) -> dict:
+        mask = xp.take(xp.broadcast_to(c, (2, 3)), (2, 0, 2), axis=1)
+        value = xp.take(x, (2, 0, 2), axis=1)
+        selected = xp.where(mask, value * value, xp.log(y))
+        return {"out": selected, "alias": selected}
+
+    primal = capture(expression, feeds)
+    derivative = transpose_program(
+        primal, ("out", "alias"), inputs=("x", "y"), allow_external_mask_where=True
+    )
+    first = np.arange(6.0).reshape(2, 3) + 0.2
+    second = np.full((2, 3), 0.4)
+    expected_x, expected_y = np.zeros_like(feeds["x"]), np.zeros_like(feeds["y"])
+    for i, j in np.ndindex(2, 3):
+        position = (2, 0, 2)[j]
+        weight = first[i, j] + second[i, j]
+        if feeds["c"][i, 0]:
+            expected_x[0, position] += weight * 2 * feeds["x"][0, position]
+        else:
+            expected_y[i, 0] += weight / feeds["y"][i, 0]
+    for graph in (
+        derivative.program,
+        optimize(derivative.program),
+        Program.loads(derivative.program.dumps()),
+    ):
+        result = run(
+            graph, {**feeds, "bar_out": first, "bar_alias": second}, backend, tmp_path
+        )
+        np.testing.assert_allclose(result["bar_x"], expected_x, rtol=2e-12, atol=2e-12)
+        np.testing.assert_allclose(result["bar_y"], expected_y, rtol=2e-12, atol=2e-12)
+        assert not np.shares_memory(result["bar_x"], feeds["x"])
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("empty", [False, True])
+def test_external_mask_vjp_retains_all_cotangents_and_primal_contracts(
+    tmp_path: Path, backend: str, empty: bool
+) -> None:
+    feeds = {
+        "c": np.array([True, False]),
+        "x": np.ones(2),
+        "y": np.ones(2),
+        "z": np.ones((0, 3) if empty else (2,)),
+    }
+    primal = capture(
+        lambda c, x, y, z: {"out": xp.where(c, x, y), "other": y}, feeds, ("x", "z")
+    )
+    derivative = transpose_program(
+        primal, ("out", "other"), inputs=("z",), allow_external_mask_where=True
+    )
+    valid = {**feeds, "bar_out": np.full(2, 1e308), "bar_other": np.full(2, 1e308)}
+    for graph in (
+        derivative.program,
+        optimize(derivative.program),
+        Program.loads(derivative.program.dumps()),
+    ):
+        result = run(graph, valid, backend, tmp_path)
+        np.testing.assert_array_equal(result["bar_z"], np.zeros_like(feeds["z"]))
+        for name, value in valid.items():
+            bad = [
+                {key: item for key, item in valid.items() if key != name},
+                {**valid, name: np.ones(3, dtype=value.dtype)},
+                {
+                    **valid,
+                    name: np.ones(
+                        value.shape, dtype=np.uint8 if name == "c" else np.float32
+                    ),
+                },
+            ]
+            if name != "c" and value.size:
+                bad.append({**valid, name: np.full(value.shape, np.nan)})
+            for wrong in bad:
+                with pytest.raises(ValueError):
+                    run(graph, wrong, backend, tmp_path)
+        run(graph, valid, backend, tmp_path)
+
+
+@pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("bad", ["sqrt", "unreturned", "log"])
+def test_external_mask_vjp_retains_unselected_and_forward_domains(
+    tmp_path: Path, backend: str, bad: str
+) -> None:
+    feeds = {
+        "c": np.ones(2, dtype=bool),
+        "x": np.ones(2),
+        "y": np.zeros(2) if bad != "log" else -np.ones(2),
+    }
+
+    def expression(c: Any, x: Any, y: Any) -> dict:
+        branch = xp.log(y) if bad == "log" else xp.sqrt(y)
+        return {
+            "out": x if bad == "unreturned" else xp.where(c, x, branch),
+            "other": xp.where(c, x, branch),
+        }
+
+    primal = capture(expression, feeds)
+    graph = reverse(primal, ("x",)).program
+    for candidate in (graph, optimize(graph), Program.loads(graph.dumps())):
+        with pytest.raises(ValueError):
+            run(candidate, {**feeds, "bar_out": np.zeros(2)}, backend, tmp_path)
+
+
+def test_external_mask_vjp_explicit_domain_and_first_order_boundary() -> None:
+    feeds = {"c": np.array([True, False]), "x": np.ones(2), "y": np.ones(2)}
+    primal = capture(lambda c, x, y: {"out": xp.where(c, x, y)}, feeds)
+    with pytest.raises(ValueError, match="Boolean"):
+        transpose_program(primal, ("out",), inputs=("x",))
+    for option in (1, None, "true"):
+        with pytest.raises(TypeError, match="Boolean"):
+            transpose_program(
+                primal, ("out",), inputs=("x",), allow_external_mask_where=option
+            )
+    for expression in (
+        lambda c, x, y: {"out": xp.where(x > 0, x, y)},
+        lambda c, x, y: {"out": xp.where(c, x, y), "mask": c},
+    ):
+        with pytest.raises(ValueError, match="Boolean"):
+            reverse(capture(expression, feeds))
+    with pytest.raises(ValueError, match="float64"):
+        reverse(
+            capture(
+                lambda c, x, y: {"out": xp.where(c, x, y)},
+                {**feeds, "x": feeds["x"].astype(np.float32)},
+            )
+        )
+    with pytest.raises(ValueError, match="precision"):
+        reverse(
+            Program(primal.outputs, primal.definitions, {"precision_execution": {}})
+        )
+    with pytest.raises(ValueError):
+        reverse(primal, ("c",))
+    derivative = reverse(primal).program
+    for graph in (
+        derivative,
+        optimize(derivative),
+        Program.loads(derivative.dumps()),
+        Program(derivative.outputs, derivative.definitions),
+    ):
+        with pytest.raises(ValueError):
+            reverse(graph, ("x",))
+        with pytest.raises(ValueError):
+            generated(graph, ("x",))
+    ordinary = capture(lambda c, x, y: {"out": x * x + y}, feeds)
+    expected = transpose_program(ordinary, ("out",)).program.logical_hash
+    assert (
+        transpose_program(
+            ordinary, ("out",), allow_external_mask_where=True
+        ).program.logical_hash
+        == expected
+    )
+
+
+def test_external_mask_vjp_retains_native_budgets_and_recovery(tmp_path: Path) -> None:
+    from generativeqc.experimental._array_api_execution import _Executor
+    from generativeqc_compiler.tensor.cpu import describe_cpu_compilation
+
+    feeds = {"c": np.array([True, False]), "x": np.ones(2), "y": np.ones(2)}
+    graph = reverse(
+        capture(lambda c, x, y: {"out": xp.where(c, x * x, y)}, feeds)
+    ).program
+    _, _, resources, _ = describe_cpu_compilation(graph)
+    for options in (
+        {"max_bytes": resources["required_bytes"] - 1},
+        {"max_work": resources["scalar_work"] - 1},
+        {"max_nodes": 1},
+    ):
+        with pytest.raises(ValueError, match="budget"):
+            describe_cpu_compilation(graph, **options)
+    owner = _Executor("cpu", {"cache": tmp_path})
+    valid = {**feeds, "bar_out": np.ones(2)}
+    with pytest.raises(ValueError):
+        owner.execute(graph, {**valid, "bar_out": np.full(2, np.nan)})
+    result = owner.execute(graph, valid)
+    np.testing.assert_array_equal(result["bar_x"], [2.0, 0.0])
+    np.testing.assert_array_equal(result["bar_y"], [0.0, 1.0])
+    owner.close()
+    np.testing.assert_array_equal(result["bar_x"], [2.0, 0.0])
+    with pytest.raises(RuntimeError, match="closed"):
+        owner.execute(graph, valid)
+
+
+@pytest.mark.parametrize("domain", ["float32", "scientific"])
+def test_external_mask_vjp_checks_disconnected_requested_inputs(domain: str) -> None:
+    from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec, input_tensor
+
+    feeds = {"c": np.array([True, False]), "x": np.ones(2), "y": np.ones(2)}
+    primal = capture(lambda c, x, y: {"out": xp.where(c, x, y)}, feeds)
+    indices = (Index("a", IndexSpace("ao", "ao", 2)),) if domain == "scientific" else ()
+    disconnected = input_tensor(
+        "z",
+        TensorSpec(
+            indices,
+            dtype="float64" if domain == "scientific" else "float32",
+            role="parameter",
+            differentiable=True,
+        ),
+    )
+    with pytest.raises(ValueError, match="generic|float64"):
+        reverse(Program(primal.outputs, (*primal.definitions, disconnected)), ("z",))
+
+
+def test_external_mask_vjp_prunes_unrequested_incidence_and_rejects_other_backends() -> (
+    None
+):
+    from generativeqc_compiler.tensor.optimize import prepare_for_backend
+
+    feeds = {"c": np.ones(20, dtype=bool), "x": np.eye(20), "y": np.array(1.0)}
+    primal = capture(
+        lambda c, x, y: {"out": xp.where(c, xp.einsum("ii->i", x), y)}, feeds
+    )
+    derivative = reverse(primal, ("y",), max_elements=100).program
+    result = execute(derivative, {**feeds, "bar_out": np.ones(20)}).outputs
+    np.testing.assert_array_equal(result["bar_y"], 0.0)
+    with pytest.raises(ValueError, match="budget"):
+        reverse(primal, ("x",), max_elements=100)
+    for backend in ("cuda", "portable"):
+        with pytest.raises(ValueError):
+            prepare_for_backend(derivative, backend)

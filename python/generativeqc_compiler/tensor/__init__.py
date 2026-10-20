@@ -10,6 +10,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.layout import DenseLayout
+from generativeqc_compiler.common.materialization import MaterializationRuleRequest
 
 from .ad_program import (
     GENERATION_VERSION,
@@ -64,6 +65,13 @@ from .ir import (
     sqrt,
     transpose,
     where,
+)
+from .materialization import (
+    MaterializationDecision,
+    MaterializationFootprint,
+    MaterializationPlan,
+    materialization_footprint,
+    plan_materializations,
 )
 from .optimize import PASSES, optimize, prepare_for_backend, rewrite
 from .precision import (
@@ -158,6 +166,10 @@ __all__ = [
     "IndexedTensorLayout",
     "JVPProgram",
     "JVPResult",
+    "MaterializationDecision",
+    "MaterializationFootprint",
+    "MaterializationPlan",
+    "MaterializationRuleRequest",
     "Node",
     "NodeComplexity",
     "PackedLayout",
@@ -199,9 +211,11 @@ __all__ = [
     "linearize",
     "log",
     "lower_precision",
+    "materialization_footprint",
     "multiply",
     "node_complexity",
     "optimize",
+    "plan_materializations",
     "power",
     "prepare_for_backend",
     "reassociate_einsums",

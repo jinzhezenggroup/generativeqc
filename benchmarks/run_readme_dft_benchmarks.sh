@@ -12,6 +12,8 @@ readme_output="${README_BENCHMARK_OUTPUT:-.artifacts/readme-dft}"
 readme_timeout="${README_BENCHMARK_POINT_TIMEOUT:-1800}"
 readme_repeats="${README_BENCHMARK_REPEATS:-5}"
 readme_df="${README_BENCHMARK_DENSITY_FITTING:-none}"
+readme_pruning="${README_BENCHMARK_GRID_PRUNING:-auto}"
+case "$readme_pruning" in auto|none|radial-v1) ;; *) exit 2 ;; esac
 case "$readme_df" in none|cuda) ;; *) exit 2 ;; esac
 readme_aux="${README_BENCHMARK_AUXILIARY_BASIS:-benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json}"
 [[ "$readme_timeout" =~ ^[1-9][0-9]*$ && "$readme_repeats" =~ ^[1-9][0-9]*$ ]] || exit 2
@@ -42,6 +44,7 @@ for method in ${README_BENCHMARK_METHODS:-hf pbe pbe0 b3lyp r2scan r2scan-3c m06
         for engine in reference native; do
             [[ "$readme_engine" == both || "$readme_engine" == "$engine" ]] || continue
             extra=(--density-fitting "$readme_df")
+            [[ "$method" == hf ]] || extra+=(--grid-pruning "$readme_pruning")
             [[ "$readme_df" != cuda ]] || extra+=(--auxiliary-basis-file "$readme_aux")
             if [[ "$engine" == native ]]; then
                 # Reference completion must not decide whether native runs.

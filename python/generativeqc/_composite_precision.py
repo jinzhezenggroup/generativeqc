@@ -67,6 +67,7 @@ def composite_gradient_admission(calculator: Any, state: Any, basis: Any) -> str
         or not 2 <= basis.natom <= 12
         or any(shell.angular_momentum > 2 for shell in basis.shells)
         or source.grid_spec != GridSpec(48, 16, 32)
+        or getattr(source, "nonlocal_grid_spec", source.grid_spec) != source.grid_spec
         or source.nonlocal_density_policy != MOLECULAR_VV10_DENSITY_POLICY
         or source.method_ir.identity != _qualified_model()
     ):

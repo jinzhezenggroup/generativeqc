@@ -39,6 +39,7 @@ from . import _native
 from .batch import PreparedBatch
 from .ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
+    _canonical_grid_spec,
     _native_semilocal_code,
     electronic_method_ir,
     uses_molecular_nonlocal_domain,
@@ -259,7 +260,10 @@ class NativeKsSnapshot:
         "metadata",
         "method_ir",
         "model_terms",
+        "nonlocal_atomic_weights",
         "nonlocal_density_policy",
+        "nonlocal_grid",
+        "nonlocal_grid_spec",
         "stationarity_tolerance",
         "values",
     )
@@ -460,14 +464,18 @@ class NativeKsSnapshot:
         """Bind derivative fallback policy to the live native provider proof."""
         return "density-fitted" in self.fock_provider_proof()[:2]
 
-    def cuda_resident_grid(self) -> CudaResidentGrid | None:
+    def cuda_resident_grid(
+        self, *, nonlocal_grid: bool = False
+    ) -> CudaResidentGrid | None:
         """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
         if self.backend != "cuda":
             return None
         self.check_current()
         binding = getattr(
             self._library,
-            "generativeqc_ks_snapshot_cuda_resident_grid_v2",
+            "generativeqc_ks_snapshot_cuda_nonlocal_grid_v1"
+            if nonlocal_grid and self.nonlocal_grid is not self.grid
+            else "generativeqc_ks_snapshot_cuda_resident_grid_v2",
             None,
         )
         if binding is None:
@@ -966,6 +974,103 @@ class NativeKsSnapshot:
             and bool(getattr(self, "density_fitted", False)),
         )
 
+    def _decode_nonlocal_grid(self, options: typing.Any) -> None:
+        """Authenticate the independent prescription and exact collocation source.
+
+        A point-count collision is not equality. Legacy snapshots may retain
+        the primary grid only when the caller did not request a distinct rule.
+        """
+        from generativeqc_compiler.dft.grid import ExplicitGrid, GridSpec
+
+        requested = options.nonlocal_grid or options.grid
+        binding = getattr(
+            self._library, "generativeqc_ks_snapshot_nonlocal_grid_v1", None
+        )
+        count = ct.c_size_t()
+        if binding is not None:
+            binding.argtypes = [
+                ct.c_void_p,
+                ct.c_void_p,
+                ct.POINTER(ct.c_double),
+                ct.c_size_t,
+                ct.POINTER(ct.c_size_t),
+            ]
+            binding.restype = ct.c_int
+            _native.check(
+                self._library,
+                binding(self._batch._batch, self._handle, None, 0, ct.byref(count)),
+            )
+        if count.value == 0:
+            if options.has_separate_nonlocal_grid:
+                raise ValueError(
+                    "native snapshot omitted the requested independent VV10 grid"
+                )
+            self.nonlocal_grid = self.grid
+            self.nonlocal_grid_spec = self.grid_spec
+            self.nonlocal_atomic_weights = self.atomic_weights
+            return
+        if count.value < 126 or (count.value - 126) % 6:
+            raise ValueError("native nonlocal grid wire length mismatch")
+        values = np.empty(count.value, dtype=np.float64)
+        _native.check(
+            self._library,
+            binding(
+                self._batch._batch,
+                self._handle,
+                values.ctypes.data_as(ct.POINTER(ct.c_double)),
+                count.value,
+                ct.byref(count),
+            ),
+        )
+        points, version, radial, polar, azimuth, iterations, tolerance = values[:7]
+        points = int(points)
+        if points <= 0 or len(values) != 126 + 6 * points:
+            raise ValueError("native nonlocal grid point count mismatch")
+        actual_spec = GridSpec(
+            version=int(version),
+            **(
+                {
+                    "radial_rule": "treutler-ahlrichs",
+                    "angular_rule": "lebedev",
+                    "partition": "becke-treutler",
+                    "pruning": "nwchem",
+                    "ordering": "atom-radial-lebedev",
+                }
+                if int(version) == 4
+                else {
+                    "pruning": "radial-v1" if int(version) == 3 else "none",
+                }
+            ),
+            radial_points=int(radial),
+            angular_polar=int(polar),
+            angular_azimuth=int(azimuth),
+            partition_iterations=int(iterations),
+            coincident_tolerance=float(tolerance),
+            element_radii=tuple(
+                (atomic_number, float(radius))
+                for atomic_number, radius in enumerate(values[7:126])
+                if atomic_number and radius
+            ),
+        )
+        canonical_requested = _canonical_grid_spec(requested)
+        if actual_spec != canonical_requested or actual_spec == self.grid_spec:
+            raise ValueError("native nonlocal grid prescription mismatch")
+        coordinates = values[126 : 126 + 3 * points].reshape(points, 3)
+        weights = values[126 + 3 * points : 126 + 4 * points]
+        owners = values[126 + 4 * points : 126 + 5 * points]
+        if not np.all(owners == owners.astype(np.int64)):
+            raise ValueError("native nonlocal grid has nonintegral atom owners")
+        self.nonlocal_grid = ExplicitGrid(
+            coordinates,
+            weights,
+            tuple(map(int, owners)),
+            {"source": "native-ks-nonlocal-grid-v1"},
+        )
+        self.nonlocal_grid_spec = actual_spec
+        self.nonlocal_atomic_weights = values[126 + 5 * points :].copy()
+        self.nonlocal_atomic_weights.flags.writeable = False
+        self.check_current()
+
     def decode(self, basis: typing.Any, grid: typing.Any) -> typing.Any:
         """Verify actual AO/grid sources before deriving any Python identities."""
         from generativeqc_compiler.dft.grid import ExplicitGrid
@@ -1035,6 +1140,19 @@ class NativeKsSnapshot:
             radii = take((119,))
             self.grid_spec = GridSpec(
                 version=int(version),
+                **(
+                    {
+                        "radial_rule": "treutler-ahlrichs",
+                        "angular_rule": "lebedev",
+                        "partition": "becke-treutler",
+                        "pruning": "nwchem",
+                        "ordering": "atom-radial-lebedev",
+                    }
+                    if int(version) == 4
+                    else {
+                        "pruning": "radial-v1" if int(version) == 3 else "none",
+                    }
+                ),
                 radial_points=int(radial),
                 angular_polar=int(polar),
                 angular_azimuth=int(azimuth),
@@ -1205,6 +1323,7 @@ class NativeKsSnapshot:
         ):
             raise ValueError("native stationary grid source mismatch")
         self.grid = grid
+        self._decode_nonlocal_grid(options)
         self.grid_cache_work = MappingProxyType(
             {
                 "exact_grid_reused": reused,
@@ -1219,6 +1338,11 @@ class NativeKsSnapshot:
                 "method_ir": self.method_ir.identity,
                 "coefficients": self.coefficients,
                 **(
+                    {"nonlocal_grid": self.nonlocal_grid.identity}
+                    if self.nonlocal_grid is not grid
+                    else {}
+                ),
+                **(
                     {
                         "native_model_terms": self.model_terms,
                         "nonlocal_density_policy": self.nonlocal_density_policy,
@@ -1227,7 +1351,7 @@ class NativeKsSnapshot:
                     else {}
                 ),
             }
-            if self.coefficients != (1.0, 1.0, 0.0)
+            if self.coefficients != (1.0, 1.0, 0.0) or self.nonlocal_grid is not grid
             else {}
         )
         basis_identity = basis.identity

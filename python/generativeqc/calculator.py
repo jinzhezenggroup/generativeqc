@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .spin_roots import SpinRootPolicy, SpinRootResult
+
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
@@ -1236,7 +1238,7 @@ class Calculator:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method == _native.METHOD_RCCSD
+            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
             or (
                 not batch
                 and self._method == _native.METHOD_MP2
@@ -1506,14 +1508,15 @@ class Calculator:
             "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
         }
 
-    def _shells_for_atoms(
+    def _basis_for_atoms(
         self,
         atoms: Sequence[Atom],
         basis: str | Sequence[Shell] | None = None,
         *,
         operator: str | None = None,
         derivative_order: int = 0,
-    ) -> tuple[Shell, ...]:
+    ) -> BasisSet | tuple[Shell, ...]:
+        """Admit immutable basis metadata without expanding native contractions."""
         selected_basis = self._basis if basis is None else basis
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
@@ -1533,6 +1536,20 @@ class Calculator:
             if auxiliary
             else None,
         )
+        return selected_basis
+
+    def _shells_for_atoms(
+        self,
+        atoms: Sequence[Atom],
+        basis: str | Sequence[Shell] | None = None,
+        *,
+        operator: str | None = None,
+        derivative_order: int = 0,
+    ) -> tuple[Shell, ...]:
+        """Expand portable metadata for planning, custom bases and old libraries."""
+        selected_basis = self._basis_for_atoms(
+            atoms, basis, operator=operator, derivative_order=derivative_order
+        )
         return (
             selected_basis.shells_for(atoms)
             if isinstance(selected_basis, BasisSet)
@@ -1549,11 +1566,12 @@ class Calculator:
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
-        """Select the correlation source's domain, not generic DF-HF exports.
+        """Select an explicitly linked auxiliary domain, never orbital admission.
 
         The physical correlation source and its nuclear pullback support
         auxiliary g shells. Both preflight and native shell expansion must
-        use that same scoped policy; other DF consumers retain their limits.
+        use that same scoped policy. HF/KS uses a separate role for its complete
+        value/first-derivative owner; older libraries retain their f boundary.
         """
         if (
             operator in {"df_metric", "df_three_center"}
@@ -1576,6 +1594,18 @@ class Calculator:
             and getattr(self, "_composite_rks_second_order", False)
         ):
             return "wb97mv_df_values"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order in (0, 1)
+            and self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            and (
+                self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
+                or self._ks_options is not None
+            )
+            and hasattr(self._library, "generativeqc_scf_auxiliary_system_create_v1")
+        ):
+            return "scf_df"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -1878,25 +1908,97 @@ class Calculator:
                 context=context,
             )
             return system
-        selected_basis = self._basis if basis is None else basis
-        if not isinstance(selected_basis, BasisSet):
-            selected_basis = _snapshot_basis(selected_basis, self._representation_name)
-        shells = self._shells_for_atoms(atoms, basis)
+        selected_basis = self._basis_for_atoms(atoms, basis)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
         checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
+        from . import _basis_builtin
+
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        if not correlation_auxiliary and _basis_builtin.eligible(
+            self._library, selected_basis
+        ):
+            return _basis_builtin.create_system(
+                self._library, context, selected_basis, atoms, charge, multiplicity
+            )
+        atom_array = (_native.AtomDescriptor * len(atoms))(
+            *(
+                _native.AtomDescriptor(atom.atomic_number, *atom.position)
+                for atom in atoms
+            )
+        )
+        bundled_create = getattr(
+            self._library, "generativeqc_system_create_bundled", None
+        )
+        bundled_name = (
+            _model_resolution._bundled_basis_name(selected_basis)
+            if bundled_create is not None and not correlation_auxiliary
+            else None
+        )
+        template_create = getattr(
+            self._library, "generativeqc_system_create_basis_template_v1", None
+        )
+        use_template = (
+            template_create is not None
+            and isinstance(selected_basis, BasisSet)
+            and not correlation_auxiliary
+        )
+        if use_template or (
+            bundled_create is not None
+            and bundled_name is not None
+            and not correlation_auxiliary
+        ):
+            descriptor = _native.SystemDescriptor(
+                struct_size=ctypes.sizeof(_native.SystemDescriptor),
+                abi_version=_native.ABI_VERSION,
+                atoms=atom_array,
+                atom_count=len(atom_array),
+                charge=int(charge),
+                multiplicity=int(multiplicity),
+                basis_representation=(
+                    _native.BASIS_SPHERICAL
+                    if selected_basis.representation == "spherical"
+                    else _native.BASIS_CARTESIAN
+                ),
+            )
+            system = ctypes.c_void_p()
+            if bundled_create is not None and bundled_name is not None:
+                status = bundled_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    bundled_name.encode("ascii"),
+                    selected_basis.provenance.checksum.encode("ascii"),
+                    ctypes.byref(system),
+                )
+            else:
+                from ._basis_native import NativeBasisTemplate
+
+                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+                if (
+                    source.has_ecp
+                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and not self._composite_rks_second_order
+                ):
+                    raise NotImplementedError(
+                        "ECP density-fitting execution is not yet validated"
+                    )
+                status = template_create(
+                    context,
+                    ctypes.byref(descriptor),
+                    ctypes.byref(source.descriptor),
+                    ctypes.byref(system),
+                )
+            _native.check(self._library, status, context=context)
+            return system
+        shells = self._shells_for_atoms(atoms, basis)
         checked_integer(len(shells), "shell count", low=1, high=2**32 - 1)
         checked_integer(
             sum(len(s.primitives) for s in shells),
             "primitive count",
             low=1,
             high=2**32 - 1,
-        )
-        atom_array = (_native.AtomDescriptor * len(atoms))(
-            *(
-                _native.AtomDescriptor(atom.atomic_number, *atom.position)
-                for atom in atoms
-            )
         )
         flattened_primitives: list[Primitive] = []
         shell_descriptors: list[_native.ShellDescriptor] = []
@@ -1976,7 +2078,11 @@ class Calculator:
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
                 if auxiliary_consumer == "correlation_df"
-                else "generativeqc_ks_auxiliary_system_create_v1",
+                else (
+                    "generativeqc_scf_auxiliary_system_create_v1"
+                    if auxiliary_consumer == "scf_df"
+                    else "generativeqc_ks_auxiliary_system_create_v1"
+                ),
                 None,
             )
             if create_system is None:
@@ -2336,6 +2442,10 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
+        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+            )
         if endpoint not in self._capabilities.supported_second_order:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
@@ -2619,6 +2729,49 @@ class Calculator:
                 _public_calculator_endpoint=True,
             ),
         )
+
+    def stable_singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+        policy: SpinRootPolicy | None = None,
+        previous: SpinRootResult | None = None,
+    ) -> SpinRootResult:
+        """Require a stable real-internal UHF/UKS root before publishing E/forces.
+
+        This explicit CPU FP64 all-electron workflow certifies unscreened J/K
+        with SCF screening at most 1e-12. It reuses
+        native SCF, J/K, SCF-domain XC and the shared coupled response action.
+        ``SpinRootPolicy`` bounds the full spectrum/restarts and failure gates.
+        ``previous`` is a completed ``SpinRootResult`` for the same model; its
+        occupied spaces are projected as a seed and the new root is independently
+        requalified. Root switches reject unless the policy explicitly allows
+        them. Stable states pass through; unstable states need a lower, stationary,
+        fully stable restart. Failure publishes no energy or force result.
+
+        Coordinates are Bohr, energies Hartree and analytic forces Hartree/Bohr.
+        UHF, native UMP2 UHF references and qualified semilocal polarized LDA/PBE
+        are admitted; CUDA, fitting,
+        ECP, mixed precision, complex/spin-flip stability and unqualified XC fail
+        closed. Install ``generativeqc[stability]`` for the bounded CPU linear
+        algebra. This is not a global-minimum or arbitrary spatial-symmetry proof.
+        """
+        from ._spin_root_workflow import stable_singlepoint
+
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return stable_singlepoint(
+                self,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                policy=policy,
+                previous=previous,
+            )
 
     def singlepoint(
         self,

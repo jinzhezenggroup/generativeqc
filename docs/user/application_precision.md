@@ -1,7 +1,15 @@
 # Application precision and explicit audits
 
-`PrecisionCalculator(policy="fast")` selects FP32 arithmetic from an application
-error budget, without asking users to select kernels.
+`PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
+while `PrecisionCalculator(policy="fast")` selects qualified FP32 arithmetic
+from an application error budget, without asking users to select kernels.
+
+`policy="fp64"` remains a backward-compatible name for Standard: both use
+identical controls and execution, and the serialized `profile` preserves the
+name requested by the caller for compatibility. The native CLI
+`--precision fp64|auto` and low-level `Calculator(precision="fp64"|"auto")`
+select arithmetic rather than these application profiles; `auto` is **not**
+an alias for Fast. Neither profile changes the molecular model.
 
 ## Module-selected Fast Fock
 
@@ -9,11 +17,14 @@ Every supported native CUDA XC composition uses the same shared Direct-Fock prec
 policy. Admission depends on executable operator capabilities, not a functional
 name, canonical exchange fraction or MethodIR identity. The current restricted,
 all-electron Direct consumer admits **FP32 J and full-range K recurrence** with
-24–768 AOs, 2–96 atoms and shells through d. It uses the requested supported
+at least 24 AOs, at least two atoms and shells through d. There is no fixed AO
+or atom-count upper limit in this precision policy; native dimension validation
+and actual resource admission still apply. It uses the requested supported
 quadrature unchanged; the J/K precision decision does not require a particular grid.
 Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
 `3e-5` Eh/bohr RMS force when requested. This domain is independent of the
-384-AO mixed-gradient limit; neither is a hardware AO limit.
+384-AO mixed-gradient limit, which remains unchanged. Admission is not a
+per-system observable-error certificate; explicit audits retain their contract.
 
 Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
@@ -31,8 +42,15 @@ SR/LR K uses FP32 in both the optional whole-shell consumer and its bounded
 canonical-AO fallback; both report executed mixed recurrence work.
 Post-SCF corrections retain their existing arithmetic and complete-model checks;
 they do not select the recurrence precision of electronic J/K. Cached primitive
-preparation, whole-shell contraction/scatter, XC, eigensolution and global
-accumulation retain FP64. The bounded canonical-AO value fallback uses its
+preparation, whole-shell contraction/scatter, XC point algebra, eigensolution
+and global accumulation retain FP64. Shared XC density and potential matrix
+products use FP32 inner arithmetic in admitted physical Fast-Fock layouts,
+including their existing compact and indexed schedules. Their panels and
+physical outputs remain FP64; potential contributions accumulate across point
+tiles in FP64. Binary column normalization preserves representable density
+tails without clipping inputs or moving their dot products back to FP64.
+Strict refinement and response consumers keep strict products. The bounded
+canonical-AO value fallback uses its
 existing FP32 scalar policy for primitive and contracted values:
 this is **not an all-FP32 calculation**. An admitted phase-local integral source
 uses FP32 recurrence and FP32 storage, with FP64 density products and compensated
@@ -64,6 +82,10 @@ projection contains K. Separate range K contributes executed recurrence evidence
 VV10 reports mixed pair work only after at least one FP32 pair actually executes,
 and retains strict records when pair-domain fallback is used. Nonlocal exact-key
 reuse includes arithmetic identity, so FP32 results cannot certify strict closure.
+The operator census reports XC matrix products independently of XC point
+algebra: FP32 density products have FP32 reduction, while FP32 potential
+products have FP64 inter-tile reduction. Both retain FP64 storage. A mixed
+matrix product does not imply mixed XC point or analytic-force arithmetic.
 Module qualification is not a
 measured per-call observable error or a
 universal force-error bound. Explicit targets still request a separate complete
@@ -79,6 +101,32 @@ lease is audited and retired, then a separate FP64 source may be admitted. The
 two quartic caches do not overlap. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
+
+For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
+nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
+at 192 or more AOs, without a fixed upper AO limit. This is not a whitelist of
+measured AO counts or a claim that every larger shape has been benchmarked. Smaller eligible
+owners keep ordinary Fast unless explicitly opted in. Provisional
+initializer and frozen-VV10 iterations evaluate linear operators on the total
+current-minus-anchor density and reconstruct their full matrices in FP64.
+Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
+XC and VV10 still consume total density. Delta iterations do not advance the
+anchor. Final physical checks and Fast's selected convergence tolerances are
+unchanged: this does not promise FP64-mode observable accuracy.
+
+The anchor lease is optional, allocated after mandatory preparation and included
+in the native state capacity. It requires five additional FP64 AO matrices and
+one scalar. Device allocation failure keeps the ordinary Fast path; host
+reservation and non-allocation errors remain explicit failures. At a pressured
+force handoff the idle anchor is retired before optional ERIs; density, stationary
+weights, XC, the final-state token and the warm seed remain valid. Subsequent
+warm and cold solves on that owner use ordinary Fast without reallocating anchors.
+FP64 policy, strict caller controls, other models, DF/UKS, public resource-ledger owners,
+device chunks and same-owner warm replays retain their incumbent path.
+`GENERATIVEQC_KS_FAST_ANCHOR_DELTA=0` disables the optimization before preparation;
+unset selects the default at 192 or more AOs; `1` opts in within the scientific
+eligibility domain, including smaller owners, without forcing unsupported domains.
+There is no universal iteration-count or speed guarantee.
 
 The shared nonlocal initializer and frozen-potential proposal stages also admit
 budget-selected mixed Focks. Provisional residuals never certify the target.
@@ -306,7 +354,7 @@ mean that its intermediate arithmetic was FP64. For a **measured per-call**
 energy/force allowance, supply `target=TargetAccuracy(...)`: the full FP64
 comparison and, if necessary, verified fallback are included in its cost.
 
-`PrecisionCalculator(policy="fp64")` runs **one strict FP64 endpoint**, without
+`PrecisionCalculator(policy="standard")` runs **one strict FP64 endpoint**, without
 an unconditional second SCF/force solve. The CUDA KS scheduler can retain
 geometry-invariant J/K integrals and reuse them across SCF iterations, within
 the existing memory/lifetime guards. This exact optimization also benefits
@@ -317,7 +365,7 @@ calculations retain their faster phased executor. Fast comparisons must use this
 already-optimized strict baseline, not withhold scheduling improvements from it.
 It does not imply FP32 execution or promise a speedup for every workload.
 
-FP64 without `target` reports `strict_fp64`, with `target=None` and no measured
+Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
 observable-budget audit is claimed**. Its solver controls are at least as strict
 as `1e-10` energy, `1e-8` density and `1e-12` screening; stricter caller settings
@@ -333,7 +381,7 @@ behavior remains unchanged.
 from generativeqc import PrecisionCalculator
 
 calculator = PrecisionCalculator(
-    method="pbe0-rks", basis="def2-svp", device="cuda", policy="fp64",
+    method="pbe0-rks", basis="def2-svp", device="cuda", policy="standard",
 )
 ```
 
@@ -355,7 +403,8 @@ result = calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 print(result.precision_validation.to_dict())
 ```
 
-The preset names are case-insensitive. Balanced is the facade default.
+The preset names are case-insensitive. Balanced remains the facade default;
+this naming change does not alter default calculations or audit behavior.
 Providing `target` replaces all preset audit requirements, so energy-only audits
 use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.
@@ -382,17 +431,22 @@ with calculator.prepare_batch([atoms], warm_start=True) as batch:
     print(warm.precision_validation)
 ```
 
-Qualified Fast and untargeted FP64 retain the native plan and its own warm
+Qualified Fast and untargeted Standard (FP64) retain the native plan and its own warm
 densities, without seed exports or extra audits. Audited items trigger bounded
 host staging of **candidate-owned** seeds and release the candidate device plan
-before constructing independent, cold FP64 auditors. The next call lazily
+before constructing independent FP64 auditors. The next call lazily
 rebuilds the candidate plan and restores only those seeds. An auditor's density
 never becomes a candidate seed, even when its energy/forces replace a rejected
 candidate. Native restoration validates the source density/overlap and reruns
 SCF at the requested target coordinates. Frozen seeds retain their original
 source coordinates across movement and audits.
-Source-overlap validation can use native host work; its cost is included in
-resume time. This is not a PySCF or reference-oracle production dependency.
+Auditors retain only their own same-geometry, same-control density proposals;
+every audit still reruns SCF and recomputes the requested observables. Tighter
+fallback verification starts cold. Freezing updates freezes both independent
+histories. Geometry or control changes discard the affected audit seed.
+Source-overlap validation uses native host work and bounded CUDA eigensolvers
+for CUDA HF/KS; its cost is included in resume time. The existing physical
+admission gates and near-asymmetric host fallback remain unchanged.
 
 An admitted application-XC warmup does not perturb a converged resident seed
 merely to execute FP32 work again. Same-model resident replays begin in FP64 and
@@ -401,14 +455,16 @@ can still use budget-selected FP32. Cold, external and geometry-rebuilt seeds
 retain the admitted mixed warmup. Arithmetic records describe what ran: a strict
 warm SCF does not claim mixed SCF work or a refinement that did not occur.
 
-`maximum_seed_bytes` (default 256 MiB) caps numeric seed staging. The bound is
+`maximum_seed_bytes` (default 256 MiB) caps combined candidate/auditor numeric
+seed staging. The bound is
 checked conservatively for all prepared slots **before** the native query can
 materialize resident densities. Staging and validation scratch must also fit
 the current `ResourcePlan`'s host headroom; auditors reserve that host storage
 from the same budget, including an explicitly supplied resource plan.
-Unavailable seed transport or insufficient headroom fails the affected audited
-items rather than silently discarding warm history. `warm_start=False` needs no
-seed transport. `clear_warm_starts()` also clears suspended seeds.
+Unavailable candidate seed transport or insufficient candidate headroom fails
+the affected audited items. Optional audit history falls back to a complete
+cold audit when its storage cannot fit. `warm_start=False` needs no seed
+transport. `clear_warm_starts()` clears both suspended histories.
 
 Each item carries a schema-2 `PrecisionValidation`. Shared candidate time and
 per-item endpoint time are `None`, not an invented division of fleet latency.
@@ -426,7 +482,7 @@ unknown work counts remain `None`.
 | Preset | Energy allowance (Eh) | Max force-component allowance (Eh/bohr) | RMS force-component allowance (Eh/bohr) | Candidate SCF |
 | --- | ---: | ---: | ---: | --- |
 | Fast | `1e-5` | `1e-4` | `3e-5` | Shared Direct-module FP32 J/K with budget-controlled physical gates, or strict-density XC/gradient routes; FP64 audit fallback |
-| FP64 | No implicit budget audit | No implicit budget audit | No implicit budget audit | FP64, one endpoint unless an explicit target is supplied |
+| Standard (`fp64` alias) | No implicit budget audit | No implicit budget audit | No implicit budget audit | Optimized FP64, one endpoint unless an explicit target is supplied |
 | `audit_auto` | `1e-5` | `1e-4` | `3e-5` | Native AUTO on admitted CUDA models; FP64 otherwise |
 | Balanced | `1e-7` | `1e-5` | `3e-6` | FP64 |
 | Strict | `1e-9` | `1e-7` | `3e-8` | FP64 |

@@ -81,6 +81,32 @@
       ]
     },
     {
+      "id": "ks.fast-fixed-anchor-delta",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_FAST_ANCHOR_DELTA"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Unset admits fixed FP64 J/K/range-K anchors at 192 or more AOs for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves, without a fixed upper AO limit. Shared budget-Fock admission also has no fixed AO or atom-count ceiling; native dimensions, actual resources and all other scientific conditions remain checked. Explicit 1 opts in smaller scientifically eligible owners; 0 disables. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged, then retired at a pressured force handoff without revoking D/W/XC or the final token; later solves use ordinary Fast. Numerical acceptance thresholds are unchanged. Historical measurements do not qualify every newly admitted larger shape.",
+      "revisit_condition": "Require profitable complete-endpoint evidence before lowering the 192-AO automatic floor: retained water-12 observations are adverse. Removing count ceilings is not a new large-size accuracy or speed qualification. Record independent large-system energy/force gates and actual work/resource failures separately. Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger anchor domains independently; preserve strict full-target audits, explicit rollback and force-phase optional-memory fallback.",
+      "evidence": [
+        "docs/user/application_precision.md",
+        ".agents/notes/implemented/performance/2026-10-18-fast-fixed-anchor-delta.md",
+        ".agents/notes/implemented/performance/2026-10-18-fast-anchor-force-handoff-and-size-gate.md",
+        ".agents/notes/implemented/performance/2026-10-19-fast-fock-size-cap-removal.md",
+        "benchmarks/results/wb97mv-anchor-delta-20261018/README.md",
+        "benchmarks/results/fast-anchor-default-20261018/README.md",
+        "benchmarks/results/fast-anchor-domain-20261019/README.md",
+        "tests/python/test_fast_anchor_delta_controller.py",
+        "tests/native/test_ks_cuda.cpp"
+      ]
+    },
+    {
       "id": "ks.df-warm-factor-replay",
       "classification": "already-default",
       "controls": [
@@ -841,15 +867,43 @@
         "src/scf/cuda/direct_coulomb.cpp",
         "src/scf/cuda/direct_force_class_domains.cu"
       ],
-      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range sources with at least 384 AOs, including pure J and global hybrids. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal exclusions and optional resources remain guarded. Independent D4/gCP geometry terms are allowed for pure J; hybrids with D4 remain excluded. PBE0 established the recurrence-reuse and 384/768-AO warm/moved benefit. The pure-J extension records complete 3/12/48/96-atom 3c and 48/96-atom PBE/r2SCAN populations on frozen integrated source aaec57399ef29f96981da368c3a8c6a91af74ae8, with the low-free-memory shell-lease refusals and earlier timeouts retained separately. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
+      "rationale": "Unset/empty selects relative-response order-six reuse and guarded pure-J density-first order-six/seven contraction for the existing strict-FP64 restricted exact-direct full-range domain with at least 384 AOs. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal exclusions and optional resources remain guarded. Independent D4/gCP geometry terms are allowed for pure J; hybrids with D4 remain excluded. Earlier spatial-reuse qualification remains historical; the relative/density promotion has separate source-matched 48/96-atom complete-endpoint, independent-oracle and actual-work evidence. Nonzero exchange, seeds, partial masks and unsafe reorderings keep component contraction. Explicit spatial-reuse/1 retains the previous control, relative-reuse omits density contraction, and 0/unknown values retain the incumbent; no selector bypasses scientific/resource guards.",
       "revisit_condition": "Qualify further source/model variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety; track the independent low-memory shell-lease fallback and publication of source-matched raw benchmark artifacts under #2416.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
         "note:.agents/notes/implemented/performance/2026-10-13-pure-j-spatial-default.md",
+        "note:.agents/notes/implemented/performance/2026-10-17-direct-force-default-promotion.md",
         "docs:docs/user/ks_options.md",
         "benchmarks:benchmarks/results/pbe0-spd-spatial-reuse-20261011/validation.json.gz",
         "tests:tests/python/test_pbe0_spatial_force_policy.py",
         "tests:tests/python/test_direct_spatial_coulomb_cache.py"
+      ]
+    },
+    {
+      "id": "hf.weighted-relative-force-responses",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES"
+      ],
+      "owner_issues": [
+        1117,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/weighted_eri.py",
+        "src/scf/cuda/direct_coulomb.cpp",
+        "src/scf/cuda/direct_force_low_order_sources.cuh"
+      ],
+      "rationale": "Unset/empty/1/relative selects generated relative-coordinate FP64 AD for full-range weighted Direct force orders one through five. The shared fixed-weight scalar reuses pair-separation and Coulomb responses; ssss, FP32 and long-range roots remain unchanged. Every source reduction must be finite before atom scatter, otherwise the original nuclear FP64 graph retries once. Prepared HF/DFT owners capture the independent arithmetic selector; zero/unknown retains nuclear roots. Source-matched complete 48/96-atom, PBE0/HF, reverse-order and original-image comparisons independently qualify the default, preserving actual trajectories, scientific/resource guards and explicit small regressions.",
+      "revisit_condition": "Qualify new consumer/resource domains with independent finite E/F gates and full cold/warm/moved endpoints. Preserve bounded nuclear fallback and record actual SCF/Fock counts; do not infer endpoint gains from static DAG counts or relabel an incremental component as GPU4PySCF parity.",
+      "evidence": [
+        "note:.agents/notes/implemented/performance/2026-10-17-weighted-relative-force-responses.md",
+        "docs:docs/developer/weighted_eri.md",
+        "tests:tests/python/test_direct_force_reuse_benchmark.py",
+        "tests:tests/python/test_weighted_eri.py",
+        "tests:tests/python/test_direct_order4_sources.py",
+        "tests:tests/python/test_direct_order5_sources.py"
       ]
     },
     {
@@ -1577,11 +1631,12 @@
         "src/scf/cuda/direct_md_j.hpp",
         "src/methods/dft_method.cpp"
       ],
-      "rationale": "Unbudgeted strict-FP64 zero-order SPD Coulomb defaults to MD-J for at least eight AOs, within an optional 128-MiB cap after retained normal owners. Public active-ledger plans retain normal J because they reserve no optional MD allowance. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers. Original source qualification retains three same-binary cold pairs with independent gates and explicit 17/16 Fock counts.",
+      "rationale": "Eligible strict-FP64 zero-order s/p/d Coulomb defaults to complete primitive MD-J for at least eight AOs. Optional storage is charged to the actual owner capacity after retained normal owners; the private 128-MiB shape reservation is not a second hard cap. Public active-ledger plans retain normal J. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers.",
       "revisit_condition": "Broaden ledger admission only with an explicit optional candidate reserving future owners, rebuild and forces; broaden numerical/workload domains only with renewed independent gates and complete endpoints. Retained GPU receipts remain pinned to their measured source; host resource repairs do not claim new GPU qualification.",
       "evidence": [
         "pr:#2100",
-        "benchmarks/results/md-j-default-cold/README.md"
+        "benchmarks/results/md-j-default-cold/README.md",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-owner-capacity.md"
       ]
     },
     {
@@ -1645,6 +1700,101 @@
       "evidence": [
         "tests/python/test_tensor_where_jvp_program.py",
         "docs/developer/tensor_ir.md"
+      ]
+    },
+    {
+      "id": "tensor.external-mask-generated-vjp",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:transpose_program.allow_external_mask_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generated VJP for fixed external Boolean masks on generic finite FP64 arrays remains explicit. All live primal and forward domains and every requested cotangent feed are retained, including disconnected and empty gradients. Only materializing native CPU is qualified; default Boolean rejection and non-selection generated equations remain unchanged.",
+      "revisit_condition": "Broader dtype, backend, higher-order or public compiled AD admission requires separate source-matched independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_tensor_where_jvp_program.py",
+        "docs/developer/tensor_ir.md"
+      ]
+    },
+    {
+      "id": "dft.md-j-reference-engine",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:GENERATIVEQC_MD_J_ENGINE"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/md_j_engine.cuh",
+        "python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+      ],
+      "rationale": "Unset/primitive selects complete primitive Hermite J with independent conservative Coulomb norms, current-density active prefixes and a cumulative per-entry screening allowance. Explicit reference/incumbent retain exact public-AO-mask compatibility. Hierarchy refusal retains incumbent MD and base-storage refusal retains normal J. Independent oracle, changed-density graph, sanitizer, resource rollback and complete 96-atom r2SCAN-3c/PBE0 E/F qualification support the guarded default; the public ledger, K, mixed and derivative boundaries remain.",
+      "revisit_condition": "Renew source-matched independent numerical, resource/lifecycle and full endpoint qualification before broadening basis, ledger, precision or multiple-independent-density domains. Preserve explicit exact-mask rollback and report semantic work counts with endpoint timing.",
+      "evidence": [
+        "docs/developer/md_j_engine.md",
+        "tests/python/test_md_j_engine_math.py",
+        "tests/python/test_md_j_engine_contract.py",
+        "tests/python/test_md_j_engine_reference.py",
+        "tests/python/test_md_j_engine_runtime.py",
+        "tests/python/test_md_j_engine_cuda.py",
+        "tests/python/test_md_j_resources.py",
+        "benchmarks/md_j_engine_acceptance.py",
+        "tests/python/test_md_j_primitive_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
+      ]
+    },
+    {
+      "id": "dft.xc-spatial-order",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_XC_SPATIAL_ORDER"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "src/dft/grid_spatial_order.hpp"
+      ],
+      "rationale": "Eligible resident semilocal XC with admitted local AO maps defaults to an exact spatial permutation of points and weights. Canonical grid ownership remains authoritative for moving-grid forces. Explicit 0, insufficient allowances and optional device OOM retain canonical execution; nonlocal and public-ledger owners remain excluded. Independent E/V, graph/tail/resource/sanitizer and complete 96-atom energy+force qualification support promotion.",
+      "revisit_condition": "Require renewed canonical force identity, resource reservation and independent endpoint qualification before enabling nonlocal or public-ledger consumers or changing quadrature, AO thresholds or precision.",
+      "evidence": [
+        "docs/developer/dft_grid.md",
+        "tests/native/test_dft_cuda.cu",
+        "note:.agents/notes/implemented/performance/2026-10-19-xc-spatial-grid-order.md",
+        "note:.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md"
+      ]
+    },
+    {
+      "id": "tensor.primal-comparison-where-ad",
+      "classification": "retained-opt-in",
+      "controls": [
+        "tensor-ad:_validate_external_mask_inputs.allow_comparison_where",
+        "tensor-ad:linearize.allow_comparison_where",
+        "tensor-ad:transpose_program.allow_comparison_where"
+      ],
+      "owner_issues": [
+        2137,
+        2111
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/ad_program.py"
+      ],
+      "rationale": "First-order generic finite FP64 selected-branch derivatives with primal comparison selectors require explicit selection. Boolean edges stop derivative ancestry; predicate-only computations retain primal checks, while real branches retain forward-domain checks. Only reference/materializing native CPU is qualified. The external-mask-only default remains unchanged.",
+      "revisit_condition": "Preserve explicit selector and switching-point semantics. Broader dtype/backend, scientific or higher-order admission requires independent qualification and ownership review.",
+      "evidence": [
+        "tests/python/test_array_api_comparison_where_ad.py",
+        "docs/developer/tensor_ir.md",
+        ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
       ]
     }
   ]

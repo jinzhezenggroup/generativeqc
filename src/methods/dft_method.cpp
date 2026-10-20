@@ -409,6 +409,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
+    if (options_.nonlocal_grid_spec && *options_.nonlocal_grid_spec != grid_.spec()) {
+      nonlocal_grid_ = std::make_unique<dft::MolecularGrid>(ks_molecular_grid(
+          system_, *options_.nonlocal_grid_spec, backend_, device,
+          options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused));
+      options_.nonlocal_grid = nonlocal_grid_.get();
+    }
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
@@ -524,6 +530,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
                               runtime::vector_capacities(basis_.packed, grid_.points(),
                                                          grid_.weights(), grid_.owners(), warm_));
     bytes = runtime::add_capacity(bytes, integral_response_cache_.bytes());
+    if (nonlocal_grid_)
+      bytes = runtime::add_capacity(
+          bytes, runtime::vector_capacities(nonlocal_grid_->points(), nonlocal_grid_->weights(),
+                                            nonlocal_grid_->owners()));
     if (range_correction_)
       bytes = runtime::add_capacity(bytes, range_correction_->cpu_observation_capacity());
 #if GENERATIVEQC_HAS_CUDA
@@ -879,6 +889,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // its raw measures directly; dividing partitioned weights loses tail data.
     output.atomic_weights = grid_.atomic_weights();
     output.resident_grid = grid_.cuda_view();
+    if (nonlocal_grid_) {
+      output.nonlocal_points = nonlocal_grid_->points();
+      output.nonlocal_weights = nonlocal_grid_->weights();
+      output.nonlocal_grid_owners = nonlocal_grid_->owners();
+      output.nonlocal_atomic_weights = nonlocal_grid_->atomic_weights();
+      output.nonlocal_resident_grid = nonlocal_grid_->cuda_view();
+    }
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -2092,6 +2109,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                         options_.semilocal_correlation_scale};
       if (range_correction_) identity.model.range_correction = range_correction_->strategy();
       if (nonlocal_) identity.model.nonlocal_correlation = nonlocal_->parameters();
+      identity.model.nonlocal_grid = options_.nonlocal_grid_spec;
       if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan_.semilocal_family))
         identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::MolecularV1;
       dft::KsPhysicalState physical{identity,
@@ -2144,13 +2162,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
   void prepare_nonlocal(int device) {
-    if (grid_.point_count() > std::numeric_limits<std::uint32_t>::max())
+    const auto& nonlocal_grid = options_.nonlocal_grid ? *options_.nonlocal_grid : grid_;
+    if (nonlocal_grid.point_count() > std::numeric_limits<std::uint32_t>::max())
       throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                         "KS grid exceeds the VV10 public point-count domain");
     generativeqc_status status = GENERATIVEQC_STATUS_INTERNAL_ERROR;
     std::string detail;
     nonlocal_ = dft::nlc::Vv10Plan::prepare(
-        backend_, device, static_cast<std::uint32_t>(grid_.point_count()),
+        backend_, device, static_cast<std::uint32_t>(nonlocal_grid.point_count()),
         static_cast<std::uint32_t>(options_.xc_tile_points), execution_plan_.nonlocal_parameters,
         execution_plan_.nonlocal_maximum_bytes, detail, status);
     if (!nonlocal_)
@@ -2205,6 +2224,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   dft::AoBasis basis_;
   dft::MolecularGrid grid_;
+  std::unique_ptr<dft::MolecularGrid> nonlocal_grid_;
   std::vector<double> warm_;
   ExactDensityResponseCache integral_response_cache_;
   const std::uint64_t cpu_owner_{next_cpu_ks_owner()};
@@ -2929,10 +2949,11 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
                                                          shape[5] == 0 && shape[6] == 0, shape[4],
                                                          shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    const auto points = runtime::size_mul(
-        shape[0], runtime::size_mul(grid.radial_points,
-                                    runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
-    if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // This shape-only query has no element inventory. V4's exact count is
+    // checked by the prepared grid/controller; never invent a uniform count.
+    if (grid.version != 4 &&
+        runtime::size_mul(shape[0], dft::grid_points_per_atom(grid)) != shape[3])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
         dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,

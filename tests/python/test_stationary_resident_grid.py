@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import numpy as np
+from generativeqc._stationary_cuda import _CudaSources
+
 ROOT = Path(__file__).resolve().parents[2]
 SCHEDULER = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
 
@@ -19,10 +22,21 @@ def test_generic_stationary_cuda_borrows_native_grid() -> None:
     assert 'getattr(state._source, "cuda_resident_grid", None)' in body
     assert "resident_grid.device != device" in body
     assert "resident_grid.point_count != grid_points" in body
-    assert "grid_points != na * points_per_atom" in body
     assert "sources.geometry_molecular_resident_weights(" in body
     assert "resident_grid.weights + begin * 8" in body
     assert "resident_grid.atomic_weights + begin * 8" in body
+
+
+def test_profile_owner_mapping_supports_ragged_and_legacy_tiles() -> None:
+    """A tile may cross unequal atom extents; the final prefix is exclusive."""
+    source = object.__new__(_CudaSources)
+    source._grid_offsets = np.array([0, 2, 7, 10], dtype=np.uint64)
+    np.testing.assert_array_equal(
+        source._molecular_owners(1, 7, 0), [0, 1, 1, 1, 1, 1, 2]
+    )
+    np.testing.assert_array_equal(
+        source._molecular_owners(1, 7, 3), [0, 0, 1, 1, 1, 2, 2]
+    )
 
 
 def test_generic_stationary_cuda_reports_zero_production_grid_uploads() -> None:

@@ -130,6 +130,8 @@ def emit_df_hf_response_cuda() -> str:
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
+#include "tensor/cuda_runtime.cuh"
+
 #include <cstddef>
 #include <limits>
 
@@ -151,9 +153,9 @@ inline cublasStatus_t df_rhf_charge_contract(
     int terms, const double* densities, const double* fitted,
     double* potentials) {{
   const double one = 1.0, zero = 0.0;
-  return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, count, terms, matrix,
-                     &one, fitted, matrix, densities, matrix, &zero,
-                     potentials + begin, auxiliary_stride);
+  return generativeqc_tensor::submit_column_gemm(
+      {{blas, true, false, count, terms, matrix, &one, fitted, matrix,
+        densities, matrix, &zero, potentials + begin, auxiliary_stride}});
 }}
 
 /** Contract one density with auxiliary-fast retained B, without unpacking B.
@@ -166,9 +168,9 @@ inline cublasStatus_t df_rhf_retained_charge_contract(
     cublasHandle_t blas, int pairs, int auxiliary, const double* factor,
     const double* density, double* charge) {{
   const double one = 1.0, zero = 0.0;
-  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, auxiliary, 1, pairs,
-                     &one, factor, auxiliary, density, pairs, &zero,
-                     charge, auxiliary);
+  return generativeqc_tensor::submit_column_gemm(
+      {{blas, false, false, auxiliary, 1, pairs, &one, factor, auxiliary,
+        density, pairs, &zero, charge, auxiliary}});
 }}
 
 /** Recover the full-rank fitted RHF Coulomb potential from the rooted

@@ -1,4 +1,4 @@
-"""New LDA/PBE grid defaults must preserve existing r2SCAN admission."""
+"""r2SCAN shares the default grid policy and preserves explicit legacy grids."""
 
 import pytest
 from generativeqc import KsOptions
@@ -7,16 +7,15 @@ from generativeqc_compiler.dft.grid import GridPolicy, GridSpec
 
 
 @pytest.mark.parametrize("method", ["r2scan-rks", "r2scan-uks"])
-def test_r2scan_default_retains_qualified_legacy_grid(method: str) -> None:
+def test_r2scan_default_uses_treutler(method: str) -> None:
     options = resolve_ks_options(method)
-    assert options.grid == GridSpec()
-    assert options.grid.version == 1
+    assert options.grid == GridSpec.treutler(3)
 
 
 @pytest.mark.parametrize("method", ["r2scan-rks", "r2scan-uks"])
 def test_r2scan_does_not_silently_ignore_tight_grid_request(method: str) -> None:
-    with pytest.raises(NotImplementedError, match="explicit GridSpec"):
-        resolve_ks_options(method, KsOptions(grid_accuracy="tight"))
+    options = resolve_ks_options(method, KsOptions(grid_accuracy="tight"))
+    assert options.grid == GridSpec.treutler(4)
 
 
 @pytest.mark.parametrize("method", ["r2scan-rks", "r2scan-uks"])

@@ -120,7 +120,7 @@ native parity. New schema v2 records explicitly identify the external oracle
 and its version, retain directions and actual/reference HVPs, and report native
 parity in `native_dense_maximum_error`.
 
-The supplemental `consumer-oracle-evidence.json` records clean source
+The supplemental `consumer-oracle-evidence.json.xz` records clean source
 `b326568699acbeea9153ad62c91e845f49af4518` and PySCF 2.14.0. The matching
 native binary SHA-256 is
 `b34f4435647b90e9ffc3adb6ef7e2f98eeb95ba6d6ff1a481bb2da6eaaf79757`.
@@ -164,3 +164,8 @@ policy changes. Larger systems, changed-geometry performance and constrained
 budget performance are required before promotion; they are not established by
 this three-fixture campaign. The old `response-179` CPU/DF records remain
 historical and are not a speedup baseline for this exact-Hamiltonian comparison.
+
+The supplemental archive preserves all 86,482 original JSON bytes (SHA-256
+`e948358363d64e9ce078de3f2560726e42d3b42d05fabc3a162520d64990c8fb`). Read it with
+`xz -dc consumer-oracle-evidence.json.xz`; compression changes storage only,
+not the retained observations or their historical qualification.

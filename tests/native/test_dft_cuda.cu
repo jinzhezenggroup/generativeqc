@@ -84,9 +84,10 @@ struct Fixture {
   Fixture(const AoBasis& basis, const MolecularGrid& grid, std::uint32_t functional, bool uks,
           std::size_t tile, CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64,
           bool response = false, double exchange_scale = 1.0, double correlation_scale = 1.0,
-          const CudaXcAoTiles* maps = nullptr, bool reserve_selection = false)
+          const CudaXcAoTiles* maps = nullptr, bool reserve_selection = false,
+          bool borrow_grid = false)
       : layout(cuda_xc_layout(basis, grid, functional, uks, tile, ao_precision, exchange_scale,
-                              correlation_scale)) {
+                              correlation_scale, borrow_grid)) {
     try {
       if (response)
         layout = cuda_xc_layout_shape(layout.natom, layout.nprimitive, layout.nao, layout.npoint,
@@ -99,9 +100,9 @@ struct Fixture {
       check(cudaMalloc(&arena, allocation_bytes + 64));
       check(cudaMemset(static_cast<char*>(arena) + allocation_bytes, 0x5a, 64));
       check(cudaMalloc(&density, layout.spins * layout.nao * layout.nao * sizeof(double)));
-      plan =
-          std::make_unique<CudaXcPlan>(layout, basis.packed, grid.points(), grid.weights(), arena,
-                                       allocation_bytes, stream, CudaMolecularGridView{}, maps);
+      plan = std::make_unique<CudaXcPlan>(
+          layout, basis.packed, grid.points(), grid.weights(), arena, allocation_bytes, stream,
+          borrow_grid ? grid.cuda_view() : CudaMolecularGridView{}, maps);
       if (potential_qualification_budget) plan->prepare_potential(potential_qualification_budget);
       if (density_provider_qualification_budget)
         plan->prepare_density(generativeqc::runtime::strict_fp64_precision(), 10,
@@ -136,7 +137,8 @@ struct Fixture {
             "XC enqueue staged data or synchronized");
   }
   std::pair<std::vector<double>, std::vector<double>> submit_density_features(
-      const std::vector<double>& d) {
+      const std::vector<double>& d, generativeqc::runtime::PrecisionPhase phase =
+                                        generativeqc::runtime::PrecisionPhase::StrictAudit) {
     double *device_rho{}, *device_gradient{};
     std::vector<double> rho(layout.npoint), gradient(3 * layout.npoint);
     try {
@@ -146,7 +148,8 @@ struct Fixture {
                             stream));
       check(cudaStreamSynchronize(stream));
       const auto before = plan->transfers();
-      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient);
+      plan->enqueue_density_features(density, d.size(), ++generation, device_rho, device_gradient,
+                                     phase);
       const auto after = plan->transfers();
       require(after.output_d2h_bytes == before.output_d2h_bytes &&
                   after.setup_h2d_bytes == before.setup_h2d_bytes &&
@@ -892,9 +895,38 @@ void variational_and_state(const AoBasis& basis, const MolecularGrid& grid,
 
 void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned functional,
                    bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr,
-                   std::size_t point_batch_tiles = 1, bool compact = false, bool ragged = false) {
+                   std::size_t point_batch_tiles = 1, bool compact = false, bool ragged = false,
+                   bool spatial = false) {
   Fixture captured(basis, grid, functional, unrestricted, tile, CudaXcAoPrecision::Fp64, false, 1.0,
-                   1.0, maps);
+                   1.0, maps, spatial, spatial);
+  if (spatial) {
+    const auto bytes = 4 * grid.point_count() * sizeof(double);
+    const auto host_bytes =
+        bytes + (2 * grid.point_count() + 4 * basis.natom) * sizeof(std::size_t);
+    const auto before = captured.plan->grid_view();
+    require(!captured.plan->prepare_spatial_grid(grid, host_bytes, bytes - 1),
+            "spatial grid admitted insufficient device allowance");
+    require(!captured.plan->prepare_spatial_grid(grid, host_bytes - 1, bytes),
+            "spatial grid admitted insufficient host allowance");
+    require(captured.plan->grid_view().points == before.points,
+            "refused spatial preparation changed the original grid");
+    require(captured.plan->prepare_spatial_grid(grid, host_bytes, bytes),
+            "spatial grid exact resource admission failed");
+    require(captured.plan->spatial_grid_device_bytes() == bytes &&
+                captured.plan->canonical_grid_view().points == before.points &&
+                captured.plan->grid_view().points != before.points,
+            "spatial grid did not retain distinct execution and canonical views");
+    const auto budget = cuda_xc_ao_selection_resources(captured.plan->layout());
+    require(captured.plan->select_local_ao(1e-16, budget.host_peak_bytes),
+            "spatial grid AO selection failed");
+    bool rejected = false;
+    try {
+      captured.plan->prepare_spatial_grid(grid, host_bytes, bytes);
+    } catch (const std::logic_error&) {
+      rejected = true;
+    }
+    require(rejected, "spatial preparation mutated immutable maps");
+  }
   captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024, compact, ragged);
   auto d = density(basis.nao, unrestricted ? 2 : 1);
   check(cudaMemcpyAsync(captured.density, d.data(), d.size() * sizeof(double),
@@ -1047,6 +1079,7 @@ void matrix_schedule_cases() {
 // tests; these in-namespace test fragments must retain dependency order.
 // clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_mixed_matrix_cases.cuh"
 #include "dft_point_batch_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
@@ -1057,6 +1090,7 @@ void matrix_schedule_cases() {
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
 #include "dft_mapped_density_benchmark.cuh"
+#include "dft_r2scan_provider_benchmark.cuh"
 #include "dft_point_batch_benchmark.cuh"
 // clang-format on
 }  // namespace
@@ -1081,6 +1115,23 @@ int main(int argc, char** argv) {
                           static_cast<unsigned>(std::stoul(argv[3])), std::stod(argv[4]));
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--mixed-matrix-contractions") {
+      mixed_matrix_cases();
+      std::cout << "CUDA shared FP32 products: independent E/V, maps, batches and strict handoff "
+                   "passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--spatial-grid") {
+      const auto molecule = system(2, true);
+      const AoBasis basis(molecule);
+      const auto grid = MolecularGrid::from_cuda(molecule, {1, 5, 3, 7, 3, 1e-12}, 0, true);
+      for (unsigned functional : {1U, 2U})
+        for (bool unrestricted : {false, true})
+          graph_capture(basis, grid, functional, unrestricted, 33, nullptr, 3, true, true, true);
+      std::cout << "CUDA spatial grid: independent CPU E/V, changed-density replay, tails, "
+                   "canonical force view and resource refusal passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--point-batches") {
       point_batch_cases();
       std::cout
@@ -1089,6 +1140,14 @@ int main(int argc, char** argv) {
     }
     if (argc == 4 && std::string(argv[1]) == "--point-batch-benchmark") {
       point_batch_benchmark(argv[2], argv[3]);
+      return 0;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--r2scan-grid-benchmark") {
+      r2scan_provider_benchmark(argv[2], argv[3], true);
+      return EXIT_SUCCESS;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--r2scan-provider-benchmark") {
+      r2scan_provider_benchmark(argv[2], argv[3]);
       return 0;
     }
     if (argc == 4 && std::string(argv[1]) == "--compact-batch-benchmark") {

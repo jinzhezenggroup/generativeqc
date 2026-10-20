@@ -105,6 +105,7 @@ def build_weighted_eri_kernel(
     component_indices: tuple[int, ...] | None = None,
     *,
     primal_form: AlgebraForm = AlgebraForm.FACTORED_NARY,
+    derivative_basis: typing.Literal["nuclear", "relative"] = "nuclear",
 ) -> WeightedEriKernel:
     """Precontract Hermite coefficients, then differentiate the weighted scalar.
 
@@ -116,7 +117,13 @@ def build_weighted_eri_kernel(
     Uncompiled subsets retain the unscreened native external-weight fallback.
     ``primal_form`` permits algebra/AD commutation checks; its default preserves
     the established first-derivative graph and emitted source.
+    ``derivative_basis='relative'`` differentiates the same weighted scalar in
+    the Gaussian pair-separation/product-center frame before recovering nuclear
+    derivatives. Positive exponent fractions define this frame; external weights
+    stay fixed. The default retains the arbitrary-leaf nuclear response graph.
     """
+    if derivative_basis not in ("nuclear", "relative"):
+        raise ValueError("weighted derivative basis must be nuclear or relative")
     if (
         integral.operator.family
         not in (
@@ -223,8 +230,21 @@ def build_weighted_eri_kernel(
     boys = tuple(
         graph.variable(f"boys_{n}") for n in range(integral.maximum_coulomb_order + 1)
     )
-    gradients: dict[int, tuple[Expr, Expr, Expr]] = {}
-    for center in integral.independent_derivative_centers:
+    gradients = (
+        _relative_weighted_eri_gradients(
+            graph,
+            value,
+            integral.maximum_coulomb_order,
+            integral.independent_derivative_centers,
+        )
+        if derivative_basis == "relative"
+        else {}
+    )
+    for center in (
+        ()
+        if derivative_basis == "relative"
+        else integral.independent_derivative_centers
+    ):
         pair_scale = graph.variable(f"{CENTERS[center]}_product_scale")
         difference_scale = pair_scale if center < 2 else -pair_scale
         rows = []
@@ -273,3 +293,68 @@ def build_weighted_eri_kernel(
     return WeightedEriKernel(
         integral, spec, indices, graph, value, result, tuple(sorted(coefficients))
     )
+
+
+def _relative_weighted_eri_gradients(
+    graph: Graph,
+    value: Expr,
+    maximum_coulomb_order: int,
+    independent_centers: tuple[int, ...],
+) -> dict[int, tuple[Expr, Expr, Expr]]:
+    """Share AD in A-B, C-D and P-Q, then apply their constant nuclear Jacobian.
+
+    P and Q are exponent-weighted Gaussian product centers. Only P-Q responds
+    through the Coulomb/Boys ladder; pair separation responses share each
+    Gaussian decay and its Hermite shifts. The recurrence/value graph is the
+    existing weighted ERI, not an independent derivative formula. Exponents and
+    external cotangents are fixed, and physical product fractions sum to one.
+    """
+    product_scales = tuple(
+        graph.variable(f"{center}_product_scale") for center in CENTERS
+    )
+    relative = []
+    for coordinate in range(3):
+        responses = []
+        for axis in AXES:
+            if coordinate < 2:
+                first_prefix, second_prefix = (
+                    ("pa", "pb") if coordinate == 0 else ("qc", "qd")
+                )
+                leaves = {
+                    "prefactor": graph.variable("prefactor")
+                    * graph.variable(f"decay_{CENTERS[2 * coordinate]}_{axis}"),
+                    f"{first_prefix}_{axis}": -product_scales[2 * coordinate + 1],
+                    f"{second_prefix}_{axis}": product_scales[2 * coordinate],
+                }
+            else:
+                argument_response = (
+                    2 * graph.variable("rho") * graph.variable(f"difference_{axis}")
+                )
+                leaves = {f"difference_{axis}": graph.constant(1)}
+                leaves.update(
+                    {
+                        f"boys_{order}": -graph.variable(f"boys_{order + 1}")
+                        * argument_response
+                        for order in range(maximum_coulomb_order)
+                    }
+                )
+            responses.append(
+                graph.differentiate(
+                    value, graph.variable(f"relative_{coordinate}_{axis}"), leaves
+                )
+            )
+        relative.append(responses)
+    gradients = {}
+    for center in independent_centers:
+        responses = tuple(
+            (
+                relative[center // 2][axis]
+                if center % 2 == 0
+                else -relative[center // 2][axis]
+            )
+            + (product_scales[center] if center < 2 else -product_scales[center])
+            * relative[2][axis]
+            for axis in range(3)
+        )
+        gradients[center] = (responses[0], responses[1], responses[2])
+    return gradients

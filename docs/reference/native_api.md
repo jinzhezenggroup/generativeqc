@@ -40,6 +40,15 @@ expose registry information, not support for every basis/device/precision and
 derivative combination. A prepared execution can apply stricter checks.
 See [capability sources](capabilities.md).
 
+## Native KS grid descriptor
+
+The `generativeqc_ks_options` descriptor keeps the same layout across grid
+versions. The [KS grid contract](../user/ks_options.md#prepared-semilocal-ks-model-options)
+documents the version-4 defaults, supported elements, level encoding and
+radius-table behavior for native callers as well as Python. It governs the
+`grid_version`, `radial_points`, `angular_polar`, `angular_azimuth` and
+`element_radii` fields when constructing the C descriptor directly.
+
 ## Core C handles and ownership
 
 | Entry points | Contract |
@@ -51,6 +60,34 @@ See [capability sources](capabilities.md).
 | `generativeqc_batch_prepare/destroy` | Own and release a persistent ragged-fleet plan |
 | `generativeqc_batch_execute` | Execute the fleet with per-input result statuses rather than assuming every member succeeded |
 | `generativeqc_context_get_last_detail` | Borrow context detail; copy it before another context operation because D4/nonlocal calls may clear it even on success |
+
+For bundled Gaussian bases, `generativeqc_system_create_bundled` accepts an
+atom-only full-size system descriptor, a bundled name and an optional expected
+catalog checksum. `generativeqc_bundled_basis_catalog_sha256` identifies the
+compiled source pack; supplying it as the expected checksum binds external
+metadata to that exact catalog. The C++ `System(context, atoms, basis_name, ...)`
+constructor uses the same expansion and existing normalization/validation owner.
+These paths read no basis files, import no Python and invoke no compiler at
+runtime. They do not broaden any method/backend capability.
+
+For caller-supplied FP64 data, `generativeqc_system_create_basis_template_v1`
+accepts the same atom-only system descriptor and an element-local template
+descriptor. Shared exponents and row-major general contractions are expanded in
+atom, shell and contraction-row order, retaining zero coefficients. Scalar ECP
+terms carry their nonnegative source angular channels; the greatest channel of
+each element becomes the local potential. The compiled catalog, canonical-file
+CLI adapter and Python `BasisSet` adapter share this expansion owner. Existing
+descriptor constructors retain normalization and scientific/backend admission.
+The C++ `System(context, atoms, template_descriptor, ...)` overload provides the
+same copying, synchronous lifetime contract. Array ranges and expanded uint32
+capacities are checked before expansion; no system is published on failure.
+
+Template arrays are numerical inputs, not authenticated canonical JSON or a
+native model/provenance identity. Format/schema and provenance adapters remain
+outside this constructor. The template route preserves the existing bounded
+scalar ECP scope (orbital s/p/d/f, local channel through g, radial powers 0–4);
+method/backend restrictions still apply. Explicit atom-expanded descriptors
+remain supported for existing clients.
 
 Keep the execution context valid for dependent prepared owners, and release each
 handle with its matching `*_destroy` function. Systems own copied atom/basis

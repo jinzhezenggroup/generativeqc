@@ -137,7 +137,7 @@ class PrecisionPolicy:
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
     native FP32 admission. It is not a measured per-call error certificate.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
-    FP64 without ``target`` executes once in FP64; no observable error estimate
+    Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
     Other presets are audit allowances, not measured error ranges. Only
     relaxed-target audits are admitted.
@@ -160,13 +160,14 @@ class PrecisionPolicy:
             raise ValueError("arithmetic-selection budgets currently require Fast")
         if not isinstance(self.profile, str) or self.profile not in (
             "fast",
+            "standard",
             "fp64",
             *_DEFAULT_BUDGETS,
         ):
             raise ValueError(
-                "precision profile must be 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
+                "precision profile must be 'standard', 'fast', 'fp64', 'audit_auto', 'balanced' or 'strict'"
             )
-        if self.profile in ("fast", "fp64") and self.target is None:
+        if self.profile in ("fast", "standard", "fp64") and self.target is None:
             return
         if self.target is None:
             energy, maximum, rms = _DEFAULT_BUDGETS[self.profile]
@@ -458,7 +459,8 @@ class PrecisionCalculator:
 
     ``policy`` is a preset name or a PrecisionPolicy with an application budget.
     Other options have Calculator semantics except ``precision`` and
-    ``target_accuracy``, which this facade owns. FP64 without an explicit target
+    ``target_accuracy``, which this facade owns. Standard (legacy alias: fp64)
+    without an explicit target
     runs once in FP64; native exact source reuse also benefits ordinary Calculator.
     Fast selects provisional FP32 J/full-range K through shared Direct-module
     capabilities, independently of XC identity; relaxed candidates keep FP64 forces.
@@ -505,7 +507,7 @@ class PrecisionCalculator:
         self._policy = policy
         self._lock = threading.RLock()
         self._options = {"method": method, "basis": basis, "device": device, **options}
-        if policy.profile in ("fp64", "fast"):
+        if policy.profile in ("standard", "fp64", "fast"):
             # A speed profile must not turn caller-supplied loose convergence
             # controls into an implicitly certified strict endpoint.
             for name, ceiling in (
@@ -693,7 +695,10 @@ class PrecisionCalculator:
         Audits suspend that plan with bounded host seed storage; later execution
         restores only its own seeds, never an auditor's density. Candidate batch
         timing is shared, not invented per-item or divided equally among items.
-        ``maximum_seed_bytes`` bounds numeric seed staging when an audit is needed.
+        Auditors may warm from their own same-geometry, same-control densities;
+        every audit still recomputes its observables. ``maximum_seed_bytes``
+        bounds combined candidate and auditor numeric seed staging. Optional
+        audit history is discarded when that bound cannot accommodate it.
         """
         from ._precision_batch import PreparedPrecisionBatch
 

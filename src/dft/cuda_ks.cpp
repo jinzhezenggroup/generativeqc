@@ -279,6 +279,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const scf::PreparedFockPlan* range_provider{};
   const AoBasis& basis;
   const MolecularGrid& grid;
+  const MolecularGrid& nonlocal_grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
   scf::PreparedCudaFockBinding range_fock_binding{};
@@ -303,7 +304,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   CudaXcLayout xc_layout;
   CudaKsResources resource;
   CudaKsTransfers movement;
-  void *arena{}, *xc_arena{}, *nonlocal_arena{};
+  void *arena{}, *xc_arena{}, *nonlocal_arena{}, *nonlocal_xc_arena{};
   std::size_t ks_arena_bytes{}, nonlocal_arena_bytes{};
   double *nonlocal_raw_density{}, *nonlocal_raw_gradient{}, *nonlocal_effective_weights{},
       *nonlocal_effective_density{}, *nonlocal_effective_gradient{}, *nonlocal_vrho{},
@@ -316,6 +317,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::string nonlocal_cache_schedule;
   nlc::Vv10CudaDeviceLayout nonlocal_layout{};
   std::unique_ptr<CudaXcPlan> xc;
+  std::unique_ptr<CudaXcPlan> nonlocal_xc;
+  CudaXcLayout nonlocal_xc_layout;
   CudaXcAoSelectionWork prepared_ao_work;
   std::uint64_t initial_xc_evaluations{};
   std::unique_ptr<OrdinaryStreamEigensolver> eigensolver;
@@ -340,11 +343,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool experimental_mixed_point{}, experimental_mixed_ao{}, pending_mixed_point{};
   bool experimental_mixed_history{};
   bool experimental_mixed_contractions{};
+  bool pending_mixed_contractions{};
   bool budget_fock{}, budget_stationarity{}, pending_mixed_exchange{}, pending_mixed_resident{};
   bool pending_mixed_range_exchange{}, pending_mixed_range_resident{}, pending_mixed_nonlocal{};
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
+  bool fast_anchor_eligible{}, fast_anchor_active{}, fast_anchor_ready{}, pending_fast_delta{};
+  void* fast_anchor_arena{};
+  double *fast_anchor_density{}, *fast_delta_density{}, *fast_anchor_j{}, *fast_anchor_exchange{},
+      *fast_anchor_range_exchange{}, *fast_delta_maximum{};
   unsigned incremental_energy_full_builds{};
   unsigned incremental_delta_updates{};
   double host_incremental_max_abs_delta_density{};
@@ -713,8 +721,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                   std::array<std::uint64_t, 2> nonlocal_arithmetic) {
     auto& work = output.precision_work;
     const bool mixed = pending_mixed_coulomb || pending_mixed_density || pending_mixed_point ||
-                       pending_mixed_range_resident || mixed_range_recurrences ||
-                       nonlocal_arithmetic[0];
+                       pending_mixed_contractions || pending_mixed_range_resident ||
+                       mixed_range_recurrences || nonlocal_arithmetic[0];
     const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
                              : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
                                                          : scf::PrecisionWorkPhase::Scf);
@@ -781,6 +789,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (pending_mixed_density)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                   scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
+      if (pending_mixed_contractions) {
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed, 1,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionDtype::Fp32,
+                                  scf::PrecisionDtype::Fp32);
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed, 1,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionDtype::Fp32);
+      }
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
@@ -979,7 +996,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     if (nonlocal_layout.workspace_bytes % sizeof(double))
       throw std::logic_error("resident VV10 workspace is not double-aligned");
-    const auto points = xc_layout.npoint;
+    const auto points = nonlocal_grid.point_count();
     const auto workspace_doubles = nonlocal_layout.workspace_bytes / sizeof(double);
     const auto doubles =
         sum(product(11, points), sum(workspace_doubles, nonlocal_cache_enabled ? 7U : 2U));
@@ -1186,6 +1203,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         range_provider(separate_range_provider),
         basis(basis),
         grid(grid),
+        nonlocal_grid(control.nonlocal_grid ? *control.nonlocal_grid : grid),
         options(control),
         grid_spec(grid.spec()),
         functional(functional),
@@ -1312,7 +1330,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (nonlocal_correlation &&
         (nonlocal_correlation->backend() != GENERATIVEQC_BACKEND_CUDA ||
          nonlocal_correlation->device_id() != device ||
-         nonlocal_correlation->resources().point_count != grid.point_count()))
+         nonlocal_correlation->resources().point_count != nonlocal_grid.point_count()))
       throw std::invalid_argument("CUDA KS nonlocal owner is incompatible with the grid or device");
     current_device();
     const auto resident_grid = grid.cuda_view();
@@ -1322,6 +1340,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
                                options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
+    if (options.nonlocal_grid)
+      nonlocal_xc_layout = cuda_xc_layout(
+          basis, nonlocal_grid, semilocal_family_code(SemilocalFamily::Pbe), spins == 2, tile,
+          CudaXcAoPrecision::Fp64, 0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
     const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
     if (application_precision) {
@@ -1419,6 +1441,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
+    fast_anchor_eligible = admit_fast_anchor_delta(
+        budget_fock, budget_stationarity, functional,
+        static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
+            has_range_correction && scf::direct_jk_incremental_exact_eligible(strategy) &&
+            range_incremental_eligible && !incremental_direct_jk,
+        spins,
+        nonlocal_correlation &&
+            nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10,
+        runtime::active_device_resource_ledger != nullptr, configured_chunk_width());
+    if (fast_anchor_eligible) {
+      if (const auto* selected = std::getenv("GENERATIVEQC_KS_FAST_ANCHOR_DELTA")) {
+        if (std::strcmp(selected, "0") != 0 && std::strcmp(selected, "1") != 0)
+          throw std::invalid_argument("Fast anchor delta accepts 0 or 1");
+        fast_anchor_eligible = std::strcmp(selected, "1") == 0;
+      } else {
+        fast_anchor_eligible = default_fast_anchor_delta(n);
+      }
+    }
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     // Automatic local-AO requests use the XC owner's execution capability.
@@ -1476,16 +1516,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Its negative-zero weight marks a screened row whose energy and AO
       // potential are discarded. Preserve active positive-zero/signed weights
       // while avoiding that row's otherwise unnecessary partner traversal.
-      nonlocal_layout =
-          nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
+      nonlocal_layout = nlc::vv10_cuda_device_layout(nonlocal_grid.point_count(),
+                                                     xc_layout.tile_points, true, false, true);
       const auto* cache_choice = std::getenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE");
       const auto parameters = nonlocal_correlation->parameters();
       // Complete endpoint controls qualify the exact component cache once
       // quadratic pair work dominates its linear ingredient comparison.
-      const bool cache_requested =
-          cache_choice ? std::string_view(cache_choice) == "1" : xc_layout.npoint >= 65536;
-      nonlocal_cache_enabled = cache_requested && xc_layout.npoint >= 3 &&
-                               xc_layout.npoint <= (std::uint64_t{1} << 32) &&
+      const bool cache_requested = cache_choice ? std::string_view(cache_choice) == "1"
+                                                : nonlocal_grid.point_count() >= 65536;
+      nonlocal_cache_enabled = cache_requested && nonlocal_grid.point_count() >= 3 &&
+                               nonlocal_grid.point_count() <= (std::uint64_t{1} << 32) &&
                                parameters.variant == nlc::Vv10Variant::vv10 &&
                                std::fabs(parameters.coefficient) <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
@@ -1570,6 +1610,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes,
               sum(eigensolver->host_bytes(), eigensolver->metadata_bytes()));
+      // Reserve the mandatory secondary transport before optional primary AO maps.
+      // A map allocation miss must still be able to retry the dense primary arena.
+      if (!host_unfused && options.nonlocal_grid)
+        check(runtime::resource_cuda_malloc(&nonlocal_xc_arena, nonlocal_xc_layout.device_bytes));
       if (resource.xc_device_bytes) {
         bool host_oom = false;
         auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
@@ -1605,8 +1649,38 @@ struct CudaKsPlan::Impl : KsStateStorage {
             basis, grid, functional, spins == 2, tile, xc_arena, resource.xc_device_bytes, stream,
             CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
             options.semilocal_correlation_scale, borrow_resident_grid);
+        if (options.nonlocal_grid) {
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, nonlocal_xc_layout.device_bytes);
+          resource.grid_device_bytes =
+              sum(resource.grid_device_bytes, nonlocal_grid.cuda_view().device_bytes);
+          resource.retained_host_numeric_bytes =
+              sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);
+          // VV10 needs only total rho/grad-rho and their GGA AO pullback. The
+          // qualified zero-scaled PBE transport supplies those without adding
+          // PBE energy or requiring WB97M-V component-scaling capability.
+          nonlocal_xc = std::make_unique<CudaXcPlan>(
+              basis, nonlocal_grid, semilocal_family_code(SemilocalFamily::Pbe), spins == 2, tile,
+              nonlocal_xc_arena, nonlocal_xc_layout.device_bytes, stream, CudaXcAoPrecision::Fp64,
+              0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
+        }
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
+        // Keep the canonical resident quadrature for grid-response forces.
+        // The optional semilocal execution copy changes only point order and
+        // is excluded under a public ledger until a fleet planner reserves it.
+        const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
+        // Unset selects the qualified spatial schedule; explicit 0 keeps the
+        // canonical execution order for diagnostics and paired comparisons.
+        if ((!spatial_choice || std::string_view(spatial_choice) == "1") && admit_ao &&
+            borrow_resident_grid && !nonlocal_correlation &&
+            !runtime::active_device_resource_ledger) {
+          const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
+          const auto host_bytes =
+              sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
+                                         sizeof(std::size_t)));
+          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes);
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
+        }
         if (admit_ao) {
           if (!xc->select_local_ao(1e-16, ao_map_host_budget,
                                    device_discovery ? CudaXcAoDiscovery::DeviceChunks
@@ -1617,6 +1691,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         const auto admitted_precision = resolve_cuda_ks_iteration_precision(
             precision_schedule, false,
             cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+        if (admitted_precision.uses_lower_precision(
+                cuda_ks_precision_region::kXcMatrixContractions) &&
+            cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout))
+          xc->prepare_mixed_matrix_contractions();
         // Host and device reservations must both precede optional preparation.
         // The lowering layer owns qualification and implementation selection.
         const auto density_budget =
@@ -1688,6 +1766,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         }
       }
       prepare_initial_state();
+      prepare_fast_anchor_storage();
     } catch (...) {
       cleanup();
       throw;
@@ -1708,12 +1787,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // retired lease drains even if diagnostic metadata cannot be allocated.
     }
     xc.reset();
+    nonlocal_xc.reset();
     eigensolver.reset();
     matrix_products.reset();
+    if (fast_anchor_arena) runtime::resource_cuda_free(fast_anchor_arena);
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
+    if (nonlocal_xc_arena) runtime::resource_cuda_free(nonlocal_xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
     nonlocal_arena = xc_arena = arena = nullptr;
+    nonlocal_xc_arena = nullptr;
+    fast_anchor_arena = nullptr;
     cudaSetDevice(previous);
   }
   ~Impl() { cleanup(); }
@@ -1770,6 +1854,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!precision_schedule.any_lower_precision() || budget_fock) && !incremental_direct_jk &&
         !use_warm && options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    fast_anchor_active = fast_anchor_arena && nonlocal_outer_active &&
+                         configured_chunk_width() == 1 && !runtime::active_device_resource_ledger;
+    fast_anchor_ready = pending_fast_delta = false;
+    if (fast_anchor_active) check(cudaMemsetAsync(fast_delta_maximum, 0, sizeof(double), stream));
     if (budget_fock && budget_stationarity) {
       // Finish one bounded mixed proposal before paying for the strict anchor.
       // Application budgets reject explicit warmup overrides at preparation;
@@ -1838,6 +1926,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_mixed_resident = false;
     pending_mixed_density = false;
     pending_mixed_point = false;
+    pending_mixed_contractions = false;
     mixed_precision_executed = false;
     final_corrections = 0;
     refinement_iterations = 0;
@@ -2043,18 +2132,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!device_nonlocal) {
       potential = xc->enqueue_replay_body(density, elements);
     } else {
-      potential = xc->enqueue_replay_density_features(density, elements, nonlocal_raw_density,
-                                                      nonlocal_raw_gradient);
-      const auto quadrature = xc->grid_view();
+      auto& nonlocal_source = nonlocal_xc ? *nonlocal_xc : *xc;
+      if (nonlocal_xc) potential = xc->enqueue_replay_body(density, elements);
+      const auto nonlocal_potential = nonlocal_source.enqueue_replay_density_features(
+          density, elements, nonlocal_raw_density, nonlocal_raw_gradient);
+      if (!nonlocal_xc) potential = nonlocal_potential;
+      const auto quadrature = nonlocal_source.grid_view();
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
-            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
-            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
-            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+            stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
+            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_domain_error);
       });
       enqueue_nonlocal_pairs(quadrature.points);
-      xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
-                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_energy);
+      nonlocal_source.enqueue_replay_nonlocal_potential(nonlocal_effective_weights,
+                                                        nonlocal_effective_gradient, nonlocal_vrho,
+                                                        nonlocal_vsigma, nonlocal_energy);
+      if (nonlocal_xc) merge_grid_views(potential, nonlocal_potential);
     }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
@@ -2129,6 +2224,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       for (unsigned slot = 0; slot < pending_iterations; ++slot) {
         const auto submitted_generation = ++generation;
         xc->publish_submitted_generation(submitted_generation);
+        if (nonlocal_xc) nonlocal_xc->publish_submitted_generation(submitted_generation);
         pending_generations[slot] = submitted_generation;
       }
     } catch (...) {
@@ -2422,7 +2518,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule &&
           nonlocal_cache_mixed == mixed_pair_arithmetic) {
         nlc::enqueue_vv10_force_key_compare_cuda(
-            stream, xc_layout.npoint, nonlocal_correlation->parameters(),
+            stream, nonlocal_grid.point_count(), nonlocal_correlation->parameters(),
             nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
             nonlocal_workspace, nonlocal_domain_error, nonlocal_pair_error,
             nonlocal_cache_mismatch);
@@ -2442,14 +2538,32 @@ struct CudaKsPlan::Impl : KsStateStorage {
     });
     if (nonlocal_cache_enabled) {
       run_resident_nonlocal_cuda([&] {
-        nlc::enqueue_vv10_store_force_key_cuda(stream, xc_layout.npoint, nonlocal_effective_density,
-                                               nonlocal_workspace, nonlocal_domain_error,
-                                               nonlocal_domain_error, nonlocal_pair_error);
+        nlc::enqueue_vv10_store_force_key_cuda(
+            stream, nonlocal_grid.point_count(), nonlocal_effective_density, nonlocal_workspace,
+            nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
       });
       nonlocal_cache_schedule = schedule;
       nonlocal_cache_mixed = mixed_pair_arithmetic;
       nonlocal_cache_ready = true;
     }
+  }
+
+  /** Both views belong exclusively to this owner and the same ordered stream.
+   * Only E/V are additive: electron-count diagnostics retain the XC rule. */
+  void merge_grid_views(const CudaXcView& semilocal, const CudaXcView& nonlocal) {
+    if (semilocal.stream != stream || nonlocal.stream != stream || semilocal.nao != n ||
+        nonlocal.nao != n || semilocal.spins != spins || nonlocal.spins != spins)
+      throw std::logic_error("independent quadrature views do not share the KS frame");
+    cuda_ks_detail::merge_grid_contributions(
+        stream, elements, const_cast<double*>(semilocal.potential),
+        const_cast<double*>(semilocal.totals), const_cast<int*>(semilocal.error),
+        nonlocal.potential, nonlocal.totals, nonlocal.error);
+    check(cudaGetLastError());
+  }
+
+  void merge_nonlocal_grid(std::uint64_t next_generation) {
+    if (nonlocal_xc)
+      merge_grid_views(xc->view(next_generation), nonlocal_xc->view(next_generation));
   }
 
   CudaXcView stage_xc(std::uint64_t next_generation,
@@ -2464,27 +2578,31 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
       // in opt-in diagnostics. Disabled tracing adds no events or fences.
+      auto& nonlocal_source = nonlocal_xc ? *nonlocal_xc : *xc;
+      if (nonlocal_xc) xc->enqueue(density, elements, next_generation, phase);
       runtime::cuda_trace::trace_call("semilocal_density_features", stream, [&] {
-        xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
-                                     nonlocal_raw_gradient);
+        nonlocal_source.enqueue_density_features(
+            density, elements, next_generation, nonlocal_raw_density, nonlocal_raw_gradient, phase);
       });
-      const auto quadrature = xc->grid_view();
+      const auto quadrature = nonlocal_source.grid_view();
       if (nonlocal_frozen_stage) {
         // Keep the anchor gradient, screening mask and scalar pair derivatives
         // together: their AO assembly is precisely V_nlc[D_anchor]. Only raw
         // current-density features above are overwritten by this inner step.
         // Its energy is provisional and can never satisfy the target gate.
-        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                       nonlocal_energy);
+        nonlocal_source.enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                                   nonlocal_effective_gradient, nonlocal_vrho,
+                                                   nonlocal_vsigma, nonlocal_energy);
+        merge_nonlocal_grid(next_generation);
         return xc->view(next_generation);
       }
       runtime::cuda_trace::TraceRegion domain_trace("nonlocal_density_domain", stream);
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
-            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
-            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
-            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+            stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
+            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_domain_error);
       });
       domain_trace.finish();
       runtime::cuda_trace::TraceRegion pair_trace("nonlocal_pair_features", stream);
@@ -2493,10 +2611,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
           phase == generativeqc::runtime::PrecisionPhase::Admitted && pending_mixed_nonlocal);
       pair_trace.finish();
       runtime::cuda_trace::trace_call("nonlocal_ao_potential", stream, [&] {
-        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                       nonlocal_energy);
+        nonlocal_source.enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                                   nonlocal_effective_gradient, nonlocal_vrho,
+                                                   nonlocal_vsigma, nonlocal_energy);
       });
+      merge_nonlocal_grid(next_generation);
       return xc->view(next_generation);
     }
     const auto bytes = elements * sizeof(double);
@@ -2518,7 +2637,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       host_xc_totals = {value.energy, 0.5 * value.electrons, 0.5 * value.electrons};
       if (nonlocal_correlation) {
         const auto nonlocal =
-            nlc::integrate_vv10_rks(basis, grid, host_xc_density, *nonlocal_correlation,
+            nlc::integrate_vv10_rks(basis, nonlocal_grid, host_xc_density, *nonlocal_correlation,
                                     xc_layout.tile_points, {}, nonlocal_domain);
         if (nonlocal.potential.size() != matrix)
           throw std::runtime_error("host-unfused RKS nonlocal potential size changed");
@@ -2541,8 +2660,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       host_xc_totals = {value.energy, value.electrons[0], value.electrons[1]};
       if (nonlocal_correlation) {
         const auto nonlocal =
-            nlc::integrate_vv10_uks(basis, grid, host_xc_alpha, host_xc_beta, *nonlocal_correlation,
-                                    xc_layout.tile_points, nonlocal_domain);
+            nlc::integrate_vv10_uks(basis, nonlocal_grid, host_xc_alpha, host_xc_beta,
+                                    *nonlocal_correlation, xc_layout.tile_points, nonlocal_domain);
         if (nonlocal.potential[0].size() != matrix || nonlocal.potential[1].size() != matrix)
           throw std::runtime_error("host-unfused UKS nonlocal potential size changed");
         for (std::size_t i = 0; i < matrix; ++i) {
@@ -2560,6 +2679,95 @@ struct CudaKsPlan::Impl : KsStateStorage {
                           cudaMemcpyHostToDevice, stream));
     movement.xc_host_h2d_bytes += bytes + sizeof(host_xc_totals) + sizeof(host_xc_error);
     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
+  }
+
+  /** Allocate only after mandatory preparation. Refusing this optional lease
+   * must retain the ordinary Fast solve, not turn memory pressure into a new
+   * endpoint failure. A host reservation or non-allocation error still fails. */
+  void prepare_fast_anchor_storage() {
+    if (!fast_anchor_eligible) return;
+    const auto bytes = sum(product(matrix, 5 * sizeof(double)), sizeof(double));
+    bool host_oom = false;
+    const auto status = runtime::resource_cuda_malloc(&fast_anchor_arena, bytes, &host_oom);
+    if (status == cudaErrorMemoryAllocation && !host_oom) {
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+      fast_anchor_eligible = false;
+      ++movement.fast_anchor_allocation_fallbacks;
+      return;
+    }
+    check(status);
+    auto* storage = static_cast<double*>(fast_anchor_arena);
+    fast_anchor_density = storage;
+    fast_delta_density = storage + matrix;
+    fast_anchor_j = storage + 2 * matrix;
+    fast_anchor_exchange = storage + 3 * matrix;
+    fast_anchor_range_exchange = storage + 4 * matrix;
+    fast_delta_maximum = storage + 5 * matrix;
+    resource.state_device_bytes = sum(resource.state_device_bytes, bytes);
+  }
+
+  /** The idle force consumer never borrows the optional cold-SCF anchor.
+   * Release it only after the producer stream is drained. A later cold solve
+   * keeps the ordinary Fast path; cumulative execution evidence is unchanged. */
+  std::size_t retire_fast_anchor_storage() {
+    if (!fast_anchor_arena) return 0;
+    const auto bytes = sum(product(matrix, 5 * sizeof(double)), sizeof(double));
+    check(runtime::resource_cuda_free(fast_anchor_arena));
+    fast_anchor_arena = nullptr;
+    fast_anchor_density = fast_delta_density = fast_anchor_j = fast_anchor_exchange =
+        fast_anchor_range_exchange = fast_delta_maximum = nullptr;
+    fast_anchor_eligible = fast_anchor_active = fast_anchor_ready = pending_fast_delta = false;
+    resource.state_device_bytes -= bytes;
+    return bytes;
+  }
+
+  /** Reconstruct linear operators from one fixed strict anchor. Full targets
+   * always refresh FP64 J/K; nonlinear XC continues to consume total density.
+   * Keeping the anchor fixed avoids chaining screened or rounded updates. */
+  const double* prepare_fast_anchor_jk_density() {
+    pending_fast_delta =
+        fast_anchor_ready && !final_closure && (nonlocal_seed_stage || nonlocal_frozen_stage);
+    if (!pending_fast_delta) {
+      pending_mixed_coulomb = pending_mixed_exchange = pending_mixed_range_exchange = false;
+      return density;
+    }
+    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
+    launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, elements, density,
+                                              fast_anchor_density, fast_delta_density,
+                                              fast_delta_maximum);
+    check(cudaGetLastError());
+    return fast_delta_density;
+  }
+
+  void finalize_fast_anchor_jk_components() {
+    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
+    if (pending_fast_delta) {
+      launch_add_matrix_kernel(blocks, 128, 0, stream, matrix, fast_anchor_j, j);
+      launch_add_matrix_kernel(blocks, 128, 0, stream, elements, fast_anchor_exchange, exchange);
+      launch_add_matrix_kernel(blocks, 128, 0, stream, elements, fast_anchor_range_exchange,
+                               range_exchange);
+    } else {
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, density, fast_anchor_density);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, matrix, j, fast_anchor_j);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, exchange, fast_anchor_exchange);
+      launch_copy_matrix_kernel(blocks, 128, 0, stream, elements, range_exchange,
+                                fast_anchor_range_exchange);
+    }
+    check(cudaGetLastError());
+  }
+
+  /** Enqueued copies are not accepted anchors until physical validation
+   * succeeds. A failed attempt must not lend stale buffers to the next one. */
+  void finish_fast_anchor_iteration() {
+    if (!fast_anchor_active) return;
+    fast_anchor_ready = !is_failed;
+    if (is_failed)
+      ++movement.fast_anchor_invalidations;
+    else if (pending_fast_delta)
+      ++movement.fast_delta_builds;
+    else
+      ++movement.fast_anchor_builds;
   }
 
   bool incremental_delta_admitted() const noexcept {
@@ -2592,6 +2800,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   const double* prepare_incremental_jk_density() {
+    if (fast_anchor_active) return prepare_fast_anchor_jk_density();
     pending_incremental_delta = false;
     if (!incremental_direct_jk) return density;
     pending_incremental_delta = incremental_delta_admitted();
@@ -2624,6 +2833,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   void finalize_incremental_jk_components() {
+    if (fast_anchor_active) {
+      finalize_fast_anchor_jk_components();
+      return;
+    }
     if (!incremental_direct_jk || final_closure) return;
     const auto matrix_blocks = static_cast<unsigned>((matrix + 127) / 128);
     const auto element_blocks = static_cast<unsigned>((elements + 127) / 128);
@@ -2693,6 +2906,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               stream));
       pending_mixed_point =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kXcPointAlgebra);
+      pending_mixed_contractions = xc && prepared_ao_work.point_ao_visits != 0 &&
+                                   iteration_precision.uses_lower_precision(
+                                       cuda_ks_precision_region::kXcMatrixContractions) &&
+                                   cuda_xc_detail::mixed_matrix_contractions_supported(xc_layout);
       const auto density_phase = strict_refinement
                                      ? generativeqc::runtime::PrecisionPhase::StrictAudit
                                      : generativeqc::runtime::PrecisionPhase::Admitted;
@@ -2771,7 +2988,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       jk_trace.finish();
       mixed_precision_executed = mixed_precision_executed || pending_mixed_coulomb ||
                                  pending_mixed_density || pending_mixed_point ||
-                                 pending_mixed_range_exchange || pending_mixed_nonlocal;
+                                 pending_mixed_contractions || pending_mixed_range_exchange ||
+                                 pending_mixed_nonlocal;
       pending_nonlocal_seed = nonlocal_seed_stage;
       pending_nonlocal_frozen = nonlocal_frozen_stage;
       runtime::cuda_trace::TraceRegion xc_trace("ks_xc", stream);
@@ -2927,7 +3145,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           nonlocal_cache_enabled ? nonlocal_work[2] : nonlocal_exact_iterations};
     const bool completed_mixed = pending_mixed_coulomb || pending_mixed_density ||
                                  pending_mixed_point || pending_mixed_range_resident ||
-                                 mixed_range_recurrences || nonlocal_arithmetic[0];
+                                 pending_mixed_contractions || mixed_range_recurrences ||
+                                 nonlocal_arithmetic[0];
     if (completed_mixed)
       ++output.precision.mixed_stage_fock_builds;
     else
@@ -2969,12 +3188,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
     for (unsigned s = 0; s < 2; ++s)
       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
+    finish_fast_anchor_iteration();
     if (!is_failed && incremental_direct_jk && pending_incremental_delta)
       ++output.incremental_direct_jk.anchor_updates;
     if (is_failed) {
       pending_incremental_delta = false;
       if (pending_mixed_coulomb || pending_mixed_density || pending_mixed_point ||
-          pending_mixed_range_exchange || pending_mixed_nonlocal) {
+          pending_mixed_contractions || pending_mixed_range_exchange || pending_mixed_nonlocal) {
         // Any failed low-precision attempt retries the same density with the
         // strict target operator. Do not publish or cache the failed proposal.
         ++output.precision.execution_retries;
@@ -3284,6 +3504,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (nonlocal_correlation) {
       identity.model.nonlocal_correlation = nonlocal_correlation->parameters();
       identity.model.nonlocal_density_domain = nonlocal_domain;
+      identity.model.nonlocal_grid = options.nonlocal_grid_spec;
     }
     // A snapshot must describe the same XC composition that built its Fock matrix.
     identity.model.semilocal_exchange_scale = options.semilocal_exchange_scale;
@@ -3962,7 +4183,9 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
   }
   try {
     const auto& layout = impl_->xc->layout();
-    const auto grid = impl_->xc->grid_view();
+    // SCF may integrate a private exact permutation. Derivative ownership and
+    // atomic measures use the retained canonical order, authenticated below.
+    const auto grid = impl_->xc->canonical_grid_view();
     CudaKsResidentGridBinding candidate{frame.device_id,   impl_->xc->packed_basis(),
                                         grid.points,       grid.weights,
                                         frame.density,     layout.natom,
@@ -3977,13 +4200,15 @@ generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken&
     if (quadrature) {
       if (quadrature.device != frame.device_id || quadrature.points != grid.points ||
           quadrature.weights != grid.weights || quadrature.point_count != grid.point_count)
-        throw std::logic_error("CUDA KS moving-grid source is not its actual XC quadrature");
+        throw std::logic_error("CUDA KS moving-grid source is not its canonical XC quadrature");
       const auto& spec = impl_->grid.spec();
       candidate.atomic_weights = quadrature.atomic_weights;
-      candidate.points_per_atom = spec.radial_points * spec.angular_polar * spec.angular_azimuth;
+      candidate.points_per_atom = spec.version == 4 ? 0 : grid_points_per_atom(spec);
       candidate.partition_iterations = spec.partition_iterations;
       candidate.coincident_tolerance = spec.coincident_tolerance;
       candidate.quadrature_owner = quadrature.owner;
+      candidate.atom_offsets = quadrature.atom_offsets;
+      candidate.atomic_radii = quadrature.atomic_radii;
     }
     binding = candidate;
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -4033,12 +4258,13 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
         impl_->generation - impl_->final_generation < kCudaKsChunkCapacity;
     if (!exact_generation && !bounded_terminal_overwrite)
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
-    if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
+    if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient ||
+        !impl_->nonlocal_grid.point_count())
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
     binding = {impl_->device,
                impl_->nonlocal_raw_density,
                impl_->nonlocal_raw_gradient,
-               impl_->xc_layout.npoint,
+               impl_->nonlocal_grid.point_count(),
                reinterpret_cast<void*>(impl_->stream),
                impl_->owner,
                impl_->solve_epoch,
@@ -4240,15 +4466,22 @@ generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken
     std::size_t free_before{}, free_after{}, total{}, retired{};
     check(cudaMemGetInfo(&free_before, &total));
     free_after = free_before;
-    if (additional_device_bytes > free_before && impl_->phase_source) {
+    if (additional_device_bytes > free_before &&
+        (impl_->fast_anchor_arena || impl_->phase_source)) {
       // The final-state token excludes active/pending SCF work. Drain its
-      // producer before invalidating graph borrowers and freeing immutable ERIs;
-      // downstream D/W/XC leases do not borrow this independently owned source.
+      // producer before freeing optional cold-SCF storage. Downstream D/W/XC
+      // leases borrow neither the anchor nor the independently owned ERIs.
       check(cudaStreamSynchronize(impl_->stream));
       ++impl_->movement.synchronizations;
-      retired = impl_->phase_device_bytes;
-      impl_->retire_phase_source(false);  // Successful SCF already audited it.
-      check(cudaMemGetInfo(&free_after, &total));
+      if (impl_->fast_anchor_arena) {
+        retired = impl_->retire_fast_anchor_storage();
+        check(cudaMemGetInfo(&free_after, &total));
+      }
+      if (additional_device_bytes > free_after && impl_->phase_source) {
+        retired += impl_->phase_device_bytes;
+        impl_->retire_phase_source(false);  // Successful SCF already audited it.
+        check(cudaMemGetInfo(&free_after, &total));
+      }
     }
     receipt = {additional_device_bytes, free_before, free_after, retired};
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -4287,6 +4520,11 @@ CudaKsTransfers CudaKsPlan::transfers() const noexcept {
     const auto& xc = impl_->xc->transfers();
     out.setup_h2d_bytes += xc.setup_h2d_bytes;
     out.synchronizations += xc.synchronizations;
+  }
+  if (impl_->nonlocal_xc) {
+    const auto& nonlocal = impl_->nonlocal_xc->transfers();
+    out.setup_h2d_bytes += nonlocal.setup_h2d_bytes;
+    out.synchronizations += nonlocal.synchronizations;
   }
   return out;
 }

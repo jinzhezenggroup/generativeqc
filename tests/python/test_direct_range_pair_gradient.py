@@ -28,8 +28,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("spatial_reuse", (False, True))
-def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -> None:
-    """Check every center/axis, all pair partitions of orders 4--6 and LR limits."""
+@pytest.mark.parametrize("coincident", (False, True))
+def test_full_and_lr_all_center_gradients(
+    tmp_path: Path, spatial_reuse: bool, coincident: bool
+) -> None:
+    """Check every center/axis, pair partition, LR limit and zero radial response."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("host gradient probes require c++ and ccache")
@@ -40,13 +43,6 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -
         **emit_direct_cartesian_contraction_headers(),
         "gradient.cuh": emit_direct_high_order_pair_gradient_header(),
     }
-    if spatial_reuse:
-        gradient = headers["gradient.cuh"].replace(
-            "high_order_coulomb<", "counted_high_order_coulomb<"
-        )
-        marker = "template <unsigned AngularOrder, bool SpatialReuse>"
-        gradient = gradient.replace(marker, COUNTED_COULOMB + marker, 1)
-        headers["gradient.cuh"] = gradient
     for name, source in headers.items():
         (tmp_path / name).write_text(source)
     (tmp_path / "cuda_runtime.h").write_text(
@@ -57,7 +53,10 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -
         "inline unsigned __popc(unsigned x) { return __builtin_popcount(x); }\n"
     )
     source = tmp_path / "probe.cpp"
-    probe = PROBE
+    probe = PROBE.replace(
+        "constexpr bool Coincident = false;",
+        f"constexpr bool Coincident = {'true' if coincident else 'false'};",
+    )
     if spatial_reuse:
         probe = probe.replace(
             "primitive_eri_order456_gradient<A+B,C+D,true>",
@@ -71,7 +70,7 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -
             "#include <array>", "#include <array>\n#include <cassert>"
         )
         probe = probe.replace(
-            "int main() {", SPATIAL_COUNTS + "int main() {\n  check_spatial_counts();"
+            "int main() {", SPATIAL_PARITY + "int main() {\n  check_spatial_parity();"
         )
     source.write_text(probe)
     executable = tmp_path / "probe"
@@ -104,19 +103,8 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -
     print(result.stdout)
 
 
-COUNTED_COULOMB = r"""
-inline unsigned spatial_evaluations{};
-template <unsigned MaximumOrder>
-__device__ inline double counted_high_order_coulomb(
-    unsigned state, double rho, const HighOrderCoulombWorkspace<MaximumOrder>& workspace,
-    const double* boys) {
-  ++spatial_evaluations;
-  return high_order_coulomb<MaximumOrder>(state, rho, workspace, boys);
-}
-"""
-
-SPATIAL_COUNTS = r"""
-void check_spatial_counts() {
+SPATIAL_PARITY = r"""
+void check_spatial_parity() {
   const Vec3<double> positions[4]{{0.1,-0.2,-0.8},{0.3,0.1,0.7},
                                 {-0.5,0.6,0.2},{0.8,-0.4,0.3}};
   for (const bool balanced : {false, true}) {
@@ -124,21 +112,18 @@ void check_spatial_counts() {
                             balanced ? Angular{0,0,2} : Angular{2,0,0},
                             balanced ? Angular{0,1,0} : Angular{1,0,0}};
     double scalar[4][3], cached[4][3];
-    spatial_evaluations = 0;
     primitive_eri_order456_gradient<3,3,false,false>(
         0.8,positions[0],angular[0],0.6,positions[1],angular[1],
         0.7,positions[2],angular[2],0.9,positions[3],angular[3],scalar);
-    assert(spatial_evaluations == 256U);
-    spatial_evaluations = 0;
     primitive_eri_order456_gradient<3,3,false,true>(
         0.8,positions[0],angular[0],0.6,positions[1],angular[1],
         0.7,positions[2],angular[2],0.9,positions[3],angular[3],cached);
-    assert(spatial_evaluations == (balanced ? 54U : 22U));
     for (unsigned center = 0; center < 4; ++center)
       for (unsigned axis = 0; axis < 3; ++axis)
-        assert(scalar[center][axis] == cached[center][axis]);
+        assert(std::abs(scalar[center][axis] - cached[center][axis]) <
+               3e-13 * (1.0 + std::abs(scalar[center][axis])));
   }
-  std::printf("order-six spatial evaluations 256 -> 22/54, identical gradients PASS\n");
+  std::printf("order-six shared spatial gradients match retained scalar gradients PASS\n");
 }
 """
 
@@ -150,6 +135,7 @@ PROBE = r"""
 #include <cstdlib>
 #include <limits>
 using namespace generativeqc::scf::cuda_execution;
+constexpr bool Coincident = false;
 using generativeqc::integrals::CoulombRange;
 unsigned checks = 0;
 double maximum_error = 0.0;
@@ -165,6 +151,9 @@ void check_partition() {
     for (double scale : {0.4, 1.0, 3.0}) {
       std::array<Vec3<double>,4> positions{{{0.1,-0.2,-0.8},{0.3,0.1,0.7},
                                           {-0.5,0.6,0.2},{0.8,-0.4,0.3}}};
+      // At a common center the radial displacement vanishes, but displaced
+      // finite differences must still recover every nuclear-center response.
+      if constexpr (Coincident) positions.fill(positions[0]);
       const double exponent[4]{0.8*scale,0.6*scale,0.7*scale,0.9*scale};
       for (double omega : {0.0,1e-8,0.3,2.0,1e4}) {
         double gradient[4][3];

@@ -380,15 +380,18 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             )
     lines += [
         "",
-        "The [measurement report](README.md) describes the protocol and unsuccessful",
-        "points; "
-        + (
-            "[df-summary.json.xz](df-summary.json.xz)"
-            if summary.get("density_fitting")
-            else "[summary.json.xz](summary.json.xz)"
-        )
-        + " retains all scalar observations,",
-        "residuals, errors and independent cold/moved reference forces.",
+        summary.get(
+            "evidence_note",
+            "The [measurement report](README.md) describes the protocol and unsuccessful\n"
+            "points; "
+            + (
+                "[df-summary.json.xz](df-summary.json.xz)"
+                if summary.get("density_fitting")
+                else "[summary.json.xz](summary.json.xz)"
+            )
+            + " retains all scalar observations,\n"
+            "residuals, errors and independent cold/moved reference forces.",
+        ),
         "",
     ]
     (

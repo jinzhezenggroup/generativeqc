@@ -9,12 +9,12 @@ all graph/implicit waits or manufacture D2H-to-H2D host-transform links.
 from __future__ import annotations
 
 import ctypes
-import os
 from typing import TYPE_CHECKING, Any
 
 from tools.audit_replay_allocations import _integer, _require
 from tools.cupti_graph_inventory import GraphInventory
 from tools.cupti_residency_capture import summarize
+from tools.residency_allocation import require_cupti_allocation
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -110,8 +110,17 @@ class SourceInventory:
         capacity: int = 1 << 18,
         node_limit: int = 4096,
         depth_limit: int = 16,
+        native_library: Path | None = None,
+        qz_receipt: Path | None = None,
+        qz_receipt_sha256: str | None = None,
     ) -> None:
-        _require(bool(os.environ.get("SLURM_JOB_ID")), "source capture requires Slurm")
+        require_cupti_allocation(
+            path,
+            native_library=native_library,
+            qz_receipt=qz_receipt,
+            qz_receipt_sha256=qz_receipt_sha256,
+            native=native,
+        )
         _require(
             type(capacity) is int and 1 <= capacity <= 1 << 20,
             "invalid source capacity",
@@ -147,6 +156,9 @@ class SourceInventory:
             node_limit=node_limit,
             depth_limit=depth_limit,
             callback_name="generativeqc_cupti_residency_observe_v1",
+            native_library=native_library,
+            qz_receipt=qz_receipt,
+            qz_receipt_sha256=qz_receipt_sha256,
         )
         self.stopped = False
 

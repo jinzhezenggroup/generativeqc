@@ -469,18 +469,6 @@ if(GENERATIVEQC_BUILD_CLI)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
                  src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp
                  src/cli/resources.cpp src/cli/hessian.cpp)
-  set(GENERATIVEQC_CLI_BASIS_HEADER
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
-  generativeqc_register_generated_sources(
-    NAME generativeqc_cli_basis_codegen
-    TARGET generativeqc_cli
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_basis_pack.py"
-    OUTPUTS "${GENERATIVEQC_CLI_BASIS_HEADER}"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
-    ARGS
-      --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
-      --output "${GENERATIVEQC_CLI_BASIS_HEADER}"
-    COMMENT "Generating Python-free CLI basis catalog")
   generativeqc_link_cli_core(generativeqc_cli)
   if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
     target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)
@@ -645,6 +633,12 @@ install(TARGETS generativeqc
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+# The native library embeds the BSE-derived catalog even without the CLI.
+install(FILES LICENSES/bse-data-BSD-3-Clause.txt
+              LICENSES/gpu4pyscf-Apache-2.0.txt
+              LICENSES/pyscf-Apache-2.0.txt
+              LICENSES/pyscf-NOTICE.txt
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   if(GENERATIVEQC_PYTHON_WHEEL AND DEFINED SKBUILD_SCRIPTS_DIR)
@@ -653,9 +647,7 @@ if(GENERATIVEQC_BUILD_CLI)
     install(TARGETS generativeqc_wheel_launcher
       RUNTIME DESTINATION "${SKBUILD_SCRIPTS_DIR}")
   endif()
-  # The CLI embeds the BSE-derived Gaussian basis catalog in its binary.
-  install(FILES LICENSES/bse-data-BSD-3-Clause.txt
-                LICENSES/nlohmann-json-MIT.txt
+  install(FILES LICENSES/nlohmann-json-MIT.txt
           DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

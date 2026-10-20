@@ -47,6 +47,7 @@ _NATIVE_CPU_CASES = {
     "flip": lambda x: xp.flip(x),
     "roll": lambda x: xp.roll(x, 1, axis=-1),
     "repeat": lambda x: xp.repeat(x, 2, axis=-1),
+    "tile": lambda x: xp.tile(x, (2, 3)),
     "matrix_transpose": xp.matrix_transpose,
     "slice": lambda x: xp.slice(x, ((0, 1), (0, 3))),
     "take": lambda x: xp.take(x, (1, 0), axis=0),
@@ -84,7 +85,9 @@ def test_coverage_distinguishes_boolean_data_and_reference_execution() -> None:
     assert matrix["equal"]["ad"] == "non-differentiable"
     assert matrix["sum"]["audited_keywords"]["keepdims"] == "generic-arrays-only"
     assert matrix["astype"]["audited_keywords"]["device"] == "None-only"
-    assert matrix["where"]["ad"] == "unsupported; forward-reference-only"
+    assert matrix["where"]["ad"] == (
+        "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in"
+    )
     assert matrix["where"]["native_cpu"] is True
     assert matrix["where"]["native_cpu_dtypes"] == ("float64",)
     for name, operation in matrix.items():

@@ -576,6 +576,32 @@ typedef struct generativeqc_atom {
   double z;
 } generativeqc_atom;
 
+/** Named AOT basis input. name/checksum are byte-counted without a required NUL.
+ * expected_pack_checksum is optional (count0), or the canonical JSON SHA256
+ * (count64). Query reads atom identities, not coordinates. Expansion admission
+ * covers only detached raw basis buffers, not complete normalized system memory. */
+typedef struct generativeqc_builtin_basis_descriptor_v1 {
+  uint32_t struct_size, abi_version;
+  const char* name;
+  uint64_t name_count;
+  const generativeqc_atom* atoms;
+  uint64_t atom_count;
+  generativeqc_basis_representation representation;
+  int32_t charge;
+  uint32_t multiplicity, reserved;
+  uint64_t maximum_expansion_bytes;
+  const char* expected_pack_checksum;
+  uint64_t expected_pack_checksum_count;
+} generativeqc_builtin_basis_descriptor_v1;
+
+/** Query publication. Names/checksum borrow immutable loaded-library storage. */
+typedef struct generativeqc_builtin_basis_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t shell_count, primitive_count, ao_count, expansion_bytes;
+  const char* canonical_name;
+  const char* pack_checksum;
+} generativeqc_builtin_basis_capacity_v1;
+
 typedef struct generativeqc_primitive {
   double exponent;
   double coefficient;
@@ -642,7 +668,12 @@ typedef struct generativeqc_ks_options {
   const char* scf_domain;
   /** Grid contract version. Version 1 is the deterministic reference
    * prescription with unit-radius fallback. Version 2 is a fully resolved
-   * production prescription with sourced element radii. */
+   * production prescription with sourced element radii. Version 3 requires
+   * explicit element radii and uses radial-v1 angular pruning: for radial rank
+   * u=(index+1/2)/radial_points, full orders on [1/3,3/4], half outside,
+   * quarter for u<1/5 or u>6/7,
+   * with orders rounded up and at least three azimuth points. Its maximum
+   * angular orders are 128 polar and 512 azimuth. No density pruning is implied. */
   uint32_t grid_version;
   uint32_t radial_points;
   uint32_t angular_polar;
@@ -2123,6 +2154,74 @@ GENERATIVEQC_API const char* generativeqc_context_get_last_detail(
  */
 GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_context* context);
 
+/** One general contraction template, independent of its eventual atom mapping.
+ * The primitive_count exponents starting at exponent_offset are shared by contraction_count rows
+ * of the row-major coefficients matrix starting at coefficient_offset. Offsets
+ * and counts refer to the corresponding arrays in the enclosing v1 descriptor.
+ * Coefficients multiply normalized primitives; zeros and row order are retained.
+ * This fixed v1 record has no implicit ABI prefix or representation conversion.
+ */
+typedef struct generativeqc_basis_shell_template_v1 {
+  uint32_t angular_momentum;
+  uint32_t exponent_offset;
+  uint32_t primitive_count;
+  uint32_t coefficient_offset;
+  uint32_t contraction_count;
+} generativeqc_basis_shell_template_v1;
+
+/** One uncontracted scalar ECP radial term before atom/local-channel mapping.
+ * angular_momentum is the nonnegative source channel, not the -1 local marker:
+ * the largest channel in an element's complete term range is its local residual.
+ * The term represents coefficient*r^(power-2)*exp(-exponent*r^2), with positive
+ * exponent. Existing scalar ECP execution limits and charge bookkeeping apply.
+ */
+typedef struct generativeqc_basis_ecp_template_v1 {
+  uint32_t angular_momentum;
+  uint32_t power;
+  double exponent;
+  double coefficient;
+} generativeqc_basis_ecp_template_v1;
+
+/** Unique element template; atomic_number is the physical nuclear charge.
+ * shell_offset/shell_count and ecp_term_offset/ecp_term_count select contiguous
+ * ranges in the enclosing descriptor. Every element has at least one shell.
+ * ECP core/term data appear together and leave a positive effective ionic charge;
+ * all-electron records use zero core, zero terms. Shared source ranges are allowed.
+ */
+typedef struct generativeqc_basis_element_template_v1 {
+  int32_t atomic_number;
+  int32_t ecp_core_electrons;
+  uint32_t shell_offset;
+  uint32_t shell_count;
+  uint32_t ecp_term_offset;
+  uint32_t ecp_term_count;
+} generativeqc_basis_element_template_v1;
+
+/** Borrowed, element-local basis data; it does not authorize scientific execution.
+ * Initialize struct_size/abi_version and every pointer/count pair. elements are
+ * unique Z=1..118 records; shells, exponents and coefficients are nonempty arrays.
+ * ecp_terms may be NULL only with zero ecp_term_count. All values, ranges, positive
+ * exponents and nonzero contraction rows are checked. The fixed v1 subrecords
+ * remain immutable for the synchronous call; no input storage is retained.
+ * No canonical JSON/source provenance is inferred from FP64 arrays: callers keep
+ * their own offline immutable data/provenance and select representation in the
+ * system descriptor. General rows expand without changing their coefficients.
+ */
+typedef struct generativeqc_basis_template_descriptor_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  const generativeqc_basis_element_template_v1* elements;
+  uint32_t element_count;
+  const generativeqc_basis_shell_template_v1* shells;
+  uint32_t shell_count;
+  const double* exponents;
+  uint32_t exponent_count;
+  const double* coefficients;
+  uint32_t coefficient_count;
+  const generativeqc_basis_ecp_template_v1* ecp_terms;
+  uint32_t ecp_term_count;
+} generativeqc_basis_template_descriptor_v1;
+
 /** Create a system from atom, geometry and basis descriptors in atomic units.
  * Prepared consumers retain their context; this system owns its copied data.
  */
@@ -2150,6 +2249,127 @@ GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_
 GENERATIVEQC_API generativeqc_status generativeqc_system_create(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system);
+/** @native-contract generativeqc_bundled_basis_catalog_sha256
+ * @behavior Query the canonical-JSON SHA-256 of the compiled bundled basis source pack.
+ * @outputs Returns a nonnull, lowercase 64-digit NUL-terminated checksum, not a method
+ * capability or a checksum of normalized geometry-dependent basis data.
+ * @lifetime Borrows immutable library storage; valid until the library is unloaded.
+ * @errors No failure status; does not throw or require a context.
+ * @execution Synchronous, thread-safe metadata query; no file, Python, compiler or GPU access.
+ */
+GENERATIVEQC_API const char* generativeqc_bundled_basis_catalog_sha256(void);
+/** @native-contract generativeqc_system_create_bundled
+ * @behavior Expand a compiled bundled basis and create a normalized owning system through
+ * the same validation/normalization owner as generativeqc_system_create.
+ * @inputs A live context, full-size current-ABI descriptor, positive atom_count and atoms;
+ * shell/primitive pointers and counts must all be zero. Other descriptor fields retain
+ * their usual meaning. basis_name is a nonnull NUL-terminated bundled name (ASCII case and
+ * underscore aliases accepted). Optional expected_catalog_sha256 must exactly match the
+ * catalog query, binding caller provenance to the compiled pack; NULL opts out of this check.
+ * @outputs Writes a new owning system; after required nonnull checks, clears the output
+ * before validation. Unknown/missing-element bases are rejected, never downloaded or retried.
+ * @lifetime Copies atoms and expanded basis; caller buffers/strings may be released on return.
+ * Prepared consumers own their copies as for generativeqc_system_create.
+ * @errors ABI_MISMATCH for version/size mismatch; INVALID_ARGUMENT for malformed input,
+ * unknown names/elements or catalog mismatch. Backend/scientific/allocation errors retain
+ * system_create statuses. Required-null rejection may leave output unchanged; other failures
+ * leave it NULL. This constructor does not broaden backend or method capability admission.
+ * @execution Synchronous; serialize with operations on this context. Compiled constants only:
+ * no file/network access, Python import, runtime compiler, or reference-oracle calculation.
+ * @units Geometry and Gaussian data follow the system_create atomic-unit contract.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_bundled(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    const char* basis_name, const char* expected_catalog_sha256, generativeqc_system** system);
+/** @native-contract generativeqc_system_create_basis_template_v1
+ * @behavior Expand element-local general contractions and scalar ECP source channels,
+ * then create an owning system through the existing normalization/ECP admission owners.
+ * @inputs A live context and full-size current-ABI system and basis-template descriptors.
+ * The system has positive atom_count/atoms and zero shell/primitive pointers/counts;
+ * its charge, multiplicity and representation retain their usual meaning. Basis arrays
+ * follow the v1 record contracts and remain immutable for this call. Every input atom
+ * needs one matching element. Cartesian/spherical conventions are not reinterpreted.
+ * @outputs Writes a copied normalized system, clearing the slot after required nonnull
+ * argument checks. Atom order, shell/row order, exact zeros and ECP local-channel semantics
+ * are preserved. No partially expanded system is published on failure.
+ * @lifetime Copies all required data; no atom/template/array storage survives by reference.
+ * Prepared consumers own their copies, so the source system may be destroyed after prepare.
+ * @errors ABI_MISMATCH for descriptor version/size mismatch; INVALID_ARGUMENT for malformed
+ * records, ranges, overflow, missing elements or unsupported scalar ECP shapes. Native
+ * allocation/backend/scientific errors retain existing system_create[_ecp] statuses.
+ * Required-null rejection may leave output unchanged; other failures leave it NULL.
+ * @execution Synchronous; serialize operations on this context. No files, network, Python,
+ * compiler, reference-oracle work or new method/backend capability admission.
+ * @units Coordinates and Gaussian/ECP arrays use the existing system/ECP atomic units.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_basis_template_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    const generativeqc_basis_template_descriptor_v1* basis, generativeqc_system** system);
+/** @native-contract generativeqc_builtin_basis_count_v1
+ * @behavior Count immutable AOT basis names shared with the native CLI.
+ * @inputs No arguments or context are required.
+ * @outputs Returns the number of valid discovery ordinals.
+ * @lifetime Catalog storage belongs to the loaded native library.
+ * @errors No allocation, provider initialization or failure status occurs.
+ * @execution Synchronous immutable lookup, safe without a calculation or device.
+ * @units Returns a dimensionless count, not an execution-capability claim.
+ */
+GENERATIVEQC_API uint32_t generativeqc_builtin_basis_count_v1(void);
+
+/** @native-contract generativeqc_builtin_basis_name_v1
+ * @behavior Discover the canonical name at a catalog ordinal.
+ * @inputs index is zero-based and less than builtin_basis_count_v1().
+ * @outputs Returns a NUL-terminated name, or NULL for an invalid ordinal.
+ * @lifetime The borrowed immutable string remains valid while the library is loaded.
+ * @errors Invalid indices return NULL without allocation or provider initialization.
+ * @execution Synchronous immutable lookup; it does not admit any scientific consumer.
+ * @units index is dimensionless; names use the established case/underscore aliases on input.
+ */
+GENERATIVEQC_API const char* generativeqc_builtin_basis_name_v1(uint64_t index);
+
+/** @native-contract generativeqc_builtin_basis_query_v1
+ * @behavior Query shared AOT basis expansion counts and canonical pack provenance.
+ * @inputs Versioned records, a byte-counted name, bounded nonempty atom array and valid
+ * representation. reserved is zero. Optional expected_pack_checksum has exactly64 bytes.
+ * Charge/spin and coordinate physics are validated only when a system is created.
+ * @outputs On success publishes shell/primitive/AO counts, raw expansion bytes and borrowed
+ * canonical name/checksum. maximum_expansion_bytes does not limit a metadata query.
+ * @lifetime Inputs are borrowed for the call; records must not overlap. Returned strings
+ * borrow immutable library storage, not a context or caller input. Extension tails stay intact.
+ * @errors ABI_MISMATCH for incompatible records; INVALID_ARGUMENT for malformed dimensions,
+ * alias/alignment/overflow, missing data or pack mismatch. Metadata allocation failure maps
+ * to OUT_OF_MEMORY. Refusal leaves output unchanged.
+ * @execution Synchronous host metadata only; reads atom identities, never coordinates,
+ * numerical execution, runtime JSON/Python, an accelerator or a provider.
+ * @units Counts are dimensionless and expansion bytes cover only detached raw shell/primitive
+ * buffers, excluding allocator metadata, caller atoms and normalized system/provider storage.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_builtin_basis_query_v1(const generativeqc_builtin_basis_descriptor_v1* descriptor,
+                                    generativeqc_builtin_basis_capacity_v1* capacity);
+
+/** @native-contract generativeqc_system_create_builtin_basis_v1
+ * @behavior Materialize a named shared AOT basis and call the existing system validation/
+ * normalization owner; no alternate scientific formula or custom-basis substitution is used.
+ * @inputs Live context, versioned descriptor and disjoint nonnull system output slot. Coordinates,
+ * charge/spin and backend source limits obey system_create. Optional checksum binds exact pack
+ * contents. Zero maximum_expansion_bytes is unbounded; otherwise it bounds raw expansion only.
+ * @outputs Publishes a newly owned system only after complete success. Refusal preserves the
+ * caller output slot. Release a successful handle with system_destroy; prepared data is copied.
+ * @lifetime Descriptor/atom/name/checksum buffers are borrowed only during the call. The returned
+ * system owns detached normalized state; its lifetime does not depend on those inputs.
+ * @errors ABI_MISMATCH for record versions; INVALID_ARGUMENT for malformed/aliased input,
+ * missing data, pack or physical validation; OUT_OF_MEMORY below raw expansion capacity or on
+ * allocation failure. Existing backend restrictions propagate; never retry another basis/CPU.
+ * @execution Synchronous serialized context use, including destruction. Admission precedes raw
+ * expansion allocation and coordinate reads. This constructs metadata, not energy/integrals.
+ * @units Coordinates are Bohr, Gaussian exponents inverse Bohr squared, and the native basis
+ * normalization contract is unchanged. Raw expansion capacity is not total system/RSS authority.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_builtin_basis_v1(
+    generativeqc_context* context, const generativeqc_builtin_basis_descriptor_v1* descriptor,
+    generativeqc_system** system);
+
 /** Release a system; prepared consumers retain their own copied system data. */
 /** @native-contract generativeqc_system_destroy
  * @behavior Release the system exactly once.

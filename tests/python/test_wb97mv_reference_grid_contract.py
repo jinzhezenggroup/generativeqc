@@ -13,8 +13,9 @@ from benchmarks.readme_wb97mv import reference_engine
 
 
 @pytest.mark.parametrize("spin", (0, 1))
+@pytest.mark.parametrize("pruning", ("none", "radial-v1"))
 def test_reference_response_uses_the_primary_moving_quadrature(
-    monkeypatch: pytest.MonkeyPatch, spin: int
+    monkeypatch: pytest.MonkeyPatch, spin: int, pruning: str
 ) -> None:
     """A hidden default SG1 response grid cannot satisfy the common-grid gate."""
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.1, 0.2, 1.5))]
@@ -52,7 +53,15 @@ def test_reference_response_uses_the_primary_moving_quadrature(
     monkeypatch.setitem(
         sys.modules, "pyscf", SimpleNamespace(gto=SimpleNamespace(M=Molecule))
     )
-    engine = reference_engine(atoms, "sto-3g", GridSpec(8, 4, 8), spin=spin)
+    spec = GridSpec(
+        8,
+        4,
+        8,
+        ((1, 0.8), (8, 1.4)),
+        version=1 if pruning == "none" else 3,
+        pruning=pruning,
+    )
+    engine = reference_engine(atoms, "sto-3g", spec, spin=spin)
     primary = engine.grids.gen_atomic_grids(engine.mol)
     for grid in (engine.cphf_grids, engine.nlcgrids):
         assert grid.radii_adjust is None
@@ -63,4 +72,18 @@ def test_reference_response_uses_the_primary_moving_quadrature(
         for element in primary:
             np.testing.assert_array_equal(actual[element][0], primary[element][0])
             np.testing.assert_array_equal(actual[element][1], primary[element][1])
-            assert len(actual[element][0]) == 8 * 4 * 8
+            assert len(actual[element][0]) == spec.points_per_atom
+    from generativeqc_compiler.dft.grid import MolecularGrid
+
+    native_rule = MolecularGrid(atoms, spec)
+    raw = list(native_rule._raw_tiles(173))
+    points = np.concatenate([tile.points for tile in raw])
+    weights = np.concatenate([tile.weights for tile in raw])
+    owners = np.concatenate([tile.owners for tile in raw])
+    for owner, (element, center) in enumerate(atoms):
+        np.testing.assert_allclose(
+            primary[element][0], points[owners == owner] - center, atol=2e-13
+        )
+        np.testing.assert_allclose(
+            primary[element][1], weights[owners == owner], rtol=3e-15
+        )

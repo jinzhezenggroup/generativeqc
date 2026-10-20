@@ -228,6 +228,52 @@ def _qualify(fixture: dict, values: tuple, part: str) -> None:
 
 
 @pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("tile", (2, 64))
+def test_native_jk_batched_sources_and_ordered_budget_fallback(
+    spins: int, tile: int, tmp_path: Path
+) -> None:
+    """Independent ERIs qualify batched chunks and both resident fallbacks."""
+    fixture = _fixture(spins, spherical=True)
+    outputs = {}
+    receipts = {}
+    for mode in (
+        "resident",
+        "batch-chunked",
+        "unbatched",
+        "batch-budgeted",
+        "projection-budgeted",
+    ):
+        outputs[mode], receipts[mode] = _native(
+            fixture, tmp_path, tile=tile, cache_mode=mode
+        )
+        _qualify(fixture, outputs[mode], "exact")
+    assert receipts["resident"]["batch_bytes"] > 0
+    assert receipts["batch-chunked"]["batch_bytes"] > 0
+    assert (
+        receipts["batch-chunked"]["batch_bytes"] < receipts["resident"]["batch_bytes"]
+    )
+    assert (
+        receipts["batch-chunked"]["projection_launches"]
+        > receipts["resident"]["projection_launches"]
+    )
+    for actual, expected in zip(
+        outputs["resident"], outputs["batch-chunked"], strict=True
+    ):
+        np.testing.assert_array_equal(actual, expected)
+    for mode in ("unbatched", "batch-budgeted", "projection-budgeted"):
+        assert receipts[mode]["batch_bytes"] == 0
+        assert receipts[mode]["resident_bytes"] > 0
+        for actual, expected in zip(outputs["resident"], outputs[mode], strict=True):
+            np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+    assert (
+        receipts["resident"]["integral_launches"]
+        < receipts["unbatched"]["integral_launches"]
+    )
+    for field in ("projection_launches", "reduction_launches"):
+        assert receipts["resident"][field] < receipts["unbatched"][field]
+
+
+@pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize("spherical", (False, True))
 @pytest.mark.parametrize("cache_mode", ("resident", "streamed", "budgeted"))
 def test_native_jk_residency_and_budget_fallback_against_d_integrals(

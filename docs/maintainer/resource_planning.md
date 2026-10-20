@@ -105,6 +105,34 @@ iteration-branch histograms, source identity and the library checksum. A changed
 numerical/work signature invalidates a pooled timing comparison. This scoped
 procedure does not establish GPU performance or complete physical receipts.
 
+## CUDA DF bucket capacity ownership
+
+With `generativeqc_resource_hf_df_cuda_fleet_v1`, the Python CUDA HF DF planner
+and native CLI share one C++ numeric composition owner. It groups expanded
+topologies by orbital/electron/primitive compatibility, checks Cartesian,
+auxiliary and atom dimensions, and composes the existing source-upload, DIIS
+and tile-planner leaves. Python packs scalar metadata and renders labels;
+it does not choose tile capacities or recompute the fleet's numeric bounds.
+
+The owner preserves resident/recomputed alternatives, explicit packed and
+packed-single selection, occupied/automatic exchange reservations, requested
+or default DF sub-budgets, and RHF/UHF ragged fleets. Packed-single retains
+the conservative two-factor shape-query bound rather than claiming the
+executable single-factor allocation. All bucket caches remain simultaneously
+retained; preparation/setup/force workspace is serialized, and an independent
+singleton cold numerical retry receives its own reservation. The existing
+explicit CPU numerical-recovery contract is unchanged.
+
+The private ABI validates a complete inventory before either sizing or full
+publication. Invalid schemas, topology, byte-domain overflow, overlapping
+input/output/error buffers and insufficient sub-budgets leave capacity output
+unchanged. It allocates linear topology/plan metadata, not scientific arrays,
+and neither probes nor initializes CUDA. Only a missing fleet symbol enables
+the isolated old-library Python compatibility composer; native refusal or
+malformed output never retries Python capacity arithmetic. These declared
+bounds do not establish complete allocator/provider/lease/RSS authority or
+qualify a new scientific backend or property.
+
 ## Native device ledger binding
 
 An already-loaded library exposing
@@ -134,11 +162,12 @@ closed frontend handles until their actual owners release them.
 
 ## CUDA KS to force handoff
 
-CUDA KS keeps its admitted optional ERI value cache throughout SCF and after
-energy-only solves. Before a stationary force consumer allocates, the live
-final-state owner compares its additional device envelope with free memory on
-its bound device. Under pressure it drains the SCF producer and retires the
-optional value lease and its graph borrowers. Resident density, stationary
+CUDA KS keeps its admitted optional ERI value cache and Fast anchor matrices
+throughout SCF and after energy-only solves. Before a stationary force consumer
+allocates, the live final-state owner compares its additional device envelope
+with free memory on its bound device. Under pressure it drains the SCF producer
+and retires the idle anchor lease, then rechecks free memory before retiring the
+optional ERI lease and its graph borrowers if still needed. Resident density, stationary
 weights, XC state, the exact final-state token and the last-good warm seed stay
 valid. The force consumer still uses the prepared derivative provider.
 
@@ -146,7 +175,10 @@ Native stationary, Python stationary and composite force owners request this
 handoff before allocation. Compatible replays exclude retained force arenas
 from the requested headroom. Python force work reports `scf_force_memory` with
 requested, free-before, free-after and reclaimed device bytes. Resource
-accounting drops the retired provider's device and host storage.
+accounting drops retired anchor state capacity and the retired provider's device
+and host storage. Repeated handoffs cannot retire an allocation twice. Retired
+anchors remain disabled on this owner: later warm/cold solves and error recovery
+retain ordinary Fast without reacquiring optional memory ahead of the force owner.
 
 This check is advisory: it does not reserve global free memory, relax an
 explicit budget, evict other calculations, or promise that arbitrary mandatory
@@ -214,6 +246,20 @@ selection and admission use the separately discovered native composition owner
 described above; prepared leases remain frontend-owned. Native fleet sizing is
 not complete endpoint/RSS allocation accounting.
 
+Direct CUDA RHF/UHF plans with a discovered
+`generativeqc_resource_hf_cuda_fleet_v1` obtain host bounds, retained device
+arenas and serialized retry composition from the same allocation-free C++ owner
+as the native CLI. The topology-aware allocator v2 and ECP queries remain the
+leaf authorities; composition never constructs a CUDA provider or context.
+Ragged fleets sum retained host/device capacities and preserve the conservative
+retry `max(arena) + max(ecp_workspace)`, including maxima from different items.
+The entire fleet is validated before publication, and homogeneous CLI batches
+apply multiplicity exactly once. Schedule identity names native fleet ownership;
+only an absent symbol permits portable compatibility. Native refusal, overflow
+or inconsistent publication never restarts Python arithmetic. This does not
+change density-fitted HF, scientific admission, prepared lease ownership or the
+exclusion of provider/allocator retention and complete simultaneously-live RSS.
+
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
 owners as the installed CLI for per-item diagnostics, twelve retained-owner
@@ -230,8 +276,25 @@ and fleet authority separately. Libraries exposing only
 fleet composition; old/no-library dry runs retain portable metadata sizing
 without implicitly loading a provider. Neither sizing query executes
 quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
-allocator/RSS receipts remain outside this bridge; CUDA capacity formulas and
-fleet composition are unchanged.
+allocator/RSS receipts remain outside this bridge.
+
+CUDA KS host inventories use the same `scf::KsHostFleetResources` owner through
+the additive `generativeqc_resource_ks_cuda_host_fleet_v1` query. An item adds
+the XC host-unfused selector to the CPU query's seventeen scalar shape fields.
+The query shares the transaction, overflow and no-provider-discovery contract,
+and is available in CPU-only libraries. CUDA host bounds include independent
+solver, matrix and structured binding reservations; host-unfused XC matrices
+are retained, while setup and host XC tiles are serialized workspace. CUDA
+shapes do not inherit CPU integral fourth powers or through-g admission.
+
+Python supplies its snapshot-grid and force-consumer retained allowances once
+per fleet; they coexist with every preparation and replay. The energy-only
+native CLI supplies neither allowance. These are lifetime inputs, not new
+force eligibility or admission. Missing symbols retain portable host sizing;
+selected native refusal or inconsistent publication cannot retry that path.
+Schedule identity records CUDA host fleet authority separately from device
+inventory and ECP queries. Device fleet composition and complete
+provider/allocation/lease authority are outside this host bridge.
 
 HF/KS ECP workspace sizing uses the already loaded library's
 `generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.
@@ -242,8 +305,9 @@ storage. A discovered query's rejection propagates without portable retry.
 Old libraries and library-free dry runs retain explicit metadata-only sizing;
 all-electron inputs need no ECP query or policy import. ECP sizing provenance is
 separate from the enclosing HF/KS inventory in the schedule identity. KS records
-host and device ECP owners separately because CUDA dry runs can load their
-layout-query library after sizing host storage. This changes sizing ownership,
+host and device ECP owners separately because old-library and portable host
+paths need not discover the same ECP query as device layout planning. This changes
+sizing ownership,
 not scientific qualification, native admission/leases or allocation receipts.
 
 D3(BJ) planning uses the already loaded library's private

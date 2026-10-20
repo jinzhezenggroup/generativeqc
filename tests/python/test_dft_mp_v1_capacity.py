@@ -15,6 +15,10 @@ from test_stationary_dispatch_contract import (
     assert_dispatch_contract,
     assert_reset_contract,
 )
+from test_stationary_geometry_resources import (
+    assert_native_allocation_contract,
+    assert_native_create_contract,
+)
 
 from tools.dft_mp_v1 import qualify_capacity
 
@@ -59,6 +63,21 @@ def current_grid_abi_identity() -> str:
         if isinstance(node, ast.FunctionDef) and node.name == "native_ks_options"
     )
     return qualify_capacity._source_node_sha256(source, lowerer)
+
+
+def current_grid_layout_identity() -> str:
+    """Report the emitted layout's current source provenance, not a frozen pin."""
+    source = (ROOT / "python/generativeqc_compiler/xc/quadrature_cuda.py").read_text()
+    assignment = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_LAYOUT"
+            for target in node.targets
+        )
+    )
+    return qualify_capacity._source_node_sha256(source, assignment)
 
 
 def current_python_owner_identity(
@@ -394,18 +413,24 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "3084647a9f477c2941cc64fa7c66092c5730d813c91194f5082ce3de2ceeb23a"
     )
     assert result["grid"] == {
-        "source_only_molecular_grid_sha256": (
-            "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
+        "source_only_molecular_grid_sha256": current_python_owner_identity(
+            "python/generativeqc_compiler/dft/grid.py",
+            "__post_init__",
+            owner="MolecularGrid",
         ),
         "public_grid_abi_sha256": (current_grid_abi_identity()),
-        "native_grid_abi_sha256": (
-            "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
+        "native_grid_abi_sha256": qualify_capacity._source_span_sha256(
+            (ROOT / "src/methods/dft_method_preparation.cpp").read_text(),
+            begin="dft::GridSpec ks_grid_options(",
+            end="void validate_ks_spin_state(",
+            label="native GridSpec ABI lowerer",
         ),
-        "generated_quadrature_layout_sha256": (
-            "1674152aa312f3769d8b78be60aff491cc52f577d74b8d889d133bff3064ff23"
-        ),
-        "native_cuda_grid_sha256": (
-            "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
+        "generated_quadrature_layout_sha256": current_grid_layout_identity(),
+        "native_cuda_grid_sha256": qualify_capacity._source_span_sha256(
+            (ROOT / "src/dft/cuda_quadrature.cu").read_text(),
+            begin="MolecularGrid MolecularGrid::from_cuda(",
+            end="}  // namespace generativeqc::dft",
+            label="native CUDA grid",
         ),
         "native_cuda_grid_route_sha256": (
             "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
@@ -556,7 +581,11 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_becke_binary_scaled_metrics_sha256": (
             "89e7d6e1d62e133b1bd48500024013c426aaede9688fdb248ee32d2c453cccae"
         ),
-        "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+        "geometry_resources_sha256": qualify_capacity._lf_sha256(
+            (
+                ROOT / "python/generativeqc_compiler/method/stationary_resources.py"
+            ).read_bytes()
+        ),
         "public_wrapper_sha256": (
             "45097f6787b42bd6fb13ddd38fd77dead329af1ec357fc8e620610ac967081af"
         ),
@@ -630,15 +659,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "resident_ao_cache_sha256": (
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
-        "native_owner_sha256": (
-            "82d609f25e944f0ca115b59f14da8e18c43a43a7042c6275ba7fa9d22b38c791"
-        ),
-        "native_allocation_sha256": (
-            "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
-        ),
-        "native_create_sha256": (
-            "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
-        ),
+        "native_owner_sha256": current_native_identity("struct Owner {"),
+        "native_allocation_sha256": current_native_identity("size_t allocation("),
+        "native_create_sha256": current_native_identity("int stationary_create("),
         "native_reset_sha256": (current_native_identity("int stationary_reset(")),
         "native_geometry_reset_sha256": (
             current_native_identity("int stationary_geometry_reset(")
@@ -692,7 +715,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
         "native_phased_becke_admission_sha256": (
-            "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+            "7e542218111e02482d3b4afea38bd02d270003fed47502fb4bc20fb83b2df920"
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -739,8 +762,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "init_sha256": current_python_owner_identity(
             "python/generativeqc/_ks_snapshot.py", "__init__", owner="NativeKsSnapshot"
         ),
-        "decode_sha256": (
-            "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
+        "decode_sha256": current_python_owner_identity(
+            "python/generativeqc/_ks_snapshot.py", "decode", owner="NativeKsSnapshot"
         ),
         "grid_cache_sha256": (
             "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
@@ -978,6 +1001,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         + 48 * (96 * 95 // 2)
         + 4_851_008
         + 39_755_392
+        + 8 * (2 * 96 + 1)  # Immutable atom offsets and partition radii.
         + grid_binding_host_bytes
         - 84_953_088  # Unused indexed host and aligned device staging.
     )
@@ -1701,14 +1725,14 @@ def test_native_finish_span_fails_closed_on_contract_drift(
     "old,new",
     [
         (
-            "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "(5 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
             "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
         ),
         ("n > 2048", "n > 2049"),
     ],
 )
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
-    tmp_path: Path, old: str, new: str
+    tmp_path: Path, old: str, new: str, required_native_cxx: "NativeCxx"
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
@@ -1719,8 +1743,10 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
     assert old in native
     target.write_text(native.replace(old, new, 1), encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="native_allocation_sha256 contract changed"):
-        qualify_capacity._source_limits(tmp_path)
+    with pytest.raises(subprocess.CalledProcessError):
+        assert_native_allocation_contract(
+            target.read_text(), tmp_path, required_native_cxx
+        )
 
 
 def test_primitive_budget_scope_fails_closed_when_work_definition_moves(
@@ -1971,37 +1997,37 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
             "selected_basis.shells_for(atoms)",
             "selected_basis.shells_for(atoms)[:1]",
         ),
-        ("_shells_for_atoms", "self._representation_name)", "'cartesian')"),
+        ("_basis_for_atoms", "self._representation_name)", "'cartesian')"),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             "if auxiliary else self._device_name",
             "if auxiliary else 'cpu'",
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             "self._density_fitting_backend() if auxiliary",
             "self._device_name if auxiliary",
         ),
-        ("_shells_for_atoms", "operator=selected_operator", "operator='overlap'"),
+        ("_basis_for_atoms", "operator=selected_operator", "operator='overlap'"),
         (
             "_shells_for_atoms",
             "derivative_order=derivative_order",
             "derivative_order=0",
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             'role="auxiliary" if auxiliary else "orbital"',
             'role="orbital"',
         ),
         (
-            "_shells_for_atoms",
+            "_basis_for_atoms",
             (
                 "consumer=self._auxiliary_basis_consumer("
                 "selected_operator, derivative_order)"
             ),
             "consumer=None",
         ),
-        ("_shells_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
+        ("_basis_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
         (
             "_create_native_system",
             "shells = self._shells_for_atoms(atoms, basis)",
@@ -2592,51 +2618,42 @@ def test_prepared_precision_mode_binds_replay_identity_and_source_owner(
         qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
-def test_grid_count_fails_closed_when_native_cuda_shape_moves(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "relative,marker,addition,key",
+    (
+        (
+            "python/generativeqc_compiler/dft/grid.py",
+            "        atoms = owned_atoms(self.atoms)",
+            "\n        # Harmless grid-owner provenance change.",
+            "source_only_molecular_grid_sha256",
+        ),
+        (
+            "python/generativeqc_compiler/xc/quadrature_cuda.py",
+            "inline Layout layout(size_t atoms, size_t points) {",
+            "\n  // Harmless layout-owner provenance change.",
+            "generated_quadrature_layout_sha256",
+        ),
+        (
+            "src/dft/cuda_quadrature.cu",
+            "MolecularGrid MolecularGrid::from_cuda(",
+            "/* Harmless CUDA-owner provenance change. */",
+            "native_cuda_grid_sha256",
+        ),
+    ),
+)
+def test_grid_implementation_changes_are_recorded_as_provenance(
+    tmp_path: Path, relative: str, marker: str, addition: str, key: str
 ) -> None:
+    """Actual point/layout execution is tested separately from source provenance."""
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "src/dft/cuda_quadrature.cu"
+    before = qualify_capacity._grid_count_contract(tmp_path)
+    target = tmp_path / relative
     source = target.read_text(encoding="utf-8")
-    old = "q::product(system.atoms.size(), per_atom)"
-    assert old in source
-    target.write_text(
-        source.replace(old, "q::product(system.atoms.size() + 1, per_atom)", 1),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
-
-
-def test_grid_count_fails_closed_when_source_only_shape_moves(
-    tmp_path: Path,
-) -> None:
-    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/generativeqc_compiler/dft/grid.py"
-    source = target.read_text(encoding="utf-8")
-    old = "len(atoms) * len(r) * len(angular)"
-    assert old in source
-    target.write_text(source.replace(old, "len(r) * len(angular)", 1), encoding="utf-8")
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
-
-
-def test_grid_count_fails_closed_when_generated_layout_moves(
-    tmp_path: Path,
-) -> None:
-    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "python/generativeqc_compiler/xc/quadrature_cuda.py"
-    source = target.read_text(encoding="utf-8")
-    old = "l.points = points;"
-    assert old in source
-    target.write_text(
-        source.replace(old, "l.points = points + 1;", 1), encoding="utf-8"
-    )
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
+    assert source.count(marker) == 1
+    target.write_text(source.replace(marker, marker + addition, 1), encoding="utf-8")
+    after = qualify_capacity._grid_count_contract(tmp_path)
+    assert before[key] != after[key]
+    assert before["point_count_definition"] == after["point_count_definition"]
 
 
 @pytest.mark.parametrize(
@@ -2737,21 +2754,229 @@ def test_native_execution_provenance_tracks_harmless_body_edits(
     assert_dispatch_contract(source, tmp_path, native_cxx)
 
 
-def test_grid_count_fails_closed_when_native_abi_lowering_moves(
-    tmp_path: Path,
+def assert_native_grid_abi(
+    repository: Path, tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute current readers with real ABI/GridSpec declarations, without a DSO."""
+    preparation = (repository / "src/methods/dft_method_preparation.cpp").read_text()
+    reader = preparation[
+        preparation.index("dft::GridSpec ks_grid_options(") : preparation.index(
+            "void validate_ks_spin_state("
+        )
+    ]
+    start = preparation.index(
+        "    if (ks_input->struct_size < sizeof(generativeqc_ks_options)"
+    )
+    admission = preparation[
+        start : preparation.index("    if ((ks_input->spin_channels", start)
+    ]
+    grid = (ROOT / "src/dft/grid.cpp").read_text()
+    validator = grid[
+        grid.index("void validate_grid_spec(") : grid.index(
+            "std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells"
+        )
+    ]
+    from generativeqc_compiler.xc.atomic_grid_native import emit_atomic_grid_header
+    from test_stationary_task_work_budget import _block
+
+    (tmp_path / "generated_atomic_grid.hpp").write_text(emit_atomic_grid_header())
+    default_grid = _block(grid, "GridSpec default_grid_spec(")
+    source = tmp_path / "grid_abi.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <climits>
+#include <cmath>
+#include <iostream>
+#include <optional>
+#include <stdexcept>
+#include <string_view>
+#include "generativeqc/generativeqc.h"
+#include "dft/application_precision.hpp"
+#include "dft/grid.hpp"
+#include "generated_atomic_grid.hpp"
+namespace dft=generativeqc::dft;
+struct MethodError:std::runtime_error { int status; MethodError(int s,const char* m):std::runtime_error(m),status(s){} };
+struct NativeKsExecutionPlan { bool nonlocal_correlation=true; };
+const char* expected_scf_domain(const NativeKsExecutionPlan&) { return "current-domain"; }
+namespace scf { struct ScfOptions {
+ enum class XcExecutionSchedule { DeviceFused,HostUnfused };
+ std::uint64_t xc_tile_points=256;
+ XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
+ std::optional<dft::GridSpec> nonlocal_grid_spec;
+ std::array<double,3> application_precision_budget{};
+}; }
+auto checked_precision_mode(const generativeqc_method_descriptor& d) { return d.precision_mode; }
+"""
+        + "\nnamespace generativeqc::dft {\n"
+        + validator
+        + default_grid
+        + "\n}\n"
+        + reader
+        + "\nvoid admit(const generativeqc_method_descriptor& descriptor, scf::ScfOptions& options) { const auto* ks_input=descriptor.ks_options;\n"
+        + admission
+        + "}\n"
+        + r"""
+int main() {
+ static_assert(sizeof(generativeqc_ks_options)==160);
+ static_assert(sizeof(dft::ApplicationPrecisionKsOptions)==184);
+ static_assert(sizeof(dft::NonlocalGridKsOptions)==200);
+ static_assert(offsetof(dft::NonlocalGridKsOptions,grid)==192);
+ generativeqc_ks_options primary{};
+ primary.struct_size=sizeof(primary); primary.abi_version=GENERATIVEQC_ABI_VERSION;
+ primary.scf_domain="current-domain"; primary.tile_points=37;
+ primary.grid_version=1;primary.radial_points=8;primary.angular_polar=4;primary.angular_azimuth=8;
+ primary.partition_iterations=3;primary.coincident_tolerance=1e-12;
+ primary.xc_execution_schedule=GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
+ generativeqc_method_descriptor descriptor{};descriptor.ks_options=&primary;descriptor.precision_mode=GENERATIVEQC_PRECISION_AUTO;
+ NativeKsExecutionPlan plan;
+ auto read=[&](const generativeqc_ks_options* input) { descriptor.ks_options=input;scf::ScfOptions options;admit(descriptor,options);auto grid=ks_grid_options(descriptor,options,plan);return std::make_pair(grid,options);};
+ const auto legacy=read(&primary);
+ assert(legacy.first.radial_points==8 && legacy.second.xc_tile_points==37);
+ assert((legacy.first.element_radii==std::array<double,119>{}));
+ descriptor.ks_options=nullptr;scf::ScfOptions default_options;
+ const auto automatic=ks_grid_options(descriptor,default_options,plan);
+ assert(automatic.version==4 && automatic.radial_points==3 && automatic.angular_polar==0 && automatic.angular_azimuth==0);
+ for(unsigned z=1;z<std::size(generativeqc::generated::atomic_grid::xi);++z)
+   assert(automatic.element_radii[z]==generativeqc::generated::atomic_grid::bragg[z]);
+ for(unsigned level:{0u,3u,9u}) {
+   auto modern=primary;modern.grid_version=4;modern.radial_points=level;
+   modern.angular_polar=modern.angular_azimuth=0;
+   const auto current=read(&modern);
+   assert(current.first.version==4 && current.first.radial_points==level);
+   assert(current.first.element_radii==automatic.element_radii);
+   assert(current.second.xc_tile_points==37);
+ }
+ for(unsigned version:{2u,3u}) {
+   auto explicit_legacy=primary;explicit_legacy.grid_version=version;
+   assert((read(&explicit_legacy).first.element_radii==std::array<double,119>{}));
+ }
+ assert(legacy.second.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
+ dft::ApplicationPrecisionKsOptions precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=184;
+ const auto old_precision=read(&precision.base);
+ assert(old_precision.first==legacy.first);
+ assert((old_precision.second.application_precision_budget==std::array<double,3>{1e-6,1e-5,3e-6}));
+ auto secondary=primary;secondary.radial_points=4;secondary.angular_polar=8;secondary.partition_iterations=2;
+ std::array<double,119> radii;radii.fill(1.0);radii[1]=1.3;secondary.element_radii=radii.data();secondary.element_radius_count=119;
+ dft::NonlocalGridKsOptions independent{};independent.base.base=primary;independent.base.base.struct_size=200;independent.grid=&secondary;
+ const auto split=read(&independent.base.base);
+ assert(split.first==legacy.first && split.second.nonlocal_grid_spec);
+ assert(split.second.nonlocal_grid_spec->radial_points==4 && split.second.nonlocal_grid_spec->angular_polar==8);
+ assert(split.second.nonlocal_grid_spec->partition_iterations==2 && split.second.nonlocal_grid_spec->element_radii[1]==1.3);
+ assert(split.second.xc_tile_points==37);
+ radii[1]=9;assert(split.second.nonlocal_grid_spec->element_radii[1]==1.3);
+ auto modern=primary;modern.grid_version=4;modern.radial_points=3;modern.angular_polar=modern.angular_azimuth=0;
+ std::array<double,119> modern_radii;modern_radii.fill(1.0);modern_radii[8]=1.7;
+ modern.element_radii=modern_radii.data();modern.element_radius_count=119;
+ const auto modern_copy=read(&modern);modern_radii[8]=9;
+ assert(modern_copy.first.element_radii[1]==1.0 && modern_copy.first.element_radii[8]==1.7);
+ auto equal=primary;std::array<double,119> units;units.fill(1);equal.element_radii=units.data();equal.element_radius_count=119;independent.grid=&equal;
+ assert(!read(&independent.base.base).second.nonlocal_grid_spec);
+ unsigned rejected=0;
+ for(unsigned size:{0u,159u,161u,183u,185u,199u,201u,208u}) {
+  auto bad=primary;bad.struct_size=size;
+  try {read(&bad);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_ABI_MISMATCH);++rejected;}
+ }
+ for(unsigned mode=0;mode<11;++mode) {
+  auto bad=independent;auto inner=secondary;bad.grid=&inner;
+  if(mode==0)bad.version=0;
+  if(mode==1)bad.version=2;
+  if(mode==2)bad.reserved=1;
+  if(mode==3)bad.grid=nullptr;
+  if(mode==4)inner.struct_size=184;
+  if(mode==5)inner.abi_version=GENERATIVEQC_ABI_VERSION+1;
+  if(mode==6)inner.scf_domain="wrong";
+  if(mode==7)inner.radial_points=0;
+  if(mode==8)inner.tile_points=0;
+  if(mode==9)inner.element_radius_count=118;
+  if(mode==10)plan.nonlocal_correlation=false;
+  try {read(&bad.base.base);}catch(const std::exception&){++rejected;}
+  plan.nonlocal_correlation=true;
+ }
+ assert(rejected==19);
+ precision.energy=-1;try {read(&precision.base);assert(false);}catch(const MethodError& e){assert(e.status==GENERATIVEQC_STATUS_INVALID_ARGUMENT);}
+ std::cout<<"PASS real-header legacy160/184/private200, copied prescription, normalized equality, 19 invalid/unsupported controls, negative precision budget\n";
+}
+"""
+    )
+    binary = tmp_path / "grid_abi"
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-O0",
+            f"-I{repository / 'include'}",
+            f"-I{repository / 'src'}",
+            f"-I{ROOT / 'include'}",
+            f"-I{ROOT / 'src'}",
+        ],
+    )
+    result = subprocess.run(
+        [str(binary)], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert result.returncode == 0, (
+        "native grid ABI contract changed: " + result.stdout + result.stderr
+    )
+
+
+def test_native_grid_abi_preserves_legacy_and_private_layouts(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    assert_native_grid_abi(ROOT, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "grid.radial_points = input.radial_points;",
+            "grid.radial_points = input.radial_points + 1;",
+        ),
+        (
+            "options.xc_tile_points = input.tile_points;",
+            "options.xc_tile_points = input.tile_points + 1;",
+        ),
+        (
+            "if (ks_input->struct_size != sizeof(generativeqc_ks_options) &&",
+            "if (false && ks_input->struct_size != sizeof(generativeqc_ks_options) &&",
+        ),
+        ("if (!execution_plan.nonlocal_correlation)", "if (false)"),
+        (
+            "if (descriptor.ks_options->grid_version != 4) grid = dft::GridSpec{};",
+            "if (false) grid = dft::GridSpec{};",
+        ),
+        (
+            "grid.version == 1 && radius == 1.0 ? 0.0 : radius",
+            "radius == 1.0 ? 0.0 : radius",
+        ),
+    ],
+)
+def test_native_grid_abi_controls_reject_transport_and_admission_mutations(
+    tmp_path: Path, required_native_cxx: "NativeCxx", old: str, new: str
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
     target = tmp_path / "src/methods/dft_method_preparation.cpp"
-    source = target.read_text(encoding="utf-8")
+    source = target.read_text()
+    assert old in source
+    target.write_text(source.replace(old, new, 1))
+    with pytest.raises(AssertionError, match="native grid ABI contract changed"):
+        assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
+
+
+def test_grid_count_fails_closed_when_native_abi_lowering_moves(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    target = tmp_path / "src/methods/dft_method_preparation.cpp"
+    source = target.read_text()
     old = "grid.radial_points = input.radial_points;"
     assert old in source
     target.write_text(
-        source.replace(old, "grid.radial_points = input.radial_points + 1;", 1),
-        encoding="utf-8",
+        source.replace(old, "grid.radial_points = input.radial_points + 1;", 1)
     )
-
-    with pytest.raises(RuntimeError, match="grid point-count contract changed"):
-        qualify_capacity._grid_count_contract(tmp_path)
+    with pytest.raises(AssertionError, match="native grid ABI contract changed"):
+        assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)
 
 
 def test_module_import_binds_helpers_to_the_tool_checkout(tmp_path: Path) -> None:
@@ -3193,8 +3418,8 @@ def test_geometry_resource_budget_changes_fail_closed(
         ),
         (
             "void launch_geometry(",
-            "owner.phased_storage &&",
-            "true &&",
+            "bool(owner.phased_storage)",
+            "true",
             "native_launch_geometry_sha256",
         ),
         (
@@ -3226,8 +3451,8 @@ def test_geometry_resource_budget_changes_fail_closed(
         ),
         (
             "void launch_geometry(",
-            "++owner.launches;",
-            "/* producer launch omitted */",
+            "++owner.launches;\n    geometry_cooperative_kernel<true, double>",
+            "/* producer launch omitted */\n    geometry_cooperative_kernel<true, double>",
             "native_launch_geometry_sha256",
         ),
         (
@@ -3275,6 +3500,9 @@ def test_cooperative_native_schedule_contract_fails_closed(
     elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
         with pytest.raises(subprocess.CalledProcessError):
             assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_owner_sha256", "native_create_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_native_create_contract(target.read_text(), tmp_path, native_cxx)
     else:
         with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
             qualify_capacity._source_limits(tmp_path)
@@ -4239,6 +4467,9 @@ def test_zero_seed_native_contract_fails_closed(
     elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
         with pytest.raises(subprocess.CalledProcessError):
             assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_owner_sha256", "native_create_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_native_create_contract(target.read_text(), tmp_path, native_cxx)
     else:
         with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
             qualify_capacity._source_limits(tmp_path)
@@ -4358,8 +4589,8 @@ def test_generic_optimization_capacity_helpers_remain_source_bound(
         (
             "src/dft/stationary_gradient_cuda.cuh",
             "void launch_geometry(",
-            "owner.phased_storage &&\n      na >=",
-            "owner.phased_storage ||\n      na >=",
+            "phased_active &&\n      na >=",
+            "phased_active ||\n      na >=",
             "native_launch_geometry_sha256",
         ),
     ],
@@ -4388,6 +4619,9 @@ def test_restricted_point_capacity_controls_remain_source_bound(
     elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
         with pytest.raises(subprocess.CalledProcessError):
             assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_owner_sha256", "native_create_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_native_create_contract(target.read_text(), tmp_path, native_cxx)
     else:
         with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
             qualify_capacity._source_limits(tmp_path)
@@ -4566,6 +4800,9 @@ def test_binary_scaled_becke_contract_fails_closed(
     elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
         with pytest.raises(subprocess.CalledProcessError):
             assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_owner_sha256", "native_create_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_native_create_contract(target.read_text(), tmp_path, native_cxx)
     else:
         with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
             qualify_capacity._source_limits(tmp_path)
@@ -4588,6 +4825,7 @@ def test_capacity_provenance_tracks_benign_owner_source_changes(tmp_path: Path) 
     route_before = qualify_capacity._source_public_route(tmp_path)
     for relative, class_name, name in (
         ("python/generativeqc/_ks_snapshot.py", "NativeKsSnapshot", "__init__"),
+        ("python/generativeqc/_ks_snapshot.py", "NativeKsSnapshot", "decode"),
         ("python/generativeqc/batch.py", "PreparedBatch", "_public_dft_cuda_force"),
         (
             "python/generativeqc/_stationary_cuda.py",
@@ -4627,7 +4865,7 @@ def test_capacity_provenance_tracks_benign_owner_source_changes(tmp_path: Path) 
         route_before["cuda_force_method_sha256"]
         != route_after["cuda_force_method_sha256"]
     )
-    assert snapshot_before["decode_sha256"] == snapshot_after["decode_sha256"]
+    assert snapshot_before["decode_sha256"] != snapshot_after["decode_sha256"]
     assert (
         route_before["whole_grid_work_limits"] == route_after["whole_grid_work_limits"]
     )
@@ -4669,3 +4907,107 @@ def test_hybrid_predicate_reordering_changes_only_report_provenance(
                 )
         for method in ("PBE", "CAM-B3LYP", "WB97M-V"):
             assert not route._promoted(precision=precision, method=method)
+
+
+def test_native_capacity_execution_covers_current_owner_and_arena(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    source = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    assert_native_allocation_contract(source, tmp_path, required_native_cxx)
+    assert_native_create_contract(source, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("if (bytes > budget)", "if (bytes >= budget)"),
+        ("p->atomic_radii = take(na);", "p->atomic_radii = take(na - 1);"),
+        ("take(na + 1)", "take(na)"),
+        ("if (!center_bytes) throw;", "throw;"),
+        ("catch (const DeviceAllocationError&)", "catch (const std::exception&)"),
+        ("if (work > max_page_primitive_work)", "if (false)"),
+        (
+            "if (work > std::numeric_limits<uint64_t>::max() - primitive_count)",
+            "if (false)",
+        ),
+    ],
+)
+def test_native_capacity_execution_rejects_resource_and_failure_drift(
+    tmp_path: Path, required_native_cxx: "NativeCxx", old: str, new: str
+) -> None:
+    source = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    assert source.count(old) == 1
+    with pytest.raises(subprocess.CalledProcessError):
+        assert_native_create_contract(
+            source.replace(old, new), tmp_path, required_native_cxx
+        )
+
+
+def test_capacity_resource_provenance_allows_benign_source_edits(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    before = qualify_capacity._source_limits(tmp_path)["primitive_page_contract_sha256"]
+    resources = tmp_path / "python/generativeqc_compiler/method/stationary_resources.py"
+    resources.write_text(resources.read_text() + "\n# Provenance-only comment.\n")
+    native = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    source = native.read_text()
+    for marker in ("struct Owner {", "size_t allocation(", "int stationary_create("):
+        position = source.index("{", source.index(marker)) + 1
+        source = (
+            source[:position] + "\n// Provenance-only comment.\n" + source[position:]
+        )
+    native.write_text(source)
+    after = qualify_capacity._source_limits(tmp_path)["primitive_page_contract_sha256"]
+    changed = {
+        "geometry_resources_sha256",
+        "native_owner_sha256",
+        "native_allocation_sha256",
+        "native_create_sha256",
+    }
+    assert {key for key in before if before[key] != after[key]} == changed
+    assert_native_allocation_contract(source, tmp_path, required_native_cxx)
+    assert_native_create_contract(source, tmp_path, required_native_cxx)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("+ (5 + 3 * sources) * atoms", "+ (3 + 3 * sources) * atoms"),
+        ("+ 1  # atom prefix offsets", "+ 0  # atom prefix offsets"),
+        ("if required <= budget_bytes - allocation - center_bytes:", "if True:"),
+        ("except ValueError as error:", "except Exception as error:"),
+    ],
+)
+def test_resource_semantics_reject_missing_panels_and_unbounded_fallback(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    relative = "python/generativeqc_compiler/method/stationary_resources.py"
+    copy_contract_files(tmp_path, (relative,))
+    target = tmp_path / relative
+    source = target.read_text()
+    assert source.count(old) == 1
+    target.write_text(source.replace(old, new))
+    with pytest.raises(RuntimeError, match="geometry-resource contract changed"):
+        qualify_capacity._geometry_resource_contract(target)
+
+
+def test_native_grid_abi_provenance_accepts_benign_reader_edits(
+    tmp_path: Path, required_native_cxx: "NativeCxx"
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    before = qualify_capacity._grid_count_contract(tmp_path)
+    target = tmp_path / "src/methods/dft_method_preparation.cpp"
+    source = target.read_text()
+    marker = "dft::GridSpec ks_grid_options("
+    position = source.index("{", source.index(marker)) + 1
+    target.write_text(
+        source[:position] + "\n// Provenance-only comment.\n" + source[position:]
+    )
+    after = qualify_capacity._grid_count_contract(tmp_path)
+    assert {key for key in before if before[key] != after[key]} == {
+        "native_grid_abi_sha256"
+    }
+    assert_native_grid_abi(tmp_path, tmp_path, required_native_cxx)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def emit_high_order_coulomb_support() -> str:
-    """Emit the qualified order-5..7 Cartesian Coulomb support verbatim."""
+    """Emit scalar and preweighted order-5..7 Cartesian Coulomb consumers."""
 
     return r"""/**
  * Compiler-owned primitive-local powers for the bounded high-order Coulomb
@@ -53,8 +53,12 @@ __device__ inline unsigned axis_wick_multiplicity(
          (order - 4U) * (order - 5U) / 48U;
 }
 
-/** Evaluate one Cartesian Coulomb derivative through `MaximumOrder`. */
-template <unsigned MaximumOrder>
+/** Evaluate one Cartesian Coulomb derivative through `MaximumOrder`.
+ * PreweightedBoys borrows (-2*rho)^n F_n prepared once for an entire spatial
+ * box. Its low-degree states also use the cached coordinate/rho powers rather
+ * than independently rebuilding the closed order-zero-through-four factors.
+ * The default specialization retains its original arithmetic and ABI. */
+template <unsigned MaximumOrder, bool PreweightedBoys = false>
 __device__ inline double high_order_coulomb(
     unsigned derivative_state, double rho,
     const HighOrderCoulombWorkspace<MaximumOrder>& workspace,
@@ -63,7 +67,7 @@ __device__ inline double high_order_coulomb(
   const unsigned y_order = (derivative_state >> 3U) & 7U;
   const unsigned z_order = (derivative_state >> 6U) & 7U;
   const unsigned total_order = x_order + y_order + z_order;
-  if (total_order < 5) {
+  if (!PreweightedBoys && total_order < 5) {
     return fourth_order_coulomb(
         derivative_state, rho, workspace.difference, boys);
   }
@@ -80,7 +84,7 @@ __device__ inline double high_order_coulomb(
             axis_wick_multiplicity(z_order, z_pairs);
         value +=
             static_cast<double>(multiplicity) *
-            workspace.negative_two_rho_powers[boys_order] *
+            (PreweightedBoys ? 1.0 : workspace.negative_two_rho_powers[boys_order]) *
             workspace.coordinate_powers[0][x_order - 2U * x_pairs] *
             workspace.coordinate_powers[1][y_order - 2U * y_pairs] *
             workspace.coordinate_powers[2][z_order - 2U * z_pairs] *

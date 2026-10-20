@@ -22,6 +22,8 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_gcp.cpp
     src/api/c_api_common.cpp
     src/api/c_api_context.cpp
+    src/api/c_api_basis_catalog.cpp
+    src/api/c_api_basis_builtin.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_resource_planning.cpp
     src/api/c_api_resource_ledger_plan.cpp
@@ -37,6 +39,8 @@ endfunction()
 
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
+    src/molecule/basis_catalog.cpp
+    src/molecule/basis_template.cpp
     src/runtime/context.cpp
     src/runtime/ragged_topology.cpp
     src/runtime/resource_planning.cpp
@@ -130,6 +134,7 @@ function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/methods/hf_method.cpp
     src/scf/density_fitting.cpp
+    src/scf/hf_df_resources.cpp
     src/scf/fleet.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
@@ -175,6 +180,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
       src/scf/cuda/hf_initial_guess.cpp
+      src/scf/cuda/warm_density.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/rhf_resident_values.cpp
@@ -385,6 +391,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/posthf/mp2_derivative_cpu.cpp
       src/posthf/mp2_energy.cpp
       src/posthf/ump2_energy.cpp
+      src/posthf/ump2_force.cpp
       src/posthf/mp2_force.cpp
       src/posthf/mp2_gradient.cpp
       src/posthf/native_provider.cpp
