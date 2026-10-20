@@ -78,3 +78,33 @@ only about one percent and does not establish a robust universal speedup.
 HF/DF fallback audits and auxiliary-g response performance remain outside this
 change. Raw receipts, failed attempts, reference arrays and validation are in
 `benchmarks/results/fast-warm-20261020/`.
+
+## Follow-up diagnosis: strict range-value leases
+
+On the same frozen `798f9ddd7` build, WB97M-V Direct48 Standard warm takes
+7.024–7.054 s and Fast 9.712–9.780 s. Both execute one strict target Fock and
+no implicit endpoint audit. Python profiling locates the difference in native
+SCF (1.534 versus 4.536 s), not force evaluation (5.566 versus 5.267 s).
+The profiler populations are diagnostic and are not publication timings.
+
+An explicit 4-GiB range-residency diagnostic (job 11417) reduces Fast cold
+to 69.550 s but leaves warm at 9.744 s. There are two distinct causes:
+automatic refinement discards the mixed lease without building a strict one,
+and warm replay rejects even an explicit strict lease because the cold
+precision schedule contained mixed operators.
+
+Admit automatic strict range construction only for the existing application
+budget-Fock/stationarity refinement domain. It retains the substantial-grid,
+restricted SPD, nonlocal outer-solver, complete-resource and 4-GiB bounds.
+Retire the mixed lease first; never retain mixed values as strict. The strict
+lease can serve the remaining cold target iterations and same-owner strict
+warm consumers. Ordinary AUTO retains its streamed refinement tail.
+Warm never constructs quartic storage. Failed/refused admission, explicit
+seeds, changed policy or geometry, force-memory eviction and public resource
+ledgers retain the ordinary-provider fallback and separately rebased energy.
+
+The replay decision follows the next consumer's arithmetic, including the
+existing application-budget strict warm rule, and explicitly verifies that
+the retained source is FP64. Physical publication and force gates are unchanged.
+GPU qualification and endpoint measurements for this extension are pending;
+it does not yet establish an additional performance claim.
