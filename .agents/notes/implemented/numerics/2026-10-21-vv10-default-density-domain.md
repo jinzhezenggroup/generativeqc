@@ -1,6 +1,6 @@
 # Decision: align the molecular VV10 density cutoff with GPU4PySCF
 
-Status: implemented, device qualification pending
+Status: implemented and qualified on the recorded endpoint domain
 Date: 2026-10-21
 
 ## Problem
@@ -34,8 +34,20 @@ difference declared when used for molecular comparisons.
 
 ## Qualification
 
-Boundary, inactive-row, signed-weight and policy identity tests cover the
-contract. Device gates must include complete default-grid WB97M-V E/F and the
-resident six-channel force seeds at the new threshold. Timings alone cannot
-qualify the larger domain or mixed precision. Active-set crossing derivatives
-remain outside the local derivative contract.
+133 host tests cover boundary, inactive-row, signed-weight and policy identity
+contracts; compiler dependency checks and applicable pre-commit hooks pass.
+Slurm job 11407 passes all 39 resident six-channel force seed tests at 1e-10.
+Source `bb25db89e` completes cold plus three warm WB97M-V Direct populations:
+Standard3/12/48 and Fast12. Every sample passes energy/atom 1e-5 Eh, maximum
+force 1e-4 and RMS force 3e-5 Eh/Bohr against independent XC5/6, VV10 4/5
+references. Reference stability and same-grid CPU/GPU spots meet quarter gates;
+the CPU oracle retains its independently declared density cutoff. Native and
+reference producer revisions are preserved separately.
+
+Standard48 warm is 7.035 s, versus 32.342 s in the separately recorded default
+GPU4PySCF cutoff diagnostic. This limited comparison is consistent with the
+earlier warm advantage; it is not a new all-method README ranking. Native
+Fast12 warm remains slower than Standard12 on this branch, which deliberately
+does not include the separate Fast warm-revalidation fix. No universal Fast
+performance claim follows. Active-set crossing derivatives remain outside the
+local derivative contract.
