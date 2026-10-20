@@ -1,13 +1,16 @@
 // Host-only CUDA/Context dependency seam. Never evaluates a TensorIR kernel.
 #pragma once
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <map>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "metrics.hpp"
@@ -161,6 +164,55 @@ struct Context {
 };
 }  // namespace generativeqc_tensor
 using namespace generativeqc_tensor;
+
+struct MutexHold {
+  std::mutex state;
+  std::condition_variable changed;
+  bool ready = false, holding = false, release = false;
+  std::thread worker;
+  explicit MutexHold(Context* ctx)
+      : worker([this, ctx] {
+          std::unique_lock<std::mutex> owner(ctx->mutex, std::defer_lock);
+          const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+          while (!owner.try_lock() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          std::unique_lock<std::mutex> gate(state);
+          ready = true;
+          holding = owner.owns_lock();
+          changed.notify_one();
+          if (holding) changed.wait_for(gate, std::chrono::seconds(10), [this] { return release; });
+          holding = false;
+        }) {
+    std::unique_lock<std::mutex> gate(state);
+    changed.wait_for(gate, std::chrono::seconds(4), [this] { return ready; });
+  }
+  bool active() {
+    std::lock_guard<std::mutex> gate(state);
+    return holding;
+  }
+  ~MutexHold() {
+    {
+      std::lock_guard<std::mutex> gate(state);
+      release = true;
+    }
+    changed.notify_one();
+    worker.join();
+  }
+};
+
+extern "C" void* host_hold_mutex(void* p) {
+  if (!p) return nullptr;
+  try {
+    auto* hold = new MutexHold(static_cast<Context*>(p));
+    if (hold->active()) return hold;
+    delete hold;
+  } catch (...) {
+  }
+  return nullptr;
+}
+extern "C" int host_mutex_held(void* p) { return static_cast<MutexHold*>(p)->active(); }
+extern "C" void host_release_mutex(void* p) { delete static_cast<MutexHold*>(p); }
+extern "C" size_t host_work_sequence() { return submitted; }
 
 extern "C" void* host_owner(size_t bytes) { return new Context(bytes); }
 extern "C" void host_destroy(void* p) {

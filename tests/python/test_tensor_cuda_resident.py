@@ -11,6 +11,7 @@ import ctypes
 import os
 import random
 import re
+import time
 import typing
 from pathlib import Path
 
@@ -128,6 +129,13 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
     result = ctypes.byref(metrics)
     owner = lib.host_owner(4096)
     try:
+        _assert_resident_busy(
+            lib,
+            owner,
+            4096,
+            lambda: lib.resident_run(owner, 0, result, error, len(error)),
+            error,
+        )
         # Calls resolve every required public export with its actual C signature.
         lib.host_clear_copy_kinds()
         before = lib.host_synchronizations()
@@ -166,6 +174,38 @@ def test_resident_source_declares_the_resident_abi(resident_host: typing.Any) ->
     _assert_resident_abi(*resident_host)
 
 
+def _assert_resident_busy(
+    lib: ctypes.CDLL,
+    owner: typing.Any,
+    capacity: int,
+    operation: typing.Callable[[], int],
+    error: typing.Any,
+    host: typing.Any = None,
+) -> None:
+    """Reject without admitted work while another real host thread owns the mutex."""
+    arena = lib.host_arena(owner)
+    before = ctypes.string_at(arena, capacity)
+    host_before = None if host is None else host.raw
+    sequence, pending = lib.host_work_sequence(), lib.host_pending_work()
+    holder = lib.host_hold_mutex(owner)
+    assert holder, "finite owner-mutex handshake failed"
+    try:
+        assert lib.host_mutex_held(holder)
+        error.value = b""
+        start = time.monotonic()
+        status = operation()
+        elapsed = time.monotonic() - start
+        assert elapsed < 3.0, "busy admission blocked instead of returning promptly"
+        assert status != 0
+        assert b"busy" in error.value
+        assert ctypes.string_at(arena, capacity) == before
+        assert host is None or host.raw == host_before
+        assert lib.host_work_sequence() == sequence
+        assert lib.host_pending_work() == pending
+    finally:
+        lib.host_release_mutex(holder)
+
+
 def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
     assert all(plan.steps[i].last_use == len(plan.steps) for i in plan.inputs)
     slots = (
@@ -189,6 +229,17 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
             size = step.node.spec.size * step.node.spec.itemsize
             payload = bytes((j * 17 + slot * 43) % 256 for j in range(size))
             host = ctypes.create_string_buffer(payload) if size else None
+            if slot == 0:
+                _assert_resident_busy(
+                    lib,
+                    owner,
+                    capacity,
+                    lambda slot=slot, host=host, size=size: lib.resident_upload(
+                        owner, slot, host, size, error, len(error)
+                    ),
+                    error,
+                    host,
+                )
             lib.host_clear_copy_kinds()
             before = lib.host_synchronizations()
             assert (
@@ -208,6 +259,14 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
                 assert guard.raw == b"\xcc"
                 assert ctypes.string_at(arena, capacity) == expected
 
+        # A real passthrough run must preserve the actual uploaded tensor arena.
+        metrics = _Metrics()
+        assert (
+            lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error)) == 0
+        ), error.value
+        assert ctypes.string_at(arena, capacity) == expected
+        assert lib.host_pending_work() == 0
+
         # Seed the whole arena independently: downloads cannot accidentally pass
         # by undoing an equally incorrect upload mapping.
         raw = random.Random(2296).randbytes(capacity)
@@ -226,6 +285,17 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
         for slot, step in enumerate(slots[1]):
             size = step.node.spec.size * step.node.spec.itemsize
             host = ctypes.create_string_buffer(size) if size else None
+            if slot == 0:
+                _assert_resident_busy(
+                    lib,
+                    owner,
+                    capacity,
+                    lambda slot=slot, host=host, size=size: lib.resident_download(
+                        owner, slot, host, size, error, len(error)
+                    ),
+                    error,
+                    host,
+                )
             lib.host_clear_copy_kinds()
             before = lib.host_synchronizations()
             assert (
@@ -347,6 +417,10 @@ def test_resident_control_span_transfers(
         "narrow_slot",
         "narrow_bytes",
         "output_offset",
+        "run_busy",
+        "transfer_busy",
+        "blocking_busy",
+        "status_target",
         "run_endpoints",
         "event_position",
         "early_sync",
@@ -400,6 +474,14 @@ def test_resident_host_oracle_controls(
                 "                                   cudaMemcpyDeviceToHost, ctx.stream));",
                 "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
                 "                                   cudaMemcpyDeviceToHost, ctx.stream);",
+            )
+        if mutation == "status_target":
+            return source.replace(
+                "cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream)",
+                "cudaMemsetAsync(p, 0, sizeof(int), ctx.stream)",
+            ).replace(
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),",
+                "cudaMemcpyAsync(&arithmetic_error, p, sizeof(int),",
             )
         if mutation in ("zero_status_bytes", "short_status_bytes"):
             count = "0" if mutation == "zero_status_bytes" else "sizeof(int) - 1"
@@ -479,6 +561,12 @@ def test_resident_host_oracle_controls(
             )
         if mutation == "kind":
             return source
+        if mutation == "run_busy":
+            return source.replace("if (!lock.owns_lock()) {", "if (false) {")
+        if mutation == "blocking_busy":
+            return source.replace("ctx.mutex, std::try_to_lock", "ctx.mutex")
+        if mutation == "transfer_busy":
+            return source
         field = 0 if mutation == "offset" else 1
 
         def corrupt(match: re.Match[str]) -> str:
@@ -489,6 +577,8 @@ def test_resident_host_oracle_controls(
         return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
 
     def wrong_kind(header: str) -> str:
+        if mutation == "transfer_busy":
+            return header.replace("if (!lock.owns_lock()) {", "if (false) {")
         return header.replace(
             "upload ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToHost",
             "upload ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice",
@@ -500,7 +590,7 @@ def test_resident_host_oracle_controls(
         native_cxx,
         monkeypatch,
         transform,
-        header_transform=wrong_kind if mutation == "kind" else None,
+        header_transform=wrong_kind if mutation in ("kind", "transfer_busy") else None,
     )
     if mutation in (
         "abi",
@@ -516,6 +606,8 @@ def test_resident_host_oracle_controls(
         "run_endpoints",
         "event_position",
         "early_sync",
+        "run_busy",
+        "blocking_busy",
     ):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)

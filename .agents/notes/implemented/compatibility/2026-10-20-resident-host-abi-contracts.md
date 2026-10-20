@@ -246,6 +246,21 @@ overlays. Its ignored manifest records the complete tree and selected producer,
 runtime and test blob/byte identities. The resulting commit must retain that
 exact candidate tree; delivery still requires latest-head CI and formal review.
 
+Reviews `PRRT_kwDOUFEw6s6uPMkr` and `PRRT_kwDOUFEw6s6uPwe1` add two bounded
+host contracts. A separate real host thread holds the fixture Context mutex;
+run/upload/download must promptly report a fresh busy error without changing
+arena, host buffers or admitted/pending work. The holder has finite acquisition,
+handshake and automatic release, and every normal/exceptional test path releases
+and joins it. Existing serial success oracles run after release to test recovery.
+Opt-in guard bypass and blocking controls exercise rejection without leaving a
+thread behind. This is owned-host-mutex admission, not general production Context
+lifecycle or GPU concurrency qualification.
+
+After real input uploads and before the independent download seed, a real
+passthrough `resident_run` must preserve the complete tensor arena. A control
+retargets only status reset/readback to the arena and is rejected by this public
+upload/run combination; no additional private status-member getter is required.
+
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
 test timed out. That run was interrupted and is not an acceptance result. A later

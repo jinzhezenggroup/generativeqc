@@ -102,6 +102,10 @@ def build_resident_host(
         "host_clear_copy_kinds": (None, []),
         "host_copy_matches": (ctypes.c_int, [ctypes.c_int]),
         "host_copy_bytes_match": (ctypes.c_int, [ctypes.c_size_t]),
+        "host_hold_mutex": (ctypes.c_void_p, [ctypes.c_void_p]),
+        "host_mutex_held": (ctypes.c_int, [ctypes.c_void_p]),
+        "host_release_mutex": (None, [ctypes.c_void_p]),
+        "host_work_sequence": (ctypes.c_size_t, []),
     }
     for name, (result, args) in signatures.items():
         function = getattr(lib, name)
