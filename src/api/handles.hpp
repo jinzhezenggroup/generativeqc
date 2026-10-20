@@ -27,14 +27,25 @@ struct generativeqc_system {
   /** Values-only KS DF source handle, never an orbital or generic DF-HF export.
    * Second-order consumers must independently authenticate their model/closure. */
   bool ks_auxiliary{false};
+  /** Complete CUDA HF/KS fitting values and first nuclear derivatives.
+   * The auxiliary-g sink owns six-term expansions; orbital admission is separate. */
+  bool scf_auxiliary{false};
 };
 
 namespace generativeqc::api {
 
 inline bool valid_system_roles(const generativeqc_system& orbital,
                                const generativeqc_method_descriptor& descriptor) {
-  if (orbital.correlation_auxiliary || orbital.ks_auxiliary) return false;
+  if (orbital.correlation_auxiliary || orbital.ks_auxiliary || orbital.scf_auxiliary) return false;
   const auto* auxiliary = descriptor.density_fitting_auxiliary_basis;
+  if (auxiliary && auxiliary->scf_auxiliary) {
+    const auto* capabilities = methods::find_capabilities(descriptor.method);
+    return capabilities &&
+           (capabilities->family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+            (capabilities->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+             descriptor.ks_options)) &&
+           descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA;
+  }
   if (auxiliary && auxiliary->ks_auxiliary) {
     const auto* capabilities = methods::find_capabilities(descriptor.method);
     return capabilities && capabilities->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&

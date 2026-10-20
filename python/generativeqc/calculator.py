@@ -1566,11 +1566,12 @@ class Calculator:
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
-        """Select the correlation source's domain, not generic DF-HF exports.
+        """Select an explicitly linked auxiliary domain, never orbital admission.
 
         The physical correlation source and its nuclear pullback support
         auxiliary g shells. Both preflight and native shell expansion must
-        use that same scoped policy; other DF consumers retain their limits.
+        use that same scoped policy. HF/KS uses a separate role for its complete
+        value/first-derivative owner; older libraries retain their f boundary.
         """
         if (
             operator in {"df_metric", "df_three_center"}
@@ -1593,6 +1594,18 @@ class Calculator:
             and getattr(self, "_composite_rks_second_order", False)
         ):
             return "wb97mv_df_values"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order in (0, 1)
+            and self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            and (
+                self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
+                or self._ks_options is not None
+            )
+            and hasattr(self._library, "generativeqc_scf_auxiliary_system_create_v1")
+        ):
+            return "scf_df"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -2065,7 +2078,11 @@ class Calculator:
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
                 if auxiliary_consumer == "correlation_df"
-                else "generativeqc_ks_auxiliary_system_create_v1",
+                else (
+                    "generativeqc_scf_auxiliary_system_create_v1"
+                    if auxiliary_consumer == "scf_df"
+                    else "generativeqc_ks_auxiliary_system_create_v1"
+                ),
                 None,
             )
             if create_system is None:
