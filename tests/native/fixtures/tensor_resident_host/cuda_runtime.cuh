@@ -18,8 +18,10 @@ struct PendingCopy {
 };
 inline std::vector<PendingCopy> pending;
 inline int failure = 0, synchronizations = 0;
-inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int, int stream) {
+inline std::vector<int> copy_kinds;
+inline int cudaMemcpyAsync(void* to, const void* from, size_t bytes, int kind, int stream) {
   if (stream != 73) throw std::runtime_error("wrong owner stream");
+  copy_kinds.push_back(kind);
   if (failure == 1) return 7;
   pending.push_back({to, from, bytes});
   return 0;
@@ -81,7 +83,11 @@ struct Context {
 using namespace generativeqc_tensor;
 
 extern "C" void* host_owner(size_t bytes) { return new Context(bytes); }
-extern "C" void host_destroy(void* p) { delete static_cast<Context*>(p); }
+extern "C" void host_destroy(void* p) {
+  // Negative controls can omit a drain. Discard their fake borrowed pointers.
+  pending.clear();
+  delete static_cast<Context*>(p);
+}
 extern "C" void* host_arena(void* p) { return static_cast<Context*>(p)->arena; }
 extern "C" void host_capacity(void* p, size_t bytes) {
   static_cast<Context*>(p)->metrics.owned_device_bytes = bytes;
@@ -91,3 +97,10 @@ extern "C" void host_static_ready(void* p, int ready) {
 }
 extern "C" void host_failure(int mode) { failure = mode; }
 extern "C" int host_synchronizations() { return synchronizations; }
+extern "C" size_t host_pending_copies() { return pending.size(); }
+extern "C" void host_clear_copy_kinds() { copy_kinds.clear(); }
+extern "C" int host_copy_matches(int upload) {
+  const int expected = upload ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToHost;
+  return !copy_kinds.empty() && std::all_of(copy_kinds.begin(), copy_kinds.end(),
+                                            [expected](int kind) { return kind == expected; });
+}

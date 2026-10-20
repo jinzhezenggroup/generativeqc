@@ -34,10 +34,16 @@ arithmetic/symmetry, ordinary-emitter or scientific numerical qualification.
   These cases do not qualify FP32/FP64 spans or computed-output storage.
 - Exercise invalid slots, incorrect byte lengths, null owners/host buffers,
   allocation offset/extent bounds, injected copy/synchronization/device errors,
-  nonzero statuses, diagnostics and stream draining. Preserve the input pin gate.
+  nonzero statuses, diagnostics and stream draining. Record all CUDA copy kinds
+  per operation and require H2D uploads/D2H downloads without fixing call counts;
+  require successful runs to drain their
+  queued readback as well as failed runs. Preserve the input pin gate.
 - Opt-in `VIBEQC_RESIDENT_HOST_CONTROLS=1` accepts formatting and private table
   renaming while rejecting ABI-version, missing diagnostics, offset, length and
-  status corruption using the same behavioral oracle. These controls edit generated text;
+  status corruption using the same behavioral oracle. Separate controls corrupt
+  the copied header's copy kind and omit or move the successful-run drain early.
+  Normal gates use the unchanged production header; only opt-in damage controls
+  transform a temporary copy. These controls edit generated/test-copy text;
   they are not a required-CI private spelling/hash gate.
 
 ## Boundaries retained
@@ -88,11 +94,29 @@ buffer before the static-state call and require the initialization diagnostic;
 the same control must then reject the damaged wrapper. This is test-oracle repair,
 not a production error-path change.
 
-After this diagnostic-oracle repair, the final source-matched Linux gate passed
+After this diagnostic-oracle repair, the `bdb33adb2` Linux gate passed
 157 cases with 19 CUDA-device opt-in skips, including all 27 resident cases and
 six opt-in controls. The diagnostic-suppression control now rejects the damaged
 wrapper; no production source was changed. Ruff/format and whitespace checks
 passed, and final test/helper/fixture LF blobs matched the qualified sources.
+
+Reviews `PRRT_kwDOUFEw6s6uNU3K` and `PRRT_kwDOUFEw6s6uNU3M` identified missing
+copy-kind observation and successful-run synchronization checks. The host CUDA
+dependency fixture now records supplied copy kinds; its getter compares all to
+the public H2D/D2H constants without depending on a particular numeric encoding.
+The run oracle checks synchronization and an empty pending-copy queue immediately
+after the successful call. An omitted or prematurely moved drain is rejected
+before any subsequent error path can
+mask it; negative-fixture destruction discards fake pending borrowed pointers
+rather than accessing expired stack readback storage. No production code changes
+are needed for these test-contract repairs.
+
+The resulting source-matched Linux gate passed 160 cases with 19 explicit
+CUDA-device opt-in skips, including all 30 resident cases and nine opt-in
+controls. Wrong copy kinds, missing drains and early drains are rejected while
+the harmless table-renaming/format control passes. The normal-gate production
+resident/metrics headers remain unchanged; test/helper/fixture LF blob hashes
+match the qualified sources. This remains host evidence only.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child

@@ -128,7 +128,10 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
     owner = lib.host_owner(4096)
     try:
         # Calls resolve every required public export with its actual C signature.
+        before = lib.host_synchronizations()
         assert lib.resident_run(owner, 0, result, error, len(error)) == 0, error.value
+        assert lib.host_synchronizations() > before
+        assert lib.host_pending_copies() == 0
         assert metrics.owned_device_bytes == 4096
         for pointer, metrics in ((None, result), (owner, None)):
             error.value = b""
@@ -171,11 +174,15 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
             size = step.node.spec.size * step.node.spec.itemsize
             payload = bytes((j * 17 + slot * 43) % 256 for j in range(size))
             host = ctypes.create_string_buffer(payload) if size else None
+            lib.host_clear_copy_kinds()
             before = lib.host_synchronizations()
             assert (
                 lib.resident_upload(owner, slot, host, size, error, len(error)) == 0
             ), error.value
             assert lib.host_synchronizations() > before
+            assert lib.host_pending_copies() == 0
+            if size:
+                assert lib.host_copy_matches(1)
             expected[step.offset : step.offset + size] = payload
             assert ctypes.string_at(arena, capacity) == expected
 
@@ -186,12 +193,15 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
         for slot, step in enumerate(slots[1]):
             size = step.node.spec.size * step.node.spec.itemsize
             host = ctypes.create_string_buffer(size) if size else None
+            lib.host_clear_copy_kinds()
             before = lib.host_synchronizations()
             assert (
                 lib.resident_download(owner, slot, host, size, error, len(error)) == 0
             ), error.value
             assert lib.host_synchronizations() > before
+            assert lib.host_pending_copies() == 0
             if size:
+                assert lib.host_copy_matches(0)
                 assert host.raw == raw[step.offset : step.offset + size]
             assert ctypes.string_at(arena, capacity) == raw
 
@@ -265,7 +275,18 @@ def test_resident_control_span_transfers(
     reason="opt-in generated-source metamorphic/mutation controls",
 )
 @pytest.mark.parametrize(
-    "mutation", ["format", "abi", "diagnostic", "offset", "length", "status"]
+    "mutation",
+    [
+        "format",
+        "abi",
+        "diagnostic",
+        "run_sync",
+        "early_sync",
+        "kind",
+        "offset",
+        "length",
+        "status",
+    ],
 )
 def test_resident_host_oracle_controls(
     mutation: str,
@@ -298,6 +319,17 @@ def test_resident_host_oracle_controls(
                 "generativeqc_tensor::error_text(error, size, e.what()); return 1;",
                 "return 1;",
             )
+        if mutation == "run_sync":
+            return source.replace("cuda_check(cudaEventSynchronize(ctx.end));", "")
+        if mutation == "early_sync":
+            return source.replace(
+                "cuda_check(cudaEventSynchronize(ctx.end));", ""
+            ).replace(
+                "int arithmetic_error = 0;",
+                "cuda_check(cudaEventSynchronize(ctx.end)); int arithmetic_error = 0;",
+            )
+        if mutation == "kind":
+            return source
         field = 0 if mutation == "offset" else 1
 
         def corrupt(match: re.Match[str]) -> str:
@@ -307,8 +339,21 @@ def test_resident_host_oracle_controls(
 
         return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
 
-    lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch, transform)
-    if mutation in ("abi", "diagnostic"):
+    def wrong_kind(header: str) -> str:
+        return header.replace(
+            "upload ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToHost",
+            "upload ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice",
+        )
+
+    lib = build_resident_host(
+        plan,
+        tmp_path,
+        native_cxx,
+        monkeypatch,
+        transform,
+        header_transform=wrong_kind if mutation == "kind" else None,
+    )
+    if mutation in ("abi", "diagnostic", "run_sync", "early_sync"):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)
         return

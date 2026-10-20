@@ -25,6 +25,8 @@ def build_resident_host(
     native_cxx: typing.Any,
     monkeypatch: typing.Any,
     transform: typing.Callable[[str], str] | None = None,
+    *,
+    header_transform: typing.Callable[[str], str] | None = None,
 ) -> ctypes.CDLL:
     directory.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(
@@ -32,6 +34,10 @@ def build_resident_host(
     )
     shutil.copyfile(FIXTURE / "cuda_runtime.cuh", directory / "cuda_runtime.cuh")
     shutil.copyfile(ROOT / "src/tensor/metrics.hpp", directory / "metrics.hpp")
+    if header_transform:
+        # Opt-in damage controls only; normal gates compile the unchanged header.
+        header = directory / "cuda_resident.cuh"
+        header.write_text(header_transform(header.read_text()), encoding="utf-8")
     with monkeypatch.context() as patch:
         patch.setattr(
             cuda_resident_emit,
@@ -92,6 +98,9 @@ def build_resident_host(
         "host_static_ready": (None, [ctypes.c_void_p, ctypes.c_int]),
         "host_failure": (None, [ctypes.c_int]),
         "host_synchronizations": (ctypes.c_int, []),
+        "host_pending_copies": (ctypes.c_size_t, []),
+        "host_clear_copy_kinds": (None, []),
+        "host_copy_matches": (ctypes.c_int, [ctypes.c_int]),
     }
     for name, (result, args) in signatures.items():
         function = getattr(lib, name)
