@@ -240,8 +240,17 @@ __device__ inline void md_engine_radial(double rho, Vec3<double> p, Vec3<double>
   static_assert(Stride > 0);
   const Vec3<double> difference{p.x - q.x, p.y - q.y, p.z - q.z};
   double seeds[Order + 1];
-  boys_values<Order>(rho * (difference.x * difference.x + difference.y * difference.y +
-                            difference.z * difference.z), seeds);
+  const double argument = rho * (difference.x * difference.x + difference.y * difference.y +
+                                difference.z * difference.z);
+  // Reuse the positive-series owner only in the already-series high-order
+  // domain. Extending its default series threshold into the erf/upward domain
+  // adds work. A bounded failure retains the established shared Boys path.
+  bool have_seeds = false;
+  if constexpr (Order >= 5)
+    if (argument < 6.0)
+      have_seeds = generativeqc::integrals::range_detail::long_moments(
+          Order, argument, 1.0, seeds);
+  if (!have_seeds) boys_values<Order, double, true>(argument, seeds);
   // Linearity permits one source prefactor in the seeds instead of one
   // multiply for every output dot. A unit prefactor retains the original
   // unscaled oracle/compatibility lowering and its rounding order.

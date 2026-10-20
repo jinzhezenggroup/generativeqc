@@ -183,3 +183,8 @@ required by the cumulative certificate from arithmetic/schedule inefficiency,
 and qualify complete endpoints before claiming parity. Do not revive the
 weighted shares, exact-prefix reduction, or positive Boys series merely because
 they appear tighter or resemble upstream more closely.
+
+The subsequent [Boys arithmetic qualification](2026-10-20-md-j-boys-reuse.md)
+promotes reciprocal reuse and a narrower positive-series region after separate
+ablations and complete endpoint validation. It preserves this tail certificate;
+the rejected whole-owner positive-series experiment above remains negative evidence.

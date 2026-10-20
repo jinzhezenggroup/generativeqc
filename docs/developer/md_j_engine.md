@@ -180,6 +180,15 @@ The common Coulomb prefactor is folded into the Boys seed scale before the
 linear radial recurrence, sharing it across both admitted directions and
 removing one multiplication per output dot. This changes FP64 rounding order;
 the unscaled generated entry point remains available for independent comparison.
+Compact FP64 radial evaluation opts into the shared Boys owner's reciprocal
+reuse: one square root supplies the erf seed and one reciprocal supplies all
+upward recurrence orders. Other Boys consumers retain their original arithmetic.
+For orders five through eight with argument below six, the compact evaluator
+uses the existing positive incomplete-gamma series owner instead of the
+alternating series. A bounded series failure falls back to the shared Boys
+owner. This does not extend the series region into the established upward
+recurrence domain. Both changes retain FP64 storage and accumulation and require
+independent high-precision seed/radial and complete energy/force qualification.
 Bra partials remain in registers across ket batches, then reuse the radial
 workspace for reduction. Ket partials reduce across contiguous bra shuffle
 groups before a single writer updates each shared element. Global atomics
