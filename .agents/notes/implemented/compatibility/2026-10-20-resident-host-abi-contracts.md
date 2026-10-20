@@ -148,7 +148,7 @@ created unrecorded event has no captured work. Logical endpoint admission follow
 the public [copy-direction contract](https://docs.nvidia.com/cuda/archive/12.9.1/cuda-runtime-api/group__CUDART__MEMORY.html),
 without claiming an exact device error code.
 
-The complete source-matched Linux gate with this dependency model passed 163
+The `49ade5d5f` source-matched Linux gate with this dependency model passed 163
 cases with 19 explicit CUDA-device opt-in skips, including all 33 resident cases
 and twelve opt-in controls. Against the previous `4aae37118` dependency fixture,
 the two new controls fail with `DID NOT RAISE AssertionError`, reproducing both
@@ -157,6 +157,22 @@ these old-model red results are retained negative evidence, not final acceptance
 After restoring the qualified source hashes, both controls passed (2 passed,
 31 deselected). The full-gate cache delta was 18 compilations/misses and zero
 failures; this establishes cache use rather than cache hits or GPU acceptance.
+
+Review `PRRT_kwDOUFEw6s6uN8uK` found that elapsed-time admission still accepted a
+missing begin record. The fixture now distinguishes created/unrecorded events
+from recorded events and rejects elapsed-time requests lacking either completed
+record, following the linked CUDA event API. It supplies no timing-performance
+oracle. A missing-begin control tests the resulting failure boundary. The run
+oracle also exercises existing copy, synchronization and device-check failure
+injections with fresh diagnostics and drained queues; an ignored-readback-status
+control checks that nonzero API responses are not swallowed. These are status
+transport checks, not synthetic tensor arithmetic.
+
+The final source-matched Linux gate passed 165 cases with 19 explicit CUDA-device
+opt-in skips, including all 35 resident cases and fourteen opt-in controls. The
+qualified test/helper/fixture LF hashes match the committed blobs. Full-gate
+cache evidence records 20 compilations/misses, zero failures; this is not timing,
+device or scientific acceptance.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child

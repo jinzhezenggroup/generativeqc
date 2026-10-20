@@ -35,6 +35,7 @@ struct PendingCopy {
 struct EventRecord {
   int stream;
   size_t watermark;
+  bool recorded;
 };
 inline std::vector<PendingCopy> pending;
 inline std::map<int, EventRecord> events;
@@ -81,17 +82,26 @@ inline int cudaMemsetAsync(void* p, int value, size_t bytes, int stream) {
   return 0;
 }
 inline int cudaEventRecord(int event, int stream) {
-  if (stream != 73) return 7;
-  events[event] = {stream, submitted};
+  const auto entry = events.find(event);
+  if (stream != 73 || entry == events.end()) return 7;
+  entry->second = {stream, submitted, true};
   return 0;
 }
 inline int cudaEventSynchronize(int event) {
   const auto record = events.find(event);
-  if (record != events.end() && record->second.stream != 73) return 7;
+  if (record == events.end() || record->second.stream != 73) return 7;
   // A recorded event captures preceding work, not later stream submissions.
-  return finish_copies(record == events.end() ? 0 : record->second.watermark);
+  return finish_copies(record->second.recorded ? record->second.watermark : 0);
 }
-inline int cudaEventElapsedTime(float* time, int, int) {
+inline int cudaEventElapsedTime(float* time, int begin, int end) {
+  const auto first = events.find(begin), last = events.find(end);
+  if (!time || first == events.end() || last == events.end() || !first->second.recorded ||
+      !last->second.recorded)
+    return 7;
+  const size_t frontier = std::max(first->second.watermark, last->second.watermark);
+  if (std::any_of(pending.begin(), pending.end(),
+                  [frontier](const PendingCopy& copy) { return copy.sequence <= frontier; }))
+    return 7;
   *time = 0;
   return 0;
 }
@@ -119,6 +129,8 @@ struct Context {
     metrics.owned_device_bytes = bytes;
     device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(arena), bytes});
     device_ranges.push_back({this, reinterpret_cast<std::uintptr_t>(error), sizeof(int)});
+    events[begin] = {stream, 0, false};
+    events[end] = {stream, 0, false};
   }
   ~Context() {
     device_ranges.erase(

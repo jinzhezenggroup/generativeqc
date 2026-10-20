@@ -135,6 +135,17 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
         assert lib.host_pending_copies() == 0
         assert lib.host_copy_matches(0)
         assert metrics.owned_device_bytes == 4096
+        for failure in (1, 2, 3):
+            lib.host_failure(failure)
+            error.value = b""
+            before = lib.host_synchronizations()
+            try:
+                assert lib.resident_run(owner, 0, result, error, len(error)) != 0
+                assert b"injected" in error.value
+                assert lib.host_synchronizations() > before
+                assert lib.host_pending_copies() == 0
+            finally:
+                lib.host_failure(0)
         for pointer, metrics in ((None, result), (owner, None)):
             error.value = b""
             assert lib.resident_run(pointer, 0, metrics, error, len(error)) != 0
@@ -284,6 +295,8 @@ def test_resident_control_span_transfers(
         "diagnostic",
         "run_sync",
         "run_kind",
+        "run_status",
+        "begin_record",
         "run_endpoints",
         "event_position",
         "early_sync",
@@ -330,6 +343,17 @@ def test_resident_host_oracle_controls(
             return source.replace(
                 "cudaMemcpyDeviceToHost, ctx.stream",
                 "cudaMemcpyHostToDevice, ctx.stream",
+            )
+        if mutation == "run_status":
+            return source.replace(
+                "cuda_check(cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream));",
+                "cudaMemcpyAsync(&arithmetic_error, ctx.error, sizeof(int),\n"
+                "                                   cudaMemcpyDeviceToHost, ctx.stream);",
+            )
+        if mutation == "begin_record":
+            return source.replace(
+                "cuda_check(cudaEventRecord(ctx.begin, ctx.stream));", ""
             )
         if mutation == "run_endpoints":
             return source.replace(
@@ -380,6 +404,8 @@ def test_resident_host_oracle_controls(
         "diagnostic",
         "run_sync",
         "run_kind",
+        "run_status",
+        "begin_record",
         "run_endpoints",
         "event_position",
         "early_sync",
