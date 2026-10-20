@@ -368,7 +368,8 @@ intermediate-node precision propagation is defined.
 `plan_materializations(program)` reports high-degree retained outputs, opaque
 sources and materialize-then-consume boundaries. With
 `allow_reassociation=True`, it can select a lower-storage plan for a single-use
-real-FP64 einsum producer consumed by another einsum. The pass substitutes visible
+real-FP64 einsum producer, or a bounded sum of private visible einsums,
+consumed by another einsum. The pass substitutes visible
 factors, renames private dummy indices, combines exact rational coefficients and
 reuses the existing bounded contraction-tree search. Public output specifications
 and input roles/differentiability are preserved. Default optimization/preparation
@@ -391,7 +392,8 @@ and logical live peak, plus strictly lower total materialization bytes.
 materializations; failure retains the original program and reports rejection.
 It is not a runtime workspace allowance or a guarantee that the retained program
 fits. `max_candidates`, `max_operands` and `max_intermediate_axes` bound search
-and allowed new intermediates. Inventory is refreshed after accepted rewrites.
+and allowed new intermediates. `max_distribution_terms` (default four, at most
+eight) bounds sum distribution. Inventory is refreshed after accepted rewrites.
 
 Public dense outputs, repeated producer edges, multiple readers, view/nonlinear
 consumers, repeated Einstein labels, non-FP64 arithmetic and explicit
@@ -404,6 +406,37 @@ recommendation requiring explicit factor/consumer, alias, derivative and resourc
 contracts; logical shape alone never proves separability or exact-zero support.
 The shared advisory materialization diagnostics remain independent of this
 consumer-substitution proof.
+
+Each decision also exposes a shared immutable
+`MaterializationRuleRequest`. It binds the current source equation identity,
+producer identity/specification, every consumer identity and operand position,
+explicit precision/reassociation policy, byte allowance and search/work/live-byte
+constraints. The request hash changes when any of these requirements changes.
+`to_payload()` returns a detached JSON snapshot. Native/source analyzers may
+construct the same request type and attach it to
+`common.materialization.materialization_diagnostic(..., rule_request=request)`;
+the diagnostic checks origin/subject/output consistency and still reports
+unresolved consumer/ABI and source-support obligations.
+
+The rule set is finite and provider neutral:
+`single-consumer-einsum` substitutes one visible contraction;
+`distribute-add-einsum` contracts each private visible term of a sum, then
+recombines the exact rational sum. Both require explicit reassociation permission
+and the same complete-program work/storage gates. Sum terms with another reader
+or a requested output remain materialized; distribution cannot duplicate their
+production. Opaque/nonlinear terms and unavailable rules are rejected. A lower
+memory estimate alone never permits increased estimated work. No request,
+external `factorized-source`/`block-source` recommendation, or claimed producer
+descriptor grants mathematical, derivative or runtime qualification.
+
+`tests/python/test_materialization_rule_contracts.py` qualifies the literal
+MP2 Fock-like structured-weight component and the actual RCCSD
+`D05_vv_ladder` source built by the shared equation owner. It covers independent
+values, interpreted/generated JVP/VJP, finite differences, both selected and
+losing CC shapes, immutable request identity and retained/shared/opaque/precision
+boundaries. The separate MP2 correlation source is not inferred from its shape.
+This API changes compiler opt-in planning only; it does not reroute production
+MP2/CC forces or execute a native provider.
 
 The acceptance workload is one explicit auxiliary slice of the DF-CC ladder
 `ac,ijcd,bd->ijab`, initially expressed through a visible `vvvv` product.

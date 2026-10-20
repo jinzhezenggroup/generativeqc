@@ -10,6 +10,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.layout import DenseLayout
+from generativeqc_compiler.common.materialization import MaterializationRuleRequest
 
 from .ad_program import (
     GENERATION_VERSION,
@@ -168,6 +169,7 @@ __all__ = [
     "MaterializationDecision",
     "MaterializationFootprint",
     "MaterializationPlan",
+    "MaterializationRuleRequest",
     "Node",
     "NodeComplexity",
     "PackedLayout",
