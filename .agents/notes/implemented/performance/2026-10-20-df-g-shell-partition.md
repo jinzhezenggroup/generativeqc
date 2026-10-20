@@ -61,3 +61,12 @@ to 3.140 s, with positive shell and auxiliary-g remainder work. The generic
 g remainder can still dominate large cases; full g shell sharing is a distinct
 future optimization. r2SCAN-3c DF96 and WB97M-V DF96 resource/work limits remain
 unresolved and are outside the completed endpoint qualification above.
+
+The clean r2SCAN-3c DF96 attempt hits its 45-minute Slurm limit without a
+completed sample. A separate 180-second trace shows the first RI-J evaluation
+alone taking 135.361 s, versus 1.797 s for metric factorization and 6.558 s for
+preparation. It repeatedly regenerates raw three-center tiles under the value
+budget. That value-path work cliff requires a separate optimization; speeding
+the force consumer cannot fix it. The untouched partial measurement, timeout
+receipt and compact trace counters are retained in
+`benchmarks/results/df-g-shell-20261021/large-case-diagnostic.json`.
