@@ -48,10 +48,8 @@ __global__ void build_df_pair_force_norms(DfShellBasisView view, const double* p
   while ((first + 1) * (first + 2) / 2 <= index) ++first;
   const auto second = index - first * (first + 1) / 2;
   const auto& b = view.basis;
-  const auto* a_power =
-      b.term_angular + view.ao_offsets[first] * molecule::kMaximumAoExpansionTerms * 3;
-  const auto* b_power =
-      b.term_angular + view.ao_offsets[second] * molecule::kMaximumAoExpansionTerms * 3;
+  const auto* a_power = b.term_angular + view.ao_offsets[first] * view.expansion_terms * 3;
+  const auto* b_power = b.term_angular + view.ao_offsets[second] * view.expansion_terms * 3;
   const unsigned la = a_power[0] + a_power[1] + a_power[2];
   const unsigned lb = b_power[0] + b_power[1] + b_power[2];
   double distance2 = 0;
@@ -81,8 +79,7 @@ __global__ void build_df_auxiliary_value_norms(DfShellBasisView view, std::size_
   const auto shell = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
   if (shell >= shells) return;
   const auto& b = view.basis;
-  const auto* power =
-      b.term_angular + view.ao_offsets[shell] * molecule::kMaximumAoExpansionTerms * 3;
+  const auto* power = b.term_angular + view.ao_offsets[shell] * view.expansion_terms * 3;
   const unsigned angular = power[0] + power[1] + power[2];
   double bound = 0;
   for (auto p = b.primitive_offsets[shell]; p < b.primitive_offsets[shell + 1]; ++p)
@@ -349,7 +346,9 @@ struct ShellMetadata {
   std::vector<SignatureGroup> signature_groups;
   DfShellBasisView view, signature_view;
   ShellMetadata(const core::System& system, const HostBasis& host, DfDerivativeBasisView basis,
-                Arena& arena, bool signatures) {
+                Arena& arena, bool signatures,
+                std::size_t expansion_terms = molecule::kMaximumAoExpansionTerms) {
+    view.expansion_terms = signature_view.expansion_terms = expansion_terms;
     offsets.reserve(system.shells.size() + 1);
     for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
       offsets.push_back(std::lower_bound(host.ao_shells.begin(), host.ao_shells.end(), shell) -
@@ -1184,7 +1183,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         occupied && device_metric && device_metric->full_rank, source_schedule == "qualify");
     runtime::cuda_trace::trace_counter("response_source_derivative_qualification_requested",
                                        source_schedule == "qualify");
-    if (!auxiliary_g && device_metric && schedule == 0 && source_schedule_eligible &&
+    if (device_metric && schedule == 0 && source_schedule_eligible &&
         !(upload_diagnostic && *upload_diagnostic) &&
         !(scatter_diagnostic && *scatter_diagnostic) &&
         !(serial_diagnostic && std::string_view(serial_diagnostic) == "1")) {
@@ -1199,13 +1198,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
         execution_control ? execution_control : (promoted_default ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
-    // The whole-shell consumer has only s/p/d/f class metadata. Auxiliary g
-    // uses the same six-term generated derivative as the correlation sink;
-    // never omit its class or reinterpret six-term metadata with stride three.
-    if (auxiliary_g && execution != "generic")
-      throw std::invalid_argument("auxiliary g DF-HF derivatives require generic execution");
+    // Shell reuse covers the s/p/d/f subset without changing public AO offsets.
+    // A disjoint generic contraction below owns the remaining g auxiliary
+    // functions, and metric response always retains its complete domain.
     const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
-    mixed_shell = mixed_shell && shell_execution;
+    mixed_shell = mixed_shell && shell_execution && !auxiliary_g;
     if (mixed_shell) {
       precision_work =
           static_cast<unsigned long long*>(arena.allocate(sizeof(observed_precision_work)));
@@ -1229,7 +1226,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // Unsupported states retain dense response, folding its two ordered
     // adjoints when a generated shell consumer is available.
     const bool packed_pairs = pair_policy == "packed" && shell_execution && full_shell_domain &&
-                              borrowed && borrowed->occupied_response;
+                              !auxiliary_g && borrowed && borrowed->occupied_response;
     const auto derivative_pairs = packed_pairs ? DfDerivativePairs::packed
                                   : pair_policy == "symmetric" || pair_policy == "packed" ||
                                           (pair_policy == "auto" && promoted_default)
@@ -1310,8 +1307,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
         runtime::host_trace::Region metadata("df_shell_metadata", n);
         runtime::cuda_trace::TraceRegion metadata_device("shell_metadata_preparation",
                                                          arena.stream);
-        shell_o = std::make_unique<ShellMetadata>(orbital, host_o, o, arena, primitive_buckets);
-        shell_x = std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, primitive_buckets);
+        shell_o = std::make_unique<ShellMetadata>(orbital, host_o, o, arena, primitive_buckets,
+                                                  expansion_terms);
+        shell_x = std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, primitive_buckets,
+                                                  expansion_terms);
         runtime::cuda_trace::trace_counter(
             "shell_signature_id_bytes",
             (shell_o->signature_ids.size() + shell_x->signature_ids.size()) * sizeof(std::int32_t));
@@ -2029,11 +2028,16 @@ generativeqc_status execute_cuda_df_hf_gradient(
               }
               runtime::cuda_trace::trace_counter("three_center_shell_panels", 1);
             }
-            if (metric_weights || !shell_execution || !full_shell_domain)
-              check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
-                                              derivative_output, arena.stream, 0, result.size(),
-                                              gradient_copies, shell_execution && !metric_weights,
-                                              expansion_terms));
+            const bool generic_g =
+                auxiliary_g && shell_execution && full_shell_domain && !metric_weights;
+            if (generic_g)
+              runtime::cuda_trace::trace_counter("three_center_auxiliary_g_remainder_panels", 1);
+            if (metric_weights || !shell_execution || !full_shell_domain || generic_g)
+              check(launch_df_derivative_tile(
+                  o, x, r, kind, range, count, weights, schedule, derivative_output, arena.stream,
+                  0, result.size(), gradient_copies,
+                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms,
+                  generic_g));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },

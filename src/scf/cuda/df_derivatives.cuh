@@ -30,6 +30,9 @@ using DfDerivativeBasisView = runtime::cuda_gaussian_products::BasisView;
  * expansion_terms selects the metadata stride of BOTH basis views: zero uses
  * the established three-term packing; six admits auxiliary spherical g. No
  * launch can infer that stride merely from the angular degree of one element.
+ * auxiliary_g_only partitions a six-term three-center tile after the shell
+ * consumer has contracted every s/p/d/f auxiliary class. It never applies to
+ * metric weights, which retain their complete g-inclusive contraction.
  */
 cudaError_t launch_df_derivative_tile(DfDerivativeBasisView orbital,
                                       DfDerivativeBasisView auxiliary, const double* positions,
@@ -37,6 +40,7 @@ cudaError_t launch_df_derivative_tile(DfDerivativeBasisView orbital,
                                       const double* weights, unsigned schedule, double* gradient,
                                       cudaStream_t stream, std::size_t begin = 0,
                                       std::size_t gradient_stride = 0, unsigned gradient_copies = 1,
-                                      bool skip_sp_shells = false, unsigned expansion_terms = 0);
+                                      bool skip_sp_shells = false, unsigned expansion_terms = 0,
+                                      bool auxiliary_g_only = false);
 }  // namespace generativeqc::scf
 #endif
