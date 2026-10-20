@@ -271,3 +271,27 @@ The two stopping residuals are different mathematical quantities; their numeric
 thresholds cannot be equated directly. Complete observable gates remain common.
 Old reference full-Fock/tight-convergence overrides, thread counts, compiler
 versions and sampling changes are described above with controlled evidence.
+
+## Completed baseline accounting
+
+Slurm 11405 completed the independent WB97M-V/96 XC5/6, VV10 4/5 reference.
+All repeats of the original three Direct96 populations pass the unchanged
+observable gates, with quarter-gate reference stability and CPU/GPU spot
+agreement. Standard warm 45.438 s versus default reference 120.961 s is a
+qualified 2.662x baseline observation. Its native 1e-8 VV10 density domain
+remains explicitly different from the reference's 1e-10; it is not a timing
+claim for the subsequent domain-alignment fix.
+
+The complete frozen campaign has 188 completed populations, two WB97M-V DF96
+resource failures, and two r2SCAN-3c DF96 four-hour timeouts. Standard 3c DF96
+completed cold at 6546.999 s and only two of three warm calls, at
+3686.229/3686.284 s (each one SCF iteration). Fast produced no sample before
+the limit. Original partial receipts retain their status and are paired with
+scheduler termination logs rather than relabeled as complete. Updated baseline
+qualification totals are 170 passed, 18 failed and four incomplete/unverified;
+HF DF fitting and M06-2X water-3 grid failures remain failures.
+
+[Retained large-case evidence](../../../../benchmarks/results/readme-alignment-audit-20261021/README.md)
+contains the independent reference, original WB96 measurements, all-repeat
+gates and lossless timeout receipts. These observations do not justify a
+universal default-performance headline or lowering the common accuracy gates.
