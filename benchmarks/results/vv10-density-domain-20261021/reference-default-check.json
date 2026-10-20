@@ -1,0 +1,57 @@
+{
+  "scope": "Default-grid WB97M-V Direct48; separate populations on n1 RTX5090. Numerical qualification only, not an interleaved statistical comparison or global ranking.",
+  "native_receipt_sha256": "f8d6ec390550687bf06ea71970ef2c0057396b8e291ffdfad3e6d235502a649a",
+  "reference_receipt_sha256": "4048cc522dbfd62badad6fd41cd557761572a59b94a2e224d3e8416eb614a215",
+  "dense_oracle_sha256": "433a6da569c119d0c4fe8a0bf3705e5300d06cde04720f41801b852bfb358eb8",
+  "reference_all_repeat_errors": [
+    {
+      "phase": "cold",
+      "repeat": 0,
+      "errors": {
+        "energy_abs_per_atom": 4.856172589976874e-07,
+        "force_max_abs": 2.2555953551162133e-05,
+        "force_rms": 1.0484261966316403e-05
+      },
+      "passed": true
+    },
+    {
+      "phase": "warm",
+      "repeat": 0,
+      "errors": {
+        "energy_abs_per_atom": 4.856206317072065e-07,
+        "force_max_abs": 2.2948723344740074e-05,
+        "force_rms": 1.0480694985067735e-05
+      },
+      "passed": true
+    },
+    {
+      "phase": "warm",
+      "repeat": 1,
+      "errors": {
+        "energy_abs_per_atom": 4.856206127594002e-07,
+        "force_max_abs": 2.294872332520015e-05,
+        "force_rms": 1.0480694982937962e-05
+      },
+      "passed": true
+    },
+    {
+      "phase": "warm",
+      "repeat": 2,
+      "errors": {
+        "energy_abs_per_atom": 4.856206317072065e-07,
+        "force_max_abs": 2.2948723343851896e-05,
+        "force_rms": 1.0480694984768819e-05
+      },
+      "passed": true
+    }
+  ],
+  "native_warm_median_seconds": 7.0351722203195095,
+  "reference_warm_median_seconds": 32.34214110299945,
+  "observed_warm_ratio": 4.597206733558911,
+  "native_source_revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+  "reference_source_revision": "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+  "native_density_cutoff": 1e-10,
+  "reference_density_cutoff": 1e-10,
+  "reference_weight_cutoff": 1e-14,
+  "native_weight_cutoff": 0
+}
