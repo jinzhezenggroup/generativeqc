@@ -30,10 +30,15 @@ LABELS = {
 ARM_LABELS = {
     "standard": "GenerativeQC Standard",
     "fast": "GenerativeQC Fast",
-    "gpu4pyscf": "GPU4PySCF Default",
+    "gpu4pyscf": "GPU4PySCF",
     "gpu4pyscf-fast": "GPU4PySCF Fast",
 }
-COLORS = dict(zip(MEASUREMENT_ARMS, ("#1768ac", "#00a087", "#d95f02"), strict=True))
+# Preserve the previous README's native teal and reference coral; give the new
+# native Fast profile its own color without changing the cold/warm encoding.
+COLORS = dict(zip(MEASUREMENT_ARMS, ("#087e8b", "#6654a3", "#cf5c36"), strict=True))
+# v1 records remain readable as historical latency evidence. Their distinct
+# force/convergence protocol is not admitted by the v2 accuracy qualifier.
+READABLE_SCHEMAS = ("generativeqc.readme-defaults.v1", SCHEMA)
 
 
 def checked_sample(sample: dict, record: dict) -> None:
@@ -74,7 +79,7 @@ def checked_sample(sample: dict, record: dict) -> None:
 
 def reduce_record(record: dict) -> dict:
     """Keep valid completed phases from a failed or externally timed-out job."""
-    if record.get("schema") != SCHEMA or record.get("arm") not in ARMS:
+    if record.get("schema") not in READABLE_SCHEMAS or record.get("arm") not in ARMS:
         raise ValueError("wrong benchmark schema or arm")
     if record.get("method") not in METHODS or record.get("mode") not in (
         "direct",
@@ -163,6 +168,8 @@ def render(
     revisions = {row["source_revision"] for row in rows}
     if len(revisions) != 1 or None in revisions:
         raise ValueError("mixed or missing measured revisions")
+    if len({record["schema"] for record in records}) != 1:
+        raise ValueError("mixed measurement protocols")
     repeat_counts = {record["warm_repeats"] for record in records}
     if len(repeat_counts) != 1:
         raise ValueError("mixed warm repeat counts")
@@ -179,6 +186,7 @@ def render(
         for mode in ("direct", "df"):
             fig, axes = plt.subplots(2, 4, figsize=(15, 6.8))
             for ax, method in zip(axes.flat, METHODS, strict=True):
+                has_points = False
                 for arm in MEASUREMENT_ARMS:
                     for phase, style, marker in (
                         ("cold", "--", "s"),
@@ -204,6 +212,7 @@ def render(
                             upper.append(
                                 population["maximum"] - value if population else 0
                             )
+                        has_points |= any(math.isfinite(value) for value in values)
                         ax.errorbar(
                             SIZES,
                             values,
@@ -212,7 +221,7 @@ def render(
                             ls=style,
                             marker=marker,
                             ms=4,
-                            lw=1.4,
+                            lw=1.7,
                             capsize=2,
                         )
                 basis = (
@@ -221,13 +230,30 @@ def render(
                 ax.set_title(
                     f"{LABELS[method]}\n{basis}", fontsize=11, loc="left", pad=10
                 )
-                ax.set(yscale="log", xscale="log", xticks=SIZES)
+                ax.set(
+                    yscale="log",
+                    xscale="log",
+                    xlim=(SIZES[0] / 1.2, SIZES[-1] * 1.2),
+                    xticks=SIZES,
+                )
                 ax.set_xlabel("Atoms in water cluster")
                 ax.set_ylabel("Energy + forces (s)")
                 ax.set_xticklabels([str(size) for size in SIZES])
                 ax.minorticks_off()
                 ax.grid(axis="y", alpha=0.18)
                 ax.spines[["top", "right"]].set_visible(False)
+                if not has_points:
+                    ax.set_yticks([])
+                    ax.text(
+                        0.5,
+                        0.5,
+                        "No qualified data"
+                        if qualifications is not None
+                        else "No data",
+                        transform=ax.transAxes,
+                        ha="center",
+                        color="#666666",
+                    )
             handles = [
                 Line2D([], [], color=COLORS[arm], lw=2, label=ARM_LABELS[arm])
                 for arm in MEASUREMENT_ARMS
@@ -278,6 +304,7 @@ def render(
             svg.write_text(
                 "\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n"
             )
+            fig.savefig(destination / f"{mode}.png", dpi=140)
             plt.close(fig)
     return rows
 
@@ -294,7 +321,9 @@ def load_records(paths: list[Path], *, schema: str = SCHEMA) -> list[dict]:
         value = json.loads(data)
         if isinstance(value, list):
             records.extend(value)
-        elif value.get("schema") == schema:
+        elif value.get("schema") in (
+            READABLE_SCHEMAS if schema == SCHEMA else (schema,)
+        ):
             records.append(value)
     return records
 

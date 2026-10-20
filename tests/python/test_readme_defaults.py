@@ -106,6 +106,11 @@ def test_renderer_rejects_mixed_revisions_and_duplicate_populations(
     two["samples"].pop()
     with pytest.raises(ValueError, match="warm repeat"):
         render([one, two], tmp_path)
+    two = receipt("fast")
+    two["schema"] = "generativeqc.readme-defaults.v1"
+    assert reduce_record(two)["warm"]["median"] == 2
+    with pytest.raises(ValueError, match="protocols"):
+        render([one, two], tmp_path)
 
 
 def test_native_public_mode_and_default_grid_selection(
@@ -221,7 +226,7 @@ def test_readme_excludes_archived_reference_variant(tmp_path: Path) -> None:
     svg = (tmp_path / "direct.svg").read_text()
     assert "GPU4PySCF Fast" not in svg
     assert "GenerativeQC Fast" in svg
-    assert "GPU4PySCF Default" in svg
+    assert "GPU4PySCF" in svg
 
 
 def test_shared_observable_gates_keep_force_maximum_and_rms_separate() -> None:

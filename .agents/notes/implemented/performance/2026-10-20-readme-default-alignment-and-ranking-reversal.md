@@ -295,3 +295,53 @@ HF DF fitting and M06-2X water-3 grid failures remain failures.
 contains the independent reference, original WB96 measurements, all-repeat
 gates and lossless timeout receipts. These observations do not justify a
 universal default-performance headline or lowering the common accuracy gates.
+
+## Unified measured publication and remaining Fast dispatch cost
+
+The replacement campaign freezes `0fe06f31c6c96182973405b58f5047f3f177fff4`
+and core `f89e0b13b8c5e028c33fe087501f65aeb919e5789841599d5feab59840d6dff0`.
+All 192 populations are attempted with one driver/binary, one GPU4PySCF default
+SCF profile and full grid-response forces. There are 188 complete populations
+(752 E/F calls), 170 accuracy-qualified populations, 18 accuracy failures and
+four resource/timeout failures. The 18 failures are HF DF at every size and
+M06-2X water-3 in Direct/DF, across all profiles. Gates remain unchanged.
+Standard/Fast/reference Direct WB97M-V96 warm medians are
+45.180/40.186/117.886 s. Native density screening is now aligned at 1e-10;
+the signed-weight difference remains explicit. Standard WB48 warm is
+7.036 versus 32.482 s. These scoped ratios do not establish global superiority.
+
+The actual-control audit checks all 752 samples. Reference Direct retains
+`direct_scf=True`; its installed DF wrapper sets `direct_scf=False`. Do not
+mistake that default for a forced benchmark full-density override. The source
+review also distinguishes native relative metric cutoff 1e-10 from the
+reference's Cholesky-first factorization and absolute 1e-7 fallback cutoff.
+Optional native AO-jet selection uses 1e-16 when admitted; the reference's
+shell screening uses 1e-10. Those bounds have different meanings. GPU4PySCF
+pads its grid arrays to multiples of 256 with zero weights; the water-96
+192-entry size difference is padding, not a different quadrature.
+
+A new complete endpoint trace isolates the still-slower r2SCAN-3c Direct96
+Fast cold path. In Slurm 11629, on the same source/build/card with unchanged
+scientific controls, Standard/Fast cold is 82.284/274.864 s and warm
+18.889/18.858 s. Both populations pass the unchanged independent observable
+and reference-stability gates. Native preparation is 7.349/7.372 s; the
+slowdown is not cold compilation. Standard executes 22 Focks with Coulomb J
+totaling 16.801 s and XC 27.317 s. Fast executes 15 Focks with J 224.291 s
+and XC 11.741 s. Warm strict J is 0.759 s in both profiles. Mixed J iterations
+reach 20.588 s each while strict J stays below 0.826 s. The prepared Direct
+selector excludes generated Coulomb dispatch for mixed recurrence; the
+precision choice changes the integral route as well as its arithmetic.
+
+This diagnosis does **not** implement a new selector or justify dropping
+precision/audit obligations. Revisit the prepared provider's strict/mixed J
+selection and its complete endpoint qualification, particularly for f-orbital
+bases, before treating AUTO as faster by construction. Separately, DF Fast
+still performs a Standard-threshold FP64 candidate and a tighter complete
+independent audit, including two force evaluations and owner reconstruction.
+Do not infer its total work from the returned candidate's iteration count.
+
+[Unified evidence and offline replay](../../../../benchmarks/results/readme-unified-20261021/README.md)
+retains every original timing/reference/failure, the source/input audits and
+these diagnostic traces. The root README highlights the verified WB97M-V warm
+advantage and preserves all eight methods in the two 2×4 figures. It does not
+claim that every method or every Fast path is faster.

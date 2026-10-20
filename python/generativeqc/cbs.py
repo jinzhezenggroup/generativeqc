@@ -602,6 +602,8 @@ class CCSDTCBSCalculator:
             # Report actual arithmetic from the copied native counters. A
             # resource-refused FP32 request must not be relabelled as mixed.
             arithmetic = "fp64"
+            lambda_request = "fp64" if forces is not None else "not_requested"
+            lambda_arithmetic = lambda_request
             if self._convergence["arithmetic_request"] != "fp64":
                 performance = next(
                     component.result.cc_performance
@@ -612,6 +614,17 @@ class CCSDTCBSCalculator:
                     raise RuntimeError("CBS Fast lacks native FP32 admission telemetry")
                 if performance.ccsd_fp32_executed and performance.ccsd_fp32_gemm_calls:
                     arithmetic = "mixed"
+                if forces is not None:
+                    lambda_request = "df_lambda_fp32_preconvergence"
+                    if performance.lambda_fp32_requested is not True:
+                        raise RuntimeError(
+                            "CBS Fast lacks native Lambda FP32 admission telemetry"
+                        )
+                    if (
+                        performance.lambda_fp32_executed
+                        and performance.lambda_fp32_gemm_calls
+                    ):
+                        lambda_arithmetic = arithmetic = "mixed"
             return CBSResult(
                 energy,
                 forces,
@@ -656,6 +669,8 @@ class CCSDTCBSCalculator:
                 {
                     **self._convergence,
                     "arithmetic": arithmetic,
+                    "lambda_arithmetic_request": lambda_request,
+                    "lambda_arithmetic": lambda_arithmetic,
                     "limits": dict(self._convergence["limits"]),
                     "budget": dict(self._convergence["budget"])
                     if self._convergence["budget"]

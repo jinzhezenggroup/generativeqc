@@ -54,3 +54,21 @@ Fast12 warm remains slower than Standard12 on this branch, which deliberately
 does not include the separate Fast warm-revalidation fix. No universal Fast
 performance claim follows. Active-set crossing derivatives remain outside the
 local derivative contract.
+
+## Matched-domain CPU regression oracles
+
+The existing strict CPU regression pins and complete-force finite differences
+must compare the same density domain. Independently reconverging pinned
+PySCF 2.14.0/Libxc 7.0.0 first reproduces the old 1e-8 constants, then changing
+only its VV10 density threshold to 1e-10 supplies the new reference constants.
+`tests/reference_data/molecular_vv10_cpu_oracles.json` retains both results and
+separate downstream native comparisons; native answers are not oracle inputs.
+The optional verification tools keep their upstream 1e-8 default and expose an
+explicit matched-domain flag. Complete-force reference calculations select
+1e-10 for the undisplaced geometry and every finite-difference point, restoring
+the upstream function afterward. Numerical acceptance gates are unchanged.
+
+Inactive-row fixtures now use a density below 1e-10, while explicit boundary
+and formerly excluded tail cases verify both VV10 pair legs and resource caps.
+These fixture changes do not relax screening, memory limits, or scientific
+tolerances.

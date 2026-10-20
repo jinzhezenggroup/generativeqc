@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -258,7 +258,7 @@
       "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -286,6 +286,11 @@
       "owner": "default auxiliary-g response partition qualification",
       "reason": "Lossless original20 complete endpoint samples, dense independent references, baseline comparisons,34-test GPU result and failed packaging attempt, source/library/cache identities and executed shell/g-remainder work trace. No external archive or increased storage budget. Six existing evidence payloads are losslessly compressed to keep the aggregate cap.",
       "review_document": "benchmarks/results/df-g-shell-20261021/README.md"
+    },
+    "readme-unified-20261021": {
+      "owner": "README common-accuracy complete E/F comparison",
+      "reason": "All 192 populations retain 752 complete E/F calls, independent references, exact controls, full Fast work, all numerical failures and timeouts. Lossless source-bound receipts support scoped observations only; no global promotion, numerical waiver, external archive or budget increase.",
+      "review_document": "benchmarks/results/readme-unified-20261021/README.md"
     }
   },
   "files": [
@@ -368,6 +373,14 @@
       "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
       "role": "reference-input",
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
+    },
+    {
+      "path": "benchmarks/results/df-g-shell-20261021/receipts.json.xz",
+      "family": "df-g-shell-20261021",
+      "bytes": 169040,
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts"
     },
     {
       "bytes": 485607,
@@ -538,6 +551,30 @@
       "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
     },
     {
+      "path": "benchmarks/results/readme-unified-20261021/fast.json.xz",
+      "family": "readme-unified-20261021",
+      "bytes": 255676,
+      "sha256": "c4ae4f676a9d450cb74e621d6e0123e60526995e1d93c51fc53b707a83ae5947",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-bound endpoint timing, E/F arrays, controls and semantic work, including failed and incomplete populations"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/gpu4pyscf.json.xz",
+      "family": "readme-unified-20261021",
+      "bytes": 187744,
+      "sha256": "e5683bb264600c824cbade44190ab6be9fdc543ac8afb7e63013b4d3f8639511",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-bound endpoint timing, E/F arrays, controls and semantic work, including failed and incomplete populations"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/standard.json.xz",
+      "family": "readme-unified-20261021",
+      "bytes": 215676,
+      "sha256": "269472987b33bea35880c1280215f7a1d6f95f046e60f7a25e1a22beffb59ee7",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-bound endpoint timing, E/F arrays, controls and semantic work, including failed and incomplete populations"
+    },
+    {
       "bytes": 194601,
       "classification": "required-compact-accepted-evidence",
       "family": "retention-checkout",
@@ -576,14 +613,6 @@
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
-    },
-    {
-      "path": "benchmarks/results/df-g-shell-20261021/receipts.json.xz",
-      "family": "df-g-shell-20261021",
-      "bytes": 169040,
-      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a",
-      "classification": "required-compact-accepted-evidence",
-      "role": "diagnostic-and-validation-receipts"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

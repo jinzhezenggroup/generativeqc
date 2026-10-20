@@ -126,17 +126,18 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090**
 
+For 96-atom water, Direct ωB97M-V achieves **2.61× (Standard)** and
+**2.93× (Fast)** warm speedups over GPU4PySCF.
+
 ![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
 ![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
 
-Default XC/VV10 grids; def2-SVP (r²SCAN-3c: def2-mTZVPP + D4/gCP).
-Cold includes setup; warm reuses each engine's own converged density.
-Fast uses GenerativeQC's public Fast mode and corresponding GPU4PySCF
-convergence thresholds. Force-response conventions differ, so these are
-latencies, not matched-accuracy speedups. Native DF currently rejects the
-default g-shell auxiliary basis.
-See [measurements and protocol](benchmarks/results/readme-defaults-20261020/README.md).
+Default XC/VV10 grids, native SCF policies and full grid-response forces;
+plotted points pass common independent energy/force accuracy gates.
+Cold includes setup; warm is the median of three frozen-density calls.
+Gaps mark incomplete or unqualified points.
+See [measurements and conditions](benchmarks/results/readme-unified-20261021/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 
@@ -148,13 +149,13 @@ gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
 correlation within each basis group. Timings cover the
 complete two-group E+F endpoint, not just SCF or summed component timings.
 [Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
-convergence and defaults to FP32 DF-CCSD preconvergence, followed by FP64
-residual checks and response. The curves use one fresh
+convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
+by FP64 final solves, independent residual checks and response. The curves use one fresh
 complete call per mode and molecule, with the same binary and GPU within each
 pair; they do not imply a speedup for every case. All Fast points pass
 constituent and composite energy/full-force checks against Standard.
-See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-fast-20261020/timings.md)
-and [inputs, independent checks and limitations](benchmarks/results/readme-cbs-fast-20261020/README.md).
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-lambda-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-lambda-20261021/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
 identical-Hamiltonian speedup measurements.

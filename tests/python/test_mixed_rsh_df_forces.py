@@ -227,6 +227,8 @@ def _mixed_pyscf_energy(
     pyscf = pytest.importorskip("pyscf")
     from pyscf import df, dft, gto, scf
 
+    from tools._pyscf_vv10_domain import vv10_density_domain
+
     pyscf.lib.num_threads(1)
     atoms = tuple(Atom.from_value(atom) for atom in raw_atoms)
     labels = [f"{symbol}{index}" for index, (symbol, _) in enumerate(raw_atoms)]
@@ -283,7 +285,10 @@ def _mixed_pyscf_energy(
     mean_field.conv_tol = 1e-12
     mean_field.conv_tol_grad = 1e-10
     mean_field.max_cycle = 200
-    energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
+    # This is a matched-domain force oracle, including every displaced point.
+    # Preserve upstream CPU defaults outside this explicit qualification scope.
+    with vv10_density_domain(1e-10):
+        energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
     assert mean_field.converged
     return float(energy)
 
