@@ -30,6 +30,70 @@ def _spec(spin: str, exchange: bool = False) -> Any:
     )
 
 
+@pytest.mark.parametrize("engine", ["primitive", "reference", "incumbent"])
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
+def test_same_shell_primitive_exchange_and_distinct_contractions(
+    monkeypatch: pytest.MonkeyPatch,
+    engine: str,
+    representation: str,
+    spin: str,
+) -> None:
+    """Primitive exchange preserves J/K and distinct contraction columns.
+
+    Three signed primitives exercise both self and exchanged primitive pairs.
+    Non-origin centers, p/d components, nonsymmetric spin densities and reversed
+    primitive order prevent an origin-only or diagonal-density shortcut from
+    concealing a wrong multiplicity. Independent unscreened libcint integrals
+    remain authoritative for every retained MD recipe.
+    """
+    from generativeqc import Primitive, Shell
+    from generativeqc_compiler.dft import NativeAO
+    from md_j_resident_probe import ResidentMdJProbe
+
+    atoms, initial = general_contraction_basis()
+    atoms = [(symbol, tuple(x + 0.37 for x in xyz)) for symbol, xyz in atoms]
+    shells = tuple(
+        Shell(
+            shell.atom_index,
+            shell.angular_momentum,
+            (*shell.primitives, Primitive(0.17, -0.13)),
+        )
+        for shell in initial
+    )
+    monkeypatch.setenv("GENERATIVEQC_MD_J_ENGINE", engine)
+    monkeypatch.delenv("GENERATIVEQC_DISABLE_MD_J", raising=False)
+    with NativeAO(atoms, shells, representation=representation) as basis:
+        _, _, eri, _ = public_ao_oracle(basis)
+        raw = np.random.default_rng(2645).normal(size=(basis.nao, basis.nao)) * 0.03
+    density = np.stack((raw, -0.4 * raw.T)) if spin == "unrestricted" else raw
+    total = density.sum(axis=0) if density.ndim == 3 else density
+    expected_j = np.einsum("ijkl,kl->ij", eri, total, optimize=True)
+    expected_k = np.einsum("ikjl,...kl->...ij", eri, density, optimize=True)
+    reversed_shells = tuple(
+        Shell(
+            shell.atom_index, shell.angular_momentum, tuple(reversed(shell.primitives))
+        )
+        for shell in shells
+    )
+    for ordered in (shells, reversed_shells):
+        with NativeAO(atoms, ordered, representation=representation) as basis:
+            for exchange in (False, True):
+                with ResidentMdJProbe(
+                    basis, _spec(spin, exchange), screening_tolerance=0
+                ) as plan:
+                    assert plan.diagnostics["direct_schedule"].startswith("md-j-")
+                    plan.capture_graph()
+                    actual = plan.evaluate_graph(density)
+                    np.testing.assert_allclose(
+                        actual.coulomb, expected_j, atol=2e-11, rtol=3e-12
+                    )
+                    if exchange:
+                        np.testing.assert_allclose(
+                            actual.exchange, expected_k, atol=2e-11, rtol=3e-12
+                        )
+
+
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 @pytest.mark.parametrize("general", [False, True])
