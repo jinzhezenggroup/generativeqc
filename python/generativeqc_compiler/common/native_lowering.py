@@ -14,6 +14,7 @@ import typing
 from dataclasses import asdict
 
 from .lowering_contract import LoweringConstraints
+from .lowering_provider import candidate_layout_rejection
 from .provenance import canonical_hash
 from .resources import checked_bytes
 
@@ -165,6 +166,9 @@ def native_lowering_portfolio(
         reason = candidate.reason or (
             "candidate has no typed execution binding" if execution is None else ""
         )
+        reason = reason or candidate_layout_rejection(candidate) or ""
+        if not reason and execution is not None and execution.layout_transfers:
+            reason = "native portfolio has no layout-transfer executor"
         fields = [
             json.dumps(candidate.identity),
             json.dumps(request.semantic_identity),
