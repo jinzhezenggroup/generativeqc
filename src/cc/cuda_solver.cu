@@ -1,4 +1,6 @@
 #include "cc/iteration_driver.hpp"
+#include "cc/phase_observation.hpp"
+#include "cc/replay_tiles.hpp"
 #include "cc/solver.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -798,8 +800,10 @@ struct Owner {
     df_state.t1 = state.t1;
     df_state.t2 = state.t2;
     for (std::size_t q = 0; q < naux;) {
-      const auto batch =
-          physical_replay && replay_batch ? std::min(replay_batch, naux - q) : std::size_t{1};
+      const auto batch = detail::replay_tile_width(naux - q, replay_batch, physical_replay);
+      phase_observation::Scope tile(phase_observation::Site::q_tile_inclusive, q, batch,
+                                    reinterpret_cast<std::uintptr_t>(stream));
+      phase_observation::Scope host(phase_observation::Site::q_host_preparation, q, batch);
       df_state.bov = df_bov + q * n1;
       df_state.bvv = df_bvv + q * state.v * state.v;
       generated::df::VirtualOutputs out{};
@@ -808,8 +812,18 @@ struct Owner {
         // The generated accumulator carries each lane in original Q order.
         static_cast<generated::df::CudaState&>(batch_replay_state) = df_state;
         batch_replay_state.q = batch;
+        host.close();
+        phase_observation::Scope production(phase_observation::Site::q_production_submission, q,
+                                            batch, reinterpret_cast<std::uintptr_t>(stream));
         out = generated::df::run_virtual_batch_cuda(batch_replay_state);
-        generated::df::accumulate_virtual_batch_cuda(batch_replay_state, out, df_sum, df_sum + n1);
+        production.close();
+        {
+          phase_observation::Scope accumulation(phase_observation::Site::q_accumulation_submission,
+                                                q, batch, reinterpret_cast<std::uintptr_t>(stream),
+                                                production.identity());
+          generated::df::accumulate_virtual_batch_cuda(batch_replay_state, out, df_sum,
+                                                       df_sum + n1);
+        }
         diagnostic.df_packing_bytes = checked_add(
             diagnostic.df_packing_bytes,
             checked_mul(generated::df::virtual_batch_packing_elements(state.o, state.v, batch),
@@ -826,6 +840,9 @@ struct Owner {
         q += batch;
         continue;
       }
+      host.close();
+      phase_observation::Scope production(phase_observation::Site::q_production_submission, q,
+                                          batch, reinterpret_cast<std::uintptr_t>(stream));
       if (replay_matrix) {
         static_cast<generated::df::CudaState&>(replay_state) = df_state;
         out = generated::df::run_virtual_replay_cuda(replay_state);
@@ -836,10 +853,16 @@ struct Owner {
       } else {
         out = generated::df::run_virtual_accumulate_cuda(df_state);
       }
-      accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n1), 256),
-                      256, 0, stream>>>(out.singles, n1, df_sum, state.error);
-      accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256),
-                      256, 0, stream>>>(out.doubles, n2, df_sum + n1, state.error);
+      production.close();
+      {
+        phase_observation::Scope accumulation(phase_observation::Site::q_accumulation_submission, q,
+                                              batch, reinterpret_cast<std::uintptr_t>(stream),
+                                              production.identity());
+        accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n1), 256),
+                        256, 0, stream>>>(out.singles, n1, df_sum, state.error);
+        accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256),
+                        256, 0, stream>>>(out.doubles, n2, df_sum + n1, state.error);
+      }
       ++diagnostic.df_auxiliary_slices;
       ++diagnostic.df_auxiliary_tiles;
       diagnostic.df_virtual_operations += replay_matrix
@@ -904,6 +927,8 @@ struct Owner {
   }
 
   generated::DeviceIterationOutputs iteration(double tolerance) {
+    phase_observation::Scope observed_iteration(phase_observation::Site::q_iteration_inclusive,
+                                                diagnostic.iteration_graph_calls, naux);
     if (!naux)
       return conventional_prepared ? generated::run_iteration_prepared_cuda(state)
                                    : generated::run_iteration_cuda(state);
@@ -919,7 +944,11 @@ struct Owner {
       hoisted_state.df_Wvoov = hoisted_state.df_Lvv + state.v * state.v;
       hoisted_state.df_Wvovo = hoisted_state.df_Wvoov + n2;
       hoisted_state.df_Xv = hoisted_state.df_Wvovo + n2;
-      hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
+      {
+        phase_observation::Scope preparation(phase_observation::Site::ccsd_preparation_submission,
+                                             0, naux, reinterpret_cast<std::uintptr_t>(stream));
+        hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
+      }
       ++diagnostic.df_preparation_calls;
       if (mixed_active) {
         cast_fp32(state.t1, const_cast<float*>(mixed_state.t1), n1);
@@ -932,10 +961,18 @@ struct Owner {
           !mixed_active ? plan.strict_auxiliary_batch_size : plan.auxiliary_batch_size;
       for (std::size_t q = 0; q < naux; q += batch_limit) {
         const auto batch = std::min(batch_limit, naux - q);
+        phase_observation::Scope tile(phase_observation::Site::q_tile_inclusive, q, batch,
+                                      reinterpret_cast<std::uintptr_t>(stream));
+        phase_observation::Scope host(phase_observation::Site::q_host_preparation, q, batch);
         hoisted_state.q = batch;
         hoisted_state.bov = df_bov + q * n1;
         hoisted_state.bvv = df_bvv + q * state.v * state.v;
         generated::dfhoist::AuxiliaryOutputs row{};
+        host.close();
+        phase_observation::Scope production(mixed_active
+                                                ? phase_observation::Site::q_mixed_inclusive
+                                                : phase_observation::Site::q_production_submission,
+                                            q, batch, reinterpret_cast<std::uintptr_t>(stream));
         if (mixed_active) {
           mixed_state.q = batch;
           mixed_state.bov = mixed_bov + q * n1;
@@ -954,19 +991,27 @@ struct Owner {
         } else {
           row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
         }
+        production.close();
         // These read-only core views alias mutable, owner-retained cut storage.
-        if (!mixed_active && use_pairs)
+        if (!mixed_active && use_pairs) {
+          phase_observation::Scope accumulation(phase_observation::Site::q_accumulation_submission,
+                                                q, batch, reinterpret_cast<std::uintptr_t>(stream),
+                                                production.identity());
           generated::dfpairs::accumulate_occupied_auxiliary_cuda(
               paired_state, row, const_cast<double*>(hoisted_state.df_Lvv),
               const_cast<double*>(hoisted_state.df_Wvoov),
               const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
               df_sum + n1, df_sum);
-        else if (!mixed_active)
+        } else if (!mixed_active) {
+          phase_observation::Scope accumulation(phase_observation::Site::q_accumulation_submission,
+                                                q, batch, reinterpret_cast<std::uintptr_t>(stream),
+                                                production.identity());
           generated::dfhoist::accumulate_auxiliary_cuda(
               hoisted_state, row, const_cast<double*>(hoisted_state.df_Lvv),
               const_cast<double*>(hoisted_state.df_Wvoov),
               const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
               df_sum + n1, df_sum);
+        }
         diagnostic.df_auxiliary_slices += batch;
         ++diagnostic.df_auxiliary_tiles;
         diagnostic.df_virtual_operations +=
@@ -1018,6 +1063,8 @@ struct Owner {
       }
       diagnostic.df_contraction_terms = checked_add(
           diagnostic.df_contraction_terms, checked_add(plan.preparation_terms, plan.core_terms));
+      phase_observation::Scope core(phase_observation::Site::ccsd_core_submission, 0, naux,
+                                    reinterpret_cast<std::uintptr_t>(stream));
       return generated::dfhoist::run_iteration_cuda(hoisted_state);
     }
     virtual_corrections();
@@ -1028,6 +1075,8 @@ struct Owner {
   }
 
   generated::DeviceReplayOutputs replay() {
+    phase_observation::Scope observed_replay(phase_observation::Site::q_replay_inclusive,
+                                             diagnostic.replay_graph_calls, naux);
     if (!naux) return generated::run_replay_cuda(state);
     virtual_corrections(true);
     diagnostic.df_contraction_terms =
@@ -1037,6 +1086,7 @@ struct Owner {
   }
 
   void cleanup() noexcept {
+    phase_observation::Scope observed_teardown(phase_observation::Site::teardown_inclusive);
     // Serialize every owned release against provider/graph allocation deltas.
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) cudaStreamSynchronize(stream);
@@ -1246,7 +1296,26 @@ bool run_diis(Owner& s, const SolverOptions& options,
 SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int device) {
   validate_problem(p, true);
   validate_options(options);
+  phase_observation::Scope observed_solve(phase_observation::Site::ccsd_solve_inclusive);
+  phase_observation::Scope observed_setup(phase_observation::Site::setup_inclusive);
   Owner owner(p, options, device);
+  observed_setup.close();
+  if (phase_observation::enabled()) {
+    const auto route =
+        (owner.plan.hoisted ? static_cast<std::uint64_t>(phase_observation::hoisted) : 0ULL) |
+        (owner.plan.matrix_gemm ? static_cast<std::uint64_t>(phase_observation::matrix) : 0ULL) |
+        (owner.replay_matrix ? static_cast<std::uint64_t>(phase_observation::replay_matrix)
+                             : 0ULL) |
+        (owner.mixed_active ? static_cast<std::uint64_t>(phase_observation::mixed) : 0ULL) |
+        (owner.pairs_enabled ? static_cast<std::uint64_t>(phase_observation::occupied_pairs)
+                             : 0ULL) |
+        (owner.conventional_prepared ? static_cast<std::uint64_t>(phase_observation::conventional)
+                                     : 0ULL);
+    phase_observation::admitted_plan(
+        phase_observation::PlanOwner::ccsd, owner.naux, owner.plan.strict_auxiliary_batch_size,
+        detail::replay_tile_width(owner.naux, owner.replay_batch, true), route, options.max_bytes,
+        owner.diagnostic.numeric_capacity_bytes, owner.diagnostic.owned_device_bytes);
+  }
   SolverResult result;
   result.convergence = options.convergence;
   result.reason = "maximum RCCSD iterations reached";
@@ -1388,5 +1457,14 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
 }
 
 }  // namespace generativeqc::cc
+
+extern "C" int generativeqc_cc_phase_enable_v1(
+    std::uint64_t contract, generativeqc::cc::phase_observation::Observer observer, void* context,
+    std::uint64_t* permit) {
+  return generativeqc::cc::phase_observation::enable(contract, observer, context, permit);
+}
+extern "C" int generativeqc_cc_phase_finish_v1(std::uint64_t permit, std::uint64_t* errors) {
+  return generativeqc::cc::phase_observation::finish(permit, errors);
+}
 
 #endif

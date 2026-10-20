@@ -24,9 +24,11 @@ def _demand_declaration(header: str) -> str:
 def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     tmp_path: Path,
 ) -> None:
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("requires host C++ and ccache")
+        pytest.skip("requires host C++ and a compiler cache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/methods/df_ccsdt_force.hpp").read_text()
     triples_header = (ROOT / "src/cc/df_triples.hpp").read_text()
     assert (
@@ -640,9 +642,11 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     tmp_path: Path,
 ) -> None:
     """Compile the real middle-owner call against its current RCCSD declaration."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("requires host C++ and ccache")
+        pytest.skip("requires host C++ and a compiler cache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
     declaration = (
         "RccsdNativeState run_rccsd_native_state("

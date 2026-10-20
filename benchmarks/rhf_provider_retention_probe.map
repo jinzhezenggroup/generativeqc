@@ -1,0 +1,20 @@
+libcudart.so.12 {
+  global:
+    cudaMemGetInfo;
+};
+
+libcublas.so.12 {
+  global:
+    cublasCreate_v2;
+    cublasSetStream_v2;
+    cublasSetPointerMode_v2;
+} libcudart.so.12;
+
+libcusolver.so.11 {
+  global:
+    cusolverDnCreate;
+    cusolverDnSetStream;
+    cusolverDnCreateParams;
+  local:
+    *;
+} libcublas.so.12;
