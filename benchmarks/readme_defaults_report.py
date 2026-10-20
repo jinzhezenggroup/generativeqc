@@ -303,15 +303,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipts", type=Path, nargs="+", required=True)
     parser.add_argument("--oracles", type=Path, nargs="+")
+    parser.add_argument("--reference-reuse", type=Path)
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
+    if args.reference_reuse and not args.oracles:
+        parser.error("--reference-reuse requires --oracles")
     records = load_records(args.receipts)
     qualifications = None
     if args.oracles:
         from benchmarks.readme_defaults_qualification import ORACLE_SCHEMA, qualify
 
         qualifications = qualify(
-            records, load_records(args.oracles, schema=ORACLE_SCHEMA)
+            records,
+            load_records(args.oracles, schema=ORACLE_SCHEMA),
+            reference_reuse=json.loads(args.reference_reuse.read_text())
+            if args.reference_reuse
+            else None,
         )
     rows = render(records, args.output, qualifications=qualifications)
     if qualifications is not None:
@@ -356,7 +363,11 @@ def main() -> None:
     (args.output / "timings.md").write_text("\n".join(lines) + "\n")
     identities = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in [*args.receipts, *(args.oracles or [])]
+        for path in [
+            *args.receipts,
+            *(args.oracles or []),
+            *([args.reference_reuse] if args.reference_reuse else []),
+        ]
     }
     (args.output / "receipt-identities.json").write_text(
         json.dumps(identities, indent=2) + "\n"

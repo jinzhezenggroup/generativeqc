@@ -11,7 +11,12 @@ if TYPE_CHECKING:
 import pytest
 
 from benchmarks.readme_defaults import COMMON_GATES, SCHEMA
-from benchmarks.readme_defaults_qualification import ORACLE_SCHEMA, identity, qualify
+from benchmarks.readme_defaults_qualification import (
+    ORACLE_SCHEMA,
+    REUSE_SCHEMA,
+    identity,
+    qualify,
+)
 from benchmarks.readme_defaults_report import render
 
 
@@ -28,6 +33,10 @@ def campaign() -> tuple[dict, list[dict]]:
     record = {
         "schema": SCHEMA,
         "method": "pbe",
+        "orbital_basis": "def2-SVP",
+        "basis_representation": "spherical",
+        "charge": 0,
+        "spin": 0,
         "mode": "direct",
         "arm": "standard",
         "atoms": 3,
@@ -87,6 +96,82 @@ def test_all_repeats_pass_without_mutating_receipts() -> None:
     assert len(q["warm"]["errors"]) == 3
     assert q["receipt_sha256"] == identity(record)
     assert (record, oracles) == original
+
+
+def reuse_campaign() -> tuple[dict, list[dict], dict]:
+    """Explicitly review the original reference producer for a new native build."""
+    record, oracles = campaign()
+    record["source_revision"] = "d" * 40
+    manifest = {"schema": REUSE_SCHEMA, "entries": {}}
+    for oracle in oracles:
+        manifest["entries"][identity(oracle)] = {
+            "source_revision": oracle["source_revision"],
+            "driver_sha256": oracle["driver_sha256"],
+            "scientific_inputs": {
+                "method": "pbe",
+                "orbital_basis": "def2-SVP",
+                "basis_representation": "spherical",
+                "charge": 0,
+                "spin": 0,
+            },
+        }
+    return record, oracles, manifest
+
+
+def test_reference_reuse_preserves_producer_identities_and_all_error_gates() -> None:
+    record, oracles, manifest = reuse_campaign()
+    original = deepcopy((record, oracles, manifest))
+    with pytest.raises(ValueError, match="reuse contract"):
+        qualify([record], oracles)
+    q = qualify([record], oracles, reference_reuse=manifest)[0]
+    assert q["status"] == "qualified" and q["reference_reuse"] == manifest["entries"]
+    assert (record, oracles, manifest) == original
+    record["samples"][2]["forces"][0][0] = 1e-3
+    assert qualify([record], oracles, reference_reuse=manifest)[0]["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("orbital_basis", "sto-3g"),
+        ("basis_representation", "cartesian"),
+        ("charge", 1),
+        ("spin", 2),
+    ],
+)
+def test_reused_reference_cannot_certify_different_scientific_inputs(
+    key: str, value: str | int
+) -> None:
+    record, oracles, manifest = reuse_campaign()
+    record[key] = value
+    with pytest.raises(ValueError, match="reuse contract"):
+        qualify([record], oracles, reference_reuse=manifest)
+
+
+@pytest.mark.parametrize("failure", ["driver", "receipt", "revision", "missing_input"])
+def test_reference_reuse_requires_exact_receipt_and_producer_provenance(
+    failure: str,
+) -> None:
+    record, oracles, manifest = reuse_campaign()
+    if failure == "driver":
+        oracles[0]["driver_sha256"] = "e" * 64
+    elif failure == "receipt":
+        oracles[0]["samples"][0]["seconds"] += 1
+    elif failure == "revision":
+        oracles[0]["source_revision"] = "unknown"
+    else:
+        record.pop("spin")
+    with pytest.raises(ValueError):
+        qualify([record], oracles, reference_reuse=manifest)
+
+
+def test_reviewed_reference_reuse_still_requires_grid_stability() -> None:
+    record, oracles, manifest = reuse_campaign()
+    contract = manifest["entries"].pop(identity(oracles[0]))
+    oracles[0]["samples"][0]["forces"][0][0] = 1e-3
+    manifest["entries"][identity(oracles[0])] = contract
+    result = qualify([record], oracles, reference_reuse=manifest)[0]
+    assert result["status"] == "unverified" and result["reasons"]
 
 
 def test_one_inaccurate_warm_repeat_rejects_the_warm_population() -> None:

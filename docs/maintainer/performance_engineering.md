@@ -65,6 +65,16 @@ If selected production configurations have not yet been qualified and measured
 for both engines, mark the README comparison pending rather than relabelling
 historical timings or publishing estimated speedups.
 
+An independent numerical reference may outlive a native implementation revision
+when its scientific inputs and reference software remain applicable. The README
+qualifier keeps same-revision checks by default. Its explicit `--reference-reuse`
+manifest binds each complete original oracle receipt to the audited producer,
+driver, method, orbital basis/representation, charge and spin. Geometry, package
+versions, reference controls, grid stability, CPU/GPU agreement and every sample's
+observable errors are still checked. Keep original producer identities and the
+input review; never relabel old receipts. This numerical-reference reuse does
+not permit mixing native timing revisions in one figure.
+
 The LDA/PBE pruning qualification entry point is
 `python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`
 inside a finite Slurm allocation. It measures fresh complete native and

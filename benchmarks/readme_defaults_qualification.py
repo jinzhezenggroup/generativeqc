@@ -18,6 +18,7 @@ from benchmarks.readme_defaults_accuracy import errors
 from benchmarks.readme_defaults_report import checked_sample, reduce_record
 
 ORACLE_SCHEMA = "generativeqc.readme-defaults-oracle.v1"
+REUSE_SCHEMA = "generativeqc.readme-oracle-reuse.v1"
 STABILITY_FRACTION = 0.25
 
 
@@ -56,6 +57,8 @@ def _comparison(first: dict, last: dict, atoms: int, *, fraction: float = 1) -> 
 def _oracle(record: dict) -> None:
     """Validate declared oracle controls without trusting stored pass booleans."""
     _geometry(record)
+    if not re.fullmatch(r"[0-9a-f]{40}", record.get("source_revision", "")):
+        raise ValueError("missing oracle source revision")
     if not re.fullmatch(r"[0-9a-f]{64}", record.get("driver_sha256", "")):
         raise ValueError("missing oracle driver identity")
     if not record.get("slurm_job_id"):
@@ -108,13 +111,44 @@ def _oracle(record: dict) -> None:
         raise ValueError("incomplete VV10 grid stability pair")
 
 
-def qualify(records: list[dict], oracles: list[dict]) -> list[dict]:
+def _reference_contract(record: dict, oracle: dict) -> dict:
+    """Bind an audited legacy oracle to its original driver and scientific inputs.
+
+    The original oracle schema did not export basis/spin metadata. Cross-revision
+    reuse therefore requires an explicit receipt-bound contract reviewed against
+    the producer's source; matching geometry or package versions alone is not
+    sufficient. This contract never replaces observable or stability checks.
+    """
+    keys = ("method", "orbital_basis", "basis_representation", "charge", "spin")
+    if any(key not in record for key in keys):
+        raise ValueError("reference reuse requires complete scientific inputs")
+    return {
+        "source_revision": oracle["source_revision"],
+        "driver_sha256": oracle["driver_sha256"],
+        "scientific_inputs": {key: record[key] for key in keys},
+    }
+
+
+def qualify(
+    records: list[dict], oracles: list[dict], *, reference_reuse: dict | None = None
+) -> list[dict]:
     """Gate every complete phase, retaining all errors and missing references.
 
     A method needs a CPU/GPU dense small-system spot check and a stable dense
     reference at the population's own geometry. All warm repeats must pass.
-    Production records and their measured samples are never rewritten.
+    Production records and their measured samples are never rewritten. Different
+    producer revisions require an explicit audited contract for each exact oracle
+    receipt. Native timing populations still require a single measured revision.
     """
+    reuse = {}
+    if reference_reuse is not None:
+        if (
+            set(reference_reuse) != {"schema", "entries"}
+            or reference_reuse["schema"] != REUSE_SCHEMA
+            or not isinstance(reference_reuse["entries"], dict)
+        ):
+            raise ValueError("malformed reference reuse manifest")
+        reuse = reference_reuse["entries"]
     indexed = {}
     for oracle in oracles:
         if oracle.get("schema") != ORACLE_SCHEMA or oracle.get("backend") not in (
@@ -167,7 +201,13 @@ def qualify(records: list[dict], oracles: list[dict]) -> list[dict]:
             continue
         for oracle in (target, cpu, gpu):
             if oracle.get("source_revision") != record["source_revision"]:
-                raise ValueError("measurement and reference source revisions differ")
+                receipt_identity = identity(oracle)
+                contract = _reference_contract(record, oracle)
+                if reuse.get(receipt_identity) != contract:
+                    raise ValueError(
+                        "different reference revision lacks an audited reuse contract"
+                    )
+                result.setdefault("reference_reuse", {})[receipt_identity] = contract
             packages = record.get("environment", {}).get("packages")
             if (
                 not packages
