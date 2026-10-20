@@ -66,7 +66,7 @@ geometry. Keep the moved coordinates on every replay. The diagnostic confirms
 the actual moved PBE endpoint passes the original independent force gates.
 At source `798f9ddd7`, Slurm job 11382 passes all four frozen/moved GPU tests
 against independent CPU level-4 energy and full moving-grid forces. Jobs
-11383/11384 and same-build Standard controls 11389/11390 retain complete
+11383/11388 and same-build Standard controls 11389/11390 retain complete
 96-atom cold plus three warm populations. Every sample passes energy/atom 1e-5,
 force maximum 1e-4 and force RMS 3e-5 against the independently stable dense
 reference; the CPU/GPU spot and grid-stability checks use one quarter of those
