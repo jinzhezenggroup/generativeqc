@@ -25,8 +25,8 @@ Add `--source-revision PUBLICATION_MERGE_SHA --tooling-output NEW_DIRECTORY`
 (replace placeholders) using a local clone of the delivered publication tree.
 16 source companions are bound by path/blob/SHA/size; reverse patch restores
 two tools and worker to17 original byte identities. No source execution/downloads;
-transports/prompts blocked, also old Git. Missing/wrong objects, patches or
-non-new output refuse.
+Transports/prompts blocked, also old Git.
+Missing objects are UNAVAILABLE; wrong blobs/patches or reused output refuse.
 
 Full reproduction requires raw AND source recovery. No new native/science
 execution or upstream science/performance qualification.
