@@ -24,7 +24,6 @@ struct RysShell;
 namespace {
 namespace generated = generated_df_shell;
 namespace scalar = generated_df_derivatives;
-constexpr unsigned term_capacity = molecule::kMaximumAoExpansionTerms;
 
 /** Publish one aggregated owner count; normal kernels receive a null sink. */
 __device__ __forceinline__ void record_work(unsigned long long* work, DfShellWork kind,
@@ -128,8 +127,9 @@ __device__ __forceinline__ void contract_shell_task(
     for (unsigned at = 0; at < o.term_counts[ai]; ++at)
       for (unsigned bt = 0; bt < o.term_counts[bi]; ++bt)
         for (unsigned ct = 0; ct < x.term_counts[ci]; ++ct) {
-          const auto ia = ai * term_capacity + at, ib = bi * term_capacity + bt;
-          const auto ic = ci * term_capacity + ct;
+          const auto ia = ai * first.expansion_terms + at;
+          const auto ib = bi * second.expansion_terms + bt;
+          const auto ic = ci * auxiliary.expansion_terms + ct;
           const auto ac = generated::cartesian_index(A, o.term_angular + 3 * ia);
           const auto bc = generated::cartesian_index(B, o.term_angular + 3 * ib);
           const auto cc = generated::cartesian_index(C, x.term_angular + 3 * ic);

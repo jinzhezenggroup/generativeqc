@@ -276,6 +276,11 @@
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
       "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
       "review_document": "benchmarks/results/readme-refresh-20261015/README.md"
+    },
+    "df-g-shell-20261021": {
+      "owner": "default auxiliary-g response partition qualification",
+      "reason": "Lossless original20 complete endpoint samples, dense independent references, baseline comparisons,34-test GPU result and failed packaging attempt, source/library/cache identities and executed shell/g-remainder work trace. No external archive or increased storage budget. Six existing evidence payloads are losslessly compressed to keep the aggregate cap.",
+      "review_document": "benchmarks/results/df-g-shell-20261021/README.md"
     }
   },
   "files": [
@@ -358,6 +363,14 @@
       "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
       "role": "reference-input",
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
+    },
+    {
+      "path": "benchmarks/results/df-g-shell-20261021/receipts.json.xz",
+      "family": "df-g-shell-20261021",
+      "bytes": 169040,
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts"
     },
     {
       "bytes": 485607,
@@ -520,6 +533,14 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
+      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
+      "family": "r2scan3c-final-validation-20261015",
+      "bytes": 185084,
+      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 298072,
@@ -534,6 +555,14 @@
       "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
+      "family": "readme-refresh-20261015",
+      "bytes": 176084,
+      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
     },
     {
       "bytes": 194601,
@@ -568,28 +597,12 @@
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     },
     {
-      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
-      "family": "r2scan3c-final-validation-20261015",
-      "bytes": 185084,
-      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
-    },
-    {
       "path": "benchmarks/results/wb97mv-hessian-dispatch-20261017/samples.json.xz",
       "family": "wb97mv-hessian-dispatch-20261017",
       "bytes": 177452,
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
-    },
-    {
-      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
-      "family": "readme-refresh-20261015",
-      "bytes": 176084,
-      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
