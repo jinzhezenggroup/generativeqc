@@ -262,28 +262,28 @@
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "final-uhf-0.json",
-      "sha256": "60258ef8103291341d572df24b1611c4faa27c36967f37d750dcb790bfe1bf1d",
+      "path": "final-uhf-0.json.gz",
+      "sha256": "78e13a12680c8c0bf905f375d9a999164b55062473e73de5404af12bebea25d9",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "final-uhf-1.json",
-      "sha256": "baa01ca80520c83169ec3c247a06f3a16cc1d23fd4046781b7b55f8fd22c9cbd",
+      "path": "final-uhf-1.json.gz",
+      "sha256": "86af8c1ee9a5433ed32282d6725988995ea6b7fac2761dfe7376990c2b68d17f",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "final-uhf-2.json",
-      "sha256": "5196048c1d10de65206d1e1f34056e72064cd1489a499204a8f57d3cc8ca603f",
+      "path": "final-uhf-2.json.gz",
+      "sha256": "a2b63e5f086b9ad150c774d1b5af464c3f424c2cfacb8e1a396bce848f9bdc82",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "final-uhf-3.json",
-      "sha256": "59118290f62410bb36f3cf9daa281472a44aa701ce5c233803b145d2dfd1db79",
+      "path": "final-uhf-3.json.gz",
+      "sha256": "f58270862f49e408c8f454e69740f7ac5f4faa64f43c5167523db5e6f231c4de",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "final-tetramer-0.json",
-      "sha256": "ef962cc38a9f79133a4ee95051b92323d25674c9516f7b767e1bcde1fe0c99cf",
+      "path": "final-tetramer-0.json.gz",
+      "sha256": "bb1d3aaa54f1713e49eea62ffc03ba9763d154e7d987fb43123a15a36e8fd44d",
       "kind": "complete-endpoint-samples"
     }
   ],
