@@ -225,9 +225,16 @@ def test_source_norm_covers_normalized_basis_subnormal_precontraction(
         "using cudaStream_t=void*; using cudaError_t=int;\n"
     )
     native = (ROOT / "src/scf/cuda/direct_md_j.cu").read_text()
-    kernels = "\n".join(
-        cpp_function_definition(native, name)
-        for name in ("md_j_density", "md_j_primitive_source_norms")
+    kernels = (
+        cpp_function_definition(
+            (ROOT / "src/scf/cuda/md_j_engine.cuh").read_text(),
+            "md_j_engine_count_source_norm",
+        )
+        + "\n"
+        + "\n".join(
+            cpp_function_definition(native, name)
+            for name in ("md_j_density", "md_j_primitive_source_norms")
+        )
     )
     source, binary = tmp_path / "source_norm.cpp", tmp_path / "source_norm"
     source.write_text(
@@ -244,6 +251,9 @@ struct Dim { unsigned x; };
 Dim threadIdx{}, blockIdx{}, blockDim{32};
 template<class T> T atomicMax(T* address,T value) {
   const T previous=*address; *address=std::max(previous,value); return previous;
+}
+template<class T> T atomicAdd(T* address,T value) {
+  const T previous=*address; *address+=value; return previous;
 }
 long long __double_as_longlong(double value) {
   long long bits; std::memcpy(&bits,&value,sizeof(bits)); return bits;
@@ -281,6 +291,9 @@ int main() {
     md_j_density(batch,md,0,1,false,&density,nullptr);
     md_j_primitive_source_norms(md,0,1);
     assert(state.maximum_source_norm==leaf.qd);
+    unsigned long long counted=0;
+    for (const auto count:state.source_norm_counts) counted+=count;
+    assert(counted==static_cast<unsigned>(leaf.qd>0.));
     std::printf("%.17g %.17g %.17g %.17g\n",primitive.exponent,represented,leaf.qd,
                 md_j_bound_product_up(q,density_bound));
     state={}; md_j_primitive_source_norms(md,1,2);

@@ -229,6 +229,7 @@ __global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::
   const auto position =
       (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;
   md.hierarchy[md.hierarchy_layout.bucket_offsets[pair.angular] + position].qd = norm;
+  md_j_engine_count_source_norm(md.primitive_screen, norm);
   atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_source_norm),
             static_cast<unsigned long long>(__double_as_longlong(norm)));
 }

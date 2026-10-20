@@ -76,21 +76,32 @@ being copied from its contracted parent.
 
 Let `epsilon = min(screening_tolerance, 1e-12)`, `m` be the target's
 original-shell-pair primitive multiplicity, and `N` the complete primitive
-census. Prefix admission first uses `epsilon / (2*m*N)`, rounded down.
-Source-prefix admission uses the global maximum target multiplicity; target
-admission uses its actual multiplicity. After all five angular prefixes are
-frozen, let `A` be the sum of their lengths. A second device-only hierarchy pass
-refreshes leaf thresholds and node minima with census `min(N, 2*A)`; an empty
-prefix uses `N` and schedules no source tasks. It never enlarges the prefixes.
+census. Each target receives an allowance `epsilon/m`, rounded down. Its
+source threshold is the larger of two independently certified choices:
 
-When `2*A < N`, every excluded-prefix direction has a valid share of half the
-budget, and every omitted retained direction has a share of the other half:
-at most `m*N` products at `epsilon/(2*m*N)` plus `m*A` products at
-`epsilon/(2*m*A)`. When `2*A >= N`, the original `epsilon/(m*N)` uniform
-allowance bounds all omitted directions, including stricter prefix omissions.
-Thus the complete absolute screening error for every public J entry remains
-bounded by `epsilon`. Prefix lengths conservatively include inactive gaps and
-other systems; no exact nonzero-source census or host readback is needed.
+- the uniform threshold `(epsilon/(m*N))/q_target`, rounded down;
+- a histogram boundary whose complete source-norm tail is at most
+  `(epsilon/m)/q_target`, rounded down.
+
+The histogram counts positive finite source norms by their FP64 bit pattern.
+Each bin contributes its integer count times its exact upper endpoint, with
+upward-rounded multiplication and accumulation. The owner limits the primitive
+census to signed 32-bit capacity, so converting counts to FP64 is exact. The
+result bounds the sum of **all** sources below each boundary, including sources
+that will be removed from traversal prefixes. Zero norms need no budget;
+unknown/infinite norms always survive a finite threshold. Overflow in a tail
+bound retains work. Choosing the larger threshold selects one complete
+certificate and never combines two separately spent allowances.
+
+Source-prefix admission uses the global maximum target norm and multiplicity,
+so its threshold is no larger than any individual target threshold. Target
+admission compares its threshold with the global maximum source norm. Hence
+prefix omissions and leaf omissions belong to each target's same certified
+tail. Summing at most `m` target shares bounds the complete absolute screening
+error for every public J entry by `epsilon`. A single hierarchy pass builds
+prefixes and node bounds; no host readback or second budget-splitting pass is
+needed. The [source-tail decision](../../.agents/notes/implemented/performance/2026-10-20-md-j-source-tail-budget.md)
+records the proof, measured tradeoffs and rejected alternatives. Other systems and inactive gaps only make the certificate conservative.
 
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
@@ -99,9 +110,8 @@ field. It is not capped by the uncontracted primitive norm times the shell
 density envelope: precontraction rounding near underflow can make that envelope
 smaller than the norm of the stored source. The output primitive norm times
 this source bound bounds the directed contribution to any output AO. A tile
-stages the source norm and the second pass's cached downward-rounded ratio
-`allowance / output_norm`. Each hierarchy pass computes its threshold once per
-primitive, reduces its minimum across each node, and uses infinity
+stages the source norm and the cached certified threshold. The hierarchy
+computes its threshold once per primitive, reduces its minimum across each node, and uses infinity
 for inactive/padded targets. A tile is rejected only when neither direction
 has a nonzero maximum source norm at or above the opposite minimum target
 threshold. The inner loop applies the same leaf threshold. This avoids repeated allowance divisions and bound products for
@@ -120,17 +130,17 @@ primitive remains in the prefix if it can contribute as either an output or a
 source. Target admission compares the global maximum source norm with its
 actual threshold; source admission uses the global maximum output norm and
 maximum target multiplicity. The rectangular/triangular
-work inventory is constructed from those frozen prefixes. The second pass
-reuses their resident census to refine screening within the retained domain;
-both passes execute in stream order and are refreshed on every replay.
+work inventory is constructed from those frozen prefixes. Source counting,
+tail construction and hierarchy updates execute in stream order and are
+refreshed on every replay.
 Small geometry bounds cannot restore a quadratic traversal over the entire
 unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
 changing density magnitude never relies on pointer identity. All ordinary E,
 density and output mappings remain complete, including primitives excluded from
 the current source traversal.
 
-This recipe additionally charges one FP64 bound per primitive and one small
-device census. Its hierarchy and bound storage must fit the same owner's
+This recipe additionally charges one FP64 bound per primitive and a device
+census containing prefix lengths, source-norm bin counts and tail bounds. Its hierarchy and bound storage must fit the same owner's
 remaining capacity. An unadmitted optional recipe retains the existing
 incumbent provider and its documented screening contract; inspect diagnostics
 when requiring a particular recipe. An unset selector requests `primitive`.

@@ -148,3 +148,7 @@ Do not describe this step as per-iteration parity. Revisit remaining arithmetic,
 Boys evaluation, source reuse and scheduling differences with separate ablations
 and complete endpoint gates. The unhelpful register-local experiment should
 only be revisited if a new layout or instruction profile changes its economics.
+
+The later [complete source-tail decision](2026-10-20-md-j-source-tail-budget.md)
+supersedes this note's two-pass omission-budget refinement while retaining its
+scaled-seed mathematics. The measurements above remain the historical checkpoint.

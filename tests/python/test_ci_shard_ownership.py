@@ -331,7 +331,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
-        "core-a": ("test_cc_triples_tiles.py",),
+        "core-a": ("test_cc_triples_tiles.py", "test_uccsd_t_lambda.py"),
         "core-b": (
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
@@ -343,7 +343,6 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_occupied_triples.py",
         ),
         "core-c": (
-            "test_uccsd_t_lambda.py",
             "test_cc_canonical_denominators.py",
             "test_direct_order5_sources.py",
         ),
@@ -554,7 +553,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_uccsd_t_lambda.py": "core-c",
+        "tests/python/test_uccsd_t_lambda.py": "core-a",
     }
     owners = {
         **parallel,
@@ -618,7 +617,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         priority = {
             "tests/python/test_uccsd_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
-            "tests/python/test_uccsd_t_lambda.py": "core-c",
+            "tests/python/test_uccsd_t_lambda.py": "core-a",
         }
         for shard, (_, _, arguments) in selections.items():
             selected_priority = [
@@ -699,7 +698,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
     frontiers = {
         "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
-        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-c"),
+        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-a"),
         "order5": ("tests/python/test_direct_order5_sources.py", "core-c"),
     }
     owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
