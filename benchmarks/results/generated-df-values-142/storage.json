@@ -18,6 +18,15 @@
       "stored_path": "benchmarks/results/generated-df-values-142/isolated.json.gz",
       "stored_bytes": 66298,
       "stored_sha256": "0d3484febb8b5fc5d0161f8fbc37366e9e590f103f3e60700af2c79cb37e3dd5"
+    },
+    {
+      "original_path": "benchmarks/results/generated-df-values-142/promotion.json",
+      "original_bytes": 162452,
+      "original_sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745",
+      "stored_path": "benchmarks/results/generated-df-values-142/promotion.json.gz",
+      "stored_bytes": 11426,
+      "stored_sha256": "452752f34c53794c9278a594a816cdde8087747c988c836af9de5e62cbc7656d",
+      "storage_source_revision": "ed7a8e90b1cd702382aa7779fc148d34239a3c90"
     }
   ]
 }
