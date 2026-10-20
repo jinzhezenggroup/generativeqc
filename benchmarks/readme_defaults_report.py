@@ -14,6 +14,7 @@ import math
 import statistics
 from pathlib import Path
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_defaults import ARMS, METHODS, SCHEMA, SIZES
 
 LABELS = {
@@ -298,7 +299,7 @@ def load_records(paths: list[Path]) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipts", type=Path, nargs="+", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     rows = render(load_records(args.receipts), args.output)
     (args.output / "summary.json").write_text(
