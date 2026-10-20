@@ -1,0 +1,71 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Bounded numerical/source/activity evidence only; compact-only full raw requalification and profitability are unavailable.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4114,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c26865d3f2b8fef21e8caebceb644f2bc331bfcba0c150b8e572ebeecbe4c572"
+    },
+    {
+      "bytes": 4782,
+      "path": "campaign.json.gz",
+      "role": "summary",
+      "sha256": "d3227d60a6fef80cb38bac1d3dc7b72f278ac63e5fde7a54262f3074b1130710"
+    },
+    {
+      "bytes": 1660,
+      "path": "oracle.json.gz",
+      "role": "input",
+      "sha256": "c5c2390defaa36b58f6b2ab4c934b8e1714165758a2e7bc0322296276b990d93"
+    },
+    {
+      "bytes": 4899,
+      "decoded_bytes": 15546,
+      "decoded_sha256": "bfd5d6f80dc5213f5f307724a0b38e47d7f458ea44bb7b89abd5e2ca806a0bc2",
+      "path": "measured-tooling.patch.gz",
+      "role": "source-patch",
+      "sha256": "f743dd90046176b9fc52647770ebda7ca672f591a4c52f61d04f21318c16f8d8"
+    },
+    {
+      "bytes": 4627,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "50dddfdd146de578d9671605b824bce5b97f078c8d22670f7415c8acb3611df0"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.cc_cupti_capsule",
+      "--capsule",
+      "benchmarks/results/cc-cupti-attribution-230ao-20261019/campaign.json.gz",
+      "--oracle",
+      "benchmarks/results/cc-cupti-attribution-230ao-20261019/oracle.json.gz",
+      "--output",
+      ".artifacts/benchmarks/cc-cupti/capsule-summary.json"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "artifact_sizes": {
+      "backend": 239568,
+      "cupti": 7604800,
+      "executable": 97400,
+      "library": 766752624
+    },
+    "canonical_source_identity_record": "validation.json.gz#historical_tooling_reconstruction",
+    "canonical_source_is_measured_revision": false,
+    "dirty": true,
+    "native_production_dirty": false,
+    "reason": "Measured native production inputs are clean7045237; historical WIP tooling is restored from publication-tree source plus the retained reverse patch. Recovery tree is not the measured revision.",
+    "reconstruction_schema": "generativeqc.cc-source-recovery.publication-tree.v1",
+    "revision": "7045237d47aa56a7938da3776f65b86f4bd74be4"
+  }
+}

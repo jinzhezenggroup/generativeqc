@@ -263,3 +263,38 @@ exception is preserved. Permanent controls inject by failure/evidence events,
 not helper invocation counts. Normal log close retains its existing position
 before the caller's final clock sample. These future failure-path changes do
 not retroactively qualify execution supervision of the measured campaign.
+
+## Publication-tree recovery of the measured tooling
+
+The compact230-AO publication retains a whitelist-derived capsule and the exact
+public scalar oracle. Original document SHA/size, original measured source7045237,
+installed native/endpoint/collector identities and all17 executed tooling input
+SHA/size/path mappings remain explicit. Summary checks cannot reproduce raw
+activity joins and therefore leave raw qualification UNAVAILABLE without the
+original traces. Full mode uses the existing auditor and compares the complete
+re-derived projection, including child/scalar/binary bindings, rather than just
+matching activity totals.
+
+Duplicating all historical tooling would exceed the shared evidence budget.
+Sixteen real source companions already shipped in the publication-containing
+tree provide the canonical inputs. Fourteen match measured bytes directly; a
+small reverse patch restores the historical campaign/census and original worker.
+The recovery reader verifies the publication members, Git blob identities and
+all17 final measured inputs in a new exclusive directory. It neither imports
+nor executes reconstructed code. The true delivery merge SHA is recorded after
+protected merge; an unmerged PR commit is not the sole archival dependency and
+is never substituted for the measured native revision. Missing source objects,
+wrong blobs, unsafe modes/paths or a corrupted patch cannot earn reproduction PASS.
+
+Git2.34 in the reused image lacks the newer no-lazy-fetch command-line switch.
+Recovery uses the repository's existing offline environment policy instead:
+request no lazy fetch, deny every transport protocol and disable prompts, while
+removing caller Git overrides and replacement objects. Older Git can enter a
+blocked lazy-fetch path but cannot download missing data. This avoids an image
+upgrade while retaining fail-closed missing-object behavior. Tests include a
+missing promisor blob with the newer environment switch intentionally ignored,
+transport denial despite tainted caller configuration, and source-only/raw-only
+cases that cannot claim complete recorded-evidence reproduction. Even both
+components passing is not a new native build, fresh scientific execution or
+current-upstream scientific/performance qualification. Other campaigns and the
+storage cap are unchanged.
