@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-19
 
+Superseded by [the public-admission contract decision](2026-10-20-ordered-gram-public-admission-contract.md)
+for private kernel-packet observation; the historical decision and evidence below
+are retained.
+
 ## Problem and decision
 
 Refs #2296. The original host test sliced a CUDA wrapper by signature/namespace

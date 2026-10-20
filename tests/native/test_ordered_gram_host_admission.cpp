@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -26,68 +25,36 @@ using HeaderClientTag = detail::AdmissionHeaderClientTag;
 namespace {
 struct Invocation {
   dim3 grid, block;
-  std::int32_t batch, nbf, spins;
-  std::uint32_t history;
-  const double *fock, *residual;
-  const std::uint8_t* active;
-  double *fock_history, *residual_history, *solve, *coefficients;
-  std::uint32_t *count, *head;
-  double *effective, *cache;
-  bool normalize;
-  generativeqc::tensor::RingGramWork* work;
   std::size_t shared;
   cudaStream_t source_stream;
 };
 
 const Invocation* pending{};
 unsigned submissions{};
-const char* packet_error{};
+const char* submission_error{};
 constexpr std::size_t shared_bytes = 37;
 cudaStream_t stream() { return reinterpret_cast<cudaStream_t>(std::uintptr_t{24576}); }
 generativeqc::tensor::RingGramWork* work() {
   return reinterpret_cast<generativeqc::tensor::RingGramWork*>(std::uintptr_t{28672});
 }
 
-template <class T>
-T argument(void** arguments, unsigned index) {
-  T value;
-  std::memcpy(&value, arguments[index], sizeof(T));
-  return value;
-}
-
 bool same(dim3 left, dim3 right) {
   return left.x == right.x && left.y == right.y && left.z == right.z;
 }
 
-void record(const void* kernel, dim3 grid, dim3 block, void** args, std::size_t shared,
+void record(const void* kernel, dim3 grid, dim3 block, std::size_t shared,
             cudaStream_t actual_stream) {
   ++submissions;
   if (!pending || !kernel) {
-    packet_error = "unexpected CUDA submission";
+    submission_error = "unexpected CUDA submission";
     return;
   }
   const auto& expected = *pending;
+  // The private kernel argument packet is intentionally opaque. Consistent
+  // producer parameter reordering must not change this public admission gate.
   if (!same(grid, expected.grid) || !same(block, expected.block) || shared != expected.shared ||
-      actual_stream != expected.source_stream ||
-      argument<std::int32_t>(args, 0) != expected.batch ||
-      argument<std::int32_t>(args, 1) != expected.nbf ||
-      argument<std::int32_t>(args, 2) != expected.spins ||
-      argument<std::uint32_t>(args, 3) != expected.history ||
-      argument<const double*>(args, 4) != expected.fock ||
-      argument<const double*>(args, 5) != expected.residual ||
-      argument<const std::uint8_t*>(args, 6) != expected.active ||
-      argument<double*>(args, 7) != expected.fock_history ||
-      argument<double*>(args, 8) != expected.residual_history ||
-      argument<double*>(args, 9) != expected.solve ||
-      argument<double*>(args, 10) != expected.coefficients ||
-      argument<std::uint32_t*>(args, 11) != expected.count ||
-      argument<std::uint32_t*>(args, 12) != expected.head ||
-      argument<double*>(args, 13) != expected.effective ||
-      argument<bool>(args, 14) != expected.normalize || argument<const double*>(args, 15) ||
-      argument<std::size_t>(args, 16) || argument<const double*>(args, 17) ||
-      argument<double*>(args, 18) != expected.cache ||
-      argument<generativeqc::tensor::RingGramWork*>(args, 19) != expected.work)
-    packet_error = "public launcher changed the CUDA launch packet";
+      actual_stream != expected.source_stream)
+    submission_error = "public CUDA launch configuration changed";
 }
 
 void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::int32_t spins,
@@ -97,30 +64,10 @@ void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::in
             double* effective, double* cache, bool normalize = false,
             generativeqc::tensor::RingGramWork* work_record = nullptr, std::size_t shared = 0,
             cudaStream_t source_stream = nullptr) {
-  const Invocation request{grid,
-                           block,
-                           batch,
-                           nbf,
-                           spins,
-                           history,
-                           fock,
-                           residual,
-                           active,
-                           fock_history,
-                           residual_history,
-                           solve,
-                           coefficients,
-                           count,
-                           head,
-                           effective,
-                           cache,
-                           normalize,
-                           work_record,
-                           shared,
-                           source_stream};
+  const Invocation request{grid, block, shared, source_stream};
   const auto before = submissions;
   pending = &request;
-  packet_error = nullptr;
+  submission_error = nullptr;
   try {
     if (!normalize && !work_record)
       generativeqc::scf::cuda_execution::launch_update_diis_cached_gram(
@@ -139,7 +86,7 @@ void submit(dim3 grid, dim3 block, std::int32_t batch, std::int32_t nbf, std::in
   pending = nullptr;
   if (submissions != before + 1)
     throw std::runtime_error("admitted public launcher missed CUDA API interception");
-  if (packet_error) throw std::runtime_error(packet_error);
+  if (submission_error) throw std::runtime_error(submission_error);
 }
 
 int probe() {
@@ -259,9 +206,9 @@ int probe() {
 // This symbol is exported by the test executable, so calls originating in the
 // linked production shared library are intercepted as well as test objects.
 extern "C" __attribute__((visibility("default"))) cudaError_t CUDARTAPI
-cudaLaunchKernel(const void* kernel, dim3 grid, dim3 block, void** arguments, std::size_t shared,
+cudaLaunchKernel(const void* kernel, dim3 grid, dim3 block, void**, std::size_t shared,
                  cudaStream_t actual_stream) {
-  record(kernel, grid, block, arguments, shared, actual_stream);
+  record(kernel, grid, block, shared, actual_stream);
   return cudaSuccess;
 }
 
