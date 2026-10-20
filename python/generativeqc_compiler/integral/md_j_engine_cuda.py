@@ -242,12 +242,17 @@ __device__ inline void md_engine_radial(double rho, Vec3<double> p, Vec3<double>
   double seeds[Order + 1];
   const double argument = rho * (difference.x * difference.x + difference.y * difference.y +
                                 difference.z * difference.z);
-  // Reuse the positive-series owner only in the already-series high-order
-  // domain. Extending its default series threshold into the erf/upward domain
-  // adds work. A bounded failure retains the established shared Boys path.
+  // Replace only the established small-argument series, including low orders.
+  // Enlarging this domain adds series work on mixed-argument source warps.
+  // A bounded failure retains the shared Boys path; order zero is unchanged.
+  constexpr double series_threshold = Order == 1   ? 0.25
+                                      : Order == 2 ? 0.75
+                                      : Order == 3 ? 1.25
+                                      : Order == 4 ? 2.0
+                                                   : 6.0;
   bool have_seeds = false;
-  if constexpr (Order >= 5)
-    if (argument < 6.0)
+  if constexpr (Order >= 1)
+    if (argument < series_threshold)
       have_seeds = generativeqc::integrals::range_detail::long_moments(
           Order, argument, 1.0, seeds);
   if (!have_seeds) boys_values<Order, double, true>(argument, seeds);

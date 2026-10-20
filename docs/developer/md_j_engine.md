@@ -183,10 +183,11 @@ the unscaled generated entry point remains available for independent comparison.
 Compact FP64 radial evaluation opts into the shared Boys owner's reciprocal
 reuse: one square root supplies the erf seed and one reciprocal supplies all
 upward recurrence orders. Other Boys consumers retain their original arithmetic.
-For orders five through eight with argument below six, the compact evaluator
-uses the existing positive incomplete-gamma series owner instead of the
-alternating series. A bounded series failure falls back to the shared Boys
-owner. This does not extend the series region into the established upward
+For orders one through eight, the compact evaluator uses the existing positive
+incomplete-gamma series owner within the established small-argument domain:
+thresholds 0.25, 0.75, 1.25 and 2 for orders one through four, then 6 for
+orders five through eight. Order zero retains its original evaluator. A bounded
+series failure falls back to the shared Boys owner. This does not extend the series region into the established upward
 recurrence domain. Both changes retain FP64 storage and accumulation and require
 independent high-precision seed/radial and complete energy/force qualification.
 Bra partials remain in registers across ket batches, then reuse the radial
