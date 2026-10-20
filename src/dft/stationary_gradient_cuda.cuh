@@ -1392,9 +1392,8 @@ static int stationary_geometry_molecular_resident_weights_enqueue_impl(
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->retains_becke_pair_state(fp32_geometry) ? 2 : 1);
+    p->becke_pair_state_evaluations += view->npoint * p->atoms * (p->atoms - 1) /
+                                       (p->retains_becke_pair_state(fp32_geometry) ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
