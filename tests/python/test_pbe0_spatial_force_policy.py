@@ -17,7 +17,7 @@ def test_method_authenticates_full_range_spatial_force_default(
 ) -> None:
     """Check every composition, approximation, size, spin and precision guard."""
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
-    predicate = _definition(source, "  bool qualified_spatial_force_default() const")
+    predicate = _definition(source, "  bool qualified_spatial_force_default(")
     probe = tmp_path / "policy.cpp"
     probe.write_text(PREFIX + predicate + "\n};\n" + DRIVER)
     executable = native_cxx.build_executable(
@@ -71,6 +71,7 @@ PREFIX = r"""
 #include <vector>
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_spd_force_policy.hpp"
+#include "scf/direct_force_precision.hpp"
 constexpr int GENERATIVEQC_DENSITY_FITTING_NONE = 0;
 constexpr int GENERATIVEQC_PRECISION_FP64 = 0;
 namespace generativeqc::dft { enum class SemilocalFamily { Pbe, Other }; }
@@ -188,27 +189,27 @@ int main() {
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.op = scf::FockOperator::LongRange; });
   reject_hybrid([](auto& value) { value.fock_.strategy_value.spec.exchange.op = scf::FockOperator::LongRange; });
   reject([](auto& value) { value.options_.density_fitting_mode = 1; });
-  // Budget SCF may reuse the FP64 force source only through an authenticated
-  // native binding; independently qualified mixed derivatives are excluded.
-  for (unsigned source : {0U, 1U, 2U}) {
-    for (bool admitted : {false, true})
-      for (unsigned gradient : {0U, 1U}) {
-        Method precision;
-        precision.fock_.strategy_value.spec.exchange.present = source == 0;
-        precision.execution_plan_.d4_correction = source == 2;
-        precision.options_.precision_mode = 1;
-        precision.native_stationary_admitted = admitted;
-        precision.gradient_qualification = gradient;
-        assert(precision.qualified_spatial_force_default() == (admitted && gradient == 0));
-        precision.fock_.diagnostic_value.nbf = 383;
-        assert(!precision.qualified_spatial_force_default());
+  // The actual invocation owns derivative arithmetic independently of the
+  // historical SCF mode and whether Python or native code consumes the source.
+  for (unsigned source : {0U, 1U, 2U})
+    for (int scf_mode : {0, 1, 2})
+      for (bool admitted : {false, true}) {
+        Method force;
+        force.fock_.strategy_value.spec.exchange.present = source == 0;
+        force.execution_plan_.d4_correction = source == 2;
+        force.options_.precision_mode = scf_mode;
+        force.native_stationary_admitted = admitted;
+        assert(force.qualified_spatial_force_default());
+        for (unsigned mask = 0; mask != 8; ++mask) {
+          scf::DirectForcePrecisionRequest request;
+          request.mixed_weighted = mask & 1;
+          request.mixed_geometry = mask & 2;
+          request.mixed_grid = mask & 4;
+          assert(force.qualified_spatial_force_default(&request) == (mask == 0));
+        }
+        force.fock_.diagnostic_value.nbf = 383;
+        assert(!force.qualified_spatial_force_default());
       }
-    Method unresolved;
-    unresolved.fock_.strategy_value.spec.exchange.present = source == 0;
-    unresolved.execution_plan_.d4_correction = source == 2;
-    unresolved.options_.precision_mode.reset();
-    assert(!unresolved.qualified_spatial_force_default());
-  }
   reject([](auto& value) { value.execution_plan_.range_exchange = true; });
   reject([](auto& value) { value.range_strategy_ = true; });
   reject([](auto& value) { value.execution_plan_.nonlocal_correlation = true; });
