@@ -90,8 +90,14 @@ struct RccsdNativeState {
 void validate_descriptor(const generativeqc_method_descriptor&, const runtime::ExecutionContext&) {}
 std::size_t correlation_budget(const generativeqc_method_descriptor&) { return 100; }
 using SolverOptions = generativeqc::cc::SolverOptions;
-SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
-Reference reference_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
+SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t, core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
+  return {};
+}
+Reference reference_options(const generativeqc_method_descriptor&, std::size_t, core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
+  return {};
+}
 RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
