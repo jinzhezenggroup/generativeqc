@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_layout_contraction.cuh",
+  "reason": "Prepared execution of compiler-owned same-storage LayoutTransfer obligations around the existing shared contraction owner. Bounded FP64 affine copies, immutable exact-shape descriptors, caller-precharged scratch, pointer/device/context preflight and logical transfer counters are runtime services; scientific equations and provider legality remain with the canonical compiler request and existing matrix executor. Capture and unsupported domains are explicitly refused; production method/device promotion is separate qualification.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
