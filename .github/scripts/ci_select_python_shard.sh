@@ -344,11 +344,15 @@ nightly_hessian_paths=(
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
 # Dedicated UCCSD force tests no longer occupy the broad core queues;
-# corrected Lambda stays an independent prioritized core-c owner.
-core_fresh_frontier_c=(
+# corrected Lambda stays an independent prioritized core-a owner.
+core_fresh_frontier_a=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
+  # Run 39378471974 timed out core-c with no recorded failures while core-a
+  # finished in 17m45s. Transfer the complete corrected-Lambda family
+  # (965 observed worker-seconds), preserving its priority and ordinary slots.
+  "${core_fresh_frontier_a[@]}"
   # Run 38867209562 delayed cold RKS water by 352 s behind corrected Lambda.
   # Keep all three fresh Hessian/Lambda families on distinct stable owners,
   # without removing their original slots from the ordinary modulo split.
@@ -380,9 +384,7 @@ core_hotspots_b=(
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
-  # The gradient and corrected-Lambda families must not share one late tail.
-  # Fresh function-scoped owners remain parallel, with every case retained.
-  "${core_fresh_frontier_c[@]}"
+  # Keep the complete order-five probe independent of corrected Lambda.
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )
@@ -416,7 +418,10 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_wb97mv_uks_hessian.py
     )
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a) target_bucket=0 ;;
+      core-a)
+        target_bucket=0
+        fresh_frontier_paths+=("${core_fresh_frontier_a[@]}")
+        ;;
       core-b) target_bucket=1 ;;
       core-c)
         target_bucket=2
@@ -424,7 +429,6 @@ case "${GENERATIVEQC_CI_SHARD}" in
         # minute 27. Start its complete numerical/adapter gate early too;
         # changing only priority preserves all owners, cases and time limits.
         fresh_frontier_paths+=(
-          "${core_fresh_frontier_c[@]}"
           tests/python/test_direct_order5_sources.py
         )
         ;;
