@@ -135,9 +135,10 @@ def _assert_resident_abi(plan: typing.Any, lib: ctypes.CDLL) -> None:
             assert lib.resident_run(pointer, 0, metrics, error, len(error)) != 0
             assert error.value
         lib.host_static_ready(owner, 0)
+        error.value = b""
         before = lib.host_synchronizations()
         assert lib.resident_run(owner, 0, result, error, len(error)) != 0
-        assert error.value
+        assert b"not initialized" in error.value
         assert lib.host_synchronizations() > before
     finally:
         lib.host_destroy(owner)
@@ -263,7 +264,9 @@ def test_resident_control_span_transfers(
     os.environ.get("VIBEQC_RESIDENT_HOST_CONTROLS") != "1",
     reason="opt-in generated-source metamorphic/mutation controls",
 )
-@pytest.mark.parametrize("mutation", ["format", "abi", "offset", "length", "status"])
+@pytest.mark.parametrize(
+    "mutation", ["format", "abi", "diagnostic", "offset", "length", "status"]
+)
 def test_resident_host_oracle_controls(
     mutation: str,
     tmp_path: Path,
@@ -290,6 +293,11 @@ def test_resident_host_oracle_controls(
                 'extern "C" int resident_abi() { return 1; }',
                 'extern "C" int resident_abi() { return 2; }',
             )
+        if mutation == "diagnostic":
+            return source.replace(
+                "generativeqc_tensor::error_text(error, size, e.what()); return 1;",
+                "return 1;",
+            )
         field = 0 if mutation == "offset" else 1
 
         def corrupt(match: re.Match[str]) -> str:
@@ -300,7 +308,7 @@ def test_resident_host_oracle_controls(
         return re.sub(r"\{(\d+)ULL,(\d+)ULL\}", corrupt, source, count=1)
 
     lib = build_resident_host(plan, tmp_path, native_cxx, monkeypatch, transform)
-    if mutation == "abi":
+    if mutation in ("abi", "diagnostic"):
         with pytest.raises(AssertionError):
             _assert_resident_abi(plan, lib)
         return

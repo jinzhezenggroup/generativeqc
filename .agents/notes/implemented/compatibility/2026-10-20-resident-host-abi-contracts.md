@@ -36,8 +36,8 @@ arithmetic/symmetry, ordinary-emitter or scientific numerical qualification.
   allocation offset/extent bounds, injected copy/synchronization/device errors,
   nonzero statuses, diagnostics and stream draining. Preserve the input pin gate.
 - Opt-in `VIBEQC_RESIDENT_HOST_CONTROLS=1` accepts formatting and private table
-  renaming while rejecting ABI-version, generated offset, length and status
-  corruption using the same behavioral oracle. These controls edit generated text;
+  renaming while rejecting ABI-version, missing diagnostics, offset, length and
+  status corruption using the same behavioral oracle. These controls edit generated text;
   they are not a required-CI private spelling/hash gate.
 
 ## Boundaries retained
@@ -73,12 +73,26 @@ replacement uses a legitimate zero-element floating constant through the public
 TensorIR API. It does not bypass precision admission, initialize floating data or
 qualify any nonempty floating span.
 
-The final narrower sources passed the Linux gate with 156 cases and 19 explicit
+The `149b11c9e` narrower sources passed the Linux gate with 156 cases and 19 explicit
 CUDA-device opt-in skips, including all 26 resident cases (five opt-in controls).
 The cache recorded 11 compilations/misses and zero compilation failures.
 The three qualified test/helper/fixture LF hashes were checked against the
 committed blobs. The compiler/runtime boundary remains host-only; this result
 does not qualify ordinary emission, floating validation, kernels or science.
+
+Review P2 `PRRT_kwDOUFEw6s6uNLy_` identified a stale diagnostic in the static-state
+failure oracle. The opt-in diagnostic-suppression control reproduced that gap:
+the old ABI oracle accepted a nonzero, synchronized return without a fresh
+diagnostic, so the control failed with `DID NOT RAISE AssertionError`. Clear the
+buffer before the static-state call and require the initialization diagnostic;
+the same control must then reject the damaged wrapper. This is test-oracle repair,
+not a production error-path change.
+
+After this diagnostic-oracle repair, the final source-matched Linux gate passed
+157 cases with 19 CUDA-device opt-in skips, including all 27 resident cases and
+six opt-in controls. The diagnostic-suppression control now rejects the damaged
+wrapper; no production source was changed. Ruff/format and whitespace checks
+passed, and final test/helper/fixture LF blobs matched the qualified sources.
 
 An exploratory broader run included the unmodified ccache-specific fixture tests
 with sccache selected: `--print-stats` was unsupported and a relative-tool child
