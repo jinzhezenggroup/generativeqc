@@ -65,7 +65,7 @@ struct Owner {
       general_point_count{};
   uint64_t fp32_geometry_batches{}, fp32_geometry_points{};
   bool retains_becke_pair_state() const {
-    return (bool(phased_storage) && !adjusted_partition) ||
+    return bool(phased_storage) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
   }
   bool binary_scaled_becke_active() const {
@@ -322,7 +322,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     ++owner.launches;
   }
   const double* radii = owner.adjusted_partition ? owner.atomic_radii : nullptr;
-  const bool phased_active = owner.phased_storage && !owner.adjusted_partition;
+  const bool phased_active = bool(owner.phased_storage);
   if (fp32_geometry) {
     if (external || !stationary_fp32_point_capable)
       throw std::invalid_argument("unsupported FP32 stationary geometry point contract");
@@ -354,6 +354,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     phased.owner_offset = owner_offset;
     phased.points_per_atom = points_per_atom;
     phased.center_pairs = center_pairs;
+    phased.atomic_radii = radii;
     phased.partial = partial;
     phased.error = error;
   }
@@ -584,8 +585,8 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
   });
 }
 /** Copy only O(natom) immutable topology, with a setup fence before borrowed
- * streams may use it. The equal-radius phased witnesses do not authorize the
- * adjusted graph; its bounded shared-adjoint route remains available. */
+ * streams may use it. Bounded and phased derivatives borrow the same radii;
+ * neither schedule changes them when geometry is rebound. */
 int stationary_grid_topology_v1(void* pointer, const size_t* offsets, const double* radii,
                                 size_t atoms, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
