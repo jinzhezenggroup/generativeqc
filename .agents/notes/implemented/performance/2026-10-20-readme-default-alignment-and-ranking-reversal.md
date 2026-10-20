@@ -213,3 +213,61 @@ spots only at identical XC/VV10 levels. Earlier unstable, failed and partial
 receipts remain retained. The main 192-population campaign and its slower Fast
 baseline remain immutable; new Fast implementation results use distinct source
 and binary identities.
+
+## Follow-up: verified fixes and remaining comparison differences
+
+The original campaign above remains immutable. Subsequent implementations have
+their own source/binary identities and cannot replace selected old points under
+the old revision label.
+
+At `33461b49e`, the DF consumer partitions auxiliary angular momentum: existing
+s/p/d/f shell sharing runs alongside a generic g remainder. Slurm 11404 passes
+34 complete endpoint/translation tests. All repeats of PBE/PBE0 DF48/96 and
+r2SCAN-3c DF48 pass unchanged observable, grid-stability and CPU/GPU-spot gates.
+PBE96 warm decreases from 129.270 to 29.708 s, and PBE0 from 255.253 to 56.309 s.
+Those candidate times still exceed the corresponding default reference, so this
+fix does not establish general DF leadership.
+
+At `bb25db89e`, native's molecular VV10 density cutoff changes to rho >= 1e-10
+under a new policy identity. 133 host and 39 GPU force-seed tests pass, as do
+every cold/three-warm sample of Standard 3/12/48 and Fast 12 against stable
+XC 5/6 + VV10 4/5 direct references. Standard WB97M-V48 warm is 7.035 s,
+consistent with the earlier warm advantage. This branch does not contain the
+separate Fast warm fix. GPU4PySCF additionally removes abs(weight) <= 1e-14 while
+native keeps nonzero signed weights and their derivatives. Aligning the density
+cutoff must not be called identical active-domain screening.
+
+A bounded r2SCAN-3c DF96 diagnostic at `33461b49e` isolates a second work cliff
+before the force calculation. The first RI-J evaluation takes 135.361 s; metric
+factorization takes 1.797 s and complete preparation 6.558 s. The plan assigns
+about 14.54 GB to values and 7.14 GB to response, uses 1,183,744 ordered AO pairs
+and an auxiliary tile of 185, and repeatedly regenerates raw three-center tiles.
+The diagnostic intentionally stops after 180 s and is not a performance
+population. This case cannot be explained by precision auditing or g force
+response alone. Revisit value representation, source reuse and bounded resource
+planning.
+
+For publication, keep these distinctions explicit in evidence while leaving
+README prose short:
+
+| Condition | GenerativeQC | GPU4PySCF 1.8.1 |
+| --- | --- | --- |
+| Scientific inputs | Same geometry, spin, orbital basis and method corrections | Same |
+| XC/VV10 quadrature | Treutler/Lebedev/NWChem level 3 | Installed defaults: level 3/3 |
+| Moving-grid force response | Complete | Explicitly enabled for the shared requested force definition |
+| VV10 density cutoff | Baseline 1e-8; correction 1e-10 | Default 1e-10 |
+| VV10 weight screening | Retain nonzero signed weights | Remove abs(weight) <= 1e-14 |
+| Standard stopping | Energy 1e-10, density RMS 1e-8; physical residual closure | Energy 1e-9, orbital gradient approximately 3.16e-5 |
+| Integral screening | Standard 1e-12; admitted Direct Fast 1e-10 | Default 1e-13 |
+| Initial density | Huckel | MINAO |
+| Direct incremental J/K | Disabled by default | Default incremental implementation retained |
+| DF auxiliary | Frozen exact tables selected by reference | Default def2-SVP-JKFIT or 3c even-tempered |
+| WB97M-V DF range exchange | Exact long-range correction | Fitted long-range exchange |
+| Precision profile | Native Standard/Fast; fallback work retained | One default profile |
+| Cold/warm boundaries | Constructor/preparation + E/F; frozen own cold density | Same declared boundaries |
+| Resources | One n1 RTX 5090, one CPU math thread, finite Slurm job | Same |
+
+The two stopping residuals are different mathematical quantities; their numeric
+thresholds cannot be equated directly. Complete observable gates remain common.
+Old reference full-Fock/tight-convergence overrides, thread counts, compiler
+versions and sampling changes are described above with controlled evidence.
