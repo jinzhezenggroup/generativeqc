@@ -8,8 +8,9 @@
 
 namespace generativeqc::methods::detail {
 
-/** Private v2 transport for all mean-field families. The stable public method
- * descriptor remains the prefix. Callers must query the v2 feature before
+/** Private budget transport for mean-field arithmetic and correlated stopping.
+ * Each family has its own capability query and admission policy. The public method
+ * descriptor remains the prefix. Callers must query the appropriate feature before
  * submitting this size; preparation copies the allowances into its own plan.
  * Unlike the legacy KS extension, these budgets do not request SCF AUTO. */
 struct ApplicationPrecisionMethodOptions {

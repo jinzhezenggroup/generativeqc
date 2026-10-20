@@ -30,6 +30,9 @@ GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { 
 /** Method-family-neutral budget transport, independent of SCF arithmetic. */
 GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v2(void) { return 2; }
 
+/** Independent admission for budget-selected correlated stopping criteria. */
+GENERATIVEQC_API uint32_t generativeqc_correlation_convergence_version_v1(void) { return 1; }
+
 /** Private capability: budget-selected full-range FP32 J/K and physical gates. */
 GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v1(void) { return 1; }
 

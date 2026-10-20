@@ -1,0 +1,48 @@
+{
+  "file_count": 8,
+  "files": [
+    {
+      "bytes": 10614,
+      "path": "benchmarks/results/readme-cbs-20261013/README.md",
+      "sha256": "fdb02ff4cea83a1e8e3d2c5939e308f813863168737e144ca632db45c7688b63"
+    },
+    {
+      "bytes": 22494,
+      "path": "benchmarks/results/readme-cbs-20261013/df-cbs.svg",
+      "sha256": "9644f5f0f2850c3ceffc790ae64108b1d49dfe6edbe6af3142b4b80e2a193c1d"
+    },
+    {
+      "bytes": 500,
+      "path": "benchmarks/results/readme-cbs-20261013/early-reference-driver.patch",
+      "sha256": "ef5e4f7a1b62b81c4b6427b9cc2acd89e515d27c941eae720469aba7cad357a5"
+    },
+    {
+      "bytes": 8950,
+      "path": "benchmarks/results/readme-cbs-20261013/manifest.json",
+      "sha256": "2e3d3ac983a3e5ba5a0c1ede5388e6eb67a8a68fd87a66eb3bae190aad22b413"
+    },
+    {
+      "bytes": 3964,
+      "path": "benchmarks/results/readme-cbs-20261013/measured-driver.py.xz",
+      "sha256": "50a5f029376bb4c5829ba08c12f5c086735baa5b9e42590e39a1609cbb802702"
+    },
+    {
+      "bytes": 42984,
+      "path": "benchmarks/results/readme-cbs-20261013/summary.json.xz",
+      "sha256": "4e4a063b1d485537cdef61e1f8a7aa7fe77ed5cd0903e56191962388ccb2eb04"
+    },
+    {
+      "bytes": 15056,
+      "path": "benchmarks/results/readme-cbs-20261013/supplement.json.xz",
+      "sha256": "e514c45bf3d0d158a0819c4f61325077eb06bf060f54a857b22f60f875f39558"
+    },
+    {
+      "bytes": 2084,
+      "path": "benchmarks/results/readme-cbs-20261013/timings.md",
+      "sha256": "75127caf5d1d78569831ec9a8937ff5ebee7cf4155683ededce25570ff87c094"
+    }
+  ],
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "eac2de2b33544b104bb318e53aa02aecbea5009f",
+  "total_bytes": 106646
+}

@@ -1,0 +1,36 @@
+{
+  "base_revision": "eac2de2b33544b104bb318e53aa02aecbea5009f",
+  "source_manifest": "source-manifest.json",
+  "checks": [
+    {
+      "suite": "CBS orchestration, native CBS publication/recovery and default properties",
+      "passed": 90,
+      "skipped": 17,
+      "seconds": 384.35
+    },
+    {
+      "suite": "Precision policy and Python API documentation",
+      "passed": 146,
+      "subtests_passed": 55,
+      "seconds": 13.07
+    },
+    {
+      "suite": "Final CBS orchestration and correlated native transport/error controls",
+      "passed": 61,
+      "deselected": 2,
+      "seconds": 0.99
+    },
+    {
+      "suite": "Final CPU Fast water independent energy/force gates and energy-only parity",
+      "passed": 1,
+      "seconds": 173.28
+    },
+    {
+      "suite": "Final CUDA Fast water and Standard/Fast exact/full DF CBS directional derivatives",
+      "passed": 5,
+      "seconds": 6.39
+    }
+  ],
+  "gpu_policy": "All real GPU work used finite Slurm allocations on n4, main partition, gpu:5090:1; visibility preserved.",
+  "build_cache": "Verified ccache 4.5.1; source-matched CPU/CUDA Release builds."
+}

@@ -104,6 +104,10 @@ struct CcPerformanceDiagnostic {
   std::uint64_t diis_gram_calls{};
   std::uint64_t diis_coefficient_calls{};
   std::uint64_t diis_combine_calls{};
+  // Private versioned precision telemetry; do not extend the frozen public
+  // performance descriptor or infer execution from a requested Fast policy.
+  std::uint64_t ccsd_fp32_requested{}, ccsd_fp32_executed{}, ccsd_fp32_refused{};
+  std::uint64_t ccsd_fp32_evaluations{}, ccsd_fp32_gemm_calls{}, ccsd_fp32_cast_elements{};
 };
 
 struct KsTransportDiagnostic {

@@ -192,7 +192,8 @@ class PrecisionPolicy:
     """Select arithmetic by application budget, or request explicit audits.
 
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
-    native FP32 admission. It is not a measured per-call error certificate.
+    native FP32 admission. CCSDTCBSCalculator also uses this allowance for
+    final FP64 convergence limits. It is not a measured per-call error certificate.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
     Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.

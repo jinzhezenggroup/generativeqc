@@ -100,6 +100,31 @@ def read_cc_performance_result(
         for field_name, _ in diag._fields_
         if field_name not in ("struct_size", "abi_version")
     }
+    precision = getattr(library, "generativeqc_calculation_get_cc_precision_v1", None)
+    if index is None and precision is not None:
+        precision.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_uint32,
+        ]
+        precision.restype = ctypes.c_int
+        counters = (ctypes.c_uint64 * 6)()
+        status = precision(owner, counters, len(counters))
+        if status != _native.STATUS_NOT_IMPLEMENTED:
+            _native.check(library, status, context=context)
+            for position, field in enumerate(
+                (
+                    "ccsd_fp32_requested",
+                    "ccsd_fp32_executed",
+                    "ccsd_fp32_refused",
+                    "ccsd_fp32_evaluations",
+                    "ccsd_fp32_gemm_calls",
+                    "ccsd_fp32_cast_elements",
+                )
+            ):
+                values[field] = (
+                    bool(counters[position]) if position < 3 else counters[position]
+                )
     return CcPerformanceResult(**values)
 
 

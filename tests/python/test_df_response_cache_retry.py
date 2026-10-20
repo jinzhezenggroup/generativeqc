@@ -29,6 +29,7 @@ _SHIM = r"""
 #include <vector>
 #include "runtime/execution_precision.hpp"
 #include "cc/solver.hpp"
+#include "cc/phase_observation.hpp"
 namespace cc = generativeqc::cc;
 __DF_CORRELATION_DEMAND__
 DFCorrelationDemand expected_demand;
@@ -85,6 +86,7 @@ struct Scope {
 }  // namespace df_progress
 }  // namespace runtime
 namespace core {
+using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
 struct Atom {
   int position{}, atomic_number{};
 };
@@ -145,7 +147,9 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::
                                         bool retain_df_response, bool df_matrix_gemm,
                                         void*, std::size_t batch_limit, bool derived_denominators, bool packed_diis,
                                         std::optional<bool> ccsd_mixed_precision,
-                                        double ccsd_mixed_switch_residual, bool df_mp2_mode, bool df_reference) {
+                                        double ccsd_mixed_switch_residual, bool df_mp2_mode, bool df_reference,
+                                        core::CorrelationConvergence convergence) {
+  assert(!convergence.relaxed());
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
   assert(ccsd_mixed_switch_residual == expected_ccsd_switch);
@@ -226,7 +230,7 @@ int main() {
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
                                expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-                               expected_ccsd_switch, expected_demand);
+                               expected_ccsd_switch, expected_demand, {});
   };
   for (bool fitted : {false, true})
   for (bool mp2 : {false, true})
@@ -340,7 +344,7 @@ int main() {
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
       expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-      expected_ccsd_switch, expected_demand);
+      expected_ccsd_switch, expected_demand, {});
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -352,7 +356,7 @@ int main() {
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
         true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-        expected_ccsd_switch, expected_demand);
+        expected_ccsd_switch, expected_demand, {});
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
@@ -404,7 +408,7 @@ int main() {
     failure = 0;
     descriptor.limit = 100;
     const auto result = run_df_correlation_group_native(
-        execution, system, auxiliary, descriptor, forces, expected_demand);
+        execution, system, auxiliary, descriptor, forces, expected_demand, {});
     assert(calls == 1 && drains == 1 && late_calls == 1 && live == 0 && clears == 0);
     assert(preparations == 1 && result.primal.reference_seconds == (fitted ? 0.0 : 0.125) &&
            !result.recycling_discarded_primal_attempt);

@@ -7,6 +7,8 @@
 #include <string>
 #include <utility>
 
+#include "methods/correlation_convergence.hpp"
+
 #if GENERATIVEQC_HAS_CUDA
 #include "methods/df_ccsdt_force.hpp"
 #endif
@@ -69,6 +71,8 @@ class DfRccsdtPrepared final : public PreparedCalculation {
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
         descriptor_(descriptor) {
+    convergence_ = correlation_convergence(descriptor);
+    descriptor_.struct_size = sizeof(descriptor_);
     full_df_reference_ = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA;
     // Preserve the legacy descriptor contract of the CC solver. The explicit
     // demand carries the RI-JK model through reference, companions and response.
@@ -116,10 +120,12 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
 #if GENERATIVEQC_HAS_CUDA
     auto native =
-        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2 || full_df_reference_
+        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2 || full_df_reference_ ||
+                convergence_.relaxed()
             ? run_df_correlation_group_native(
                   execution_, system_, auxiliary_, descriptor_, compute_forces,
-                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions, full_df_reference_})
+                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions, full_df_reference_},
+                  convergence_)
             : run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
     native.primal.triples_seconds = native.triples_seconds;
     last_correlation_ = native.correlation;
@@ -138,6 +144,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
   core::System auxiliary_;
   bool full_df_reference_{};
   generativeqc_method_descriptor descriptor_{};
+  core::CorrelationConvergence convergence_;
   std::optional<generativeqc_correlation_diagnostic> last_correlation_;
   std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;

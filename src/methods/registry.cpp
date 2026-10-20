@@ -187,10 +187,21 @@ void validate_option_family(const MethodDefinition& definition,
                             generativeqc_backend backend) {
   const auto budget = detail::application_precision_budget(descriptor);
   const auto family = definition.provider.domain.family;
-  if ((budget[0] > 0.0 && backend != GENERATIVEQC_BACKEND_CUDA) ||
-      (descriptor.struct_size > sizeof(generativeqc_method_descriptor) &&
-       family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
-       family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL))
+  const bool correlated_convergence = descriptor.method == GENERATIVEQC_METHOD_MP2 ||
+                                      descriptor.method == GENERATIVEQC_METHOD_RCCSD ||
+                                      descriptor.method == GENERATIVEQC_METHOD_RCCSD_T ||
+                                      descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T;
+  if (correlated_convergence && budget[0] > 0 && descriptor.method == GENERATIVEQC_METHOD_MP2 &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "correlated convergence budgets exclude legacy RI-MP2");
+  if (!correlated_convergence &&
+      ((budget[0] > 0.0 && backend != GENERATIVEQC_BACKEND_CUDA) ||
+       (descriptor.struct_size > sizeof(generativeqc_method_descriptor) &&
+        family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+        family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "application precision transport requires CUDA HF/KS");
   if (descriptor.initial_guess) {
