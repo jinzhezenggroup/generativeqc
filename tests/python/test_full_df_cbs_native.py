@@ -148,13 +148,32 @@ def test_full_df_cbs_complete_directional_derivative(
     )
     assert cc is not None
     assert cc.ccsd_fp32_requested is (policy == "fast")
+    assert cc.lambda_fp32_requested is (policy == "fast")
+    assert cc.lambda_seconds > 0
+    assert cc.lambda_auxiliary_batch_size > 0
+    assert cc.lambda_numeric_capacity_bytes >= cc.lambda_owned_device_bytes > 0
     if policy == "fast":
         assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
         assert cc.ccsd_fp32_executed and not cc.ccsd_fp32_refused
         assert cc.ccsd_fp32_evaluations > 0 and cc.ccsd_fp32_gemm_calls > 0
         assert result.convergence["arithmetic"] == "mixed"
+        assert (
+            result.convergence["lambda_arithmetic_request"]
+            == "df_lambda_fp32_preconvergence"
+        )
+        assert cc.lambda_fp32_executed and not cc.lambda_fp32_refused
+        assert cc.lambda_fp32_actions > 0 and cc.lambda_fp32_gemm_calls > 0
+        assert cc.lambda_fp64_actions > 0
     else:
         assert not cc.ccsd_fp32_executed and cc.ccsd_fp32_gemm_calls == 0
+        assert not cc.lambda_fp32_executed and cc.lambda_fp32_gemm_calls == 0
+    energy_only = workflow.singlepoint(HYDROGEN, properties=("energy",))
+    assert energy_only.forces is None
+    assert energy_only.energy == pytest.approx(result.energy, abs=1e-10)
+    assert energy_only.convergence["lambda_arithmetic"] == "not_requested"
+    for component in energy_only.components:
+        if component.result.cc_performance is not None:
+            assert component.result.cc_performance.lambda_fp32_requested is None
 
     def oracle(atoms: tuple | list) -> float:
         """Assemble the independent focal-point model, not production components."""

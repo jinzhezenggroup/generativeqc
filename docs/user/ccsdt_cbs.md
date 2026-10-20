@@ -48,9 +48,9 @@ only a closed-shell singlet is currently admitted.
 Pass `policy="fast"` to `CCSDTCBSCalculator` to relax SCF, CCSD, Lambda and
 orbital-response convergence. `policy="standard"` (the default) and `"fp64"`
 retain the original strict controls. Fast also enables bounded FP32 auxiliary
-preconvergence for CUDA DF-CCSD by default. Final energy/residual checks,
-Lambda, triples and analytic force response use FP64. The selected Hamiltonian,
-basis groups and complete analytic-force work are preserved. Relaxed convergence
+preconvergence for CUDA DF-CCSD and Lambda by default. Final CCSD/Lambda
+solves and independent checks, triples and analytic force response use FP64.
+The selected Hamiltonian, basis groups and complete analytic-force work are preserved. Relaxed convergence
 applies to conventional CPU/CUDA CBS and both CUDA DF reference models;
 CPU and conventional CCSD keep FP64 arithmetic.
 
@@ -111,14 +111,24 @@ DF-CCSD warmup switches to FP64 at a residual of at least 100 times the selected
 CC residual ceiling, or after at most 24 warmup evaluations. It clears the mixed
 DIIS history before FP64 iterations. Resource or provider refusal retains the
 bounded FP64 path; numerical failures remain visible.
+Lambda uses at most 16 FP32 warmup iterations with a `1e-6` handoff tolerance,
+then starts a fresh FP64 GMRES solve with empty Krylov history. Its independent
+transpose audit and parameter/factor derivatives remain FP64. The bounded
+auxiliary batch retains the ordinary Q32 ceiling; memory admission may reduce it.
 
 `result.convergence` records the requested policy, selected route, composite
 and component allowances, coefficient sum and configured limits. Its
 `arithmetic_request` records the FP32 preconvergence request; `arithmetic`
-reports `"mixed"` only when FP32 GEMMs actually executed, otherwise `"fp64"`.
-Component `cc_performance` records FP32 admission, refusal, evaluation, GEMM and
-cast counts. Native diagnostics retain measured residuals and iteration counts. The
-allowance-to-tolerance mapping is a stopping policy: it is not a per-call
+reports `"mixed"` only when CCSD or Lambda FP32 GEMMs actually executed,
+otherwise `"fp64"`. `lambda_arithmetic_request` and `lambda_arithmetic` record
+Lambda separately; energy-only calls report `"not_requested"`.
+Component `cc_performance` records admission/refusal, evaluations or iterations,
+GEMMs and casts. DF force endpoints also expose Lambda, source-response and
+orbital phase times, actual auxiliary batch and numeric/device capacities.
+Lambda action counts cover the shared transpose operator, excluding its separate
+independent audit. Capacities are not measured peak VRAM. Unavailable telemetry
+is `None`, distinct from measured zero. Native diagnostics retain measured
+residuals and iteration counts. The allowance-to-tolerance mapping is a stopping policy: it is not a per-call
 observable certificate, a mathematical error bound, or a basis-set error
 estimate. No strict duplicate endpoint is run to estimate the error. Validate
 representative molecules against Standard or an independent reference when

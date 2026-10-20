@@ -462,11 +462,15 @@ def test_convergence_metadata_is_detached(
 
 
 @pytest.mark.parametrize("executed", (True, False))
+@pytest.mark.parametrize("lambda_executed", (True, False, None))
+@pytest.mark.parametrize("forces", (True, False))
 def test_fast_reports_executed_arithmetic_and_resource_fallback(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
     monkeypatch: pytest.MonkeyPatch,
     executed: bool,
+    lambda_executed: bool | None,
+    forces: bool,
 ) -> None:
     """A refused FP32 request must remain an observable FP64 result."""
     from generativeqc import _native
@@ -484,6 +488,10 @@ def test_fast_reports_executed_arithmetic_and_resource_fallback(
         ccsd_fp32_evaluations=2 if executed else 0,
         ccsd_fp32_gemm_calls=12 if executed else 0,
         ccsd_fp32_cast_elements=100 if executed else 0,
+        lambda_fp32_requested=None if lambda_executed is None else True,
+        lambda_fp32_executed=lambda_executed,
+        lambda_fp32_refused=not lambda_executed,
+        lambda_fp32_gemm_calls=20 if lambda_executed else 0,
     )
     original = cbs_module.Calculator.singlepoint
 
@@ -491,11 +499,25 @@ def test_fast_reports_executed_arithmetic_and_resource_fallback(
         return replace(original(self, *args, **kwargs), cc_performance=performance)
 
     monkeypatch.setattr(cbs_module.Calculator, "singlepoint", measured)
-    result = CCSDTCBSCalculator(
+    owner = CCSDTCBSCalculator(
         bases, auxiliary_bases=("sto-3g", "def2-svp"), device="cuda", policy="fast"
-    ).singlepoint(ATOMS)
-    assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
-    assert result.convergence["arithmetic"] == ("mixed" if executed else "fp64")
+    )
+    properties = ("energy", "forces") if forces else ("energy",)
+    if forces and lambda_executed is None:
+        with pytest.raises(RuntimeError, match="Lambda FP32 admission telemetry"):
+            owner.singlepoint(ATOMS, properties=properties)
+    else:
+        result = owner.singlepoint(ATOMS, properties=properties)
+        assert result.convergence["arithmetic_request"] == "df_ccsd_fp32_preconvergence"
+        assert result.convergence["arithmetic"] == (
+            "mixed" if executed or (forces and lambda_executed) else "fp64"
+        )
+        assert result.convergence["lambda_arithmetic_request"] == (
+            "df_lambda_fp32_preconvergence" if forces else "not_requested"
+        )
+        assert result.convergence["lambda_arithmetic"] == (
+            "not_requested" if not forces else "mixed" if lambda_executed else "fp64"
+        )
     assert all(event["closed"] for event in fake_native)
 
 

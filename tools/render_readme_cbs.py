@@ -221,16 +221,69 @@ def arithmetic_provenance(sample: dict, protocol: dict) -> dict | None:
         )
     ):
         raise ValueError("FP32 request lacks native arithmetic telemetry")
-    mixed = cc["ccsd_fp32_executed"] and cc["ccsd_fp32_gemm_calls"] > 0
-    arithmetic = "mixed" if mixed else "fp64"
-    if convergence.get("arithmetic") != arithmetic or (
+    mixed = cc["ccsd_fp32_executed"]
+    if mixed != (cc["ccsd_fp32_gemm_calls"] > 0) or (
         mixed and (cc["ccsd_fp32_refused"] or cc["ccsd_fp32_evaluations"] == 0)
     ):
         raise ValueError("FP32 counters disagree with reported arithmetic")
-    return {
-        "arithmetic": arithmetic,
-        **{key: cc[f"ccsd_fp32_{key}"] for key in (*flags, *counts)},
-    }
+    result = {key: cc[f"ccsd_fp32_{key}"] for key in (*flags, *counts)}
+    # Historical receipts predate the separate Lambda request. Preserve their
+    # exact diagnostic shape and never infer unrecorded work from today's policy.
+    if "lambda_arithmetic_request" in convergence:
+        request = convergence["lambda_arithmetic_request"]
+        if request == "df_lambda_fp32_preconvergence":
+            work = (
+                "fp32_iterations",
+                "fp64_iterations",
+                "fp32_actions",
+                "fp64_actions",
+                "fp32_gemm_calls",
+                "fp32_cast_elements",
+                "auxiliary_batch_size",
+                "numeric_capacity_bytes",
+                "owned_device_bytes",
+            )
+            if (
+                any(type(cc.get(f"lambda_fp32_{key}")) is not bool for key in flags)
+                or cc.get("lambda_fp32_requested") is not True
+                or any(
+                    type(cc.get(f"lambda_{key}")) is not int or cc[f"lambda_{key}"] < 0
+                    for key in work
+                )
+            ):
+                raise ValueError(
+                    "Lambda FP32 request lacks native arithmetic telemetry"
+                )
+            executed = cc["lambda_fp32_executed"]
+            if executed != (cc["lambda_fp32_gemm_calls"] > 0) or (
+                executed
+                and (
+                    cc["lambda_fp32_refused"]
+                    or not cc["lambda_fp32_actions"]
+                    or not cc["lambda_fp32_cast_elements"]
+                )
+            ):
+                raise ValueError(
+                    "Lambda FP32 counters disagree with reported arithmetic"
+                )
+            arithmetic = "mixed" if executed else "fp64"
+            result["lambda"] = {
+                "arithmetic": arithmetic,
+                **{key: cc[f"lambda_fp32_{key}"] for key in flags},
+                **{key: cc[f"lambda_{key}"] for key in work},
+            }
+            mixed |= executed
+        elif request in ("fp64", "not_requested"):
+            arithmetic = request
+            result["lambda"] = {"arithmetic": arithmetic}
+        else:
+            raise ValueError("unknown Lambda arithmetic request")
+        if convergence.get("lambda_arithmetic") != arithmetic:
+            raise ValueError("Lambda counters disagree with reported arithmetic")
+    arithmetic = "mixed" if mixed else "fp64"
+    if convergence.get("arithmetic") != arithmetic:
+        raise ValueError("FP32 counters disagree with reported arithmetic")
+    return {"arithmetic": arithmetic, **result}
 
 
 def attach_fast(summary: dict, fast: dict) -> None:
@@ -483,6 +536,55 @@ def comparison_table(summary: dict) -> str:
             )
         ]
         lines.append(f"| C{point['carbon']} | " + " | ".join(cells) + " |")
+    if any(
+        "lambda_arithmetic_request" in sample.get("convergence", {})
+        for point in summary["fast"]["points"]
+        for sample in (point.get("native") or {}).get("samples", [])
+    ):
+        lines += [
+            "",
+            "## Lambda work",
+            "",
+            "FP32 auxiliary warmup is followed by a fresh FP64 solve and independent audit.",
+            "Actions count the shared transpose operator, excluding the separate audit; phase time includes both.",
+            "Q is the actual auxiliary batch. Numeric capacity is not measured peak VRAM.",
+            "",
+            "| Alkane | Lambda Standard/Fast (s) | Standard FP64 actions | Fast FP32/FP64 actions | Fast Q | Fast FP32 GEMMs | Fast numeric capacity (GiB) |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        for point in summary["fast"]["points"]:
+            work = []
+            for item in (controls[point["carbon"]], point):
+                native = item.get("native") or {}
+                samples = native.get("samples", [])
+                cc = (
+                    constituents(samples[0], native["protocol"])["low/df-ccsd(t)"].get(
+                        "cc_performance"
+                    )
+                    if samples
+                    else None
+                )
+                work.append(cc or {})
+            standard, fast = work
+            times = "/".join(
+                f"{cc['lambda_seconds']:.3f}"
+                if cc.get("lambda_seconds") is not None
+                else "—"
+                for cc in work
+            )
+            actions = "/".join(
+                str(fast.get(f"lambda_fp{width}_actions", "—")) for width in (32, 64)
+            )
+            capacity = fast.get("lambda_numeric_capacity_bytes")
+            cells = [
+                times,
+                str(standard.get("lambda_fp64_actions", "—")),
+                actions,
+                str(fast.get("lambda_auxiliary_batch_size", "—")),
+                str(fast.get("lambda_fp32_gemm_calls", "—")),
+                f"{capacity / (1 << 30):.3f}" if capacity is not None else "—",
+            ]
+            lines.append(f"| C{point['carbon']} | " + " | ".join(cells) + " |")
     for name, series in (("Standard", summary), ("Fast", summary["fast"])):
         # The existing single-series table contains actual semantic counters,
         # independent checks and per-group timings without double-counting companions.
