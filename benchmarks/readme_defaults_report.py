@@ -74,7 +74,13 @@ def checked_sample(sample: dict, record: dict) -> None:
 
 def reduce_record(record: dict) -> dict:
     """Keep valid completed phases from a failed or externally timed-out job."""
-    if record.get("schema") != SCHEMA or record.get("arm") not in ARMS:
+    schema = record.get("schema")
+    # Historical v1 receipts retain their original four-profile meaning. Only
+    # read-only population reduction is shared; they are not v2 qualification.
+    if (
+        schema not in ("generativeqc.readme-defaults.v1", SCHEMA)
+        or record.get("arm") not in ARMS
+    ):
         raise ValueError("wrong benchmark schema or arm")
     if record.get("method") not in METHODS or record.get("mode") not in (
         "direct",
@@ -140,6 +146,8 @@ def render(
     records: list[dict], destination: Path, *, qualifications: list[dict] | None = None
 ) -> list[dict]:
     """Render absolute latencies; leave missing points as visible curve gaps."""
+    if any(record.get("schema") != SCHEMA for record in records):
+        raise ValueError("historical receipts require their pinned v1 renderer")
     import matplotlib
 
     matplotlib.use("Agg")
