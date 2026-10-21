@@ -11,6 +11,9 @@ CUDA HF/KS accepts orbital shells through f and fitting auxiliaries through g
 (`l=4`) for energies and first nuclear derivatives, including spherical JKFIT
 bases. Auxiliary-center and metric response use the native bounded derivative
 owner. This does not extend orbital-g or higher-derivative support.
+The generated shell derivative consumer includes auxiliary g, reusing its
+primitive geometry across shell components. Generic and bounded panel paths
+remain available; mixed shell arithmetic remains limited to auxiliary s/p/d/f.
 
 Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
 under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes

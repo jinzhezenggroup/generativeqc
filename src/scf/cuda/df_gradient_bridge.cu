@@ -356,7 +356,7 @@ struct ShellMetadata {
     offsets.push_back(host.ao_shells.size());
     ids.reserve(system.shells.size());
     if (signatures) signature_ids.reserve(system.shells.size());
-    for (unsigned l = 0; l < 4; ++l) {
+    for (unsigned l = 0; l < 5; ++l) {
       view.begin[l] = ids.size();
       for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
         if (system.shells[shell].angular_momentum == l) ids.push_back(shell);
@@ -388,7 +388,7 @@ struct ShellMetadata {
   }
   DfShellBasisView panel(std::size_t begin, std::size_t count) const {
     auto result = view;
-    for (unsigned l = 0; l < 4; ++l) {
+    for (unsigned l = 0; l < 5; ++l) {
       const auto first = ids.begin() + view.begin[l], end = first + view.count[l];
       const auto low =
           std::partition_point(first, end, [&](auto shell) { return offsets[shell + 1] <= begin; });
@@ -441,7 +441,7 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
                                std::size_t panel_begin, std::size_t panel_count, std::size_t nbf,
                                std::span<const double> weights, DfDerivativePairs pairs,
                                bool full_domain) {
-  constexpr unsigned classes = 64;
+  constexpr unsigned classes = 80;
   std::array<std::array<unsigned long long, kDfWeightMagnitudeBins>, classes> histograms{};
   std::array<unsigned long long, classes> samples{}, loads{};
   const auto packed_stride = nbf * (nbf + 1) / 2;
@@ -452,9 +452,9 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
   for (unsigned a = 0; a < 4; ++a)
     for (unsigned b = 0; b < 4; ++b) {
       if (pairs != DfDerivativePairs::full && a < b) continue;
-      for (unsigned c = 0; c < 4; ++c) {
+      for (unsigned c = 0; c < 5; ++c) {
         if (!full_domain && (a > 1 || b > 1 || c > 1 || a + b + c == 0)) continue;
-        const auto class_index = 16 * a + 4 * b + c;
+        const auto class_index = 20 * a + 5 * b + c;
         const auto a_begin = orbital.view.begin[a], a_end = a_begin + orbital.view.count[a];
         const auto b_begin = orbital.view.begin[b], b_end = b_begin + orbital.view.count[b];
         const auto c_begin = auxiliary.view.begin[c], c_end = c_begin + auxiliary.view.count[c];
@@ -504,8 +504,8 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
                                      kDfWeightMagnitudeBins);
   for (unsigned a = 0; a < 4; ++a)
     for (unsigned b = 0; b < 4; ++b)
-      for (unsigned c = 0; c < 4; ++c) {
-        const auto class_index = 16 * a + 4 * b + c;
+      for (unsigned c = 0; c < 5; ++c) {
+        const auto class_index = 20 * a + 5 * b + c;
         if (!samples[class_index]) continue;
         char name[128];
         std::snprintf(name, sizeof(name), "shell_%u%u%u_weight_effective_samples", a, b, c);
@@ -1198,9 +1198,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
         execution_control ? execution_control : (promoted_default ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
-    // Shell reuse covers the s/p/d/f subset without changing public AO offsets.
-    // A disjoint generic contraction below owns the remaining g auxiliary
-    // functions, and metric response always retains its complete domain.
+    // Shell reuse includes auxiliary g using the compiler's raised polynomial
+    // domain. Metric response retains its independent complete contraction.
     const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
     mixed_shell = mixed_shell && shell_execution && !auxiliary_g;
     if (mixed_shell) {
@@ -2028,16 +2027,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
               }
               runtime::cuda_trace::trace_counter("three_center_shell_panels", 1);
             }
-            const bool generic_g =
-                auxiliary_g && shell_execution && full_shell_domain && !metric_weights;
-            if (generic_g)
-              runtime::cuda_trace::trace_counter("three_center_auxiliary_g_remainder_panels", 1);
-            if (metric_weights || !shell_execution || !full_shell_domain || generic_g)
+            if (metric_weights || !shell_execution || !full_shell_domain)
               check(launch_df_derivative_tile(
                   o, x, r, kind, range, count, weights, schedule, derivative_output, arena.stream,
                   0, result.size(), gradient_copies,
-                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms,
-                  generic_g));
+                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },

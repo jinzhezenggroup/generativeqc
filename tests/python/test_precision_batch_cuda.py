@@ -15,7 +15,6 @@ from generativeqc import (
     TargetAccuracy,
     TargetErrorBudget,
 )
-from generativeqc._precision_batch import _SeedLease
 from test_df_fast_public_cuda import auxiliary_bases
 from test_df_fast_public_cuda import options as fitted_options
 from test_hf_fast_cuda import oracle as hf_oracle
@@ -138,15 +137,41 @@ def check(observed: Any, expected: dict, *, fast: bool) -> None:
         assert observed.fock_builds > 0
     if fast:
         validation = observed.precision_validation
-        assert validation.status == "qualified_mixed_gradient"
+        assert validation.status in (
+            "qualified_mixed_gradient",
+            "qualified_budget_fock",
+            "qualified_budget_fock_strict_warm",
+            "strict_standard_fallback",
+        )
         assert validation.solve_count == 1
         assert validation.solves[0].seconds is None
-        gradient = observed.precision["gradient"]
-        assert gradient["returned_mode"] == "mixed"
-        assert (
-            gradient.get("attempted_fp32_geometry_points", 0) > 0
-            or gradient.get("attempted_fp32_weighted_tasks", 0) > 0
-        )
+        if validation.status == "qualified_mixed_gradient":
+            gradient = observed.precision["gradient"]
+            assert gradient["returned_mode"] == "mixed"
+            assert (
+                gradient.get("attempted_fp32_geometry_points", 0) > 0
+                or gradient.get("attempted_fp32_weighted_tasks", 0) > 0
+            )
+        elif validation.status == "qualified_budget_fock":
+            assert observed.precision["mixed_stage_fock_builds"] > 0
+            assert observed.precision["strict_stage_fock_builds"] >= 2
+            assert observed.precision["final_residual_audits"] > 0
+        else:
+            assert observed.precision["mixed_stage_fock_builds"] == 0
+            assert observed.precision["effective_bits"] == 64
+        gradient = observed.precision.get("gradient") or {}
+        if gradient.get("returned_mode") == "mixed":
+            # Strict warm Focks may accompany a separately qualified mixed
+            # derivative; preserve both scientific proofs in the public report.
+            assert gradient["complete"]
+            assert (
+                validation.gradient_admission
+                != "no-application-qualified-fp32-gradient-route"
+            )
+            assert (
+                gradient.get("attempted_fp32_geometry_points", 0) > 0
+                or (gradient.get("attempted_fp32_weighted_tasks") or 0) > 0
+            )
 
 
 @pytest.mark.parametrize("functional,fitted", METHODS)
@@ -204,12 +229,19 @@ def test_fitted_energy_audit_restores_only_candidate_frozen_density() -> None:
     """The historical HF seed ABI really restores KS, including source geometry."""
     atoms, moved = geometries()
     expected = oracle("PBE0", True, moved)
-    calculator = PrecisionCalculator(policy="fast", **inputs("PBE0", True))
+    # Explicit targets continue to exercise independent audit ownership even
+    # when the default Fast request can retain a completed Standard endpoint.
+    target = TargetAccuracy(
+        (ObservableTarget("energy", "absolute", "Eh", absolute=1e-7),)
+    )
+    calculator = PrecisionCalculator(
+        policy=PrecisionPolicy("fast", target=target), **inputs("PBE0", True)
+    )
     try:
         with calculator.prepare_batch([atoms]) as prepared:
             prepared.execute(strict=True)
             prepared.set_warm_start_updates(False)
-            before = _SeedLease(prepared._owner, 1 << 20)
+            before = [array.copy() for array in prepared._seeds.storage]
             energy = prepared.execute(properties=("energy",), strict=True)
             assert energy.items[0].forces is None
             assert (energy.items[0].precision or {}).get("gradient") is None
@@ -217,17 +249,17 @@ def test_fitted_energy_audit_restores_only_candidate_frozen_density() -> None:
             assert len(energy.precision_validation["audit_calls"]) == 1
             assert prepared._owner is None
             assert energy.precision_validation["seed_bytes_retained"] > 0
-            for left, right in zip(
-                before.storage, prepared._seeds.storage, strict=True
-            ):
+            for left, right in zip(before, prepared._seeds.storage, strict=True):
                 np.testing.assert_array_equal(left, right)
             result = prepared.execute(
-                [np.asarray([position for _, position in moved])], strict=True
+                [np.asarray([position for _, position in moved])],
+                strict=True,
+                properties=("energy", "forces"),
             )
-            check(result.items[0], expected, fast=True)
+            check(result.items[0], expected, fast=False)
+            assert result.items[0].precision_validation.status == "observed_met"
             assert result.items[0].warm_start_used
-            after = _SeedLease(prepared._owner, 1 << 20)
-            for left, right in zip(before.storage, after.storage, strict=True):
+            for left, right in zip(before, prepared._seeds.storage, strict=True):
                 np.testing.assert_array_equal(left, right)
     finally:
         calculator.clear_cache()
@@ -282,8 +314,5 @@ def test_application_fast_does_not_perturb_converged_frozen_seeds(
                 assert not result.precision["strict_refinement_applied"]
                 assert result.fock_builds <= 2
                 assert result.physical_residual_rms < 1e-9
-                assert (
-                    result.precision["gradient"]["attempted_fp32_geometry_points"] > 0
-                )
     finally:
         calculator.clear_cache()

@@ -55,6 +55,7 @@ def test_screened_cold_candidates_preserve_rhf_policy(
     source = tmp_path / "policy.cpp"
     source.write_text(r"""
 #include <limits>
+#include <bit>
 #include "scf/cuda/direct_jk_source_policy.hpp"
 using namespace generativeqc::scf::cuda_execution;
 constexpr auto screened = DirectJkSourceAutoPolicy::screened_hybrid_cold;
@@ -122,6 +123,16 @@ int main() {
   if (!partial.valid || partial.mask != 0x1555 || partial.ceiling != (2ULL << 30)) return 5;
   const auto disabled = direct_jk_resident_bucket_policy("0", "0");
   if (!disabled.valid || disabled.mask || disabled.ceiling) return 6;
+  std::array<std::size_t,28> bytes{};
+  bytes.fill(100);
+  // The highest-degree bucket fits; the rest must stream. No over-admission.
+  if (direct_jk_fit_resident_buckets(bytes,100,(1U<<28)-1)!=(1U<<27)) return 7;
+  if (direct_jk_fit_resident_buckets(bytes,99,(1U<<28)-1)!=0) return 8;
+  if (direct_jk_fit_resident_buckets(bytes,2800,(1U<<28)-1)!=(1U<<28)-1) return 9;
+  if (direct_jk_fit_resident_buckets(bytes,300,1)!=1) return 10;
+  bytes[27]=std::numeric_limits<std::size_t>::max();
+  const auto bounded=direct_jk_fit_resident_buckets(bytes,200,(1U<<28)-1);
+  if ((bounded&(1U<<27)) || std::popcount(bounded)!=2) return 11;
   return !direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,
                                        std::numeric_limits<double>::quiet_NaN());
 }

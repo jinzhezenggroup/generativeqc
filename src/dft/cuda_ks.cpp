@@ -513,7 +513,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Complete endpoints qualify screened SPD sources on substantial grids.
     // Application-budget refinement publishes a strict lease for both its
     // remaining target work and same-owner warm consumers. The mixed lease is
-    // retired first, so the existing 4-GiB and complete-resource bounds still
+    // retired first, so the optional ceiling and complete-resource bounds still
     // apply to one optional source. Ordinary AUTO keeps its streamed tail.
     const bool budget_range_refinement = strict_refinement && budget_fock && budget_stationarity;
     if (automatic_range &&
@@ -524,13 +524,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto buckets = direct_jk_resident_bucket_policy(
         std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
         std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
-        automatic_range ? 4ULL << 30
+        automatic_range ? 16ULL << 30
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
                                     provider.cuda_direct_source(), source_strategy.spec);
+    // The generated strict hybrid already shares shell work. Constructing a
+    // second quartic full-range source does not amortize over ordinary cold SCF.
+    // Mixed proposals and uncovered high-angular/range operators retain reuse.
+    if (requested == DirectJkSourceSelection::automatic && !has_range_correction && !budget_fock &&
+        has_exchange && maximum_angular <= 2 &&
+        scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
+                                                        source_strategy.spec))
+      return;
     // Refuse warm/seeded or small candidates before cloning the provider or
     // sorting compact rows. A permitted iteration limit is not expected reuse.
     if (requested == DirectJkSourceSelection::automatic) {
@@ -566,7 +574,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
               has_range_correction ? "cuda_ks_range_resident_values_prepare"
                                    : "cuda_ks_resident_values_prepare",
               source_cold_phase, generic_fock, source_strategy.screening_tolerance, buckets.ceiling,
-              false, auto_policy, buckets.mask, spins),
+              false, auto_policy, buckets.mask, spins,
+              automatic_range && !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -2902,6 +2911,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
       pending_mixed_coulomb =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      // Pure-J proposals benefit from the generated strict shell consumer:
+      // generic mixed recurrence repeats substantially more component work.
+      // Select before submission so the work ledger reports actual FP64 J.
+      // Hybrid/resident schedules retain their independently qualified policy.
+      if (pending_mixed_coulomb && !has_exchange && !has_range_correction &&
+          !(phase_source && phase_source->active()) &&
+          scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
+                                                          provider.strategy().spec))
+        pending_mixed_coulomb = false;
       pending_mixed_exchange = has_exchange && iteration_precision.uses_lower_precision(
                                                    cuda_ks_precision_region::kExactExchange);
       pending_mixed_range_exchange =

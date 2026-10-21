@@ -3284,10 +3284,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
         static_cast<std::int32_t>(nbf), incremental_rebuild_interval,
-        incremental_direct_jk_policy.density_rms_threshold, density_rms, density_input, hcore,
-        active, incremental_anchor_density, incremental_anchor_fock, next_density,
-        incremental_delta_updates, incremental_full_build, incremental_full_build_count,
-        incremental_delta_build_count, incremental_max_abs_delta_density);
+        incremental_direct_jk_policy.density_rms_threshold,
+        options.screening_tolerance > 0.0 ? options.density_tolerance : 0.0, density_rms,
+        density_input, hcore, active, incremental_anchor_density, incremental_anchor_fock,
+        next_density, incremental_delta_updates, incremental_full_build,
+        incremental_full_build_count, incremental_delta_build_count,
+        incremental_max_abs_delta_density);
     cudaError_t error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     // Existing Direct-J/K shell-pair density bounds and quartet compaction now

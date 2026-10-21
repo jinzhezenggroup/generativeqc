@@ -2115,6 +2115,16 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                             nullptr, -1.0, census, detail);
 }
 
+bool cuda_direct_jk_generated_coulomb_available(const CudaDirectJkPlan* plan,
+                                                FockBuildSpec spec) noexcept {
+  if (!plan || !spec.coulomb.present || spec.coulomb.op != FockOperator::FullRange ||
+      spec.derivative_order != 0)
+    return false;
+  return direct_jk_generated_full_range_value_available(*plan) ||
+         (!plan->generated_exchange && plan->generated_coulomb &&
+          plan->generated_coulomb->value_capability);
+}
+
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
                                            FockBuildSpec spec) noexcept {
   if (!plan || !plan->canonical_pairs ||
