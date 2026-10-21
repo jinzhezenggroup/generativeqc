@@ -302,7 +302,7 @@ gather/reshape operations. Axes may be signed integers, unique tuples, `None`
 (all axes), or `()` (identity). Reduced zero extents produce the empty product
 1; zero extents on retained axes produce an empty output. `keepdims=True`
 retains reduced axes of length one. `dtype=None` preserves the input dtype;
-explicit same-dtype requests are accepted, while conversions are rejected.
+explicit `float32`/`float64` requests cast generic inputs before reduction.
 Scientific index annotations, spin, symmetry and compressed representations
 are outside this capture contract.
 
@@ -318,6 +318,37 @@ explicitly rejected. Higher derivatives, scientific endpoints and performance
 are outside this slice. Standard eager `prod` behavior is unchanged.
 
 The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
+
+### Explicit reduction dtype
+
+Captured generic finite `sum` and `prod` accept `dtype=xp.float32` or
+`dtype=xp.float64`. The existing TensorIR cast converts each input element
+before arithmetic; casting only the result would have different precision and
+overflow behavior. `dtype=None` and explicit same-dtype requests preserve the
+existing graph without an extra cast. Empty sums/products retain identities
+0/1 in the requested dtype. Standard eager behavior is unchanged.
+
+Explicit dtype requests reject scientific index spaces, spin, symmetries and
+non-general representations, including same-dtype requests. `sum(dtype=None)`
+retains its existing scientific contract. Integer, Boolean and complex targets
+remain unsupported by capture. Nonfinite conversion or arithmetic results fail
+the existing finite contract. Conversion preflight includes the entire target
+buffer and reduction intermediates within 256 MiB before building gather
+positions; backend byte/node limits still apply.
+
+Reference execution supports both real dtypes. First-order AD uses the existing
+cast convention: convert tangents to the forward target dtype and cotangents
+back to the input dtype. This convention does not treat IEEE rounding as an
+everywhere differentiable function. Products retain zero-safe polynomial AD.
+Opt-in native CPU execution admits only the already supported float64 input,
+output and arithmetic; float32 inputs are not admitted by requesting float64
+output. Public explicit-dtype CUDA capture is rejected before native compilation
+or device work. Raw TensorIR primitive admission remains separate. These limits
+do not qualify native float32, CUDA, full IEEE semantics or full Array API
+conformance. The compiler capability report retains `array_api_version=None`.
+
+The precision contract follows [Array API 2025.12 sum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.sum.html)
+and the product specification linked above.
 The compiler continues to report `array_api_version=None`; the public eager
 namespace's existing standard discovery does not qualify capture conformance.
 

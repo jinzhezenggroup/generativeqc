@@ -969,6 +969,26 @@ def _reduction_axes(
     return tuple(sorted(axes))
 
 
+def _reduction_dtype(value: VibeArray, dtype: object, name: str) -> str:
+    """Validate explicit reduction precision before any metadata-preserving cast."""
+    if (
+        not _is_generic_array(value)
+        or value.node.spec.representation != "general"
+        or value.node.spec.symmetries
+        or any(index.space.spin is not None for index in value.node.spec.indices)
+    ):
+        raise ValueError(
+            f"{name} dtype conversions require generic arrays without scientific annotations"
+        )
+    if (
+        value.dtype not in ("float32", "float64")
+        or type(dtype) is not str
+        or dtype not in ("float32", "float64")
+    ):
+        raise TypeError(f"{name} dtype requires real float32 or float64")
+    return dtype
+
+
 def sum(
     x: object,
     *,
@@ -978,8 +998,7 @@ def sum(
 ) -> VibeArray:
     """Reduce selected axes; generic arrays may retain singleton reduced axes."""
     value = _array(x)
-    if dtype is not None:
-        raise ValueError("frontend sum does not insert dtype conversions")
+    target = value.dtype if dtype is None else _reduction_dtype(value, dtype, "sum")
     if type(keepdims) is not bool:
         raise TypeError("keepdims must be a bool")
     axes = _reduction_axes(axis, value.ndim, "sum")
@@ -988,6 +1007,16 @@ def sum(
             "keepdims for scientifically annotated arrays requires explicit "
             "TensorIR index metadata"
         )
+    if target != value.dtype:
+        # Include the complete cast buffer and reduction/possible output reshape
+        # before creating any conversion node. Backend limits still cover inputs.
+        itemsize = 4 if target == "float32" else 8
+        output_size = _shape_product(
+            n for i, n in enumerate(value.shape) if i not in axes
+        )
+        if (value.size + 2 * output_size) * itemsize > 256 * 1024 * 1024:
+            raise ValueError("sum exceeds the static reduction graph budget")
+        value = astype(value, target, copy=False)
     result = VibeArray(tensor_ir.reduce_sum(value.node, axes=axes))
     if keepdims:
         shape = tuple(
@@ -1003,6 +1032,8 @@ def _prod_plan(
     axes: tuple[int, ...],
     itemsize: int,
     output: tuple[int, ...],
+    *,
+    cast_bytes: int | None = None,
 ) -> tuple[int, int, int]:
     """Bound new retained tensors, nodes and gather positions before allocation.
 
@@ -1012,8 +1043,8 @@ def _prod_plan(
     Existing input graphs and returned copies remain subject to backend budgets.
     """
     current = list(shape)
-    retained = _shape_product(output) * itemsize  # final reshape
-    nodes, positions, rounds = 1, 0, 0
+    retained = (cast_bytes or 0) + _shape_product(output) * itemsize  # final reshape
+    nodes, positions, rounds = 1 + (cast_bytes is not None), 0, 0
     empty = any(shape[i] == 0 for i in axes)
     if empty:
         retained += itemsize  # scalar one plus optional output broadcast
@@ -1066,8 +1097,7 @@ def prod(
         raise TypeError(
             "prod supports only generic arrays without scientific annotations"
         )
-    if dtype is not None and dtype != value.dtype:
-        raise ValueError("frontend prod does not insert dtype conversions")
+    target = value.dtype if dtype is None else _reduction_dtype(value, dtype, "prod")
     if type(keepdims) is not bool:
         raise TypeError("keepdims must be a bool")
     axes = _reduction_axes(axis, value.ndim, "prod")
@@ -1076,7 +1106,16 @@ def prod(
         if keepdims
         else tuple(n for i, n in enumerate(value.shape) if i not in axes)
     )
-    _prod_plan(value.shape, axes, value.node.spec.itemsize, output)
+    itemsize = 4 if target == "float32" else 8
+    _prod_plan(
+        value.shape,
+        axes,
+        itemsize,
+        output,
+        cast_bytes=value.size * itemsize if target != value.dtype else None,
+    )
+    if target != value.dtype:
+        value = astype(value, target, copy=False)
     if any(value.shape[i] == 0 for i in axes):
         return full(output, 1, dtype=value.dtype)
     if value.size == 0:

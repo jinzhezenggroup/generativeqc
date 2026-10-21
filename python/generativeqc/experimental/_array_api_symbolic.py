@@ -527,12 +527,14 @@ def sum(
     dtype: object = None,
     keepdims: builtins.bool = False,
 ) -> typing.Any:
-    """Reduce over selected axes without retaining reduced dimensions.
-
-    Dtype conversion and keepdims=True are not supported in this preview.
-    """
+    """Capture finite reductions with an optional explicit real input cast."""
     if isinstance(x, VibeArray):
-        return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+        if dtype is not None and _CAPTURE_BACKEND.get() == "cuda":
+            raise ValueError(
+                "sum explicit dtype capture is not qualified for backend='cuda'"
+            )
+        target = None if dtype is None else _dtype_name(dtype)
+        return _namespace.sum(x, axis=axis, dtype=target, keepdims=keepdims)
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
@@ -549,7 +551,7 @@ def prod(
     dtype: object = None,
     keepdims: builtins.bool = False,
 ) -> VibeArray:
-    """Capture finite generic products without implicit dtype conversion."""
+    """Capture finite generic products with an optional explicit input cast."""
     if _CAPTURE_BACKEND.get() == "cuda":
         raise ValueError("prod capture is not qualified for backend='cuda'")
     target = None if dtype is None else _dtype_name(dtype)

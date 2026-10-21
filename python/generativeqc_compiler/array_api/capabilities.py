@@ -175,7 +175,7 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "prod": {
         "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
         "keepdims": "bool; generic-arrays-only",
-        "dtype": "None|same-input-dtype; conversion-unsupported",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
         "capture": "finite-generic-real-only; empty-product-one; static-graph-budget",
     },
     **{
@@ -201,7 +201,7 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "sum": {
         "axis": "static-int|tuple|None",
         "keepdims": "generic-arrays-only",
-        "dtype": "conversion-unsupported",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
     },
     "mean": {
         "axis": "static-int|tuple|None",
@@ -270,7 +270,15 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
-    "prod": {"ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in"},
+    "sum": {
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; explicit-dtype-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    "prod": {
+        "ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
     **{
         name: {
             "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
