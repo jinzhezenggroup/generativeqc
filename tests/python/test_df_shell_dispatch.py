@@ -5,12 +5,14 @@ launch declarations, the dispatch ABI, generated policy/registry and production
 control flow are compiled from the checkout.
 """
 
+from __future__ import annotations
+
 import json
 import os
-import shutil
 import subprocess
 import typing
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.integral.df_shell_derivatives import SUPPORTED_SHELL_CLASSES
@@ -18,19 +20,14 @@ from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 from generativeqc_compiler.integral.df_tuning.manifest import emit_policy
 from generativeqc_compiler.integral.df_tuning.policy import SCHEDULES
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _class_code(a: int, b: int, c: int) -> int:
-    """Keep legacy s–f IDs stable and append the auxiliary-g dispatch domain."""
-    return 64 + 4 * a + b if c == 4 else 16 * a + 4 * b + c
-
-
 @pytest.fixture(scope="module")
-def dispatcher(tmp_path_factory: typing.Any) -> typing.Any:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def dispatcher(tmp_path_factory: typing.Any, native_cxx: NativeCxx) -> typing.Any:
     directory = tmp_path_factory.mktemp("df_shell_dispatch")
     stub = directory / "scf/cuda"
     stub.mkdir(parents=True)
@@ -76,7 +73,7 @@ int cudaDeviceGetAttribute(int* value,cudaDeviceAttr kind,int) {
 namespace generativeqc::scf {
 template<unsigned A,unsigned B,unsigned C>
 int record(const DfShellLaunch& context) {
-  constexpr int code=C==4?64+4*A+B:16*A+4*B+C;
+  constexpr int code=20*A+5*B+C;
   calls[count][0]=code;calls[count][1]=context.variant;calls[count][2]=context.rys;++count;
   return code==fail_class?91:0;
 }
@@ -105,25 +102,20 @@ int main(int argc,char** argv) {
 """.replace("__DECLARATIONS__", "\n".join(declarations))
     )
     executable = directory / "probe"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source, ROOT / "src/scf/cuda/df_shell_derivatives.cu"],
+        executable,
+        compile_args=[
             "-std=c++20",
             "-O0",
             "-x",
             "c++",
-            str(source),
-            str(ROOT / "src/scf/cuda/df_shell_derivatives.cu"),
             "-I",
             str(directory),
             "-I",
             str(ROOT / "src"),
-            "-o",
-            str(executable),
         ],
-        check=True,
-        capture_output=True,
-        timeout=90,
+        compile_timeout=90,
     )
 
     def run(
@@ -168,7 +160,7 @@ def test_dispatch_preserves_domains_order_and_explicit_schedules(
 ) -> None:
     result = dispatcher(kind, full, variant, policy="legacy")
     domain = [
-        _class_code(a, b, c)
+        20 * a + 5 * b + c
         for a, b, c in SUPPORTED_SHELL_CLASSES
         if full or (max(a, b, c) <= 1 and a + b + c > 0)
     ]
@@ -186,25 +178,26 @@ def test_qualified_policy_and_unknown_target_fallback(
         ).read_text()
     )
     choices = {
-        _class_code(*map(int, row["class"])): row
+        20 * int(row["class"][0]) + 5 * int(row["class"][1]) + int(row["class"][2]): row
         for row in manifest["architectures"]["sm_120"]["kernels"]
     }
+    codes = [20 * a + 5 * b + c for a, b, c in SUPPORTED_SHELL_CLASSES]
     expected = [
         [
             code,
             SCHEDULES.index(choices[code]["schedule"]) if code in choices else 0,
             int(code in choices and choices[code]["lowering"] == "rys"),
         ]
-        for code in range(80)
+        for code in codes
     ]
     assert dispatcher(kind)["calls"] == expected
     assert dispatcher(kind, policy="candidate")["calls"] == expected
     assert dispatcher(kind, architecture=80)["calls"] == [
-        [code, 0, 0] for code in range(80)
+        [code, 0, 0] for code in codes
     ]
     assert dispatcher(kind, schedule="auto")["calls"] == expected
     assert dispatcher(kind, variant=1, schedule="packed")["calls"] == [
-        [code, 1, row[2]] for code, row in enumerate(expected)
+        [row[0], 1, row[2]] for row in expected
     ]
     # Auxiliary g has generated strict lowering, but no qualified Rys policy.
     assert all(row[2] == 0 for row in expected[64:])
@@ -217,10 +210,14 @@ def test_errors_stop_dispatch_and_invalid_variant_is_rejected(
     assert dispatcher(kind, policy="invalid") == {"status": 1, "calls": []}
     assert dispatcher(kind, variant=3) == {"status": 1, "calls": []}
     assert dispatcher(kind, error=7) == {"status": 7, "calls": []}
-    for fail in (21, 70):
-        failed = dispatcher(kind, fail=fail)
-        assert failed["status"] == 91
-        assert [row[0] for row in failed["calls"]] == list(range(fail + 1))
+    failed = dispatcher(kind, fail=21)
+    assert failed["status"] == 91
+    codes = [20 * a + 5 * b + c for a, b, c in SUPPORTED_SHELL_CLASSES]
+    assert [row[0] for row in failed["calls"]] == codes[: codes.index(21) + 1]
+    # Auxiliary-g failures stop at the same exact class, without aliasing through-f.
+    failed_g = dispatcher(kind, fail=24)
+    assert failed_g["status"] == 91
+    assert [row[0] for row in failed_g["calls"]] == codes[: codes.index(24) + 1]
 
 
 def test_empty_packet_keeps_early_return_contract(dispatcher: typing.Any) -> None:
