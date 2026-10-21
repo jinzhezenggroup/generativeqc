@@ -13,12 +13,17 @@ import typing
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.integral.df_shell_derivatives import SHELL_CLASSES
+from generativeqc_compiler.integral.df_shell_derivatives import SUPPORTED_SHELL_CLASSES
 from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 from generativeqc_compiler.integral.df_tuning.manifest import emit_policy
 from generativeqc_compiler.integral.df_tuning.policy import SCHEDULES
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _class_code(a: int, b: int, c: int) -> int:
+    """Keep legacy s–f IDs stable and append the auxiliary-g dispatch domain."""
+    return 64 + 4 * a + b if c == 4 else 16 * a + 4 * b + c
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +56,7 @@ namespace generativeqc::scf {struct DfShellDiagnostics {};}
     (directory / registry[0]).write_text(registry[1])
     (directory / "generated_df_production.hpp").write_text(emit_policy())
     declarations = []
-    for a, b, c in SHELL_CLASSES:
+    for a, b, c in SUPPORTED_SHELL_CLASSES:
         declarations.append(
             f"extern const DfShellDispatch df_shell_{a}{b}{c}{{panel<{a},{b},{c}>,group<{a},{b},{c}>,packets<{a},{b},{c}>}};"
         )
@@ -62,7 +67,7 @@ namespace generativeqc::scf {struct DfShellDiagnostics {};}
 #include <cstdlib>
 #include "scf/cuda/df_shell_dispatch.cuh"
 static int architecture=120, device_error=0, fail_class=-1, count=0;
-static int calls[64][3];
+static int calls[80][3];
 int cudaGetDevice(int* device) {*device=0;return device_error;}
 int cudaDeviceGetAttribute(int* value,cudaDeviceAttr kind,int) {
   *value=kind==cudaDevAttrComputeCapabilityMajor?architecture/10:architecture%10;
@@ -71,7 +76,7 @@ int cudaDeviceGetAttribute(int* value,cudaDeviceAttr kind,int) {
 namespace generativeqc::scf {
 template<unsigned A,unsigned B,unsigned C>
 int record(const DfShellLaunch& context) {
-  constexpr int code=16*A+4*B+C;
+  constexpr int code=C==4?64+4*A+B:16*A+4*B+C;
   calls[count][0]=code;calls[count][1]=context.variant;calls[count][2]=context.rys;++count;
   return code==fail_class?91:0;
 }
@@ -163,8 +168,8 @@ def test_dispatch_preserves_domains_order_and_explicit_schedules(
 ) -> None:
     result = dispatcher(kind, full, variant, policy="legacy")
     domain = [
-        16 * a + 4 * b + c
-        for a, b, c in SHELL_CLASSES
+        _class_code(a, b, c)
+        for a, b, c in SUPPORTED_SHELL_CLASSES
         if full or (max(a, b, c) <= 1 and a + b + c > 0)
     ]
     assert result == {"status": 0, "calls": [[code, variant, 0] for code in domain]}
@@ -181,7 +186,7 @@ def test_qualified_policy_and_unknown_target_fallback(
         ).read_text()
     )
     choices = {
-        16 * int(row["class"][0]) + 4 * int(row["class"][1]) + int(row["class"][2]): row
+        _class_code(*map(int, row["class"])): row
         for row in manifest["architectures"]["sm_120"]["kernels"]
     }
     expected = [
@@ -190,17 +195,19 @@ def test_qualified_policy_and_unknown_target_fallback(
             SCHEDULES.index(choices[code]["schedule"]) if code in choices else 0,
             int(code in choices and choices[code]["lowering"] == "rys"),
         ]
-        for code in range(64)
+        for code in range(80)
     ]
     assert dispatcher(kind)["calls"] == expected
     assert dispatcher(kind, policy="candidate")["calls"] == expected
     assert dispatcher(kind, architecture=80)["calls"] == [
-        [code, 0, 0] for code in range(64)
+        [code, 0, 0] for code in range(80)
     ]
     assert dispatcher(kind, schedule="auto")["calls"] == expected
     assert dispatcher(kind, variant=1, schedule="packed")["calls"] == [
         [code, 1, row[2]] for code, row in enumerate(expected)
     ]
+    # Auxiliary g has generated strict lowering, but no qualified Rys policy.
+    assert all(row[2] == 0 for row in expected[64:])
 
 
 @pytest.mark.parametrize("kind", range(3))
@@ -210,9 +217,10 @@ def test_errors_stop_dispatch_and_invalid_variant_is_rejected(
     assert dispatcher(kind, policy="invalid") == {"status": 1, "calls": []}
     assert dispatcher(kind, variant=3) == {"status": 1, "calls": []}
     assert dispatcher(kind, error=7) == {"status": 7, "calls": []}
-    failed = dispatcher(kind, fail=21)
-    assert failed["status"] == 91
-    assert [row[0] for row in failed["calls"]] == list(range(22))
+    for fail in (21, 70):
+        failed = dispatcher(kind, fail=fail)
+        assert failed["status"] == 91
+        assert [row[0] for row in failed["calls"]] == list(range(fail + 1))
 
 
 def test_empty_packet_keeps_early_return_contract(dispatcher: typing.Any) -> None:
