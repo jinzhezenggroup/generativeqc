@@ -1191,16 +1191,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     return outputs;
   }
   if (quartet_direct || options.export_physical_reference) {
-    // High-order direct ERI recurrences use a bounded per-thread local
-    // workspace.  CUDA's default stack limit is only 1 KiB, which is enough
-    // for s/p/d low-order tiles but lets d/f quartets fault with an apparent
-    // local-memory out-of-bounds access.  Reserve a generous fixed ceiling
-    // once per device; low-order kernels do not consume it.
-    std::size_t stack_limit = 0;
-    cuda_error = cudaDeviceGetLimit(&stack_limit, cudaLimitStackSize);
-    if (cuda_error == cudaSuccess && stack_limit < direct_schedule.cuda_stack_limit_bytes) {
-      cuda_error = cudaDeviceSetLimit(cudaLimitStackSize, direct_schedule.cuda_stack_limit_bytes);
-    }
+    // The default 1 KiB stack is insufficient for high-order recurrences.
+    // Through-d value/force paths are qualified at 32 KiB; preserve the larger
+    // policy ceiling for f and unknown metadata. The limit reserves driver
+    // memory, so charging the f ceiling to every basis can prevent DF forces
+    // from allocating their explicitly budgeted workspace.
+    const auto maximum_shell_angular =
+        host.shell_angular.empty()
+            ? 255U
+            : *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
+    const auto required_stack =
+        maximum_shell_angular <= 2
+            ? std::min(direct_schedule.cuda_stack_limit_bytes, std::size_t{32} << 10)
+            : direct_schedule.cuda_stack_limit_bytes;
+    // Preserve a higher context-wide limit established by another live owner.
+    cuda_error = runtime::cuda_ensure_stack_limit(required_stack);
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
       return outputs;
@@ -1913,6 +1918,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_coefficients,
                            occupied};
   configure_direct_weighted_force_response(device_batch);
+  if (!host.shell_angular.empty())
+    device_batch.direct_maximum_shell_angular =
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
   if (quartet_direct && geometry_changed) {
     launch_build_shell_primitive_pair_cache_kernel(
         static_cast<unsigned>(total_shell_pairs), detail::kDirectQuartetThreads, 0,

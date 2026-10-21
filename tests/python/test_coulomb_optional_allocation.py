@@ -52,6 +52,7 @@ cudaError_t cudaMemsetAsync(void* p,int v,std::size_t n,cudaStream_t) {
   std::memset(p,v,n); return cudaSuccess;
 }
 namespace runtime {
+cudaError_t cuda_ensure_stack_limit(std::size_t) { return cudaSuccess; }
 std::size_t size_mul(std::size_t a,std::size_t b) { return a*b; }
 std::size_t size_add(std::size_t a,std::size_t b) { return a+b; }
 int cuda_target_info_from_properties(cudaDeviceProp) { return 0; }
@@ -96,6 +97,7 @@ constexpr unsigned kSchwarzThreads=32;
  F(direct_ao_shells) F(direct_ao_angular) F(shell_ao_offsets)
 struct HostBatch {
   std::size_t nbf=1, direct_nbf=1;
+  std::vector<std::uint8_t> shell_angular{0};
 #define V(name) std::vector<std::int64_t> name{0,1};
   METADATA(V)
 #undef V
@@ -111,6 +113,7 @@ using GeneratedShellPairDensityBounds = ShellPairDensityBounds;
 }
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
+  std::uint8_t direct_maximum_shell_angular{255};
   unsigned direct_coulomb_reachable=0;
   unsigned direct_hermite_convolution=0;
   bool direct_pair_materialized_values=false;

@@ -72,7 +72,7 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, const double* inverse_square_root, void* stream_handle,
     double* output, std::string& detail, bool apply_metric_transform, double* low_output = nullptr,
-    bool current_device_only = false) {
+    bool current_device_only = false, bool packed_pairs = false) {
   detail.clear();
   std::size_t pair_total = 0;
   if (source != nullptr && !generativeqc::runtime::checked_multiply(
@@ -80,7 +80,12 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
     detail = "bounded DF transformed tile dimensions overflow size_t";
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
+  if (packed_pairs && source) {
+    // Dense n*n was checked above; avoid forming n*(n+1) before division.
+    pair_total = pair_total / 2 + source->public_nbf / 2 + source->public_nbf % 2;
+  }
   if (source == nullptr || output == nullptr ||
+      (packed_pairs && (apply_metric_transform || derivative_coordinate >= 0)) ||
       (apply_metric_transform && inverse_square_root == nullptr) || stream_handle == nullptr ||
       system >= source->batch_size || pair_begin > pair_total ||
       pair_count > pair_total - pair_begin || auxiliary_begin > source->public_naux ||
@@ -161,7 +166,7 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
         system, pair_begin, pair_count, auxiliary_begin, auxiliary_count,
         system_derivative_coordinate, source->orbital_to_cartesian, source->auxiliary_to_cartesian,
         inverse_square_root, apply_metric_transform, output, mapping, source->value_math,
-        low_output);
+        low_output, packed_pairs);
   } else {
     launch_build_cuda_df_transformed_tile_kernel(
         true, blocks, source_threads, 0, stream, source->batch, source->cartesian_nbf,
@@ -431,6 +436,20 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
       pair_begin, pair_count, auxiliary_begin, auxiliary_count, derivative_coordinate, nullptr,
       stream_handle, output, detail, false);
+}
+
+generativeqc_status generate_cuda_density_fitting_packed_raw_tile(
+    CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
+    std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
+    void* stream_handle, double* output, std::string& detail) {
+  if (!source || !source->implementation) {
+    detail = "bounded packed DF source handle is null";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return generate_cuda_density_fitting_transformed_tile_impl(
+      static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
+      pair_begin, pair_count, auxiliary_begin, auxiliary_count, -1, nullptr, stream_handle, output,
+      detail, false, nullptr, false, true);
 }
 
 generativeqc_status enqueue_cuda_density_fitting_raw_values(

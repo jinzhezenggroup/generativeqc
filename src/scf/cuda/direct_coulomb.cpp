@@ -9,6 +9,7 @@
 
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -163,6 +164,9 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
   configure_direct_coulomb_recurrence(plan->batch);
+  if (!host.shell_angular.empty())
+    plan->batch.direct_maximum_shell_angular =
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
   plan->screening = screening;
@@ -177,10 +181,15 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   try {
     // Growing the optional recurrence stack can reserve device memory too.
     // Keep that failure on the same bounded fallback path as explicit buffers.
-    std::size_t stack_limit = 0;
-    check(cudaDeviceGetLimit(&stack_limit, cudaLimitStackSize));
-    if (stack_limit < schedule.cuda_stack_limit_bytes)
-      check(cudaDeviceSetLimit(cudaLimitStackSize, schedule.cuda_stack_limit_bytes));
+    // Through-d value and derivative consumers are qualified at 32 KiB. The
+    // larger f/unknown ceiling otherwise costs several GiB of driver backing
+    // on large GPUs, even when the selected recurrence never needs it.
+    const auto required_stack =
+        plan->batch.direct_maximum_shell_angular <= 2
+            ? std::min(schedule.cuda_stack_limit_bytes, std::size_t{32} << 10)
+            : schedule.cuda_stack_limit_bytes;
+    // CUDA limits are context-wide: never lower another live owner's limit.
+    check(runtime::cuda_ensure_stack_limit(required_stack));
     auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
       void* pointer{};
       const auto bytes = product(count, width);
