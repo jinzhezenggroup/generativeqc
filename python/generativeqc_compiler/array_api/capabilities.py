@@ -47,6 +47,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "var",
         "prod",
         "max",
         "min",
@@ -117,6 +118,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "var",
         "prod",
         "max",
         "min",
@@ -172,6 +174,12 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "var": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-zero",
+        "keepdims": "bool; generic-arrays-only",
+        "correction": "finite-static-int|float; nonempty-reduction; positive-divisor; finite-nonzero-coefficient",
+        "capture": "finite-generic-real-only; centered-two-pass; all-intermediates-finite; static-graph-budget",
+    },
     "prod": {
         "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
         "keepdims": "bool; generic-arrays-only",
@@ -270,6 +278,10 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "var": {
+        "ad": "centered-polynomial-first-order; rounding-not-classical-derivative",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+    },
     "sum": {
         "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; explicit-dtype-cuda-rejected",
         "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",

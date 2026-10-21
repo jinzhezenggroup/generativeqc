@@ -1243,6 +1243,83 @@ def mean(
     )
 
 
+def _var_plan(
+    shape: tuple[int, ...], axes: tuple[int, ...], itemsize: int
+) -> tuple[int, int]:
+    """Bound the centered two-pass graph before creating any new nodes.
+
+    Eight input-sized slots cover canonicalization, mean broadcast, subtraction
+    and squaring (including their possible canonical reshapes). Ten reduced
+    slots cover both sums, mean scaling, singleton insertion/removal, final
+    scaling and their canonical reshapes. Identity and zero-byte nodes still
+    consume slots. Existing graphs and AD retain their backend resource gates.
+    """
+    reduced = tuple(n for i, n in enumerate(shape) if i not in axes)
+    singleton = tuple(1 if i in axes else n for i, n in enumerate(shape))
+    checked_shape(reduced)
+    checked_shape(singleton)
+    retained = (8 * _shape_product(shape) + 10 * _shape_product(reduced)) * itemsize
+    nodes = 18
+    if retained > 256 * 1024 * 1024:
+        raise ValueError("var exceeds the static reduction graph budget")
+    return retained, nodes
+
+
+def var(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    correction: float = 0.0,
+    keepdims: bool = False,
+) -> VibeArray:
+    """Finite generic variance via centered squares and existing first-order AD.
+
+    Empty reductions and nonpositive divisors are outside this finite capture
+    subset. Eager IEEE behavior is a separate public contract.
+    """
+    value = _array(x, "var")
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("var requires real float32 or float64 arrays")
+    if (
+        not _is_generic_array(value)
+        or value.node.spec.representation != "general"
+        or value.node.spec.symmetries
+        or any(index.space.spin is not None for index in value.node.spec.indices)
+    ):
+        raise TypeError(
+            "var supports only generic arrays without scientific annotations"
+        )
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _reduction_axes(axis, value.ndim, "var")
+    if type(correction) not in (int, float):
+        raise TypeError("var correction must be a static int or float")
+    if type(correction) is float and not isfinite(correction):
+        raise ValueError("var correction must be finite")
+    count = _shape_product(value.shape[i] for i in axes)
+    divisor = count - Fraction(correction)
+    if count == 0 or divisor <= 0:
+        raise ValueError("var requires a nonempty reduction and positive divisor")
+    factor = 1 / divisor
+    try:
+        rounded = float(factor)
+        if value.dtype == "float32":
+            rounded = unpack("f", pack("f", rounded))[0]
+    except (ValueError, OverflowError) as error:
+        raise ValueError(
+            "var coefficient must be finite and nonzero in input dtype"
+        ) from error
+    if not isfinite(rounded) or rounded == 0:
+        raise ValueError("var coefficient must be finite and nonzero in input dtype")
+    _var_plan(value.shape, axes, 4 if value.dtype == "float32" else 8)
+    center = subtract(value, mean(value, axis=axes, keepdims=True))
+    squares = multiply(center, center)
+    total = sum(squares, axis=axes, keepdims=keepdims)
+    return _canonical_generic(
+        VibeArray(tensor_ir.add(total.node, coefficients=(factor,)))
+    )
+
+
 def _permutation(axes: object, rank: int) -> tuple[int, ...]:
     if not isinstance(axes, tuple) or len(axes) != rank:
         raise ValueError("permute_dims axes must be a full-rank tuple")

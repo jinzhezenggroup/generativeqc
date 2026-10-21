@@ -319,6 +319,34 @@ are outside this slice. Standard eager `prod` behavior is unchanged.
 
 The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
 
+### Captured variance
+
+`xp.var(x, axis=None, correction=0.0, keepdims=False)` captures generic finite
+float32/float64 arrays with their input dtype unchanged. It computes a centered
+two-pass variance: subtract the mean, square, sum and scale by `1/(M-correction)`.
+This avoids subtracting two large raw moments. Signed integer axes, unique
+tuples, `None`, scalar arrays and `()` are supported; `()` gives zero at every
+element. Empty retained dimensions give empty outputs. Scientific index, spin,
+symmetry and representation annotations are rejected before identity cases.
+
+Correction must be a finite static Python int or float, with a nonempty
+reduction, positive divisor and finite nonzero scaling coefficient in the input
+dtype. All executed intermediate values must remain finite. Nonpositive
+divisors and empty reductions are rejected during capture; standard eager
+NaN behavior remains available. No `dtype` keyword or `std` capture is added.
+Capture preflights all new buffers and nodes against a conservative 256 MiB
+retained-storage bound; complete-program backend byte/work/node gates remain.
+
+Existing first-order AD composes the centered derivative, including zero at
+constant inputs. This is the existing real-arithmetic AD convention, without a
+claim about classical derivatives of floating-point rounding. Opt-in native
+execution uses only the existing CPU FP64 contract. Public CUDA compile/lower,
+execution and AD entries reject this unqualified operation. Native FP32, higher
+derivatives, molecular endpoints and performance are outside this slice.
+
+The comparison target is [Array API 2025.12 var](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.var.html);
+this finite captured subset does not implement its full IEEE special cases.
+
 ### Explicit reduction dtype
 
 Captured generic finite `sum` and `prod` accept `dtype=xp.float32` or

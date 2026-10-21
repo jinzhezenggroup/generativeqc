@@ -558,6 +558,19 @@ def prod(
     return _namespace.prod(x, axis=axis, dtype=target, keepdims=keepdims)
 
 
+def var(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    correction: float = 0.0,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite centered variance without broadening backend admission."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("var capture is not qualified for backend='cuda'")
+    return _namespace.var(x, axis=axis, correction=correction, keepdims=keepdims)
+
+
 def max(
     x: object,
     *,
