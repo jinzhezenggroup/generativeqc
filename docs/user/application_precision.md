@@ -372,6 +372,10 @@ an unconditional second SCF/force solve. The CUDA KS scheduler can retain
 geometry-invariant J/K integrals and reuse them across SCF iterations, within
 the existing memory/lifetime guards. This exact optimization also benefits
 ordinary `Calculator`: FP64 is not faster arithmetic withheld from FP64 users.
+For pure-J through-d models with an available generated strict provider, automatic
+selection retains that provider instead of preparing a quartic integral cache.
+Fast can still narrow its other admitted operators; explicit residency requests
+retain their capacity checks.
 The native force executor and cooperative scheduling also benefit ordinary FP64
 PBE0/PBE/B3LYP/r2SCAN RKS through 32 atoms in each qualified AO domain. Larger d-shell strict
 calculations retain their faster phased executor. Fast comparisons must use this

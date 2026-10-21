@@ -3,6 +3,10 @@
 Status: implemented (remaining large-endpoint bottlenecks documented)
 Date: 2026-10-21
 
+Follow-up: [SCF capacity and pure-J residency](2026-10-21-scf-capacity-and-pure-j-residency.md)
+narrows the actual-Cartesian capacity change to derivative-only LR providers.
+Applying it to primary SCF owners also evicted an established optional J path.
+
 ## Scope and invariants
 
 This follows the [endpoint repair](2026-10-21-scf-endpoint-redundant-work.md).

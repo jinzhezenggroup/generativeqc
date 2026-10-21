@@ -58,6 +58,9 @@ The CUDA mixed force planner dry-queries the native LR derivative capacity under
 live final-state token before AO/Becke tile admission. It charges that independent
 owner alongside the complete nonlocal/grid inventory, with the same conservative
 bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.
+This derivative-only allowance uses the actual Cartesian dimension. The primary
+SCF provider keeps its separate allowance for optional Coulomb acceleration,
+including when it also owns first-order resources.
 The derivative bridge then enforces that additional allowance. Its reported host/device
 bounds do not include the DF response owner's separate resource envelope and
 must not be interpreted as a whole-force peak-memory bound. Both the final-state
