@@ -169,6 +169,19 @@ int cudaMemsetAsync(void*, int, std::size_t, int) {
   throw std::logic_error("ordinary precision must not initialize mixed nonlocal counters");
 }
 void check(int status) { assert(status == 0); }
+namespace generativeqc::scf {
+bool cuda_direct_jk_generated_coulomb_available(int, int) {
+  throw std::logic_error("range-corrected fixture must not select pure-J work");
+}
+}
+struct Source {
+  bool active() const { return false; }
+};
+struct Provider {
+  int cuda_direct_source() const { return 0; }
+  struct Strategy { int spec = 0; };
+  Strategy strategy() const { return {}; }
+};
 struct Xc {
   struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
   Binding admitted{}, strict{{runtime::strict_fp64_precision()}};
@@ -276,6 +289,8 @@ int main() {
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
     for (bool strict_refinement : {false, true}) {
       const bool has_exchange = false, has_range_correction = true;
+      Source* phase_source = nullptr;
+      Provider provider;
       const bool device_nonlocal = nonlocal;
       const int stream = 7;
       bool pending_mixed_range_exchange = true, pending_mixed_nonlocal = true;
