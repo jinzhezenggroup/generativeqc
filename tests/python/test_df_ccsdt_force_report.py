@@ -296,8 +296,14 @@ def report_probe(
 // It describes only assigned inputs, never report availability or key selection.
 template<class T>
 void seed(T& target, unsigned index, unsigned bit, bool zero, const char* key) {
-  if constexpr (std::is_same_v<T, bool>) target = !zero && ((index >> bit) & 1);
-  else if constexpr (std::is_floating_point_v<T>) target = zero ? 0 : 1000 + index + 0.125;
+  // Measured zero is distinct from an absent phase. Synthetic signed values
+  // test transparent serialization, not physical convergence or timing.
+  if constexpr (std::is_same_v<T, bool>) target = (index >> bit) & 1;
+  else if constexpr (std::is_floating_point_v<T>) {
+    const double magnitude = 1000.0 + index + 0.12345678901234567;
+    target = zero ? 0.0 : ((index + bit) & 1 ? -magnitude : magnitude);
+  } else if constexpr (std::is_integral_v<T> && sizeof(T) >= 8)
+    target = zero ? 0 : std::numeric_limits<T>::max() - 1000 - index;
   else target = zero ? 0 : 1000 + index;
   std::cerr << key << ' ' << std::setprecision(17) << target << '\n';
 }
@@ -314,13 +320,12 @@ int main(int argc, char** argv) {
         + r"""
   result.recycling_discarded_primal_attempt = mask & 1;
   result.orbital.resident_jk_discarded_attempt = mask & 2;
-  const char* text = zero ? nullptr : "hash-\"quote\"-\\slash";
-  result.solver.df_mixed_program_hash = text;
-  result.lambda.shared_program_hash = text;
-  result.lambda.independent_program_hash = text;
-  result.lambda.mixed_program_hash = text;
-  result.lambda.audit_schedule_hash = text;
-  result.lambda.core_reuse_plan_hash = text;
+  result.solver.df_mixed_program_hash = zero ? nullptr : "ccsd-mixed-\"quote\"-\\slash";
+  result.lambda.shared_program_hash = zero ? nullptr : "lambda-shared-\"quote\"-\\slash";
+  result.lambda.independent_program_hash = zero ? nullptr : "lambda-independent-\"quote\"-\\slash";
+  result.lambda.mixed_program_hash = zero ? nullptr : "lambda-mixed-\"quote\"-\\slash";
+  result.lambda.audit_schedule_hash = zero ? nullptr : "lambda-audit-\"quote\"-\\slash";
+  result.lambda.core_reuse_plan_hash = zero ? nullptr : "lambda-core-\"quote\"-\\slash";
   result.triples.w_candidate_identity = zero ? "" : "candidate-\"c\"";
   result.triples.w_codegen_precision_schedule_identity = zero ? "" : "precision-\\p";
   result.triples_gap.schedule = zero ? "" : "gap-\"g\"";
@@ -390,7 +395,7 @@ def test_complete_report(
             completed = _run(report_probe, stage, mask, policy, bit, zero)
             actual = json.loads(completed.stdout, object_pairs_hook=_unique_object)
             inputs = {
-                key: float(value)
+                key: json.loads(value)
                 for key, value in (
                     line.split() for line in completed.stderr.splitlines()
                 )
@@ -431,15 +436,15 @@ def test_complete_report(
                 if zero
                 else [0.12345678901234566, -2.25, 3.5, -4.75, 5.125, -6.0],
             )
-            for key in (
-                "ccsd_mixed_program_hash",
-                "lambda_shared_program_hash",
-                "lambda_independent_program_hash",
-                "lambda_mixed_program_hash",
-                "lambda_audit_schedule_hash",
-                "lambda_core_reuse_plan_hash",
-            ):
-                expected[key] = "" if zero else 'hash-"quote"-\\slash'
+            for key, prefix in {
+                "ccsd_mixed_program_hash": "ccsd-mixed",
+                "lambda_shared_program_hash": "lambda-shared",
+                "lambda_independent_program_hash": "lambda-independent",
+                "lambda_mixed_program_hash": "lambda-mixed",
+                "lambda_audit_schedule_hash": "lambda-audit",
+                "lambda_core_reuse_plan_hash": "lambda-core",
+            }.items():
+                expected[key] = "" if zero else prefix + '-"quote"-\\slash'
             assert actual == expected
             assert all(
                 type(value) in (int, float, str, list, type(None))

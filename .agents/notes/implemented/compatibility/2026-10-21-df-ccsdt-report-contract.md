@@ -38,6 +38,13 @@ temporary damaged copy reading `forces` for `lambda_primal_matrix_requested`
 incorrectly passed all 576 cases. Independent option codewords close that oracle
 gap without changing the production report or scientific call.
 
+Zero scalar measurements vary independently of measurement flags. Integer
+receipts retain exact native values, including distinct near-limit 64-bit inputs;
+signed non-binary-exact FP64 sentinels detect narrowing and sign loss. Each
+nullable program identity has a distinct quoted/backslash input. Earlier coupled
+or small/shared fixtures missed these corruptions. These are serialization
+fixtures, not physical measurements or scientific admission evidence.
+
 ## Invariants
 
 - Either discarded-attempt flag makes all original work/count/time/peak fields
