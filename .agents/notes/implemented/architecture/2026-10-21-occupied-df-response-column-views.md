@@ -98,6 +98,52 @@ remote experiment directory is
 `/inspire/hdd/project/chemicalreaction/czxs25220150/1890-occupied-response-1021`.
 Historical #2637 libraries and results do not qualify this new source.
 
+### R1 actual device evidence and retained fixture domain
+
+The first source-matched H200 Job actually executed the whole-header native
+matrix contract (15 passes, maximum absolute error 7.74662e-17) and all 22
+original occupied-response function parameters with their unchanged numerical,
+work and resource gates. The next retained/fitted/auto case passed its energy
+and force assertions, then failed `response_retained_fitted_projection_passes
+== 1`. Execution stopped there: 22 function passes, one work-contract failure
+and seven planned retained parameters not run. R1 is overall FAIL, permanently
+retained, not complete scientific acceptance. Its 137 complete E+F calls / 200
+items include initial calls without separate oracle comparisons; they are not
+200 independent comparisons. The 169 recorded force assertions had maximum
+observed absolute error 5.303313344029448e-12; maximum energy error was not
+separately logged and remains UNAVAILABLE.
+
+The actual failed trace has zero CUDA error and no dropped regions/tiles. It
+records `final_fitted_projection_potential_reuse`, a final fitted projection
+reuse counter of one and one projection BLAS call, without the bounded-panel
+pass/column counters. Current production independently selects
+`FINAL_PROJECTION=auto|off|reuse`: `SOURCE=fitted` chooses the fitted input but
+does not exclude canonical final-K reuse. A valid single-RHF, full-rank final
+projection token enters that earlier reuse branch and bypasses the bounded
+panel branch. Both callers, the shared header and the original retained test
+are byte-identical between base8683 and qualified76762; this is static evidence,
+not a claim of a source-matched base8683 GPU run. The original environment
+whitelist did not capture raw FINAL_PROJECTION/OCCUPIED_METRIC strings, so their
+raw values are not reconstructed from a later CPU shell.
+
+The retained test now explicitly sets the existing FINAL_PROJECTION control to
+off to exercise its original bounded fitted/raw panel contract. All eight
+parameters and every energy, force, route, panel, work and resource assertion
+remain unchanged. Production defaults and native source are unchanged. The
+separate existing single-final-K replay test already has strict conditional
+reuse counters and requires observed reuse for its auto domain; its complete
+five variants across two auxiliaries retain auto/off, spectral, corrected and
+dense-fallback coverage. It is not modified.
+
+One bounded R2 is planned for the eight retained parameters and those ten
+single-final-K parameters, stopping at the first failure. Existing 15 native
+matrix / 22 original function passes may be retained only after proving all
+actual native, installed compiler/header, ABI and build inputs equivalent and
+checking the runtime environment/configuration. No result for R2 is asserted
+here. R1's failure capsule SHA-256 is
+`7a8e1ea10231c01c1b4433657fbc1033098e64eb1d6a397514c4a2c24f9bb309`
+(239 run files individually checked, 460213 bytes), retained on both endpoints.
+
 ## Rejected alternatives and remaining scope
 
 A method-local wrapper would only relocate vendor coupling. A new shared

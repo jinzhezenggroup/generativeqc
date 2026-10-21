@@ -65,6 +65,9 @@ def test_occupied_response_independent_replay(
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
     monkeypatch.setenv("GENERATIVEQC_DF_EXCHANGE", "occupied")
+    # This contract measures bounded fitted/raw panel projection.
+    # Final-K projection reuse has separate replay coverage.
+    monkeypatch.setenv("GENERATIVEQC_DF_FINAL_PROJECTION", "off")
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "occupied")
     monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA", "blas")
     monkeypatch.setenv("GENERATIVEQC_DF_SOURCE_DERIVATIVE_SCHEDULE", consumer)
