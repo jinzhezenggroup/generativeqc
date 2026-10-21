@@ -111,7 +111,12 @@ residency or refusing all buckets retains uncached recurrence. Full/SR/LR source
 angular-bucket selection; unselected FP32 buckets execute mixed recurrence
 rather than silently selecting strict arithmetic. Before strict refinement the mixed
 lease is audited and retired, then a separate FP64 source may be admitted. The
-two quartic caches do not overlap. Failed mixed proposals retire their source
+two quartic caches do not overlap. For full-range through-d hybrids with a
+generated strict provider, automatic selection streams the short strict tail
+when application-budget stationarity is active, avoiding a second quartic
+construction. Mixed proposals retain their bounded cache. Explicitly tighter
+stopping controls, forced residency and range operators retain their existing
+admission policy. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
