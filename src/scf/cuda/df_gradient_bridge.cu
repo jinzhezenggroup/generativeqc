@@ -281,9 +281,26 @@ struct Arena {
     if (stream && owns_stream) (void)cudaStreamDestroy(stream);
   }
   void* allocate(std::size_t bytes) {
-    if (bytes > budget - stats.device_bytes) throw std::bad_alloc();
+    if (bytes > budget - stats.device_bytes) {
+      runtime::cuda_trace::trace_counter("response_failed_budget_request_bytes", bytes);
+      runtime::cuda_trace::trace_counter("response_failed_retained_device_bytes",
+                                         stats.device_bytes);
+      throw std::bad_alloc();
+    }
     void* p = nullptr;
-    check(runtime::resource_cuda_malloc(&p, bytes));
+    const auto status = runtime::resource_cuda_malloc(&p, bytes);
+    if (status != cudaSuccess) {
+      // Preserve the failing live set before exceptional cleanup frees it.
+      // A declared allowance failure and physical-device pressure need
+      // different repairs; both otherwise collapse to the public OOM status.
+      runtime::cuda_trace::trace_counter("response_failed_device_request_bytes", bytes);
+      runtime::cuda_trace::trace_counter("response_failed_retained_device_bytes",
+                                         stats.device_bytes);
+      std::size_t free_bytes{}, total_bytes{};
+      if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess)
+        runtime::cuda_trace::trace_counter("response_failure_free_device_bytes", free_bytes);
+      check(status);
+    }
     try {
       pointers.push_back(p);
     } catch (...) {
@@ -1144,6 +1161,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                               {1, n, a, source != nullptr, true, source_index});
     runtime::cuda_trace::TraceRegion preparation("response_allocation_and_uploads",
                                                  reinterpret_cast<cudaStream_t>(stream_handle));
+    runtime::cuda_trace::trace_counter("response_declared_device_budget_bytes", maximum_bytes);
     PinnedResponseSlice packed_slice;
     PinnedResponsePanels raw_panels;
     // The host destination must outlive Arena's exceptional-path stream drain.
@@ -1402,7 +1420,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const long double fixed_elements =
           4.0L * a * a + (3.0L + terms.size()) * n * n + 2.0L * terms.size() * a;
       const auto available = maximum_bytes - arena.stats.device_bytes;
-      if ((fixed_elements + 2.0L * n * n) * sizeof(double) > available) throw std::bad_alloc();
+      if ((fixed_elements + 2.0L * n * n) * sizeof(double) > available) {
+        runtime::cuda_trace::trace_counter("response_fixed_storage_refused", 1);
+        throw std::bad_alloc();
+      }
       const auto panel_capacity =
           static_cast<std::size_t>((available / sizeof(double) - fixed_elements) / (1.0L * n * n));
       std::size_t occupied_retained = 0, occupied_largest = 0, occupied_coefficients = 0;
@@ -1431,7 +1452,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           (!requested_scatter || !*requested_scatter);
       // A requested fitted occupied route must not silently fall through to
       // the AO-space repeated-fit algorithm if its small factors cannot fit.
-      if (occupied && whitened && !owned_occupied) throw std::bad_alloc();
+      if (occupied && whitened && !owned_occupied) {
+        runtime::cuda_trace::trace_counter("response_occupied_storage_refused", 1);
+        throw std::bad_alloc();
+      }
       // If two complete tensors do not fit, a streamed owner can still supply
       // one raw tensor once. Transform it in place and retain a smaller W panel.
       // This prevents both the unstable raw-Gram fallback and repeated source
@@ -1750,6 +1774,15 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.read_occupied_panels = &source_panel_reader;
       }
       std::function<void(std::size_t, std::size_t, double*)> read_fitted;
+      // A pure-J streamed source can contract D before its metric solve. Keep
+      // retained factors, exchange, truncated metrics and explicit panel/dot
+      // diagnostics on their existing independently qualified paths.
+      const bool raw_coulomb = source && device_metric->full_rank && !borrowed && !owned_occupied &&
+                               !whitened && !single_fitted_tensor && !packed_pairs &&
+                               coulomb_policy == "auto" && algebra == "blas" && !serial_dot &&
+                               std::all_of(terms.begin(), terms.end(), [](const auto& term) {
+                                 return term.exchange_coefficient == 0;
+                               });
       if (whitened && !borrowed && !owned_occupied) {
         // The forward plan already owns this immutable tensor. Reading it is
         // an explicit borrow, not extra response allocation or raw regeneration.
@@ -1809,7 +1842,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                              2 * a * whitened->pair_count * count);
         };
       } else if (source && device_metric->full_rank && !borrowed && !owned_occupied &&
-                 !single_fitted_tensor && tile < a) {
+                 !single_fitted_tensor && !raw_coulomb && tile < a) {
         // Corrected or arbitrary densities need no SCF-factor lease. Keep all
         // eigendirections of a small AO-pair block until after division by
         // lambda, then emit only the requested public auxiliary columns of
@@ -2039,8 +2072,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
           packed_pairs ? std::span<const std::int64_t>(shell_x->offsets)
                        : std::span<const std::int64_t>{},
           packed_block_rows, read_fitted, single_fitted_tensor,
-          owned_occupied ? &owned_buffers : nullptr,
-          coulomb_policy == "auto" ? whitened : nullptr));
+          owned_occupied ? &owned_buffers : nullptr, coulomb_policy == "auto" ? whitened : nullptr,
+          raw_coulomb));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

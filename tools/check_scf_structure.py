@@ -507,6 +507,7 @@ CUDA_ALLOWED["cuda_direct_bounded_queue_page"] = (
     "scf/direct_task_layout.hpp",
 )
 CUDA_MODULES["cuda_direct_contractions"] = (
+    "direct_schwarz_order",
     "eri_tensor_index",
     "direct_eri_symmetry",
     "direct_fock_accumulation",

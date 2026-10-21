@@ -412,6 +412,81 @@ static cudaError_t contract_retained_coulomb_response(
   return cudaSuccess;
 }
 
+/** A source-only J response needs q=M^-1*(A:D), not all of A*M^-1.
+ * Apply the same factor order as streamed J: Q^T*b, divide, then Q*q.
+ * Exchange is excluded because its quadratic response must retain consistent
+ * inverse-applied AO factors. No explicit inverse or raw metric Gram is formed.
+ * Existing response scratch owns the raw slice, two vectors and bounded W;
+ * read/consume callbacks remain ordered on the supplied stream.
+ */
+static cudaError_t contract_raw_coulomb_response(
+    std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
+    const double* densities, CudaDfMetricView metric, std::size_t tile, double* workspace,
+    cudaStream_t stream, cublasHandle_t blas,
+    const std::function<void(std::size_t, double*)>& read_values,
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
+        consume) {
+  const auto matrix = n * n, aa = a * a;
+  auto* bar_metric = workspace + aa;
+  auto* raw = workspace + 4 * aa;
+  auto* weights = raw + 3 * matrix;
+  auto* potentials = weights + 2 * tile * matrix;
+  auto* projected = potentials + terms.size() * a;
+  const auto checked = [](cublasStatus_t status) {
+    if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
+  };
+  const auto mi = static_cast<int>(matrix), ai = static_cast<int>(a);
+  const double one = 1, zero = 0;
+  {
+    runtime::cuda_trace::TraceRegion charge("raw_coulomb_charge_and_potential", stream);
+    for (std::size_t q = 0; q < a; ++q) {
+      read_values(q, raw);
+      checked(generativeqc_tensor::submit_column_gemv(
+          {blas, true, mi, static_cast<int>(terms.size()), &one, densities, mi, raw, 1, &zero,
+           potentials + q, ai}));
+    }
+    for (std::size_t t = 0; t < terms.size(); ++t) {
+      checked(generativeqc_tensor::submit_column_gemv({blas, true, ai, ai, &one,
+                                                       metric.eigenvectors, ai, potentials + t * a,
+                                                       1, &zero, projected + t * a, 1}));
+      cuda_df::launch_scale_metric_projection(stream, a, 1, metric.eigenvalues, false,
+                                              projected + t * a);
+      auto error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+      checked(generativeqc_tensor::submit_column_gemv({blas, false, ai, ai, &one,
+                                                       metric.eigenvectors, ai, projected + t * a,
+                                                       1, &zero, potentials + t * a, 1}));
+    }
+    runtime::cuda_trace::trace_counter("response_raw_coulomb_source_passes", 1);
+    runtime::cuda_trace::trace_counter("response_charge_blas_dots", terms.size() * a);
+    runtime::cuda_trace::trace_counter("response_charge_dot_elements", terms.size() * a * matrix);
+    runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_gemvs", 2 * terms.size());
+    runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_flops", 4 * terms.size() * aa);
+  }
+  auto error = cudaMemsetAsync(bar_metric, 0, aa * sizeof(double), stream);
+  if (error != cudaSuccess) return error;
+  for (std::size_t t = 0; t < terms.size(); ++t)
+    if (terms[t].coulomb_coefficient != 0)
+      coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(a, -terms[t].coulomb_coefficient,
+                                                                potentials + t * a, bar_metric);
+  for (std::size_t begin = 0; begin < a; begin += tile) {
+    const auto count = std::min(tile, a - begin);
+    error = cudaMemsetAsync(weights, 0, count * matrix * sizeof(double), stream);
+    if (error != cudaSuccess) return error;
+    for (std::size_t t = 0; t < terms.size(); ++t)
+      if (terms[t].coulomb_coefficient != 0)
+        coulomb_weights_kernel<<<blocks(count * matrix), threads, 0, stream>>>(
+            matrix, a, begin, count, terms[t].coulomb_coefficient, densities + t * matrix,
+            potentials + t * a, weights);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    consume(0, {begin, matrix, 1, a}, count * matrix, weights);
+    runtime::cuda_trace::trace_counter("response_auxiliary_blocks", 1);
+  }
+  consume(1, {}, aa, bar_metric);
+  return cudaGetLastError();
+}
+
 /** Full-rank, J-only bounded response. A streamed fitted-panel reader
  * supplies A M^{-1} in auxiliary-major order. Unlike the generic J/K
  * response, pure Coulomb needs only p=(A M^{-1}):D, W_P=c_J D p_P and
@@ -1486,7 +1561,17 @@ cudaError_t contract_cuda_df_response_weights(
     std::span<const std::int64_t> auxiliary_shell_offsets, std::size_t packed_block_rows,
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
     bool single_fitted_tensor, const CudaDfResponseBuffers* streamed_occupied,
-    const CudaDfWhitenedTensorView* retained_coulomb) {
+    const CudaDfWhitenedTensorView* retained_coulomb, bool raw_coulomb) {
+  if (raw_coulomb) {
+    if (!metric.full_rank || borrowed || streamed_occupied || single_fitted_tensor ||
+        packed_pairs || retained_coulomb || read_fitted || !read_values || !blas_products ||
+        serial_metric_dot || !std::all_of(terms.begin(), terms.end(), [](const auto& term) {
+          return term.exchange_coefficient == 0;
+        }))
+      return cudaErrorInvalidValue;
+    return contract_raw_coulomb_response(n, a, terms, densities, metric, tile, workspace, stream,
+                                         blas, read_values, consume);
+  }
   if (retained_coulomb && !borrowed && !streamed_occupied && !single_fitted_tensor &&
       !packed_pairs && metric.full_rank && blas_products && !serial_metric_dot &&
       std::all_of(terms.begin(), terms.end(),

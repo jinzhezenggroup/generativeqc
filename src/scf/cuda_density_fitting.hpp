@@ -233,6 +233,17 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream, double* output, std::string& detail);
 
+/** Generate raw zero-order A[mu,nu,P] for unit-weight lower AO pairs.
+ * pair=mu*(mu+1)/2+nu, nu<=mu; output remains [pair][auxiliary]. This
+ * changes only addressing: it shares the ordinary raw source recurrence,
+ * public-basis transforms and arithmetic. The caller folds off-diagonal
+ * density weights and expands the symmetric result. No metric is applied.
+ */
+generativeqc_status generate_cuda_density_fitting_packed_raw_tile(
+    CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
+    std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count, void* stream,
+    double* output, std::string& detail);
+
 /** Raw zero-order [pair,aux] values from one immutable single-system source
  * into caller storage on a borrowed stream. Unlike the compatibility source
  * API this never changes the current device. No fitted J/K scratch or occupied

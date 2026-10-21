@@ -452,15 +452,19 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
-                                             unsigned derivative_order, bool reserve_optional_md) {
+                                             unsigned derivative_order, bool reserve_optional_md,
+                                             std::size_t cartesian_nao) {
   auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
   const auto add = [&](std::size_t n, std::size_t width) {
     bytes = runtime::size_add(bytes, runtime::size_mul(n, width));
   };
-  // Shape-only upper bound for the optional spd Cartesian source. The public
-  // spherical-to-Cartesian ratio is at most 6/5; 2 keeps integer admission
-  // conservative without needing angular metadata or a geometry upload.
-  const auto cart = runtime::size_mul(nao, 2);
+  // Metadata-aware callers can avoid reserving four times the Cartesian
+  // matrix storage for a nearly Cartesian public basis. This is still a dry
+  // capacity query; no topology packing, CUDA work or allocation is needed.
+  // Shape-only callers retain the existing through-f conservative envelope.
+  direct_jk_require(!cartesian_nao || cartesian_nao >= nao,
+                    "Cartesian direct J/K dimension is smaller than the public basis");
+  const auto cart = cartesian_nao ? cartesian_nao : runtime::size_mul(nao, 2);
   const auto public_elements = runtime::size_mul(batch, runtime::size_mul(nao, nao));
   const auto cart_elements = runtime::size_mul(batch, runtime::size_mul(cart, cart));
   add(cart_elements, 4 * sizeof(double));    // Density, J, J correction and Schwarz.
