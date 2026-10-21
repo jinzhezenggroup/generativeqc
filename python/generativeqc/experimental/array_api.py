@@ -1039,9 +1039,12 @@ class CompiledFunction:
             if symbolic is not None and function is globals().get(function.__name__)
             else function
         )
-        if function is prod or function is _symbolic_backend.prod:
-            # Direct compilation uses prod's static defaults. Nondefault axis,
-            # dtype and keepdims belong in a closure, not runtime array feeds.
+        if builtins.any(
+            function is candidate
+            for candidate in (prod, _symbolic_backend.prod, var, _symbolic_backend.var)
+        ):
+            # Direct compilation uses static defaults. Nondefault reduction
+            # options belong in a closure, not runtime array feeds.
             signature = signature.replace(parameters=(signature.parameters["x"],))
         unsupported = {
             inspect.Parameter.POSITIONAL_ONLY,
