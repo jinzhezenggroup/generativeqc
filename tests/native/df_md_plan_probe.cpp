@@ -233,13 +233,37 @@ int main(int argc, char** argv) {
                     detail == "injected charge producer failure" &&
                     untouched == std::vector<double>{1234.0},
                 "charge failure status/output was not preserved");
+        failure.context = plan->md_coulomb;
+        failure.submit = [](void* context, const double* density, double* charge,
+                            std::string&) -> generativeqc_status {
+          return cuda_execution::cuda_df_md_charge(
+                     static_cast<cuda_execution::CudaDfMdOwner*>(context), density, charge) ==
+                         cudaSuccess
+                     ? GENERATIVEQC_STATUS_SUCCESS
+                     : GENERATIVEQC_STATUS_CUDA_ERROR;
+        };
+        failure.derivative = [](void*, const double*, const double*, double, double*,
+                                std::string& message) -> generativeqc_status {
+          message = "injected derivative producer failure";
+          return GENERATIVEQC_STATUS_CUDA_ERROR;
+        };
+        failure.natom = orbital.atoms.size() + 1;
+        require(fail_response() == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "mismatched derivative atom extent was accepted");
+        failure.natom = orbital.atoms.size();
+        require(fail_response() == GENERATIVEQC_STATUS_CUDA_ERROR &&
+                    detail == "injected derivative producer failure" &&
+                    untouched == std::vector<double>{1234.0},
+                "derivative failure status/output was not preserved");
       }
       for (double scale : {1.0, 0.0, -0.37}) {
         const auto resources = gradient(scale);
         if (admitted)
-          require(resources.recomputed_value_bytes == 0 && resources.value_slices == 0 &&
-                      resources.borrowed_device_bytes >= plan->md_coulomb_resources.device_bytes,
-                  "Hermite response regenerated raw values or omitted its storage lease");
+          require(
+              resources.recomputed_value_bytes == 0 && resources.value_slices == 0 &&
+                  resources.borrowed_device_bytes >= plan->md_coulomb_resources.device_bytes &&
+                  resources.device_response_bytes == a * a * sizeof(double),
+              "Hermite response regenerated values/derivative panels or omitted its storage lease");
       }
     }
     std::ofstream output(argv[1], std::ios::binary);

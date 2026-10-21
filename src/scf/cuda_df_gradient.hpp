@@ -67,6 +67,12 @@ struct CudaDfRawChargeView {
   void* stream{};
   std::size_t nbf{}, naux{}, device_bytes{};
   std::uint64_t owner_identity{};
+  // Optional direct contraction of D_ij v_P d(ij|P)/dR. The bridge retains
+  // metric response and authenticates the atom extent before any submission.
+  using Derivative = generativeqc_status (*)(void*, const double*, const double*, double, double*,
+                                             std::string&);
+  Derivative derivative{};
+  std::size_t natom{};
 };
 /** Borrow of one canonical column-major C, with D=density_scale*C*C^T.
  * The plan owner validates the method token, exact density and device

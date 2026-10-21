@@ -1820,7 +1820,7 @@
         "src/scf/cuda/df_coulomb.cpp",
         ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
       ],
-      "rationale": "Default-off pure-J Hermite contractions replace dense three-center regeneration only for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The retained source and metric still own response; unsupported angular domains and bounded capacity refusals keep the incumbent. Independent charge/projection tests qualify the algebra and private owner, not complete endpoint speed or default promotion.",
+      "rationale": "Default-off pure-J Hermite contractions replace dense three-center regeneration only for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes exact response charge and contracts three-center atom derivatives in Hermite form; metric response remains in the existing bridge. Unsupported angular domains and bounded capacity refusals keep the incumbent. Independent charge/projection/derivative and integrated force tests qualify this candidate; default promotion still requires complete endpoint evidence.",
       "revisit_condition": "Qualify metric-applied J, complete energy/force and cold/warm endpoints, changed geometry and constrained-memory fallback with source-matched binaries and executed-work traces; independently qualify screening and response before any default promotion."
     }
   ]

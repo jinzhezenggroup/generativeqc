@@ -334,3 +334,53 @@ The compiled core SHA-256 is
 `f9fb4111fbec9b10b2bd18410e6d4076b36cc3ab4665559798df4109c18e8941`.
 The host dispatcher double was updated for the new optional argument/owner;
 55 relevant host tests pass with one unavailable-toolchain test skipped.
+
+
+## Tensor-free three-center derivative follow-up
+
+The remaining response cost is its dense three-center derivative contraction:
+response v2 traces retain 64.5 GB of derivative weights and 32.6 s of derivative
+work even though raw charge production is gone. The new candidate applies the
+same Gaussian center derivative (2 alpha times the raised power minus the
+original power times the lowered power) before public-AO expansion. Compiler
+lowering extends the existing radial recurrence to order eleven. Either the
+orbital pair or auxiliary target is raised, never both, so original f/g basis
+admission and normalization remain unchanged. The original metric derivative
+and exact spectral solve remain in the response owner.
+
+Two stream-ordered contractions produce raised target Hermite potentials.
+Projection accumulates the two orbital-center derivatives and auxiliary-center
+derivative into the caller's existing atom gradient. Every call refreshes both
+D and v; additive output, nonsymmetric D, signed contractions and graph replay
+are explicit contracts. Native layout preflight reserves all raised potential
+storage before panel sizing, and the resource ledger checks the actual added
+allocations. The recurrence's larger second dimension handles the raised
+center; first-center derivatives swap the two basis factors rather than
+accessing outside the existing asymmetric workspace.
+
+The standalone `df-md-derivative-v1` passes 178 independent libcint populations
+with three replays each, including all s/p/d/f × s/p/d/f × auxiliary s/p/d/f/g
+classes, spherical/Cartesian representations, coincident centers, diffuse and
+tight/translated cases. An independent five-point derivative of D:(A v) gates
+the complete atom derivative, including translation invariance and nonzero
+initial gradient output. 1163 host root/address/layout cases and 1322 shared
+Direct math regressions pass. The actual core-integrated force test also passes
+all 16 prior full-rank/truncated cases, with independent derivatives of the
+complete .5 rho^T M^+ rho energy, atom-extent rejection and a late producer
+failure that must drain without publishing partial output. Qualification completes with memcheck on all 178 standalone populations,
+racecheck on 18 geometry populations, and integrated memcheck (16 cases) / racecheck (4 cases),
+all clean. The largest independent standalone derivative error is 3.053e-9.
+No default-promotion claim follows from these gates alone.
+
+
+The integrated `df-md-force-plan-v1` candidate independently qualifies all
+four clean and four traced 96-atom r2SCAN-3c DF E/F endpoints. Standard measures
+90.753 s cold and 18.249 s median warm (18.234–18.262), still 16/1 iterations.
+The trace confirms zero raw-value/three-center-weight panel production. Its
+force response is 6.20 s, comprising 1.77 s raw charge/metric solve, 3.39 s direct
+Hermite derivative and 1.03 s original metric derivative. Raised owner storage
+is 258,024,576 bytes, fully reserved/accounted. This remains slower than the
+qualified stock GPU4 result, particularly cold; SCF per-iteration cost and
+Fast admission remain separate follow-ups.
+
+Core SHA-256: `069f87c91095f2799a179f93588d7d6c4fa73c2ef7c4fb3f3c2c4f634ffdcb5b`.

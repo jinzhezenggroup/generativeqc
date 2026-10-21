@@ -15,8 +15,8 @@ struct CudaDfMdOwner {
   cudaStream_t stream{};  // borrowed; enclosing plan destroys this after the owner
   DfMdView pair{}, auxiliary{};
   std::array<std::size_t, 8> pair_offsets{}, auxiliary_offsets{};
-  std::size_t pair_hermites{}, auxiliary_hermites{};
-  std::array<void*, 12> allocations{};
+  std::size_t pair_hermites{}, auxiliary_hermites{}, pair_responses{}, auxiliary_responses{};
+  std::array<void*, 14> allocations{};
   std::size_t allocation_count{};
   CudaDfMdResources resources{};
 
@@ -83,6 +83,8 @@ cudaError_t prepare_view(CudaDfMdOwner& owner, const DfMdLayout& layout, DfMdVie
   if (status != cudaSuccess) return status;
   status = owner.allocate(layout.hermite_elements, view.potential);
   if (status != cudaSuccess) return status;
+  status = owner.allocate(layout.response_elements, view.response_potential);
+  if (status != cudaSuccess) return status;
   df_md_prepare_transforms<<<view.count, 128, 0, owner.stream>>>(view);
   return cudaPeekAtLastError();
 }
@@ -97,24 +99,24 @@ cudaError_t validate_replay(const CudaDfMdOwner* owner, const double* input, dou
   return device == owner->device ? cudaSuccess : cudaErrorInvalidDevice;
 }
 
-template <unsigned P, unsigned A, bool Charge>
+template <unsigned P, unsigned A, bool Charge, bool Response>
 cudaError_t contract_class(const CudaDfMdOwner& owner) {
   const auto p = owner.pair_offsets[P], np = owner.pair_offsets[P + 1] - p;
   const auto a = owner.auxiliary_offsets[A], na = owner.auxiliary_offsets[A + 1] - a;
   if (!np || !na) return cudaSuccess;
-  df_md_contract<P, A, Charge>
+  df_md_contract<P, A, Charge, Response>
       <<<Charge ? na : np, 128, 0, owner.stream>>>(owner.pair, p, np, owner.auxiliary, a, na);
   return cudaPeekAtLastError();
 }
 
-template <bool Charge>
+template <bool Charge, bool Response = false>
 cudaError_t contract(const CudaDfMdOwner& owner) {
   // Class launches are ordered on one stream; each target Hermite interval has
   // one writer per class, and no class can observe a partially accumulated sum.
-#define CLASS(P, A)                                          \
-  {                                                          \
-    const auto status = contract_class<P, A, Charge>(owner); \
-    if (status != cudaSuccess) return status;                \
+#define CLASS(P, A)                                                    \
+  {                                                                    \
+    const auto status = contract_class<P, A, Charge, Response>(owner); \
+    if (status != cudaSuccess) return status;                          \
   }
 #define ROW(P) \
   CLASS(P, 0); \
@@ -197,6 +199,8 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     candidate->auxiliary_offsets = aux_layout.offsets;
     candidate->pair_hermites = pair_layout.hermite_elements;
     candidate->auxiliary_hermites = aux_layout.hermite_elements;
+    candidate->pair_responses = pair_layout.response_elements;
+    candidate->auxiliary_responses = aux_layout.response_elements;
     error = prepare_view(*candidate, pair_layout, candidate->pair);
     if (error == cudaSuccess) error = prepare_view(*candidate, aux_layout, candidate->auxiliary);
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
@@ -260,6 +264,40 @@ cudaError_t cuda_df_md_project(CudaDfMdOwner* owner, const double* potential, do
   status = cudaMemsetAsync(coulomb, 0, n * n * sizeof(double), owner->stream);
   if (status != cudaSuccess) return status;
   df_md_project<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, coulomb);
+  return cudaPeekAtLastError();
+}
+
+cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double* density,
+                                             const double* potential, double coefficient,
+                                             double* gradient) {
+  auto status = validate_replay(owner, density, gradient);
+  if (status != cudaSuccess) return status;
+  status = validate_replay(owner, potential, gradient);
+  if (status != cudaSuccess) return status;
+  if (!std::isfinite(coefficient)) return cudaErrorInvalidValue;
+  if (coefficient == 0) return cudaSuccess;
+  // Both inputs are refreshed: force response must not depend on a prior J or
+  // charge submission, even after zero-density or captured-state replay.
+  df_md_precontract<<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density);
+  df_md_precontract<<<owner->auxiliary.count, 128, 0, owner->stream>>>(owner->auxiliary, potential);
+  status = cudaPeekAtLastError();
+  if (status != cudaSuccess) return status;
+  status = cudaMemsetAsync(owner->pair.response_potential, 0,
+                           owner->pair_responses * sizeof(double), owner->stream);
+  if (status != cudaSuccess) return status;
+  status = cudaMemsetAsync(owner->auxiliary.response_potential, 0,
+                           owner->auxiliary_responses * sizeof(double), owner->stream);
+  if (status != cudaSuccess) return status;
+  status = contract<false, true>(*owner);
+  if (status != cudaSuccess) return status;
+  status = contract<true, true>(*owner);
+  if (status != cudaSuccess) return status;
+  df_md_project_derivative<true>
+      <<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density, coefficient, gradient);
+  df_md_project_derivative<false>
+      <<<owner->pair.count, 128, 0, owner->stream>>>(owner->pair, density, coefficient, gradient);
+  df_md_project_derivative<false><<<owner->auxiliary.count, 128, 0, owner->stream>>>(
+      owner->auxiliary, potential, coefficient, gradient);
   return cudaPeekAtLastError();
 }
 

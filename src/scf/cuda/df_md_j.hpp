@@ -22,7 +22,8 @@ struct DfMdAo {
  * orientations; all ordered same-shell primitive products remain explicit.
  * Geometry and E are prepared on the GPU. Offsets address disjoint intervals. */
 struct DfMdPrimitive {
-  std::size_t first_ao{}, second_ao{}, transform_offset{}, hermite_offset{};
+  std::size_t first_ao{}, second_ao{}, transform_offset{}, hermite_offset{}, response_offset{};
+  std::size_t first_atom{}, second_atom{};
   unsigned first_count{}, second_count{}, first_angular{}, second_angular{};
   bool same_shell{};
   double alpha{}, beta{}, weight{};
@@ -39,7 +40,7 @@ struct DfMdPrimitive {
 struct DfMdView {
   DfMdPrimitive* primitives{};
   const DfMdAo *first_aos{}, *second_aos{};
-  double *transforms{}, *density{}, *potential{};
+  double *transforms{}, *density{}, *potential{}, *response_potential{};
   std::size_t count{}, nbf{};
   bool auxiliary{};
 };

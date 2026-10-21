@@ -695,7 +695,17 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
                     plan->nbf,
                     plan->naux,
                     plan->md_coulomb_resources.device_bytes,
-                    metric.owner_identity};
+                    metric.owner_identity,
+                    [](void* context, const double* density, const double* potential,
+                       double coefficient, double* gradient, std::string& message) {
+                      const auto error = cuda_execution::cuda_df_md_three_center_gradient(
+                          static_cast<cuda_execution::CudaDfMdOwner*>(context), density, potential,
+                          coefficient, gradient);
+                      return error == cudaSuccess
+                                 ? GENERATIVEQC_STATUS_SUCCESS
+                                 : cuda_failure(error, "DF Hermite response derivative", message);
+                    },
+                    orbital.atoms.size()};
     }
     const auto status = execute_cuda_df_hf_gradient(
         plan->device_id, reinterpret_cast<void*>(plan->stream), plan->integral_source, system,

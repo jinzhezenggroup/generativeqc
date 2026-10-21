@@ -22,7 +22,8 @@ struct CudaDfMdResources {
 
 /** Prepare a complete unscreened, strict-FP64 single-system DF charge/J owner.
  * Inputs carry native radial normalization. No integral oracle, public-AO
- * three-center tensor, metric solve, screening or force calculation occurs.
+ * three-center tensor, metric solve, screening or force calculation occurs
+ * during preparation. Raised Hermite potentials are included in its budget.
  * The borrowed stream must outlive the owner and all captured graphs using it.
  * Creation is forbidden inside capture; replay methods are allocation-free.
  * On refusal/failure, *owner remains null and all partial allocations retire.
@@ -47,5 +48,14 @@ cudaError_t cuda_df_md_charge(CudaDfMdOwner* owner, const double* density, doubl
  * the complete row-major J and is independent of any prior charge invocation.
  * Neither entry point retains borrowed input/output pointer identity. */
 cudaError_t cuda_df_md_project(CudaDfMdOwner* owner, const double* potential, double* coulomb);
+
+/** Add coefficient * sum_ijP D_ij v_P d(ij|P)/dR to an existing device
+ * atom gradient. D and v are fixed physical inputs, independently refreshed on
+ * every call; no metric derivative is included. The caller owns the full-rank
+ * metric response and clears/retains the output as appropriate. Allocation-free
+ * and stream-ordered, including captured replay. Nonsymmetric D is supported. */
+cudaError_t cuda_df_md_three_center_gradient(CudaDfMdOwner* owner, const double* density,
+                                             const double* potential, double coefficient,
+                                             double* gradient);
 
 }  // namespace generativeqc::scf::cuda_execution

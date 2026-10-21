@@ -64,8 +64,10 @@ def df_md_math(
     return owner
 
 
-@pytest.mark.parametrize("pair", range(7))
-@pytest.mark.parametrize("auxiliary", range(5))
+@pytest.mark.parametrize(
+    ("pair", "auxiliary"),
+    [(p, a) for p in range(8) for a in range(6) if p + a <= 11],
+)
 @pytest.mark.parametrize("stride", (1, 3))
 @pytest.mark.parametrize("rho", (1e-6, 1.0, 1e6))
 @pytest.mark.parametrize("argument", (0.0, 1e-12, 6.0, 100.0))
@@ -130,7 +132,7 @@ def test_pair_and_auxiliary_products_match_closed_roots(
         assert np.all(np.abs(actual - expected) <= 5e-12 * allowance + 1e-290)
 
 
-@pytest.mark.parametrize("order", (-1, 11, True, 1.5))
+@pytest.mark.parametrize("order", (-1, 12, True, 1.5))
 def test_radial_emitter_rejects_unqualified_orders(order: Any) -> None:
     with pytest.raises(ValueError, match="orders"):
         emit_md_radial_function(order)
@@ -163,13 +165,14 @@ void products(double rho, const double* d, const double* density, const double* 
 extern "C" int evaluate(unsigned pair, unsigned auxiliary, unsigned stride, double rho,
                          const double* d, const double* density, const double* potential,
                          double* radial, double* pair_result, double* auxiliary_result) {
-  switch (5 * pair + auxiliary) {
-#define CASE(P,A) case 5*P+A: \
+  switch (6 * pair + auxiliary) {
+#define CASE(P,A) case 6*P+A: \
   if (stride == 1) products<P,A,1>(rho,d,density,potential,radial,pair_result,auxiliary_result); \
   else if (stride == 3) products<P,A,3>(rho,d,density,potential,radial,pair_result,auxiliary_result); \
   else return -2; return 0
-#define ROW(P) CASE(P,0); CASE(P,1); CASE(P,2); CASE(P,3); CASE(P,4)
+#define ROW(P) CASE(P,0); CASE(P,1); CASE(P,2); CASE(P,3); CASE(P,4); CASE(P,5)
     ROW(0); ROW(1); ROW(2); ROW(3); ROW(4); ROW(5); ROW(6);
+    CASE(7,0); CASE(7,1); CASE(7,2); CASE(7,3); CASE(7,4);
 #undef ROW
 #undef CASE
   }

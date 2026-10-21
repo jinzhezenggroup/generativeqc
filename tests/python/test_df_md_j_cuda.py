@@ -8,6 +8,7 @@ Every real-device execution requires an explicitly enabled finite Slurm job.
 
 from __future__ import annotations
 
+import math
 import os
 import subprocess
 from dataclasses import replace
@@ -120,8 +121,9 @@ def _evaluate(
     text = "\n".join(lines) + "\n"
     (folder / "basis-and-vectors.txt").write_text(text)
     output = folder / "products.bin"
+    derivatives = os.environ.get("GENERATIVEQC_TEST_DF_MD_DERIVATIVE") == "1"
     run = subprocess.run(
-        [str(probe), str(output)],
+        [str(probe), str(output)] + (["--gradient"] if derivatives else []),
         input=text,
         text=True,
         capture_output=True,
@@ -131,7 +133,10 @@ def _evaluate(
     (folder / "probe.stdout").write_text(run.stdout)
     (folder / "probe.stderr").write_text(run.stderr)
     assert run.returncode == 0, run.stderr
-    result = np.fromfile(output, dtype=np.float64).reshape(3, a + n * n)
+    all_values = np.fromfile(output, dtype=np.float64).reshape(
+        3, a + n * n + (3 * mol.natm if derivatives else 0)
+    )
+    result = all_values[:, : a + n * n]
     assert np.isfinite(result).all()
     charge = np.einsum("ijp,ij->p", raw, density)
     jmatrix = np.einsum("ijp,p->ij", raw, potential)
@@ -146,7 +151,54 @@ def _evaluate(
         atol=3e-10,
         rtol=3e-11,
     )
+    derivative_error = None
+    if derivatives:
+        coordinates = mol.atom_coords()
+
+        def energy(atom: int, axis: int, displacement: float) -> float:
+            """Independent raw three-center scalar; no native density/metric oracle."""
+            geometry = coordinates.copy()
+            geometry[atom, axis] += displacement
+            shifted = mol.copy()
+            shifted.set_geom_(geometry, unit="Bohr")
+            value = 0.0
+            for i, j in product(range(2), repeat=2):
+                block = shifted.intor_by_shell(
+                    "int3c2e_sph" if spherical else "int3c2e_cart", (i, j, 2)
+                )
+                if not spherical:
+                    block *= (
+                        scales[loc[i] : loc[i + 1], None, None]
+                        * scales[None, loc[j] : loc[j + 1], None]
+                        * scales[None, None, loc[2] : loc[3]]
+                    )
+                value += np.einsum(
+                    "ijp,ij,p->",
+                    block,
+                    density[loc[i] : loc[i + 1], loc[j] : loc[j + 1]],
+                    potential,
+                )
+            return float(value)
+
+        step = 2e-4 / math.sqrt(exponent_scale)
+        derivative = np.empty((mol.natm, 3))
+        for atom, axis in product(range(mol.natm), range(3)):
+            derivative[atom, axis] = (
+                energy(atom, axis, -2 * step)
+                - 8 * energy(atom, axis, -step)
+                + 8 * energy(atom, axis, step)
+                - energy(atom, axis, 2 * step)
+            ) / (12 * step)
+        gradients = all_values[:, a + n * n :].reshape(3, mol.natm, 3)
+        for observed, scale in zip(gradients, (1.25, 0.0, -0.925), strict=True):
+            np.testing.assert_allclose(
+                observed - 0.25, scale * derivative, atol=2e-8, rtol=2e-8
+            )
+            np.testing.assert_allclose((observed - 0.25).sum(axis=0), 0.0, atol=2e-9)
+        np.testing.assert_array_equal(gradients[1], 0.25)
+        derivative_error = float(np.max(abs(gradients[0] - 0.25 - 1.25 * derivative)))
     return {
+        "derivative_max_abs_error": derivative_error,
         "max_abs_error": float(np.max(abs(result[0] - expected))),
         "replay_max_abs_error": float(np.max(abs(result[2] - refreshed))),
         "native_inventory": run.stdout.strip(),

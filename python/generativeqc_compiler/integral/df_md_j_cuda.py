@@ -24,14 +24,16 @@ from __future__ import annotations
 
 from .md_j_engine_cuda import _hermite_states, emit_md_radial_function
 
-MAXIMUM_PAIR_ANGULAR = 6
-MAXIMUM_AUXILIARY_ANGULAR = 4
+MAXIMUM_PAIR_ANGULAR = 7
+MAXIMUM_AUXILIARY_ANGULAR = 5
 
 
 def emit_df_md_j_header() -> str:
     """Emit FP64 forward/transpose contractions through orbital f and auxiliary g.
 
-    Summed derivatives reach order ten (286 radial entries), so addresses use
+    One first response raises either side, reaching order eleven (364 radial
+    entries). The rectangular address inventory also contains the unused (7,5)
+    corner, which is rejected by the contraction guard. Addresses use
     uint16 rather than the Direct s/p/d consumer's uint8 inventory. The two
     products are exact transposes of the same signed Coulomb matrix; pair
     symmetry factors and primitive prefactors remain the caller's responsibility.
@@ -66,12 +68,7 @@ static __device__ __constant__ const signed char kDfMdAuxiliarySigns[{len(signs)
 }};
 """
     return (
-        _PREAMBLE
-        + emit_md_radial_function(
-            MAXIMUM_PAIR_ANGULAR + MAXIMUM_AUXILIARY_ANGULAR, "df_md_radial"
-        )
-        + tables
-        + _CONTRACTIONS
+        _PREAMBLE + emit_md_radial_function(11, "df_md_radial") + tables + _CONTRACTIONS
     )
 
 
@@ -94,12 +91,13 @@ _PREAMBLE = """/*
  * is adapted from GPU4PySCF gpu4pyscf/lib/gvhf-md/md_contract_j.cu at
  * 9af748a71ca8f4881c604332c2f0cc1632e033ac.
  * Modifications: descending in-place radial stages, shared GenerativeQC Boys
- * seeds, order-ten uint16 indexing and three-center forward/transpose products.
+ * seeds, order-eleven uint16 indexing and three-center forward/transpose products.
  */
 #pragma once
 #include <cstdint>
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/cuda/cartesian_angular.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 """
@@ -115,8 +113,9 @@ __host__ __device__ constexpr unsigned df_md_prefix(unsigned angular) {
 
 template<unsigned PairAngular, unsigned AuxiliaryAngular>
 __device__ inline unsigned df_md_address(unsigned pair_component, unsigned auxiliary_component) {
-  static_assert(PairAngular <= 6 && AuxiliaryAngular <= 4);
-  constexpr unsigned offset = 70 * df_md_prefix(PairAngular) +
+  static_assert(PairAngular <= 7 && AuxiliaryAngular <= 5 &&
+                PairAngular + AuxiliaryAngular <= 11);
+  constexpr unsigned offset = 126 * df_md_prefix(PairAngular) +
                                df_md_count(PairAngular) * df_md_prefix(AuxiliaryAngular);
   return kDfMdAddresses[offset + pair_component * df_md_count(AuxiliaryAngular) +
                         auxiliary_component];
@@ -150,6 +149,30 @@ __device__ inline double df_md_auxiliary_charge(const double* radial, const doub
     result += phase * density[i] *
               radial[RadialStride * df_md_address<PairAngular, AuxiliaryAngular>(i, auxiliary_component)];
   return result;
+}
+/** Gaussian center differentiation before public-component projection. The
+ * second center occupies the recurrence's larger dimension, allowing an f
+ * orbital to raise to g (or auxiliary g to h) without admitting those as new
+ * orbital shells. Raised powers keep the original primitive/component
+ * normalization. The caller swaps the two centers for the first derivative. */
+template<class Hermite>
+__device__ inline double df_md_second_center_transform(
+    const Hermite* coefficients, Angular first, Angular second, Angular hermite,
+    unsigned axis, double beta) {
+  const unsigned i[3]{first.x, first.y, first.z};
+  const unsigned j[3]{second.x, second.y, second.z};
+  const unsigned t[3]{hermite.x, hermite.y, hermite.z};
+  double product = 1;
+  for (unsigned k = 0; k < 3; ++k) {
+    if (k == axis) {
+      double value = 2 * beta * coefficients[k].at(i[k], j[k] + 1, t[k]);
+      if (j[k]) value -= j[k] * coefficients[k].at(i[k], j[k] - 1, t[k]);
+      product *= value;
+    } else {
+      product *= coefficients[k].at(i[k], j[k], t[k]);
+    }
+  }
+  return product;
 }
 }  // namespace generativeqc::scf::cuda_execution
 """

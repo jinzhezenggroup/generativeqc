@@ -100,7 +100,10 @@ cudaError_t contract_cuda_df_response_weights(
     // Optional owner-verified A^T D, consuming the supplied current row-major D.
     // It replaces raw panel production only; metric and derivative weights stay
     // in this response owner and use the same stream and full-rank policy.
-    const std::function<void(const double*, double*)>& read_raw_charge = {});
+    const std::function<void(const double*, double*)>& read_raw_charge = {},
+    // A direct derivative consumer avoids public-AO three-center W panels.
+    // It receives exact D and solved v; metric response stays in this owner.
+    const std::function<void(const double*, const double*, double)>& consume_raw_derivative = {});
 
 }  // namespace generativeqc::scf
 #endif

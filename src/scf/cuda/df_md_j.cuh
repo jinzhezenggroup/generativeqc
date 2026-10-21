@@ -99,14 +99,16 @@ __global__ void df_md_project(DfMdView view, double* output) {
  * launched sequentially on the owning stream. Padding lanes are initialized
  * and participate in every barrier/shuffle; no partial warp uses stale roots.
  * This complete unscreened path is a qualification seam, not a default policy. */
-template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge>
+template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Response = false>
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
                                DfMdView auxiliary, std::size_t auxiliary_begin,
                                std::size_t auxiliary_count) {
   constexpr unsigned sources = 8, components = 16, threads = sources * components;
-  constexpr unsigned target_count = df_md_count(Charge ? AuxiliaryAngular : PairAngular);
+  constexpr unsigned pair_order = PairAngular + (Response && !Charge);
+  constexpr unsigned auxiliary_order = AuxiliaryAngular + (Response && Charge);
+  constexpr unsigned target_count = df_md_count(Charge ? auxiliary_order : pair_order);
   constexpr unsigned rows = (target_count + components - 1) / components;
-  __shared__ double radial[sources * df_md_count(PairAngular + AuxiliaryAngular)];
+  __shared__ double radial[sources * df_md_count(pair_order + auxiliary_order)];
   __shared__ double scale[sources];
   const unsigned lane = threadIdx.x % sources, component_lane = threadIdx.x / sources;
   const auto target_view = Charge ? auxiliary : pairs;
@@ -125,8 +127,8 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
         const auto pair = Charge ? source : target, aux = Charge ? target : source;
         const double sum = pair.exponent + aux.exponent;
         const double rho = pair.exponent * (aux.exponent / sum);
-        df_md_radial<PairAngular + AuxiliaryAngular, sources>(rho, pair.product, aux.product,
-                                                              radial + lane);
+        df_md_radial<pair_order + auxiliary_order, sources>(rho, pair.product, aux.product,
+                                                            radial + lane);
         scale[lane] = 34.986836655249725 / (pair.exponent * aux.exponent * sqrt(sum));
       }
     }
@@ -137,11 +139,10 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
         if (c >= target_count) continue;
         const auto* input = source_view.density + source.hermite_offset;
         if constexpr (Charge)
-          values[row] +=
-              scale[lane] * df_md_auxiliary_charge<PairAngular, AuxiliaryAngular, sources>(
-                                radial + lane, input, c);
+          values[row] += scale[lane] * df_md_auxiliary_charge<pair_order, auxiliary_order, sources>(
+                                           radial + lane, input, c);
         else
-          values[row] += scale[lane] * df_md_pair_potential<PairAngular, AuxiliaryAngular, sources>(
+          values[row] += scale[lane] * df_md_pair_potential<pair_order, auxiliary_order, sources>(
                                            radial + lane, input, c);
       }
     __syncthreads();
@@ -151,9 +152,75 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
     for (unsigned stride = sources / 2; stride; stride /= 2)
       value += __shfl_down_sync(0xffffffffU, value, stride, sources);
     const auto c = component_lane + row * components;
-    if (!lane && c < target_count) target_view.potential[target.hermite_offset + c] += value;
+    if (!lane && c < target_count) {
+      auto* output = Response ? target_view.response_potential : target_view.potential;
+      output[(Response ? target.response_offset : target.hermite_offset) + c] += value;
+    }
   }
   static_assert(threads == 128);  // Launch contract: four complete warps.
+}
+
+/** Contract a raised Hermite potential directly into atom derivatives. The
+ * compiler owns the center derivative algebra; this kernel owns component
+ * projection and reductions. Swapping centers puts every raised power in the
+ * recurrence's larger second dimension. No derivative tensor is materialized.
+ * Each block adds its complete primitive contribution to the caller's existing
+ * gradient, so metric and other physical terms can share the output stream. */
+template <bool First>
+__global__ void df_md_project_derivative(DfMdView view, const double* input, double coefficient,
+                                         double* gradient) {
+  const auto primitive = view.primitives[blockIdx.x];
+  __shared__ HermiteCoefficients<double> coefficients[3];
+  __shared__ double partials[128];
+  const auto first = First ? primitive.second : primitive.first;
+  const auto second = First ? primitive.first : primitive.second;
+  const auto alpha = First ? primitive.beta : primitive.alpha;
+  const auto beta = First ? primitive.alpha : primitive.beta;
+  if (threadIdx.x == 0) {
+    const double p[3]{primitive.product.x, primitive.product.y, primitive.product.z};
+    const double a[3]{first.x, first.y, first.z}, b[3]{second.x, second.y, second.z};
+    for (unsigned axis = 0; axis < 3; ++axis)
+      fill_hermite(First ? primitive.second_angular : primitive.first_angular,
+                   (First ? primitive.first_angular : primitive.second_angular) + 1, p[axis],
+                   a[axis], b[axis], alpha, beta, coefficients[axis]);
+  }
+  __syncthreads();
+  const unsigned angular = primitive.first_angular + primitive.second_angular + 1;
+  const unsigned hermites = df_md_count(angular);
+  const unsigned components = primitive.first_count * primitive.second_count;
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    double value = 0;
+    for (unsigned item = threadIdx.x; item < components * hermites; item += blockDim.x) {
+      const auto component = item / hermites;
+      const auto i = primitive.first_ao + component / primitive.second_count;
+      const auto j = primitive.second_ao + component % primitive.second_count;
+      const auto& original_first = view.first_aos[i];
+      const auto& original_second = view.second_aos[j];
+      const auto& a = First ? original_second : original_first;
+      const auto& b = First ? original_first : original_second;
+      const auto h = md_hermite_angular(angular, item % hermites);
+      double derivative = 0;
+      for (unsigned x = 0; x < a.count; ++x)
+        for (unsigned y = 0; y < b.count; ++y)
+          derivative += a.coefficients[x] * b.coefficients[y] *
+                        df_md_second_center_transform(coefficients, a.angular[x], b.angular[y], h,
+                                                      axis, beta);
+      double weight = view.auxiliary ? input[j] : input[i * view.nbf + j];
+      if (!view.auxiliary && !primitive.same_shell) weight += input[j * view.nbf + i];
+      value += weight * derivative *
+               view.response_potential[primitive.response_offset + item % hermites];
+    }
+    partials[threadIdx.x] = value;
+    __syncthreads();
+    for (unsigned stride = blockDim.x / 2; stride; stride /= 2) {
+      if (threadIdx.x < stride) partials[threadIdx.x] += partials[threadIdx.x + stride];
+      __syncthreads();
+    }
+    if (threadIdx.x == 0)
+      atomicAdd(gradient + 3 * (First ? primitive.first_atom : primitive.second_atom) + axis,
+                coefficient * primitive.weight * partials[0]);
+    __syncthreads();
+  }
 }
 
 }  // namespace generativeqc::scf::cuda_execution

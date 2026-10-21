@@ -22,7 +22,8 @@ struct DfMdLayout {
   std::vector<DfMdAo> aos;
   std::vector<DfMdPrimitive> primitives;
   std::array<std::size_t, 8> offsets{};
-  std::size_t transform_elements{}, hermite_elements{}, device_bytes{}, host_peak_bytes{};
+  std::size_t transform_elements{}, hermite_elements{}, response_elements{};
+  std::size_t device_bytes{}, host_peak_bytes{};
   bool auxiliary{};
 };
 
@@ -88,6 +89,8 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
       result.offsets[angular + 1] = add(result.offsets[angular + 1], count);
       const auto states = multiply(count, hermites(angular));
       result.hermite_elements = add(result.hermite_elements, states);
+      result.response_elements =
+          add(result.response_elements, multiply(count, hermites(angular + 1)));
       result.transform_elements =
           add(result.transform_elements, multiply(states, multiply(na, nb)));
     }
@@ -96,9 +99,10 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
     throw std::length_error("DF MD primitive domain exceeds a one-dimensional CUDA grid");
   const auto metadata = add(multiply(primitive_count, sizeof(DfMdPrimitive)),
                             multiply(add(aos, auxiliary ? 1 : 0), sizeof(DfMdAo)));
-  result.device_bytes =
-      add(metadata, multiply(add(result.transform_elements, multiply(2, result.hermite_elements)),
-                             sizeof(double)));
+  result.device_bytes = add(
+      metadata, multiply(add(add(result.transform_elements, multiply(2, result.hermite_elements)),
+                             result.response_elements),
+                         sizeof(double)));
   // Public expansion temporaries are bounded by fifteen Cartesian g AOs with
   // six terms each. Include shell offsets, returned object and vector slack
   // below after actual allocation; the preflight deliberately reserves twice
@@ -147,6 +151,8 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
         for (const auto& q : b.primitives) {
           DfMdPrimitive primitive;
           primitive.first_ao = auxiliary ? 0 : shell_offsets[i];
+          primitive.first_atom = a.atom_index;
+          primitive.second_atom = b.atom_index;
           primitive.second_ao = shell_offsets[auxiliary ? i : j];
           primitive.first_count = auxiliary ? 1 : shell_offsets[i + 1] - primitive.first_ao;
           primitive.second_count = shell_offsets[(auxiliary ? i : j) + 1] - primitive.second_ao;
@@ -175,16 +181,19 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
   });
   for (std::size_t i = 1; i < result.offsets.size(); ++i)
     result.offsets[i] += result.offsets[i - 1];
-  std::size_t transforms = 0, states = 0;
+  std::size_t transforms = 0, states = 0, responses = 0;
   for (auto& primitive : result.primitives) {
     primitive.transform_offset = transforms;
     primitive.hermite_offset = states;
+    primitive.response_offset = responses;
     const auto count = hermites(primitive.first_angular + primitive.second_angular);
     transforms += primitive.first_count * primitive.second_count * count;
     states += count;
+    responses += hermites(primitive.first_angular + primitive.second_angular + 1);
   }
   if (transforms != result.transform_elements || states != result.hermite_elements ||
-      result.aos.size() != aos || result.primitives.size() != primitive_count)
+      responses != result.response_elements || result.aos.size() != aos ||
+      result.primitives.size() != primitive_count)
     throw std::logic_error("DF MD layout census and generated intervals disagree");
   const auto actual_payload = add(multiply(result.aos.capacity(), sizeof(DfMdAo)),
                                   multiply(result.primitives.capacity(), sizeof(DfMdPrimitive)));

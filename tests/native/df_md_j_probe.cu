@@ -109,7 +109,8 @@ struct GraphOwner {
 }  // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 2 || !std::getenv("SLURM_JOB_ID")) return 3;
+  const bool derivatives = argc == 3 && std::string(argv[2]) == "--gradient";
+  if ((argc != 2 && !derivatives) || !std::getenv("SLURM_JOB_ID")) return 3;
   try {
     const auto orbital = read_system(), auxiliary = read_system();
     DeviceOwner owner;
@@ -162,6 +163,8 @@ int main(int argc, char** argv) {
     auto* v = owner.allocate<double>(a);
     auto* j = owner.allocate<double>(n * n);
     auto* rho = owner.allocate<double>(a);
+    const auto gradient_elements = 3 * orbital.atoms.size();
+    auto* gradient = derivatives ? owner.allocate<double>(gradient_elements) : nullptr;
     if (cuda_df_md_charge(raw, d, d) != cudaErrorInvalidValue ||
         cuda_df_md_project(raw, nullptr, j) != cudaErrorInvalidValue)
       throw std::runtime_error("invalid replay buffers were not refused");
@@ -176,6 +179,7 @@ int main(int argc, char** argv) {
       throw std::runtime_error("owner preparation entered a captured stream");
     // Projection deliberately precedes charge: neither call may depend on a
     // previous invocation's Hermite input or stale intermediate potential.
+    if (derivatives) check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
     check(cuda_df_md_project(raw, v, j));
     check(cuda_df_md_charge(raw, d, rho));
     check(cudaStreamEndCapture(owner.stream, &graph.graph));
@@ -191,7 +195,14 @@ int main(int argc, char** argv) {
                             owner.stream));
       check(cudaMemcpyAsync(v, current_v.data(), a * sizeof(double), cudaMemcpyHostToDevice,
                             owner.stream));
+      // Nonzero existing output verifies addition, including the exact zero
+      // replay. Captured derivatives must refresh both input vectors themselves.
+      std::vector<double> current_gradient(gradient_elements, 0.25);
+      if (derivatives)
+        check(cudaMemcpyAsync(gradient, current_gradient.data(), gradient_elements * sizeof(double),
+                              cudaMemcpyHostToDevice, owner.stream));
       if (replay == 0) {
+        if (derivatives) check(cuda_df_md_three_center_gradient(raw, d, v, 1.25, gradient));
         check(cuda_df_md_project(raw, v, j));
         check(cuda_df_md_charge(raw, d, rho));
       } else {
@@ -201,9 +212,15 @@ int main(int argc, char** argv) {
                             owner.stream));
       check(cudaMemcpyAsync(current_v.data(), rho, a * sizeof(double), cudaMemcpyDeviceToHost,
                             owner.stream));
+      if (derivatives)
+        check(cudaMemcpyAsync(current_gradient.data(), gradient, gradient_elements * sizeof(double),
+                              cudaMemcpyDeviceToHost, owner.stream));
       check(cudaStreamSynchronize(owner.stream));
       output.write(reinterpret_cast<const char*>(current_v.data()), a * sizeof(double));
       output.write(reinterpret_cast<const char*>(current_d.data()), n * n * sizeof(double));
+      if (derivatives)
+        output.write(reinterpret_cast<const char*>(current_gradient.data()),
+                     gradient_elements * sizeof(double));
       if (!output) throw std::runtime_error("cannot write probe output");
     }
     if (ledger.ledger->allocations != allocations_before_replay)

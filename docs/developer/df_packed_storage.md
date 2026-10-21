@@ -143,8 +143,11 @@ The candidate replaces raw three-center value regeneration with two vector
 contractions and the existing metric solve. It remains unscreened; retained
 integral sources remain available. Pure-J force response borrows the same
 stream-bound owner to recompute auxiliary charge from its exact current density,
-then applies the unchanged metric solve and derivative contractions. It does not
-reuse an earlier SCF potential. Explicit panel/slice diagnostic controls retain
+then applies the unchanged metric solve. A strict direct Hermite contraction
+adds the three-center atom derivatives without emitting public-AO weight panels;
+the original metric derivative remains in the response owner. Raised potential
+storage is included in the value reservation. It does not reuse an earlier SCF
+potential. Explicit panel/slice diagnostic controls retain
 their existing paths. Unsupported domains and
 optional capacity refusals use the existing bounded path. Device failures
 propagate. The owner and captured graphs share the value plan's stream and

@@ -139,13 +139,16 @@ def emit_md_radial_function(
     """Emit shared compact Coulomb roots through the caller's qualified order.
 
     Direct retains its order-eight specialization. Three-center f/f/g work
-    requires order ten; its separate consumer must qualify indexing and
+    requires order ten and its first response order eleven; each consumer
+    must qualify indexing and
     contractions without changing Direct's source domain. The returned function
     uses caller-provided Vec3, Boys helpers and CUDA qualifiers, owns no storage,
     and includes its exact compile-time order guard.
     """
-    if type(maximum_order) is not int or not 0 <= maximum_order <= 10:
-        raise ValueError("compact MD radial lowering supports orders zero through ten")
+    if type(maximum_order) is not int or not 0 <= maximum_order <= 11:
+        raise ValueError(
+            "compact MD radial lowering supports orders zero through eleven"
+        )
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         raise ValueError("MD radial function name must be a C++ identifier")
     stages = "\n".join(
