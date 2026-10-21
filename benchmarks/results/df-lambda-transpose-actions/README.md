@@ -20,7 +20,7 @@ fresh-process observations per case, alternating baseline/candidate and
 candidate/baseline order. All 24 measured observations and four excluded
 qualification/cache-prime observations are retained by workload in
 [water24.samples.json](water24.samples.json) and
-[methane34.samples.json](methane34.samples.json).
+[methane34.samples.json.gz](methane34.samples.json.gz).
 
 Conventional unscreened RHF supplies Fock/orbitals; only correlation is fitted.
 Both bases are spherical: cc-pVDZ / cc-pVDZ-RI. Water has `(o,v,q)=(5,19,84)`;
@@ -152,3 +152,10 @@ do not use n3 while it is under maintenance. Use the committed oracle coordinate
 definitions and FD directions with pinned PySCF 2.14.0 for independent replay.
 Only explicitly whitened correlation factors enter that oracle's CCSD/T solver;
 no oracle numeric state enters a native endpoint.
+
+## Lossless storage
+
+The methane samples are stored as gzip to retain complete historical evidence
+within the repository budget. The adjacent [storage receipt](methane34.samples.storage.json)
+pins the original merged Git blob and both byte identities. `gzip -dc` restores
+the exact original JSON; no samples or historical verdicts were changed.
