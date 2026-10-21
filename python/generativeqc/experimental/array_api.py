@@ -1039,7 +1039,10 @@ class CompiledFunction:
             if symbolic is not None and function is globals().get(function.__name__)
             else function
         )
-        if function in (prod, _symbolic_backend.prod, var, _symbolic_backend.var):
+        if builtins.any(
+            function is candidate
+            for candidate in (prod, _symbolic_backend.prod, var, _symbolic_backend.var)
+        ):
             # Direct compilation uses static defaults. Nondefault reduction
             # options belong in a closure, not runtime array feeds.
             signature = signature.replace(parameters=(signature.parameters["x"],))
