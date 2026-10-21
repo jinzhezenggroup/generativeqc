@@ -182,7 +182,9 @@ plus the largest serialized projection, occupation-construction and strict
 seed-validation workspace (including eigensolver copies). It never adds an
 uncharged workspace allowance. Hückel similarly charges all retained seed
 matrices, molecular subspace/admission storage, invocation-local atomic frames
-and the largest serialized atomic integral/DIIS owner. It never adds an
+and the largest serialized atomic integral/DIIS owner. Its molecular allowance
+covers the larger of assembly and strict admission, which execute sequentially;
+it includes the returned density and eigensolver validation temporaries. It never adds an
 uncharged workspace allowance. This can overestimate serialized lifetime overlap. An
 infeasible global plan is rejected before execution, rather than silently
 changing a requested strategy to make the plan fit.
