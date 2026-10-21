@@ -100,7 +100,7 @@ __global__ void df_md_project(DfMdView view, double* output) {
   }
 }
 
-/** Eight source lanes share radial work across all target components. A block
+/** Source lanes share radial work across all target components. A block
  * exclusively owns one target primitive, so Hermite accumulation needs no
  * atomics and has a fixed source traversal. Angular source groups must be
  * launched sequentially on the owning stream. Padding lanes are initialized
@@ -110,10 +110,16 @@ template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Res
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
                                DfMdView auxiliary, std::size_t auxiliary_begin,
                                std::size_t auxiliary_count) {
-  constexpr unsigned sources = 8, components = 16, threads = sources * components;
   constexpr unsigned pair_order = PairAngular + (Response && !Charge);
   constexpr unsigned auxiliary_order = AuxiliaryAngular + (Response && Charge);
   constexpr unsigned target_count = df_md_count(Charge ? auxiliary_order : pair_order);
+  // Low-order targets cannot use sixteen component lanes: for an s target,
+  // fifteen lanes wait while one contracts. Give those lanes independent
+  // sources instead. Every source group remains a power-of-two subwarp, and
+  // the complete block stays at 128 threads, including padding components.
+  // Higher targets retain the original bounded radial shared-memory layout.
+  constexpr unsigned sources = target_count <= 4 ? 32 : target_count <= 10 ? 16 : 8;
+  constexpr unsigned components = 128 / sources, threads = sources * components;
   constexpr unsigned rows = (target_count + components - 1) / components;
   __shared__ double radial[sources * df_md_count(pair_order + auxiliary_order)];
   __shared__ double scale[sources];
