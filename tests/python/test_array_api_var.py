@@ -201,7 +201,7 @@ def test_native_fp64_no_reference(
     x = np.linspace(-2, 3, np.prod(shape, dtype=int)).reshape(shape)
     if constant:
         x.fill(2)
-    direction = np.full(shape, 0.3)
+    direction = np.linspace(-0.3, 0.7, x.size).reshape(shape)
     expected = np.var(x, axis=axes, ddof=correction, keepdims=keepdims)
     weights = np.full(expected.shape, 0.7)
     tangent, adjoint = analytic(x, direction, weights, axes, correction, keepdims)
