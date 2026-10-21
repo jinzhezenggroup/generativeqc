@@ -96,7 +96,11 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted = {},
     bool single_fitted_tensor = false, const CudaDfResponseBuffers* streamed_occupied = nullptr,
     const CudaDfWhitenedTensorView* retained_coulomb = nullptr, bool raw_coulomb = false,
-    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels = {});
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels = {},
+    // Optional owner-verified A^T D, consuming the supplied current row-major D.
+    // It replaces raw panel production only; metric and derivative weights stay
+    // in this response owner and use the same stream and full-rank policy.
+    const std::function<void(const double*, double*)>& read_raw_charge = {});
 
 }  // namespace generativeqc::scf
 #endif

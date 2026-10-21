@@ -290,9 +290,11 @@ The maximum errors are about 2.041e-6 Eh/atom, 5.626e-5 Eh/Bohr maximum force,
 and 2.477e-5 Eh/Bohr RMS force. Clean Standard measures 180.499 s cold and
 107.532 s median warm, with 16 / 1 iterations. The trace has 19 completed
 Hermite J operations at about 2.49 s each. Source/metric/J admission is real,
-not inferred from the environment selector. The same-binary rollback is still
-running; these measurements do not establish a speedup over that rollback or
-over stock GPU4PySCF.
+not inferred from the environment selector. The completed same-binary rollback
+also passes all four common E/F gates. It measures 1221.523 s cold and
+173.718 s median warm, with the same 16 / 1 iterations. The candidate therefore
+improves these complete endpoints by 6.77x / 1.62x. It remains slower than the
+qualified stock GPU4PySCF result (25.945 s cold, 12.507 s median warm).
 
 Force response still costs about 94.6 s: its raw charge/potential pass alone
 costs about 61.4 s and produces 64,547,192,832 raw bytes per call. Its remaining
@@ -303,3 +305,32 @@ this domain. Preserve that executed policy; do not relabel it as an accelerated
 Fast solve. The artifacts include `candidate-qualification.json` and
 `trace-work-summary.json`. No README redraw or default promotion follows from
 this single-method qualification.
+
+
+## Response-charge follow-up
+
+The optional value owner now lends a stream-bound raw-charge callback to
+pure-J force response. The bridge authenticates device, stream, dimensions and
+source/metric identity before allocating. It recomputes charge from each exact
+density argument and preserves the original full-rank spectral solve; an
+earlier SCF potential is not a valid substitute for that density contract.
+The response accounts for the borrowed owner's bytes, propagates native
+failure status after stream-drained cleanup, and retains explicit panel/slice
+diagnostic paths. No derivative algebra or grid was changed. Qualification
+is in progress in `df-md-response-v2/`; v1's probe failed to compile because
+an injected-status lambda inferred an anonymous enum instead of the status
+ABI's integer type. This was a test fixture failure before GPU execution.
+
+The response v2 qualification completes all 16 independent force populations
+(through f/g, Cartesian/spherical and truncated fallback), full memcheck (16 cases) and
+racecheck (4 cases), with zero errors or hazards. Complete 96-atom Standard endpoints measure
+120.189 s cold and 47.474 s median warm (47.453–47.498 s), with unchanged 16/1
+SCF iterations. All four clean and four separately traced endpoints pass the
+common independent E/F gates; the maximum force error remains about 5.626e-5
+and RMS 2.477e-5 Eh/Bohr. The traced response uses one MD charge callback and
+zero raw three-center value productions per force call; derivative contraction
+work remains. This is a real endpoint improvement, still slower than GPU4.
+The compiled core SHA-256 is
+`f9fb4111fbec9b10b2bd18410e6d4076b36cc3ab4665559798df4109c18e8941`.
+The host dispatcher double was updated for the new optional argument/owner;
+55 relevant host tests pass with one unavailable-toolchain test skipped.

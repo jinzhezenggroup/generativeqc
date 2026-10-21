@@ -141,7 +141,11 @@ and host storage remain included in the enclosing diagnostics.
 
 The candidate replaces raw three-center value regeneration with two vector
 contractions and the existing metric solve. It remains unscreened; retained
-integral sources and force response are unchanged. Unsupported domains and
+integral sources remain available. Pure-J force response borrows the same
+stream-bound owner to recompute auxiliary charge from its exact current density,
+then applies the unchanged metric solve and derivative contractions. It does not
+reuse an earlier SCF potential. Explicit panel/slice diagnostic controls retain
+their existing paths. Unsupported domains and
 optional capacity refusals use the existing bounded path. Device failures
 propagate. The owner and captured graphs share the value plan's stream and
 must retire before that stream is destroyed.
@@ -149,6 +153,9 @@ must retire before that stream is destroyed.
 `tests/python/test_df_md_plan_cuda.py` exercises independent metric/J parity,
 budget fallback and changed-input replay against the compiled core. Run it in
 a finite Slurm GPU allocation with `GENERATIVEQC_TEST_DF_MD_PLAN=1` and an
-explicit `GENERATIVEQC_LIBRARY`. This experimental control does not imply
+explicit `GENERATIVEQC_LIBRARY`. Adding `GENERATIVEQC_TEST_DF_MD_FORCE=1`
+checks complete Coulomb gradients against independent displaced libcint
+energies, zero/changed density, borrowed-owner identity and failure propagation.
+This experimental control does not imply
 complete energy/force or performance qualification; see the
 [consumer-work investigation](../../.agents/notes/proposed/2026-10-22-df-consumer-work-gap.md).

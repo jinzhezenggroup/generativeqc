@@ -427,7 +427,8 @@ static cudaError_t contract_raw_coulomb_response(
     cudaStream_t stream, cublasHandle_t blas,
     const std::function<void(std::size_t, double*)>& read_values,
     const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume,
-    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels) {
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels,
+    const std::function<void(const double*, double*)>& read_raw_charge) {
   const auto matrix = n * n, aa = a * a;
   auto* bar_metric = workspace + aa;
   auto* raw = workspace + 4 * aa;
@@ -441,7 +442,10 @@ static cudaError_t contract_raw_coulomb_response(
   const double one = 1, zero = 0;
   {
     runtime::cuda_trace::TraceRegion charge("raw_coulomb_charge_and_potential", stream);
-    if (read_raw_panels) {
+    if (read_raw_charge) {
+      for (std::size_t t = 0; t < terms.size(); ++t)
+        read_raw_charge(densities + t * matrix, potentials + t * a);
+    } else if (read_raw_panels) {
       for (std::size_t begin = 0; begin < a; begin += tile) {
         const auto count = std::min(tile, a - begin);
         read_raw_panels(begin, count, weights);
@@ -473,9 +477,11 @@ static cudaError_t contract_raw_coulomb_response(
                                                        metric.eigenvectors, ai, projected + t * a,
                                                        1, &zero, potentials + t * a, 1}));
     }
-    runtime::cuda_trace::trace_counter("response_raw_coulomb_source_passes", 1);
-    runtime::cuda_trace::trace_counter("response_charge_blas_dots", terms.size() * a);
-    runtime::cuda_trace::trace_counter("response_charge_dot_elements", terms.size() * a * matrix);
+    if (!read_raw_charge) {
+      runtime::cuda_trace::trace_counter("response_raw_coulomb_source_passes", 1);
+      runtime::cuda_trace::trace_counter("response_charge_blas_dots", terms.size() * a);
+      runtime::cuda_trace::trace_counter("response_charge_dot_elements", terms.size() * a * matrix);
+    }
     runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_gemvs", 2 * terms.size());
     runtime::cuda_trace::trace_counter("response_raw_coulomb_factor_flops", 4 * terms.size() * aa);
   }
@@ -1578,17 +1584,20 @@ cudaError_t contract_cuda_df_response_weights(
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
     bool single_fitted_tensor, const CudaDfResponseBuffers* streamed_occupied,
     const CudaDfWhitenedTensorView* retained_coulomb, bool raw_coulomb,
-    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels) {
-  if (read_raw_panels && !raw_coulomb) return cudaErrorInvalidValue;
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels,
+    const std::function<void(const double*, double*)>& read_raw_charge) {
+  if ((read_raw_panels || read_raw_charge) && !raw_coulomb) return cudaErrorInvalidValue;
   if (raw_coulomb) {
     if (!metric.full_rank || borrowed || streamed_occupied || single_fitted_tensor ||
-        packed_pairs || retained_coulomb || read_fitted || (!read_values && !read_raw_panels) ||
-        !blas_products || serial_metric_dot ||
-        !std::all_of(terms.begin(), terms.end(),
-                     [](const auto& term) { return term.exchange_coefficient == 0; }))
+        packed_pairs || retained_coulomb || read_fitted ||
+        (!read_values && !read_raw_panels && !read_raw_charge) || !blas_products ||
+        serial_metric_dot || !std::all_of(terms.begin(), terms.end(), [](const auto& term) {
+          return term.exchange_coefficient == 0;
+        }))
       return cudaErrorInvalidValue;
     return contract_raw_coulomb_response(n, a, terms, densities, metric, tile, workspace, stream,
-                                         blas, read_values, consume, read_raw_panels);
+                                         blas, read_values, consume, read_raw_panels,
+                                         read_raw_charge);
   }
   if (retained_coulomb && !borrowed && !streamed_occupied && !single_fitted_tensor &&
       !packed_pairs && metric.full_rank && blas_products && !serial_metric_dot &&

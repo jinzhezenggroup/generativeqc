@@ -53,6 +53,21 @@ struct CudaDfMetricView {
   // raw-tensor view exists. Pointer equality alone cannot detect allocator reuse.
   std::uint64_t owner_identity{};
 };
+/** Stream-ordered raw auxiliary-charge consumer borrowed from the exact value
+ * source/metric owner. It recomputes A^T D from the density supplied by response;
+ * no earlier SCF density or cached potential is assumed. Submission uses the
+ * borrowed stream, overwrites naux outputs, allocates nothing, and propagates
+ * native status/detail. The enclosing value plan retains and budgets context
+ * through the response bridge's stream drain. No basis data is downloaded. */
+struct CudaDfRawChargeView {
+  using Submit = generativeqc_status (*)(void*, const double*, double*, std::string&);
+  void* context{};
+  Submit submit{};
+  int device_id{-1};
+  void* stream{};
+  std::size_t nbf{}, naux{}, device_bytes{};
+  std::uint64_t owner_identity{};
+};
 /** Borrow of one canonical column-major C, with D=density_scale*C*C^T.
  * The plan owner validates the method token, exact density and device
  * generation before constructing this view. A zero-rank spin has no pointer.
@@ -245,6 +260,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr,
-    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false);
+    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false,
+    const CudaDfRawChargeView* raw_charge = nullptr);
 }  // namespace generativeqc::scf
 #endif
