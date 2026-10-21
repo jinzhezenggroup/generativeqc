@@ -294,6 +294,33 @@ of that Python float. During capture, negative-zero float literals are rejected 
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
 
+### Captured products
+
+`xp.prod(x, axis=None, dtype=None, keepdims=False)` captures generic finite
+float32/float64 arrays using the existing TensorIR multiplication and static
+gather/reshape operations. Axes may be signed integers, unique tuples, `None`
+(all axes), or `()` (identity). Reduced zero extents produce the empty product
+1; zero extents on retained axes produce an empty output. `keepdims=True`
+retains reduced axes of length one. `dtype=None` preserves the input dtype;
+explicit same-dtype requests are accepted, while conversions are rejected.
+Scientific index annotations, spin, symmetry and compressed representations
+are outside this capture contract.
+
+Pairwise multiplication with separate odd tails gives a bounded static graph;
+no input is duplicated to pad an odd extent. Capture preflights gather positions,
+nodes, rounds and retained intermediate bytes before creating index maps.
+Backend byte/work/node budgets still apply to the complete program. Multiplication
+is polynomial, so existing first-order JVP/VJP rules remain valid at one or
+multiple zero factors without a comparison-selector opt-in or division by an
+input. Native execution is limited here to the existing materializing CPU FP64
+contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
+explicitly rejected. Higher derivatives, scientific endpoints and performance
+are outside this slice. Standard eager `prod` behavior is unchanged.
+
+The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
+The compiler continues to report `array_api_version=None`; the public eager
+namespace's existing standard discovery does not qualify capture conformance.
+
 ## Generic native molecular method sources
 
 Use `xp.MolecularModel` to connect any **existing, supported** native

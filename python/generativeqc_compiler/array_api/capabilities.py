@@ -47,6 +47,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "prod",
         "max",
         "min",
     ),
@@ -116,6 +117,7 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "prod",
         "max",
         "min",
         "reshape_explicit_indices",
@@ -170,6 +172,12 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "prod": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+        "keepdims": "bool; generic-arrays-only",
+        "dtype": "None|same-input-dtype; conversion-unsupported",
+        "capture": "finite-generic-real-only; empty-product-one; static-graph-budget",
+    },
     **{
         name: {
             "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
@@ -262,6 +270,7 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "prod": {"ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in"},
     **{
         name: {
             "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
