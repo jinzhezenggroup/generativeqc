@@ -609,30 +609,31 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
 
 
 @pytest.mark.parametrize(
-    "variable",
+    "variable,value",
     [
-        "GENERATIVEQC_FINAL_FOCK_REBUILD",
-        "GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING",
-        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
-        "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
-        "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
-        "GENERATIVEQC_CANONICAL_RSH_VALUES",
-        "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD",
+        ("GENERATIVEQC_FINAL_FOCK_REBUILD", "1"),
+        ("GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING", "1"),
+        ("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "1"),
+        ("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "1"),
+        ("GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION", "1"),
+        ("GENERATIVEQC_CANONICAL_RSH_VALUES", "1"),
+        ("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1"),
+        ("GENERATIVEQC_DF_COULOMB_RESPONSE", "slices"),
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(
-    tmp_path: typing.Any, monkeypatch: typing.Any, variable: typing.Any
+    tmp_path: typing.Any, monkeypatch: typing.Any, variable: str, value: str
 ) -> None:
     path = tmp_path / "state"
     monkeypatch.delenv(variable, raising=False)
     save(path)
-    monkeypatch.setenv(variable, "1")
+    monkeypatch.setenv(variable, value)
     with calc().prepare_batch([H2]) as target:
         with pytest.raises(CheckpointError, match="numerical controls"):
             target.load_checkpoint(path)
         report = target.load_checkpoint(path, allow_warm=True)
         assert report["items"][0]["compatibility"] == "warm_start_compatible"
-        assert os.environ[variable] == "1"
+        assert os.environ[variable] == value
         target.save_checkpoint(tmp_path / "reexport")
     source = inspect_checkpoint(tmp_path / "reexport").items[0]
     assert source["controls"]["runtime_policy"][variable] is None

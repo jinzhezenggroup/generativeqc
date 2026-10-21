@@ -35,8 +35,8 @@ extern "C" int df_raw_coulomb_response_probe(std::size_t n, std::size_t a, std::
                                              std::size_t tile, const double* raw,
                                              const double* densities, const double* coefficients,
                                              const double* eigenvectors, const double* eigenvalues,
-                                             bool full_rank, bool exchange, double* bar_a,
-                                             double* bar_m, char* message,
+                                             bool full_rank, bool exchange, bool batched,
+                                             double* bar_a, double* bar_m, char* message,
                                              std::size_t message_size) noexcept {
   using namespace generativeqc;
   try {
@@ -49,6 +49,13 @@ extern "C" int df_raw_coulomb_response_probe(std::size_t n, std::size_t a, std::
       throw std::runtime_error("response probe BLAS preparation failed");
     const auto matrix = n * n;
     const auto* device_raw = owner.allocate(a * matrix, raw);
+    // The production panel ABI is pair-major, unlike the independent oracle's
+    // auxiliary-major input. Keep both layouts immutable while checking ragged
+    // reads; the callback must never borrow the response's live charge vectors.
+    std::vector<double> pair_major(a * matrix);
+    for (std::size_t ij = 0; ij < matrix; ++ij)
+      for (std::size_t q = 0; q < a; ++q) pair_major[ij * a + q] = raw[q * matrix + ij];
+    const auto* device_pair_raw = owner.allocate(a * matrix, pair_major.data());
     const auto* device_density = owner.allocate(terms * matrix, densities);
     const scf::CudaDfMetricView metric{nullptr,
                                        owner.allocate(a * a, eigenvectors),
@@ -60,6 +67,15 @@ extern "C" int df_raw_coulomb_response_probe(std::size_t n, std::size_t a, std::
     std::vector<scf::DensityFittingDensityResponse> response;
     for (std::size_t t = 0; t < terms; ++t)
       response.push_back({{densities + t * matrix, matrix}, coefficients[t], exchange ? .25 : 0.0});
+    std::function<void(std::size_t, std::size_t, double*)> panel_reader;
+    if (batched)
+      panel_reader = [&](std::size_t begin, std::size_t count, double* output) {
+        if (!count || count > tile || begin > a || count > a - begin)
+          throw std::runtime_error("raw panel exceeds its admitted bounds");
+        check(cudaMemcpy2DAsync(output, count * sizeof(double), device_pair_raw + begin,
+                                a * sizeof(double), count * sizeof(double), matrix,
+                                cudaMemcpyDeviceToDevice, owner.stream));
+      };
     const auto error = scf::contract_cuda_df_response_weights(
         n, a, response, device_density, metric, tile, workspace, owner.stream, owner.blas, false,
         true,
@@ -81,7 +97,7 @@ extern "C" int df_raw_coulomb_response_probe(std::size_t n, std::size_t a, std::
                                   owner.stream));
           }
         },
-        nullptr, {}, false, {}, 256, {}, false, nullptr, nullptr, true);
+        nullptr, {}, false, {}, 256, {}, false, nullptr, nullptr, true, panel_reader);
     check(cudaStreamSynchronize(owner.stream));
     return static_cast<int>(error);
   } catch (const std::exception& error) {

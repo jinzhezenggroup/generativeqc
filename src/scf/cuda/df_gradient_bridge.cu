@@ -1689,8 +1689,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
         throw std::invalid_argument("unknown DF response algebra (use scalar or blas)");
       const char* coulomb_control = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
       const std::string_view coulomb_policy = coulomb_control ? coulomb_control : "auto";
-      if (coulomb_policy != "auto" && coulomb_policy != "panels")
-        throw std::invalid_argument("unknown DF Coulomb response (use auto or panels)");
+      if (coulomb_policy != "auto" && coulomb_policy != "panels" && coulomb_policy != "slices")
+        throw std::invalid_argument("unknown DF Coulomb response (use auto, panels or slices)");
       if (borrowed && (algebra != "blas" || serial_dot || gradient_copies != 1))
         throw std::invalid_argument(
             "resident JK scratch requires BLAS response without serial/scatter probes");
@@ -1779,10 +1779,24 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // diagnostics on their existing independently qualified paths.
       const bool raw_coulomb = source && device_metric->full_rank && !borrowed && !owned_occupied &&
                                !whitened && !single_fitted_tensor && !packed_pairs &&
-                               coulomb_policy == "auto" && algebra == "blas" && !serial_dot &&
+                               coulomb_policy != "panels" && algebra == "blas" && !serial_dot &&
                                std::all_of(terms.begin(), terms.end(), [](const auto& term) {
                                  return term.exchange_coefficient == 0;
                                });
+      std::function<void(std::size_t, std::size_t, double*)> raw_coulomb_reader;
+      if (raw_coulomb && coulomb_policy != "slices") {
+        // The response owns a tile-sized weight interval that is dead during
+        // charge preparation. Emit the source's native pair-major panel there;
+        // the charge GEMM consumes it before either the next read or W emission.
+        raw_coulomb_reader = [&](std::size_t begin, std::size_t count, double* values) {
+          const auto status = generate_cuda_density_fitting_raw_tile(
+              source, source_index, 0, n * n, begin, count, -1, stream_handle, values, detail);
+          if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+          if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+          arena.stats.recomputed_value_bytes += n * n * count * sizeof(double);
+          arena.stats.value_slices += count;
+        };
+      }
       if (whitened && !borrowed && !owned_occupied) {
         // The forward plan already owns this immutable tensor. Reading it is
         // an explicit borrow, not extra response allocation or raw regeneration.
@@ -2072,8 +2086,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
           packed_pairs ? std::span<const std::int64_t>(shell_x->offsets)
                        : std::span<const std::int64_t>{},
           packed_block_rows, read_fitted, single_fitted_tensor,
-          owned_occupied ? &owned_buffers : nullptr, coulomb_policy == "auto" ? whitened : nullptr,
-          raw_coulomb));
+          owned_occupied ? &owned_buffers : nullptr,
+          coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

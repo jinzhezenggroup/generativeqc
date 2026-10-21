@@ -564,7 +564,8 @@
         "hf-runtime:GENERATIVEQC_DF_DIIS_DOTS",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_STORAGE",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_SPACE",
-        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC"
+        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC",
+        "hf-runtime:GENERATIVEQC_DF_COULOMB_RESPONSE"
       ],
       "owner_issues": [
         404,
