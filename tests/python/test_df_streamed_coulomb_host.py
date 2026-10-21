@@ -311,6 +311,7 @@ def streamed_probe(
     # Dispatch dependencies outside this test's scope fail loudly if selected.
     # Their real signatures preserve the production call contract.
     for name in (
+        "contract_raw_coulomb_response",
         "contract_retained_coulomb_response",
         "contract_occupied_response",
         "fit_full_tensor_in_place",
