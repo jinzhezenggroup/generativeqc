@@ -89,6 +89,21 @@ for Cartesian/spherical PBE, r2SCAN, PBE0 and UKS water cation, including
 explicit tighter E/D=1e-12/1e-10 tolerances and frozen warm replay. The
 expanded host lifecycle/final-validation/inventory suite passed 201 tests.
 
+After rebasing onto master `90417ba61`, v3 rebuilt matching core and all
+stationary AOT libraries/manifests from clean commit
+`8b96ac432fb6f89170bc6f855aa72b4231736e2a`. Core SHA-256 is
+`0228e9e65ef067838b107fa207d8c2a2ea030c06cb8e3e585bca7329c598d8b7`.
+Twelve further complete populations / 48 E/F calls cover PBE/PBE0/r2SCAN
+Direct default/rollback, PBE/PBE0 DF at 3/96 atoms, Fast PBE0 and the
+retained M06-2X/3 failure. Eleven populations qualify; the same pre-existing
+M06-2X grid error remains. PBE0 cold is 40.801 -> 38.726 s, 15 -> 14
+iterations; PBE is 27.223 -> 26.908 s, 15 -> 14. Treat v2 and v3 as separate
+timing populations, not interchangeable observations. The compact
+[qualification evidence](../../../../benchmarks/results/ks-final-gate-20261022/qualification.json.xz)
+keeps every v2/v3 sample's timing, work, energy, forces, numerical gates,
+controls and full receipt hashes, including failures and slower results.
+Full original receipts and scripts remain in ignored artifacts and n1.
+
 ## Revisit when
 
 Broader admission requires independent endpoint, geometry, explicit-tolerance,
