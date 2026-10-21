@@ -5,12 +5,13 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
 #include "molecule/basis.hpp"
-#include "scf/cuda/df_md_j.cuh"
-#include "scf/cuda/df_md_layout.hpp"
+#include "runtime/resource_ledger.hpp"
+#include "scf/cuda/df_md_owner.hpp"
 
 using namespace generativeqc;
 using namespace generativeqc::scf::cuda_execution;
@@ -83,45 +84,28 @@ struct DeviceOwner {
   }
 };
 
-struct Prepared {
-  DfMdView view;
-  std::array<std::size_t, 8> offsets{};
+/** Inject real allocation admission failures without exhausting the GPU. */
+struct LedgerScope {
+  std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+  std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+      std::make_shared<runtime::DeviceResourceLedger>()};
+  explicit LedgerScope(std::size_t limit) {
+    ledger->device = 0;
+    ledger->limit = limit;
+    runtime::active_device_resource_ledger = ledger;
+  }
+  ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
 };
 
-Prepared prepare(DeviceOwner& owner, const core::System& system, bool auxiliary) {
-  const auto layout = make_df_md_layout(system, auxiliary, 16U << 20, 16U << 20);
-  const auto& primitives = layout.primitives;
-  Prepared result;
-  result.offsets = layout.offsets;
-  result.view.primitives = owner.upload(primitives);
-  result.view.first_aos = result.view.second_aos = owner.upload(layout.aos);
-  if (auxiliary) {
-    DfMdAo unit;
-    unit.count = 1;
-    unit.coefficients[0] = 1;
-    result.view.first_aos = owner.upload(std::vector<DfMdAo>{unit});
+/** Graphs must retire before their captured native owner and borrowed stream. */
+struct GraphOwner {
+  cudaGraph_t graph{};
+  cudaGraphExec_t executable{};
+  ~GraphOwner() {
+    if (executable) (void)cudaGraphExecDestroy(executable);
+    if (graph) (void)cudaGraphDestroy(graph);
   }
-  result.view.count = primitives.size();
-  result.view.nbf = layout.aos.size();
-  result.view.auxiliary = auxiliary;
-  result.view.transforms = owner.allocate<double>(layout.transform_elements);
-  result.view.density = owner.allocate<double>(layout.hermite_elements);
-  result.view.potential = owner.allocate<double>(layout.hermite_elements);
-  df_md_prepare_transforms<<<primitives.size(), 128, 0, owner.stream>>>(result.view);
-  check(cudaPeekAtLastError());
-  return result;
-}
-
-template <unsigned P, unsigned A>
-void contract_class(const Prepared& pair, const Prepared& auxiliary, cudaStream_t stream) {
-  const auto p = pair.offsets[P], np = pair.offsets[P + 1] - p;
-  const auto a = auxiliary.offsets[A], na = auxiliary.offsets[A + 1] - a;
-  if (!np || !na) return;
-  df_md_contract<P, A, true><<<na, 128, 0, stream>>>(pair.view, p, np, auxiliary.view, a, na);
-  check(cudaPeekAtLastError());
-  df_md_contract<P, A, false><<<np, 128, 0, stream>>>(pair.view, p, np, auxiliary.view, a, na);
-  check(cudaPeekAtLastError());
-}
+};
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -129,8 +113,47 @@ int main(int argc, char** argv) {
   try {
     const auto orbital = read_system(), auxiliary = read_system();
     DeviceOwner owner;
-    const auto pairs = prepare(owner, orbital, false), aux = prepare(owner, auxiliary, true);
-    const auto n = pairs.view.nbf, a = aux.view.nbf;
+    CudaDfMdOwner* raw = nullptr;
+    CudaDfMdResources resources;
+    std::string detail;
+    if (create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 0, 16U << 20, &raw, resources,
+                                detail) != GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
+        raw)
+      throw std::runtime_error("zero optional budget did not refuse transactionally");
+    auto displaced = auxiliary;
+    displaced.atoms[0].position[0] += 0.1;
+    if (create_cuda_df_md_owner(0, owner.stream, orbital, displaced, 16U << 20, 16U << 20, &raw,
+                                resources, detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
+        raw)
+      throw std::runtime_error("mismatched source geometry was admitted");
+    auto status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
+                                          &raw, resources, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    const auto admitted_bytes = resources.device_bytes;
+    destroy_cuda_df_md_owner(raw);
+    raw = nullptr;
+    LedgerScope ledger(admitted_bytes - 1);
+    status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
+                                     &raw, resources, detail);
+    if (status != GENERATIVEQC_STATUS_OUT_OF_MEMORY || raw || ledger.ledger->live ||
+        !ledger.ledger->allocations || !ledger.ledger->rejected) {
+      destroy_cuda_df_md_owner(raw);
+      throw std::runtime_error("partial optional allocation failure did not roll back");
+    }
+    ledger.ledger->limit = admitted_bytes;
+    status = create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
+                                     &raw, resources, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    std::unique_ptr<CudaDfMdOwner, decltype(&destroy_cuda_df_md_owner)> prepared(
+        raw, destroy_cuda_df_md_owner);
+    if (ledger.ledger->live != resources.device_bytes ||
+        ledger.ledger->peak > resources.device_bytes)
+      throw std::runtime_error("reported optional storage differs from the actual ledger");
+    const auto allocations_before_replay = ledger.ledger->allocations;
+    const auto n = resources.nbf, a = resources.naux;
+    if (!resources.device_bytes || resources.device_bytes > (16U << 20) ||
+        resources.host_peak_bytes > (16U << 20))
+      throw std::runtime_error("optional owner escaped its reported storage budget");
     std::vector<double> density(n * n), potential(a);
     for (auto& value : density) std::cin >> value;
     for (auto& value : potential) std::cin >> value;
@@ -139,6 +162,24 @@ int main(int argc, char** argv) {
     auto* v = owner.allocate<double>(a);
     auto* j = owner.allocate<double>(n * n);
     auto* rho = owner.allocate<double>(a);
+    if (cuda_df_md_charge(raw, d, d) != cudaErrorInvalidValue ||
+        cuda_df_md_project(raw, nullptr, j) != cudaErrorInvalidValue)
+      throw std::runtime_error("invalid replay buffers were not refused");
+    GraphOwner graph;
+    check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
+    CudaDfMdOwner* forbidden = nullptr;
+    CudaDfMdResources unused;
+    if (create_cuda_df_md_owner(0, owner.stream, orbital, auxiliary, 16U << 20, 16U << 20,
+                                &forbidden, unused,
+                                detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
+        forbidden)
+      throw std::runtime_error("owner preparation entered a captured stream");
+    // Projection deliberately precedes charge: neither call may depend on a
+    // previous invocation's Hermite input or stale intermediate potential.
+    check(cuda_df_md_project(raw, v, j));
+    check(cuda_df_md_charge(raw, d, rho));
+    check(cudaStreamEndCapture(owner.stream, &graph.graph));
+    check(cudaGraphInstantiate(&graph.executable, graph.graph, nullptr, nullptr, 0));
     std::ofstream output(argv[1], std::ios::binary);
     for (unsigned replay = 0; replay < 3; ++replay) {
       auto current_d = density, current_v = potential;
@@ -150,32 +191,12 @@ int main(int argc, char** argv) {
                             owner.stream));
       check(cudaMemcpyAsync(v, current_v.data(), a * sizeof(double), cudaMemcpyHostToDevice,
                             owner.stream));
-      df_md_precontract<<<pairs.view.count, 128, 0, owner.stream>>>(pairs.view, d);
-      check(cudaPeekAtLastError());
-      df_md_precontract<<<aux.view.count, 128, 0, owner.stream>>>(aux.view, v);
-      check(cudaPeekAtLastError());
-#define CLASS(P, A) contract_class<P, A>(pairs, aux, owner.stream)
-#define ROW(P) \
-  CLASS(P, 0); \
-  CLASS(P, 1); \
-  CLASS(P, 2); \
-  CLASS(P, 3); \
-  CLASS(P, 4)
-      ROW(0);
-      ROW(1);
-      ROW(2);
-      ROW(3);
-      ROW(4);
-      ROW(5);
-      ROW(6);
-#undef ROW
-#undef CLASS
-      check(cudaMemsetAsync(j, 0, n * n * sizeof(double), owner.stream));
-      check(cudaMemsetAsync(rho, 0, a * sizeof(double), owner.stream));
-      df_md_project<<<pairs.view.count, 128, 0, owner.stream>>>(pairs.view, j);
-      check(cudaPeekAtLastError());
-      df_md_project<<<aux.view.count, 128, 0, owner.stream>>>(aux.view, rho);
-      check(cudaPeekAtLastError());
+      if (replay == 0) {
+        check(cuda_df_md_project(raw, v, j));
+        check(cuda_df_md_charge(raw, d, rho));
+      } else {
+        check(cudaGraphLaunch(graph.executable, owner.stream));
+      }
       check(cudaMemcpyAsync(current_d.data(), j, n * n * sizeof(double), cudaMemcpyDeviceToHost,
                             owner.stream));
       check(cudaMemcpyAsync(current_v.data(), rho, a * sizeof(double), cudaMemcpyDeviceToHost,
@@ -185,9 +206,18 @@ int main(int argc, char** argv) {
       output.write(reinterpret_cast<const char*>(current_d.data()), n * n * sizeof(double));
       if (!output) throw std::runtime_error("cannot write probe output");
     }
+    if (ledger.ledger->allocations != allocations_before_replay)
+      throw std::runtime_error("charge/J replay allocated native device storage");
+    check(cudaGraphExecDestroy(graph.executable));
+    graph.executable = nullptr;
+    check(cudaGraphDestroy(graph.graph));
+    graph.graph = nullptr;
+    prepared.reset();
+    if (ledger.ledger->live) throw std::runtime_error("DF Hermite owner leaked tracked storage");
     std::cout << "public_aos=" << n << " auxiliary_aos=" << a
-              << " orbital_primitive_pairs=" << pairs.view.count
-              << " auxiliary_primitives=" << aux.view.count << '\n';
+              << " orbital_primitive_pairs=" << resources.orbital_primitives
+              << " auxiliary_primitives=" << resources.auxiliary_primitives
+              << " owner_device_bytes=" << resources.device_bytes << '\n';
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

@@ -1,6 +1,7 @@
 """Independent device gates for the proposed tensor-free DF J contractions.
 
 This private seam qualifies public-AO charge/projection and replay reset only.
+It also exercises bounded owner setup and changed-density graph replay.
 It is not a production SCF, metric-policy, force, or endpoint performance gate.
 Every real-device execution requires an explicitly enabled finite Slurm job.
 """
@@ -40,7 +41,10 @@ def df_md_probe(tmp_path_factory: Any, required_native_cxx: NativeCxx) -> Path:
     cuda = Path(os.environ["CUDA_PATH"])
     compiler = replace(required_native_cxx, compiler=str(cuda / "bin/nvcc"))
     return compiler.build_executable(
-        [ROOT / "tests/native/df_md_j_probe.cu"],
+        [
+            ROOT / "tests/native/df_md_j_probe.cu",
+            ROOT / "src/scf/cuda/df_md_owner.cu",
+        ],
         folder / "probe",
         compile_args=(
             "-std=c++20",

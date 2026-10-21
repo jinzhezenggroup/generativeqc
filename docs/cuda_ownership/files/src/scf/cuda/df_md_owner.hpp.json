@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_md_owner.hpp",
+  "role": "runtime",
+  "subsystem": "df_values",
+  "reason": "Private, bounded single-stream ownership and launch adapter for the proposed compiler-owned DF Hermite charge/J consumer. Counts and budgets precede device allocation; transactional preparation, caller-owned vector inputs, capture-safe replay, and stream-drained teardown are qualified separately. No production admission or metric/force policy is selected here.",
+  "regions": []
+}

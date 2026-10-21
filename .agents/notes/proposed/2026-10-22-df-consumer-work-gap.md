@@ -175,3 +175,47 @@ other runtime storage. Factoring E by axis would reduce its logical storage to
 49,020,288 bytes but is not implemented or timed. These are topology/capacity
 counts, not measured executed recurrence work. Preserve the distinction from
 the reference's screened decontracted-shell census.
+
+## Qualified bounded private owner
+
+The follow-up `df_md_owner.hpp/.cu` provides transactional preparation and
+allocation-free charge/projection methods on one borrowed stream. It checks the
+combined orbital/auxiliary host and device budgets before GPU allocation,
+counts every resident E/H/descriptor/AO buffer, rejects creation during capture,
+checks the current device, rejects null or identical input/output pointers,
+and drains before freeing partial or completed storage. Full input/output range
+disjointness remains the caller's contract. The caller must retire captured graphs
+before destroying the owner and keep the borrowed stream alive. Public metric
+policy, source identity/stream handoff, SCF admission and force integration are
+still absent. No default route or environment selector calls this factory.
+
+`df-md-j-owner-v1/` and `df-md-j-owner-v2/` each pass all 178 libcint populations
+and 534 stream/graph replays. Projection runs before charge to prove it does not
+depend on stale input or a previous charge call. v2 additionally forces a real
+ledger rejection after partial allocation, verifies zero surviving bytes, then
+admits at exactly the reported device footprint. Captured changed/zero inputs
+allocate no native device storage, and destroying the owner returns ledger live
+bytes to zero. v2's maximum first/replay errors remain 6.52e-13 / 7.99e-13.
+
+`df-md-j-owner-sanitizers-v1/` applies memcheck to all 178 v2 populations and
+racecheck to all 18 geometry populations: zero errors/hazards, including partial
+allocation rollback and graph reuse. These are still charge/projection and
+lifecycle gates, not complete molecular energy/force or performance evidence.
+The new owner is not yet in the core CMake source registration; the tests compile
+its exact translation unit with sccache and link only canonical basis helpers
+from the frozen core described above. v2's complete source-input manifest names
+base commit `17e393183` plus the recorded owner changes. v1 retained the earlier
+campaign base in its metadata; both inventories pin each actual compiled input.
+
+## Force work within the raw v3 diagnostic
+
+Disjoint regions further partition each ~58.4 s force response: the raw Coulomb
+charge/potential takes ~24.925 s, and 24 three-center derivative contractions
+take ~32.45 s host / ~32.33 s device in total. The trace records one dense raw
+source pass with 64,547,192,832 bytes, 24 charge panels and the same number of
+three-center derivative weight bytes. See the ignored raw worktree's
+`df-raw-shell-v3/force-work-summary.json`. These are children of the response
+region and must not be added to their parent. A packed charge consumer or a
+properly authenticated final-potential lease may remove redundant charge work;
+neither removes the remaining derivative contraction bottleneck. No reuse may
+assume that a canonical final density is identical to an earlier proposal.
