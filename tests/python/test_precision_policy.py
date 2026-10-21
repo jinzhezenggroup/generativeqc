@@ -1304,9 +1304,16 @@ def test_nonlocal_fast_uses_real_strict_scf_policy(backend: SimpleNamespace) -> 
     )
 
 
-@pytest.mark.parametrize("fitted", (False, True))
+@pytest.mark.parametrize(
+    "electronic",
+    (
+        "r2scan-rks-budget-fp32-v1",
+        "r2scan-df-rks-budget-fp32-v1",
+        "r2scan-df-rks-treutler-budget-fp32-v1",
+    ),
+)
 def test_composite_gradient_admission_requires_all_canonical_correction_sources(
-    fitted: bool,
+    electronic: str,
 ) -> None:
     """A complete electronic record alone cannot certify another corrected graph."""
     from generativeqc.dispersion import (
@@ -1321,9 +1328,6 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     gcp = GCPCorrectionResult(0, 0.0, gradient, "cpu", "", "native", "graph")
     correction = R2SCAN3CCorrectionResult(0, 0.0, gradient, "cuda+cpu", "", d4, gcp)
     calculator = SimpleNamespace(_dispersion_method_ir=resolve_method("R2SCAN-3c"))
-    electronic = (
-        "r2scan-df-rks-budget-fp32-v1" if fitted else "r2scan-rks-budget-fp32-v1"
-    )
     assert implementation._complete_gradient_admission(
         calculator, result(dispersion=correction), electronic
     ) == electronic.replace("r2scan-", "r2scan-3c-", 1)

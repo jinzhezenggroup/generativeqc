@@ -127,6 +127,52 @@ def test_stale_provider_is_not_optional_capability(model: Any) -> None:
         fitted_gradient_admission(calculator, state, basis)
 
 
+@pytest.mark.parametrize("name", ("PBE", "PBE0", "B3LYP", "R2SCAN", "M06-2X"))
+@pytest.mark.parametrize(("nao", "natom"), ((96, 12), (136, 12), (1088, 96)))
+def test_default_grid_has_separate_complete_model_admission(
+    model: Any, name: str, nao: int, natom: int
+) -> None:
+    """The default-grid domain does not borrow the legacy tensor-grid proof."""
+    calculator, state, basis, provider = model
+    source = state._source
+    object.__setattr__(source, "grid_spec", GridSpec.treutler(level=3))
+    object.__setattr__(source, "method_ir", resolve_method(name))
+    basis.nao, basis.natom = nao, natom
+    if name in ("PBE", "R2SCAN"):
+        object.__setattr__(source, "coefficients", (1.0, 1.0, 0.0))
+        provider.value = ("density-fitted", None, 1e-10)
+    assert fitted_gradient_admission(calculator, state, basis) == (
+        f"{name.lower()}-df-rks-treutler-budget-fp32-v1"
+    )
+    if nao > 96:
+        object.__setattr__(source, "grid_spec", GridSpec(48, 16, 32))
+        assert fitted_gradient_admission(calculator, state, basis) is None
+
+
+@pytest.mark.parametrize(
+    ("nao", "natom", "grid"),
+    (
+        (95, 12, GridSpec.treutler()),
+        (1201, 96, GridSpec.treutler()),
+        (1088, 97, GridSpec.treutler()),
+        (1088, 96, GridSpec.treutler(level=4)),
+    ),
+)
+def test_default_grid_keeps_explicit_qualification_boundaries(
+    model: Any, nao: int, natom: int, grid: GridSpec
+) -> None:
+    calculator, state, basis, _ = model
+    object.__setattr__(state._source, "grid_spec", grid)
+    basis.nao, basis.natom = nao, natom
+    assert fitted_gradient_admission(calculator, state, basis) is None
+
+
+def test_default_grid_does_not_inspect_an_untrusted_source(model: Any) -> None:
+    calculator, state, basis, _ = model
+    state._source = SimpleNamespace()
+    assert fitted_gradient_admission(calculator, state, basis) is None
+
+
 def test_canonical_3c_requires_both_electronic_and_correction_models(
     model: Any,
 ) -> None:

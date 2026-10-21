@@ -188,8 +188,14 @@ only its electronic derivative work is narrowed. Both corrections are included
 in the returned energy/forces and endpoint timing. This is not all-GPU 3c.
 
 CUDA density-fitted PBE/PBE0/B3LYP/r2SCAN/M06-2X RKS also select mixed semilocal
-geometry with 24–96 AOs, 2–12 atoms, orbital shells through d, and explicit
-`GridSpec(24, 8, 16)` or `GridSpec(48, 16, 32)` (unit radii, three Becke passes).
+geometry with orbital shells through d. Default Treutler/Lebedev/NWChem
+level-3 grids use a separately qualified domain of 96–1200 AOs and 2–96 atoms;
+smaller default-grid inputs keep the strict path because conversion costs do
+not reliably amortize. The original explicit `GridSpec(24, 8, 16)` and
+`GridSpec(48, 16, 32)` domain remains 24–96 AOs and 2–12 atoms (unit radii,
+three Becke passes). The default-grid record is
+`<method>-df-rks-treutler-budget-fp32-v1`; legacy tensor grids retain their
+original qualification identifiers.
 Canonical r2SCAN-3c DF uses the same domain with its defining def2-mTZVPP basis
 and unchanged FP64 D4/native CPU gCP corrections. Its electronic precision
 record identifies r2SCAN DF; complete-model qualification also requires both

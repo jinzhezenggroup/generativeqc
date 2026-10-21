@@ -544,7 +544,12 @@ def _complete_gradient_admission(
 
     correction = result.dispersion
     if (
-        electronic in ("r2scan-rks-budget-fp32-v1", "r2scan-df-rks-budget-fp32-v1")
+        electronic
+        in (
+            "r2scan-rks-budget-fp32-v1",
+            "r2scan-df-rks-budget-fp32-v1",
+            "r2scan-df-rks-treutler-budget-fp32-v1",
+        )
         and correction_model.identity
         == resolve_method("R2SCAN-3c", spin="unpolarized").identity
         and isinstance(correction, R2SCAN3CCorrectionResult)

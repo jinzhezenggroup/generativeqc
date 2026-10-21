@@ -14,7 +14,8 @@ from .force_aware_numerics import TargetErrorBudget
 from .profiles import canonical_hash
 
 DF_GRADIENT_QUALIFICATIONS = frozenset(
-    f"{name}-df-rks-budget-fp32-v1"
+    f"{name}-df-rks{domain}-budget-fp32-v1"
+    for domain in ("", "-treutler")
     for name in ("pbe", "pbe0", "b3lyp", "r2scan", "m06-2x")
 )
 
@@ -51,9 +52,20 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
     ):
         return None
     source = state._source
+    if type(source) is not NativeKsSnapshot:
+        return None
+    default_grid = source.grid_spec == GridSpec.treutler(level=3)
+    # Default Treutler grids have separate complete-model qualification. Keep
+    # legacy tensor-grid limits distinct; a new grid label never widens those.
+    # Below 96 AOs, complete default-grid endpoints do not reliably amortize
+    # conversion/setup costs. This profitability floor is not a numerical gate.
+    qualified_shape = (
+        96 <= basis.nao <= 1200 and 2 <= basis.natom <= 96
+        if default_grid
+        else 24 <= basis.nao <= 96 and 2 <= basis.natom <= 12
+    )
     if (
-        type(source) is not NativeKsSnapshot
-        or source.backend != "cuda"
+        source.backend != "cuda"
         or source.hamiltonian != "all-electron"
         or state.identity.spin != "unpolarized"
         or calculator._precision_mode != _native.PRECISION_FP64
@@ -61,10 +73,12 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
         or calculator._energy_tolerance > 1e-10
         or calculator._density_tolerance > 1e-8
         or calculator._screening_tolerance > 1e-12
-        or not 24 <= basis.nao <= 96
-        or not 2 <= basis.natom <= 12
+        or not qualified_shape
         or any(shell.angular_momentum > 2 for shell in basis.shells)
-        or source.grid_spec not in (GridSpec(24, 8, 16), GridSpec(48, 16, 32))
+        or (
+            not default_grid
+            and source.grid_spec not in (GridSpec(24, 8, 16), GridSpec(48, 16, 32))
+        )
     ):
         return None
     qualification = _qualified_models().get(source.method_ir.identity)
@@ -91,7 +105,11 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
         1e-10,
     ):
         return None
-    return qualification
+    return (
+        qualification.replace("-df-rks-", "-df-rks-treutler-")
+        if default_grid
+        else qualification
+    )
 
 
 def fitted_gradient_precision(qualification: str, result: Any) -> dict:
