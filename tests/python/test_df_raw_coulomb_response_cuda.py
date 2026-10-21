@@ -51,7 +51,7 @@ def response_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
     call.argtypes = (
         [ct.c_size_t] * 4
         + [dp] * 5
-        + [ct.c_bool] * 2
+        + [ct.c_bool] * 3
         + [dp] * 2
         + [ct.c_void_p, ct.c_size_t]
     )
@@ -62,11 +62,13 @@ def response_probe(tmp_path_factory: Any, native_cxx: NativeCxx) -> Any:
 @pytest.mark.parametrize("condition", (1e2, 1e6, 1e10))
 @pytest.mark.parametrize("tile", (1, 3, 11))
 @pytest.mark.parametrize("signed", (False, True))
+@pytest.mark.parametrize("batched", (False, True), ids=("slices", "panels"))
 def test_signed_multidensity_adjoint_and_rank_refusal(
     response_probe: Any,
     condition: float,
     tile: int,
     signed: bool,
+    batched: bool,
 ) -> None:
     """Ragged/full panels and ill-conditioned metrics retain signed terms.
 
@@ -100,6 +102,7 @@ def test_signed_multidensity_adjoint_and_rank_refusal(
         *pointers,
         True,
         False,
+        batched,
         bar_a.ctypes.data_as(dp),
         bar_m.ctypes.data_as(dp),
         error,
@@ -135,6 +138,7 @@ def test_signed_multidensity_adjoint_and_rank_refusal(
             *pointers,
             full_rank,
             exchange,
+            batched,
             bar_a.ctypes.data_as(dp),
             bar_m.ctypes.data_as(dp),
             error,
@@ -178,6 +182,9 @@ def test_streamed_pure_coulomb_complete_endpoint(
         assert counts.get("response_raw_coulomb_source_passes") == 1
         assert counts["raw_value_bytes"] == row["nbf"] ** 2 * row["naux"] * 8
         assert not counts.get("response_fitted_projection_flops", 0)
+        # Confirm bounded source batching was exercised by this molecular
+        # owner, without pinning a planner-specific tile or exact call count.
+        assert 0 < counts["response_raw_coulomb_source_panels"] < row["naux"]
 
 
 def test_raw_coulomb_geometry_rebuild(monkeypatch: Any, tmp_path: Path) -> None:

@@ -189,11 +189,16 @@ upload path. This is therefore not a zero-upload resident whole-force path.
 Full-rank J-only response contracts the resident whitened factor once with the
 folded density, applies its symmetric metric root to that charge, and emits
 bounded three-center and metric cotangents. It does not repeatedly refit AO
-panels or construct exchange-style AO Gram matrices. Rank-deficient metrics,
-mixed J/K terms and diagnostic algebra retain their general response routes.
-`GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects the original bounded-panel
-route for qualification; the default is `auto`. Both preserve the same metric
-gauge, auxiliary-center response and derivative consumer.
+panels or construct exchange-style AO Gram matrices. When only the raw source
+is available, it instead reads bounded pair-major panels into existing response
+scratch, contracts their density charges, then applies the metric inverse in
+eigenvector order. This batches source reads without extra storage or a tensor
+transpose. Rank-deficient metrics, mixed J/K terms and diagnostic algebra retain
+their general response routes. `GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects
+the original fitted-panel route for qualification; `slices` retains individual
+auxiliary reads for source-only J. The default is `auto`. All preserve the same
+metric gauge, auxiliary-center response and derivative consumer. The selection
+is recorded in resource and restart identities.
 
 The known native DF snapshot provider separately bounds its additional paired
 one-electron/publication storage; DF response scratch stays in its independent

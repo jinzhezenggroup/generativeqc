@@ -78,6 +78,11 @@ std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, st
  * auxiliary slice once, contract density before the metric inverse, and keep
  * eigendirections until division by eigenvalues. It excludes exchange and
  * borrowed/fitted tensors; rank truncation retains its spectral response.
+ * Its optional read_raw_panels(begin,count,output) produces pair-major raw A
+ * with count contiguous auxiliary columns per AO pair, on the same stream.
+ * The response contracts each bounded panel directly into all density charges
+ * before reusing its ordinary weight scratch. No transpose or extra allocation
+ * is needed. Absent this callback, the single-slice reader remains available.
  */
 cudaError_t contract_cuda_df_response_weights(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
@@ -90,7 +95,8 @@ cudaError_t contract_cuda_df_response_weights(
     std::size_t packed_block_rows = 256,
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted = {},
     bool single_fitted_tensor = false, const CudaDfResponseBuffers* streamed_occupied = nullptr,
-    const CudaDfWhitenedTensorView* retained_coulomb = nullptr, bool raw_coulomb = false);
+    const CudaDfWhitenedTensorView* retained_coulomb = nullptr, bool raw_coulomb = false,
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels = {});
 
 }  // namespace generativeqc::scf
 #endif

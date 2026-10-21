@@ -416,16 +416,18 @@ static cudaError_t contract_retained_coulomb_response(
  * Apply the same factor order as streamed J: Q^T*b, divide, then Q*q.
  * Exchange is excluded because its quadratic response must retain consistent
  * inverse-applied AO factors. No explicit inverse or raw metric Gram is formed.
- * Existing response scratch owns the raw slice, two vectors and bounded W;
- * read/consume callbacks remain ordered on the supplied stream.
+ * Existing response scratch owns the raw slice, two vectors and bounded W.
+ * Before W is formed its storage may hold a complete raw panel. Contracting
+ * the source's pair-major layout directly avoids both per-auxiliary launches
+ * and a transpose. Read/consume callbacks stay ordered on the supplied stream.
  */
 static cudaError_t contract_raw_coulomb_response(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
     const double* densities, CudaDfMetricView metric, std::size_t tile, double* workspace,
     cudaStream_t stream, cublasHandle_t blas,
     const std::function<void(std::size_t, double*)>& read_values,
-    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
-        consume) {
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume,
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels) {
   const auto matrix = n * n, aa = a * a;
   auto* bar_metric = workspace + aa;
   auto* raw = workspace + 4 * aa;
@@ -439,11 +441,25 @@ static cudaError_t contract_raw_coulomb_response(
   const double one = 1, zero = 0;
   {
     runtime::cuda_trace::TraceRegion charge("raw_coulomb_charge_and_potential", stream);
-    for (std::size_t q = 0; q < a; ++q) {
-      read_values(q, raw);
-      checked(generativeqc_tensor::submit_column_gemv(
-          {blas, true, mi, static_cast<int>(terms.size()), &one, densities, mi, raw, 1, &zero,
-           potentials + q, ai}));
+    if (read_raw_panels) {
+      for (std::size_t begin = 0; begin < a; begin += tile) {
+        const auto count = std::min(tile, a - begin);
+        read_raw_panels(begin, count, weights);
+        // A[pair,Q] is column-major [Q,pair]; D[term,pair] is [pair,term].
+        // Write a short row block in the full [auxiliary,term] charge array.
+        checked(generativeqc_tensor::submit_column_gemm(
+            {blas, false, false, static_cast<int>(count), static_cast<int>(terms.size()), mi, &one,
+             weights, static_cast<int>(count), densities, mi, &zero, potentials + begin, ai}));
+        runtime::cuda_trace::trace_counter("response_raw_coulomb_source_panels", 1);
+        runtime::cuda_trace::trace_counter("response_raw_coulomb_charge_gemms", 1);
+      }
+    } else {
+      for (std::size_t q = 0; q < a; ++q) {
+        read_values(q, raw);
+        checked(generativeqc_tensor::submit_column_gemv(
+            {blas, true, mi, static_cast<int>(terms.size()), &one, densities, mi, raw, 1, &zero,
+             potentials + q, ai}));
+      }
     }
     for (std::size_t t = 0; t < terms.size(); ++t) {
       checked(generativeqc_tensor::submit_column_gemv({blas, true, ai, ai, &one,
@@ -1561,16 +1577,18 @@ cudaError_t contract_cuda_df_response_weights(
     std::span<const std::int64_t> auxiliary_shell_offsets, std::size_t packed_block_rows,
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
     bool single_fitted_tensor, const CudaDfResponseBuffers* streamed_occupied,
-    const CudaDfWhitenedTensorView* retained_coulomb, bool raw_coulomb) {
+    const CudaDfWhitenedTensorView* retained_coulomb, bool raw_coulomb,
+    const std::function<void(std::size_t, std::size_t, double*)>& read_raw_panels) {
+  if (read_raw_panels && !raw_coulomb) return cudaErrorInvalidValue;
   if (raw_coulomb) {
     if (!metric.full_rank || borrowed || streamed_occupied || single_fitted_tensor ||
-        packed_pairs || retained_coulomb || read_fitted || !read_values || !blas_products ||
-        serial_metric_dot || !std::all_of(terms.begin(), terms.end(), [](const auto& term) {
-          return term.exchange_coefficient == 0;
-        }))
+        packed_pairs || retained_coulomb || read_fitted || (!read_values && !read_raw_panels) ||
+        !blas_products || serial_metric_dot ||
+        !std::all_of(terms.begin(), terms.end(),
+                     [](const auto& term) { return term.exchange_coefficient == 0; }))
       return cudaErrorInvalidValue;
     return contract_raw_coulomb_response(n, a, terms, densities, metric, tile, workspace, stream,
-                                         blas, read_values, consume);
+                                         blas, read_values, consume, read_raw_panels);
   }
   if (retained_coulomb && !borrowed && !streamed_occupied && !single_fitted_tensor &&
       !packed_pairs && metric.full_rank && blas_products && !serial_metric_dot &&
