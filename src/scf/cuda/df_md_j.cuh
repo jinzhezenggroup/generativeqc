@@ -57,6 +57,7 @@ __global__ void df_md_prepare_transforms(DfMdView view) {
 __global__ void df_md_precontract(DfMdView view, const double* input) {
   const auto primitive = view.primitives[blockIdx.x];
   const auto hermites = df_md_count(primitive.first_angular + primitive.second_angular);
+  bool active = false;
   for (unsigned d = threadIdx.x; d < hermites; d += blockDim.x) {
     double value = 0;
     for (unsigned i = 0; i < primitive.first_count; ++i)
@@ -69,7 +70,13 @@ __global__ void df_md_precontract(DfMdView view, const double* input) {
       }
     view.density[primitive.hermite_offset + d] = value;
     view.potential[primitive.hermite_offset + d] = 0;
+    active = active || value != 0;
   }
+  // This is an exact zero test on the already produced FP64 density, not a
+  // tolerance or a changed integral cutoff. Keep NaNs active so a failure is
+  // never hidden. Every input replay overwrites the flag on the owning stream.
+  const bool any_active = __syncthreads_or(active);
+  if (threadIdx.x == 0) view.primitives[blockIdx.x].density_active = any_active;
 }
 
 /** Project one primitive's Hermite potential into a caller-cleared public
@@ -118,9 +125,12 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
   const auto count = Charge ? pair_count : auxiliary_count;
   double values[rows]{};
   for (std::size_t offset = 0; offset < count; offset += sources) {
-    const bool active = offset + lane < count;
+    bool active = offset + lane < count;
     DfMdPrimitive source{};
-    if (active) source = source_view.primitives[begin + offset + lane];
+    if (active) {
+      source = source_view.primitives[begin + offset + lane];
+      active = source.density_active;
+    }
     if (component_lane == 0) {
       scale[lane] = 0;
       if (active) {

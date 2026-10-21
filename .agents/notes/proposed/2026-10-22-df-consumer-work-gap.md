@@ -384,3 +384,14 @@ qualified stock GPU4 result, particularly cold; SCF per-iteration cost and
 Fast admission remain separate follow-ups.
 
 Core SHA-256: `069f87c91095f2799a179f93588d7d6c4fa73c2ef7c4fb3f3c2c4f634ffdcb5b`.
+
+
+Exact-zero source elision is separately qualified in `df-md-zero-source-v1`.
+The precontract kernel publishes whether any existing FP64 Hermite density
+coefficient is nonzero; every replay overwrites that flag on the same stream.
+Radial contractions skip only a completely zero source, without a numerical
+cutoff or changed screening policy. Nonfinite coefficients remain active. The
+zero/changed-input graph suite, all 178 raw J/derivative cases, 16 integrated
+force cases and integrated memcheck (16 cases) / racecheck (4 cases) pass. All eight 96-atom clean
+and trace E/F calls pass the common gates. Clean Standard is 88.237 s cold and
+17.899 s median warm; these small gains do not resolve the remaining gap.

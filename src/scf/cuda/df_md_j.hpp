@@ -25,7 +25,7 @@ struct DfMdPrimitive {
   std::size_t first_ao{}, second_ao{}, transform_offset{}, hermite_offset{}, response_offset{};
   std::size_t first_atom{}, second_atom{};
   unsigned first_count{}, second_count{}, first_angular{}, second_angular{};
-  bool same_shell{};
+  bool same_shell{}, density_active{};
   double alpha{}, beta{}, weight{};
   Vec3<double> first{}, second{};
   double exponent{};
