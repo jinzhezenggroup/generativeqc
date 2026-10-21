@@ -900,7 +900,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       --output "${GENERATIVEQC_DF_GENERATED_HEADER}"
       --policy-output "${GENERATIVEQC_DF_POLICY_HEADER}")
 
-  # The native views and compiler both admit all 4^3 s/p/d/f classes. Keep
+  # Orbital s/p/d/f and auxiliary through-g share generated shell reuse. Keep
   # stable per-class output paths; profile edits must not reshuffle units.
   set(GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/df_shells")
   set(GENERATIVEQC_DF_SHELL_SOURCES)
@@ -908,7 +908,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY}/generated_df_shell_dispatch.hpp")
   foreach(_a RANGE 0 3)
     foreach(_b RANGE 0 3)
-      foreach(_c RANGE 0 3)
+      foreach(_c RANGE 0 4)
         set(_class "${_a}${_b}${_c}")
         list(APPEND GENERATIVEQC_DF_SHELL_SOURCES
              "${GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY}/df_shell_${_class}.cu")

@@ -11,6 +11,14 @@ name requested by the caller for compatibility. The native CLI
 select arithmetic rather than these application profiles; `auto` is **not**
 an alias for Fast. Neither profile changes the molecular model.
 
+When Fast has no admitted approximation, a completed native CUDA Standard
+endpoint can return as `strict_standard_fallback` without a duplicate solve or
+prepared-owner rebuild. This requires strict arithmetic and Standard-or-tighter
+solver controls, with the default-or-looser budget and no explicit target.
+The result retains Standard's final-state checks; it does not claim measured
+observable error or mixed work. Explicit targets and tighter budgets keep their
+independent audits. Legacy fitted-HF work counters remain unknown.
+
 ## Module-selected Fast Fock
 
 Every supported native CUDA XC composition uses the same shared Direct-Fock precision
@@ -30,7 +38,9 @@ Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
 verified module-level native Fock capability permits this selection; older
 libraries, unsupported providers and tighter budgets retain strict controls.
-Pure semilocal models lower J without inventing K work. Hybrid models share the
+Pure semilocal models use generated strict J when it is faster than generic
+mixed recurrence; their admitted XC/density contractions still follow the
+budget schedule. They do not invent K work. Hybrid models share the
 same full-range K consumer, including the full-range projection of a short-/long-
 range decomposition. Compatible exact SR/LR K consumers also lower their shared
 Cartesian recurrence, keeping radial moments in FP64. VV10/rVV10 lower bounded
@@ -75,8 +85,10 @@ identity and resource-capacity checks still apply. Unsupported complete graphs
 retain their existing bounded force consumer. Relaxed SCF controls do not
 authorize mixed-gradient arithmetic or its additional resident-grid capacity.
 
-An admitted endpoint reports `qualified_budget_fock`, actual positive FP32
-`coulomb_j` and recurrence work, and consecutive final FP64 Fock checks. Positive
+An admitted endpoint reports `qualified_budget_fock` and consecutive final FP64
+Fock checks. Its ledger requires positive FP32 `coulomb_j` and recurrence work,
+or a pure semilocal graph with strict FP64 J and executed budget-selected XC or
+density contractions. Positive
 mixed `exchange_k` work is additionally required when the native full-range
 projection contains K. Separate range K contributes executed recurrence evidence;
 VV10 reports mixed pair work only after at least one FP32 pair actually executes,
@@ -93,8 +105,9 @@ FP64 audit. Numerical failures retain the failed attempt with unknown work
 counts rather than invented zeros, then use bounded strict fallback/audit solves.
 
 Optional source residency follows the existing bounded cold/size, memory and
-free-device-capacity gates; disabling residency or refusing its complete bucket
-inventory retains uncached mixed recurrence. Full/SR/LR sources share bounded
+free-device-capacity gates. Automatic range sources can retain complete angular
+buckets that fit the allowance, streaming the remaining buckets. Disabling
+residency or refusing all buckets retains uncached recurrence. Full/SR/LR sources share bounded
 angular-bucket selection; unselected FP32 buckets execute mixed recurrence
 rather than silently selecting strict arithmetic. Before strict refinement the mixed
 lease is audited and retired, then a separate FP64 source may be admitted. The
@@ -186,16 +199,16 @@ generation, one-electron/Pulay sources, DF integrals and metric response, and
 global reductions remain FP64. The direct-path AO/integral narrowing described
 below does not apply to DF. This support does not promise a speedup for every
 system or complete singlepoint.
-DF energy-only requests have no admitted mixed operator and still use the
-observable-audit fallback; they are not accelerated.
+DF energy-only requests have no admitted mixed operator. Eligible strict native
+endpoints use the Standard fallback; explicit targets still request an audit.
 
 CUDA DF RHF has a separate native shell-derivative candidate: 24–96 orbital
 AOs, up to 512 auxiliary AOs, 2–12 atoms, orbital shells through d and auxiliary
 shells through f. It requires the full-rank metric at the default `1e-10`
 threshold and a verified strict final density. Only the ordinary shell schedule
 narrows; the policy does not replace a faster generic schedule merely to report
-FP32 work. Small generic-only, rank-reduced and tighter-budget cases retain the
-audit fallback and can be slower than ordinary FP64. Numerical qualification
+FP32 work. Small generic-only and rank-reduced cases retain strict execution;
+tighter-budget requests retain the independent audit. Numerical qualification
 does **not** establish general HF-DF acceleration.
 The cost-selected candidate narrows shell polynomial/Rys algebra and compensated
 local FP32 contraction only when an orbital bra shell has angular momentum at
@@ -481,7 +494,7 @@ unknown work counts remain `None`.
 
 | Preset | Energy allowance (Eh) | Max force-component allowance (Eh/bohr) | RMS force-component allowance (Eh/bohr) | Candidate SCF |
 | --- | ---: | ---: | ---: | --- |
-| Fast | `1e-5` | `1e-4` | `3e-5` | Shared Direct-module FP32 J/K with budget-controlled physical gates, or strict-density XC/gradient routes; FP64 audit fallback |
+| Fast | `1e-5` | `1e-4` | `3e-5` | Budget-selected Direct modules or strict-density gradients; eligible Standard fallback, otherwise FP64 audit |
 | Standard (`fp64` alias) | No implicit budget audit | No implicit budget audit | No implicit budget audit | Optimized FP64, one endpoint unless an explicit target is supplied |
 | `audit_auto` | `1e-5` | `1e-4` | `3e-5` | Native AUTO on admitted CUDA models; FP64 otherwise |
 | Balanced | `1e-7` | `1e-5` | `3e-6` | FP64 |
@@ -647,8 +660,8 @@ and use a distinct schema; they must not be folded into historical FP64 figures.
 
 Cold includes facade/plan construction; frozen post-cold, moved, and frozen
 post-move calls include all requested work, including audits and seed restoration
-when needed. A successful Fast request outside a qualified FP32 domain can
-still be an expensive audited FP64 call. Its report records this explicitly;
+when needed. A successful Fast request outside a qualified FP32 domain uses
+the eligible Standard fallback or an audited FP64 call. Its report records which;
 runner support alone is **not** qualification of all README methods/sizes, proof
 of FP32 arithmetic, or a speedup claim. Private seed/force experiments cannot
 be combined with Fast in this runner.
@@ -679,6 +692,9 @@ from the candidate. `strict=True` raises after processing all peers, without
 rolling back their warm proposals. Whole-fleet preparation, malformed coordinate
 layout, diagnostic-query and resume failures raise in either mode. Coordinate
 updates are snapshotted once so candidates and auditors see the same geometry.
+Numerical failures of a budget-Fock proposal get the same bounded strict retry
+as scalar execution. Its failed attempt remains in the work report; unavailable
+counts remain unknown. Input and resource failures do not trigger this retry.
 
 (python-precision-ownership)=
 ## Ownership and concurrency

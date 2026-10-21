@@ -15,7 +15,12 @@ from . import _native
 from ._api_types import Atom
 from .batch import BatchResult
 from .checkpoint import _descriptor, _pointer, _resource_check, _restore_states
-from .precision_policy import PrecisionBudgetError, _model_identity, _solve_record
+from .precision_policy import (
+    PrecisionBudgetError,
+    PrecisionSolve,
+    _model_identity,
+    _solve_record,
+)
 
 
 def _seed_capacity(batch: Any) -> tuple[int, int]:
@@ -328,6 +333,27 @@ class PreparedPrecisionBatch:
             if role == "candidate":
                 observed = original
                 seconds = None
+                if not observed.succeeded:
+                    # A failed approximate final-state check is still real
+                    # work. Keep its native count (or unknown), then let the
+                    # shared controller perform its one strict retry. Shared
+                    # fleet time cannot be assigned to an individual member.
+                    solves.append(
+                        PrecisionSolve(
+                            role,
+                            precision,
+                            None,
+                            observed.iterations,
+                            None,
+                            observed.fock_builds,
+                            observed.executed_backend,
+                            calculator._energy_tolerance,
+                            calculator._density_tolerance,
+                            calculator._screening_tolerance,
+                            observed.status_message,
+                        )
+                    )
+                    raise RuntimeError(observed.status_message)
                 record = _solve_record(
                     calculator,
                     observed,
@@ -598,7 +624,14 @@ class PreparedPrecisionBatch:
 
             items = []
             for original in candidate.items:
-                if not original.succeeded:
+                # Retry only numerical failures of the budget-Fock proposal.
+                # Invalid input and exhausted resources must keep their native
+                # failure semantics instead of allocating another owner.
+                retry = (
+                    self._facade._fast_fock
+                    and original.status == _native.STATUS_NUMERICAL_FAILURE
+                )
+                if not original.succeeded and not retry:
                     items.append(original)
                     continue
                 items.append(

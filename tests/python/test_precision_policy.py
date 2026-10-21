@@ -223,6 +223,161 @@ def test_fast_unsupported_backend_records_explicit_fp64_audit(
     assert report.budget == TargetErrorBudget(1e-5, 1e-4, 3e-5)
 
 
+def strict_native_result(**changes: typing.Any) -> Result:
+    """Minimal native HF evidence, which has no detailed operator inventory."""
+    return result(
+        executed_backend="cuda",
+        precision={
+            "requested_mode": "fp64",
+            "effective_bits": 64,
+            "operator_work_counters_valid": True,
+            "mixed_stage_fock_builds": 0,
+            "strict_stage_fock_builds": 4,
+            "final_residual_audits": 1,
+            **changes,
+        },
+    )
+
+
+def test_fast_strict_fallback_retains_standard_without_repeating_endpoint(
+    backend: SimpleNamespace,
+) -> None:
+    """A speed profile must not recreate an already strict owner for an audit."""
+    backend.block_auto = True
+    backend.outputs = [strict_native_result()]
+    output = PrecisionCalculator(policy="fast", device="cuda").singlepoint(ATOMS)
+    report = output.precision_validation
+    assert len(backend.calls) == report.solve_count == 1
+    assert report.status == "strict_standard_fallback"
+    assert report.scope == "native_fp64"
+    assert report.target is None and report.errors == ()
+    assert "no-observable-audit" in report.reference
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"final_residual_audits": 0},
+        {"mixed_stage_fock_builds": 1},
+        {"operator_work_counters_valid": False},
+        {"effective_bits": 32},
+        {"gradient": {"returned_mode": "mixed"}},
+    ],
+)
+def test_fast_standard_fallback_requires_actual_strict_closure(
+    backend: SimpleNamespace,
+    changes: dict,
+) -> None:
+    backend.block_auto = True
+    backend.outputs = [strict_native_result(**changes), strict_native_result()]
+    output = PrecisionCalculator(policy="fast", device="cuda").singlepoint(ATOMS)
+    assert output.precision_validation.solve_count == 2
+
+
+def test_fast_standard_fallback_never_bypasses_explicit_target(
+    backend: SimpleNamespace,
+) -> None:
+    backend.block_auto = True
+    backend.outputs = [strict_native_result(), strict_native_result()]
+    output = PrecisionCalculator(
+        policy=PrecisionPolicy("fast", target=ENERGY),
+        device="cuda",
+    ).singlepoint(ATOMS, properties=("energy",))
+    assert output.precision_validation.solve_count == 2
+    assert output.precision_validation.status == "observed_met"
+
+
+def test_fast_strict_warm_hf_retains_checked_final_fock(
+    backend: SimpleNamespace,
+) -> None:
+    """Native warm reuse need not invent a second final-Fock audit count."""
+    backend.block_auto = True
+    native = strict_native_result(final_residual_audits=0, skipped_final_fock_builds=1)
+    backend.outputs = [
+        BatchItemResult(
+            index=0,
+            status=0,
+            status_message="",
+            bucket_id=0,
+            warm_start_used=True,
+            warm_start_fallback=False,
+            **{
+                field.name: getattr(native, field.name)
+                for field in fields(BatchItemResult)
+                if hasattr(native, field.name)
+            },
+        )
+    ]
+    output = PrecisionCalculator(policy="fast", device="cuda").singlepoint(ATOMS)
+    assert output.precision_validation.status == "strict_standard_fallback"
+    assert output.precision_validation.solve_count == 1
+
+
+def test_fast_fitted_hf_keeps_unavailable_work_counters_unknown(
+    backend: SimpleNamespace,
+) -> None:
+    """The legacy fitted Standard endpoint remains usable without a census."""
+    backend.block_auto = True
+    native = strict_native_result(
+        operator_work_counters_valid=False,
+        strict_stage_fock_builds=0,
+        final_residual_audits=0,
+    )
+    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    calculator._candidate._density_fitting_mode = 1
+    backend.outputs = [native]
+    output = calculator.singlepoint(ATOMS)
+    assert output.precision_validation.status == "strict_standard_fallback"
+    assert output.precision_validation.solve_count == 1
+    assert output.precision["operator_work_counters_valid"] is False
+
+
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks"))
+@pytest.mark.parametrize("proposal", ("xc", "matrix_product", "density_build"))
+def test_budget_fock_accepts_strict_j_only_for_pure_xc_proposals(
+    method: str,
+    proposal: str,
+) -> None:
+    """A strict replacement needs a real dtype census and physical closure."""
+    from generativeqc.ks import resolve_ks_options
+
+    calculator = SimpleNamespace(_ks_options=resolve_ks_options(method, KsOptions()))
+    work = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": True,
+        "strict_stage_fock_builds": 2,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": "coulomb_j",
+                "storage": "fp64",
+                "compute": "fp64",
+                "accumulation": "fp64",
+                "reduction": "fp64",
+                "arithmetic_mode": "strict",
+                "count": 5,
+            },
+            {
+                "name": proposal,
+                "compute": "fp32",
+                "arithmetic_mode": "mixed",
+                "count": 3,
+            },
+        ],
+    }
+    assert implementation._budget_fock_work_admitted(calculator, work) is (
+        method == "pbe-rks"
+    )
+    # A strict final row cannot hide an unsupported approximate proposal row.
+    work["operators"].append({**work["operators"][0], "compute": "fp16"})
+    assert not implementation._budget_fock_work_admitted(calculator, work)
+    work["operators"].pop()
+    work["operators"][0]["compute"] = "fp16"
+    assert not implementation._budget_fock_work_admitted(calculator, work)
+
+
 @pytest.mark.parametrize(
     "method",
     (
@@ -355,7 +510,18 @@ def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
 
 @pytest.mark.parametrize(
     "missing",
-    (None, "cold", "fallback", "inventory", "mixed", "exchange", "audit", "state"),
+    (
+        None,
+        "cold",
+        "fallback",
+        "inventory",
+        "mixed",
+        "exchange",
+        "audit",
+        "state",
+        "qualified_gradient",
+        "unqualified_gradient",
+    ),
 )
 @pytest.mark.parametrize("explicit_target", (False, True))
 @pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks"))
@@ -403,6 +569,14 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
             )
         ],
     }
+    if missing in ("qualified_gradient", "unqualified_gradient"):
+        work["gradient"] = {
+            "schema_version": 3,
+            "qualification": f"{method}-budget-fp32-v1",
+            "complete": missing == "qualified_gradient",
+            "returned_mode": "mixed",
+            "attempted_fp32_geometry_points": 80,
+        }
     native = result(executed_backend="cuda", precision=work)
     candidate = BatchItemResult(
         index=0,
@@ -427,7 +601,8 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
     calculator._candidate._ks_options = resolve_ks_options(method, KsOptions())
     report = calculator.singlepoint(ATOMS).precision_validation
     admitted = (
-        missing is None or (missing == "exchange" and method == "pbe-rks")
+        missing in (None, "qualified_gradient")
+        or (missing == "exchange" and method == "pbe-rks")
     ) and not explicit_target
     assert report.solve_count == (1 if admitted else 2)
     assert report.status == (

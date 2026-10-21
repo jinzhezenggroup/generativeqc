@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +12,28 @@ enum class DirectJkSourceSelection { automatic, disabled, forced, invalid };
 
 /** RHF keeps its qualified domain; KS also admits bounded screened SPD sources. */
 enum class DirectJkSourceAutoPolicy { generic_f, screened_cold, screened_hybrid_cold };
+
+/** Fit whole angular buckets without changing the omitted buckets' operator.
+ * Higher total pair angular momentum has more recurrence work per retained
+ * value, so admit it first. Unselected buckets use the existing streamed
+ * consumer. Subtraction-based capacity checks remain valid near SIZE_MAX. */
+inline std::uint32_t direct_jk_fit_resident_buckets(const std::array<std::size_t, 28>& bytes,
+                                                    std::size_t capacity,
+                                                    std::uint32_t requested) noexcept {
+  std::uint32_t selected = 0;
+  for (int degree = 12; degree >= 0; --degree)
+    for (unsigned first = 0; first < 7; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        if (first + second != static_cast<unsigned>(degree)) continue;
+        const auto bucket = first * (first + 1) / 2 + second;
+        const auto bit = std::uint32_t{1} << bucket;
+        if ((requested & bit) && bytes[bucket] <= capacity) {
+          selected |= bit;
+          capacity -= bytes[bucket];
+        }
+      }
+  return selected;
+}
 
 /** Capture an experimental selection once per phase, never in kernel replay.
  * Callers supply method-specific controls and the incumbent value ceiling.

@@ -22,6 +22,7 @@ from generativeqc.ks_diagnostics import KsTransportDiagnostic
 from test_precision_policy import (
     ATOMS,
     ENERGY,
+    strict_native_result,
 )
 from test_precision_policy import backend as _scalar_backend
 
@@ -238,6 +239,73 @@ def test_native_fleet_reuse_without_item_timing_or_seed_exports(
                 assert validation.schema_version == 2
                 assert observed.fock_builds == 7
             json.dumps(report, allow_nan=False)
+    assert fleet.live is None
+
+
+def test_fast_standard_fallback_reuses_owner_and_frozen_density(fleet: Any) -> None:
+    """A strict fallback never suspends the expensive native prepared owner."""
+    fleet.block_auto = True
+    evidence = strict_native_result().precision
+    observed = item(precision=evidence, executed_backend="cuda")
+    fleet.fleet_outputs = [[observed], [observed]]
+    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    with calculator.prepare_batch([ATOMS]) as prepared:
+        first = prepared.execute(strict=True)
+        prepared.set_warm_start_updates(False)
+        second = prepared.execute(strict=True)
+        assert len(fleet.fleets) == 1 and fleet.exports == 0
+        assert fleet.live is fleet.fleets[0]
+        for result in (first, second):
+            assert not result.precision_validation["audit_calls"]
+            assert result.precision_validation["suspension_seconds"] == 0
+            assert (
+                result.items[0].precision_validation.status
+                == "strict_standard_fallback"
+            )
+
+
+@pytest.mark.parametrize(
+    "status",
+    (
+        _native.STATUS_NUMERICAL_FAILURE,
+        _native.STATUS_OUT_OF_MEMORY,
+        _native.STATUS_INVALID_ARGUMENT,
+    ),
+)
+def test_fast_failed_proposal_retries_only_numerics_and_retains_work(
+    fleet: Any,
+    status: int,
+) -> None:
+    """The same bounded strict retry applies to scalar and prepared proposals."""
+    failed = item(
+        status=status,
+        status_message="final-state check failed",
+        converged=False,
+        energy=float("nan"),
+        forces=None,
+        fock_builds=None,
+        executed_backend="cuda",
+    )
+    strict = item(executed_backend="cuda", precision=strict_native_result().precision)
+    fleet.block_auto = True
+    fleet.fleet_outputs = [[failed], [strict]]
+    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    calculator._fast_fock = True
+    with calculator.prepare_batch([ATOMS]) as prepared:
+        output = prepared.execute()
+        observed = output.items[0]
+        if status == _native.STATUS_NUMERICAL_FAILURE:
+            assert observed.succeeded and observed.fock_builds is None
+            validation = observed.precision_validation
+            assert validation.status == "strict_standard_fallback"
+            assert validation.solve_count == 2
+            assert validation.solves[0].error == "final-state check failed"
+            assert validation.solves[0].fock_builds is None
+            assert "budget_fock_failed_fp64_fallback" in validation.fallback_reasons
+            assert len(output.precision_validation["audit_calls"]) == 1
+        else:
+            assert observed.status == status
+            assert output.precision_validation["audit_calls"] == []
     assert fleet.live is None
 
 
