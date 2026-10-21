@@ -8,7 +8,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -171,14 +170,8 @@ def test_evidence_review_uses_verified_test_merge(tmp_path: Path, case: str) -> 
     shim.write_bytes(("#!/bin/sh\nexec " + shlex.quote(python) + ' "$@"\n').encode())
     shim.chmod(0o755)
     env["PATH"] = str(binaries) + os.pathsep + env.get("PATH", "")
-    workflow = (ROOT / ".github/workflows/pre-commit.yml").read_text(encoding="utf-8")
-    block = workflow.split(
-        "      - name: Check new benchmark evidence against the PR base\n", 1
-    )[1]
-    block = block.split("      - name:", 1)[0]
-    command = textwrap.dedent(block.split("        run: |\n", 1)[1])
     result = subprocess.run(
-        [bash, "-eu", "-c", command],
+        [bash, (ROOT / "tools/check_evidence_change.sh").as_posix()],
         cwd=tmp_path,
         env=env,
         check=False,
