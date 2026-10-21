@@ -1124,6 +1124,20 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     COMMENT "Generating compact reference-aligned MD Coulomb engine")
 
+  set(GENERATIVEQC_DF_MD_J_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_md_j.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_md_j_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_md_j.py"
+    OUTPUTS "${GENERATIVEQC_DF_MD_J_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/df_md_j_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+    ARGS --output "${GENERATIVEQC_DF_MD_J_HEADER}"
+    COMMENT "Generating compiler-owned DF Hermite charge/J contractions")
+
   set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")
   generativeqc_register_generated_sources(

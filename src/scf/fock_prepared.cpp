@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
@@ -12,6 +13,7 @@
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
+#include "scf/cuda_density_fitting_md.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
 namespace generativeqc::scf {
@@ -63,6 +65,12 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
   result.one_electron_value_override = one_electron_policy.diagnostic_override;
   result.one_electron_value_capability_fallback = one_electron_policy.capability_fallback;
   if (needs(strategy.spec, FockApproximation::DensityFitted)) {
+    // Freeze the experimental policy in prepared-source identity; changing
+    // it must not silently reuse a previously selected value owner.
+    const char* md = std::getenv("GENERATIVEQC_DF_MD_COULOMB");
+    if (md && std::string_view(md) != "0" && std::string_view(md) != "1")
+      throw std::invalid_argument("GENERATIVEQC_DF_MD_COULOMB must be 0 or 1");
+    result.df_md_coulomb_requested = md && std::string_view(md) == "1";
     result.df_pair_storage_request = requested_df_pair_storage_request();
     result.df_pair_storage = requested_df_pair_storage();
     result.df_value_mapping = cuda_policy::df_value_mapping_requested();
@@ -356,8 +364,28 @@ struct PreparedFockPlan::Impl {
                       decltype(&destroy_cuda_density_fitting_integral_source)>
           source(raw_source, &destroy_cuda_density_fitting_integral_source);
       diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
-      const auto tiles =
-          plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
+      const auto metadata_bytes = cuda_density_fitting_integral_source_device_bytes(source.get());
+      auto tiles = plan_values(nbf, naux, metadata_bytes);
+#if GENERATIVEQC_HAS_CUDA
+      if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested &&
+          !tiles.stores_full_three_center) {
+        // The incumbent deliberately spends spare capacity on raw panels. An
+        // after-the-fact owner cannot fit there even when its whole footprint
+        // is small. Reserve the exact native census first, without increasing
+        // the value cap or borrowing the independently owned force allowance.
+        const auto reserve = cuda_df_md_coulomb_reservation(system, *auxiliary, plan_budget);
+        if (reserve && reserve < plan_budget) {
+          try {
+            tiles = plan_requested_density_fitting_tiles(
+                diagnostic.variant.df_pair_storage_request, 1, nbf, naux, nbf, 0,
+                plan_budget - reserve, metadata_bytes, true, 0, true);
+          } catch (const DensityFittingBudgetError&) {
+            // The ordinary plan already fits. Optional owner storage must not
+            // turn a supported low-memory calculation into a preparation error.
+          }
+        }
+      }
+#endif
       data.resolved_budget = resolved;
       data.df_gradient_budget = resolved.response_bytes;
       // A qualified automatic pure-J owner may reclaim fractional headroom
@@ -386,6 +414,15 @@ struct PreparedFockPlan::Impl {
                   tiles.stores_full_three_center, tiles.value_storage),
               detail);
       cuda_df.reset(raw_plan);
+#if GENERATIVEQC_HAS_CUDA
+      if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested) {
+        // No additional allowance: installation receives only the resolved
+        // value budget. Its optional host peak is bounded by that same cap.
+        checked(try_install_cuda_df_md_coulomb(raw_plan, system, *auxiliary, plan_budget,
+                                               plan_budget, diagnostic.fitted, detail),
+                detail);
+      }
+#endif
       if (!diagnostic.fitted.empty()) {
         for (auto& item : diagnostic.fitted) {
           item.resolved_value_budget_bytes = resolved.value_bytes;

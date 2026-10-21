@@ -219,3 +219,87 @@ region and must not be added to their parent. A packed charge consumer or a
 properly authenticated final-potential lease may remove redundant charge work;
 neither removes the remaining derivative contraction bottleneck. No reuse may
 assume that a canonical final density is identical to an earlier proposal.
+
+
+## Optional source/metric/SCF handoff under qualification
+
+The prepared restricted pure-J adapter now has a default-off
+`GENERATIVEQC_DF_MD_COULOMB=1` candidate. The choice participates in prepared
+source identity. Core CMake owns the generated DF Hermite header and native
+owner translation unit. Installation occurs on the completed value plan's
+long-lived stream, after source creation's temporary stream has retired and
+before any SCF state or graph exists. It uses the exact normalized systems
+that created the source; there is no device-to-host basis reconstruction.
+
+The candidate applies the same retained full-rank eigensystem vector solve as
+the raw-panel path between charge and J projection. Resident factors, hybrid
+exchange, batches, truncated metrics, angular domains beyond orbital f /
+auxiliary g, and unavailable capacity retain the incumbent. The original
+source and metric remain available for unchanged force response. Owner
+teardown follows SCF graph retirement and precedes destruction of the borrowed
+stream. Device/numerical errors propagate; optional allocation refusal does
+not authorize a reference-oracle retry.
+
+An initially attempted after-setup-only admission is insufficient at the
+96-atom streamed cliff: the recorded raw v3 planner used 14,509,920,430 of
+14,536,349,827 value bytes. Its 26 MB slack cannot hold the roughly 200 MB
+Hermite owner. The refined adapter shares the native layout census without
+materializing metadata to reserve its exact device footprint before sizing
+interchangeable fallback panels. It never enlarges the total value cap or
+borrows response capacity. If even minimum fallback panels cannot coexist,
+the previously feasible ordinary tile plan remains available. All admitted
+owner device/host storage is added to the enclosing plan diagnostics.
+
+The standalone source/metric/J test links the actual newly compiled core and
+uses independent libcint raw/metric values plus NumPy's spectral solve. It
+covers nonsymmetric density, same/zero/changed-input graph replay, two budget
+refusals with still-executable incumbent J, exact owner resource accounting,
+and duplicate auxiliary shells that must retain the truncated-metric fallback.
+Qualification is ongoing; no complete endpoint or default-promotion claim is
+implied. Submitted traversal counters explicitly distinguish host submissions
+from executed graph replays. The candidate remains unscreened and does not
+repair the independent three-center derivative bottleneck.
+
+
+The integrated `df-md-plan-v2` core (SHA-256
+`5fac69b4a90465135a5f72e478def9806320eb85bfaa218ce9775a3945f109e7`)
+passes 16 source/metric/J populations: 14 full-rank Cartesian/spherical cases
+through orbital f / auxiliary g and two duplicate-auxiliary truncated cases.
+Every case also checks two capacity refusals with incumbent replay. Full-rank
+cases exercise three captured density replays and exact reservation accounting.
+The largest error across the incumbent, native J, and first graph replay against
+the independent metric solve is 9.5591e-14. All 16 populations pass memcheck;
+four f/g and truncated populations pass racecheck, with zero errors/hazards.
+Evidence and source-matched receipts remain in ignored `df-md-plan-v2/` and
+`df-md-plan-sanitizers-v1/` locally and under the established n1 evidence root.
+
+The retained v1 failure occurred before candidate execution: the fixture used
+full AO/Q extents, which correctly produced a resident value plan and refused
+streamed-owner admission in 14 cases. The two truncated fallback populations
+passed. v2 uses a partial AO row extent and includes the pre-allocation native
+reservation. The failed receipts and frozen v1 source/binary remain available;
+no production admission condition was loosened to accommodate the fixture.
+Complete endpoint qualification and default promotion remain pending.
+
+
+The v2 96-atom r2SCAN-3c DF candidate has now completed Standard, native Fast,
+and a separate traced Standard population (12 complete E/F calls). All pass
+the existing independently stable dense-grid/CPU-spot common gates through
+`readme_defaults_qualification.qualify` and the audited reference-reuse manifest.
+The maximum errors are about 2.041e-6 Eh/atom, 5.626e-5 Eh/Bohr maximum force,
+and 2.477e-5 Eh/Bohr RMS force. Clean Standard measures 180.499 s cold and
+107.532 s median warm, with 16 / 1 iterations. The trace has 19 completed
+Hermite J operations at about 2.49 s each. Source/metric/J admission is real,
+not inferred from the environment selector. The same-binary rollback is still
+running; these measurements do not establish a speedup over that rollback or
+over stock GPU4PySCF.
+
+Force response still costs about 94.6 s: its raw charge/potential pass alone
+costs about 61.4 s and produces 64,547,192,832 raw bytes per call. Its remaining
+derivative contractions are a separate bottleneck. The Fast receipt explicitly
+reports `strict_standard_fallback` with `fp32_gradient_not_qualified` and
+`fast_route_unavailable_using_standard`, explaining its lack of improvement in
+this domain. Preserve that executed policy; do not relabel it as an accelerated
+Fast solve. The artifacts include `candidate-qualification.json` and
+`trace-work-summary.json`. No README redraw or default promotion follows from
+this single-method qualification.

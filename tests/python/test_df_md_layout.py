@@ -57,6 +57,7 @@ def test_optional_capacity_and_full_angular_domain(
     assert status == 0
     device, host = map(int, result[:2])
     assert device > 0 and host > 0
+    assert int(result[6]) == device  # The pre-allocation reservation is exact.
     # There are two shells with 2/3 primitives. J enumerates all ordered
     # primitive products within a self shell and each cross-shell pair once.
     assert result[2] == (5 if auxiliary else 4 + 6 + 9)
@@ -107,6 +108,7 @@ extern "C" int layout(unsigned angular, unsigned spherical, unsigned auxiliary, 
       case 6: system.atoms[0].position[0]=std::numeric_limits<double>::infinity(); break;
       case 7: system.shells[0].primitives[0].coefficient=1e308; break;
     }
+    output[6]=df_md_layout_device_bytes(system,auxiliary,device,host);
     const auto prepared=make_df_md_layout(system,auxiliary,device,host);
     output[0]=prepared.device_bytes; output[1]=prepared.host_peak_bytes;
     output[2]=prepared.primitives.size(); output[3]=prepared.aos.size();

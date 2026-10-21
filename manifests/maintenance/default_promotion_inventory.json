@@ -43,7 +43,8 @@
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
-      "python/generativeqc_compiler/tensor/ad_program.py"
+      "python/generativeqc_compiler/tensor/ad_program.py",
+      "src/scf/fock_prepared.cpp"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -1802,6 +1803,25 @@
         "docs/developer/tensor_ir.md",
         ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
       ]
+    },
+    {
+      "id": "scf.df-md-coulomb",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_MD_COULOMB"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_md_plan.cpp",
+        "src/scf/cuda/df_md_owner.cu",
+        "src/scf/cuda/df_coulomb.cpp",
+        ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
+      ],
+      "rationale": "Default-off pure-J Hermite contractions replace dense three-center regeneration only for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The retained source and metric still own response; unsupported angular domains and bounded capacity refusals keep the incumbent. Independent charge/projection tests qualify the algebra and private owner, not complete endpoint speed or default promotion.",
+      "revisit_condition": "Qualify metric-applied J, complete energy/force and cold/warm endpoints, changed geometry and constrained-memory fallback with source-matched binaries and executed-work traces; independently qualify screening and response before any default promotion."
     }
   ]
 }

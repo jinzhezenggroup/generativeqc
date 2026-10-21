@@ -127,3 +127,28 @@ unset and `auto` remain dense because bounded response and geometry rebuild can
 regress substantially. The 384/1856 unequal case remains numerically unqualified.
 The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records domain evidence, validation and conditions for revisiting selection.
+
+## Experimental streamed pure-J contractions
+
+`GENERATIVEQC_DF_MD_COULOMB=1` opts prepared restricted pure-J sources into a
+native Hermite charge/projection candidate. Unset or `0` preserves the existing
+selection; other values are rejected. The control is part of prepared-source
+identity. Admission requires one streamed system, a full-rank metric, orbital
+angular momentum through f, auxiliary angular momentum through g, and enough
+value capacity for the complete optional owner. Native topology counts reserve
+its exact device footprint before the planner sizes fallback panels. Device
+and host storage remain included in the enclosing diagnostics.
+
+The candidate replaces raw three-center value regeneration with two vector
+contractions and the existing metric solve. It remains unscreened; retained
+integral sources and force response are unchanged. Unsupported domains and
+optional capacity refusals use the existing bounded path. Device failures
+propagate. The owner and captured graphs share the value plan's stream and
+must retire before that stream is destroyed.
+
+`tests/python/test_df_md_plan_cuda.py` exercises independent metric/J parity,
+budget fallback and changed-input replay against the compiled core. Run it in
+a finite Slurm GPU allocation with `GENERATIVEQC_TEST_DF_MD_PLAN=1` and an
+explicit `GENERATIVEQC_LIBRARY`. This experimental control does not imply
+complete energy/force or performance qualification; see the
+[consumer-work investigation](../../.agents/notes/proposed/2026-10-22-df-consumer-work-gap.md).

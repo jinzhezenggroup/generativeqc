@@ -770,12 +770,23 @@ def _discover_partial_phase_values(root: Path) -> dict[str, str]:
     return result
 
 
+def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
+    """Inventory optional prepared value owners without pinning their admission syntax."""
+    relative = Path("src/scf/fock_prepared.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"hf-runtime:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_DF_MD_COULOMB)"', source)
+    }
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
         _discover_scf_options(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
+        _discover_prepared_df_controls(root),
         _discover_ks_phase_values(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),

@@ -48,8 +48,9 @@ inline unsigned hermites(unsigned angular) {
  * explicit reason for a future provider to retain its existing bounded path.
  * No default admission is implied. Input coefficients must already carry the
  * canonical radial normalization; this function never normalizes them again. */
-inline DfMdLayout make_df_md_layout(const core::System& system, bool auxiliary,
-                                    std::size_t device_limit, std::size_t host_limit) {
+namespace df_md_layout_detail {
+inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t device_limit,
+                         std::size_t host_limit, bool materialize) {
   using namespace df_md_layout_detail;
   if (system.shells.empty() || system.atoms.empty() ||
       (system.basis_representation != GENERATIVEQC_BASIS_CARTESIAN &&
@@ -110,6 +111,10 @@ inline DfMdLayout make_df_md_layout(const core::System& system, bool auxiliary,
   result.host_peak_bytes = add(sizeof(result), add(multiply(2, payload), multiply(2, temporary)));
   if (result.device_bytes > device_limit || result.host_peak_bytes > host_limit)
     throw std::length_error("DF MD complete layout exceeds the optional budget");
+
+  // Admission queries share this exact census and allocate no topology-sized
+  // vectors. Complete layouts continue below only after both caps are proven.
+  if (!materialize) return result;
 
   result.aos.reserve(aos);
   result.primitives.reserve(primitive_count);
@@ -187,6 +192,24 @@ inline DfMdLayout make_df_md_layout(const core::System& system, bool auxiliary,
       shell_offsets.capacity() > multiply(2, add(system.shells.size(), 1)))
     throw std::length_error("DF MD host allocator capacity exceeds the reserved envelope");
   return result;
+}
+
+}  // namespace df_md_layout_detail
+
+/** Exact optional device footprint with a bounded host-layout preflight.
+ * Shares the materializer's census, but constructs no large host vectors and
+ * evaluates no integrals. This lets an enclosing planner reserve the owner
+ * before allocating its interchangeable raw fallback tiles. */
+inline std::size_t df_md_layout_device_bytes(const core::System& system, bool auxiliary,
+                                             std::size_t device_limit, std::size_t host_limit) {
+  return df_md_layout_detail::layout(system, auxiliary, device_limit, host_limit, false)
+      .device_bytes;
+}
+
+/** Materialize the checked native metadata and disjoint E/H intervals. */
+inline DfMdLayout make_df_md_layout(const core::System& system, bool auxiliary,
+                                    std::size_t device_limit, std::size_t host_limit) {
+  return df_md_layout_detail::layout(system, auxiliary, device_limit, host_limit, true);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

@@ -26,7 +26,7 @@ struct CudaDfMdResources {
  * The borrowed stream must outlive the owner and all captured graphs using it.
  * Creation is forbidden inside capture; replay methods are allocation-free.
  * On refusal/failure, *owner remains null and all partial allocations retire.
- * This factory is a qualification seam; no production admission calls it yet. */
+ * The optional prepared pure-J adapter owns admission and enclosing budgets. */
 generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
                                             const core::System& orbital,
                                             const core::System& auxiliary,
