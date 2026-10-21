@@ -324,6 +324,17 @@ orthogonalization/operator/recycling timings, workspace bytes, and a non-success
 It does not silently regularize a singular denominator or claim success after
 a workspace or stagnation failure.
 
+The native host GMRES workspace bounds simultaneously live numeric payload:
+the Arnoldi and preconditioned bases, iteration vectors, Hessenberg/Givens
+arrays and returned solution. Optional history and published-basis capacity is
+charged only when requested. The bound includes one extra vector of publication
+headroom; `measured_workspace_peak_bytes` separately reports actual tracked
+allocations. Input spans, callback-owned storage and allocator metadata are
+outside this controller's bound and belong to the caller's complete budget.
+Resource planners should query this bound instead of reserving unused Krylov
+bases; a budget one byte below the queried requirement refuses before allocation
+or any operator action.
+
 The operator, preconditioner and retained-subspace roles are separate.
 `DiagonalPreconditioner` is opt-in and rejects zero/near-zero diagonal entries;
 it is never selected implicitly.

@@ -24,11 +24,17 @@ _REASONS = {
 }
 
 
-def _descriptor(dimension: int, options: Any) -> _native.ResponseGmresDescriptor:
+def _descriptor(
+    dimension: int, options: Any, *, collect_basis: bool
+) -> _native.ResponseGmresDescriptor:
     """Marshal validated control values without vectors, callbacks or allocations by dimension."""
     return _native.ResponseGmresDescriptor(
         struct_size=ctypes.sizeof(_native.ResponseGmresDescriptor),
         abi_version=_native.ABI_VERSION,
+        # This facade always publishes history/timings. Capacity queries and
+        # execution must request the same optional native storage, including
+        # a basis temporarily required by host recycling.
+        flags=1 | 4 | (2 if collect_basis else 0),
         dimension=checked_integer(
             dimension, "response dimension", low=1, high=2**64 - 1
         ),
@@ -66,9 +72,11 @@ def _descriptor(dimension: int, options: Any) -> _native.ResponseGmresDescriptor
     )
 
 
-def workspace_bytes(library: Any, dimension: int, options: Any) -> int:
+def workspace_bytes(
+    library: Any, dimension: int, options: Any, *, collect_basis: bool = True
+) -> int:
     """Query the same owner that admits the solve before creating dimension-sized buffers."""
-    descriptor = _descriptor(dimension, options)
+    descriptor = _descriptor(dimension, options, collect_basis=collect_basis)
     output = ctypes.c_uint64()
     _native.check(
         library,
@@ -181,14 +189,13 @@ def solve_host(
         if preconditioner is None
         else _action_callback(preconditioner, engine, failures, precondition=True)
     )
-    descriptor = _descriptor(dimension, options)
+    descriptor = _descriptor(dimension, options, collect_basis=collect_basis)
     descriptor.rhs = values.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     descriptor.initial_guess = (
         None if guess is None else guess.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     )
     descriptor.apply = apply
     descriptor.precondition = condition
-    descriptor.flags = 1 | 4 | (2 if collect_basis else 0)
     owner = ctypes.c_void_p()
     try:
         status = library.generativeqc_response_solve_v1(
@@ -266,8 +273,7 @@ def solve_sequence(
     )
     validate_callback = _native.ResponseValidate(validate)
     publish_callback = _native.ResponsePublish(publish)
-    gmres = _descriptor(dimension, options)
-    gmres.flags = 1 | 4 | (2 if collect_basis else 0)
+    gmres = _descriptor(dimension, options, collect_basis=collect_basis)
     gmres.apply, gmres.precondition = apply, condition
     gmres.rhs = rhs.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     row_stride, column_stride = (value // rhs.itemsize for value in rhs.strides)

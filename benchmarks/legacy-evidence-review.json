@@ -1,5 +1,10 @@
 {
   "families": {
+    "cbs-fast-memory-20261021": {
+      "owner": "CBS GMRES capacity and Lambda endpoint qualification",
+      "reason": "Exact compressed final endpoints, independent full-vector finite differences, closed Lambda work traces and separately identified superseded screens/CPU failures retain scientific and negative evidence together. Splitting screens increases total storage by 29144 bytes through lost shared compression. Source/binary identities, reconstruction patch, manifest and executable gate replay bind the record; all existing storage caps remain unchanged.",
+      "review_document": "benchmarks/results/cbs-fast-memory-20261021/README.md"
+    },
     "ks-resident-final-validation-default-20261011": {
       "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
@@ -294,6 +299,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz",
+      "family": "cbs-fast-memory-20261021",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-oracles-work-and-failed-screens",
+      "bytes": 140240,
+      "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414"
+    },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
       "family": "bounded-dft-schedules-2475-2479",

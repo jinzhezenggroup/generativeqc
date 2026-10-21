@@ -1219,11 +1219,20 @@ def solve(
         from . import _native
 
         native_library = _native.optional_response_library()
+    # Admission includes the same diagnostic publications as execution. Host
+    # recycling needs an internal basis even when the caller does not retain it.
+    basis_requested = collect_basis or (recycle is not None and not resident_recycle)
     if native_library is not None:
         from ._response_native import workspace_bytes
 
         required = (
-            workspace_bytes(native_library, operator.dimension, options) + reservation
+            workspace_bytes(
+                native_library,
+                operator.dimension,
+                options,
+                collect_basis=basis_requested,
+            )
+            + reservation
         )
     else:
         required = _single_workspace_bytes(operator.dimension, options) + reservation
@@ -1260,9 +1269,6 @@ def solve(
         with workspace():
             solve_options = replace(
                 options, max_workspace_bytes=options.max_workspace_bytes - reservation
-            )
-            basis_requested = collect_basis or (
-                recycle is not None and not resident_recycle
             )
             if native_library is not None:
                 from ._response_native import solve_host
