@@ -47,6 +47,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "max",
+        "min",
     ),
     "shape-transform": (
         "reshape_explicit_indices",
@@ -114,6 +116,8 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "max",
+        "min",
         "reshape_explicit_indices",
         "permute_dims",
         "reshape",
@@ -166,6 +170,14 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    **{
+        name: {
+            "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+            "keepdims": "bool; generic-arrays-only",
+            "capture": "finite-generic-real-only; empty-reduction-error; earliest-C-order-tie; static-graph-budget",
+        }
+        for name in ("max", "min")
+    },
     **{
         name: {
             "capture": "finite-generic-real-only; at-least-one-array; first-operand-selected-on-ties",
@@ -254,7 +266,7 @@ _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
         name: {
             "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
         }
-        for name in ("minimum", "maximum")
+        for name in ("minimum", "maximum", "min", "max")
     },
     "clip": {
         "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",

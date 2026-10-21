@@ -604,6 +604,31 @@ at ties or Hessian qualification is claimed. The operations reuse comparisons an
 `where`, with shared broadcast values and unchanged resource budgets. Their
 capability entries retain native CPU/CUDA qualification unset.
 
+Captured `max(x, axis=None, keepdims=False)` and `min` accept finite generic
+float32/float64 static arrays. Axis accepts a signed integer, a unique tuple of
+axes, or `None`; an empty tuple is a detached identity. `keepdims` must be a
+Python bool. An actual zero-length reduced axis raises; a zero-length retained
+axis gives an empty output. Scientific annotations and nonfinite capture remain
+unsupported. The existing eager IEEE behavior is unchanged. The
+[max](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.max.html)
+and [min](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.min.html)
+specifications permit errors for empty reductions and implementation-defined
+signed-zero order.
+
+Capture pairs adjacent values in a balanced tree, preserving the earliest
+C-order value on ties, including its zero sign. Before constructing the graph,
+it limits total gather positions to 65,536, pairwise rounds to 64, and estimated
+new retained tensor storage to 256 MiB. Ordinary backend node, work and byte
+budgets still apply and may reject smaller programs. Put static options inside
+a function, for example `xp.compile(lambda x: xp.max(x, axis=(0, -1)),
+backend="reference")`, following the existing array-only runtime argument
+contract. First-order comparison-selector AD requires
+`allow_comparison_where=True` wherever comparisons remain in the graph; empty
+axis and singleton identities use the existing identity AD. Tie gradients are
+only a deterministic branch convention. CPU FP64 execution/AD uses the existing
+opt-in native path; capability qualification flags remain unset, and native
+float32 and CUDA reductions are not qualified.
+
 Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
 arrays. Each bound can be absent, a finite static scalar under the existing exact
 scalar contract, or a same-dtype generic array. All three shapes must broadcast;
