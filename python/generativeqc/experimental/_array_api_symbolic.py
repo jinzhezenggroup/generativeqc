@@ -527,6 +527,26 @@ def sum(
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
 
 
+def max(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic maximum reductions."""
+    return _namespace.max(x, axis=axis, keepdims=keepdims)
+
+
+def min(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic minimum reductions."""
+    return _namespace.min(x, axis=axis, keepdims=keepdims)
+
+
 def mean(
     x: object,
     *,
