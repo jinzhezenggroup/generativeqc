@@ -33,9 +33,16 @@ def controller_probe(
     policy_end = source.index(
         "    if (incremental_direct_jk_policy.requested", policy_start
     )
+    gate_start = source.index("    const bool has_energy_history =")
+    gate_end = (
+        source.index(";", source.index("converged = has_energy_history", gate_start))
+        + 1
+    )
     unit = r"""
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -55,7 +62,10 @@ void launch_copy_matrix_kernel(unsigned,unsigned,unsigned,int,std::size_t n,
     const double* a,double* out) {for(std::size_t i=0;i<n;++i)out[i]=a[i];}
 void require(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 struct Consumer {
-  bool fast_anchor_active=false;
+  bool fast_anchor_active=false, early_final_probe_requested=true;
+  bool budget_stationarity=false, warm_energy_baseline=false;
+  bool pending_nonlocal_seed=false, pending_nonlocal_frozen=false;
+  unsigned nonlocal_seed_iterations=0, nonlocal_exact_epoch_iterations=0;
   const double* prepare_fast_anchor_jk_density() {
     throw std::runtime_error("generic incremental owner entered the Fast controller");
   }
@@ -93,6 +103,7 @@ struct Consumer {
     unit += source[policy_start:policy_end]
     unit += "\n}\n"
     for signature in (
+        "double physical_stationarity_tolerance()",
         "bool incremental_delta_admitted()",
         "void refine_incremental_energy(double density_change",
         "const double* prepare_incremental_jk_density()",
@@ -100,6 +111,16 @@ struct Consumer {
         "void finalize_incremental_jk_components()",
     ):
         unit += _definition(source, signature)
+    # Execute the actual ordinary stopping block. Incremental owners cannot
+    # enter the optional final probe, so this is their complete stop decision.
+    unit += (
+        """
+  bool stop(double change, double residual, double maximum) {
+    struct {double density_change, residual, maximum_residual;} physical{change,residual,maximum};
+"""
+        + source[gate_start:gate_end]
+        + "\nreturn converged;\n}\n"
+    )
     unit += r"""
   void build(bool closure) {
     final_closure=closure;
@@ -115,6 +136,36 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="gate") {
+      for(bool tight:{false,true}) {
+        Consumer probe;
+        if(tight) {probe.options.energy_tolerance=1e-12; probe.options.density_tolerance=1e-10;}
+        probe.output.iterations=2;
+        const double density_tolerance=probe.options.density_tolerance;
+        const double residual_tolerance=std::min(1e-9,density_tolerance);
+        const double change=density_tolerance/2, residual=residual_tolerance/2;
+        probe.output.energy_change=1e-5;
+        require(!probe.stop(change,residual,residual),"large energy change passed the actual gate");
+        require(probe.incremental_energy_refinement,
+                "actual convergence block waited for energy before starting full refinement");
+        probe.output.energy_change=probe.options.energy_tolerance/2;
+        probe.incremental_energy_full_builds=1;
+        require(!probe.stop(change,residual,residual),"one full build certified energy history");
+        probe.incremental_energy_full_builds=2;
+        require(probe.stop(change,residual,residual),"qualified full history did not converge");
+        require(!probe.stop(density_tolerance,residual,residual),"density gate was relaxed");
+        require(!probe.stop(change,residual_tolerance,residual),"RMS gate was relaxed");
+        require(!probe.stop(change,residual,residual_tolerance),"AO maximum gate was relaxed");
+        probe.output.energy_change=probe.options.energy_tolerance;
+        require(!probe.stop(change,residual,residual),"energy gate was relaxed");
+        probe.output.energy_change=probe.options.energy_tolerance/2;
+        probe.output.iterations=1;
+        require(!probe.stop(change,residual,residual),"cold first iteration invented history");
+        probe.warm_energy_baseline=true;
+        require(probe.stop(change,residual,residual),"validated warm history was ignored");
+      }
+      return 0;
+    }
     if(std::string(argv[1])=="refinement") {
       Consumer probe;
       probe.build(false);
@@ -209,6 +260,20 @@ def test_stationary_density_refines_full_energy_without_relaxing_its_gate(
     """Blocked delta energy must not prevent full-operator convergence work."""
     result = subprocess.run(
         [str(controller_probe), "refinement"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_actual_stopping_keeps_energy_density_residual_and_full_history_gates(
+    controller_probe: Path,
+) -> None:
+    """Evaluate ordinary/tight stop decisions instead of pinning source spelling."""
+    result = subprocess.run(
+        [str(controller_probe), "gate"],
         check=False,
         capture_output=True,
         text=True,
