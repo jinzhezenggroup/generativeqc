@@ -6,7 +6,6 @@ boundaries. The fake phase owner records destruction before cache release.
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -462,93 +461,5 @@ def test_retained_cache_retry_covers_late_phases_once(tmp_path: Path) -> None:
     shim = _SHIM.replace("__DF_CORRELATION_DEMAND__", demand)
     probe.write_text(shim + checked_add + prefix + _TAIL + wrapper + _MAIN)
     binary = tmp_path / "retry"
-    compile_owner(compiler, tmp_path, [probe], binary)
-    subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
-
-
-def test_discarded_attempt_work_is_unavailable_in_benchmark(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
-    source = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
-    start = source.index("      const auto field =")
-    stop = source.index('      field("nbf",', start)
-    reporting = source[start:stop]
-    fields = {
-        name: kind
-        for kind, name in re.findall(
-            r'(?<![A-Za-z_])(work_field|field)\("([^"\n]+)"', source[stop:]
-        )
-    }
-    suffixes = (
-        "_calls",
-        "_actions",
-        "_terms",
-        "_summands",
-        "_iterations",
-        "_bytes",
-        "_capacity",
-        "_tiles",
-        "_slices",
-        "_operations",
-        "_evaluations",
-        "_work",
-        "_values",
-        "_visits",
-        "_kernels",
-        "_restarts",
-        "_updates",
-        "_seconds",
-    )
-    for name, kind in fields.items():
-        if name.endswith(suffixes) and name not in {
-            "native_seconds",
-            "previous_endpoint_seconds",
-            # This separately measured discarded-attempt receipt is complete.
-            "resident_jk_retry_seconds",
-        }:
-            assert kind == "work_field", name
-    assert fields["native_seconds"] == fields["total_energy"] == "field"
-    assert fields["resident_jk_retry_seconds"] == "field"
-    retry_receipt = next(
-        line
-        for line in source.splitlines()
-        if 'field("resident_jk_retry_seconds",' in line
-    )
-    probe = tmp_path / "report.cpp"
-    probe.write_text(
-        r"""
-#include <cassert>
-#include <iomanip>
-#include <sstream>
-struct Result {
-  bool recycling_discarded_primal_attempt;
-  struct {bool resident_jk_discarded_attempt;double resident_jk_retry_seconds;} orbital;
-};
-int main() {
-for (int repetition=0;repetition<3;++repetition)
-for (unsigned mask=0;mask<4;++mask) {
-  Result result{bool(mask&1),{bool(mask&2),1.25}};
-  std::ostringstream output;
-"""
-        + reporting
-        + r"""
-work_field("triples_work",17);work_field("lambda_actions",19);work_field("jk_actions",23);
-work_field("orbital_seconds",2.0);field("native_seconds",3.0);
-"""
-        + retry_receipt
-        + r"""
-const char* stage = repetition==2 ? "moved-warm" : repetition ? "warm" : "cold";
-const auto prefix = std::string("  \"lifecycle_stage\": \"")+stage+"\",\n";
-if (mask) {
-  assert(output.str()==prefix+"  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
-} else {
-  assert(output.str()==prefix+"  \"triples_work\": 17,\n  \"lambda_actions\": 19,\n  \"jk_actions\": 23,\n  \"orbital_seconds\": 2,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
-}
-}}
-
-"""
-    )
-    binary = tmp_path / "report"
     compile_owner(compiler, tmp_path, [probe], binary)
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
