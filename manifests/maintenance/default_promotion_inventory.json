@@ -1822,6 +1822,27 @@
       ],
       "rationale": "Default-off pure-J Hermite contractions replace dense three-center regeneration only for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes exact response charge and contracts three-center atom derivatives in Hermite form; metric response remains in the existing bridge. Unsupported angular domains and bounded capacity refusals keep the incumbent. Independent charge/projection/derivative and integrated force tests qualify this candidate; default promotion still requires complete endpoint evidence.",
       "revisit_condition": "Qualify metric-applied J, complete energy/force and cold/warm endpoints, changed geometry and constrained-memory fallback with source-matched binaries and executed-work traces; independently qualify screening and response before any default promotion."
+    },
+    {
+      "id": "ks.final-state-aware-stopping",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_EARLY_FINAL_PROBE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Eligible strict-FP64 restricted single-iteration owners may replace only the conservative AO-maximum margin with the existing complete canonical final-state proof on the current physical F[D]. Energy, density-change, spin-RMS and all final-state acceptance gates remain unchanged. Numerical rejection continues from the intact density proposal without publishing borrowed orbital scratch; driver/solver failures propagate. Explicit 0 restores the incumbent policy. Pure-J DF is eligible; Fast, mixed, fitted exchange, range/nonlocal, UKS, incremental, ECP, chunks and missing resident workspace/library retain the incumbent. No new persistent numeric storage is required.",
+      "revisit_condition": "Qualify other solver/provider/precision/lifetime domains independently. Preserve the unchanged final canonical-density test, failed-proof continuation and token-bound force validation. Complete cold/warm timings and semantic work, including rejected probes, must support any performance claim; unchanged-iteration populations may incur a small extra proof cost.",
+      "evidence": [
+        "docs/developer/ks_diagnostics.md",
+        "tests/python/test_ks_early_final_probe_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        ".agents/notes/implemented/performance/2026-10-22-final-state-aware-ks-stopping.md"
+      ]
     }
   ]
 }

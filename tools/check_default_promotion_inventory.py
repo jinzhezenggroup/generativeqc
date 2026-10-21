@@ -722,6 +722,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
