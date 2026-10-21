@@ -534,10 +534,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Pure J already has a generated strict consumer (and may own faster MD-J).
     // A quartic cache, especially an FP32 cache rebuilt in FP64 at handoff,
     // costs more than the saved J applications over a complete cold solve.
-    // Keep the same existing preference for strict hybrids. Mixed hybrids,
-    // uncovered high-angular/range operators and explicit requests retain reuse.
+    // The short strict tail of a relaxed application-budget hybrid uses that same
+    // generated provider. Rebuilding all FP32 source values in FP64 for two
+    // closing Focks costs more than streaming those strict applications.
+    // Mixed hybrid proposals, explicitly tighter stopping controls, uncovered
+    // high-angular/range operators and forced requests keep their residency policy.
     if (requested == DirectJkSourceSelection::automatic && !has_range_correction &&
-        (!has_exchange || !budget_fock) && maximum_angular <= 2 &&
+        (!has_exchange || !budget_fock || (strict_refinement && budget_stationarity)) &&
+        maximum_angular <= 2 &&
         scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
                                                         source_strategy.spec))
       return;
