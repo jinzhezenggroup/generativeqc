@@ -34,7 +34,22 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           EVIDENCE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: python3 tools/evidence.py check-change --base "$EVIDENCE_BASE"
+          EVIDENCE_HEAD: ${{ github.event.pull_request.head.sha }}
+          GIT_NO_LAZY_FETCH: "1"
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          # The event base can predate the target actually merged for this run.
+          read -r merge base head extra <<< "$(git rev-list --parents -n 1 HEAD)"
+          if [[ -z "$base" || -z "$head" || -n "$extra" || "$head" != "$EVIDENCE_HEAD" ]]; then
+            echo "Expected a two-parent PR test merge with the requested head" >&2
+            exit 1
+          fi
+          if [[ -z "$EVIDENCE_BASE" ]] || ! git cat-file -e "$EVIDENCE_BASE^{commit}" ||
+             ! git merge-base --is-ancestor "$EVIDENCE_BASE" "$base"; then
+            echo "Event evidence base must be an available ancestor of the tested base" >&2
+            exit 1
+          fi
+          python3 tools/evidence.py check-change --base "$base"
       - name: Prevent legacy codegen test regrowth
         if: github.event_name == 'pull_request'
         env:
