@@ -285,8 +285,11 @@ def test_validation_dtype_metadata_and_nonfinite() -> None:
             source.close()
     source = xp.compile(lambda x: xp.prod(x, dtype=xp.float32), backend="reference")
     try:
-        with pytest.raises(ValueError, match="dtype conversions"):
-            source(np.ones(3))
+        result = source(np.array([1.25, -2.5, 3.75]))
+        assert result.dtype == np.dtype("float32")
+        np.testing.assert_array_equal(
+            result, np.prod(np.array([1.25, -2.5, 3.75], dtype="float32"))
+        )
     finally:
         source.close()
     source = xp.compile(lambda x: xp.prod(x), backend="reference")
