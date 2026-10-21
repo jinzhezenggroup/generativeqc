@@ -119,6 +119,7 @@ struct Owner {
   // This orbital-lifetime probe does not run the nonlocal initializer.
   bool confirm_nonlocal_stationary_density = false;
   bool confirm_direct_stationary_density = false;
+  bool early_final_probe_ran = false;
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
@@ -207,6 +208,11 @@ int main(int argc, char** argv) {
   if (scenario == "stationary-confirmation") {
     owner.confirm_direct_stationary_density = true;
     owner.occupied_fitted_factor_ready = true;
+  }
+  if (scenario == "early-final-rejection") {
+    owner.early_final_probe_ran = true;
+    std::fill_n(owner.tmp1, 8, -99.0);
+    std::fill_n(owner.tmp2, 8, -99.0);
   }
   const bool resident = scenario.find("resident-") == 0;
   if (resident) {
@@ -299,6 +305,19 @@ int main(int argc, char** argv) {
     assert(copies == 0 && owner.density[0] == 10.0);
     assert(owner.warm_ready && owner.warm[0] == 42.0);
     assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
+  } else if (scenario == "early-final-rejection") {
+    // Rejected canonical proof can overwrite iteration scratch, but must
+    // preserve the next density and the independent last-good warm seed.
+    assert(owner.is_active && !owner.output.converged && !owner.final_state_ready);
+    assert(!owner.occupied_fitted_factor_ready && !owner.warm_orbitals_ready);
+    assert(owner.density[0] == 20.0 && owner.warm_orbitals[0] == 10.0);
+    assert(owner.warm_ready && owner.warm[0] == 42.0 && owner.warm_energy == -41.0);
+    owner.early_final_probe_ran = false;
+    owner.scenario = "success";
+    std::fill_n(owner.tmp2, 8, 20.0);
+    owner.enqueue();
+    assert(owner.finish() && owner.warm_orbitals_ready);
+    assert(owner.warm_orbitals[0] == 20.0);
   } else if (scenario == "converged") {
     assert(owner.warm_ready && owner.warm[0] == 10.0);
     assert(owner.warm_energy == owner.physical.electronic_energy);
@@ -360,6 +379,7 @@ int main(int argc, char** argv) {
         "retry",
         "converged",
         "stationary-confirmation",
+        "early-final-rejection",
         "resident-converged",
         "resident-frozen",
         "resident-unconverged",
