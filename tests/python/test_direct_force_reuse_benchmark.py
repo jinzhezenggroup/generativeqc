@@ -253,6 +253,43 @@ def test_worker_symlinks_preserve_targets(
     assert not (target / "child").exists() and not (target / "missing").exists()
 
 
+def _process_is_alive(pid: int) -> bool:
+    """Observe an owned process without mistaking exit races for cleanup failure."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().split()[2]
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return state not in ("Z", "X")
+
+
+@pytest.mark.parametrize(
+    "state, alive", [("R", True), ("S", True), ("Z", False), ("X", False)]
+)
+def test_process_witness_states(
+    monkeypatch: pytest.MonkeyPatch, state: str, alive: bool
+) -> None:
+    monkeypatch.setattr(Path, "read_text", lambda self: f"123 (owned) {state}")
+    assert _process_is_alive(123) is alive
+
+
+@pytest.mark.parametrize(
+    "error", [FileNotFoundError, ProcessLookupError, PermissionError]
+)
+def test_process_witness_exit_race(
+    monkeypatch: pytest.MonkeyPatch, error: type[OSError]
+) -> None:
+    def read_stat(path: Path) -> str:
+        assert path == Path("/proc/123/stat")
+        raise error("controlled process-state read")
+
+    monkeypatch.setattr(Path, "read_text", read_stat)
+    if error is PermissionError:
+        with pytest.raises(PermissionError):
+            _process_is_alive(123)
+    else:
+        assert not _process_is_alive(123)
+
+
 @pytest.mark.parametrize("leader_exits", [False, True])
 def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None:
     """Use only the finite harmless process group started by this test."""
@@ -287,12 +324,7 @@ def test_owned_descendant_is_retired(tmp_path: Path, leader_exits: bool) -> None
     def alive() -> bool:
         if owned is None:
             return False
-        path = Path(f"/proc/{owned['pid']}/stat")
-        try:
-            state = path.read_text().split()[2]
-        except FileNotFoundError:
-            return False
-        return state not in ("Z", "X")
+        return _process_is_alive(owned["pid"])
 
     try:
         deadline = time.monotonic() + 3
