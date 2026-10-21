@@ -46,6 +46,19 @@ budget/algebra guards and is identified separately in the retained local
 Final-candidate receipts, launchers and checks are retained under ignored
 `.artifacts/source-coulomb-shell-v2` and the corresponding n1 directory.
 
+The final-candidate DF48 generic/automatic comparison completes cold/warm in
+251.955/91.295 and 185.273/29.619 seconds, respectively, at identical 16/1 SCF
+cycles and unchanged independent gates. Default DF96 Standard/Fast diagnostics
+complete in 1634.850/177.501 and 1651.618/174.570 seconds (22/1 cycles), also
+passing. Five complete molecular Compute Sanitizer cases report zero errors.
+These separate diagnostics and source identities are retained in the
+[repaired README evidence](../../../../benchmarks/results/readme-repaired-20261021/README.md).
+Its distinct official campaign uses clean source `cbd4d8074`, the same binary,
+default resources and three warm repeats: all 192 populations complete, 174
+qualify and 18 retain their default-grid/fitting accuracy failures. Both native
+profiles beat the reference in 43 of 58 qualified warm cases; large source-only
+DF96 remains substantially slower despite the derivative improvement.
+
 ## Remaining work
 
 Shell selection removes repeated derivative work; it does not remove repeated
