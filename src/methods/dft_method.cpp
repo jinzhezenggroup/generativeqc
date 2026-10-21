@@ -127,9 +127,14 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
     std::size_t primitives = 0;
     for (const auto& shell : system.shells)
       primitives = runtime::add_capacity(primitives, shell.primitives.size());
+    // The lazy first-order LR owner competes with composite grid response
+    // under one capacity cap. Use its known Cartesian size rather than the
+    // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
+    // Value-only preparation retains its established optional-owner allowance.
+    const auto cartesian_nao = direct_derivative_order ? molecule::cartesian_ao_count(system) : 0U;
     return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
                                                  system.shells.size(), primitives,
-                                                 direct_derivative_order, true);
+                                                 direct_derivative_order, true, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;

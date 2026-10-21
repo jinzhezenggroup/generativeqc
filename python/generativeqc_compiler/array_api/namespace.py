@@ -5,7 +5,8 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
-from math import copysign, isfinite, prod
+from math import copysign, isfinite
+from math import prod as _shape_product
 from string import ascii_letters
 from struct import pack, unpack
 
@@ -176,7 +177,7 @@ def _canonical_generic(value: VibeArray) -> VibeArray:
 
 
 def _broadcast_shape(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[int, ...]:
-    rank = max(len(left), len(right))
+    rank = builtins.max(len(left), len(right))
     a = (1,) * (rank - len(left)) + left
     b = (1,) * (rank - len(right)) + right
     result = []
@@ -814,7 +815,7 @@ def repeat(x: object, repeats: int, *, axis: int | None = None) -> VibeArray:
     # Collapse the leading and trailing groups so a valid rank-64 input
     # does not need a rank-65 intermediate. Empty inputs use a harmless
     # unit trailing group without multiplying possibly huge empty extents.
-    inner = prod(shape[position + 1 :]) if value.size else 1
+    inner = _shape_product(shape[position + 1 :]) if value.size else 1
     outer = value.size // inner
     expanded = (outer, 1, inner)
     repeated = (outer, repeats, inner)
@@ -833,7 +834,7 @@ def tile(x: object, repetitions: tuple[int, ...]) -> VibeArray:
         raise TypeError("tile repetitions must be a static tuple of integers")
     if any(count < 0 for count in repetitions):
         raise ValueError("tile repetitions must be nonnegative")
-    rank = max(value.ndim, len(repetitions))
+    rank = builtins.max(value.ndim, len(repetitions))
     shape = (1,) * (rank - value.ndim) + value.shape
     counts = (1,) * (rank - len(repetitions)) + repetitions
     output = tuple(extent * count for extent, count in zip(shape, counts, strict=True))
@@ -849,7 +850,7 @@ def tile(x: object, repetitions: tuple[int, ...]) -> VibeArray:
         if count == 1:
             continue
         shape = result.shape
-        outer = prod(shape[:axis])
+        outer = _shape_product(shape[:axis])
         inner = result.size // outer
         # Split into three groups so rank-64 arrays do not require a
         # rank-65 intermediate. Repeat whole axis blocks, not elements.
@@ -997,6 +998,190 @@ def sum(
     return _canonical_generic(result)
 
 
+def _prod_plan(
+    shape: tuple[int, ...],
+    axes: tuple[int, ...],
+    itemsize: int,
+    output: tuple[int, ...],
+) -> tuple[int, int, int]:
+    """Bound new retained tensors, nodes and gather positions before allocation.
+
+    Each take may retain both a gather and a canonical reshape. Multiplication
+    retains one more tensor. Odd tails have extent one and stay separate until
+    the axis is finished; they are never duplicated or divided out.
+    Existing input graphs and returned copies remain subject to backend budgets.
+    """
+    current = list(shape)
+    retained = _shape_product(output) * itemsize  # final reshape
+    nodes, positions, rounds = 1, 0, 0
+    empty = any(shape[i] == 0 for i in axes)
+    if empty:
+        retained += itemsize  # scalar one plus optional output broadcast
+        nodes += 2
+    elif _shape_product(shape):
+        for axis in reversed(axes):
+            tails = 0
+            while current[axis] > 1:
+                extent = current[axis]
+                if extent % 2:
+                    tail_shape = current.copy()
+                    tail_shape[axis] = 1
+                    retained += (
+                        _shape_product(tail_shape) * itemsize * (2 + bool(tails))
+                    )
+                    nodes += 2 + bool(tails)
+                    positions += 1
+                    tails += 1
+                current[axis] = extent // 2
+                retained += _shape_product(current) * itemsize * 5
+                nodes += 5
+                positions += 2 * current[axis]
+                rounds += 1
+            if tails:
+                retained += _shape_product(current) * itemsize
+                nodes += 1
+    if positions > 65_536 or rounds > 64 or nodes > 512 or retained > 256 * 1024 * 1024:
+        raise ValueError("prod exceeds the static reduction graph budget")
+    return retained, nodes, positions
+
+
+def prod(
+    x: object,
+    /,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    dtype: object = None,
+    keepdims: bool = False,
+) -> VibeArray:
+    """Bounded finite generic product using zero-safe polynomial multiplication."""
+    value = _array(x, "prod")
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError("prod requires real float32 or float64 arrays")
+    if (
+        not _is_generic_array(value)
+        or value.node.spec.representation != "general"
+        or value.node.spec.symmetries
+        or any(index.space.spin is not None for index in value.node.spec.indices)
+    ):
+        raise TypeError(
+            "prod supports only generic arrays without scientific annotations"
+        )
+    if dtype is not None and dtype != value.dtype:
+        raise ValueError("frontend prod does not insert dtype conversions")
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _reduction_axes(axis, value.ndim, "prod")
+    output = (
+        tuple(1 if i in axes else n for i, n in enumerate(value.shape))
+        if keepdims
+        else tuple(n for i, n in enumerate(value.shape) if i not in axes)
+    )
+    _prod_plan(value.shape, axes, value.node.spec.itemsize, output)
+    if any(value.shape[i] == 0 for i in axes):
+        return full(output, 1, dtype=value.dtype)
+    if value.size == 0:
+        return reshape(value, output)
+    result = value
+    for position in reversed(axes):
+        carry = None
+        while result.shape[position] > 1:
+            extent = result.shape[position]
+            if extent % 2:
+                tail = take(result, (extent - 1,), axis=position)
+                carry = tail if carry is None else multiply(carry, tail)
+            left = take(result, tuple(range(0, extent - 1, 2)), axis=position)
+            right = take(result, tuple(range(1, extent, 2)), axis=position)
+            result = multiply(left, right)
+        if carry is not None:
+            result = multiply(result, carry)
+    return reshape(result, output)
+
+
+def _reduce_extremum(
+    x: object, *, axis: int | tuple[int, ...] | None, keepdims: bool, name: str
+) -> VibeArray:
+    value = _array(x, name)
+    # Validate metadata even for identities and empty outputs.
+    if value.dtype not in ("float32", "float64"):
+        raise TypeError(f"{name} requires real float32 or float64 arrays")
+    if (
+        not _is_generic_array(value)
+        or value.node.spec.representation != "general"
+        or value.node.spec.symmetries
+        or any(index.space.spin is not None for index in value.node.spec.indices)
+    ):
+        raise TypeError(
+            f"{name} supports only generic arrays without scientific annotations"
+        )
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _reduction_axes(axis, value.ndim, name)
+    if any(value.shape[position] == 0 for position in axes):
+        raise ValueError(f"{name} of an empty reduction is unsupported")
+    target = tuple(
+        1 if position in axes else extent for position, extent in enumerate(value.shape)
+    )
+    output = (
+        target
+        if keepdims
+        else tuple(
+            extent
+            for position, extent in enumerate(value.shape)
+            if position not in axes
+        )
+    )
+    if value.size == 0:
+        return reshape(value, output)
+
+    # Preflight the whole construction before materializing any index tuples.
+    # Adjacent pairs preserve the earliest C-order winner (also for signed zero).
+    # Each round halves an axis, giving logarithmic depth rather than a node per
+    # input scalar. Existing backend budgets still apply to the resulting graph.
+    positions = rounds = 0
+    shape = list(value.shape)
+    itemsize = 4 if value.dtype == "float32" else 8
+    # Include the final output reshape, including identity reductions. Each
+    # pairwise round retains two gathers, their canonical reshapes and where.
+    retained = _shape_product(output) * itemsize
+    if retained > 256 * 1024 * 1024:
+        raise ValueError(f"{name} exceeds the static reduction graph budget")
+    for position in reversed(axes):
+        while shape[position] > 1:
+            shape[position] = (shape[position] + 1) // 2
+            positions += 2 * shape[position]
+            rounds += 1
+            retained += _shape_product(shape) * (5 * itemsize + 1)
+            if positions > 65_536 or rounds > 64 or retained > 256 * 1024 * 1024:
+                raise ValueError(f"{name} exceeds the static reduction graph budget")
+    result = value
+    operation = maximum if name == "max" else minimum
+    for position in reversed(axes):
+        while result.shape[position] > 1:
+            extent = result.shape[position]
+            left = take(result, tuple(range(0, extent, 2)), axis=position)
+            right = take(
+                result,
+                tuple(builtins.min(i + 1, extent - 1) for i in range(0, extent, 2)),
+                axis=position,
+            )
+            result = operation(left, right)
+    return reshape(result, output)
+
+
+def max(
+    x: object, /, *, axis: int | tuple[int, ...] | None = None, keepdims: bool = False
+) -> VibeArray:
+    """Bounded finite generic maximum; ties retain the earliest C-order value."""
+    return _reduce_extremum(x, axis=axis, keepdims=keepdims, name="max")
+
+
+def min(
+    x: object, /, *, axis: int | tuple[int, ...] | None = None, keepdims: bool = False
+) -> VibeArray:
+    """Bounded finite generic minimum with the same tie convention as max."""
+    return _reduce_extremum(x, axis=axis, keepdims=keepdims, name="min")
+
+
 def mean(
     x: object,
     *,
@@ -1110,7 +1295,7 @@ def _contraction_axes(
     axes: object, left_rank: int, right_rank: int
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
     if type(axes) is int:
-        if not 0 <= axes <= min(left_rank, right_rank):
+        if not 0 <= axes <= builtins.min(left_rank, right_rank):
             raise ValueError("tensordot axes count is out of range")
         return tuple(range(left_rank - axes, left_rank)), tuple(range(axes))
     if not isinstance(axes, (tuple, list)) or len(axes) != 2:
@@ -1245,7 +1430,7 @@ def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
         start, stop, step = item.indices(extent)
         if step == 1:
             # A contiguous slice needs only its bounds, not an index tuple.
-            selected_count = max(0, stop - start)
+            selected_count = builtins.max(0, stop - start)
             if selected_count:
                 ranges = tuple(
                     (start, stop) if axis == source_axis else (0, node.spec.shape[axis])

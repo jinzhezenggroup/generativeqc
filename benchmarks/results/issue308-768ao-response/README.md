@@ -155,3 +155,11 @@ The conservative CUDA ledger counts +177/-12 scientific adapter lines and
 +0/-0 runtime CUDA lines; no derivative kernel family or generated capability
 is added. The bounded panel route is still needed where full scratch is absent;
 the separately recorded serial metric-dot oracle retains its existing retirement gate.
+
+## Lossless storage
+
+The three `*-768ao.json` records are retained as `.json.gz` companions.
+Each `.storage.json` binds the original bytes, Git identity and compressed
+bytes. The filenames and hashes in the historical provenance describe the
+uncompressed records; `gzip -dc default-768ao.json.gz` restores those exact
+bytes. All numerical samples and outcomes are unchanged.

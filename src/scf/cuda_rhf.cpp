@@ -1191,16 +1191,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     return outputs;
   }
   if (quartet_direct || options.export_physical_reference) {
-    // High-order direct ERI recurrences use a bounded per-thread local
-    // workspace.  CUDA's default stack limit is only 1 KiB, which is enough
-    // for s/p/d low-order tiles but lets d/f quartets fault with an apparent
-    // local-memory out-of-bounds access.  Reserve a generous fixed ceiling
-    // once per device; low-order kernels do not consume it.
-    std::size_t stack_limit = 0;
-    cuda_error = cudaDeviceGetLimit(&stack_limit, cudaLimitStackSize);
-    if (cuda_error == cudaSuccess && stack_limit < direct_schedule.cuda_stack_limit_bytes) {
-      cuda_error = cudaDeviceSetLimit(cudaLimitStackSize, direct_schedule.cuda_stack_limit_bytes);
-    }
+    // The default 1 KiB stack is insufficient for high-order recurrences.
+    // Through-d value/force paths are qualified at 32 KiB; preserve the larger
+    // policy ceiling for f and unknown metadata. The limit reserves driver
+    // memory, so charging the f ceiling to every basis can prevent DF forces
+    // from allocating their explicitly budgeted workspace.
+    const auto maximum_shell_angular =
+        host.shell_angular.empty()
+            ? 255U
+            : *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
+    const auto required_stack =
+        maximum_shell_angular <= 2
+            ? std::min(direct_schedule.cuda_stack_limit_bytes, std::size_t{32} << 10)
+            : direct_schedule.cuda_stack_limit_bytes;
+    // Preserve a higher context-wide limit established by another live owner.
+    cuda_error = runtime::cuda_ensure_stack_limit(required_stack);
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
       return outputs;
@@ -1913,6 +1918,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_coefficients,
                            occupied};
   configure_direct_weighted_force_response(device_batch);
+  if (!host.shell_angular.empty())
+    device_batch.direct_maximum_shell_angular =
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
   if (quartet_direct && geometry_changed) {
     launch_build_shell_primitive_pair_cache_kernel(
         static_cast<unsigned>(total_shell_pairs), detail::kDirectQuartetThreads, 0,
@@ -3284,10 +3292,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
         static_cast<std::int32_t>(nbf), incremental_rebuild_interval,
-        incremental_direct_jk_policy.density_rms_threshold, density_rms, density_input, hcore,
-        active, incremental_anchor_density, incremental_anchor_fock, next_density,
-        incremental_delta_updates, incremental_full_build, incremental_full_build_count,
-        incremental_delta_build_count, incremental_max_abs_delta_density);
+        incremental_direct_jk_policy.density_rms_threshold,
+        options.screening_tolerance > 0.0 ? options.density_tolerance : 0.0, density_rms,
+        density_input, hcore, active, incremental_anchor_density, incremental_anchor_fock,
+        next_density, incremental_delta_updates, incremental_full_build,
+        incremental_full_build_count, incremental_delta_build_count,
+        incremental_max_abs_delta_density);
     cudaError_t error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     // Existing Direct-J/K shell-pair density bounds and quartet compaction now

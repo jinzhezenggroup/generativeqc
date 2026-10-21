@@ -4,10 +4,13 @@ Requires optional PySCF 2.14.0 / Libxc 7.0.0. Only full-range J/K are fitted;
 get_k(omega=0.3) deliberately uses exact integrals rather than range-separated DF.
 The tiny orbital auxiliary basis qualifies composition, not basis-set accuracy.
 Run from the checkout with PYTHONPATH=python python tools/verify_mixed_df_rsh_cpu.py.
+Default reproduces historical CPU PySCF; --vv10-density-cutoff 1e-10 explicitly
+qualifies the new native molecular domain without changing reference defaults.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from typing import TYPE_CHECKING
 
@@ -86,4 +89,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    from _pyscf_vv10_domain import vv10_density_domain
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--vv10-density-cutoff", type=float, choices=(1e-8, 1e-10), default=1e-8
+    )
+    args = parser.parse_args()
+    with vv10_density_domain(args.vv10_density_cutoff):
+        main()

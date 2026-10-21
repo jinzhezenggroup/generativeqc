@@ -190,3 +190,30 @@ def test_default_auxiliary_water_tetramer(
 ) -> None:
     """A larger complete owner exercises auxiliary panels and repeated response."""
     check_endpoint(method, xc, fast, "water-tetramer-def2-svp-spherical")
+
+
+@pytest.mark.parametrize("schedule", ("warp", "packed", "compact"))
+@pytest.mark.parametrize("pairs", ("full", "symmetric"))
+def test_auxiliary_g_shell_schedules_against_independent_forces(
+    schedule: str, pairs: str, monkeypatch: Any, tmp_path: Any
+) -> None:
+    """Exercise every schedule on spherical g weights and both J/K responses.
+
+    The independent complete PySCF derivative includes auxiliary-center motion.
+    Executed g-shell regions ensure agreement cannot come from generic replay.
+    Small panels naturally cut spherical shells in the exchange response.
+    """
+    monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", "shell")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_SCHEDULE", schedule)
+    monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", pairs)
+    trace = tmp_path / "g-shell.jsonl"
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+    check_endpoint("pbe0-rks", "PBE0", False, "water-def2-svp-spherical")
+    records = [json.loads(line) for line in trace.read_text().splitlines()]
+    import re
+
+    assert any(
+        re.fullmatch(r"shell_[0-3][0-3]4(?:_p\d+_\d+_\d+)?", region["name"])
+        for record in records
+        for region in record["regions"]
+    )

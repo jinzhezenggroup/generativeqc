@@ -294,6 +294,33 @@ of that Python float. During capture, negative-zero float literals are rejected 
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
 
+### Captured products
+
+`xp.prod(x, axis=None, dtype=None, keepdims=False)` captures generic finite
+float32/float64 arrays using the existing TensorIR multiplication and static
+gather/reshape operations. Axes may be signed integers, unique tuples, `None`
+(all axes), or `()` (identity). Reduced zero extents produce the empty product
+1; zero extents on retained axes produce an empty output. `keepdims=True`
+retains reduced axes of length one. `dtype=None` preserves the input dtype;
+explicit same-dtype requests are accepted, while conversions are rejected.
+Scientific index annotations, spin, symmetry and compressed representations
+are outside this capture contract.
+
+Pairwise multiplication with separate odd tails gives a bounded static graph;
+no input is duplicated to pad an odd extent. Capture preflights gather positions,
+nodes, rounds and retained intermediate bytes before creating index maps.
+Backend byte/work/node budgets still apply to the complete program. Multiplication
+is polynomial, so existing first-order JVP/VJP rules remain valid at one or
+multiple zero factors without a comparison-selector opt-in or division by an
+input. Native execution is limited here to the existing materializing CPU FP64
+contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
+explicitly rejected. Higher derivatives, scientific endpoints and performance
+are outside this slice. Standard eager `prod` behavior is unchanged.
+
+The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
+The compiler continues to report `array_api_version=None`; the public eager
+namespace's existing standard discovery does not qualify capture conformance.
+
 ## Generic native molecular method sources
 
 Use `xp.MolecularModel` to connect any **existing, supported** native
@@ -603,6 +630,31 @@ separately from the tie selection convention; no mathematical differentiability
 at ties or Hessian qualification is claimed. The operations reuse comparisons and
 `where`, with shared broadcast values and unchanged resource budgets. Their
 capability entries retain native CPU/CUDA qualification unset.
+
+Captured `max(x, axis=None, keepdims=False)` and `min` accept finite generic
+float32/float64 static arrays. Axis accepts a signed integer, a unique tuple of
+axes, or `None`; an empty tuple is a detached identity. `keepdims` must be a
+Python bool. An actual zero-length reduced axis raises; a zero-length retained
+axis gives an empty output. Scientific annotations and nonfinite capture remain
+unsupported. The existing eager IEEE behavior is unchanged. The
+[max](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.max.html)
+and [min](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.min.html)
+specifications permit errors for empty reductions and implementation-defined
+signed-zero order.
+
+Capture pairs adjacent values in a balanced tree, preserving the earliest
+C-order value on ties, including its zero sign. Before constructing the graph,
+it limits total gather positions to 65,536, pairwise rounds to 64, and estimated
+new retained tensor storage to 256 MiB. Ordinary backend node, work and byte
+budgets still apply and may reject smaller programs. Put static options inside
+a function, for example `xp.compile(lambda x: xp.max(x, axis=(0, -1)),
+backend="reference")`, following the existing array-only runtime argument
+contract. First-order comparison-selector AD requires
+`allow_comparison_where=True` wherever comparisons remain in the graph; empty
+axis and singleton identities use the existing identity AD. Tie gradients are
+only a deterministic branch convention. CPU FP64 execution/AD uses the existing
+opt-in native path; capability qualification flags remain unset, and native
+float32 and CUDA reductions are not qualified.
 
 Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
 arrays. Each bound can be absent, a finite static scalar under the existing exact

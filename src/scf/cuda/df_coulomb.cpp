@@ -5,6 +5,7 @@
 #include <limits>
 #include <new>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -84,6 +85,27 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
       // admitted occupied K can provide the first pass without materializing
       // transformed three-center tiles just to reduce them into one vector.
       const auto pair_tile = std::min(plan.ao_pair_tile, plan.row_tile * plan.nbf);
+      const auto* packed_choice = std::getenv("GENERATIVEQC_DF_STREAMED_COULOMB_PACKED");
+      const bool packed_pairs = !packed_choice || std::string_view(packed_choice) != "0";
+      const auto pair_count = packed_pairs ? plan.matrix_elements / 2 + plan.nbf / 2 + plan.nbf % 2
+                                           : plan.matrix_elements;
+      // J has revoked projection leases and all preceding K consumers are
+      // ordered on this stream. Its transpose staging is therefore available
+      // for folded D, then packed J after charge contraction. A later K builds
+      // its own transpose/factor again; neither K output nor its live charge
+      // vector aliases this scratch. No extra per-system storage is admitted.
+      const auto generate_raw = [&](std::size_t system, std::size_t first, std::size_t pairs,
+                                    std::size_t begin, std::size_t count) {
+        if (packed_pairs)
+          return generate_cuda_density_fitting_packed_raw_tile(
+              plan.integral_source, system, first, pairs, begin, count,
+              reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+        return generate_cuda_density_fitting_raw_tile(
+            plan.integral_source, system, first, pairs, begin, count, -1,
+            reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+      };
+      runtime::cuda_trace::trace_counter("streamed_coulomb_pairs", pair_count);
+      runtime::cuda_trace::trace_counter("streamed_coulomb_packed", packed_pairs);
       runtime::df_progress::number("planner_ao_pair_tile", plan.ao_pair_tile);
       runtime::df_progress::number("executed_ao_pairs", pair_tile);
       runtime::df_progress::number("executed_auxiliary_tile", plan.auxiliary_tile);
@@ -96,6 +118,15 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
         // The small panel charge/potential borrows K scratch; only the first
         // auxiliary_count entries are live, within every resolved tile size.
         auto* panel_vector = plan.exchange_intermediate;
+        auto* packed = plan.exchange_density_column_major + system * plan.matrix_elements;
+        const auto* system_density = density + system * plan.matrix_elements;
+        if (packed_pairs && !raw_charge_ready) {
+          launch_pack_df_density(plan.stream, plan.nbf, system_density, packed);
+          cuda_error = cudaPeekAtLastError();
+          if (cuda_error != cudaSuccess)
+            return cuda_failure(cuda_error, "pack streamed DF density", detail);
+          system_density = packed;
+        }
         if (!raw_charge_ready) {
           for (std::size_t begin = 0; begin < plan.naux; begin += plan.auxiliary_tile) {
             const auto count = std::min(plan.auxiliary_tile, plan.naux - begin);
@@ -103,17 +134,13 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
             cuda_error = cudaMemsetAsync(raw_charge, 0, count * sizeof(double), plan.stream);
             if (cuda_error != cudaSuccess)
               return cuda_failure(cuda_error, "zero raw DF panel charge", detail);
-            for (std::size_t pair_begin = 0; pair_begin < plan.matrix_elements;
-                 pair_begin += pair_tile) {
-              const auto pairs = std::min(pair_tile, plan.matrix_elements - pair_begin);
-              auto status = generate_cuda_density_fitting_raw_tile(
-                  plan.integral_source, system, pair_begin, pairs, begin, count, -1,
-                  reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+            for (std::size_t pair_begin = 0; pair_begin < pair_count; pair_begin += pair_tile) {
+              const auto pairs = std::min(pair_tile, pair_count - pair_begin);
+              auto status = generate_raw(system, pair_begin, pairs, begin, count);
               if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
               launch_accumulate_streamed_auxiliary_density_kernel(
                   blocks_for(count), kThreads, 0, plan.stream, pairs, count,
-                  plan.auxiliary_tile_values, density + system * plan.matrix_elements + pair_begin,
-                  raw_charge);
+                  plan.auxiliary_tile_values, system_density + pair_begin, raw_charge);
               cuda_error = cudaPeekAtLastError();
               if (cuda_error != cudaSuccess)
                 return cuda_failure(cuda_error, "raw DF panel charge contraction", detail);
@@ -158,6 +185,14 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
           runtime::cuda_trace::trace_counter("streamed_coulomb_factor_flops",
                                              4 * plan.naux * plan.naux);
         }
+        auto* output = plan.coulomb + system * plan.matrix_elements;
+        if (packed_pairs) {
+          // The charge and metric phases have consumed folded D completely.
+          cuda_error = cudaMemsetAsync(packed, 0, pair_count * sizeof(double), plan.stream);
+          if (cuda_error != cudaSuccess)
+            return cuda_failure(cuda_error, "zero packed streamed DF Coulomb", detail);
+          output = packed;
+        }
         for (std::size_t begin = 0; begin < plan.naux; begin += plan.auxiliary_tile) {
           const auto count = std::min(plan.auxiliary_tile, plan.naux - begin);
           if (!factor_first) {
@@ -171,21 +206,24 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
             }
           }
           const auto* potential = factor_first ? charge + begin : panel_vector;
-          for (std::size_t pair_begin = 0; pair_begin < plan.matrix_elements;
-               pair_begin += pair_tile) {
-            const auto pairs = std::min(pair_tile, plan.matrix_elements - pair_begin);
-            auto source_status = generate_cuda_density_fitting_raw_tile(
-                plan.integral_source, system, pair_begin, pairs, begin, count, -1,
-                reinterpret_cast<void*>(plan.stream), plan.auxiliary_tile_values, detail);
+          for (std::size_t pair_begin = 0; pair_begin < pair_count; pair_begin += pair_tile) {
+            const auto pairs = std::min(pair_tile, pair_count - pair_begin);
+            auto source_status = generate_raw(system, pair_begin, pairs, begin, count);
             if (source_status != GENERATIVEQC_STATUS_SUCCESS) return source_status;
-            launch_build_streamed_coulomb_tile_kernel(
-                blocks_for(pairs), kThreads, 0, plan.stream, pairs, count,
-                plan.auxiliary_tile_values, potential,
-                plan.coulomb + system * plan.matrix_elements + pair_begin);
+            launch_build_streamed_coulomb_tile_kernel(blocks_for(pairs), kThreads, 0, plan.stream,
+                                                      pairs, count, plan.auxiliary_tile_values,
+                                                      potential, output + pair_begin);
             cuda_error = cudaPeekAtLastError();
             if (cuda_error != cudaSuccess)
               return cuda_failure(cuda_error, "raw DF Coulomb output contraction", detail);
           }
+        }
+        if (packed_pairs) {
+          launch_scatter_df_pairs(plan.stream, plan.nbf, packed,
+                                  plan.coulomb + system * plan.matrix_elements);
+          cuda_error = cudaPeekAtLastError();
+          if (cuda_error != cudaSuccess)
+            return cuda_failure(cuda_error, "scatter streamed DF Coulomb", detail);
         }
       }
       return GENERATIVEQC_STATUS_SUCCESS;

@@ -125,6 +125,47 @@ def read_cc_performance_result(
                 values[field] = (
                     bool(counters[position]) if position < 3 else counters[position]
                 )
+    response = getattr(library, "generativeqc_calculation_get_df_response_v1", None)
+    if index is None and response is not None:
+        response.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_uint32,
+        ]
+        response.restype = ctypes.c_int
+        counters = (ctypes.c_uint64 * 12)()
+        seconds = (ctypes.c_double * 3)()
+        status = response(owner, counters, len(counters), seconds, len(seconds))
+        if status != _native.STATUS_NOT_IMPLEMENTED:
+            _native.check(library, status, context=context)
+            for position, field in enumerate(
+                (
+                    "lambda_fp32_requested",
+                    "lambda_fp32_executed",
+                    "lambda_fp32_refused",
+                    "lambda_fp32_iterations",
+                    "lambda_fp64_iterations",
+                    "lambda_fp32_actions",
+                    "lambda_fp64_actions",
+                    "lambda_fp32_gemm_calls",
+                    "lambda_fp32_cast_elements",
+                    "lambda_auxiliary_batch_size",
+                    "lambda_numeric_capacity_bytes",
+                    "lambda_owned_device_bytes",
+                )
+            ):
+                values[field] = (
+                    bool(counters[position]) if position < 3 else counters[position]
+                )
+            values.update(
+                zip(
+                    ("lambda_seconds", "source_response_seconds", "orbital_seconds"),
+                    seconds,
+                    strict=True,
+                )
+            )
     return CcPerformanceResult(**values)
 
 

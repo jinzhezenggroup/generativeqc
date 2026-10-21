@@ -149,3 +149,10 @@ lines. Another 283 unchanged adapter lines move from scientific to runtime.
 Thus the ledger delta is scientific -290/runtime +290, but this is **not a
 290-line deletion**. The native adapter remains, and the independent CPU
 `ecp.cpp` oracle/fallback is deliberately retained.
+
+Source inventories are stored losslessly in
+`benchmarks/results/ecp-source-inventories.json.xz`. Adjacent `.storage.json`
+files bind the original bytes and the JSON bundle member. Decode with
+`json.loads(lzma.decompress(bundle.read_bytes()))["files"][original_path]`
+and encode that string as UTF-8 to recover the exact original JSON. Historical
+raw manifest checksums continue to describe their original run files.

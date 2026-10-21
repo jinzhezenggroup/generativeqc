@@ -1,5 +1,17 @@
 # Published GPU benchmark artifacts
 
+The [2026-10-21 unified README comparison](readme-unified-20261021/README.md)
+remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
+and one GPU4PySCF default SCF profile. Both engines include complete moving-grid
+force response. The report retains common independent accuracy gates, actual
+work, failed populations and the [remaining configuration differences](readme-unified-20261021/conditions.md).
+
+The [initial 2026-10-20 default-grid refresh](readme-defaults-20261020/README.md)
+retains 765 complete cold/warm E+F calls across all eight HF/DFT methods,
+including public Standard/Fast modes. That frozen native source rejected the
+reference's default g-shell auxiliary basis; those failures remain explicit. These are stock
+latencies with different force-response conventions, not qualified speedups.
+
 The [2026-10-20 CCSD(T)/CBS Fast campaign](readme-cbs-fast-20261020/README.md)
 compares complete Standard/Fast QM7 C1–C7 calls with the same binary and GPU
 within each pair. Fast combines relaxed convergence with default FP32 DF-CCSD

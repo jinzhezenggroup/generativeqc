@@ -217,34 +217,34 @@
   "record_parts": {
     "timings": [
       {
-        "bytes": 47053,
-        "path": "samples/root-repeat-0.json",
-        "sha256": "94c9247c0271be88360b3ec8c4a86c71b2c9fdc9918e3589dfd6b9b89d65226d"
+        "bytes": 4842,
+        "path": "samples/root-repeat-0.json.gz",
+        "sha256": "270034da87f9ec8c2c5a13fbb9e567c8cf0d6d6afc8b8a3f1646f2c9e5d30a93"
       },
       {
-        "bytes": 47092,
-        "path": "samples/root-repeat-1.json",
-        "sha256": "f0ecb1727cc0c076fe97761a4bf5d2c9d55539153aa2a22b80bbfa2e90fa2052"
+        "bytes": 4840,
+        "path": "samples/root-repeat-1.json.gz",
+        "sha256": "6d6dac84f2aa786bfdf5dda2f16fbeb3c21fad29cba283fa5001e3a46de04d2f"
       },
       {
-        "bytes": 47084,
-        "path": "samples/root-repeat-2.json",
-        "sha256": "7054465eaa6005a44dd576f0739be5402c6275ddd335918a2f6b9effff7957f7"
+        "bytes": 4878,
+        "path": "samples/root-repeat-2.json.gz",
+        "sha256": "2a95f78edc485bb9fc112da961a93bcdce0e91bab7d1f64c0e347c659e6dd18d"
       },
       {
-        "bytes": 35194,
-        "path": "samples/coarse-repeat-0.json",
-        "sha256": "ec9d46e33b98f4012d56074c9576230c9807864106e06eb27f5eceaa8c98327b"
+        "bytes": 3729,
+        "path": "samples/coarse-repeat-0.json.gz",
+        "sha256": "dc912f0b5036bbfe67cc3399767acafbbf16cd8b4574f81e80327e9d196e1b93"
       },
       {
-        "bytes": 35220,
-        "path": "samples/coarse-repeat-1.json",
-        "sha256": "9aa2cebed9207ea09582d65febf4ce1f48b4284996299abf9bd4b0ea402c62aa"
+        "bytes": 3750,
+        "path": "samples/coarse-repeat-1.json.gz",
+        "sha256": "f97fea8fd9c2b96e5928fe9ad0d884db2725944a6834ba7385d0ea70e1b83c9c"
       },
       {
-        "bytes": 35219,
-        "path": "samples/coarse-repeat-2.json",
-        "sha256": "a0e614a5a10a2304438ed4f31ee2e54d7949563f230d2db752f9011c4ba8533f"
+        "bytes": 3745,
+        "path": "samples/coarse-repeat-2.json.gz",
+        "sha256": "bba5c13ea5195ee34dfad522033fb538b2f05236b7c2e7705e47a29ffd48350c"
       },
       {
         "bytes": 2858,

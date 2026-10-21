@@ -119,11 +119,41 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
         and operator.get("arithmetic_mode") == "mixed"
         and operator.get("count", 0) > 0
     }
+    # A pure semilocal proposal may use the faster generated FP64 J while XC
+    # or density contractions remain budget selected. Strict J is no less accurate than its admitted
+    # recurrence-only mixed counterpart; require its actual complete dtype row
+    # instead of demanding unnecessary FP32 work or inventing a recurrence count.
+    j_rows = [
+        row
+        for row in work.get("operators", ())
+        if row.get("name") == "coulomb_j" and row.get("count", 0) > 0
+    ]
+    strict_j = bool(j_rows) and all(
+        row.get("arithmetic_mode") == "strict"
+        and all(
+            row.get(field) == "fp64"
+            for field in ("storage", "compute", "accumulation", "reduction")
+        )
+        for row in j_rows
+    )
+    mixed_proposal = any(
+        row.get("name") in ("xc", "matrix_product", "density_build")
+        and row.get("compute") == "fp32"
+        and row.get("arithmetic_mode") == "mixed"
+        and row.get("count", 0) > 0
+        for row in work.get("operators", ())
+    )
+    pure_strict_j = (
+        options.coefficients[2] == 0
+        and not options.has_range_exchange
+        and strict_j
+        and mixed_proposal
+    )
     return (
         work.get("operator_work_counters_valid") is True
         and work.get("complete") is True
         and work.get("operator_inventory_complete") is True
-        and required <= observed
+        and (required <= observed or pure_strict_j)
         and work.get("strict_stage_fock_builds", 0) >= 2
         and work.get("strict_refinement_applied") is True
         and work.get("final_residual_audits", 0) > 0
@@ -131,7 +161,7 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
 
 
 def _budget_fock_strict_warm_admitted(
-    calculator: Calculator, result: typing.Any
+    calculator: Calculator, result: typing.Any, *, qualified_gradient: bool = False
 ) -> bool:
     """Accept a fully revalidated FP64 warm endpoint without inventing mixed work.
 
@@ -157,7 +187,11 @@ def _budget_fock_strict_warm_admitted(
         or work.get("mixed_stage_fock_builds") != 0
         or work.get("strict_stage_fock_builds", 0) < 1
         or work.get("final_residual_audits", 0) < 1
-        or (work.get("gradient") and work["gradient"].get("returned_mode") != "fp64")
+        or (
+            work.get("gradient")
+            and work["gradient"].get("returned_mode") != "fp64"
+            and not qualified_gradient
+        )
     ):
         return False
     required = {"coulomb_j", "xc", "fock_assembly", "physical_residual"}
@@ -185,6 +219,69 @@ def _budget_fock_strict_warm_admitted(
         if identity and event.get("state") == identity and event.get("count", 0) > 0
     }
     return required <= observed and {"strict_fock", "final_audit"} <= bound
+
+
+def _standard_fallback_admitted(
+    calculator: Calculator,
+    candidate: typing.Any,
+    precision: str,
+    budget: TargetErrorBudget,
+) -> bool:
+    """Retain a completed Standard endpoint when Fast cannot narrow its work.
+
+    This is the native Standard contract, not an observable-error certificate.
+    Require strict execution under the native final-state contract, and never
+    extend the fallback to tighter budgets or caller-relaxed solver controls.
+    Direct HF can reuse an already checked final Fock on a warm call; fitted
+    HF lacks the optional work ledger. Keep those accounting limits explicit
+    without repeating an otherwise completed Standard endpoint.
+    Explicit TargetAccuracy requests bypass this policy in the caller.
+    """
+    work = candidate.precision or {}
+    gradient = work.get("gradient") or {}
+    strict_work = (
+        work.get("operator_work_counters_valid") is True
+        and work.get("strict_stage_fock_builds", 0) > 0
+        and (
+            work.get("final_residual_audits", 0) > 0
+            or (
+                calculator.capabilities.family == "hartree_fock"
+                and getattr(candidate, "warm_start_used", False) is True
+                and getattr(candidate, "warm_start_fallback", True) is False
+                and work.get("skipped_final_fock_builds", 0) > 0
+            )
+        )
+    )
+    # The fitted HF owner predates the detailed work ledger. Its strict native
+    # result still enforces the Standard physical-final-state contract; absence
+    # of counters must remain unknown rather than induce a second strict solve.
+    fitted_hf = (
+        calculator.capabilities.family == "hartree_fock"
+        and bool(getattr(calculator, "_density_fitting_mode", None))
+        and work.get("operator_work_counters_valid") is False
+        and not gradient
+    )
+    return (
+        precision == "fp64"
+        and candidate.converged
+        and candidate.executed_backend == "cuda"
+        and budget.energy_abs >= 1e-5
+        and budget.force_max_abs >= 1e-4
+        and (budget.force_rms is None or budget.force_rms >= 3e-5)
+        and all(
+            0 < getattr(calculator, attribute, math.inf) <= limit
+            for attribute, limit in (
+                ("_energy_tolerance", 1e-10),
+                ("_density_tolerance", 1e-8),
+                ("_screening_tolerance", 1e-12),
+            )
+        )
+        and work.get("requested_mode") == "fp64"
+        and work.get("effective_bits") == 64
+        and work.get("mixed_stage_fock_builds") == 0
+        and (strict_work or fitted_hf)
+        and (not gradient or gradient.get("returned_mode") == "fp64")
+    )
 
 
 @dataclass(frozen=True)
@@ -1014,7 +1111,11 @@ class PrecisionCalculator:
             strict_warm = (
                 fast_native
                 and self._fast_fock
-                and _budget_fock_strict_warm_admitted(candidate_calculator, candidate)
+                and _budget_fock_strict_warm_admitted(
+                    candidate_calculator,
+                    candidate,
+                    qualified_gradient=qualified_gradient,
+                )
             )
             if (
                 fast_native
@@ -1134,6 +1235,24 @@ class PrecisionCalculator:
                     perf_counter() - started,
                     reference="pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
                     scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
+                )
+                return replace(candidate, precision_validation=validation)
+            if _standard_fallback_admitted(
+                candidate_calculator, candidate, candidate_precision, self.policy.budget
+            ):
+                validation = PrecisionValidation(
+                    self.policy.profile,
+                    None,
+                    model,
+                    "strict_standard_fallback",
+                    (*route_reasons, "fast_route_unavailable_using_standard"),
+                    (),
+                    (),
+                    tuple(solves),
+                    perf_counter() - started,
+                    reference="native-standard-fp64-final-state-checks-no-observable-audit",
+                    scope="native_fp64",
                     budget=self.policy.budget,
                 )
                 return replace(candidate, precision_validation=validation)

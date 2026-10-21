@@ -62,6 +62,6 @@ void launch_build_cuda_df_transformed_tile_kernel(
     const DfPublicAoExpansion* orbital_to_cartesian,
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
     bool apply_metric_transform, double* output, unsigned mapping = 0U, unsigned math = 0U,
-    double* low_output = nullptr);
+    double* low_output = nullptr, bool packed_pairs = false);
 
 }  // namespace generativeqc::scf::cuda_execution

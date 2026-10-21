@@ -38,6 +38,34 @@ def test_private_precision_query_rejects_invalid_buffers() -> None:
     assert list(counters) == [99] * 6
 
 
+def test_private_response_query_rejects_invalid_buffers() -> None:
+    """Reject malformed spans before touching either the owner or output arrays."""
+    library = _native.load_library(device="cpu", device_id=0)
+    query = library.generativeqc_calculation_get_df_response_v1
+    query.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_uint32,
+    ]
+    query.restype = ctypes.c_int
+    counters = (ctypes.c_uint64 * 12)(*[99] * 12)
+    seconds = (ctypes.c_double * 3)(*[99.0] * 3)
+    for args in (
+        (None, counters, 12, seconds, 3),
+        (1, None, 12, seconds, 3),
+        (1, counters, 11, seconds, 3),
+        (1, counters, 13, seconds, 3),
+        (1, counters, 12, None, 3),
+        (1, counters, 12, seconds, 2),
+        (1, counters, 12, seconds, 4),
+    ):
+        assert query(*args) == _native.STATUS_INVALID_ARGUMENT
+    assert list(counters) == [99] * 12
+    assert list(seconds) == [99.0] * 3
+
+
 @pytest.mark.parametrize("version", (None, 0, 2))
 def test_missing_native_convergence_capability_fails_before_execution(
     monkeypatch: pytest.MonkeyPatch,

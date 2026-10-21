@@ -244,6 +244,13 @@ def test_public_cuda_global_hybrid_force(
     with calc.prepare_batch(
         [atoms], multiplicities=[multiplicity], warm_start=True
     ) as batch:
+        # This gate qualifies the generated stationary owner's retained work
+        # and lifetime. Native PBE0/B3LYP promotion can otherwise bypass that
+        # owner entirely. The fresh moved call below still uses default routing,
+        # so its comparison also covers parity with the native prepared route.
+        monkeypatch.setattr(
+            batch, "_native_dft_force_eligible", lambda index=None: False
+        )
         # Retain the executed owner evidence without changing the force route.
         # A descriptor count alone cannot establish which native source ran.
         force_work = []

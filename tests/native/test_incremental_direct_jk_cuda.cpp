@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -131,8 +132,10 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
                 diagnostic.delta_rejected_shell_quartets == 0U,
             "unscreened incremental Direct-J/K rejected shell quartets");
   } else {
-    const std::uint64_t expected_full = (builds + 1U) / 2U;
-    require(diagnostic.anchor_full_builds == expected_full,
+    // Density-stationary refinement may replace late delta builds with full
+    // operators. The screened contract remains at most one delta per anchor.
+    const std::uint64_t minimum_full = (builds + 1U) / 2U;
+    require(diagnostic.anchor_full_builds >= minimum_full,
             "screened incremental mode accumulated more than one delta update");
     require(diagnostic.periodic_rebuilds + 1U == diagnostic.anchor_full_builds,
             "screened incremental periodic rebuild counters disagree");
@@ -228,7 +231,8 @@ int main() {
     verify_case(true, 1.0e-12, 8U);
     verify_density_rms_gate();
     return EXIT_SUCCESS;
-  } catch (const std::exception&) {
+  } catch (const std::exception& error) {
+    std::fprintf(stderr, "%s\n", error.what());
     return EXIT_FAILURE;
   }
 }

@@ -24,6 +24,10 @@ from .df_derivatives_cuda import emit_df_derivatives_cuda
 
 PROTOTYPE_CLASSES = tuple(a for a in product(range(2), repeat=3) if any(a))
 SHELL_CLASSES = tuple(product(range(4), repeat=3))
+# Auxiliary g uses the same moment DAG with its explicitly raised F_11 domain.
+# Keep the original through-f family stable for existing tuning inventories.
+AUXILIARY_G_SHELL_CLASSES = tuple((a, b, 4) for a, b in product(range(4), repeat=2))
+SUPPORTED_SHELL_CLASSES = SHELL_CLASSES + AUXILIARY_G_SHELL_CLASSES
 DF_SIGNATURE_PACKET_SCHEDULE = HomogeneousTaskSchedule(
     packet_capacity=24,
     execution=HomogeneousExecution.ORDINARY,
@@ -98,8 +102,10 @@ def shell_work_model(angular: typing.Any) -> typing.Any:
     count by the number of executed primitive products; it must not count
     inactive components or infer hardware instructions from these values.
     """
-    if tuple(angular) not in SHELL_CLASSES:
-        raise ValueError("shell work model requires an s/p/d/f angular triple")
+    if tuple(angular) not in SUPPORTED_SHELL_CLASSES:
+        raise ValueError(
+            "shell work model requires orbital s/p/d/f and auxiliary through g"
+        )
     offsets, size = axis_cache_layout(angular)
 
     def powers(degree: typing.Any) -> typing.Any:
@@ -138,11 +144,13 @@ def select_shell_classes(classes: typing.Any = None) -> typing.Any:
     requested = tuple(tuple(angular) for angular in classes)
     if (
         not requested
-        or any(angular not in SHELL_CLASSES for angular in requested)
+        or any(angular not in SUPPORTED_SHELL_CLASSES for angular in requested)
         or len(set(requested)) != len(requested)
     ):
-        raise ValueError("expected unique supported s/p/d/f shell classes")
-    return tuple(angular for angular in SHELL_CLASSES if angular in requested)
+        raise ValueError(
+            "expected unique supported orbital s/p/d/f and auxiliary through-g classes"
+        )
+    return tuple(angular for angular in SUPPORTED_SHELL_CLASSES if angular in requested)
 
 
 def emit_df_shell_derivatives_cuda(
@@ -158,6 +166,11 @@ def emit_df_shell_derivatives_cuda(
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
     selected = select_shell_classes(classes)
+    auxiliary_g = any(c == 4 for _, _, c in selected)
+    if auxiliary_g and any(c != 4 for _, _, c in selected):
+        raise ValueError(
+            "auxiliary-g shell units require their own scalar geometry domain"
+        )
     lines = [
         r"""// Generated shell-shared weighted DF derivatives.
 #ifndef GENERATIVEQC_GENERATED_DF_SHELL_DERIVATIVES_CUH
@@ -359,4 +372,28 @@ struct Moments {
             )
         )
         source = emit_df_derivatives_cuda(scalar_type="float") + "\n" + source
+    if auxiliary_g:
+        # Both Geometry's Boys storage and the axis-polynomial switch must use
+        # the raised auxiliary-g domain. Relabeling just the shell class would
+        # leave F_11 and c=4 coefficients outside the through-f scalar contract.
+        if scalar_type == "float":
+            prefix = emit_df_derivatives_cuda(scalar_type="float") + "\n"
+            source = source.removeprefix(prefix)
+            source = (
+                emit_df_derivatives_cuda(auxiliary_g=True, scalar_type="float")
+                + "\n"
+                + source
+            )
+        source = source.replace(
+            '#include "generated_df_derivatives.cuh"',
+            '#include "generated_df_derivative_policy.cuh"',
+        )
+        source = source.replace(
+            "namespace scalar = generated_df_derivatives;",
+            "namespace scalar = generated_df_auxiliary_g_derivatives;",
+        )
+        source = source.replace(
+            "generated_df_fp32_derivatives::axis_polynomial",
+            "generated_df_fp32_auxiliary_g_derivatives::axis_polynomial",
+        )
     return source

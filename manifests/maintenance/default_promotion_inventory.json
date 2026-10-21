@@ -564,7 +564,8 @@
         "hf-runtime:GENERATIVEQC_DF_DIIS_DOTS",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_STORAGE",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_SPACE",
-        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC"
+        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC",
+        "hf-runtime:GENERATIVEQC_DF_COULOMB_RESPONSE"
       ],
       "owner_issues": [
         404,
@@ -1252,7 +1253,7 @@
     },
     {
       "id": "cc.lambda-df-mixed-precision-warmup",
-      "classification": "guarded-promotion-candidate",
+      "classification": "already-default",
       "controls": [
         "cc-option:lambda.df_mixed_precision"
       ],
@@ -1264,16 +1265,21 @@
         "src/cc/lambda_response_cuda.cu",
         "src/cc/df_lambda_cuda.cu",
         "python/generativeqc_compiler/cc/df_mixed_precision.py",
-        "tools/generate_df_lambda.py"
+        "tools/generate_df_lambda.py",
+        "src/methods/df_ccsdt_force.cu"
       ],
-      "rationale": "Default-off auxiliary-only FP32 Lambda preconvergence borrows idle shared strict scratch with a half-size strict Q tile. FP64 primal/core/RHS/Krylov algebra and individual-Q widening remain intact. Only a finite proposal crosses a permanent precision boundary into a new original FP64 GMRES solve with a fresh physical residual and empty history. Independent expanded FP64 audit and every parameter/factor/force VJP are unchanged; optional resource refusal retains bounded FP64 actions and nonfinite failures do not publish or silently retry.",
-      "revisit_condition": "Do not promote by default without representative source-matched complete cold E+F cohorts on additional sizes/devices, original independent energy/force and residual gates, total mixed-plus-strict work counts and resource/lifetime/sanitizer coverage. Borrowed scratch capacity is not an allocator peak; extra warmup iterations must be charged to endpoint time.",
+      "rationale": "Scoped default within grouped CUDA DF-CBS Fast force calls; Standard, energy-only, standalone and supplied-problem defaults remain off. Auxiliary-only FP32 Lambda preconvergence borrows idle shared strict scratch. Fast compensates the owner's Q-cap halving to preserve the ordinary Q32 ceiling subject to bounded admission. FP64 primal/core/RHS/Krylov algebra and individual-Q widening remain intact. Only a finite proposal crosses a permanent precision boundary into a new FP64 GMRES solve with a fresh physical action and empty history. Independent expanded FP64 audit and every parameter/factor/force VJP retain the selected Fast physical limits; optional resource refusal retains bounded FP64 actions and nonfinite failures do not publish or silently retry. Native telemetry distinguishes requests from executed work. Repeated matched C4 endpoints, larger C1-C7 controls and independent C2/water force checks qualify this consumer, not a universal precision/performance policy.",
+      "revisit_condition": "Broaden beyond the qualified CBS Fast consumer only with source-matched complete endpoint, independent numerical and additional-device evidence. Preserve total mixed-plus-strict work accounting, bounded refusal and lifetime contracts. Revisit the requested cap if shared scratch planning changes; borrowed capacity is not a measured allocator peak and all warmup work belongs in endpoint time.",
       "evidence": [
         "docs/developer/df_ccsdt.md",
         ".agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md",
         "benchmarks/results/df-lambda-mixed-warmup-20261011/publication.json",
         "tests/python/test_df_lambda_mixed_precision.py",
-        "tests/python/test_df_triples_mixed_endpoint.py"
+        "tests/python/test_df_triples_mixed_endpoint.py",
+        "docs/user/ccsdt_cbs.md",
+        ".agents/notes/implemented/performance/2026-10-21-cbs-fast-lambda.md",
+        "tests/python/test_full_df_cbs_native.py",
+        "benchmarks/results/cbs-fast-lambda-20261021/publication.json"
       ]
     },
     {

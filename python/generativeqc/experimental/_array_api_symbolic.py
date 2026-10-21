@@ -9,6 +9,8 @@ from __future__ import annotations
 import builtins
 import inspect
 import typing
+from contextlib import contextmanager
+from contextvars import ContextVar
 from fractions import Fraction
 
 import numpy as np
@@ -33,6 +35,19 @@ float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 _HOST_CONTAINER_MAX_DEPTH = 64
 _HOST_CONTAINER_MAX_ITEMS = 1_000_000
+_CAPTURE_BACKEND: ContextVar[str | None] = ContextVar(
+    "prod_capture_backend", default=None
+)
+
+
+@contextmanager
+def _capture_backend(backend: str) -> typing.Iterator[None]:
+    """Scope frontend-specific qualification without changing TensorIR identity."""
+    token = _CAPTURE_BACKEND.set(backend)
+    try:
+        yield
+    finally:
+        _CAPTURE_BACKEND.reset(token)
 
 
 def _symbolic(*values: object) -> builtins.bool:
@@ -525,6 +540,40 @@ def sum(
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "sum")
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
+
+
+def prod(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    dtype: object = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture finite generic products without implicit dtype conversion."""
+    if _CAPTURE_BACKEND.get() == "cuda":
+        raise ValueError("prod capture is not qualified for backend='cuda'")
+    target = None if dtype is None else _dtype_name(dtype)
+    return _namespace.prod(x, axis=axis, dtype=target, keepdims=keepdims)
+
+
+def max(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic maximum reductions."""
+    return _namespace.max(x, axis=axis, keepdims=keepdims)
+
+
+def min(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: builtins.bool = False,
+) -> VibeArray:
+    """Capture bounded finite generic minimum reductions."""
+    return _namespace.min(x, axis=axis, keepdims=keepdims)
 
 
 def mean(
