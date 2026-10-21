@@ -200,6 +200,13 @@ auxiliary reads for source-only J. The default is `auto`. All preserve the same
 metric gauge, auxiliary-center response and derivative consumer. The selection
 is recorded in resource and restart identities.
 
+Sufficiently large full-rank source-only pure-J response automatically uses the
+generated shell derivative consumer, including auxiliary g functions. This
+selection does not require a retained raw/fitted tensor and leaves pair layout,
+screening and precision unchanged. Small, unprobed, diagnostic and unsupported
+owners keep their existing routes. `GENERATIVEQC_DF_WEIGHTED_EXECUTION=generic`
+retains the bounded generic consumer for qualification or rollback.
+
 The known native DF snapshot provider separately bounds its additional paired
 one-electron/publication storage; DF response scratch stays in its independent
 resource contract. Spare geometry budget admits point-parallel Becke phases.
