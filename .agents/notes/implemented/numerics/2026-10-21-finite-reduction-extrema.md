@@ -23,8 +23,10 @@ the existing compiled input/interpreter contract; eager IEEE behavior stays inta
 
 Preflight total gather positions <= 65,536, pairwise rounds <= 64, and newly
 retained intermediate tensor bytes <= 256 MiB. A round accounts conservatively
-for four real arrays plus one Boolean predicate of the halved shape; it does
-not replace backend budgets or count existing input graph storage. Scalar-by-
+for five real arrays (two gathers, two canonical reshapes and where) plus one
+Boolean predicate of the halved shape, with the final output reshape counted
+separately. This does not replace backend budgets or count existing input graph
+storage. Scalar-by-
 scalar Python unrolling would create a node per input value and deep chains.
 Pairing contiguous halves would change the earliest-index tie convention.
 Arithmetic extrema formulas can overflow for finite inputs and lose zero signs.

@@ -152,6 +152,13 @@ def test_static_graph_and_runtime_budgets(name: str) -> None:
             operation(symbolic(shape))
     # A zero output requires no comparisons or materialized gather maps.
     assert operation(symbolic((0, 100_000)), axis=1).shape == (0,)
+    # Budget includes gathered values, their canonical views, selection and
+    # final reshape. Symbolic construction must reject before large allocation.
+    assert operation(symbolic((2, 5_000_000)), axis=0).shape == (5_000_000,)
+    with pytest.raises(ValueError, match="graph budget"):
+        operation(symbolic((2, 5_500_000)), axis=0)
+    with pytest.raises(ValueError, match="graph budget"):
+        operation(symbolic((34_000_000,)), axis=())
     for limits in ({"max_bytes": 1}, {"max_nodes": 1}, {"max_work": 0}):
         source = xp.compile(lambda x: getattr(xp, name)(x), backend="cpu", **limits)
         try:

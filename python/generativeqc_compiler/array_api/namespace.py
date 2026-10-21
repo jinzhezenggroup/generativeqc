@@ -1037,15 +1037,20 @@ def _reduce_extremum(
     # Adjacent pairs preserve the earliest C-order winner (also for signed zero).
     # Each round halves an axis, giving logarithmic depth rather than a node per
     # input scalar. Existing backend budgets still apply to the resulting graph.
-    positions = rounds = retained = 0
+    positions = rounds = 0
     shape = list(value.shape)
     itemsize = 4 if value.dtype == "float32" else 8
+    # Include the final output reshape, including identity reductions. Each
+    # pairwise round retains two gathers, their canonical reshapes and where.
+    retained = prod(output) * itemsize
+    if retained > 256 * 1024 * 1024:
+        raise ValueError(f"{name} exceeds the static reduction graph budget")
     for position in reversed(axes):
         while shape[position] > 1:
             shape[position] = (shape[position] + 1) // 2
             positions += 2 * shape[position]
             rounds += 1
-            retained += prod(shape) * (4 * itemsize + 1)
+            retained += prod(shape) * (5 * itemsize + 1)
             if positions > 65_536 or rounds > 64 or retained > 256 * 1024 * 1024:
                 raise ValueError(f"{name} exceeds the static reduction graph budget")
     result = value
