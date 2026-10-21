@@ -80,7 +80,10 @@ CPU/GPU spot checks. The controls include Standard/Fast r2SCAN-3c/48,
 PBE0/96 and r2SCAN-3c DF/96. All 40 complete energy/force calls qualify.
 
 DF/96 remains slow: Standard/Fast cold 1261.321/1250.211 seconds, median warm
-177.774/176.308 seconds, both sixteen target iterations. Admitting a better
+177.774/176.308 seconds, both sixteen target iterations. The Fast receipt
+explicitly reports `strict_standard_fallback` with
+`fp32_gradient_not_qualified`: this default-grid/basis case has no admitted
+Fast gradient route and uses Standard FP64 controls. Admitting a better
 seed does not repair repeated raw three-center generation. These results must
 remain visible; this change does not establish universal performance leadership.
 
