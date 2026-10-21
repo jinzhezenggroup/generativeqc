@@ -27,6 +27,7 @@ screening, density preparation, shell normalization, or launch policy.
 
 from __future__ import annotations
 
+import re
 from functools import cache
 from math import prod
 
@@ -132,18 +133,44 @@ static __device__ __constant__ const signed char kMdEngineKetPhases[70] = {{{sig
 """
 
 
-def emit_md_j_engine_header() -> str:
-    """Emit deterministic compact FP64 CUDA without runtime imports or probes."""
+def emit_md_radial_function(
+    maximum_order: int = MAXIMUM_RADIAL_ORDER, name: str = "md_engine_radial"
+) -> str:
+    """Emit shared compact Coulomb roots through the caller's qualified order.
+
+    Direct retains its order-eight specialization. Three-center f/f/g work
+    requires order ten; its separate consumer must qualify indexing and
+    contractions without changing Direct's source domain. The returned function
+    uses caller-provided Vec3, Boys helpers and CUDA qualifiers, owns no storage,
+    and includes its exact compile-time order guard.
+    """
+    if type(maximum_order) is not int or not 0 <= maximum_order <= 10:
+        raise ValueError("compact MD radial lowering supports orders zero through ten")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise ValueError("MD radial function name must be a C++ identifier")
     stages = "\n".join(
         line
-        for stage in range(1, MAXIMUM_RADIAL_ORDER + 1)
+        for stage in range(1, maximum_order + 1)
         for line in _emit_radial_stage(stage)
     )
+    message = (
+        "MD s/p/d radial order must not exceed eight"
+        if maximum_order == 8
+        else "MD radial order exceeds the generated domain"
+    )
+    prefix = (
+        _RADIAL_PREFIX.replace("@NAME@", name)
+        .replace("@MAXIMUM_ORDER@", str(maximum_order))
+        .replace("@ORDER_MESSAGE@", message)
+    )
+    return prefix + stages + "\n}\n\n"
+
+
+def emit_md_j_engine_header() -> str:
+    """Emit deterministic compact FP64 CUDA without runtime imports or probes."""
     return (
         _PREAMBLE
-        + _RADIAL_PREFIX
-        + stages
-        + "\n}\n\n"
+        + emit_md_radial_function()
         + _emit_contraction_tables()
         + _emit_primitive_norms()
         + _CONTRACT
@@ -234,9 +261,9 @@ _RADIAL_PREFIX = r"""/** Produce choose(Order+3,3) strided R(0,t,u,v) values, t/
 // Stride interleaves independent quartets across adjacent source lanes. The
 // default preserves the compact scalar layout used by independent math probes.
 template <unsigned Order, unsigned Stride = 1>
-__device__ inline void md_engine_radial(double rho, Vec3<double> p, Vec3<double> q,
+__device__ inline void @NAME@(double rho, Vec3<double> p, Vec3<double> q,
                                         double* output, double prefactor = 1.0) {
-  static_assert(Order <= 8, "MD s/p/d radial order must not exceed eight");
+  static_assert(Order <= @MAXIMUM_ORDER@, "@ORDER_MESSAGE@");
   static_assert(Stride > 0);
   const Vec3<double> difference{p.x - q.x, p.y - q.y, p.z - q.z};
   double seeds[Order + 1];

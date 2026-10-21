@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_md_j.cuh",
+  "role": "scientific",
+  "subsystem": "df_values",
+  "reason": "Proposed unscreened tensor-free DF J consumer: GPU Hermite preparation reuses the retained normalized Cartesian recurrence, density precontraction and public projection consume compiler-owned order-ten radial/transpose mathematics. Independent f/g charge and projection tests qualify this private seam only; production owner, metric integration, screening, force response and default admission remain absent. No legacy/default DF value dispatcher is changed.",
+  "regions": []
+}
