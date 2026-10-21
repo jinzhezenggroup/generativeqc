@@ -100,8 +100,8 @@ M06-2X grid error remains. PBE0 cold is 40.801 -> 38.726 s, 15 -> 14
 iterations; PBE is 27.223 -> 26.908 s, 15 -> 14. Treat v2 and v3 as separate
 timing populations, not interchangeable observations. The compact
 [qualification evidence](../../../../benchmarks/results/ks-final-gate-20261022/qualification.json.xz)
-keeps every v2/v3 sample's timing, work, energy, forces, numerical gates,
-controls and full receipt hashes, including failures and slower results.
+keeps every v2/v3 sample's timing, work, energy, force hashes, numerical
+error gates, controls and full receipt hashes, including failures and slower results.
 Full original receipts and scripts remain in ignored artifacts and n1.
 
 ## Revisit when
