@@ -144,6 +144,36 @@ here. R1's failure capsule SHA-256 is
 `7a8e1ea10231c01c1b4433657fbc1033098e64eb1d6a397514c4a2c24f9bb309`
 (239 run files individually checked, 460213 bytes), retained on both endpoints.
 
+### CI test-merge input seam
+
+The next head's Actions pre-commit run 39536520913 failed the unchanged evidence
+review budget: its actual checkout was synthetic merge `53ac23e5`, with parents
+`339e3edb` and `f3e8904d`, but evidence review compared the older event base
+`24c650d5`. That included 129 unrelated target-branch evidence files and
+2,344,241 review bytes against the 2,097,152 cap. The actual PR-owned delta had
+seven files and zero benchmark evidence bytes; its canonical check passed.
+The real Actions failure remains retained, not relabeled green.
+
+The adjacent codegen-ownership step already authenticates the requested head
+against a two-parent test merge and uses its first parent. Evidence review now
+uses that same tested-base boundary, additionally requiring the event base to
+exist locally and be an ancestor of the tested base. Linear/raw heads, extra
+parents, head mismatches, absent objects, unrelated bases and target rollback
+fail before evidence CLI entry. Lazy fetching is disabled. The existing public
+CLI still applies its full-tree retention and incoming-byte budgets; policy,
+caps, exceptions and benchmark artifacts are unchanged.
+
+Executable synthetic Git histories run the actual workflow step and unchanged
+evidence CLI. They cover the old stale-base false failure versus repaired
+success, real added/modified over-budget failures, shrinking/small changes,
+aggregate failure and invalid provenance. The first Windows harness exposed
+that os.execv did not preserve the child CLI failure status; its thin entry was
+corrected to run the real CLI in-process, without substituting a passing result.
+All 14 workflow controls then passed locally. Linux and related retention/
+ratchet checks are recorded separately before CI-only delivery. R2's submitted
+f3e8904 source, library, driver and proof are not modified for this CI fix;
+qualification reuse requires their actual scientific dependencies unchanged.
+
 ## Rejected alternatives and remaining scope
 
 A method-local wrapper would only relocate vendor coupling. A new shared
