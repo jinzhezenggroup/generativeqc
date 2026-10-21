@@ -75,3 +75,7 @@ Further endpoint gains require measuring triples, independent replay/audit and
 TZ MP2/reference response separately. Changes to those consumers need their own
 scientific qualification. Revisit the Q compensation if the Lambda owner's
 scratch policy changes; preserve explicit bounded fallback and work accounting.
+
+The [GMRES workspace follow-up](2026-10-22-cbs-lambda-workspace.md) addresses
+C7's Q4 admission cliff by removing unused host reservations while preserving
+this warmup policy and all final convergence gates.

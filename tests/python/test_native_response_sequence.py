@@ -91,8 +91,10 @@ def test_sequence_matches_independent_dense_oracle(
 
 
 def test_native_sequence_preserves_a_budget_admitted_prefix(library: Any) -> None:
-    operator = MatrixOperator(np.eye(4))
-    rhs = np.column_stack([np.ones(4), np.arange(1.0, 5.0), np.ones(4)])
+    # Leave enough room for the independent RHS-rank diagnostic before testing
+    # streaming admission. A tiny solve can need less storage than that stage.
+    operator = MatrixOperator(np.eye(8))
+    rhs = np.column_stack([np.ones(8), np.arange(1.0, 9.0), np.ones(8)])
     options = GMRESOptions(restart=2, max_iterations=4)
     single = solve(operator, rhs[:, 0], options=options)
     staging_bytes = rhs.shape[0] * rhs.itemsize

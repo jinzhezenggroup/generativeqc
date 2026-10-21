@@ -887,6 +887,82 @@ void modified_plans_are_rejected_before_execution() {
   require(actions == 0, "mutated plan reached its operator");
 }
 
+void workspace_covers_restarts_and_optional_diagnostics() {
+  // Exercise actual tracked allocation lifetimes rather than duplicating the
+  // planner's formula. A manufactured solution supplies an independent oracle;
+  // small restarts retain best iterates and optional publications across cycles.
+  constexpr std::size_t n = 41;
+  DenseOperator matrix{n, std::vector<double>(n * n)};
+  std::vector<double> solution(n), rhs(n), initial(n), diagonal(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    solution[i] = 1.0 + 0.01 * i;
+    initial[i] = 0.1 * solution[i];
+    diagonal[i] = matrix.values[i * n + i] = 2.0 + 0.07 * i;
+    if (i + 1 < n) matrix.values[i * n + i + 1] = 0.15;
+    if (i) matrix.values[i * n + i - 1] = -0.1;
+  }
+  matrix(solution, rhs);
+  for (unsigned flags = 0; flags != 4; ++flags) {
+    for (const bool exhaust : {false, true}) {
+      for (const bool precondition : {false, true}) {
+        for (const std::size_t restart : {3UL, 30UL}) {
+          GmresOptions options;
+          options.restart = restart;
+          options.max_iterations = exhaust ? 2 : 80;
+          options.relative_tolerance = 1e-13;
+          options.true_residual_every = 3;
+          options.collect_history = flags & 1;
+          options.collect_basis = flags & 2;
+          const auto required = generativeqc::response::prepare_gmres(n, options);
+          options.max_workspace_bytes = required.workspace_bytes;
+          const auto plan = generativeqc::response::prepare_gmres(n, options);
+          auto apply = [&](auto input, auto output) { matrix(input, output); };
+          const auto preconditioner =
+              precondition ? std::span<const double>(diagonal) : std::span<const double>{};
+          const auto result =
+              generativeqc::response::solve_gmres(plan, apply, rhs, initial, preconditioner);
+          require(result.measured_workspace_peak_bytes <= plan.workspace_bytes &&
+                      result.measured_workspace_peak_bytes > 0,
+                  "restarted/diagnostic GMRES exceeded its admitted numeric storage");
+          require(result.history.empty() != options.collect_history &&
+                      result.basis.empty() != options.collect_basis,
+                  "workspace accounting lost requested diagnostics");
+          if (exhaust) {
+            require(result.status == GmresStatus::max_iterations,
+                    "short solve did not exercise finite exhaustion");
+          } else {
+            require(result.converged() && (restart != 3 || result.restarts > 0) &&
+                        explicit_residual(matrix, result.solution, rhs) < 1e-10,
+                    "bounded restarted solve failed the independent residual");
+          }
+          options.max_workspace_bytes = required.workspace_bytes - 1;
+          const auto short_plan = generativeqc::response::prepare_gmres(n, options);
+          const auto before = matrix.actions;
+          const auto refused =
+              generativeqc::response::solve_gmres(short_plan, apply, rhs, initial, preconditioner);
+          require(refused.status == GmresStatus::workspace_limit &&
+                      refused.measured_workspace_peak_bytes == 0 && matrix.actions == before,
+                  "short diagnostic budget allocated storage or invoked the operator");
+
+          // A late operator failure occurs after all iteration arrays and optional
+          // diagnostic capacity exist; no failure return may exceed the same cap.
+          std::size_t actions = 0;
+          const auto failed = generativeqc::response::solve_gmres(
+              plan,
+              [&](auto input, auto output) {
+                matrix(input, output);
+                if (++actions == 3) output[0] = std::numeric_limits<double>::quiet_NaN();
+              },
+              rhs, initial, preconditioner);
+          require(failed.status == GmresStatus::nonfinite_operator &&
+                      failed.measured_workspace_peak_bytes <= plan.workspace_bytes,
+                  "late nonfinite return bypassed bounded GMRES ownership");
+        }
+      }
+    }
+  }
+}
+
 void response_batch_contract() {
   DenseOperator matrix{2, {2.0, 0.0, 0.0, 3.0}};
   generativeqc::response::LinearResponseProblem problem(
@@ -1239,6 +1315,7 @@ int main() {
     amortized_true_residuals();
     stable_norm_extremes();
     measured_workspace_owns_returned_storage();
+    workspace_covers_restarts_and_optional_diagnostics();
     std::cout << "Native GMRES contracts passed\n";
     return 0;
   } catch (const std::exception& error) {

@@ -154,8 +154,8 @@ by FP64 final solves, independent residual checks and response. The curves use o
 complete call per mode and molecule, with the same binary and GPU within each
 pair; they do not imply a speedup for every case. All Fast points pass
 constituent and composite energy/full-force checks against Standard.
-See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-lambda-20261021/timings.md)
-and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-lambda-20261021/README.md).
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-memory-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-memory-20261021/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
 identical-Hamiltonian speedup measurements.
