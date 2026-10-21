@@ -148,8 +148,9 @@ def test_signed_multidensity_adjoint_and_rank_refusal(
 
 
 @pytest.mark.parametrize("method,xc", (("pbe-rks", "PBE"), ("r2scan-3c", "R2SCAN")))
+@pytest.mark.parametrize("execution", ("auto", "generic"))
 def test_streamed_pure_coulomb_complete_endpoint(
-    method: str, xc: str, monkeypatch: Any, tmp_path: Path
+    method: str, xc: str, execution: str, monkeypatch: Any, tmp_path: Path
 ) -> None:
     """Default auxiliary-g grids/forces agree with independent PySCF endpoints.
 
@@ -162,6 +163,10 @@ def test_streamed_pure_coulomb_complete_endpoint(
     assert os.environ.get("SLURM_JOB_ID")
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     monkeypatch.setenv("GENERATIVEQC_DF_COULOMB_RESPONSE", "auto")
+    if execution == "auto":
+        monkeypatch.delenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", execution)
     trace = tmp_path / "response.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
     monkeypatch.setattr(
@@ -185,6 +190,12 @@ def test_streamed_pure_coulomb_complete_endpoint(
         # Confirm bounded source batching was exercised by this molecular
         # owner, without pinning a planner-specific tile or exact call count.
         assert 0 < counts["response_raw_coulomb_source_panels"] < row["naux"]
+        # Source-only pure J has no resident tensor prerequisite for generated
+        # derivatives. The explicit generic rollback still reaches the same
+        # independent force/energy gates, without enabling extra screening.
+        assert counts["response_source_coulomb_shell_promoted"] == (execution == "auto")
+        assert counts["response_derivative_shell_execution"] == (execution == "auto")
+        assert counts["response_derivative_profile_promoted"] == 0
 
 
 def test_raw_coulomb_geometry_rebuild(monkeypatch: Any, tmp_path: Path) -> None:
