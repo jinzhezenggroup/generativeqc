@@ -531,11 +531,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
                                     provider.cuda_direct_source(), source_strategy.spec);
-    // The generated strict hybrid already shares shell work. Constructing a
-    // second quartic full-range source does not amortize over ordinary cold SCF.
-    // Mixed proposals and uncovered high-angular/range operators retain reuse.
-    if (requested == DirectJkSourceSelection::automatic && !has_range_correction && !budget_fock &&
-        has_exchange && maximum_angular <= 2 &&
+    // Pure J already has a generated strict consumer (and may own faster MD-J).
+    // A quartic cache, especially an FP32 cache rebuilt in FP64 at handoff,
+    // costs more than the saved J applications over a complete cold solve.
+    // Keep the same existing preference for strict hybrids. Mixed hybrids,
+    // uncovered high-angular/range operators and explicit requests retain reuse.
+    if (requested == DirectJkSourceSelection::automatic && !has_range_correction &&
+        (!has_exchange || !budget_fock) && maximum_angular <= 2 &&
         scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
                                                         source_strategy.spec))
       return;

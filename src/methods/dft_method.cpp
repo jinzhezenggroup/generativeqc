@@ -120,8 +120,14 @@ unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
+enum class KsProviderPurpose { scf, derivative_only };
+
+/** Keep SCF's established optional J allowance separate from a lazy force lease.
+ * Derivative order alone cannot distinguish these owners: the primary SCF
+ * provider also retains first-order resources for the eventual force. */
 std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
-                              unsigned direct_derivative_order = 0) {
+                              unsigned direct_derivative_order = 0,
+                              KsProviderPurpose purpose = KsProviderPurpose::scf) {
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
     std::size_t primitives = 0;
@@ -130,14 +136,17 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
     // The lazy first-order LR owner competes with composite grid response
     // under one capacity cap. Use its known Cartesian size rather than the
     // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
-    // Value-only preparation retains its established optional-owner allowance.
-    const auto cartesian_nao = direct_derivative_order ? molecule::cartesian_ao_count(system) : 0U;
+    // The primary provider needs its established allowance even when it also
+    // owns derivatives; tightening that cap can silently evict its MD-J source.
+    const auto cartesian_nao =
+        purpose == KsProviderPurpose::derivative_only ? molecule::cartesian_ao_count(system) : 0U;
     return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
                                                  system.shells.size(), primitives,
                                                  direct_derivative_order, true, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;
+  (void)purpose;
 #endif
   return 0;
 }
@@ -1293,7 +1302,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
       // Keep cold and warm admission identical: this is the same conservative
       // capacity used before constructing the separate first-order LR owner.
-      bytes = ks_provider_bytes(system_, backend_, 1U);
+      bytes = ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     }
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1428,8 +1437,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // Charge it on every call, including reuse, before creating any storage;
     // maximum_bytes independently bounds compact host and additional device use.
     const auto derivative_device_bytes =
-        range_derivative_correction_ ? range_derivative_correction_->diagnostic().device_bytes
-                                     : ks_provider_bytes(system_, backend_, 1U);
+        range_derivative_correction_
+            ? range_derivative_correction_->diagnostic().device_bytes
+            : ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     std::size_t primary_device_bytes{};
     status = dft::mixed_rsh_df_primary_device_allowance(maximum_bytes, derivative_device_bytes,
                                                         primary_device_bytes, detail);
