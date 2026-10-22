@@ -1,6 +1,7 @@
 # Independent full-DF CBS energy qualification
 
-Refs #2679. **INCOMPLETE: C1, C3 and C4 pass; C5–C7 references remain in progress.**
+Refs #2679. **PASS: all six independent energy references pass the unchanged
+5e-8 Eh gates against both Standard and Fast.**
 This is an energy-only slice. C4/C7 two-step directional-force and translation
 checks, and optional C3 full-vector forces, remain outside this delivery. The
 parent issue must remain open.
@@ -46,12 +47,15 @@ references remain `INCOMPLETE`, never inferred from Standard.
 | C1H4 | 0 | 5.368 | 5.200e-11 | PASS |
 | C3H8 | 8 | 102.720 | 6.499e-10 | PASS |
 | C4H10 | 48 | 313.568 | 7.981e-10 | PASS |
-| C5H12 | 183 | unavailable | unavailable | INCOMPLETE |
-| C6H14 | 293 | unavailable | unavailable | INCOMPLETE |
-| C7H16 | 5604 | unavailable | unavailable | INCOMPLETE |
+| C5H12 | 183 | 464.493 | 1.251e-9 | PASS |
+| C6H14 | 293 | 1370.360 | 1.745e-9 | PASS |
+| C7H16 | 5604 | 2953.111 | 2.376e-9 | PASS |
 
 Reference runtimes are reported separately and are not speedup denominators.
 There are no new native timing or performance-ranking measurements.
+All 72 constituent/composite comparisons pass; the maximum absolute error is
+2.37639596889494e-9 Eh. The numerical publication decision is accepted for this
+frozen-source energy slice only.
 
 Each `receipts/C*.json.xz` contains the original reference JSON text, verbatim
 SCF/CC logs, outcome and stdout, preserving their raw hashes. Checkpoints remain
@@ -59,6 +63,17 @@ in the persistent remote task directory. The first C1 attempt failed in a
 diagnostic call after SCF because `get_grad` requires explicit orbital arguments;
 its source, receipt, log and exit 1 remain under `failures/` and
 `oracle-attempt1.py.xz`. The corrected attempt restarted from a fresh MINAO guess.
+
+The wrapper used for these measurements is retained byte-for-byte in
+`run-oracle-measured.sh.xz`, SHA-256 of its uncompressed bytes
+`13152983d8168bb8d375a3a3a515b0a3365ab678335c924fefdb759f1e379363`.
+`oracle-source.patch.xz` reconstructs that measured wrapper. The current
+`run-oracle.sh` adds a post-measurement retry guard: under the molecule lease it
+refuses any existing molecule artifact before opening stdout or outcome. It does
+not rewrite the measured driver, inputs, raw results or remote measurement root.
+`test_run_oracle.py` uses a tiny fixture on the retained CPU image to check fresh
+runs, failures, retries, partial artifacts and lease contention without computing
+scientific energies. The before/after reports are in `runner-retry-check.json.xz`.
 
 ## Frozen native identity
 
@@ -100,9 +115,12 @@ The persistent task root is
 `/inspire/ssd/project/chemicalreaction/czxs25220150/i2679-cbs-energy-20261023-a1`.
 `run-oracle.sh` uses per-molecule leases and temporary directories, a six-hour
 timeout, retained outcomes, and independent output names. No fake Slurm identity
-is set. The separate 55 CPU / 300 GiB Notebook `i2679-cbs-energy-1023` remains
-queued. A single prep creation POST timed out and the platform exposed two
-same-name prep objects; the other object received no calculation. No instance was
+is set. The separate 55 CPU / 300 GiB Notebook `i2679-cbs-energy-1023` was queued
+when the references began and later became RUNNING on `cpu-nat-381` at HIGH/6.
+These reference measurements continued on the 4 CPU prep instance; the larger
+allocation is not their execution resource. A single prep creation POST timed
+out and the platform exposed two same-name prep objects; the other object
+received no calculation. No instance was
 stopped/deleted and all remain subject to platform lifecycle/reclaim rules.
 
 For a new independent run, stage the pinned full dataset, `inputs.json`,
@@ -120,8 +138,17 @@ Replay the retained evidence from the repository without PySCF or CUDA:
 ```bash
 python benchmarks/results/cbs-independent-energy-20261023/replay.py \
   --receipts benchmarks/results/cbs-independent-energy-20261023/receipts \
-  --output comparison-replay.json
+  --output comparison-replay.json --require-pass
 ```
 
-Use `--require-pass` only to require all six original energy gates to pass.
-The publication decision remains inconclusive while references are incomplete.
+`--require-pass` requires all six original energy gates to pass. Omitting it
+allows diagnostic replay of incomplete or failing cohorts without changing their
+reported status. Force qualification and the parent issue remain open.
+
+Run the opt-in wrapper checks on the CPU image using a separate scratch root:
+
+```bash
+mkdir -p "$CHECK_ROOT"
+python test_run_oracle.py --wrapper "$ROOT/run-oracle.sh" \
+  --scratch-root "$CHECK_ROOT" --report "$CHECK_ROOT/retry-check.json"
+```

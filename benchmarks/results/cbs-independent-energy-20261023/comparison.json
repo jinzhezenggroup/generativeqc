@@ -190,7 +190,7 @@
     {
       "carbon": 5,
       "qm7_index": 183,
-      "status": "INCOMPLETE",
+      "status": "PASS",
       "native": {
         "standard": {
           "low/df-ccsd(t)": -197.18947110448389,
@@ -209,12 +209,41 @@
           "composite": -197.58264285239366
         }
       },
-      "reason": "Independent raw receipt unavailable"
+      "receipt_sha256": "d56046e6985ac6cafd56d8798be45708c734fa65cb071aa5d6b00fdad978f657",
+      "reference_status": "completed",
+      "seconds": 464.4934387598187,
+      "max_rss_kib": 1549148,
+      "reference": {
+        "low/rhf": -196.34641986273425,
+        "low/mp2": -197.09134806069545,
+        "low/df-ccsd(t)": -197.18947110447738,
+        "high/rhf": -196.4020407901263,
+        "high/mp2": -197.37496726259818,
+        "composite": -197.5826428511462
+      },
+      "errors_eh": {
+        "standard": {
+          "low/rhf": 2.5579538487363607e-13,
+          "low/mp2": 1.1368683772161603e-13,
+          "low/df-ccsd(t)": 6.508571459562518e-12,
+          "high/rhf": 5.400124791776761e-13,
+          "high/mp2": 8.526512829121202e-14,
+          "composite": 6.707523425575346e-12
+        },
+        "fast": {
+          "low/rhf": 3.126388037344441e-13,
+          "low/mp2": 9.663381206337363e-13,
+          "low/df-ccsd(t)": 1.2512089142546756e-09,
+          "high/rhf": 4.831690603168681e-13,
+          "high/mp2": 3.723243935382925e-12,
+          "composite": 1.2474572486098623e-09
+        }
+      }
     },
     {
       "carbon": 6,
       "qm7_index": 293,
-      "status": "INCOMPLETE",
+      "status": "PASS",
       "native": {
         "standard": {
           "low/df-ccsd(t)": -236.39015941802006,
@@ -233,12 +262,41 @@
           "composite": -236.85941738679665
         }
       },
-      "reason": "Independent raw receipt unavailable"
+      "receipt_sha256": "605ecf8f7f36c5dd96b6d16ada78f9231a71d6706af23ba26328bc0101ae1f2c",
+      "reference_status": "completed",
+      "seconds": 1370.359628694132,
+      "max_rss_kib": 2831656,
+      "reference": {
+        "low/rhf": -235.3835172298606,
+        "low/mp2": -236.27436460529614,
+        "low/df-ccsd(t)": -236.39015941801586,
+        "high/rhf": -235.44941169536972,
+        "high/mp2": -236.61280833918437,
+        "composite": -236.85941738505917
+      },
+      "errors_eh": {
+        "standard": {
+          "low/rhf": 3.694822225952521e-13,
+          "low/mp2": 1.1368683772161603e-13,
+          "low/df-ccsd(t)": 4.206412995699793e-12,
+          "high/rhf": 1.5063505998114124e-12,
+          "high/mp2": 1.4495071809506044e-12,
+          "composite": 5.8548721426632255e-12
+        },
+        "fast": {
+          "low/rhf": 1.9895196601282805e-13,
+          "low/mp2": 0.0,
+          "low/df-ccsd(t)": 1.7451782241550973e-09,
+          "high/rhf": 1.5631940186722204e-12,
+          "high/mp2": 5.229594535194337e-12,
+          "composite": 1.7374759408994578e-09
+        }
+      }
     },
     {
       "carbon": 7,
       "qm7_index": 5604,
-      "status": "INCOMPLETE",
+      "status": "PASS",
       "native": {
         "standard": {
           "low/df-ccsd(t)": -275.5908320136936,
@@ -257,9 +315,38 @@
           "composite": -276.13619195855716
         }
       },
-      "reason": "Independent raw receipt unavailable"
+      "receipt_sha256": "91da5d0b48413db4fcc13a93418e72c6334dd647e9c0f7d13ef8c6067ba90977",
+      "reference_status": "completed",
+      "seconds": 2953.1111651640385,
+      "max_rss_kib": 4807908,
+      "reference": {
+        "low/rhf": -274.42060477394307,
+        "low/mp2": -275.45736351862143,
+        "low/df-ccsd(t)": -275.59083201369054,
+        "high/rhf": -274.4967659209386,
+        "high/mp2": -275.85064201553075,
+        "composite": -276.13619195618077
+      },
+      "errors_eh": {
+        "standard": {
+          "low/rhf": 3.979039320256561e-13,
+          "low/mp2": 7.958078640513122e-13,
+          "low/df-ccsd(t)": 3.069544618483633e-12,
+          "high/rhf": 2.1032064978498966e-12,
+          "high/mp2": 2.2168933355715126e-12,
+          "composite": 1.3073986337985843e-12
+        },
+        "fast": {
+          "low/rhf": 3.979039320256561e-13,
+          "low/mp2": 4.718003765447065e-12,
+          "low/df-ccsd(t)": 2.3729853637632914e-09,
+          "high/rhf": 1.8758328224066645e-12,
+          "high/mp2": 2.5011104298755527e-12,
+          "composite": 2.37639596889494e-09
+        }
+      }
     }
   ],
   "scope": "energy only; no new native timing or force qualification",
-  "status": "INCOMPLETE"
+  "status": "PASS"
 }

@@ -44,5 +44,20 @@ failure is retained; its corrected attempt uses a fresh independent MINAO guess.
 The original native campaign is immutable. No production code, public tests,
 shared benchmark index or homepage series is changed.
 
+The completed six-molecule energy cohort passes all 72 constituent/composite
+comparisons across Standard and Fast at the unchanged 5e-8 Eh gate. The largest
+absolute error is 2.37639596889494e-9 Eh. The accepted energy publication's replay
+command uses `--require-pass`; missing or failing molecules cannot satisfy that
+command. This numerical acceptance applies to the frozen native records, not a
+new master build, force qualification, CI or review completion.
+
+A post-measurement wrapper fix refuses pre-existing per-molecule artifacts under
+the lease before opening stdout or outcome redirects. The Python receipt guard
+alone was too late to preserve companion files on retry. The original measured
+wrapper remains compressed and is the version reconstructed by the source patch;
+the revised wrapper is reproduction tooling, not a retroactive measurement-source
+identity. Bounded fixture checks retain both the original failure and fixed
+byte-preservation results without rerunning scientific calculations.
+
 Refs #2679. Revisit the numerical qualification after any change to the exact
 scientific model or when independently qualifying a new native source snapshot.

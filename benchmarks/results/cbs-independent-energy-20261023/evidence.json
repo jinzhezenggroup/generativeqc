@@ -355,14 +355,14 @@
         }
       }
     },
-    "source_snapshot": "Pinned repository base plus oracle-source.patch.xz; exact driver bytes bound in every receipt",
+    "source_snapshot": "Pinned repository base plus oracle-source.patch.xz restores measured code, including run-oracle-measured.sh.xz; the current wrapper adds a post-measurement retry guard. Exact oracle.py bytes are bound in every receipt",
     "reference_seconds": {
       "1": 5.367569571360946,
       "3": 102.71951702050865,
       "4": 313.56788178905845,
-      "5": null,
-      "6": null,
-      "7": null
+      "5": 464.4934387598187,
+      "6": 1370.359628694132,
+      "7": 2953.1111651640385
     }
   },
   "backend_selected": "pyscf-cpu",
@@ -384,8 +384,8 @@
       "reason": "no evidence registered"
     },
     "numerical": {
-      "status": "not-run",
-      "reason": "Energy cohort INCOMPLETE; inspect per-molecule records"
+      "status": "pass",
+      "reason": "All six independent constituent/composite energy gates pass"
     },
     "endpoint": {
       "status": "not-run",
@@ -399,7 +399,7 @@
   "timings": [],
   "memory": {
     "allocated_bytes": null,
-    "peak_bytes": 949706752,
+    "peak_bytes": 4923297792,
     "reason": "Peak is per-reference-process ru_maxrss, not planner capacity or total instance peak; allocation payload not measured"
   },
   "compilation": {
@@ -470,6 +470,72 @@
       "max_absolute_error": 7.981384442246053e-10,
       "max_scaled_error": 0.015962768884492107,
       "rms_error": 4.6079866904657386e-10,
+      "shape": [
+        6
+      ]
+    },
+    "C5/standard": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 6.707523425575346e-12,
+      "max_scaled_error": 0.00013415046851150692,
+      "rms_error": 3.8238203528373236e-12,
+      "shape": [
+        6
+      ]
+    },
+    "C5/fast": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.2512089142546756e-09,
+      "max_scaled_error": 0.025024178285093512,
+      "rms_error": 7.213053516333865e-10,
+      "shape": [
+        6
+      ]
+    },
+    "C6/standard": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 5.8548721426632255e-12,
+      "max_scaled_error": 0.00011709744285326451,
+      "rms_error": 3.0684698440859907e-12,
+      "shape": [
+        6
+      ]
+    },
+    "C6/fast": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.7451782241550973e-09,
+      "max_scaled_error": 0.034903564483101945,
+      "rms_error": 1.0053605912876916e-09,
+      "shape": [
+        6
+      ]
+    },
+    "C7/standard": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 3.069544618483633e-12,
+      "max_scaled_error": 6.139089236967266e-05,
+      "rms_error": 1.882424265055881e-12,
+      "shape": [
+        6
+      ]
+    },
+    "C7/fast": {
+      "passed": true,
+      "atol": 5e-08,
+      "rtol": 0,
+      "max_absolute_error": 2.37639596889494e-09,
+      "max_scaled_error": 0.0475279193778988,
+      "rms_error": 1.3710306056518306e-09,
       "shape": [
         6
       ]

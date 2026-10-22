@@ -6,15 +6,15 @@
   },
   "decision": {
     "scope": "numerical",
-    "status": "inconclusive",
-    "reason": "Six-molecule independent energy slice INCOMPLETE; force qualification and parent #2679 remain open"
+    "status": "accepted",
+    "reason": "Six-molecule independent energy slice PASS; force qualification and parent #2679 remain open"
   },
   "files": [
     {
       "path": "comparison.json",
       "role": "summary",
-      "bytes": 9463,
-      "sha256": "1ee2b414657a18b4ec760f1451b1daad590f5298b30bcbc712e78af3306d07bc"
+      "bytes": 12618,
+      "sha256": "29ae23f00db0693d20173290e7d4ecf4576f30014ffb8b491303c18f86b138df"
     },
     {
       "path": "environment.json",
@@ -31,8 +31,8 @@
     {
       "path": "evidence.json",
       "role": "evidence",
-      "bytes": 15564,
-      "sha256": "07fcb5ed5df989e0286d2253f0165b62d6c0016c7f38b224fba2fe77b4c64236"
+      "bytes": 17312,
+      "sha256": "ec0ab3dd0eb5696cf21f64f70b8a27b523f796e37627d25b891aaaa19a060ef0"
     },
     {
       "path": "failures/C1-2-log.txt.xz",
@@ -91,14 +91,14 @@
     {
       "path": "package.py",
       "role": "reproduction",
-      "bytes": 8788,
-      "sha256": "178535d31751f7d8903d1da254e028868654b2e24da76cab376091fc8d1daac0"
+      "bytes": 9390,
+      "sha256": "fe0fb4e355b2654aa2b6e0392976ddb36f826d9bc97903facacad04dda0c1fd5"
     },
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 6899,
-      "sha256": "b446e2042e99c54d4d81464daf8d1821c217186d09676c8a36e38fae86683c56"
+      "bytes": 8385,
+      "sha256": "009dcecb34407ca261bffa92a4ea7bd0b3282aef48049d0fd500f335ba5f251a"
     },
     {
       "path": "receipts/C1.json.xz",
@@ -119,22 +119,58 @@
       "sha256": "0b227bd0db008499ed68cbc3dbd93b7fc717e69c95946ced38d3a290bd5bb089"
     },
     {
+      "path": "receipts/C5.json.xz",
+      "role": "samples",
+      "bytes": 11228,
+      "sha256": "dc6dbf6c72bdc64ae6c7862f0b0888ef2b3f7952cac137da8290126b6cfe4c62"
+    },
+    {
+      "path": "receipts/C6.json.xz",
+      "role": "samples",
+      "bytes": 11768,
+      "sha256": "91fcc1845b4e2524f918300cf13eb06a5902e26fac761a70667b0bb3cfdcc993"
+    },
+    {
+      "path": "receipts/C7.json.xz",
+      "role": "samples",
+      "bytes": 11704,
+      "sha256": "281dce25dbabc8f623383f16d2e72c69ea57ff3eac6e0e439fbfb56b39924617"
+    },
+    {
       "path": "replay.py",
       "role": "reproduction",
       "bytes": 11340,
       "sha256": "23752a7ae244e43df34391aa210ed121a22b41455246cc3a5e82c23365d1cfed"
     },
     {
+      "path": "run-oracle-measured.sh.xz",
+      "role": "reproduction",
+      "bytes": 708,
+      "sha256": "e4c3fbcfbac78fe9b86df82f4d31a89ac9c222a75c04ebb63ea1f7e9cb2b2d56"
+    },
+    {
       "path": "run-oracle.sh",
       "role": "reproduction",
-      "bytes": 1091,
-      "sha256": "13152983d8168bb8d375a3a3a515b0a3365ab678335c924fefdb759f1e379363"
+      "bytes": 1489,
+      "sha256": "464f184b71452f82b1497452512b878342377531085380555dda61194c060fdf"
     },
     {
       "path": "run-suite.sh",
       "role": "reproduction",
       "bytes": 519,
       "sha256": "10494286a1f94f63920803291a0f19b47178f319d07e2adb751d205d67e10cfa"
+    },
+    {
+      "path": "runner-retry-check.json.xz",
+      "role": "samples",
+      "bytes": 1600,
+      "sha256": "7a44a65dd660a876c6d165b5843c70f6cd002dd473966fcd50041fadc43ca5fa"
+    },
+    {
+      "path": "test_run_oracle.py",
+      "role": "reproduction",
+      "bytes": 6310,
+      "sha256": "ea2056bd215401e0bd3c18dfe2eafb117a60aedb1e300c828d7b422ffa2822ba"
     }
   ],
   "archives": [],
@@ -145,7 +181,8 @@
       "--receipts",
       "benchmarks/results/cbs-independent-energy-20261023/receipts",
       "--output",
-      "comparison-replay.json"
+      "comparison-replay.json",
+      "--require-pass"
     ]
   }
 }

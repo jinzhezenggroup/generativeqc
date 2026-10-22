@@ -15,6 +15,14 @@ export TMPDIR="$root/tmp-C$carbon"
 mkdir -p "$TMPDIR" "$output"
 exec 9>"$root/C$carbon.lease"
 flock -n 9 || exit 73
+# Opening stdout would already truncate a prior attempt before Python can refuse.
+# The molecule lease serializes this check with every invocation of this wrapper.
+for artifact in "$output/C$carbon."* "$output/C$carbon-"*; do
+  if [[ -e "$artifact" || -L "$artifact" ]]; then
+    printf 'Refusing existing molecule output: %s; use a fresh attempt directory\n' "$artifact" >&2
+    exit 75
+  fi
+done
 set +e
 timeout --kill-after=30 21600 "$root/env/bin/python" "$root/oracle.py" \
   --inputs "$root/inputs.json" --dataset "$root/qm7.mat" --output "$output" \

@@ -87,7 +87,13 @@ def main() -> None:
     prefix = root.relative_to(Path.cwd()).as_posix()
     patch = ""
     for name in MEASURED:
-        text = (root / name).read_text(encoding="utf-8")
+        # The retry guard was added after measurement. Preserve the wrapper
+        # actually used, rather than relabeling old receipts with revised code.
+        text = (
+            lzma.decompress((root / "run-oracle-measured.sh.xz").read_bytes()).decode()
+            if name == "run-oracle.sh"
+            else (root / name).read_text(encoding="utf-8")
+        )
         path = prefix + "/" + name
         patch += f"diff --git a/{path} b/{path}\nnew file mode 100644\n"
         patch += "".join(
@@ -133,7 +139,7 @@ def main() -> None:
         "gate_eh": 5e-8,
         "scope": "independent energy only",
         "frozen_native": comparison["native_provenance"],
-        "source_snapshot": "Pinned repository base plus oracle-source.patch.xz; exact driver bytes bound in every receipt",
+        "source_snapshot": "Pinned repository base plus oracle-source.patch.xz restores measured code, including run-oracle-measured.sh.xz; the current wrapper adds a post-measurement retry guard. Exact oracle.py bytes are bound in every receipt",
         "reference_seconds": {
             str(r["carbon"]): r.get("seconds") for r in comparison["molecules"]
         },
@@ -206,8 +212,10 @@ def main() -> None:
             if relative in {"inputs.json", "inputs-measured.json.xz"}
             else "samples"
             if relative.startswith(("receipts/", "failures/"))
+            or relative == "runner-retry-check.json.xz"
             else "reproduction"
-            if path.suffix in {".py", ".sh"} or relative == "oracle-attempt1.py.xz"
+            if path.suffix in {".py", ".sh"}
+            or relative in {"oracle-attempt1.py.xz", "run-oracle-measured.sh.xz"}
             else "summary"
         )
         raw = path.read_bytes()
@@ -236,6 +244,7 @@ def main() -> None:
                 prefix + "/receipts",
                 "--output",
                 "comparison-replay.json",
+                *(["--require-pass"] if status == "PASS" else []),
             ]
         },
     }
