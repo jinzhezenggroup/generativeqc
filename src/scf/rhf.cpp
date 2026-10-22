@@ -749,6 +749,11 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       device_candidate ? &snapshot.candidate : nullptr,
       reference_validation ? physical : device_physical, eigen, limits, options.compute_forces,
       force, reference_validation ? nullptr : &operations);
+  // The host/reference callback increments this counter itself. The resident
+  // device callback intentionally exports no matrices, but still evaluates a
+  // physical Fock on every selector attempt, including rejected candidates.
+  // Include that work in the public endpoint census exactly once.
+  if (!reference_validation) result.fock_builds += selected.fock_evaluations;
   if (selected.status == solver::FinalStateStatus::OutOfMemory) throw std::bad_alloc();
   if (!selected.state && selected.provider_exception)
     std::rethrow_exception(selected.provider_exception);

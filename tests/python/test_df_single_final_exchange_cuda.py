@@ -16,13 +16,15 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("auxiliary", ["def2-svp", "cc-pvdz-jkfit"])
 @pytest.mark.parametrize(
-    "final_exchange,metric,corrected,projection",
+    "final_exchange,metric,corrected,projection,response_space",
     [
-        ("auto", "auto", False, "auto"),
-        ("auto", "auto", False, "off"),
-        ("occupied", "spectral", False, "auto"),
-        ("auto", "auto", True, "auto"),
-        ("dense", "spectral", True, "auto"),
+        ("auto", "auto", False, "auto", "occupied"),
+        ("auto", "auto", False, "off", "occupied"),
+        ("occupied", "spectral", False, "auto", "occupied"),
+        ("auto", "auto", True, "auto", "occupied"),
+        ("dense", "spectral", True, "auto", "occupied"),
+        ("auto", "auto", False, "auto", "auto"),
+        ("auto", "auto", True, "auto", "auto"),
     ],
 )
 def test_single_final_k_and_response_replay(
@@ -33,6 +35,7 @@ def test_single_final_k_and_response_replay(
     metric: str,
     corrected: bool,
     projection: str,
+    response_space: str,
 ) -> None:
     """Final K accepts exact/corrected factors without lending an absent raw owner."""
     assert os.environ.get("SLURM_JOB_ID")
@@ -64,8 +67,8 @@ def test_single_final_k_and_response_replay(
         "EXCHANGE": "occupied",
         "FINAL_EXCHANGE": final_exchange,
         "FINAL_PROJECTION": projection,
-        "RESPONSE_SPACE": "occupied",
-        "OCCUPIED_RESPONSE_SOURCE": "fitted",
+        "RESPONSE_SPACE": response_space,
+        "OCCUPIED_RESPONSE_SOURCE": "auto" if response_space == "auto" else "fitted",
         "OCCUPIED_METRIC": metric,
         "SOURCE_DERIVATIVE_SCHEDULE": "qualify",
         "RESPONSE_ALGEBRA": "blas",
