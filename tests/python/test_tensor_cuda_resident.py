@@ -8,6 +8,7 @@ suite.
 """
 
 import ctypes
+import json
 import os
 import random
 import re
@@ -15,6 +16,7 @@ import time
 import typing
 from pathlib import Path
 
+import numpy as np
 import pytest
 from generativeqc_compiler.common.cuda_runtime import _Metrics
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -36,7 +38,7 @@ from generativeqc_compiler.tensor.cuda_resident import (
     _resident_dependency_logical_name,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
-from tensor_resident_host import build_resident_host
+from tensor_resident_host import build_resident_host, build_resident_validation_host
 
 TARGET = cuda_target_info("sm_80")
 
@@ -59,24 +61,126 @@ def doubled_pair_program() -> typing.Any:
     return Program({"squared": add(multiply(t1, t1)), "copy": add(t2)})
 
 
-def test_resident_source_keeps_the_ordinary_abi() -> None:
-    """A resident artifact must remain a valid host-staged artifact."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    for ordinary in (
-        "tensor_plan_identity",
-        "tensor_create",
-        "tensor_destroy",
-        "tensor_run",
-        "tensor_probe",
-    ):
-        assert ordinary in source, ordinary
-    assert "tensor_static_initialize" not in source
+@pytest.mark.parametrize("embedded", [True, False])
+def test_resident_artifact_keeps_the_ordinary_abi(
+    tmp_path: Path,
+    required_native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    embedded: bool,
+) -> None:
+    """Resolve and execute both generated ABIs using the same owner and spans."""
+    plan = plan_cuda(_transfer_program("two"), TARGET, max_bytes=1 << 26)
+    lib = build_resident_host(
+        plan,
+        tmp_path,
+        required_native_cxx,
+        monkeypatch,
+        ordinary=True,
+        embed_static_data=embedded,
+    )
+    lib.tensor_plan_identity.restype = ctypes.c_char_p
+    assert lib.tensor_plan_identity().decode() == plan.identity
+    lib.tensor_create.argtypes = [
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    lib.tensor_destroy.argtypes = [ctypes.c_void_p]
+    lib.tensor_destroy.restype = None
+    lib.tensor_run.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+    ]
+    lib.tensor_probe.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t]
+    error = ctypes.create_string_buffer(256)
+    metrics = _Metrics()
+    owner = ctypes.c_void_p()
+    assert lib.tensor_create(0, ctypes.byref(owner), error, len(error)) == 0
+    try:
+        inputs = [
+            (ctypes.c_int64 * plan.steps[i].node.spec.size)(
+                *(100 * slot + j for j in range(plan.steps[i].node.spec.size))
+            )
+            for slot, i in enumerate(plan.inputs)
+        ]
+        outputs = [
+            (ctypes.c_int64 * plan.steps[i].node.spec.size)() for _, i in plan.outputs
+        ]
+        pointers = lambda arrays: (ctypes.c_void_p * len(arrays))(
+            *(ctypes.addressof(array) for array in arrays)
+        )
 
-    external = resident_source(plan, embed_static_data=False)
-    assert "tensor_static_bytes" in external
-    assert "tensor_static_initialize" in external
-    assert "tensor static data is not initialized" in external
+        def run() -> int:
+            return lib.tensor_run(
+                owner,
+                pointers(inputs),
+                pointers(outputs),
+                0,
+                ctypes.byref(metrics),
+                error,
+                len(error),
+            )
+
+        if embedded:
+            with pytest.raises(AttributeError):
+                _ = lib.tensor_static_initialize
+        else:
+            lib.tensor_static_bytes.restype = ctypes.c_size_t
+            lib.tensor_static_initialize.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+                ctypes.c_size_t,
+                ctypes.c_void_p,
+                ctypes.c_size_t,
+            ]
+            assert lib.tensor_static_bytes() == 0  # This control plan has no payload.
+            assert run() != 0 and b"not initialized" in error.value
+            error.value = b""
+            assert (
+                lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error))
+                != 0
+            )
+            assert b"not initialized" in error.value
+            assert lib.tensor_static_initialize(owner, None, 1, error, len(error)) != 0
+            assert lib.tensor_static_initialize(owner, None, 0, error, len(error)) == 0
+            assert lib.tensor_static_initialize(owner, None, 0, error, len(error)) != 0
+        assert run() == 0, error.value
+        assert metrics.owned_device_bytes == plan.allocation_bytes
+        for slot, (_, step) in enumerate(plan.outputs):
+            if step in plan.inputs:
+                assert list(outputs[slot]) == list(inputs[plan.inputs.index(step)])
+        # Host-staged and resident calls share the actual emitted slot mapping.
+        for slot, array in enumerate(inputs):
+            for j in range(len(array)):
+                array[j] += 7
+            assert (
+                lib.resident_upload(
+                    owner, slot, array, ctypes.sizeof(array), error, len(error)
+                )
+                == 0
+            )
+        assert lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error)) == 0
+        for slot, (_, step) in enumerate(plan.outputs):
+            array = outputs[slot]
+            assert (
+                lib.resident_download(
+                    owner, slot, array, ctypes.sizeof(array), error, len(error)
+                )
+                == 0
+            )
+            if step in plan.inputs:
+                assert list(array) == list(inputs[plan.inputs.index(step)])
+        assert lib.host_pending_work() == 0
+    finally:
+        lib.tensor_destroy(owner)
+    assert lib.tensor_probe(0, error, len(error)) == 0
+    assert json.loads(error.value)["architecture"] == "sm_80"  # Fixture response.
 
 
 def _transfer_program(kind: str) -> typing.Any:
@@ -397,14 +501,16 @@ def _assert_resident_spans(plan: typing.Any, lib: ctypes.CDLL) -> None:
 
 
 def test_resident_spans_match_the_pinned_plan_offsets() -> None:
-    """Spans are compiled from pinned offsets; the planner must pin them."""
+    """Retain floating/computed span coverage until a matching executable gate.
+
+    The host control-plan transfer oracle cannot establish the storage contract
+    of computed FP64 outputs. These planner/span assertions remain scoped to
+    that lifetime contract, independently of the int64 ABI tests.
+    """
     plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
     assert all(plan.steps[i].last_use == len(plan.steps) for i in plan.inputs)
     source = resident_source(plan)
-    for i in plan.inputs:
-        step = plan.steps[i]
-        assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
-    for _, i in plan.outputs:
+    for i in (*plan.inputs, *(i for _, i in plan.outputs)):
         step = plan.steps[i]
         assert f"{{{step.offset}ULL,{step.node.spec.size * 8}ULL}}" in source
 
@@ -702,33 +808,96 @@ def test_resident_host_oracle_controls(
             _assert_resident_spans(plan, lib)
 
 
-def test_resident_run_propagates_the_ordinary_status() -> None:
-    """A native non-finite/division error must not be reported as success.
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_resident_validation_covers_every_input_symmetry(
+    tmp_path: Path,
+    required_native_cxx: typing.Any,
+    dtype: str,
+) -> None:
+    """Independent array permutations check every input, sign and tolerance."""
+    # Include a non-square shape, multiple symmetries on one input and a
+    # negative sign, so checking only one slot/permutation cannot pass.
+    a = Index("a", IndexSpace("a", "occupied", 2))
+    b = Index("b", IndexSpace("b", "virtual", 3))
+    c, d = Index("c", a.space), Index("d", b.space)
+    specs = (
+        TensorSpec((a, b), dtype=dtype, role="input"),
+        TensorSpec(
+            (a, b, c, d),
+            dtype=dtype,
+            role="input",
+            symmetries=(Symmetry((2, 1, 0, 3)), Symmetry((0, 3, 2, 1))),
+        ),
+        TensorSpec(
+            (b, d), dtype=dtype, role="input", symmetries=(Symmetry((1, 0), -1),)
+        ),
+    )
+    program = Program(
+        {f"out_{i}": input_tensor(f"input_{i}", spec) for i, spec in enumerate(specs)}
+    )
+    plan = plan_cuda(program, TARGET, max_bytes=1 << 26)
+    lib = build_resident_validation_host(plan, tmp_path, required_native_cxx)
+    arena = ctypes.create_string_buffer(plan.allocation_bytes)
+    inputs = []
+    for i in plan.inputs:
+        step = plan.steps[i]
+        values = np.arange(1, step.node.spec.size + 1, dtype=dtype).reshape(
+            step.node.spec.shape
+        )
+        for symmetry in step.node.spec.symmetries:
+            values = (
+                values + symmetry.sign * values.transpose(symmetry.permutation)
+            ) / 2
+        inputs.append(values)
 
-    The resident path inlines the generated launch sequence directly
-    (without the ordinary H2D/D2H staging copies), so it does not shell
-    out to ``tensor_run``.  The inline error boundary is identical: it
-    reads ``arithmetic_error`` from the device, throws when non-zero, and
-    the ``catch`` block synchronises the stream before returning through
-    ``generativeqc_tensor::error_text``.
-    """
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    assert "arithmetic_error" in source
-    assert "generativeqc_tensor::error_text(error, size, e.what()); return 1;" in source
-    assert "try {" in source
-    assert "throw std::runtime_error" in source
+    def validate(arrays: list[np.ndarray]) -> int:
+        for i, values in zip(plan.inputs, arrays, strict=True):
+            ctypes.memmove(
+                ctypes.addressof(arena) + plan.steps[i].offset,
+                values.ctypes.data,
+                values.nbytes,
+            )
+        return lib.validate(arena)
 
-
-def test_resident_validation_covers_every_input_symmetry() -> None:
-    """Uploads must be checked like the ordinary path, before any kernel."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    for slot in range(len(plan.inputs)):
-        assert f"resident_validate_{slot}" in source
-    # The doubles input declares simultaneous pair exchange; its validation
-    # must compare against the permuted partner with the ordinary tolerance.
-    assert "1e-11 + 1e-10 * fabs(peer)" in source
+    assert validate(inputs) == 0
+    for slot, i in enumerate(plan.inputs):
+        for invalid in (np.nan, np.inf, -np.inf):
+            damaged = [values.copy() for values in inputs]
+            damaged[slot].flat[-1] = invalid
+            assert validate(damaged) != 0, (slot, invalid)
+        spec = plan.steps[i].node.spec
+        if not spec.symmetries:
+            continue
+        # Test absolute and relative acceptance independently of the emitter's
+        # tolerance helper. These are the public FP32/FP64 validation contracts.
+        atol, rtol = (1e-6, 1e-5) if dtype == "float32" else (1e-11, 1e-10)
+        for symmetry in spec.symmetries:
+            for scale in (0.0, 100.0):
+                base = [values * scale for values in inputs]
+                # Violate only the selected permutation: a second constraint
+                # must not conceal an omitted check for the first one.
+                index = next(
+                    index
+                    for index in np.ndindex(spec.shape)
+                    if tuple(index[axis] for axis in symmetry.permutation) != index
+                    and all(
+                        tuple(index[axis] for axis in other.permutation) == index
+                        for other in spec.symmetries
+                        if other != symmetry
+                    )
+                )
+                partner = tuple(index[axis] for axis in symmetry.permutation)
+                tolerance = atol + rtol * abs(base[slot][partner])
+                for factor, accepted in ((0.25, True), (4.0, False)):
+                    damaged = [values.copy() for values in base]
+                    damaged[slot][index] += factor * tolerance
+                    assert (validate(damaged) == 0) == accepted, (
+                        slot,
+                        symmetry,
+                        scale,
+                        factor,
+                    )
+        assert validate(inputs) == 0  # Rejection does not poison the next validation.
 
 
 def test_resident_requires_pinned_materialized_outputs() -> None:
@@ -779,28 +948,76 @@ def test_resident_extension_is_part_of_the_generated_source() -> None:
     assert "// plan-specific tables" in extended
 
 
-def test_resident_run_without_extension_has_no_undefined_hook() -> None:
-    """The default source must not reference an undefined post-run symbol."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    source = resident_source(plan)
-    assert "generativeqc_resident_action" not in source
-    assert "GENERATIVEQC_RESIDENT_POST_RUN" not in source
-
-
-def test_resident_extension_post_run_is_wired_only_when_declared() -> None:
-    """A declared post-run action is emitted and its status propagated."""
-    plan = plan_cuda(doubled_pair_program(), TARGET, max_bytes=1 << 26)
-    declared = resident_source(
-        plan,
-        extension="__GENERATIVEQC_RESIDENT_POST_RUN_DECL__\n"
-        "int generativeqc_resident_post_run(void*, int, Metrics*, char*, size_t) "
-        "{ return 0; }\n",
+@pytest.mark.parametrize("declared", [False, True])
+def test_resident_extension_post_run_contract(
+    tmp_path: Path,
+    required_native_cxx: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    declared: bool,
+) -> None:
+    """Only admitted hooks run, after success, and their failures reach the caller."""
+    plan = plan_cuda(_transfer_program("two"), TARGET, max_bytes=1 << 26)
+    extension = r"""
+extern "C" {
+int hook_calls = 0, hook_status = 0, hook_profile = -1;
+void* hook_owner = nullptr;
+Metrics* hook_metrics = nullptr;
+}
+int generativeqc_resident_post_run(void* owner, int profile, Metrics* metrics, char* error, size_t size) {
+  ++hook_calls;
+  hook_profile = profile;
+  hook_owner = owner;
+  hook_metrics = metrics;
+  if (hook_status == 19) throw std::runtime_error("hook exception");
+  if (hook_status) generativeqc_tensor::error_text(error, size, "hook status");
+  return hook_status;
+}
+"""
+    if declared:
+        extension = "// __GENERATIVEQC_RESIDENT_POST_RUN_DECL__\n" + extension
+    lib = build_resident_host(
+        plan, tmp_path, required_native_cxx, monkeypatch, extension=extension
     )
-    assert (
-        "generativeqc_resident_post_run(pointer, profile, result, error, size)"
-        in declared
-    )
-    assert "if (status) return status;" in declared
+    calls = ctypes.c_int.in_dll(lib, "hook_calls")
+    status = ctypes.c_int.in_dll(lib, "hook_status")
+    profile = ctypes.c_int.in_dll(lib, "hook_profile")
+    owner = lib.host_owner(plan.allocation_bytes, plan.allocation_bytes - ALIGNMENT)
+    error = ctypes.create_string_buffer(256)
+    metrics = _Metrics()
+    try:
+        for code in (0, 37, -5, 19, 0):
+            status.value = code
+            before = calls.value
+            error.value = b""
+            result = lib.resident_run(
+                owner, 1, ctypes.byref(metrics), error, len(error)
+            )
+            assert result == ((1 if code == 19 else code) if declared else 0)
+            assert calls.value - before == int(declared)
+            if declared:
+                assert profile.value == 1
+                assert ctypes.c_void_p.in_dll(lib, "hook_owner").value == owner
+                assert ctypes.c_void_p.in_dll(
+                    lib, "hook_metrics"
+                ).value == ctypes.addressof(metrics)
+                if code:
+                    assert b"hook" in error.value
+            assert lib.host_pending_work() == 0
+        for marker in (-3, 5):
+            before = calls.value
+            error.value = b""
+            lib.host_status_marker(marker)
+            assert (
+                lib.resident_run(owner, 0, ctypes.byref(metrics), error, len(error))
+                != 0
+            )
+            assert calls.value == before
+            assert error.value
+            assert lib.host_pending_work() == 0
+            lib.host_status_marker(0)
+    finally:
+        lib.host_status_marker(0)
+        lib.host_destroy(owner)
 
 
 # ── lease invalidation and identity normalisation regressions ──
