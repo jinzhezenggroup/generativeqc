@@ -101,6 +101,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
 ) -> None:
     """Execute the actual public predicate without loading a CUDA library."""
     from generativeqc import _native
+    from generativeqc._df_precision import fitted_scf_budget_admitted
     from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
     method = resolve_method("WB97M-V", spin="unpolarized")
@@ -137,6 +138,9 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
     namespace = {
         "self": owner,
         "_native": _native,
+        # This range-separated route requests no application budget. Use the
+        # admission helper to preserve the strict precision fallback boundary.
+        "fitted_budget": fitted_scf_budget_admitted(owner, None),
         "basis_has_ecp": override.get("ecp", False),
         "density_fitting_mode": (
             _native.DENSITY_FITTING_CUDA
