@@ -43,6 +43,25 @@ def test_complete_spd_schedule_is_finite_and_deterministic() -> None:
     assert schedule.derivative_requests(DOMAIN) is requests
 
 
+@pytest.mark.parametrize("domain", [DOMAIN, ("", "xy", "zz"), ("x",), ("xx", "yz")])
+def test_inventory_matches_exhaustive_ordered_consumers(
+    domain: tuple[str, ...],
+) -> None:
+    """AOT indices must cover exactly the brute-force ordered consumer set.
+
+    Non-axis-closed domains expose accidental assumptions about the supplied
+    labels when reducing center symmetries during first-use planning.
+    """
+    expected = {("nuclear", ())}
+    for operator in schedule.COMPONENT_OPERATORS:
+        rank = 4 if operator == "four_center_eri" else 2
+        expected.update(
+            schedule.derivative_binding(operator, labels).request
+            for labels in product(domain, repeat=rank)
+        )
+    assert schedule.derivative_requests(domain) == tuple(sorted(expected))
+
+
 @pytest.mark.parametrize(
     "operator", ["overlap", "kinetic", "nuclear_attraction", "four_center_eri"]
 )

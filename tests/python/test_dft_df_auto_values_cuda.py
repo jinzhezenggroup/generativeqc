@@ -58,10 +58,19 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
     reference_forces = cupy.asnumpy(-gradient.kernel())
 
     ordinary_derivatives = NativeKsSnapshot.density_fitted_integral_derivatives
-    for storage in ("auto", "auto-panels", "dense", "auto-host-response"):
+    for storage in (
+        "auto",
+        "auto-panels",
+        "packed-single",
+        "dense",
+        "auto-host-response",
+    ):
         trace_path = tmp_path / f"{storage}.jsonl"
         progress_path = tmp_path / f"{storage}-progress.jsonl"
-        monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage.split("-")[0])
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_VALUE_STORAGE",
+            "packed-single" if storage == "packed-single" else storage.split("-")[0],
+        )
         monkeypatch.setenv(
             "GENERATIVEQC_DF_COULOMB_RESPONSE",
             "panels" if storage == "auto-panels" else "auto",
@@ -88,7 +97,10 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
             basis_representation="spherical",
             device="cuda",
             density_fitting="cuda",
-            density_fitting_memory_budget_bytes=112 << 20,
+            # Reserve enough for mandatory metric/tile state but exclude the
+            # complete dense resident owner to exercise the streamed fallback.
+            density_fitting_memory_budget_bytes=(64 if storage == "dense" else 112)
+            << 20,
             ks_options=KsOptions(grid=grid),
             energy_tolerance=1e-12,
             density_tolerance=1e-10,
@@ -104,7 +116,7 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
                 for row in cold_rows
                 if row["counters"].get("response_retained_coulomb_completed", 0)
             ]
-            if storage in {"auto", "auto-host-response"}:
+            if storage in {"auto", "auto-host-response", "packed-single"}:
                 assert len(retained_coulomb) == 1
                 assert (
                     retained_coulomb[0]["response_retained_coulomb_factor_passes"] == 1
@@ -141,17 +153,30 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
                     if row["operation"] == "resident_three_center_materialization"
                 ]
                 assert len(materialization) == 1
-                assert (
-                    materialization[0]["counters"]["value_packed_pairs"] == 96 * 97 // 2
-                )
                 counters = materialization[0]["counters"]
-                staging_pairs = counters["resident_single_staging_pair_capacity"]
-                expected_panels = (96 * 97 // 2 + staging_pairs - 1) // staging_pairs
-                assert counters["resident_whitening_factor_panels"] == expected_panels
-                assert (
-                    counters["resident_whitening_factor_gemms"] == 2 * expected_panels
+                # Auto may select dense resident storage at small dimensions.
+                # Its contract is retained values within budget, with no SCF
+                # regeneration. Explicit packing also qualifies cross-row and
+                # ragged panels independently of that resource crossover.
+                packed = "value_packed_pairs" in counters
+                if storage == "packed-single":
+                    assert packed
+                pairs = 96 * 97 // 2 if packed else 96**2
+                assert counters["resident_transformed_bytes"] == (
+                    pairs * reference.with_df.auxmol.nao_nr() * 8
                 )
-                assert expected_panels < 96
+                if packed:
+                    assert counters["value_packed_pairs"] == pairs
+                    staging_pairs = counters["resident_single_staging_pair_capacity"]
+                    expected_panels = (pairs + staging_pairs - 1) // staging_pairs
+                    assert (
+                        counters["resident_whitening_factor_panels"] == expected_panels
+                    )
+                    assert (
+                        counters["resident_whitening_factor_gemms"]
+                        == 2 * expected_panels
+                    )
+                    assert expected_panels < 96
             else:
                 assert regeneration > 0
             replay = batch.execute(strict=True, properties=("energy", "forces")).items[

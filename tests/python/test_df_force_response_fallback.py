@@ -100,8 +100,18 @@ bool qualified_value_rhf_exchange(const CudaDensityFittingJkPlan&,std::size_t ra
 generativeqc_status cuda_failure(int error,const char*,std::string&) {
   return error==cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_CUDA_ERROR;
 }
-generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan&,PersistentScfState&,
-    const double*,bool&,std::size_t&,std::string&) { return GENERATIVEQC_STATUS_NOT_IMPLEMENTED; }
+generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,PersistentScfState& state,
+    const double* density,bool& accepted,std::size_t& rank,std::string&) {
+  assert(mode>=19);
+  assert(density==plan.primary_density && density[0]==0 && density[3]==2);
+  assert(state.generation==0); // The old factor is revoked before scratch is overwritten.
+  if(mode==21) { pending_error=cudaErrorMemoryAllocation; return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
+  if(mode==23) { pending_error=cudaErrorLaunchFailure; return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
+  if(mode==24) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  accepted=mode!=20; rank=1;
+  state.factor[0]=0; state.factor[1]=std::sqrt(2.0);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 }
 generativeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan*,
     std::size_t,CudaDfFinalStateToken& result,std::string&) { if(mode==14 || mode==15) pending_error=mode==14 ? cudaErrorMemoryAllocation : cudaErrorLaunchFailure;
@@ -149,15 +159,20 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
   assert((resources->precision_work==std::array<std::uint64_t,3>{}));
   if (occupied) {
     ++occupied_calls;
-    assert(occupied->final_fitted_occupied_projection==active->auxiliary_tile_values);
+    if(mode>=19) {
+      // A corrected determinant must project B anew, never reuse the old U.
+      assert(!occupied->final_fitted_occupied_projection);
+      assert(occupied->factors[0].density_scale==1.0);
+      assert(occupied->factors[0].coefficients[0]==0);
+    } else assert(occupied->final_fitted_occupied_projection==active->auxiliary_tile_values);
     if(mode==12 || mode==13) pending_error=mode==12 ? cudaErrorMemoryAllocation : cudaErrorLaunchFailure;
     if(mode==16) return GENERATIVEQC_STATUS_CUDA_ERROR;
     if(mode==2) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-    if(mode!=0) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    if(mode!=0 && mode!=19) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } else {
     ++panel_calls;
     assert(pending_error==0);
-    if(mode==3 || mode==17 || mode==18) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    if(mode==3 || mode==17 || mode==18 || mode==25) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   output={42}; return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -183,31 +198,44 @@ int main(int argc,char** argv) {
   if(mode==8 || mode==18) density[0]=1.5;
   if(mode==9) plan.metric_full_rank[0]=0;
   if(mode==10) plan.final_projection_token.reset();
+  if(mode>=19) {
+    ++requested.identity.factor.density_generation;
+    ++requested.identity.factor.orbital_generation;
+    density[0]=0; density[3]=2;
+  }
+  if(mode==26) ++requested.identity.solve_epoch;
+  if(mode==27) { requested.identity.factor.density_generation+=16;
+                requested.identity.factor.orbital_generation+=16; }
+  if(mode==28) ++requested.identity.factor.orbital_generation;
+  if(mode==29) requested.identity.occupied[0]=0;
+  if(mode==30) setenv("GENERATIVEQC_DF_FINAL_PROJECTION","off",1);
   std::vector<double> output{-1}; std::string detail;
   DfGradientResources resources;
   resources.precision_work_collected=true;
   resources.precision_work={7,8,9};
   auto status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
       {},{&term,1},0,4096,0,output,detail,&resources,&requested,lease,nullptr);
-  const auto expected_status=mode==2 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
-      : (mode==3 || mode==5 || mode==17 || mode==18) ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
-      : (mode==13 || mode==15 || mode==16) ? GENERATIVEQC_STATUS_CUDA_ERROR
+  const auto expected_status=(mode==2 || mode==24) ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
+      : (mode==3 || mode==5 || mode==17 || mode==18 || mode==25) ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+      : (mode==13 || mode==15 || mode==16 || mode==23) ? GENERATIVEQC_STATUS_CUDA_ERROR
       : GENERATIVEQC_STATUS_SUCCESS;
   assert(status==expected_status);
-  assert(occupied_calls==int(mode<=5 || mode==12 || mode==13 || mode==16));
-  assert(panel_calls==int(mode!=0 && mode!=2 && mode!=5 && mode!=13 && mode!=15 && mode!=16));
-  assert(error_clears==int(mode==12 || mode==14));
-  if(mode==13 || mode==15) assert(pending_error==cudaErrorLaunchFailure);
+  assert(occupied_calls==int(mode<=5 || mode==12 || mode==13 || mode==16 || mode==19 || mode==22 || mode==25));
+  assert(panel_calls==int(mode!=0 && mode!=2 && mode!=5 && mode!=13 && mode!=15 && mode!=16
+                          && mode!=19 && mode!=23 && mode!=24));
+  assert(error_clears==int(mode==12 || mode==14 || mode==21));
+  if(mode==13 || mode==15 || mode==23) assert(pending_error==cudaErrorLaunchFailure);
   if(status==GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{42});
   if(status!=GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{-1});
   assert(!resources.precision_work_collected);
   assert((resources.precision_work==std::array<std::uint64_t,3>{}));
   assert(precision_authentication_calls==0);
   assert(!plan.final_projection_token);
-  if(mode==0) { // Repeated response cannot borrow the consumed projection again.
+  if(mode==0 || mode==19) { // Only a corrected density can reconstruct again; U stays consumed.
     status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
         {},{&term,1},0,4096,0,output,detail,&resources,&requested,nullptr,nullptr);
-    assert(status==GENERATIVEQC_STATUS_SUCCESS && occupied_calls==1 && panel_calls==1);
+    assert(status==GENERATIVEQC_STATUS_SUCCESS);
+    assert(occupied_calls==(mode==0 ? 1 : 2) && panel_calls==(mode==0 ? 1 : 0));
   }
 }
 """
@@ -248,7 +276,7 @@ def response_probe(
 
 @pytest.mark.parametrize(
     "mode",
-    range(19),
+    range(31),
     ids=(
         "success-and-repeat",
         "occupied-oom",
@@ -269,6 +297,18 @@ def response_probe(
         "compute-error",
         "provenance-and-panel-oom",
         "corrected-density-panel-oom",
+        "corrected-auto-and-repeat",
+        "reconstruction-rejected",
+        "reconstruction-oom",
+        "reconstructed-bridge-oom",
+        "reconstruction-pending-error",
+        "reconstruction-numerical-failure",
+        "reconstructed-and-panel-oom",
+        "corrected-stale-epoch",
+        "corrected-generation-limit",
+        "corrected-generation-mismatch",
+        "corrected-empty-occupations",
+        "corrected-projection-off",
     ),
 )
 def test_fitted_response_failure_and_lease_fallback(
