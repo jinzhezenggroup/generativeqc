@@ -40,6 +40,15 @@ expose registry information, not support for every basis/device/precision and
 derivative combination. A prepared execution can apply stricter checks.
 See [capability sources](capabilities.md).
 
+## Native KS grid descriptor
+
+The `generativeqc_ks_options` descriptor keeps the same layout across grid
+versions. The [KS grid contract](../user/ks_options.md#prepared-semilocal-ks-model-options)
+documents the version-4 defaults, supported elements, level encoding and
+radius-table behavior for native callers as well as Python. It governs the
+`grid_version`, `radial_points`, `angular_polar`, `angular_azimuth` and
+`element_radii` fields when constructing the C descriptor directly.
+
 ## Core C handles and ownership
 
 | Entry points | Contract |
@@ -180,6 +189,23 @@ Workspace bounds and measured peaks describe solver-owned numeric storage,
 excluding callback/provider allocations and complete-endpoint resource use.
 The [response guide](../developer/response.md#installed-solver-policies) defines
 Python dispatch and the remaining compatibility domains.
+
+`generativeqc_response_sequence_workspace_v1` queries first-request and
+conservative complete-sequence numeric bounds without vector/callback access.
+`generativeqc_response_sequence_solve_v1` streams independent RHS through the
+same bound native response owner, preserving an admitted prefix if the budget
+cannot cover later requests. Element strides describe borrowed read-only FP64
+storage; at most one strided column is staged. An optional method-owned
+validation callback protects zero-RHS, refusal and publication boundaries.
+The publisher receives an immutable borrowed result view, valid **only during
+that callback**, and must copy arrays it retains. No result handle survives
+the sequence call. Earlier callback side effects cannot be rolled back after
+a later callback failure; the caller-owned summary is written only on API
+success. Inspect individual convergence/reasons, not just API status.
+Solution/basis retention is charged to the schedule; publisher history copies,
+object bookkeeping and physical providers have independent budgets. This is
+not the atomic retaining native batch policy, block/recycled GMRES, or full
+molecular response/HVP assembly.
 
 ## Native basis projection
 

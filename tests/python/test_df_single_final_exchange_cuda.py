@@ -16,13 +16,15 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("auxiliary", ["def2-svp", "cc-pvdz-jkfit"])
 @pytest.mark.parametrize(
-    "final_exchange,metric,corrected,projection",
+    "final_exchange,metric,corrected,projection,response_space",
     [
-        ("auto", "auto", False, "auto"),
-        ("auto", "auto", False, "off"),
-        ("occupied", "spectral", False, "auto"),
-        ("auto", "auto", True, "auto"),
-        ("dense", "spectral", True, "auto"),
+        ("auto", "auto", False, "auto", "occupied"),
+        ("auto", "auto", False, "off", "occupied"),
+        ("occupied", "spectral", False, "auto", "occupied"),
+        ("auto", "auto", True, "auto", "occupied"),
+        ("dense", "spectral", True, "auto", "occupied"),
+        ("auto", "auto", False, "auto", "auto"),
+        ("auto", "auto", True, "auto", "auto"),
     ],
 )
 def test_single_final_k_and_response_replay(
@@ -33,6 +35,7 @@ def test_single_final_k_and_response_replay(
     metric: str,
     corrected: bool,
     projection: str,
+    response_space: str,
 ) -> None:
     """Final K accepts exact/corrected factors without lending an absent raw owner."""
     assert os.environ.get("SLURM_JOB_ID")
@@ -64,8 +67,8 @@ def test_single_final_k_and_response_replay(
         "EXCHANGE": "occupied",
         "FINAL_EXCHANGE": final_exchange,
         "FINAL_PROJECTION": projection,
-        "RESPONSE_SPACE": "occupied",
-        "OCCUPIED_RESPONSE_SOURCE": "fitted",
+        "RESPONSE_SPACE": response_space,
+        "OCCUPIED_RESPONSE_SOURCE": "auto" if response_space == "auto" else "fitted",
         "OCCUPIED_METRIC": metric,
         "SOURCE_DERIVATIVE_SCHEDULE": "qualify",
         "RESPONSE_ALGEBRA": "blas",
@@ -143,11 +146,11 @@ def test_single_final_k_and_response_replay(
                 not reused
             )
             assert counters.get("response_occupied_charge_inverse_gemms", 0) == (
-                0 if reused else 2
+                0 if reused else 1
             )
             assert counters.get(
                 "response_occupied_charge_inverse_gemms_avoided", 0
-            ) == (2 if reused else 0)
+            ) == (1 if reused else 0)
             if reused:
                 rank = mol.nelectron // 2
                 auxiliary_count = mf.with_df.auxmol.nao_nr()
@@ -182,9 +185,9 @@ def test_single_final_k_and_response_replay(
                 assert counters.get("response_symmetric_occupied_pairs", 0) == 0
                 assert counters.get("response_symmetric_expansion_copy_bytes", 0) == 0
                 assert counters["response_retained_fitted_charge_panels"] > 0
-            assert counters.get("response_fitted_occupied_metric_root_gemms") == (
-                2 if metric == "spectral" else 1
-            )
+            # Single packed factors already carry the metric eigenbasis. Both
+            # root policies need only the remaining rotation into physical P.
+            assert counters.get("response_fitted_occupied_metric_root_gemms") == 1
             assert counters.get("response_retained_metric_root", 0) == (
                 metric != "spectral"
             )

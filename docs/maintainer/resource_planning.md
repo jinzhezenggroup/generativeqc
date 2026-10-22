@@ -162,11 +162,12 @@ closed frontend handles until their actual owners release them.
 
 ## CUDA KS to force handoff
 
-CUDA KS keeps its admitted optional ERI value cache throughout SCF and after
-energy-only solves. Before a stationary force consumer allocates, the live
-final-state owner compares its additional device envelope with free memory on
-its bound device. Under pressure it drains the SCF producer and retires the
-optional value lease and its graph borrowers. Resident density, stationary
+CUDA KS keeps its admitted optional ERI value cache and Fast anchor matrices
+throughout SCF and after energy-only solves. Before a stationary force consumer
+allocates, the live final-state owner compares its additional device envelope
+with free memory on its bound device. Under pressure it drains the SCF producer
+and retires the idle anchor lease, then rechecks free memory before retiring the
+optional ERI lease and its graph borrowers if still needed. Resident density, stationary
 weights, XC state, the exact final-state token and the last-good warm seed stay
 valid. The force consumer still uses the prepared derivative provider.
 
@@ -174,7 +175,10 @@ Native stationary, Python stationary and composite force owners request this
 handoff before allocation. Compatible replays exclude retained force arenas
 from the requested headroom. Python force work reports `scf_force_memory` with
 requested, free-before, free-after and reclaimed device bytes. Resource
-accounting drops the retired provider's device and host storage.
+accounting drops retired anchor state capacity and the retired provider's device
+and host storage. Repeated handoffs cannot retire an allocation twice. Retired
+anchors remain disabled on this owner: later warm/cold solves and error recovery
+retain ordinary Fast without reacquiring optional memory ahead of the force owner.
 
 This check is advisory: it does not reserve global free memory, relax an
 explicit budget, evict other calculations, or promise that arbitrary mandatory
@@ -241,6 +245,20 @@ portable metadata sizing without implicitly loading a provider. Declared-capacit
 selection and admission use the separately discovered native composition owner
 described above; prepared leases remain frontend-owned. Native fleet sizing is
 not complete endpoint/RSS allocation accounting.
+
+Direct CUDA RHF/UHF plans with a discovered
+`generativeqc_resource_hf_cuda_fleet_v1` obtain host bounds, retained device
+arenas and serialized retry composition from the same allocation-free C++ owner
+as the native CLI. The topology-aware allocator v2 and ECP queries remain the
+leaf authorities; composition never constructs a CUDA provider or context.
+Ragged fleets sum retained host/device capacities and preserve the conservative
+retry `max(arena) + max(ecp_workspace)`, including maxima from different items.
+The entire fleet is validated before publication, and homogeneous CLI batches
+apply multiplicity exactly once. Schedule identity names native fleet ownership;
+only an absent symbol permits portable compatibility. Native refusal, overflow
+or inconsistent publication never restarts Python arithmetic. This does not
+change density-fitted HF, scientific admission, prepared lease ownership or the
+exclusion of provider/allocator retention and complete simultaneously-live RSS.
 
 CPU KS calculator plans with a discovered
 `generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native

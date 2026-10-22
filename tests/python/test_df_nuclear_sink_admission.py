@@ -85,7 +85,14 @@ int cudaMemsetAsync(void* dst, int value, std::size_t n, cudaStream_t) {
   std::memset(dst, value, n); return cudaSuccess;
 }
 const char* cudaGetErrorString(int) { return "mock CUDA failure"; }
+int cudaMemGetInfo(std::size_t* free, std::size_t* total) {
+  *free = *total = std::numeric_limits<std::size_t>::max();
+  return cudaSuccess;
+}
 namespace generativeqc::runtime {
+namespace cuda_trace {
+void trace_counter(const char*, std::size_t) {}
+}
 int resource_cuda_malloc(void** out, std::size_t bytes) {
   auto* p = static_cast<allocation_probe::Header*>(
       std::malloc(sizeof(allocation_probe::Header) + bytes));

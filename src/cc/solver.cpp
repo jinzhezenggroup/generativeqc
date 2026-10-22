@@ -227,12 +227,13 @@ void validate_problem(const Problem& p, bool allow_df_virtual) {
 }
 
 void validate_options(const SolverOptions& o) {
+  o.convergence.validate();
   if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes ||
       !o.df_auxiliary_batch_limit ||
       (o.df_mixed_precision && !o.df_mixed_precision_max_evaluations))
     throw std::invalid_argument("invalid RCCSD iteration/history/budget option");
   if (!(o.energy_tolerance > 0.0 && o.energy_tolerance <= 1e-8) ||
-      !(o.residual_tolerance > 0.0 && o.residual_tolerance <= 1e-9) ||
+      !(o.residual_tolerance > 0.0 && o.residual_tolerance <= o.convergence.cc_residual()) ||
       !(o.denominator_threshold > 0.0) || !(o.damping >= 0.0 && o.damping < 1.0) ||
       !(o.level_shift >= 0.0) || !std::isfinite(o.energy_tolerance) ||
       !std::isfinite(o.residual_tolerance) || !std::isfinite(o.denominator_threshold) ||
@@ -343,6 +344,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   current.insert(current.end(), p.initial_t2.begin(), p.initial_t2.end());
   generativeqc::solver::Diis diis(options.diis_size, elements);
   SolverResult result;
+  result.convergence = options.convergence;
   result.diagnostic.df_mixed_precision_refused = options.df_mixed_precision;
   result.diagnostic.denominator_identity = denominator_identity(p);
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);

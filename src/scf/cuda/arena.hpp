@@ -158,6 +158,7 @@ struct ArenaLayout {
   std::size_t failed{};
   std::size_t final_fock_reuse_mask{};
   std::size_t final_fock_rebuild_count{};
+  std::size_t executed_fock_builds{};
   std::size_t spin_active{};
   std::size_t iterations{};
   std::size_t solver_info{};

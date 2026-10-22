@@ -180,6 +180,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
       src/scf/cuda/hf_initial_guess.cpp
+      src/scf/cuda/warm_density.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/rhf_resident_values.cpp
@@ -215,6 +216,9 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/scf_convergence_kernels.cu
       src/scf/cuda/basis_transform_kernels.cu
       src/scf/cuda/df_source_setup.cpp
+      src/scf/cuda/df_md_owner.cu
+      src/scf/cuda/df_md_raw.cu
+      src/scf/cuda/df_md_plan.cpp
       src/scf/cuda/df_source.cpp
       src/scf/cuda/df_source_kernels.cu
       src/scf/cuda/df_integral_export.cpp
@@ -390,6 +394,7 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/posthf/mp2_derivative_cpu.cpp
       src/posthf/mp2_energy.cpp
       src/posthf/ump2_energy.cpp
+      src/posthf/ump2_force.cpp
       src/posthf/mp2_force.cpp
       src/posthf/mp2_gradient.cpp
       src/posthf/native_provider.cpp

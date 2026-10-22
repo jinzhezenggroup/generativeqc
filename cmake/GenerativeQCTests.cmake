@@ -60,6 +60,36 @@ function(generativeqc_add_ordered_history_cuda_compile_check)
   add_dependencies(generativeqc_cuda_runtime_tests generativeqc_ordered_history_cuda_compile_check)
 endfunction()
 
+function(generativeqc_add_ordered_gram_host_admission_test)
+  if(NOT GENERATIVEQC_ENABLE_CUDA OR
+     NOT GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" OR
+     NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    return()
+  endif()
+  get_target_property(_ordered_gram_library_type generativeqc TYPE)
+  if(NOT _ordered_gram_library_type STREQUAL "SHARED_LIBRARY")
+    # This gate exercises ELF interposition through the production DSO. The
+    # monolithic CLI has its separate archive/package qualification.
+    return()
+  endif()
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_executable(generativeqc_ordered_gram_host_admission_tests
+                 tests/native/test_ordered_gram_host_admission.cpp)
+  target_link_libraries(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                        generativeqc CUDA::cudart)
+  target_include_directories(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_compile_features(generativeqc_ordered_gram_host_admission_tests PRIVATE cxx_std_20)
+  target_link_options(generativeqc_ordered_gram_host_admission_tests PRIVATE
+                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel")
+  add_test(NAME generativeqc_ordered_gram_host_admission_tests
+           COMMAND "${Python3_EXECUTABLE}"
+                   "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/ordered_gram_host_admission.py"
+                   "$<TARGET_FILE:generativeqc_ordered_gram_host_admission_tests>")
+  set_tests_properties(generativeqc_ordered_gram_host_admission_tests PROPERTIES
+                       TIMEOUT 60 ENVIRONMENT "CUDA_VISIBLE_DEVICES=")
+endfunction()
+
 macro(generativeqc_add_native_tests)
   enable_testing()
   # Algorithmic tests need no CUDA, native solver, Python, or external oracle.
@@ -113,6 +143,8 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_quadrature_tests tests/native/test_cuda_quadrature.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    generativeqc_native_test(generativeqc_grid_pruning_cuda_tests tests/native/test_grid_pruning_cuda.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_xc_response_cuda_tests tests/native/test_xc_response_cuda.cu
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
     target_compile_definitions(generativeqc_xc_response_cuda_tests PRIVATE
@@ -143,6 +175,15 @@ macro(generativeqc_add_native_tests)
     add_executable(generativeqc_df_value_probe tests/native/df_value_probe.cpp)
     target_link_libraries(generativeqc_df_value_probe PRIVATE generativeqc CUDA::cudart)
     target_include_directories(generativeqc_df_value_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Compile and link the acceptance bridge against the real CUDA SDK even
+      # in compile-only CI; its captured execution still requires a real GPU.
+      add_library(generativeqc_md_j_resident_probe SHARED tests/native/md_j_resident_probe.cpp)
+      target_link_libraries(generativeqc_md_j_resident_probe PRIVATE generativeqc CUDA::cudart)
+      target_include_directories(generativeqc_md_j_resident_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+      target_link_options(generativeqc_md_j_resident_probe PRIVATE
+                          "$<$<PLATFORM_ID:Linux>:-Wl,--no-undefined>")
+    endif()
   endif()
 
   generativeqc_native_test(generativeqc_tracked_allocator_tests tests/native/test_tracked_allocator.cpp
@@ -519,6 +560,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_ks_device_resources.cpp)
   generativeqc_native_test(generativeqc_hf_host_resource_tests
                        tests/native/test_hf_host_resources.cpp)
+  generativeqc_native_test(generativeqc_hf_cuda_resource_tests
+                       tests/native/test_hf_cuda_resources.cpp)
   generativeqc_native_test(generativeqc_hf_df_resource_tests
                        tests/native/test_hf_df_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
@@ -540,6 +583,11 @@ macro(generativeqc_add_native_tests)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_cuda_runtime_tests tests/native/test_cuda_runtime.cu
                        LIBRARIES CUDA::cudart CUDA::cublas)
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Preserve the established mandatory CI target and its bounded command;
+      # its dependency graph also compiles the acceptance bridge against CUDA.
+      add_dependencies(generativeqc_cuda_runtime_tests generativeqc_md_j_resident_probe)
+    endif()
     generativeqc_add_ordered_history_cuda_compile_check()
     generativeqc_native_test(generativeqc_df_eigensystem_tests tests/native/test_df_eigensystem.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)
@@ -606,4 +654,5 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_aot_profile_tests tests/native/test_aot_profile.cpp
                        LIBRARIES CUDA::cudart)
   endif()
+  generativeqc_add_ordered_gram_host_admission_test()
 endmacro()

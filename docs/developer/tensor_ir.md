@@ -223,11 +223,33 @@ float32/float64 graphs with external Boolean input/constant masks. Masks may
 pass through validated transpose, reshape, slice, static gather and broadcast
 views; they never receive tangent/cotangent storage. JVP selects the real branch
 tangents with the actual Boolean mask; VJP routes real bars to the branches and
-uses the existing broadcast/scatter adjoints. Computed comparison conditions,
-Boolean outputs, scientific annotations and differentiation with respect to
-masks remain unsupported. This context-specific contract appears in
+uses the existing broadcast/scatter adjoints. Without the comparison-selector option below, computed comparison conditions
+remain unsupported. Boolean outputs, scientific annotations and differentiation
+with respect to masks remain unsupported in either mode. This context-specific contract appears in
 `autodiff.capabilities()["reference_external_mask_where"]`, rather than the
 unrestricted `AD_PRIMITIVES`/generated/native capability set.
+
+The explicit `allow_comparison_where=True` option additionally admits conditions
+from the six real comparison primitives and their typed Boolean views. It is
+available on reference `jvp/vjp/dot_test` (generic finite FP32/FP64), generated
+`linearize/transpose_program` and public `jvp/vjp/grad/value_and_grad` (generic
+finite FP64; reference/materializing CPU). Comparison and Boolean-output
+*differentiation* remains unsupported. Derivative dependency traversal stops at
+Boolean edges: a predicate-only `sqrt(p)` is a checked primal, not a derivative
+request, even when `p` is a requested real input. Reused branch values retain
+their derivative-domain checks. Requested predicate-only input directions remain
+validated and their cotangents are zero. The generated JVP retains requested
+direction validation as live graph edges, including after serialization/CSE/DCE.
+No Boolean derivative storage is allocated.
+
+The selector is evaluated at the primal, including at equality. The selected
+branch is the derivative convention at a switch; no differentiability or
+finite-difference assertion is made at a jump or kink. Independent finite
+differences use perturbations that preserve selectors. VJP replay uses the
+forward snapshot, including all predicate inputs. The new option preserves
+default and external-mask-only admission and the typed first-order boundary.
+Its generated provenance uses `comparison_where_jvp/vjp`; real execution inputs
+remain non-differentiable even if descriptive provenance is removed.
 
 All live primal operands remain finite/domain checked, including unselected
 branches. Existing derivative-domain/finiteness checks and VJP requested-input
@@ -266,10 +288,15 @@ backend-independent TensorIR `Program` DAGs:
   never receive tangent/cotangent storage; the canonical `where` selects real
   tangents or routes real cotangents to the selected branches. Existing view
   adjoints perform broadcast reductions and repeated-gather scatter additions.
-  Computed comparisons, Boolean outputs, scientific/control annotations,
+  Without the comparison-selector option, computed comparisons also reject.
+  Boolean outputs, scientific/control annotations,
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
-  CUDA, portable/scalar, public compiled AD and HVP are outside this slice.
+  CUDA, portable/scalar and HVP are outside this slice. The public scalar
+  `grad`/`value_and_grad` wrappers, selected-argument `vjp` and fixed-mask `jvp`
+  expose the same explicit opt-in on reference/CPU; see the [Array API contract](../user/experimental_array_api.md).
+  Combined primal/derivative graphs use the generated execution inputs, preserving
+  the non-differentiable boundary.
   Generated real feeds preserve names, roles, dtypes and shapes but are declared
   non-differentiable execution data. This existing typed boundary survives
   reconstruction without provenance, replay and optimization; the result is
@@ -335,6 +362,88 @@ The opt-in is required because an equivalent contraction tree changes
 floating-point reduction order. Programs carrying an explicit
 `precision_execution` contract currently fail closed under reassociation until
 intermediate-node precision propagation is defined.
+
+### Consumer-aware materialization plans
+
+`plan_materializations(program)` reports high-degree retained outputs, opaque
+sources and materialize-then-consume boundaries. With
+`allow_reassociation=True`, it can select a lower-storage plan for a single-use
+real-FP64 einsum producer, or a bounded sum of private visible einsums,
+consumed by another einsum. The pass substitutes visible
+factors, renames private dummy indices, combines exact rational coefficients and
+reuses the existing bounded contraction-tree search. Public output specifications
+and input roles/differentiability are preserved. Default optimization/preparation
+does not invoke this pass.
+
+`plan.program` is the selected executable TensorIR; `plan.to_payload()` binds
+the original and selected logical identities, before/after work and storage
+footprints, each considered candidate and its selection/rejection reason.
+Footprints report symbolic degrees/monomials, the existing concrete arithmetic
+work estimate, caller-input bytes, distinct public-output bytes, the sum of
+non-input logical materializations, and the simultaneous-live logical peak.
+The peak includes caller inputs and inclusive producer/last-reader lifetimes
+from the shared storage analyzer. Dead inspection definitions do not execute.
+These are logical dense models, not allocator, physical-view, provider-workspace,
+transfer or detached-publication measurements.
+
+Selection requires nonincreasing symbolic work degree, concrete work estimate
+and logical live peak, plus strictly lower total materialization bytes.
+`max_materialized_bytes` further bounds the candidate's total non-input
+materializations; failure retains the original program and reports rejection.
+It is not a runtime workspace allowance or a guarantee that the retained program
+fits. `max_candidates`, `max_operands` and `max_intermediate_axes` bound search
+and allowed new intermediates. `max_distribution_terms` (default four, at most
+eight) bounds sum distribution. Inventory is refreshed after accepted rewrites.
+
+Public dense outputs, repeated producer edges, multiple readers, view/nonlinear
+consumers, repeated Einstein labels, non-FP64 arithmetic and explicit
+`precision_execution` contracts retain their materialization. Reassociation
+permission admits changed floating-point reduction/coefficient order; it does
+not establish an error bound for every input or a production backend.
+`available_rules=()` demonstrates an unavailable compiler rule and retains the
+original plan. Opaque four-index sources receive a `factorized-source`
+recommendation requiring explicit factor/consumer, alias, derivative and resource
+contracts; logical shape alone never proves separability or exact-zero support.
+The shared advisory materialization diagnostics remain independent of this
+consumer-substitution proof.
+
+Each decision also exposes a shared immutable
+`MaterializationRuleRequest`. It binds the current source equation identity,
+producer identity/specification, every consumer identity and operand position,
+explicit precision/reassociation policy, byte allowance and search/work/live-byte
+constraints. The request hash changes when any of these requirements changes.
+`to_payload()` returns a detached JSON snapshot. Native/source analyzers may
+construct the same request type and attach it to
+`common.materialization.materialization_diagnostic(..., rule_request=request)`;
+the diagnostic checks origin/subject/output consistency and still reports
+unresolved consumer/ABI and source-support obligations.
+
+The rule set is finite and provider neutral:
+`single-consumer-einsum` substitutes one visible contraction;
+`distribute-add-einsum` contracts each private visible term of a sum, then
+recombines the exact rational sum. Both require explicit reassociation permission
+and the same complete-program work/storage gates. Sum terms with another reader
+or a requested output remain materialized; distribution cannot duplicate their
+production. Opaque/nonlinear terms and unavailable rules are rejected. A lower
+memory estimate alone never permits increased estimated work. No request,
+external `factorized-source`/`block-source` recommendation, or claimed producer
+descriptor grants mathematical, derivative or runtime qualification.
+
+`tests/python/test_materialization_rule_contracts.py` qualifies the literal
+MP2 Fock-like structured-weight component and the actual RCCSD
+`D05_vv_ladder` source built by the shared equation owner. It covers independent
+values, interpreted/generated JVP/VJP, finite differences, both selected and
+losing CC shapes, immutable request identity and retained/shared/opaque/precision
+boundaries. The separate MP2 correlation source is not inferred from its shape.
+This API changes compiler opt-in planning only; it does not reroute production
+MP2/CC forces or execute a native provider.
+
+The acceptance workload is one explicit auxiliary slice of the DF-CC ladder
+`ac,ijcd,bd->ijab`, initially expressed through a visible `vvvv` product.
+Independent dense arithmetic, generated and interpreted AD, finite differences,
+serialization and refusal/resource gates live in
+`tests/python/test_tensor_materialization.py`. This compiler-only API does not
+change production CC/MP2 routes or claim a CUDA/complete-endpoint speedup.
 
 Constant folding is deliberately limited to scalar rational add/multiply/divide
 subgraphs. The replacement must reproduce the original dtype result bit for

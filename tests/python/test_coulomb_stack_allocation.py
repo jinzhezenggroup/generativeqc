@@ -10,18 +10,18 @@ from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS
 @pytest.fixture(scope="module")
 def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("void configure_direct_coulomb_recurrence(")
+    begin = source.index("void configure_direct_")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
-    get_limit = "*n=100000; return cudaSuccess;"
-    set_limit = (
-        "cudaError_t cudaDeviceSetLimit(int,std::size_t) { return cudaSuccess; }"
+    # Inject at the runtime-owned reservation seam used by production. The
+    # shared runtime's locking and get/set behavior are tested separately.
+    ensure_stack = (
+        "cudaError_t cuda_ensure_stack_limit(std::size_t) { return cudaSuccess; }"
     )
-    assert STUBS.count(get_limit) == STUBS.count(set_limit) == 1
-    stubs = STUBS.replace(get_limit, "*n=0; return cudaSuccess;")
-    stubs = stubs.replace(
-        set_limit,
-        """cudaError_t cudaDeviceSetLimit(int,std::size_t) {
+    assert STUBS.count(ensure_stack) == 1
+    stubs = STUBS.replace(
+        ensure_stack,
+        """cudaError_t cuda_ensure_stack_limit(std::size_t) {
   if (injected_stage == 6) {
     if (injected_kind == 1) return cudaErrorMemoryAllocation;
     if (injected_kind == 2) return cudaErrorUnknown;

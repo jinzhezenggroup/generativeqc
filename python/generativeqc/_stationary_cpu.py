@@ -347,14 +347,24 @@ def _admit_work(
     # validates on every coordinate traversal. Include both in admission.
     if execution == "reference":
         validations *= 3 * natom
-    nonlocal_pair_visits = points * points if nonlocal_correlation else 0
-    nonlocal_partition_visits = visits + validations if nonlocal_correlation else 0
+    nonlocal_points = len(getattr(state._source, "nonlocal_grid", state.grid).points)
+    nonlocal_pair_visits = (
+        nonlocal_points * nonlocal_points if nonlocal_correlation else 0
+    )
+    nonlocal_partition_visits = (
+        (2 if execution == "native" else 3 * natom) * pairs * nonlocal_points
+        + ((nonlocal_points + tile_points - 1) // tile_points)
+        * pairs
+        * (3 * natom if execution == "reference" else 1)
+        if nonlocal_correlation
+        else 0
+    )
     grid_pair_work = (
         visits + validations + nonlocal_pair_visits + nonlocal_partition_visits
     )
     for actual, budget, label in (
         (records, max_primitive_records, "primitive"),
-        (points, max_grid_points, "grid point"),
+        (max(points, nonlocal_points), max_grid_points, "grid point"),
         (grid_pair_work, max_grid_pair_visits, "grid pair"),
     ):
         if actual > budget:
@@ -437,7 +447,7 @@ def complete_rks_gradient_diagnostic(
     Mixed DF uses the shared native fitted primary and only one compiler-generated
     exact LR correction traversal, never exact SR/full-range replacements;
     public RSH snapshot/capability admission remains a separate boundary. Uses a
-    native unpruned version-one grid, distinct nuclei and no
+    native fixed-topology grid, distinct nuclei and no
     point/center collisions. CPU is explicit; CUDA snapshots are rejected.
     Caller chooses an ignored/temporary compilation cache and may supply a
     CppCompilerAdapter; otherwise CXX (or c++) selects the executable. Scientific work is
@@ -515,7 +525,12 @@ def complete_rks_gradient_diagnostic(
             raise ValueError("max_host_bytes must be an integer in [1,1099511627776]")
         inventory = cpu_force_inventory(
             basis,
-            grid_points=len(state.grid.points),
+            grid_points=len(state.grid.points)
+            + (
+                len(state._source.nonlocal_grid.points)
+                if state._source.nonlocal_grid is not state.grid
+                else 0
+            ),
             ecp_terms=len(state._source.ecp_terms),
             nonlocal_correlation=any(
                 isinstance(primitive, NonlocalCorrelationPrimitive)
@@ -929,6 +944,7 @@ def complete_rks_gradient_diagnostic(
                 atoms.astype(np.int64),
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
             continue
         # One coordinate at a time bounds storage; this interpreter boundary
@@ -944,6 +960,7 @@ def complete_rks_gradient_diagnostic(
                     center_motion=fallback_motion,
                     iterations=spec.partition_iterations,
                     coincident_tolerance=spec.coincident_tolerance,
+                    atomic_radii=spec.partition_radii(basis.atoms),
                 )
                 selected = (np.arange(end - begin), atoms)
                 derivative = response.directional[selected]
@@ -963,6 +980,17 @@ def complete_rks_gradient_diagnostic(
         None,
     )
     if nonlocal_primitive is not None:
+        grid = state._source.nonlocal_grid
+        spec = state._source.nonlocal_grid_spec
+        nonlocal_atomic_weights = state._source.nonlocal_atomic_weights
+        if (
+            execution == "native"
+            and spec.partition_iterations
+            != state._source.grid_spec.partition_iterations
+        ):
+            grid_consumer = NativeGridContraction(
+                compiler=compiler, cache=cache, iterations=spec.partition_iterations
+            )
         calculator = state._source._batch._calculator
         provider = NativeNonlocalPairProvider(
             device="cpu",
@@ -982,7 +1010,7 @@ def complete_rks_gradient_diagnostic(
         if grid_consumer is not None:
             with np.errstate(over="raise", invalid="raise"):
                 seeds = np.asarray(geometry.weights) * np.asarray(
-                    state._source.atomic_weights
+                    nonlocal_atomic_weights
                 )
             components["nonlocal_weight"] += grid_consumer.contract(
                 grid.points,
@@ -990,6 +1018,7 @@ def complete_rks_gradient_diagnostic(
                 owners,
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
         else:
             assert fallback_motion is not None
@@ -1006,11 +1035,12 @@ def complete_rks_gradient_diagnostic(
                             center_motion=fallback_motion,
                             iterations=spec.partition_iterations,
                             coincident_tolerance=spec.coincident_tolerance,
+                            atomic_radii=spec.partition_radii(basis.atoms),
                         )
                         selected = (np.arange(end - begin), atoms)
                         components["nonlocal_weight"][a, axis] += np.dot(
                             geometry.weights[begin:end],
-                            state._source.atomic_weights[begin:end]
+                            nonlocal_atomic_weights[begin:end]
                             * response.directional[selected],
                         )
                     fallback_motion[a, axis] = 0.0

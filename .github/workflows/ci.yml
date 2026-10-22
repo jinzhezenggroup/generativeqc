@@ -413,9 +413,9 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # A valid source-changing queue rebuild exceeded 23m before the former
-    # 25m job ceiling killed it. Bound the build separately and leave 5m for
-    # setup, the mandatory probes, compiler diagnostics and runner cleanup.
+    # Preserve the complete qualification ceiling while separately bounding
+    # an existing prerequisite and the final library/runtime integration gate.
+    # The phase limits never extend this outer setup/build/probe/cleanup budget.
     timeout-minutes: 35
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
@@ -654,6 +654,18 @@ jobs:
           -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
+      - name: Compile production CUDA prerequisite archive
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 10
+        # Build an existing dependency in the same tree before the final gate.
+        # Its objects/device link are reused, never compiled in a second context.
+        # The unchanged 35m job limit still bounds the complete qualification.
+        run: >-
+          cmake --build --preset cuda-release-sm120
+          --target generativeqc_direct_native --parallel 3
+        env:
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_NORESHARE: "true"
       - name: Compile production CUDA and runtime CTest
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 30
@@ -700,9 +712,9 @@ jobs:
         env:
           CUDA_VISIBLE_DEVICES: ""
         run: |
-          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests --parallel 2
+          cmake --build --preset cuda-release-sm120 --target generativeqc_fock_build_tests generativeqc_scf_proposal_tests generativeqc_ordered_gram_host_admission_tests --parallel 2
           ctest --test-dir build/cuda-release-sm120 \
-            -R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure
+            -R '^generativeqc_(fock_build|scf_proposal|ordered_gram_host_admission)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats

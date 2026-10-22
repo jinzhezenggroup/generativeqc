@@ -106,6 +106,11 @@ def _partition(fixture: dict, left: float = 0, right: float = 0) -> np.ndarray:
             coordinate = np.clip(
                 (distances[:, first] - distances[:, second]) / separation, -1, 1
             )
+            if "radii" in fixture:
+                radii = fixture["radii"].astype(dtype)
+                ratio = np.sqrt(radii[second] / radii[first])
+                adjustment = np.clip((ratio - 1 / ratio) / 4, -0.5, 0.5)
+                coordinate = coordinate + adjustment * (1 - coordinate * coordinate)
             for _ in range(fixture["iterations"]):
                 coordinate = coordinate * (3 - coordinate * coordinate) / 2
             pair = np.clip((1 - coordinate) / 2, 0, 1)
@@ -263,8 +268,9 @@ def _native(
                 atoms,
                 primitives,
                 nao,
-                len(fixture["points"]) // atoms,
+                len(fixture["points"]),
                 fixture["iterations"],
+                0 if "radii" in fixture else len(fixture["points"]) // atoms,
             ],
             dtype=np.uint64,
         ).tofile(stream)
@@ -276,6 +282,7 @@ def _native(
             "points",
             "weights",
             "atomic",
+            *(("offsets", "radii") if "radii" in fixture else ()),
             "left",
             "right",
         ):
@@ -708,3 +715,30 @@ def test_actual_wb97mv_native_quadrature_geometry(spins: int, fitted: bool) -> N
     )
     assert result["revoked_without_publication"]
     assert result["geometry_action_pairs"] == points * atoms * (atoms - 1) // 2
+
+
+@pytest.mark.parametrize("point_tile", [1, 4, 1024])
+def test_native_adjusted_ragged_signed_geometry(
+    tmp_path: Path, point_tile: int
+) -> None:
+    """V4 topology and signed measures share independent first/mixed FD gates."""
+    fixture = _fixture(points_per_atom=4)
+    keep = np.array([0, 1, 4, 5, 6, 8, 9, 10, 11])
+    for name in ("points", "owner", "atomic"):
+        fixture[name] = fixture[name][keep]
+    fixture["atomic"][::3] *= -1
+    fixture["offsets"] = np.array([0, 2, 5, 9])
+    fixture["radii"] = np.array([0.66, 1.14, 2.55])
+    fixture["weights"] = _partition(fixture)
+    (jets, ao, weights), receipt = _native(fixture, tmp_path, point_tile=point_tile)
+    expected_jets = _gaussians(fixture, _indices(3))
+    np.testing.assert_allclose(jets, expected_jets, atol=2e-12, rtol=2e-12)
+    np.testing.assert_allclose(
+        ao, _ao_motion(fixture, expected_jets), atol=2e-12, rtol=2e-12
+    )
+    errors = [
+        np.max(np.abs(weights - _weight_differences(fixture, step)))
+        for step in (1e-3, 3e-4, 1e-4)
+    ]
+    assert errors[-1] < 2e-8 and errors[-1] < errors[0] / 30
+    assert receipt["capacity_alias_finite_capture_revocation_gates"]

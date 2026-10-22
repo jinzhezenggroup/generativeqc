@@ -429,7 +429,11 @@ struct MockCuda {
   }
 };
 }
-std::size_t ks_provider_bytes(const System&, generativeqc_backend, unsigned) {
+enum class KsProviderPurpose { scf, derivative_only };
+std::size_t ks_provider_bytes(const System&, generativeqc_backend, unsigned,
+                             KsProviderPurpose purpose) {
+  if (purpose != KsProviderPurpose::derivative_only)
+    throw std::runtime_error("lazy LR owner requested the SCF capacity envelope");
   return device_bytes;
 }
 class Harness {

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_md_transforms.cuh",
+  "role": "scientific",
+  "subsystem": "df_values",
+  "reason": "Shared GPU preparation of normalized public-component Hermite E. Extracted from df_md_j.cuh for charge/response and packed raw consumers, retaining the common Cartesian recurrence, component normalization and primitive ordering.",
+  "regions": []
+}

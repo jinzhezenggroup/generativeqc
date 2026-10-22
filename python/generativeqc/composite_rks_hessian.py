@@ -302,6 +302,10 @@ class _CompositeGrid:
         grid_budget_bytes: int,
         max_nonlocal_pairs: int,
     ) -> None:
+        if getattr(state._source, "nonlocal_grid", state.grid) is not state.grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support coupled response"
+            )
         self.state, self.basis, self.grid = state, basis, state.grid
         _, self.spec = resolve_ks_method(state.identity.method)
         self.functional_identity = self.spec.identity
@@ -313,6 +317,9 @@ class _CompositeGrid:
         self.ao_atoms = _native_ao_atoms(basis)
         self.atomic_weights = np.asarray(state._source.atomic_weights)
         self.grid_spec = state._source.grid_spec
+        self.partition_radii = (
+            self.grid_spec.partition_radii(basis.atoms) if self.grid_spec else None
+        )
         if (
             self.grid_spec is None
             or self.atomic_weights.shape != self.grid.weights.shape
@@ -441,6 +448,7 @@ class _CompositeGrid:
             center_motion=vector,
             iterations=self.grid_spec.partition_iterations,
             coincident_tolerance=self.grid_spec.coincident_tolerance,
+            atomic_radii=self.partition_radii,
         )
         selected = (np.arange(len(self.owners)), self.owners)
         _validate_partition_provenance(
@@ -508,6 +516,7 @@ class _CompositeGrid:
                 right_center_motion=vector,
                 iterations=self.grid_spec.partition_iterations,
                 coincident_tolerance=self.grid_spec.coincident_tolerance,
+                atomic_radii=self.partition_radii,
             )
             if partition.branch_identity != branch:
                 raise ValueError("Becke branch changed during Hessian assembly")

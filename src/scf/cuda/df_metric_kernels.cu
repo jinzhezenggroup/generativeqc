@@ -105,6 +105,25 @@ __global__ void scale_metric_projection_kernel(std::size_t dimension, std::size_
   }
 }
 
+/** Transpose and scale only the small response map, leaving the immutable
+ * AO-pair factor in its spectral coordinates. Both axes have the same extent
+ * but different meanings; using Q rather than Q^T would silently rotate forces.
+ */
+__global__ void spectral_response_root_kernel(std::size_t dimension, const double* eigenvectors,
+                                              const double* eigenvalues, double* root) {
+  const auto element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (element >= dimension * dimension) return;
+  const auto physical = element / dimension, eigen = element % dimension;
+  root[element] = eigenvectors[eigen * dimension + physical] / sqrt(eigenvalues[eigen]);
+}
+
+void launch_spectral_response_root(cudaStream_t stream, std::size_t dimension,
+                                   const double* eigenvectors, const double* eigenvalues,
+                                   double* root) {
+  spectral_response_root_kernel<<<static_cast<unsigned>((dimension * dimension + 255) / 256), 256,
+                                  0, stream>>>(dimension, eigenvectors, eigenvalues, root);
+}
+
 // Preserve the caller's original domain when rectangular tiles or a clipped
 // launch cannot be represented by the compact square-tile enumeration.
 __global__ void symmetrize_metrics_fallback_kernel(std::size_t dimension, double* metrics) {

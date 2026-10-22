@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+stability = ["scipy>=1.10"]
 # Required by the benchmark publication renderer regression; do not skip it.
 test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8", "matplotlib>=3.8", "defusedxml>=0.7.1"]
 array-api-test = ["hypothesis>=6.151.0", "ndindex>=1.8", "pytest-json-report>=1.5", "array-api-strict==2.6.1"]
@@ -93,6 +94,7 @@ wheel.py-api = "py3"
 "src/tensor/metrics.hpp" = "generativeqc_compiler/assets/src/tensor/metrics.hpp"
 "src/tensor/cpu_runtime.hpp" = "generativeqc_compiler/assets/src/tensor/cpu_runtime.hpp"
 "src/dft/grid_response_cpu.hpp" = "generativeqc_compiler/assets/src/dft/grid_response_cpu.hpp"
+"src/dft/xc_user_expression_point.hpp" = "generativeqc_compiler/assets/src/dft/xc_user_expression_point.hpp"
 "src/dft/stationary_gradient_cuda.cuh" = "generativeqc_compiler/assets/src/dft/stationary_gradient_cuda.cuh"
 "src/dft/native_stationary_shared_kernels.hpp" = "generativeqc_compiler/assets/src/dft/native_stationary_shared_kernels.hpp"
 "src/dft/becke_scaled_policy.hpp" = "generativeqc_compiler/assets/src/dft/becke_scaled_policy.hpp"

@@ -315,6 +315,14 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   return unavailable(nullptr, detail);
 }
 
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan*, const std::vector<double>&, const std::vector<double>&,
+    const std::vector<double>&, const std::vector<std::int32_t>&, const std::vector<double>&,
+    unsigned, double, double, std::vector<double>&, std::vector<CudaDensityFittingDeviceScfItem>&,
+    std::string& detail, const std::vector<double>&, unsigned, bool) {
+  return unavailable(nullptr, detail);
+}
+
 generativeqc_status run_cuda_density_fitting_uhf_device_scf(
     CudaDensityFittingJkPlan*, const std::vector<double>&, const std::vector<double>&,
     const std::vector<double>&, const std::vector<double>&, const std::vector<std::int32_t>&,

@@ -8,7 +8,7 @@ The existing first-derivative graphs remain the sole mathematical lowering.
 import typing
 from dataclasses import asdict, dataclass
 from functools import lru_cache
-from itertools import permutations, product
+from itertools import combinations_with_replacement, permutations, product
 from pathlib import Path
 from time import perf_counter
 
@@ -92,14 +92,17 @@ def derivative_requests(
             "component domain must contain one to ten sorted unique labels"
         )
     requests = {("nuclear", ())}
-    for operator, rank in (
-        ("overlap", 2),
-        ("kinetic", 2),
-        ("nuclear_attraction", 2),
-        ("four_center_eri", 4),
-    ):
-        for components in product(domain, repeat=rank):
+    # Only the inventory is unordered: runtime bindings still restore every
+    # ordered center/axis slot. Pair swaps and electron-pair exchange are exact
+    # symmetries already handled by derivative_binding, so enumerate each orbit
+    # once before axis canonicalization. Preserve sorted request numbering for
+    # the packaged AOT dispatch ABI, including domains not closed under axes.
+    pairs = tuple(combinations_with_replacement(domain, 2))
+    for operator in ("overlap", "kinetic", "nuclear_attraction"):
+        for components in pairs:
             requests.add(derivative_binding(operator, components).request)
+    for first, second in combinations_with_replacement(pairs, 2):
+        requests.add(derivative_binding("four_center_eri", first + second).request)
     return tuple(sorted(requests))
 
 

@@ -192,6 +192,75 @@ materialization in this contract revision. Declared scientific symmetries remain
 owned by the source IR; adapters retain their identity rather than infer them
 from equal dimensions.
 
+
+### Physical layout transfers
+
+A provider offer that changes affine strides or demands stronger alignment must
+bind an explicit `common.lowering_contract.LayoutTransfer` to the request and
+execution views. Weaker alignment requirements can use the original allocation.
+Changed read operands require a `before` copy; changed write operands require an
+`after` publication copy. Read/write operands require both. Each record names the
+provider-owned copy implementation, dtype and exact endpoints, preserving logical
+modes, extents, effects and ownership.
+
+The initial transfer domain is same-storage floating affine copies with full,
+disjoint ownership and provably nonoverlapping destinations. Virtual values,
+aliased/triangular ownership and combined storage-cast/packing are rejected until
+their lowering is separately established. Copy destinations and contraction
+output buffers must have independent writers.
+
+Transfer diagnostics expose logical read/write bytes and the full padded affine
+buffer span. `LoweringCost.pack_bytes` must cover all transfer visits;
+`CandidateExecution.temporary_bytes` must cover simultaneously live converted
+buffers. A read/write buffer is charged once while both copy directions count
+toward traffic. These conservative logical counts do not assert physical DRAM
+traffic. Fused copying may have zero standalone pack time only when included in
+the kernel phase; unknown pack time remains unknown. Existing aggregate resource
+limits and complete preparation/replay cost selection still apply.
+
+By default the shared native portfolio emitter reports transfer-bearing recipes
+as unsupported because the ordinary runtime ABI has no generic transfer executor. It
+retains the unchanged-layout strict fallback. Abstract compiler ranking does not
+grant native execution or capture capability. An empty transfer list is omitted
+from serialization so existing no-transfer portfolios retain their identities.
+\n
+The explicit `tensor.layout_contraction.emit_layout_contraction_portfolio`
+adapter can bind `tensor.cuda.affine-copy.v1` for positive, exact-shape,
+unbatched FP64 binary matrix einsums. It emits the canonical portfolio together
+with an immutable `LayoutContractionPlan` factory. Ready offers in this domain
+use the shared generated ordered or pedantic matrix executor. Every physical
+execution view is packed row-major; original affine views retain their modes,
+extents, scalar coefficient and optional output seed. This adapter does not
+admit storage casts, checked updates, method policy, new precision or aliases.
+
+`CudaLayoutContraction` borrows an already prepared `CudaContractionContext`
+and reuses `PreparedContractions` for arithmetic. The enclosing owner reserves
+the complete declared host/device budget and supplies stream-exclusive device
+scratch and explicitly sized input/output buffers. Converted input buffers are
+simultaneously live; a converted output also reserves one buffer, pre-copied
+only when beta reads the seed. Publication copies only logical output elements,
+preserving padding. Replay performs no allocation, plan search or provider retry.
+A provider refusal is handled at preparation by selecting an admitted strict
+generated candidate; insufficient scratch rejects before any submitted work.
+
+The descriptor, target/compiler identities, context generation, device, stream,
+capacity, pointer alignment/device and output/scratch/error disjointness are
+checked before copying. Readonly inputs may share storage. Capture is rejected
+before enqueue until replay accounting and execution are separately qualified.
+Callers serialize use of an owner and keep its borrowed context, buffers and
+scratch alive until the stream drains. Unexpected driver or partial-enqueue
+failures propagate; they never authorize replay through a different provider.
+
+Diagnostics separate submitted contractions and scalar summands from explicit
+copy launches, logical transfer elements/bytes and simultaneous scratch capacity.
+They do not count cuBLAS-internal kernels or establish endpoint profitability.
+The opt-in real-device gate is
+`GENERATIVEQC_LAYOUT_CUDA_TEST=1 GENERATIVEQC_LAYOUT_CUDA_ARCH=sm_XX pytest -s
+tests/python/test_layout_contraction.py::test_layout_contraction_cuda_execution`,
+with the architecture bound to the actual NVIDIA device. Default method routes,
+the generic emitter's refusal boundary and scientific mixed-precision admission
+remain unchanged.
+
 `collect_lowering_candidates` collects ready and unsupported provider offers for
 the **same complete request**. Providers can vary precision, physical layout,
 algorithm and `ScheduleTopology` fusion within that request. They cannot change

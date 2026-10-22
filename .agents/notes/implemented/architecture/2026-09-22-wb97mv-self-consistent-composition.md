@@ -27,6 +27,10 @@ endpoint is promoted by this internal composition.
 
 ## Explicit nonlocal density domain
 
+The density cutoff below was superseded on 2026-10-21 by the
+[GPU-default density-domain decision](../numerics/2026-10-21-vv10-default-density-domain.md).
+The original decision is retained here as historical rationale.
+
 The first full molecular grid exposed zeros and underflow in the strict positive
 VV10 pair domain. The WB97M-V endpoint now selects `vv10-molecular-rho-ge-1e-8-v1`,
 the same inner/outer density selection used by PySCF 2.14.0 `_vv10nlc`. This is a

@@ -30,6 +30,32 @@ struct ResidencyObservation {
   bool dispatching{};
 };
 inline thread_local ResidencyObservation residency_observation;
+
+/** Private canonical binding identity, separate from graph/source identities.
+ * Successful mutations advance it without wrapping. Saturation invalidates new
+ * diagnostic admission while legacy binding/error/solver semantics remain intact.
+ * Only callers using the same new native's canonical bind/unbind participate;
+ * old inline clients or mixed old/new DSO definitions are not qualified by it.
+ * This adds independent TLS storage, never fields to ResidencyObservation. */
+struct ResidencyBindingEpoch {
+  std::uint64_t value{};
+  bool exhausted{};
+};
+inline thread_local ResidencyBindingEpoch residency_binding_epoch;
+
+inline void advance_residency_binding_epoch() noexcept {
+  auto& epoch = residency_binding_epoch;
+  if (epoch.value == std::numeric_limits<std::uint64_t>::max())
+    epoch.exhausted = true;
+  else
+    ++epoch.value;
+}
+
+inline bool residency_binding_epoch_admissible() noexcept {
+  const auto& epoch = residency_binding_epoch;
+  return epoch.value && !epoch.exhausted &&
+         epoch.value != std::numeric_limits<std::uint64_t>::max();
+}
 inline std::atomic<std::uint64_t> residency_graph_generation{1};
 
 /** Reject replacement or mutation during dispatch; callback/context lifetime is
@@ -38,6 +64,7 @@ inline int bind_residency_observer(ResidencyObserver callback, void* context) no
   auto& observation = residency_observation;
   if (!callback || observation.callback || observation.dispatching) return 1;
   observation = {callback, context, 0, false};
+  advance_residency_binding_epoch();
   return 0;
 }
 
@@ -49,6 +76,7 @@ inline int unbind_residency_observer(ResidencyObserver callback, void* context,
     return 1;
   *errors = observation.errors;
   observation = {};
+  advance_residency_binding_epoch();
   return 0;
 }
 

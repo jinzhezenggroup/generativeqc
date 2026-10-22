@@ -78,7 +78,10 @@ from ._stationary_cuda import (
     _resolve_becke_primitive_policy,
     _resolve_phased_becke_policy,
 )
-from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
+from ._stationary_nonlocal_cuda import (
+    resident_nonlocal_geometry,
+    resident_split_nonlocal_geometry,
+)
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
 _COMPOSITE_EXTERNAL_SOURCES = COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES
@@ -312,13 +315,17 @@ class PreparedCompositeStationaryCudaGradient:
             raise ValueError("composite stationary stationary basis/geometry mismatch")
         functional = int(source.functional_code)
         n, na, npnt = basis.nao, basis.natom, len(state.grid.points)
+        nonlocal_grid = source.nonlocal_grid
+        nonlocal_spec = source.nonlocal_grid_spec
+        nonlocal_points = len(nonlocal_grid.points)
+        split_grid = nonlocal_grid is not state.grid
         # Share the compiler's shape contract, including its primitive bound.
         # This composition always uses native integral derivatives, even for
         # shapes where the small diagnostic AO-descriptor route is admissible.
         stationary_cuda_requires_native_integrals(
             atoms=na, aos=n, primitives=basis.nprimitive
         )
-        if not 1 <= npnt <= 4_000_000:
+        if not 1 <= npnt <= 4_000_000 or not 1 <= nonlocal_points <= 4_000_000:
             raise ValueError(
                 "composite stationary CUDA stationary shape exceeds its bounded domain"
             )
@@ -352,7 +359,9 @@ class PreparedCompositeStationaryCudaGradient:
         # capacity, then admit all simultaneously live owners under both totals.
         # An explicit user cap still fails before any force allocation or JIT.
         nlc_budget = _ResidentNonlocalForceOwner.required_device_bytes(
-            source._library, npnt, 256 if tile_points is None else tile_points
+            source._library,
+            nonlocal_points,
+            256 if tile_points is None else tile_points,
         )
         if (
             nlc_budget
@@ -383,7 +392,7 @@ class PreparedCompositeStationaryCudaGradient:
                 active_ao_capacity=n,
                 budget_bytes=max_device_bytes,
             ),
-            grid_points=npnt,
+            grid_points=npnt + (nonlocal_points if split_grid else 0),
             spins=plan.spin_blocks,
             source_count=len(stationary_runtime_sources(plan)),
             nonlocal_bytes=nlc_budget,
@@ -427,6 +436,7 @@ class PreparedCompositeStationaryCudaGradient:
             prepared_plan.identity,
             feature_plan.identity,
             source.grid_spec,
+            nonlocal_spec,
             device,
             tile_points,
             str(library),
@@ -496,13 +506,26 @@ class PreparedCompositeStationaryCudaGradient:
                     )
                 )
                 self.sources.kinds[("nuclear", ())] = 0
+                nonlocal_artifact = (
+                    compile_stationary_cuda(
+                        primitive,
+                        functional=functional,
+                        plan=plan,
+                        iterations=nonlocal_spec.partition_iterations,
+                        compiler=compiler,
+                        cache=cache,
+                    )
+                    if nonlocal_spec.partition_iterations
+                    != source.grid_spec.partition_iterations
+                    else artifact
+                )
                 # Keep semilocal and nonlocal source accounting distinct while
                 # both consumers borrow the same GridTask lease. This second
                 # bounded accumulator replaces the former second AO/grid pass.
                 self.nonlocal_sources = self._stack.enter_context(
                     _CudaSources(
                         basis,
-                        artifact,
+                        nonlocal_artifact,
                         compiler,
                         device,
                         tile_points,
@@ -518,8 +541,8 @@ class PreparedCompositeStationaryCudaGradient:
                 )
                 self._nonlocal = _ResidentNonlocalForceOwner(
                     nlc.spec,
-                    state.grid.points,
-                    state.grid.weights,
+                    nonlocal_grid.points,
+                    nonlocal_grid.weights,
                     coefficient=nlc.coefficient,
                     tile_points=tile_points,
                     maximum_bytes=nlc_budget,
@@ -663,8 +686,10 @@ class PreparedCompositeStationaryCudaGradient:
             # Integral derivatives already come from the token-bound native prepared
             # owner above. These retained CUDA accumulators execute only nuclear and
             # grid-geometry sources, so uploading detached host D/W here is redundant.
+            self.sources.configure_grid(source.grid_spec, basis.atoms)
+            self.nonlocal_sources.configure_grid(nonlocal_spec, basis.atoms)
             self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
-            self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
+            self.nonlocal_sources.reset_geometry(nonlocal_spec.coincident_tolerance)
             charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
             self.sources.nuclear_all(charges)
             component_seconds["density_and_nuclear_setup"] = (
@@ -712,20 +737,22 @@ class PreparedCompositeStationaryCudaGradient:
                         )
                     )
             resident_parts, resident_seconds, resident_work = (
-                resident_nonlocal_geometry(
-                    grid=self.grid,
-                    sources=self.sources,
-                    nonlocal_sources=self.nonlocal_sources,
-                    nonlocal_owner=self._nonlocal,
-                    state=state,
-                    raw_weights=source.atomic_weights,
-                    tile_points=tile_points,
-                    ao_count=n,
-                    functional=functional,
-                    ingredients=grid_features,
-                    ao_maps=self._ao_maps,
-                    ao_domain=ao_domain,
-                )
+                resident_split_nonlocal_geometry
+                if split_grid
+                else resident_nonlocal_geometry
+            )(
+                grid=self.grid,
+                sources=self.sources,
+                nonlocal_sources=self.nonlocal_sources,
+                nonlocal_owner=self._nonlocal,
+                state=state,
+                raw_weights=source.atomic_weights,
+                tile_points=tile_points,
+                ao_count=n,
+                functional=functional,
+                ingredients=grid_features,
+                ao_maps=self._ao_maps,
+                ao_domain=ao_domain,
             )
         components.update(resident_parts)
         component_seconds.update(resident_seconds)
@@ -771,7 +798,9 @@ class PreparedCompositeStationaryCudaGradient:
             "final_reduction_h2d_bytes": 0,
             "final_reduction_d2h_bytes": 0,
             **resident_work,
-            "partition_pair_visits": 0 if geometry_hit else 2 * npnt * na * (na - 1),
+            "partition_pair_visits": 0
+            if geometry_hit
+            else (npnt + nonlocal_points) * na * (na - 1),
             "geometry_response_cache_hits": int(geometry_hit),
             "geometry_response_evaluations": int(not geometry_hit),
             "geometry_response_retained_host_bytes": self._geometry_response.retained_bytes,

@@ -250,8 +250,15 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   if (options.kind == PreliminaryKind::Huckel) {
     const auto atomic = huckel_maximum_atomic_aos(system);
     const auto atomic2 = checked_mul(atomic, atomic);
-    // Assembly/admission, cached atomic frames, and one serialized atomic owner.
-    auto bytes = checked_add(16U << 20, checked_mul(256, n2));
+    // Assembly and strict admission are serialized. The occupied atomic
+    // subspace is at most n, and its solve needs at most seven matrices.
+    // Admission is the larger peak: incoming seed + three snapshot/proposal
+    // copies + four metric/spin matrices + two live product temporaries +
+    // four eigensolver/validation matrices. Reserve sixteen FP64 matrices
+    // for that fourteen-matrix peak, not two simultaneous preparation phases.
+    // Cached atomic frames and one serialized atomic owner are charged below;
+    // the already retained target integrals belong to the target's inventory.
+    auto bytes = checked_add(16U << 20, checked_mul(16 * sizeof(double), n2));
     bytes = checked_add(bytes, checked_mul(24, checked_mul(atomic2, atomic2)));
     bytes =
         checked_add(bytes, checked_mul(8, checked_mul(atomic2, 200 + 2 * options.diis_history)));

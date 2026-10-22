@@ -946,10 +946,7 @@ class PreparedBatch:
                 cores, terms = resolve_ecp(calculator._basis, atoms)
             inventory = cpu_force_inventory(
                 basis,
-                grid_points=len(atoms)
-                * grid.radial_points
-                * grid.angular_polar
-                * grid.angular_azimuth,
+                grid_points=grid.point_count(a.atomic_number for a in atoms),
                 ecp_terms=len(terms),
                 native_fitted_integrals=density_fitted_all_electron,
                 integral_terms=(

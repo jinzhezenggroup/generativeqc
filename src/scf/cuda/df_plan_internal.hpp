@@ -8,6 +8,7 @@
 #include <limits>
 #include <optional>
 
+#include "scf/cuda/df_md_owner.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
@@ -76,6 +77,11 @@ struct CudaDensityFittingJkPlan {
   }
   ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
   double* three_center{};
+  // Single packed full-rank owners may keep E=A Q lambda^-1/2 instead of
+  // B=E Q^T. J/K contract the entire auxiliary axis in either gauge. Response
+  // views must carry this choice, including leases on the final E*C projection.
+  // Raw, dense, paired-raw and rank-truncated owners retain the symmetric gauge.
+  bool resident_spectral_factors{};
   double* primary_density{};
   double* secondary_density{};
   double* total_density{};
@@ -141,6 +147,10 @@ struct CudaDensityFittingJkPlan {
   // X is shared by materialization/J/K and the spectral force response.
   bool streamed{};
   CudaDensityFittingIntegralSource* integral_source{};
+  // Optional pure-J contractions borrow this plan's stream and metric. Keep
+  // the incumbent source for forces and explicit resource/domain fallbacks.
+  cuda_execution::CudaDfMdOwner* md_coulomb{};
+  cuda_execution::CudaDfMdResources md_coulomb_resources{};
   double* inverse_square_roots{};
   std::vector<double> streamed_raw_three_center;
   std::vector<double> streamed_inverse_square_roots;

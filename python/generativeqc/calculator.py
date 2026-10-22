@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .spin_roots import SpinRootPolicy, SpinRootResult
+
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
@@ -166,8 +168,8 @@ class Calculator:
         ccsd_level_shift: float = 0.0,
         ccsd_frozen_core: int = 0,
         max_iterations: int = 100,
-        energy_tolerance: float = 1.0e-10,
-        density_tolerance: float = 1.0e-8,
+        energy_tolerance: float | None = None,
+        density_tolerance: float | None = None,
         diis_history: int = 8,
         screening_tolerance: float | None = None,
         precision: str = "fp64",
@@ -177,6 +179,7 @@ class Calculator:
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
         _application_precision_budget: typing.Any = None,
+        _correlation_convergence_budget: typing.Any = None,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
 
@@ -192,6 +195,12 @@ class Calculator:
         iteration convergence. Until an explicit audit/estimator is attached,
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
+
+        Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
+        on qualified CUDA RHF and default-grid restricted local KS owners.
+        Other models/backends and older libraries retain 1e-10/1e-8. Explicit
+        values are preserved. Convergence controls are solver conditions, not
+        observable-error bounds; see the application precision guide.
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
@@ -601,6 +610,23 @@ class Calculator:
             self._precision_mode = precision_modes[str(precision).lower()]
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
+        # CBS convergence allowances share the size-tagged transport, but have
+        # a separate capability and never request lower-precision arithmetic.
+        self._correlation_convergence_budget = _correlation_convergence_budget
+        if _correlation_convergence_budget is not None:
+            from .force_aware_numerics import TargetErrorBudget
+
+            if not isinstance(_correlation_convergence_budget, TargetErrorBudget):
+                raise TypeError("correlation convergence requires a TargetErrorBudget")
+            if _application_precision_budget is not None:
+                raise ValueError("correlation and arithmetic budgets are exclusive")
+            if self._method not in {
+                _native.METHOD_MP2,
+                _native.METHOD_RCCSD,
+                _native.METHOD_RCCSD_T,
+                _native.METHOD_DF_RCCSD_T,
+            }:
+                raise ValueError("correlation convergence requires closed-shell MP2/CC")
         self._application_precision_budget = _application_precision_budget
         if _application_precision_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -735,9 +761,17 @@ class Calculator:
                 raise ValueError("ccsd_max_iterations must be positive for RCCSD")
             if ccsd_diis_history == 1 or ccsd_diis_history > 20:
                 raise ValueError("ccsd_diis_history must be 0 or 2..20 for RCCSD")
+            from ._correlation_convergence import convergence_limits
+
             for name, value, upper in (
                 ("ccsd_energy_tolerance", ccsd_energy_tolerance, 1e-8),
-                ("ccsd_residual_tolerance", ccsd_residual_tolerance, 1e-9),
+                (
+                    "ccsd_residual_tolerance",
+                    ccsd_residual_tolerance,
+                    convergence_limits(_correlation_convergence_budget)[
+                        "ccsd_residual_tolerance"
+                    ],
+                ),
             ):
                 if not np.isfinite(value) or not 0.0 < value <= upper:
                     raise ValueError(
@@ -794,8 +828,14 @@ class Calculator:
         self._representation_name = basis_representation
         self._device_id = int(device_id)
         self._max_iterations = int(max_iterations)
-        self._energy_tolerance = float(energy_tolerance)
-        self._density_tolerance = float(density_tolerance)
+        # Resolve omitted controls after loading the native capability and the
+        # complete method. Explicit values, including tighter ones, are kept.
+        self._energy_tolerance = float(
+            1e-10 if energy_tolerance is None else energy_tolerance
+        )
+        self._density_tolerance = float(
+            1e-8 if density_tolerance is None else density_tolerance
+        )
         self._diis_history = int(diis_history)
         if screening_tolerance is None:
             screening_tolerance = 0.0 if self._method in _CORRELATED_METHODS else 1e-12
@@ -820,6 +860,29 @@ class Calculator:
             if self._method == _native.METHOD_GFN2_XTB
             else None
         )
+        if self._correlation_convergence_budget is not None:
+            query = getattr(
+                self._library, "generativeqc_correlation_convergence_version_v1", None
+            )
+            if query is None:
+                raise NotImplementedError(
+                    "native library lacks correlated convergence transport"
+                )
+            query.argtypes, query.restype = [], ctypes.c_uint32
+            if query() != 1:
+                raise NotImplementedError(
+                    "unsupported native correlated convergence transport"
+                )
+            if (
+                self._method == _native.METHOD_DF_RCCSD_T
+                and getattr(
+                    self._library, "generativeqc_calculation_get_cc_precision_v1", None
+                )
+                is None
+            ):
+                raise NotImplementedError(
+                    "native library lacks correlated FP32 telemetry"
+                )
         self._ks_options_version = 0
         if self._application_precision_budget is not None:
             query = getattr(
@@ -878,6 +941,13 @@ class Calculator:
         self._capabilities = _native_method_capabilities(
             self._library, self._method_name, self._method
         )
+        from ._scf_convergence import default_scf_controls
+
+        convergence_defaults = default_scf_controls(self)
+        if energy_tolerance is None:
+            self._energy_tolerance = convergence_defaults["energy_tolerance"]
+        if density_tolerance is None:
+            self._density_tolerance = convergence_defaults["density_tolerance"]
         if self._automatic_libxc_name is not None:
             self._capabilities = replace(
                 self._capabilities, supported_properties=frozenset({"energy"})
@@ -973,9 +1043,14 @@ class Calculator:
             and self._ks_options.has_range_exchange
             and cuda_nonlocal_force_basis_eligible(self._basis)
         )
+        from ._df_precision import fitted_scf_budget_admitted
+
+        fitted_budget = fitted_scf_budget_admitted(
+            self, self._application_precision_budget
+        )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
-            and self._precision_mode == _native.PRECISION_FP64
+            and (self._precision_mode == _native.PRECISION_FP64 or fitted_budget)
             and not basis_has_ecp
             and self._automatic_libxc_name is None
             and self._density_fitted_composite_force_eligible()
@@ -1111,7 +1186,7 @@ class Calculator:
                 # DF changes the Hamiltonian. Keep its backend explicit; the
                 # stationary force consumer is admitted only through the
                 # token-bound auxiliary/metric-response provider above.
-                if self._precision_mode != _native.PRECISION_FP64:
+                if self._precision_mode != _native.PRECISION_FP64 and not fitted_budget:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
                     )
@@ -1236,7 +1311,7 @@ class Calculator:
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         if (
-            self._method == _native.METHOD_RCCSD
+            self._method in (_native.METHOD_RCCSD, _native.METHOD_UMP2)
             or (
                 not batch
                 and self._method == _native.METHOD_MP2
@@ -1337,6 +1412,8 @@ class Calculator:
                 )
             )
         budget = getattr(self, "_application_precision_budget", None)
+        if budget is None:
+            budget = getattr(self, "_correlation_convergence_budget", None)
         descriptor_type = (
             _native.ApplicationPrecisionMethodDescriptor
             if budget is not None
@@ -1564,11 +1641,12 @@ class Calculator:
     def _auxiliary_basis_consumer(
         self, operator: str, derivative_order: int = 0
     ) -> str | None:
-        """Select the correlation source's domain, not generic DF-HF exports.
+        """Select an explicitly linked auxiliary domain, never orbital admission.
 
         The physical correlation source and its nuclear pullback support
         auxiliary g shells. Both preflight and native shell expansion must
-        use that same scoped policy; other DF consumers retain their limits.
+        use that same scoped policy. HF/KS uses a separate role for its complete
+        value/first-derivative owner; older libraries retain their f boundary.
         """
         if (
             operator in {"df_metric", "df_three_center"}
@@ -1591,6 +1669,18 @@ class Calculator:
             and getattr(self, "_composite_rks_second_order", False)
         ):
             return "wb97mv_df_values"
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and derivative_order in (0, 1)
+            and self._device_name == "cuda"
+            and self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            and (
+                self._method in (_native.METHOD_RHF, _native.METHOD_UHF)
+                or self._ks_options is not None
+            )
+            and hasattr(self._library, "generativeqc_scf_auxiliary_system_create_v1")
+        ):
+            return "scf_df"
         return None
 
     def _model_signature(self) -> typing.Any:
@@ -1675,6 +1765,18 @@ class Calculator:
                         )
                     }
                     if budget is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "correlation_convergence_budget": (
+                            self._correlation_convergence_budget.energy_abs,
+                            self._correlation_convergence_budget.force_max_abs,
+                            self._correlation_convergence_budget.force_rms,
+                        )
+                    }
+                    if getattr(self, "_correlation_convergence_budget", None)
+                    is not None
                     else {}
                 ),
                 "target_accuracy": self._target_accuracy.to_dict()
@@ -2063,7 +2165,11 @@ class Calculator:
                 self._library,
                 "generativeqc_correlation_auxiliary_system_create_v1"
                 if auxiliary_consumer == "correlation_df"
-                else "generativeqc_ks_auxiliary_system_create_v1",
+                else (
+                    "generativeqc_scf_auxiliary_system_create_v1"
+                    if auxiliary_consumer == "scf_df"
+                    else "generativeqc_ks_auxiliary_system_create_v1"
+                ),
                 None,
             )
             if create_system is None:
@@ -2423,6 +2529,10 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
+        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+            raise NotImplementedError(
+                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+            )
         if endpoint not in self._capabilities.supported_second_order:
             raise NotImplementedError(
                 f"method {self._method_name!r} does not expose public {endpoint}; "
@@ -2706,6 +2816,49 @@ class Calculator:
                 _public_calculator_endpoint=True,
             ),
         )
+
+    def stable_singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+        policy: SpinRootPolicy | None = None,
+        previous: SpinRootResult | None = None,
+    ) -> SpinRootResult:
+        """Require a stable real-internal UHF/UKS root before publishing E/forces.
+
+        This explicit CPU FP64 all-electron workflow certifies unscreened J/K
+        with SCF screening at most 1e-12. It reuses
+        native SCF, J/K, SCF-domain XC and the shared coupled response action.
+        ``SpinRootPolicy`` bounds the full spectrum/restarts and failure gates.
+        ``previous`` is a completed ``SpinRootResult`` for the same model; its
+        occupied spaces are projected as a seed and the new root is independently
+        requalified. Root switches reject unless the policy explicitly allows
+        them. Stable states pass through; unstable states need a lower, stationary,
+        fully stable restart. Failure publishes no energy or force result.
+
+        Coordinates are Bohr, energies Hartree and analytic forces Hartree/Bohr.
+        UHF, native UMP2 UHF references and qualified semilocal polarized LDA/PBE
+        are admitted; CUDA, fitting,
+        ECP, mixed precision, complex/spin-flip stability and unqualified XC fail
+        closed. Install ``generativeqc[stability]`` for the bounded CPU linear
+        algebra. This is not a global-minimum or arbitrary spatial-symmetry proof.
+        """
+        from ._spin_root_workflow import stable_singlepoint
+
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return stable_singlepoint(
+                self,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                policy=policy,
+                previous=previous,
+            )
 
     def singlepoint(
         self,

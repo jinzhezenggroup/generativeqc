@@ -150,6 +150,12 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
                                            FockBuildSpec spec) noexcept;
 
+/** Whether J can use the generated strict shell consumer for this operator.
+ * Used by the KS proposal scheduler to prefer profitable FP64 work over the
+ * generic mixed recurrence. This query does not change K or allocate storage. */
+bool cuda_direct_jk_generated_coulomb_available(const CudaDirectJkPlan* plan,
+                                                FockBuildSpec spec) noexcept;
+
 /** Whether the immutable canonical quartet source can supply a density-independent
  * linear action. This optional schedule retains no four-index integral tensor. */
 bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept;

@@ -124,6 +124,8 @@ def setup(
             else "conventional exact RHF; correlation-only DF"
         ),
         "endpoint": "energy+analytic_forces_host",
+        # Physical final-state/oracle contract. Optional FP32 preconvergence is
+        # a policy choice, recorded separately in executed native telemetry.
         "precision": "fp64",
         "frozen_core": False,
         "correlation_memory_budget_bytes": budget,
@@ -143,6 +145,7 @@ def native_call(
     auxiliary: tuple,
     budget: int,
     hf_reference: str = "exact",
+    policy: str = "standard",
 ) -> dict:
     """Measure all native basis groups and their response, not a sum of subphases."""
     from generativeqc import CBSBasis, CCSDTCBSCalculator
@@ -152,6 +155,7 @@ def native_call(
     owner = CCSDTCBSCalculator(
         (CBSBasis(orbital[0], 2), CBSBasis(orbital[1], 3)),
         auxiliary_bases=auxiliary,
+        policy=policy,
         device="cuda",
         calculator_options={"correlation_memory_budget_bytes": budget},
         **options,
@@ -238,6 +242,7 @@ def main() -> None:
     parser.add_argument("--carbon", type=int, choices=QM7_INDICES, required=True)
     parser.add_argument("--budget-mib", type=int, default=65536)
     parser.add_argument("--hf-reference", choices=("exact", "df"), default="exact")
+    parser.add_argument("--policy", choices=("standard", "fast"), default="standard")
     parser.add_argument("--samples", type=int, default=1)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)
@@ -246,6 +251,8 @@ def main() -> None:
         parser.error("positive sample count and budget required")
     if args.engine == "native" and not os.environ.get("SLURM_JOB_ID"):
         parser.error("real GPU endpoints must run through srun")
+    if args.engine == "reference" and args.policy != "standard":
+        parser.error("independent references always retain strict convergence")
     atoms = geometry(args.qm7, args.carbon)
     protocol, orbital, auxiliary = setup(
         atoms, args.carbon, args.budget_mib << 20, args.hf_reference
@@ -253,6 +260,7 @@ def main() -> None:
     payload = {
         "schema": SCHEMA,
         "engine": args.engine,
+        "policy": args.policy,
         "protocol": protocol,
         "source_revision": args.source_revision,
         "driver_sha256": digest(Path(__file__)),
@@ -292,7 +300,12 @@ def main() -> None:
                 payload["stage"] = f"{'cold' if sample == 0 else 'replay'}/{sample}"
                 checkpoint(args.output, payload)
                 record = native_call(
-                    atoms, orbital, auxiliary, args.budget_mib << 20, args.hf_reference
+                    atoms,
+                    orbital,
+                    auxiliary,
+                    args.budget_mib << 20,
+                    args.hf_reference,
+                    args.policy,
                 )
                 payload["samples"].append(record)
                 checkpoint(args.output, payload)

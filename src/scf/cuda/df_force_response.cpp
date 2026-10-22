@@ -403,12 +403,15 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       // A single fitted B has no retained raw A, so it cannot borrow the raw
       // response buffers above. Its final U=B*C is nevertheless a valid fitted
       // response input when the exact final-state lease and metric are current.
-      // Canonical density/factor validation below remains authoritative.
+      // A corrected final determinant can instead reconstruct its own checked
+      // factor and project immutable B once. Selection must not require the
+      // old SCF projection token: that token is correctly invalid after a
+      // density correction. Validation below authorizes either exact factor;
+      // only an unchanged token may additionally lend the final U=B*C buffer.
       automatic_fitted_occupied =
           space == "auto" && storage == "auto" && occupied_source == "auto" &&
           projection != "off" && fitted_resident && system == 0 && final_state &&
-          final_state->identity.occupied.size() == 1 && plan->final_projection_token &&
-          *plan->final_projection_token == *final_state && plan->metric_full_rank[0] &&
+          final_state->identity.occupied.size() == 1 && plan->metric_full_rank[0] &&
           plan->metric_response_valid[0] &&
           qualified_value_rhf_exchange(*plan, final_state->identity.occupied[0]);
       // Dense response can also reuse existing full J/K storage: projecting
@@ -546,8 +549,9 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       final_fitted_projection = plan->auxiliary_tile_values;
   }
 
-  // A force attempt consumes the exclusive scratch lease. Repeated forces
-  // without another final K, errors, and incompatible consumers all fall back.
+  // A force attempt consumes the exclusive scratch lease. No repeated force,
+  // retry or incompatible consumer may borrow this U again. A corrected density
+  // may independently reconstruct a factor and project immutable B anew below.
   plan->revoke_projection_leases();
   if (plan->integral_source || !host_weights) {
     if (!plan->metric_response_valid[system]) {
@@ -571,7 +575,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
                   plan->stored_pair_count,
                   df_packed_pairs(plan->value_storage.pairs),
                   plan->factor_basis_identity,
-                  metric};
+                  metric,
+                  plan->resident_spectral_factors};
     }
     CudaDfOccupiedResponseView streamed_factors;
     if (!borrow && plan->integral_source &&
@@ -594,7 +599,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         runtime::cuda_trace::trace_counter(
             "response_reused_final_fitted_projection_bytes",
             plan->nbf * plan->naux * borrowed_fitted_projection->rank * sizeof(double));
-      } else {
+      } else if (plan->streamed || space == "occupied" || final_fitted_projection) {
         // Neither streamed nor single-factor values own raw A for response.
         // Lend only validated canonical C; the bridge projects the physical
         // source within its independent bounded response allowance.
@@ -610,10 +615,20 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
           streamed_factors = {};
         }
       }
-      if (!borrowed_fitted_occupied && !streamed_factors.owner_identity && space == "occupied") {
+      if (!borrowed_fitted_occupied && !streamed_factors.owner_identity &&
+          (space == "occupied" || (automatic_fitted_occupied && !final_fitted_projection))) {
         const auto corrected = select_corrected_occupied_response_factor(
             *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
-        if (corrected != GENERATIVEQC_STATUS_SUCCESS) return corrected;
+        if (corrected != GENERATIVEQC_STATUS_SUCCESS) {
+          if (!automatic_fitted_occupied || corrected != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+            return corrected;
+          const auto cleared = clear_optional_response_allocation_error(detail);
+          if (cleared != GENERATIVEQC_STATUS_SUCCESS) return cleared;
+          // Reconstruction is optional in automatic mode. The original host
+          // density and immutable B still support the bounded panel response;
+          // never lend a partial reconstructed factor after allocation failure.
+          streamed_factors = {};
+        }
       }
       if (!borrowed_fitted_occupied && streamed_factors.owner_identity && final_fitted_projection &&
           streamed_factors.factors[0].rank == final_state->identity.occupied[0] &&
@@ -624,9 +639,10 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
           streamed_factors.final_fitted_occupied_projection = final_fitted_projection;
         }
       }
-      // A stale or corrected canonical density cannot borrow the final U.
-      // Automatic selection retains the exact bounded fitted-panel fallback;
-      // an explicit fitted request still reports failed qualification below.
+      // A stale or unqualified density cannot lend a factor. A corrected factor
+      // may project B afresh, but must never borrow the previous final U.
+      // Keep the exact bounded fitted-panel fallback if reconstruction refused;
+      // explicit fitted requests still report failed qualification below.
       if (automatic_fitted_occupied && !streamed_factors.owner_identity) {
         fitted_occupied_requested = false;
         automatic_fitted_occupied = false;
@@ -677,6 +693,36 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
             orbital.ecp_terms.empty() &&
                 std::none_of(orbital.atoms.begin(), orbital.atoms.end(),
                              [](const auto& atom) { return atom.ecp_core != 0; }));
+    CudaDfRawChargeView raw_charge;
+    if (plan->md_coulomb && matching_source && plan->batch_size == 1 && system == 0 &&
+        metric.full_rank && metric.owner_identity &&
+        std::all_of(terms.begin(), terms.end(),
+                    [](const auto& term) { return term.exchange_coefficient == 0; })) {
+      raw_charge = {plan->md_coulomb,
+                    [](void* context, const double* density, double* charge, std::string& message) {
+                      const auto error = cuda_execution::cuda_df_md_charge(
+                          static_cast<cuda_execution::CudaDfMdOwner*>(context), density, charge);
+                      return error == cudaSuccess
+                                 ? GENERATIVEQC_STATUS_SUCCESS
+                                 : cuda_failure(error, "DF Hermite response charge", message);
+                    },
+                    plan->device_id,
+                    reinterpret_cast<void*>(plan->stream),
+                    plan->nbf,
+                    plan->naux,
+                    plan->md_coulomb_resources.device_bytes,
+                    metric.owner_identity,
+                    [](void* context, const double* density, const double* potential,
+                       double coefficient, double* gradient, std::string& message) {
+                      const auto error = cuda_execution::cuda_df_md_three_center_gradient(
+                          static_cast<cuda_execution::CudaDfMdOwner*>(context), density, potential,
+                          coefficient, gradient);
+                      return error == cudaSuccess
+                                 ? GENERATIVEQC_STATUS_SUCCESS
+                                 : cuda_failure(error, "DF Hermite response derivative", message);
+                    },
+                    orbital.atoms.size()};
+    }
     const auto status = execute_cuda_df_hf_gradient(
         plan->device_id, reinterpret_cast<void*>(plan->stream), plan->integral_source, system,
         orbital, auxiliary, raw_a, {}, {}, terms, plan->metric_relative_threshold, schedule,
@@ -684,7 +730,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr,
-        select_borrowed_density ? borrowed_response_density : nullptr, mixed_shell);
+        select_borrowed_density ? borrowed_response_density : nullptr, mixed_shell,
+        raw_charge.context ? &raw_charge : nullptr);
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && mixed_shell) {
       // The failed transactional bridge drained its arena. Drop both optional
       // arithmetic/census storage and the consumed projection lease on replay.
@@ -700,13 +747,14 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         occupied_source == "auto") {
       // The optional all-Q occupied factors may exceed an allowance that still
       // fits ordinary bounded panels. The failed bridge has drained/freed its
-      // arena, and the one-shot lease was already revoked above. Retry exactly
-      // once without it; explicit occupied/source diagnostics retain their gate.
+      // arena. Withhold final-state authorization on retry as well as the lease:
+      // otherwise corrected-density reconstruction could re-admit this same
+      // optional allocation indefinitely. Explicit requests retain their gate.
       const auto cleared = clear_optional_response_allocation_error(detail);
       if (cleared != GENERATIVEQC_STATUS_SUCCESS) return cleared;
       return execute_cuda_density_fitting_generated_force_response(
           plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
-          maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr,
+          maximum_auxiliary_tile, derivative, detail, resources, nullptr, nullptr,
           borrowed_response_density, application_precision);
     }
     if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source &&

@@ -51,22 +51,30 @@ constexpr unsigned GENERATIVEQC_ABI_VERSION=1;
 constexpr int GENERATIVEQC_STATUS_ABI_MISMATCH=2,GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3,GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 constexpr unsigned GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED=0,GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED=1;
 struct MethodError:std::runtime_error { MethodError(int,const char* m):std::runtime_error(m){} };
-struct NativeKsExecutionPlan {};
+struct NativeKsExecutionPlan {bool nonlocal_correlation=false;};
 const char* expected_scf_domain(const NativeKsExecutionPlan&) {return "current-domain";}
 namespace core {struct System {std::vector<int> atoms;};}
-namespace scf {struct ScfOptions {
- enum class XcExecutionSchedule {DeviceFused,HostUnfused};
- std::uint64_t xc_tile_points=256;
- XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
-};}
 namespace dft {
 struct GridSpec {
  unsigned version=1,radial_points=4,angular_polar=3,angular_azimuth=2,partition_iterations=3;
  double coincident_tolerance=1e-12;
  std::array<double,119> element_radii{};
+ bool operator==(const GridSpec&) const = default;
 };
+// Distinct sentinels exercise default propagation and legacy reset without
+// copying the native grid-construction implementation into this fixture.
+GridSpec default_grid_spec() {
+ GridSpec grid; grid.version=4; grid.radial_points=3;
+ grid.angular_polar=grid.angular_azimuth=0; grid.element_radii.fill(2.0); return grid;
+}
 void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::invalid_argument("radial");}
 }
+namespace scf {struct ScfOptions {
+ std::optional<dft::GridSpec> nonlocal_grid_spec;
+ enum class XcExecutionSchedule {DeviceFused,HostUnfused};
+ std::uint64_t xc_tile_points=256;
+ XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::DeviceFused;
+};}
 struct generativeqc_ks_options {
  std::size_t struct_size=sizeof(generativeqc_ks_options); unsigned abi_version=1;
  const char* scf_domain="current-domain"; std::uint64_t tile_points=37;
@@ -74,6 +82,12 @@ struct generativeqc_ks_options {
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
 };
+namespace dft {struct NonlocalGridKsOptions {
+ generativeqc_ks_options base;
+ double energy{},maximum_force{},rms_force{};
+ std::uint32_t version=1,reserved=0;
+ const generativeqc_ks_options* grid=nullptr;
+};}
 struct generativeqc_method_descriptor {
  std::size_t struct_size=sizeof(generativeqc_method_descriptor);
  const generativeqc_ks_options* ks_options=nullptr;
@@ -84,10 +98,14 @@ struct generativeqc_method_descriptor {
 int main() {
  generativeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
  auto defaults=ks_grid_options(d,options,plan);
- assert(defaults.version==1 && options.xc_tile_points==256);
+ assert(defaults==dft::default_grid_spec() && options.xc_tile_points==256);
  generativeqc_ks_options input; d.ks_options=&input;
  auto copied=ks_grid_options(d,options,plan);
  assert(copied.version==2 && copied.radial_points==7 && options.xc_tile_points==37);
+ assert(copied.element_radii==dft::GridSpec{}.element_radii);
+ auto explicit_default=input; explicit_default.grid_version=4; d.ks_options=&explicit_default;
+ assert(ks_grid_options(d,options,plan).element_radii==defaults.element_radii);
+ d.ks_options=&input;
  assert(options.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
  unsigned rejected=0;
  for(int mode=0;mode<6;++mode) {

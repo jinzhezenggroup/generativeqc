@@ -1,0 +1,103 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "0e691d4000414ecb5fbf563232819178511e1642",
+  "file_count": 19,
+  "total_bytes": 989391,
+  "files": [
+    {
+      "path": "benchmarks/results/readme-unified-20261021/README.md",
+      "bytes": 7318,
+      "sha256": "f716bb6eeec42aed9e276f6e3b478b43d34d6408af745066d801465db00258ac"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/auxiliary-inputs.json.xz",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/comparisons.json.xz",
+      "bytes": 6356,
+      "sha256": "cf0ab5cb3df9ee51947b942a91c61b2f45b0bcd18910aaf7e57967f310eed772"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/conditions.md",
+      "bytes": 7521,
+      "sha256": "750c5836192abddcce3d863dfe8df4f93687869a7cd6b6e47b2d5eb76964d562"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/diagnostics.json.xz",
+      "bytes": 25704,
+      "sha256": "64771861c37dc7dd2fd8b206d591e22d653a09b47f1dc26535658b545e5e1f08"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/fast.json.xz",
+      "bytes": 255676,
+      "sha256": "c4ae4f676a9d450cb74e621d6e0123e60526995e1d93c51fc53b707a83ae5947"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/gpu4pyscf.json.xz",
+      "bytes": 187744,
+      "sha256": "e5683bb264600c824cbade44190ab6be9fdc543ac8afb7e63013b4d3f8639511"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/jobs.json.xz",
+      "bytes": 12244,
+      "sha256": "85bbd90ddc0b940f5b1f430879ec6767ce358fe381a997e161557a472066d2ff"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/oracles.json.xz",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/provenance.json.xz",
+      "bytes": 64656,
+      "sha256": "787ee418654f3b86791571612952077695f23f1fe30f009b5719fe76656aa31b"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/publication.json",
+      "bytes": 3816,
+      "sha256": "878443ddbc1017288ccf5fc120f35cf74ca453a471511cf6477bafae9d212da9"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/qualification.json.xz",
+      "bytes": 31004,
+      "sha256": "cfc53c0b2ba61675a4b020a153807246dd958687070adc8f84bcf65661122953"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/reference-reuse.json",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/reproduce.py",
+      "bytes": 3788,
+      "sha256": "0c5a75df8df2cc1290122d5280748962eaed343870565e2cd475bddc83f5d900"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/standard.json.xz",
+      "bytes": 215676,
+      "sha256": "269472987b33bea35880c1280215f7a1d6f95f046e60f7a25e1a22beffb59ee7"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/summary.json.xz",
+      "bytes": 45024,
+      "sha256": "3736ef49fbda9bfa812562b8f8db118b2cb35fe355e16d4cc75781e4db96f5ca"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/timings.md",
+      "bytes": 20878,
+      "sha256": "4533e0584260a517bb97c205c10f4cc4c164fdf2e41b7d99237ff85491e67dbf"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/validation.json",
+      "bytes": 9351,
+      "sha256": "5efbc30e2e8f253b1a4bb4f807febfe004d25c30048adb11847d83cb0f52ca07"
+    },
+    {
+      "path": "benchmarks/results/readme-unified-20261021/work.md",
+      "bytes": 15897,
+      "sha256": "9fe0b29c94949c2e713917df76dce2f4bfc6cd4a0d744dec99236fd5959ee75e"
+    }
+  ]
+}

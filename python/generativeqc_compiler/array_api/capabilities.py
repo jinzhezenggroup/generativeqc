@@ -11,6 +11,9 @@ FRONTEND_VERSION = 1
 _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-selection": ("where",),
     "real-elementwise": (
+        "clip",
+        "minimum",
+        "maximum",
         "add",
         "subtract",
         "multiply",
@@ -44,6 +47,10 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
     ),
     "shape-transform": (
         "reshape_explicit_indices",
@@ -80,6 +87,9 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 # test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
+        "clip",
+        "minimum",
+        "maximum",
         "where",
         "add",
         "equal",
@@ -108,6 +118,10 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
         "reshape_explicit_indices",
         "permute_dims",
         "reshape",
@@ -147,7 +161,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
-    "real-selection": "unsupported; forward-reference-only",
+    "real-selection": "fixed-external-mask-reference-AD; explicit-comparison-selector-opt-in; generated-fp64-first-order-opt-in",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -160,10 +174,42 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "var": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-zero",
+        "keepdims": "bool; generic-arrays-only",
+        "correction": "finite-static-int|float; nonempty-reduction; positive-divisor; finite-nonzero-coefficient",
+        "capture": "finite-generic-real-only; centered-two-pass; all-intermediates-finite; static-graph-budget",
+    },
+    "prod": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+        "keepdims": "bool; generic-arrays-only",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
+        "capture": "finite-generic-real-only; empty-product-one; static-graph-budget",
+    },
+    **{
+        name: {
+            "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+            "keepdims": "bool; generic-arrays-only",
+            "capture": "finite-generic-real-only; empty-reduction-error; earliest-C-order-tie; static-graph-budget",
+        }
+        for name in ("max", "min")
+    },
+    **{
+        name: {
+            "capture": "finite-generic-real-only; at-least-one-array; first-operand-selected-on-ties",
+            "operands": "broadcast-arrays; float32/float64-promotion; weak-exact-static-scalars",
+        }
+        for name in ("minimum", "maximum")
+    },
+    "clip": {
+        "min": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "max": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
+        "capture": "finite-only; lower-then-upper; current-value-selected-on-ties",
+    },
     "sum": {
         "axis": "static-int|tuple|None",
         "keepdims": "generic-arrays-only",
-        "dtype": "conversion-unsupported",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
     },
     "mean": {
         "axis": "static-int|tuple|None",
@@ -232,6 +278,28 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "var": {
+        "ad": "centered-polynomial-first-order; rounding-not-classical-derivative",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+    },
+    "sum": {
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; explicit-dtype-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    "prod": {
+        "ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    **{
+        name: {
+            "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+        }
+        for name in ("minimum", "maximum", "min", "max")
+    },
+    "clip": {
+        "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+    },
     "reshape_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_to_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
     "broadcast_shapes": {
@@ -312,7 +380,7 @@ _NATIVE_CPU_BOOLEAN_OPERATIONS = (
 )
 
 _NATIVE_CPU_NOTES: dict[str, str] = {
-    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; forward-only",
+    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; generated-fixed-mask-AD-opt-in",
     **{
         name: "finite-float64-operands; one-byte-bool-result; non-differentiable"
         for name in _OPERATION_GROUPS["real-comparison"]
@@ -399,10 +467,10 @@ def capabilities() -> dict[str, object]:
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
         "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD",
-        "where_native_scope": "materializing-cpu-forward-only; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD; generated-fixed-mask-fp64-opt-in",
+        "where_native_scope": "materializing-cpu-forward-and-opt-in-generated-fixed-mask-AD; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
         "boolean_native_lowering": True,
-        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-forward-where; no-AD",
+        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-where; Boolean-data-nondifferentiable",
         "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "typed-bool-or-exact-real-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",

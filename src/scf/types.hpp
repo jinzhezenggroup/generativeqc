@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "dft/density_source.hpp"
+#include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
@@ -101,6 +102,10 @@ struct PrecisionProvenance {
 
 /** Numerical controls shared by the implemented mean-field solvers. */
 struct ScfOptions {
+  /** Copied prescription plus a preparation-owned immutable source. A null
+   * source retains the incumbent shared-grid path, including explicit equality. */
+  std::optional<dft::GridSpec> nonlocal_grid_spec;
+  const dft::MolecularGrid* nonlocal_grid{};
   unsigned max_iterations{100};
   unsigned diis_history{8};
   double energy_tolerance{1.0e-10};
@@ -269,6 +274,9 @@ struct ScfResult {
   bool initial_density_used{};
   /** CPU physical operator evaluations, counting a joint UHF J/K as one build. */
   std::size_t fock_builds{};
+  /** Independently counted completed CUDA Direct Fock applications. Missing
+   * means this execution did not publish a complete physical census. */
+  std::optional<std::uint64_t> executed_fock_builds;
   /** Exact incremental Direct-J/K execution provenance, when requested. */
   IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /**

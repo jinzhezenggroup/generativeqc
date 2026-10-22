@@ -7,6 +7,12 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Count completed physical Fock work under its pre-convergence active mask.
+ * Captured calls count only when executed. The owner resets once per solve. */
+void launch_count_fock_application_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+                                          cudaStream_t stream, std::int32_t batch_size,
+                                          const std::uint8_t* active, std::uint64_t* builds);
+
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_initialize_state_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,

@@ -1,6 +1,6 @@
 """Exercise snapshot decoding with typed methods and a host-only wire fixture."""
 
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -22,14 +22,20 @@ from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_V
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 
-def _decode_fixture(name: str, spin: str, *, selection: str = "automatic") -> tuple:
+def _decode_fixture(
+    name: str,
+    spin: str,
+    *,
+    selection: str = "automatic",
+    grid_spec: GridSpec | None = None,
+) -> tuple:
     if selection == "automatic":
         method_ir = resolve_bulk_ks(name, spin=spin, backend="cpu").method
         carrier = native_dft_carrier_for_ir(method_ir)
     else:
         carrier = f"{name}-{'uks' if spin == 'polarized' else 'rks'}"
         method_ir, _ = resolve_ks_method(carrier)
-    spec = GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
+    spec = grid_spec or GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
     options = resolve_ks_options(
         carrier,
         KsOptions(composition=None if selection == "default" else method_ir, grid=spec),
@@ -121,6 +127,9 @@ def _decode_fixture(name: str, spin: str, *, selection: str = "automatic") -> tu
         check_current=lambda: None,
         fock_provider_proof=lambda: ("exact", None, 0.0),
     )
+    source._decode_nonlocal_grid = MethodType(
+        NativeKsSnapshot._decode_nonlocal_grid, source
+    )
     return options, source, basis, grid
 
 
@@ -155,6 +164,31 @@ def test_curated_snapshot_decode_retains_regularization_identity(
     assert state["identity"].regularization_identity == expected
     assert source.method_ir.identity == options.method_ir.identity
     assert source.functional_code == _native_semilocal_code(options.method_ir)
+
+
+@pytest.mark.parametrize("version", (1, 2, 3))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_snapshot_decode_retains_versioned_grid_prescription(
+    version: int, spin: str
+) -> None:
+    """Wire transport preserves both legacy grids and explicit pruned identities."""
+    spec = GridSpec(
+        radial_points=12,
+        angular_polar=6,
+        angular_azimuth=12,
+        element_radii=((2, 1.0),),
+        version=version,
+        pruning="radial-v1" if version == 3 else "none",
+    )
+    options, source, basis, grid = _decode_fixture(
+        "pbe", spin, selection="default", grid_spec=spec
+    )
+    state = NativeKsSnapshot.decode(source, basis, grid)
+    assert source.grid_spec == options.grid == spec
+    assert source.grid_provenance["policy_version"] == version
+    assert source.grid_provenance.get("pruning", "none") == spec.pruning
+    assert state["identity"].grid_identity == grid.identity
+    np.testing.assert_array_equal(source.atomic_weights, [1.0])
 
 
 @pytest.mark.parametrize("mismatch", ("functional", "coefficients", "spin", "grid"))
@@ -193,8 +227,8 @@ def test_snapshot_decode_rejects_forged_native_provider_provenance(
 ) -> None:
     """Real decode must reject an inconsistent J/K provider before publication.
 
-    This host-only execution oracle complements the separately retained
-    qualification-owner hash without inspecting the decoder's source spelling.
+    This host-only execution oracle protects provider admission independently
+    of the separately recorded decoder-source provenance.
     """
     _, source, basis, grid = _decode_fixture("pbe", "unpolarized", selection="default")
     source.fock_provider_proof = lambda: native_proof

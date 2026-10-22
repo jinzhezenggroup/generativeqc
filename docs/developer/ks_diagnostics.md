@@ -54,6 +54,45 @@ and residual separately from the original historical rows.
 
 `fock_builds` includes final validation rebuilds for this solve.
 
+## Final-state-aware CUDA stopping
+
+The qualified CUDA Standard defaults use the solver contract documented in
+[application precision](../user/application_precision.md). Before accepting an
+ordinary Standard stop, the owner runs the complete resident physical/canonical
+proof with matching `1e-5` density/stationarity ceilings. Rejection continues
+SCF. This mandatory proof includes fitted exchange and canonical M06-2X;
+it is independent of the optional strict-tolerance early-probe control below.
+Range/nonlocal, budget/mixed, UKS, incremental, ECP, chunked and missing-resident
+owners retain their stricter physical policy.
+
+With strict energy/density requests, FP64 RKS also checks the maximum absolute AO commutator entry,
+which is distinct from the spin-RMS `physical_residual_max` above. Eligible
+single-iteration CUDA owners can stop before this conservative `1e-9` AO
+margin is reached only after passing the complete resident final-state proof
+on the current physical `F[D]`. Public energy/density-change thresholds and
+the spin-RMS gate remain unchanged. The proof checks the true canonical
+density and all existing final-state acceptance products; an AO maximum
+below `min(1e-8, density_tolerance)` alone is insufficient.
+
+A rejected proof continues ordinary SCF with its intact density proposal.
+Borrowed eigensolver scratch cannot become a warm orbital cache, and no
+speculative final token or force weights are published. A successful proof
+may retain its physical eigenframe; force export still performs the normal
+token-bound validation. Device and solver errors retain normal failure handling.
+
+Unset `GENERATIVEQC_KS_EARLY_FINAL_PROBE` admits only canonical PBE, PBE0,
+B3LYP and r2SCAN compositions on the default Treutler grid (including the
+electronic part of r2SCAN-3c). Generated split hybrids, custom mixtures and
+other grids retain conservative stopping. `0` disables this optional strict-tolerance probe; explicit
+`1` permits experimental admission while retaining every physical and resource
+gate. Other values fail explicitly. Set the
+control before constructing the owner. Fast/budget, mixed precision, UKS,
+fitted exchange, range-separated/nonlocal, incremental J/K, ECP and device
+chunks retain their incumbent stopping policy, as do owners without the
+required resident validation workspace and matrix library. Pure-J DF is
+eligible. Trace counters record probes, acceptances and rejections; the
+`ks_early_final_probe` region includes the complete additional proof work.
+
 ## Bounded CUDA mixed-precision warmup
 
 The public precision default remains strict FP64. An explicitly requested

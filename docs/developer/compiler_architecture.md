@@ -30,6 +30,29 @@ rationale is recorded in the
 
 `method` is the composition front end above XC/TensorIR; representability
 there does not imply runtime support.
+
+The shared `integral.expr.Graph` keeps rational coefficients exact through
+constant identity checks, multiplication simplification and symbolic
+differentiation. `is_constant(expr, value)` interprets a rational payload's
+query using `constant`'s source-literal convention (finite float literals use
+their decimal spelling). Normalization distinguishes input types so a float
+and its equal binary Fraction cannot seed each other's cached coefficient.
+Both the constant lookup and scalar value numbering preserve payload type;
+an exact rational and an equal approximate float remain separate nodes.
+For a stored approximate float payload it compares the represented value
+directly, including exact comparison against rational queries. Neither a
+non-unit rational rounding to binary64 one nor a nonzero
+rational rounding to zero is a neutral/annihilating coefficient. Scalar
+evaluation and emitted FP64 literals still round to binary64; preserving an
+exact coefficient does not qualify arbitrary user expressions for native
+SCF, forces or CUDA execution.
+
+The generated bulk Libxc catalog records the shared scalar owner as a
+canonical producer input. Source-registry verification rejects a stale
+catalog/product record when that owner changes, even if the old catalog and
+its output digest still agree. Regenerate through `tools/import_libxc_bulk.py`
+while preserving pinned upstream sources and the existing admission cohort.
+
 The [implicit-response primitive](implicit_response.md) emits ordinary TensorIR
 JVP/VJP/RHS/source programs without importing the runtime solver.
 `src/integrals`, `src/tensor` and `src/dft` own the corresponding native interfaces, runtime allocation and

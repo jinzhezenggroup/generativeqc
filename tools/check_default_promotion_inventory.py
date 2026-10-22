@@ -238,7 +238,11 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
-    """Audit qualified hybrid/pure-J admission and the durable strict opt-out."""
+    """Audit model/resource admission and opt-out; executable tests own arithmetic.
+
+    Final FP64 arithmetic may follow mixed proposals. Do not pin the spelling of
+    that state decision to the original requested SCF precision.
+    """
     relative = Path("src/dft/cuda_ks.cpp")
     source = re.sub(r"\s+", " ", _read(root / relative))
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
@@ -275,10 +279,22 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
             "!has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation",
             "!final_spec.exchange.present",
             "final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted",
-            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(), full_range_coulomb_only",
+            "device_final_validation_default_eligible(",
             'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    # Resource guards must belong to this consumer's admission, not merely
+    # occur elsewhere (for example in the independent early-final SCF probe).
+    admission = re.search(r"\bconst bool device_validation\s*=\s*([^;]+);", source)
+    if admission is None or any(
+        fragment not in admission.group(1)
+        for fragment in (
+            "device_final_validation_requested(",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+            "default_device_validation)",
             "final_validation_partial && matrix_products.library_enabled()",
-            "!final_stationary_weights_ready;",
+            "!final_stationary_weights_ready",
         )
     ):
         raise ValueError("KS final-validation default owner or resource guard drifted")
@@ -286,14 +302,16 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
 
 
 def _discover_md_j_default(root: Path) -> dict[str, str]:
-    """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
+    """Keep the admitted domain and diagnostic opt-out reviewable.
+
+    Capacity is enforced by executable owner-budget and rollback probes in
+    test_md_j_resources, not by pinning a private shape-estimate constant.
+    """
     relative = Path("src/scf/cuda/direct_jk.cpp")
     source = _read(root / relative)
-    layout = _read(root / "src/scf/cuda/direct_md_j.hpp")
-    if not re.search(r"kMdJResidentCap\s*=\s*128U\s*<<\s*20", layout):
-        raise ValueError("MD-J default resident cap drifted from 128 MiB")
     if (
         'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
+        or 'std::getenv("GENERATIVEQC_MD_J_ENGINE")' not in source
         or 'std::strcmp(disabled, "1") == 0' not in source
         or "host.nbf < 8" not in source
         or "return angular > 2;" not in source
@@ -304,11 +322,16 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_MD_J_ENGINE": relative.as_posix(),
     }
 
 
 def _discover_spatial_force_default(root: Path) -> dict[str, str]:
-    """Audit exact Direct capabilities, not a functional-name whitelist."""
+    """Audit exact Direct capabilities; executable force tests own arithmetic.
+
+    The force invocation supplies precision independently of the SCF descriptor.
+    Keep model/resource boundaries here without duplicating its implementation.
+    """
     relative = Path("src/dft/cuda_spd_force_policy.hpp")
     policy = _read(root / relative)
     schedule = re.sub(
@@ -324,7 +347,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             'selector == "1" || selector == "spatial-reuse"',
             "return DirectSpdForceSchedule::Incumbent;",
             "if (captured == DirectSpdForceSchedule::Automatic)",
-            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+            "return qualified_default ? DirectSpdForceSchedule::DensityReuse : DirectSpdForceSchedule::Incumbent;",
         )
     ):
         raise ValueError("Spatial force default scope or opt-out drifted")
@@ -342,7 +365,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             "spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "dft::spatial_spd_force_default_eligible(",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")
@@ -710,6 +733,9 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
     method = Path("src/methods/dft_method.cpp")
     if (root / method).is_file():
@@ -757,12 +783,23 @@ def _discover_partial_phase_values(root: Path) -> dict[str, str]:
     return result
 
 
+def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
+    """Inventory optional prepared value owners without pinning their admission syntax."""
+    relative = Path("src/scf/fock_prepared.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"hf-runtime:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_DF_MD_COULOMB)"', source)
+    }
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
         _discover_scf_options(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
+        _discover_prepared_df_controls(root),
         _discover_ks_phase_values(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),

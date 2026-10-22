@@ -9,11 +9,11 @@ especially for device launches, conditionals and opaque host callbacks.
 from __future__ import annotations
 
 import ctypes
-import os
 from typing import TYPE_CHECKING, Any
 
 from tools.audit_replay_allocations import _integer, _require
 from tools.cupti_residency_capture import summarize
+from tools.residency_allocation import require_cupti_allocation
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -80,8 +80,17 @@ class GraphInventory:
         node_limit: int = 4096,
         depth_limit: int = 16,
         callback_name: str = "generativeqc_cupti_graph_observe_v1",
+        native_library: Path | None = None,
+        qz_receipt: Path | None = None,
+        qz_receipt_sha256: str | None = None,
     ) -> None:
-        _require(bool(os.environ.get("SLURM_JOB_ID")), "graph inventory requires Slurm")
+        require_cupti_allocation(
+            path,
+            native_library=native_library,
+            qz_receipt=qz_receipt,
+            qz_receipt_sha256=qz_receipt_sha256,
+            native=native,
+        )
         for value, limit, label in (
             (capacity, 1 << 20, "capacity"),
             (node_limit, 4096, "node limit"),

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from _ump2_force_reference import analytic_gradient
 from generativeqc import Calculator, ResolvedModel, _native, method_capabilities
 from generativeqc.checkpoint import inspect_checkpoint
 from generativeqc.fock import FockBuildSpec, FockPlan
@@ -18,7 +19,7 @@ from generativeqc_compiler.dft import NativeAO
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_ump2_manifest_declares_distinct_energy_only_native_method() -> None:
+def test_ump2_manifest_declares_distinct_native_method() -> None:
     methods = json.loads((ROOT / "manifests/public_methods.json").read_text())[
         "methods"
     ]
@@ -29,12 +30,12 @@ def test_ump2_manifest_declares_distinct_energy_only_native_method() -> None:
         "abi_id": 20,
         "family": "perturbation",
         "provider": "ump2",
-        "properties": ["energy"],
+        "properties": ["energy", "forces"],
         "supports_batch": True,
     }
     capabilities = method_capabilities("ump2")
     assert capabilities.available
-    assert capabilities.supported_properties == frozenset({"energy"})
+    assert capabilities.supported_properties == frozenset({"energy", "forces"})
     assert capabilities.supports_batch
 
 
@@ -276,12 +277,31 @@ def test_public_native_ump2_broken_symmetry_from_validated_uhf_seed() -> None:
             )
             != _native.STATUS_SUCCESS
         )
-        item = batch.execute(strict=True).items[0]
+        item = batch.execute(properties=("energy", "forces"), strict=True).items[0]
+        assert item.forces is not None
+        direction = np.array([[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]]) / np.sqrt(2.0)
+        for step in (1e-3, 3e-4):
+            energies = []
+            for sign in (1, -1):
+                displaced = coordinates.reshape(2, 3) + sign * step * direction
+                replay = batch.execute(
+                    coordinates=[displaced], properties=("energy",), strict=True
+                ).items[0]
+                assert replay.warm_start_used and not replay.warm_start_fallback
+                energies.append(replay.energy)
+            derivative = (energies[0] - energies[1]) / (2 * step)
+            assert abs(derivative + np.vdot(item.forces, direction)) < 2e-7
+
     assert item.succeeded and item.warm_start_used and not item.warm_start_fallback
     assert abs(item.correlation.reference_energy - independent_hf.e_tot) <= 1e-8
     assert abs(item.energy - oracle.e_tot) <= 1e-8
     assert abs(item.correlation.opposite_spin_energy) > 1e-8
     assert 0 <= item.correlation.reference_residual <= 1e-8
+
+    np.testing.assert_allclose(
+        item.forces, -analytic_gradient(oracle), atol=2e-7, rtol=2e-7
+    )
+    np.testing.assert_allclose(np.sum(item.forces, axis=0), 0, atol=1e-10)
 
 
 def test_ump2_batch_replaces_geometry_source_and_clears_failed_diagnostic() -> None:
@@ -304,9 +324,6 @@ def test_ump2_batch_replaces_geometry_source_and_clears_failed_diagnostic() -> N
 
 def test_public_ump2_unsupported_requests_fail_closed() -> None:
     atoms = [("Li", (0.0, 0.0, 0.0))]
-    calc = Calculator(method="ump2", basis="sto-3g", device="cpu", initial_guess=None)
-    with pytest.raises(ValueError, match="does not support properties"):
-        calc.singlepoint(atoms, multiplicity=2, properties=("energy", "forces"))
     with pytest.raises(ValueError, match="fp64"):
         Calculator(method="ump2", precision="auto")
     with pytest.raises(NotImplementedError, match="UMP2 frozen-core"):

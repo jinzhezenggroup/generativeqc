@@ -44,7 +44,8 @@ int main() {
       for (bool shell_execution : {false,true})
         for (bool full_shell_domain : {false,true})
           for (unsigned owner=0;owner<3;++owner)
-            for (bool promoted_default : {false,true}) {
+            for (bool promoted_default : {false,true})
+              for (bool auxiliary_g : {false,true}) {
               Metric metric_value{metric==1};
               const Metric* device_metric=metric ? &metric_value : nullptr;
               Borrowed borrowed_value{owner==2};
@@ -53,7 +54,7 @@ int main() {
         + "\n".join(selection)
         + r"""
               const bool expected_packed=pair_policy=="packed" && metric!=2 &&
-                  shell_execution && full_shell_domain && owner==2;
+                  shell_execution && full_shell_domain && !auxiliary_g && owner==2;
               const auto expected_pairs=expected_packed ? DfDerivativePairs::packed
                   : (pair_policy=="symmetric" || pair_policy=="packed" ||
                      (pair_policy=="auto" && promoted_default))

@@ -1,6 +1,7 @@
 #include "runtime/cuda_device_facts.hpp"
 
 #include <cstring>
+#include <mutex>
 
 #if defined(__linux__) && !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
 #include <dlfcn.h>
@@ -94,6 +95,18 @@ cudaError_t selected_facts(int, CudaTargetInfo&, char (&)[256], bool&) noexcept 
 #endif
 
 }  // namespace
+
+cudaError_t cuda_ensure_stack_limit(std::size_t minimum_bytes) {
+  // A dedicated lock must not hold the allocation-ledger mutex across driver
+  // calls, whose callbacks may retire registered resources. Context creation
+  // is infrequent; serializing across devices avoids a stale ordinal cache.
+  static std::mutex limit_mutex;
+  std::lock_guard<std::mutex> lock(limit_mutex);
+  std::size_t current{};
+  const auto status = cudaDeviceGetLimit(&current, cudaLimitStackSize);
+  if (status != cudaSuccess || current >= minimum_bytes) return status;
+  return cudaDeviceSetLimit(cudaLimitStackSize, minimum_bytes);
+}
 
 cudaError_t cuda_device_facts(int device, CudaTargetInfo& target, char (&name)[256]) noexcept {
   target = {};

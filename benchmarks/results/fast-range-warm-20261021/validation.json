@@ -1,0 +1,351 @@
+{
+  "gates": {
+    "energy_abs_per_atom": 1e-05,
+    "force_max_abs": 0.0001,
+    "force_rms": 3e-05
+  },
+  "results": {
+    "fast-wb97m-v-12.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 7.345295302569866,
+      "warm_median_seconds": 0.8723469153046608,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 2.369367090674738e-07,
+          "force_max_abs": 4.257097489945849e-05,
+          "force_rms": 1.4262480557460561e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.369367090674738e-07,
+          "force_max_abs": 4.2570974948308304e-05,
+          "force_rms": 1.426248056426489e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.369367090674738e-07,
+          "force_max_abs": 4.2570974897238045e-05,
+          "force_rms": 1.4262480556470446e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.369367090674738e-07,
+          "force_max_abs": 4.257097491011663e-05,
+          "force_rms": 1.4262480560658555e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.998820830020122e-09,
+          "force_max_abs": 2.338095414167185e-06,
+          "force_rms": 1.0054104530748115e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "fast-wb97m-v-48.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 87.21236343681812,
+      "warm_median_seconds": 6.67229188978672,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 4.849816311510343e-07,
+          "force_max_abs": 2.22408344495717e-05,
+          "force_rms": 1.0971975687526814e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.849816311510343e-07,
+          "force_max_abs": 2.2240834453235436e-05,
+          "force_rms": 1.0971975695182675e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.849816311510343e-07,
+          "force_max_abs": 2.224083443802538e-05,
+          "force_rms": 1.0971975691341838e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.849816311510343e-07,
+          "force_max_abs": 2.224083445634406e-05,
+          "force_rms": 1.0971975684156524e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 4.056450582841838e-08,
+          "force_max_abs": 4.25790584657193e-06,
+          "force_rms": 1.5998410218883425e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "fast-wb97m-v-96.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 273.16319528594613,
+      "warm_median_seconds": 39.49814134463668,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 4.854530241497438e-07,
+          "force_max_abs": 2.2364507614947016e-05,
+          "force_rms": 1.0991982981197699e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.854530241497438e-07,
+          "force_max_abs": 2.236450762294062e-05,
+          "force_rms": 1.0991982986316292e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.854530241497438e-07,
+          "force_max_abs": 2.2364507633598762e-05,
+          "force_rms": 1.0991982981829635e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.854530241497438e-07,
+          "force_max_abs": 2.236450763248854e-05,
+          "force_rms": 1.0991982985498682e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 4.0552521340941894e-08,
+          "force_max_abs": 4.278219925879512e-06,
+          "force_rms": 1.6051750464544378e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-12.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 12.038433369249105,
+      "warm_median_seconds": 0.8818953447043896,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 2.36698104079854e-07,
+          "force_max_abs": 6.135577874211151e-06,
+          "force_rms": 1.9170284076378483e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3669809934290242e-07,
+          "force_max_abs": 6.135577876986709e-06,
+          "force_rms": 1.9170284050160877e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3669809934290242e-07,
+          "force_max_abs": 6.135577874766263e-06,
+          "force_rms": 1.91702840662241e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.36698104079854e-07,
+          "force_max_abs": 6.135577873322973e-06,
+          "force_rms": 1.9170284037902456e-06,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.998820830020122e-09,
+          "force_max_abs": 2.338095414167185e-06,
+          "force_rms": 1.0054104530748115e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-48.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 107.98132455348969,
+      "warm_median_seconds": 6.894887704402208,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 4.849260809199526e-07,
+          "force_max_abs": 2.215378399941792e-05,
+          "force_rms": 1.0469962414998416e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.849260809199526e-07,
+          "force_max_abs": 2.2153783971523566e-05,
+          "force_rms": 1.0469962416365461e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.849260809199526e-07,
+          "force_max_abs": 2.215378398404133e-05,
+          "force_rms": 1.0469962419736243e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.84926076183001e-07,
+          "force_max_abs": 2.2153784003331456e-05,
+          "force_rms": 1.0469962419490188e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 4.056450582841838e-08,
+          "force_max_abs": 4.25790584657193e-06,
+          "force_rms": 1.5998410218883425e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-96.json": {
+      "passed": true,
+      "source_revision": "3cd1b5ee8633bc8fe9922a9b408dd8923dec64db",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 637.5851171351969,
+      "warm_median_seconds": 44.75533329695463,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 4.853976586597734e-07,
+          "force_max_abs": 2.218378174928537e-05,
+          "force_rms": 1.0492037089180377e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.853976586597734e-07,
+          "force_max_abs": 2.2183781728440932e-05,
+          "force_rms": 1.049203709626567e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.853976586597734e-07,
+          "force_max_abs": 2.218378171095492e-05,
+          "force_rms": 1.0492037092924842e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.853976586597734e-07,
+          "force_max_abs": 2.2183781743595476e-05,
+          "force_rms": 1.0492037085069435e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 4.0552521340941894e-08,
+          "force_max_abs": 4.278219925879512e-06,
+          "force_rms": 1.6051750464544378e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    }
+  }
+}

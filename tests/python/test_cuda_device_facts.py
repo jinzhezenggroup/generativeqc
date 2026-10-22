@@ -258,6 +258,9 @@ cudaError_t cudaDeviceGetAttribute(int*,cudaDeviceAttr,int);
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp*,int);
 cudaError_t cudaPeekAtLastError();
 cudaError_t cudaGetLastError();
+constexpr int cudaLimitStackSize=0;
+cudaError_t cudaDeviceGetLimit(std::size_t*,int);
+cudaError_t cudaDeviceSetLimit(int,std::size_t);
 """
 
 HARNESS = r"""
@@ -267,8 +270,32 @@ HARNESS = r"""
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <atomic>
+#include <chrono>
+#include <thread>
 using namespace generativeqc::runtime;
 int mode=0, epoch=0, attributes=0, properties=0, opens=0, last_error=0, clears=0;
+std::atomic<std::size_t> stack_bytes{1024};
+std::atomic<bool> small_read{false}, lowered{false};
+thread_local bool small_request=false;
+cudaError_t cudaDeviceGetLimit(std::size_t* output,int limit) {
+  assert(limit==cudaLimitStackSize);
+  if(mode==13) return 77;
+  *output=stack_bytes.load();
+  if(small_request) {
+    small_read=true;
+    // Expose an unprotected read/raise race without deadlocking a correct
+    // serialized implementation: the peer starts after the smaller read.
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  return cudaSuccess;
+}
+cudaError_t cudaDeviceSetLimit(int limit,std::size_t value) {
+  assert(limit==cudaLimitStackSize);
+  if(mode==14) return 88;
+  if(stack_bytes.exchange(value)>value) lowered=true;
+  return cudaSuccess;
+}
 int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100};
 int sm(int device) { return 100+5*device+epoch; }
 std::size_t memory(int device) { return (std::size_t{1}<<35)+device+epoch; }
@@ -344,6 +371,29 @@ void check(int device,int expected_error=0) {
 }
 int main(int argc,char** argv) {
   assert(argc==2);mode=std::atoi(argv[1]);
+  if(mode>=12) {
+    if(mode==13 || mode==14) {
+      assert(cuda_ensure_stack_limit(32768)==(mode==13 ? 77 : 88));
+      assert(stack_bytes==1024);
+      return 0;
+    }
+    std::thread small([] {
+      small_request=true;
+      assert(cuda_ensure_stack_limit(32768)==cudaSuccess);
+    });
+    std::thread large([] {
+      while(!small_read.load()) std::this_thread::yield();
+      assert(cuda_ensure_stack_limit(65536)==cudaSuccess);
+    });
+    small.join();large.join();
+    assert(!lowered && stack_bytes==65536);
+    assert(cuda_ensure_stack_limit(32768)==cudaSuccess && stack_bytes==65536);
+    // A newly selected context must be queried afresh, not skipped because
+    // this process previously established a larger floor elsewhere.
+    stack_bytes=1024;
+    assert(cuda_ensure_stack_limit(32768)==cudaSuccess && stack_bytes==32768);
+    return 0;
+  }
   if (mode==9 || mode==11) {
     last_error=mode==9 ? 700 : cudaErrorInvalidValue;
     check(7,last_error);
@@ -410,8 +460,11 @@ def test_fresh_facts_and_failure_fallback(tmp_path: Path, provider: str) -> None
         )
         objects.append(str(output))
     binary = tmp_path / "facts"
-    subprocess.run([compiler, *objects, "-ldl", "-o", str(binary)], check=True)
-    for mode in [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11]:
+    subprocess.run(
+        [compiler, *objects, "-ldl", "-pthread", "-o", str(binary)], check=True
+    )
+    modes = [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11]
+    for mode in [*modes, 12, 13, 14]:
         subprocess.run([str(binary), str(mode)], check=True, timeout=10)
 
 

@@ -518,8 +518,74 @@ def collect_lowering_candidates(
     return tuple(collected)
 
 
+def candidate_layout_rejection(candidate: LoweringCandidate) -> str | None:
+    """Bind every physical conversion to its request and charge its obligations."""
+    execution = candidate.execution
+    if execution is None:
+        return None
+    changed = {
+        old.operand: (old, new)
+        for old, new in zip(candidate.request.operands, execution.layouts, strict=True)
+        if old.strides != new.strides or new.alignment > old.alignment
+    }
+    expected = {
+        (operand, stage)
+        for operand, (old, _) in changed.items()
+        for stage in ("before", "after")
+        if (stage == "before" and old.access != "write")
+        or (stage == "after" and old.access != "read")
+    }
+    transfers = execution.layout_transfers
+    actual = {(transfer.source.operand, transfer.stage) for transfer in transfers}
+    if actual != expected:
+        return (
+            "physical layout change requires exact explicit pack/publication transfers"
+        )
+    if not transfers:
+        return None
+    precision = execution.precision
+    request = candidate.request
+    if (
+        precision.input_dtypes != request.input_dtypes
+        or precision.directive.storage_dtype != request.dtype
+    ):
+        return "layout transfer does not implement a combined storage cast"
+    input_dtypes = {
+        row.operand: dtype
+        for row, dtype in zip(
+            (row for row in request.operands if row.access != "write"),
+            request.input_dtypes,
+            strict=True,
+        )
+    }
+    buffers = {}
+    traffic = 0
+    for transfer in transfers:
+        old, new = changed[transfer.source.operand]
+        source, destination = (old, new) if transfer.stage == "before" else (new, old)
+        if transfer.source != source or transfer.destination != destination:
+            return "layout transfer endpoints do not match the requested physical views"
+        dtype = input_dtypes.get(old.operand, request.dtype)
+        if transfer.dtype != dtype:
+            return "layout transfer dtype does not match operand storage"
+        buffers[old.operand] = max(buffers.get(old.operand, 0), transfer.buffer_bytes)
+        traffic += transfer.read_bytes + transfer.write_bytes
+    required = checked_bytes(
+        sum(buffers.values()), "layout transfer simultaneous bytes"
+    )
+    if execution.temporary_bytes < required:
+        return f"layout transfer temporary bytes are omitted: {execution.temporary_bytes} < {required}"
+    traffic = checked_bytes(traffic, "complete layout transfer traffic")
+    if candidate.cost is not None and candidate.cost.pack_bytes < traffic:
+        return f"candidate cost omits layout transfer traffic: {candidate.cost.pack_bytes} < {traffic}"
+    return None
+
+
 def candidate_constraint_rejection(candidate: LoweringCandidate) -> str | None:
     """Apply common limits without asserting provider-specific numerical legality."""
+    rejection = candidate_layout_rejection(candidate)
+    if rejection is not None:
+        return rejection
     limits = candidate.request.constraints
     if limits is None:
         return None

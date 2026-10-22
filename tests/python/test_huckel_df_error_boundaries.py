@@ -166,18 +166,19 @@ Matrix prepare_initial_density(const core::System& system, const auto&, const Ma
 struct Diis { explicit Diis(unsigned) {} Matrix update(const Matrix& f, const Matrix&) { return f; } };
 struct CudaDensityFittingDeviceScfItem {
   bool converged{}; unsigned iterations{}; double energy{}, energy_change{}, density_rms{};
+  std::uint64_t fock_builds{};
 };
 unsigned cuda_df_iteration_diis_history(const ScfOptions& options) { return options.diis_history; }
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJkPlan* plan,
     const Matrix&, const Matrix&, const Matrix&, const std::vector<std::int32_t>&,
     const Matrix&, unsigned, double, double, Matrix& final_density,
-    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned) {
+    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned, bool) {
   if (boundary == Boundary::Compact && injection_enabled) return injected_status;
   if (boundary == Boundary::Iteration || boundary == Boundary::FinalHost)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   for (auto source : plan->sources) {
     final_density.push_back(2);
-    records.push_back({true, 2, 20.0 + source, 0, 0});
+    records.push_back({true, 2, 20.0 + source, 0, 0, 3});
   }
   return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -209,13 +210,13 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system, const co
   return result;
 }
 void finalize_density_fitting_rhf(const DensityFittingScfData&, const Matrix&, std::size_t,
-    Matrix&, const ScfOptions&, ScfResult&, CudaDensityFittingJkPlan*, std::size_t, bool = false);
+    Matrix&, const ScfOptions&, ScfResult&, CudaDensityFittingJkPlan*, std::size_t, bool = false, bool = false);
 """
 
 _FINALIZE = r"""
 void finalize_density_fitting_rhf(const DensityFittingScfData&, const Matrix&, std::size_t,
     Matrix& density, const ScfOptions&, ScfResult& result,
-    CudaDensityFittingJkPlan* plan, std::size_t slot, bool) {
+    CudaDensityFittingJkPlan* plan, std::size_t slot, bool, bool) {
   in_finalization = true;
   try { device_df_eigen({1}, nullptr, nullptr, plan, slot); }
   catch (...) { in_finalization = false; throw; }
@@ -287,7 +288,12 @@ int main(int argc, char** argv) {
     assert(neighbor.scf.energy == expected.scf.energy);
     assert(neighbor.scf.density == expected.scf.density);
     assert(neighbor.scf.iterations == expected.scf.iterations);
-    assert(neighbor.scf.fock_builds == expected.scf.fock_builds);
+    // A compact numerical refusal affects the whole physical batch: its
+    // missing execution census cannot be certified by the successful retry.
+    if (boundary == Boundary::Compact)
+      assert(!neighbor.scf.preliminary_guess.work_counters_complete);
+    else
+      assert(neighbor.scf.fock_builds == expected.scf.fock_builds);
     assert(neighbor.scf.preliminary_guess.outcome == initial_guess::PreliminaryOutcome::Used);
     assert(neighbor.scf.preliminary_guess.target_attempts == 1);
     assert(core_attempts.back() == 0);

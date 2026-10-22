@@ -1,0 +1,14 @@
+{
+  "path": "src/scf/cuda/df_md_raw.cu",
+  "role": "runtime",
+  "subsystem": "df_values",
+  "reason": "Budgeted immutable E ownership, public-component primitive intervals and packed raw launch scheduling. Generated radial/address/parity algebra and the shared normalized E preparation own the mathematical sources.",
+  "regions": [
+    {
+      "start": "__global__ void raw_tile",
+      "stop": "struct CudaDfMdRaw {",
+      "role": "scientific",
+      "reason": "Strict FP64 public three-center contraction of prepared normalized E through the shared compiler-owned Coulomb matrix; no new recurrence or screening."
+    }
+  ]
+}

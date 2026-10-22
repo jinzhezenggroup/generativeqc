@@ -6,6 +6,8 @@ The qualified WB97M-V composition fits LR exchange only with the explicit
 keeps exact LR integrals in both modes. The tiny orbital auxiliary basis
 qualifies composition, not basis-set accuracy.
 Run from the checkout with PYTHONPATH=python python tools/verify_mixed_df_rsh_cpu.py.
+Default reproduces historical CPU PySCF; --vv10-density-cutoff 1e-10 explicitly
+qualifies the new native molecular domain without changing reference defaults.
 """
 
 from __future__ import annotations
@@ -14,21 +16,14 @@ import argparse
 import json
 
 
-def main() -> None:
+def _run(range_exchange: str) -> None:
     import numpy as np
     import pyscf
     from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
     from pyscf import df, dft, gto, lib, scf
     from pyscf.dft import libxc
 
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--range-exchange", choices=("direct", "df", "both"), default="both"
-    )
-    args = parser.parse_args()
-    modes = (
-        ("direct", "df") if args.range_exchange == "both" else (args.range_exchange,)
-    )
+    modes = ("direct", "df") if range_exchange == "both" else (range_exchange,)
     assert pyscf.__version__ == "2.14.0"
     assert libxc.libxc_version() == "7.0.0"
     lib.num_threads(1)
@@ -131,6 +126,22 @@ def main() -> None:
                         }
                     )
                 )
+
+
+def main() -> None:
+    """Parse both controls once and apply the declared reference density domain."""
+    from _pyscf_vv10_domain import vv10_density_domain
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--vv10-density-cutoff", type=float, choices=(1e-8, 1e-10), default=1e-8
+    )
+    parser.add_argument(
+        "--range-exchange", choices=("direct", "df", "both"), default="both"
+    )
+    args = parser.parse_args()
+    with vv10_density_domain(args.vv10_density_cutoff):
+        _run(args.range_exchange)
 
 
 if __name__ == "__main__":

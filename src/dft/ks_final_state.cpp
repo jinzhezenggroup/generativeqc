@@ -132,6 +132,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       scf::require_wb97mv_composition(fock, *model.range_correction, *model.nonlocal_correlation);
     }
     validate_grid_spec(model.grid);
+    if (model.nonlocal_grid) {
+      if (!model.nonlocal_correlation || *model.nonlocal_grid == model.grid) return false;
+      validate_grid_spec(*model.nonlocal_grid);
+    }
     scf::validate_resolved_fock_build(fock);
     if (model.range_correction) scf::validate_resolved_fock_build(*model.range_correction);
   } catch (const std::invalid_argument&) {

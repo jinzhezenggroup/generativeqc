@@ -1,0 +1,672 @@
+{
+  "evidence_sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350",
+  "records": [
+    {
+      "arm": "fast",
+      "method": "hf",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 11,
+      "cold_fock_builds": 13,
+      "cold_seconds": 22.45447091385722,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        2.9208033569157124,
+        2.9161162227392197,
+        2.9228722862899303
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "fast",
+      "method": "pbe",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 39.359056022018194,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        6.621763318777084,
+        6.604568183422089,
+        6.616371192038059
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "fast",
+      "method": "pbe",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 19.711542632430792,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        6.591077532619238,
+        6.611617486923933,
+        6.623037524521351
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "fast",
+      "method": "pbe0",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 52.90185780823231,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        11.356088139116764,
+        11.373514119535685,
+        11.422648381441832
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 15,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 9,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "b3lyp",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 53.010436713695526,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        11.4289031624794,
+        11.433190654963255,
+        11.43554436787963
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 16,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "b3lyp",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 30.631414737552404,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        8.468902237713337,
+        8.442995019257069,
+        8.44875868409872
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "hf",
+      "mode": "df",
+      "atoms": 3,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 0.4706965684890747,
+      "warm_iterations": [
+        2,
+        2,
+        2
+      ],
+      "warm_fock_builds": [
+        2,
+        2,
+        2
+      ],
+      "warm_seconds": [
+        0.02041035145521164,
+        0.019016552716493607,
+        0.01933639869093895
+      ],
+      "qualification": "failed",
+      "previous_readme_iterations": 12,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 8,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "hf",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 11,
+      "cold_fock_builds": 11,
+      "cold_seconds": 98.0776100717485,
+      "warm_iterations": [
+        2,
+        2,
+        2
+      ],
+      "warm_fock_builds": [
+        2,
+        2,
+        2
+      ],
+      "warm_seconds": [
+        4.8469629399478436,
+        4.834316022694111,
+        4.830628354102373
+      ],
+      "qualification": "failed",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "hf",
+      "mode": "direct",
+      "atoms": 3,
+      "cold_iterations": 9,
+      "cold_fock_builds": 11,
+      "cold_seconds": 1.6762785911560059,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        0.07103842496871948,
+        0.07131752371788025,
+        0.07098441198468208
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 12,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 8,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "hf",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 11,
+      "cold_fock_builds": 13,
+      "cold_seconds": 22.56491069495678,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        2.921372190117836,
+        2.9204484298825264,
+        2.920271560549736
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "m06-2x",
+      "mode": "df",
+      "atoms": 3,
+      "cold_iterations": 8,
+      "cold_fock_builds": 8,
+      "cold_seconds": 2.6097016371786594,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        0.14061438664793968,
+        0.09950109198689461,
+        0.09928405284881592
+      ],
+      "qualification": "failed",
+      "previous_readme_iterations": 12,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 7,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "m06-2x",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 10,
+      "cold_fock_builds": 10,
+      "cold_seconds": 56.54224509373307,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        11.994248673319817,
+        12.062828734517097,
+        12.074172243475914
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 16,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "m06-2x",
+      "mode": "direct",
+      "atoms": 3,
+      "cold_iterations": 8,
+      "cold_fock_builds": 8,
+      "cold_seconds": 1.9735690578818321,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        0.10783739015460014,
+        0.10727484151721,
+        0.10749360918998718
+      ],
+      "qualification": "failed",
+      "previous_readme_iterations": 11,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 7,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "m06-2x",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 10,
+      "cold_fock_builds": 10,
+      "cold_seconds": 34.80127830430865,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        9.0260608792305,
+        8.942271016538143,
+        8.993400543928146
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "pbe",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 10,
+      "cold_fock_builds": 10,
+      "cold_seconds": 42.07813614234328,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        7.151674751192331,
+        7.222949616611004,
+        7.224185470491648
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "pbe",
+      "mode": "direct",
+      "atoms": 3,
+      "cold_iterations": 8,
+      "cold_fock_builds": 8,
+      "cold_seconds": 1.4247566610574722,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        0.0572158619761467,
+        0.05688943713903427,
+        0.05700934678316116
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 10,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 8,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "pbe",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 11,
+      "cold_fock_builds": 11,
+      "cold_seconds": 23.983232367783785,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        6.9907306507229805,
+        7.024209193885326,
+        6.812030136585236
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "pbe0",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 52.44195768982172,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        11.19374868273735,
+        11.157874222844839,
+        11.135473422706127
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 15,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 9,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "pbe0",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 30.76424651220441,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        8.460426930338144,
+        8.451517533510923,
+        8.44474183768034
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 9,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "r2scan-3c",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 10,
+      "cold_fock_builds": 10,
+      "cold_seconds": 54.85020096972585,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        16.057029183954,
+        16.038485262542963,
+        16.0304505713284
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 15,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "r2scan-3c",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 10,
+      "cold_fock_builds": 10,
+      "cold_seconds": 52.90828623622656,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        18.918391596525908,
+        18.917472701519728,
+        18.926091738045216
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 15,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 11,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "r2scan",
+      "mode": "df",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 43.14327524974942,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        8.107453096657991,
+        8.121369659900665,
+        7.928226221352816
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    },
+    {
+      "arm": "standard",
+      "method": "r2scan",
+      "mode": "direct",
+      "atoms": 96,
+      "cold_iterations": 9,
+      "cold_fock_builds": 9,
+      "cold_seconds": 23.959483858197927,
+      "warm_iterations": [
+        1,
+        1,
+        1
+      ],
+      "warm_fock_builds": [
+        1,
+        1,
+        1
+      ],
+      "warm_seconds": [
+        7.651389643549919,
+        7.455445870757103,
+        7.443562477827072
+      ],
+      "qualification": "qualified",
+      "previous_readme_iterations": 14,
+      "previous_readme_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a",
+      "existing_stock_gpu4pyscf_iterations": 10,
+      "existing_stock_gpu4pyscf_source": "1178a03c7f45074cc705a7accd676f0ffc1b6d2a"
+    }
+  ]
+}

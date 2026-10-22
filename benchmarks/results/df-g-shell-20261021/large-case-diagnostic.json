@@ -1,0 +1,1143 @@
+{
+  "schema": "generativeqc.df-g-shell-large-case-diagnostic.v1",
+  "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+  "measurement": {
+    "schema": "generativeqc.readme-defaults.v2",
+    "status": "running",
+    "arm": "standard",
+    "method": "r2scan-3c",
+    "mode": "df",
+    "atoms": 96,
+    "geometry_bohr": [
+      [
+        "O",
+        [
+          -5.68695864870603,
+          -9.653477530875584,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -6.934741636687752,
+          -11.0488257295427,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -4.339681395600782,
+          -10.03509801091492,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.653477530875584,
+          -13.210302597551673,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -10.03509801091492,
+          -14.557579850656921,
+          3.923524987977727
+        ]
+      ],
+      [
+        "H",
+        [
+          -11.0488257295427,
+          -11.96251960956995,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "O",
+        [
+          -13.112343224611836,
+          -9.496961557199665,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -13.553997598721192,
+          -9.398815932861053,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -12.092024916334609,
+          -7.999127260240872,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.400299689058038,
+          -13.112343224611836,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -9.49844531339665,
+          -13.553997598721192,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -10.89813398601683,
+          -12.092024916334609,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.496961557199665,
+          -5.784918021645867,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -7.999127260240872,
+          -6.805236329923094,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "H",
+        [
+          -9.398815932861053,
+          -5.343263647536509,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.243783715382119,
+          -5.68695864870603,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -7.848435516715002,
+          -6.934741636687752,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -8.862163235342782,
+          -4.339681395600782,
+          3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -13.210302597551673,
+          -9.243783715382119,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -11.96251960956995,
+          -7.848435516715002,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -14.557579850656921,
+          -8.862163235342782,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -5.784918021645867,
+          -9.400299689058038,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -5.343263647536509,
+          -9.49844531339665,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -6.805236329923094,
+          -10.89813398601683,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          -5.68695864870603,
+          9.243783715382119,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -6.934741636687752,
+          7.848435516715002,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -4.339681395600782,
+          8.862163235342782,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.653477530875584,
+          5.68695864870603,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -10.03509801091492,
+          4.339681395600782,
+          3.923524987977727
+        ]
+      ],
+      [
+        "H",
+        [
+          -11.0488257295427,
+          6.934741636687752,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "O",
+        [
+          -13.112343224611836,
+          9.400299689058038,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -13.553997598721192,
+          9.49844531339665,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -12.092024916334609,
+          10.89813398601683,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.400299689058038,
+          5.784918021645867,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -9.49844531339665,
+          5.343263647536509,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -10.89813398601683,
+          6.805236329923094,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.496961557199665,
+          13.112343224611836,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -7.999127260240872,
+          12.092024916334609,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "H",
+        [
+          -9.398815932861053,
+          13.553997598721192,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "O",
+        [
+          -9.243783715382119,
+          13.210302597551673,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -7.848435516715002,
+          11.96251960956995,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -8.862163235342782,
+          14.557579850656921,
+          3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -13.210302597551673,
+          9.653477530875584,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          -11.96251960956995,
+          11.0488257295427,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          -14.557579850656921,
+          10.03509801091492,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          -5.784918021645867,
+          9.496961557199665,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          -5.343263647536509,
+          9.398815932861053,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          -6.805236329923094,
+          7.999127260240872,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          13.210302597551673,
+          -9.653477530875584,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          11.96251960956995,
+          -11.0488257295427,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          14.557579850656921,
+          -10.03509801091492,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          9.243783715382119,
+          -13.210302597551673,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          8.862163235342782,
+          -14.557579850656921,
+          3.923524987977727
+        ]
+      ],
+      [
+        "H",
+        [
+          7.848435516715002,
+          -11.96251960956995,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "O",
+        [
+          5.784918021645867,
+          -9.496961557199665,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          5.343263647536509,
+          -9.398815932861053,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          6.805236329923094,
+          -7.999127260240872,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          9.496961557199665,
+          -13.112343224611836,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          9.398815932861053,
+          -13.553997598721192,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          7.999127260240872,
+          -12.092024916334609,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          9.400299689058038,
+          -5.784918021645867,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          10.89813398601683,
+          -6.805236329923094,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "H",
+        [
+          9.49844531339665,
+          -5.343263647536509,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "O",
+        [
+          9.653477530875584,
+          -5.68695864870603,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          11.0488257295427,
+          -6.934741636687752,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          10.03509801091492,
+          -4.339681395600782,
+          3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          5.68695864870603,
+          -9.243783715382119,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          6.934741636687752,
+          -7.848435516715002,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          4.339681395600782,
+          -8.862163235342782,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          13.112343224611836,
+          -9.400299689058038,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          13.553997598721192,
+          -9.49844531339665,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          12.092024916334609,
+          -10.89813398601683,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          13.210302597551673,
+          9.243783715382119,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          11.96251960956995,
+          7.848435516715002,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          14.557579850656921,
+          8.862163235342782,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          9.243783715382119,
+          5.68695864870603,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          8.862163235342782,
+          4.339681395600782,
+          3.923524987977727
+        ]
+      ],
+      [
+        "H",
+        [
+          7.848435516715002,
+          6.934741636687752,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "O",
+        [
+          5.784918021645867,
+          9.400299689058038,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          5.343263647536509,
+          9.49844531339665,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          6.805236329923094,
+          10.89813398601683,
+          2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          9.496961557199665,
+          5.784918021645867,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          9.398815932861053,
+          5.343263647536509,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          7.999127260240872,
+          6.805236329923094,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "O",
+        [
+          9.400299689058038,
+          13.112343224611836,
+          -2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          10.89813398601683,
+          12.092024916334609,
+          -2.9564098944273542
+        ]
+      ],
+      [
+        "H",
+        [
+          9.49844531339665,
+          13.553997598721192,
+          -0.8661927624563385
+        ]
+      ],
+      [
+        "O",
+        [
+          9.653477530875584,
+          13.210302597551673,
+          2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          11.0488257295427,
+          11.96251960956995,
+          2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          10.03509801091492,
+          14.557579850656921,
+          3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          5.68695864870603,
+          9.653477530875584,
+          -2.7688817211501036
+        ]
+      ],
+      [
+        "H",
+        [
+          6.934741636687752,
+          11.0488257295427,
+          -2.8921348693023314
+        ]
+      ],
+      [
+        "H",
+        [
+          4.339681395600782,
+          10.03509801091492,
+          -3.923524987977727
+        ]
+      ],
+      [
+        "O",
+        [
+          13.112343224611836,
+          9.496961557199665,
+          2.648657577077294
+        ]
+      ],
+      [
+        "H",
+        [
+          13.553997598721192,
+          9.398815932861053,
+          0.8661927624563385
+        ]
+      ],
+      [
+        "H",
+        [
+          12.092024916334609,
+          7.999127260240872,
+          2.9564098944273542
+        ]
+      ]
+    ],
+    "warm_repeats": 3,
+    "orbital_basis": "def2-mTZVPP",
+    "basis_representation": "spherical",
+    "charge": 0,
+    "spin": 0,
+    "source_revision": "33461b49e19914dca95dc3529ecc7a86d156d00d",
+    "runner_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+    "slurm_job_id": "11402",
+    "thread_controls": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "SLURM_CPUS_PER_TASK": "2"
+    },
+    "accelerator": {
+      "backend": "cuda",
+      "device_id": 0,
+      "name": "NVIDIA GeForce RTX 5090",
+      "compute_capability": [
+        12,
+        0
+      ],
+      "total_global_memory_bytes": 33668988928,
+      "multiprocessor_count": 170,
+      "clock_rate_khz": 2550000,
+      "driver_version": 13000,
+      "runtime_version": 12090,
+      "nvidia_smi": {
+        "performance_state": "P0",
+        "power_draw_watts": 80.15,
+        "power_limit_watts": 600.0,
+        "sm_clock_mhz": 2895.0,
+        "memory_clock_mhz": 14001.0,
+        "temperature_celsius": 39.0,
+        "sampling_point": "after benchmark measurements"
+      }
+    },
+    "environment": {
+      "timestamp_utc": "2026-10-20T16:17:50.293568+00:00",
+      "git": {
+        "commit": null,
+        "dirty": null,
+        "pending_generated_benchmark_artifacts": null
+      },
+      "host": {
+        "node": "node1",
+        "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+        "machine": "x86_64",
+        "processor": "x86_64"
+      },
+      "python": {
+        "version": "3.13.9",
+        "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+      },
+      "packages": {
+        "pyscf": "2.14.0",
+        "gpu4pyscf": "1.8.1",
+        "cupy": "13.6.0",
+        "numpy": "2.4.6"
+      },
+      "runtime": {
+        "generativeqc_library": "/data/jzzeng/fast-warm-20261020/source/build/cuda-release-sm120/libgenerativeqc.so",
+        "cuda_visible_devices": "1"
+      },
+      "toolchain": {
+        "nvcc": {
+          "path": "/group/software/cuda-12.9.1/bin/nvcc",
+          "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "ptxas": {
+          "path": "/group/software/cuda-12.9.1/bin/ptxas",
+          "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+        },
+        "cuobjdump": {
+          "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+          "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+        },
+        "host_cxx": {
+          "path": "/usr/bin/c++",
+          "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+        }
+      },
+      "accelerator": null
+    },
+    "protocol": {
+      "cold": "constructor+prepare+SCF+forces+host-export",
+      "warm": "same-owner; frozen engine-local cold density",
+      "grid_overrides": false,
+      "force_response_overrides": true,
+      "convergence": "native engine/profile defaults; common observable gates",
+      "residual_definitions": {
+        "generativeqc": "density RMS",
+        "gpu4pyscf": "orbital gradient norm"
+      },
+      "moved_geometry": false,
+      "accuracy_qualification": "unverified",
+      "common_observable_gates": {
+        "energy_abs_per_atom_hartree": 1e-05,
+        "force_max_abs_hartree_per_bohr": 0.0001,
+        "force_rms_hartree_per_bohr": 3e-05
+      }
+    },
+    "samples": [],
+    "auxiliary_input_sha256": "69c90770fd4dad720ffad275c47c08b91a5bff82ee5c05c30dbfa231a6a57ebb"
+  },
+  "completion_evidence": "Slurm accounting is disabled. The retained srun log reports job 11402 termination at its 45-minute time limit; the original measurement remains an untouched partial receipt.",
+  "measurement_log": "sccache 0.16.0\nsrun: Job step aborted: Waiting up to 32 seconds for job step to finish.\nslurmstepd-node1: error: *** STEP 11402.0 ON node1 CANCELLED AT 2026-10-21T01:03:08 DUE TO TIME LIMIT ***\nsrun: error: node1: task 0: Terminated\n",
+  "diagnostic_log": "srun: job 11412 queued and waiting for resources\nsrun: job 11412 has been allocated resources\nsccache 0.16.0\nsrun: error: node1: task 0: Exited with exit code 124\n",
+  "diagnostic_trace_sha256": "da11f01e1934b13f814cad36b03178a7c0c32e784affff08d00e154fa42960f8",
+  "diagnostic_trace_retained_at": "n1:/data/jzzeng/df-g-shell-20261021/receipts/r2scan3c96-diagnostic-progress.jsonl",
+  "first_ri_j_ms": 135361.279746,
+  "resource_policy": [
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606805897,
+      "elapsed_ms": 2.9e-05,
+      "event": "BEGIN",
+      "status": "started",
+      "execution": "host",
+      "name": "prepared_df_resource_policy"
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606826909,
+      "elapsed_ms": 0.021041,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "resolved_total_budget_bytes",
+      "value": 21676204032
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606836223,
+      "elapsed_ms": 0.030355,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "resolved_value_budget_bytes",
+      "value": 14536349827
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606844746,
+      "elapsed_ms": 0.038878,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "resolved_response_budget_bytes",
+      "value": 7139854205
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606852758,
+      "elapsed_ms": 0.04689,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "observed_free_device_bytes",
+      "value": 33110228992
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606860510,
+      "elapsed_ms": 0.054642,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "value_peak_bytes",
+      "value": 14509789870
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606868161,
+      "elapsed_ms": 0.062293,
+      "event": "VALUE",
+      "status": "observed",
+      "execution": "host",
+      "name": "prepared_df_resource_policy",
+      "key": "value_storage",
+      "value": 0
+    },
+    {
+      "schema": "generativeqc.df_progress",
+      "version": 1,
+      "id": 3,
+      "parent": 0,
+      "time_ns": 25161715606875953,
+      "elapsed_ms": 0.070085,
+      "event": "END",
+      "status": "returned",
+      "execution": "host",
+      "name": "prepared_df_resource_policy"
+    }
+  ],
+  "reason": "Clean complete endpoint timed out at 45 minutes; separate traced 180-second diagnostic isolates repeated three-center value generation inside RI-J. Partial timings are not ranked.",
+  "first_ri_j_value_summary": {
+    "nbf": {
+      "observations": 1,
+      "minimum": 1088,
+      "maximum": 1088,
+      "sum": 1088
+    },
+    "naux": {
+      "observations": 1,
+      "minimum": 6816,
+      "maximum": 6816,
+      "sum": 6816
+    },
+    "systems": {
+      "observations": 1,
+      "minimum": 1,
+      "maximum": 1,
+      "sum": 1
+    },
+    "system_offset": {
+      "observations": 1,
+      "minimum": 0,
+      "maximum": 0,
+      "sum": 0
+    },
+    "source_backed": {
+      "observations": 1,
+      "minimum": 1,
+      "maximum": 1,
+      "sum": 1
+    },
+    "streamed": {
+      "observations": 1,
+      "minimum": 1,
+      "maximum": 1,
+      "sum": 1
+    },
+    "planner_ao_pair_tile": {
+      "observations": 1,
+      "minimum": 1183744,
+      "maximum": 1183744,
+      "sum": 1183744
+    },
+    "executed_ao_pairs": {
+      "observations": 1,
+      "minimum": 1183744,
+      "maximum": 1183744,
+      "sum": 1183744
+    },
+    "executed_auxiliary_tile": {
+      "observations": 1,
+      "minimum": 185,
+      "maximum": 185,
+      "sum": 185
+    },
+    "raw_tensor_passes": {
+      "observations": 1,
+      "minimum": 2,
+      "maximum": 2,
+      "sum": 2
+    },
+    "tile_submission": {
+      "observations": 74,
+      "distinct": [
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":0,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":1110,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":1295,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":1480,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":1665,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":185,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":1850,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2035,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2220,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2405,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2590,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2775,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":2960,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":3145,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":3330,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":3515,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":370,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":3700,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":3885,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4070,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4255,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4440,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4625,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4810,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":4995,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":5180,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":5365,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":555,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":5550,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":5735,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":5920,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":6105,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":6290,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":6475,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":6660,\"auxiliary_count\":156,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":740,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}",
+        "{\"system\":0,\"pair_begin\":0,\"pair_count\":1183744,\"auxiliary_begin\":925,\"auxiliary_count\":185,\"derivative_coordinate\":-1,\"transformed\":false}"
+      ]
+    },
+    "raw_tile_productions": {
+      "observations": 74,
+      "minimum": 1,
+      "maximum": 1,
+      "sum": 74
+    },
+    "raw_value_bytes": {
+      "observations": 74,
+      "minimum": 1477312512,
+      "maximum": 1751941120,
+      "sum": 129094385664
+    },
+    "streamed_coulomb_factor_first": {
+      "observations": 1,
+      "minimum": 1,
+      "maximum": 1,
+      "sum": 1
+    },
+    "streamed_coulomb_factor_gemvs": {
+      "observations": 1,
+      "minimum": 2,
+      "maximum": 2,
+      "sum": 2
+    },
+    "streamed_coulomb_factor_flops": {
+      "observations": 1,
+      "minimum": 185831424,
+      "maximum": 185831424,
+      "sum": 185831424
+    },
+    "cuda_error": {
+      "observations": 1,
+      "minimum": 0,
+      "maximum": 0,
+      "sum": 0
+    }
+  }
+}

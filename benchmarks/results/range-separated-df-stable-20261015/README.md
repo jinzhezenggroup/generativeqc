@@ -7,12 +7,16 @@ historical evidence; they are not rewritten into successful measurements.
 
 To respect the repository-wide evidence byte budget, original raw JSON, exact
 qualification receipts, harnesses, both source identities, the historical patch
-and the original historical README are retained losslessly in `evidence.json.xz`.
-`storage.json` authenticates encoded and decoded bytes. Restore all original
-relative names into ignored local storage before using the paths below:
+and the original historical README remain lossless in the existing Git history.
+The shared `../range-df-history-storage.json` pins both xz bundles; `storage.json`
+also authenticates decoded bytes. Restore offline before using the paths below:
 
 ```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/range-df-history-storage.json \
+  --output .artifacts/range-df-history
 python benchmarks/results/range-separated-df-stable-20261015/verify.py \
+  --archive .artifacts/range-df-history/benchmarks/results/range-separated-df-stable-20261015/evidence.json.xz \
   --extract build/validation/range-df-evidence
 ```
 

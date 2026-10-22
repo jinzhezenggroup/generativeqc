@@ -635,6 +635,9 @@ install(TARGETS generativeqc
 )
 # The native library embeds the BSE-derived catalog even without the CLI.
 install(FILES LICENSES/bse-data-BSD-3-Clause.txt
+              LICENSES/gpu4pyscf-Apache-2.0.txt
+              LICENSES/pyscf-Apache-2.0.txt
+              LICENSES/pyscf-NOTICE.txt
         DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

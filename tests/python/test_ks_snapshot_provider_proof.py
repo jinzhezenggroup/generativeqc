@@ -1,6 +1,5 @@
 """Exercise the native provider proof without pretending to execute CUDA forces."""
 
-import ast
 import ctypes as ct
 import typing
 from pathlib import Path
@@ -189,43 +188,92 @@ def test_exact_only_legacy_proof_preserves_exchange_presence(exchange: float) ->
     )
 
 
-def test_capacity_audit_rejects_unreviewed_snapshot_decode_bypass(
-    tmp_path: Path,
+def _assert_decode_admission(
+    decode: typing.Callable,
+    *,
+    mismatches: tuple[str, ...] = (
+        "owner",
+        "functional",
+        "coefficients",
+        "spin",
+        "basis",
+        "grid",
+        "requested_fitting",
+        "native_fitting",
+        "exchange",
+    ),
 ) -> None:
-    """The qualification owner hash is integrity evidence, not a call-count gate.
+    """Exercise the real decoder with detached native-export records."""
+    from test_libxc_snapshot_decode_identity import _decode_fixture
 
-    Construct a semantic bypass of the decoded provider check by inserting an
-    early return in the real owner method. This checks the retained upstream
-    source-integrity audit without coupling the test to how many times (or
-    under which local spelling) the provider-proof helper is called.
-    """
-    from tools.dft_mp_v1 import qualify_capacity
+    options, source, basis, grid = _decode_fixture(
+        "pbe", "unpolarized", selection="default"
+    )
+    state = decode(source, basis, grid)
+    assert "identity" in state, "decoder bypassed state publication"
+    assert state["identity"].functional_identity == options.functional.identity
+    assert state["identity"].grid_identity == grid.identity
+    assert state["_source"] is source
 
-    relative = "python/generativeqc/_ks_snapshot.py"
-    source = (Path(__file__).resolve().parents[2] / relative).read_text()
-    tree = ast.parse(source)
-    owner = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "NativeKsSnapshot"
-    )
-    decode = next(
-        node
-        for node in owner.body
-        if isinstance(node, ast.FunctionDef) and node.name == "decode"
-    )
-    # Change only decode, not the spelling or layout of any other owner.
-    # The injected early return would skip all provider-provenance admission.
-    lines = source.splitlines(keepends=True)
-    lines.insert(
-        decode.body[0].lineno - 1,
-        " " * decode.body[0].col_offset + "return {}\n",
-    )
-    target = tmp_path / relative
-    target.parent.mkdir(parents=True)
-    target.write_text("".join(lines))
-    with pytest.raises(RuntimeError, match="snapshot functional contract changed"):
-        qualify_capacity._snapshot_functional_contract(tmp_path)
+    class StaleSnapshot(RuntimeError):
+        pass
+
+    for mismatch in mismatches:
+        _, source, basis, grid = _decode_fixture(
+            "pbe", "unpolarized", selection="default"
+        )
+        if mismatch == "owner":
+
+            def reject_stale() -> None:
+                raise StaleSnapshot("revoked native snapshot")
+
+            source.check_current = reject_stale
+        elif mismatch == "functional":
+            metadata = list(source.metadata)
+            metadata[6] += 1
+            source.metadata = tuple(metadata)
+        elif mismatch == "coefficients":
+            source.values[-3] = 0.5
+        elif mismatch == "spin":
+            polarized, _, _, _ = _decode_fixture(
+                "pbe", "polarized", selection="default"
+            )
+            source._batch._calculator.ks_options = polarized
+        elif mismatch == "basis":
+            object.__setattr__(basis, "packed", 2 * basis.packed)
+        elif mismatch == "grid":
+            grid = type(grid)(grid.points, 2 * grid.weights, grid.owners, {})
+        elif mismatch == "requested_fitting":
+            source._density_fitting_requested = True
+        elif mismatch == "native_fitting":
+            source.fock_provider_proof = lambda: ("density-fitted", None, 1e-10)
+        else:
+            source.fock_provider_proof = lambda: ("exact", "exact", 0.0)
+        try:
+            decode(source, basis, grid)
+        except (ValueError, StaleSnapshot):
+            pass
+        else:
+            raise AssertionError(f"decoder admitted mismatched {mismatch}")
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    (
+        "owner",
+        "functional",
+        "coefficients",
+        "spin",
+        "basis",
+        "grid",
+        "requested_fitting",
+        "native_fitting",
+        "exchange",
+    ),
+)
+def test_snapshot_decode_rejects_mismatched_native_sources(mismatch: str) -> None:
+    """Behavioral admission survives source refactors without a body fingerprint."""
+    _assert_decode_admission(NativeKsSnapshot.decode, mismatches=(mismatch,))
 
 
 @pytest.mark.parametrize(

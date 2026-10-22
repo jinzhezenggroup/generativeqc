@@ -175,6 +175,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   if (!candidate) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   candidate->device_id = device_id;
   const auto requested_mapping = policy.requested_value_mapping;
+  candidate->automatic_value_mapping = requested_mapping == 3U;
   candidate->value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, true);
   candidate->raw_value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, false);
   candidate->value_math = policy.value_math;

@@ -78,6 +78,7 @@ struct LambdaOptions {
   // Unpromoted CUDA schedule. Budget/allocation refusal retains
   // the host-vector path with the same diagonal policy and physical audits.
   bool cuda_resident_krylov{false};
+  core::CorrelationConvergence convergence;
 };
 
 struct LambdaDiagnostic {

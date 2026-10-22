@@ -343,6 +343,16 @@ class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
     ]
 
 
+class NonlocalGridKsOptionsDescriptor(ApplicationPrecisionKsOptionsDescriptor):
+    """Private exact-layout extension, discovered before passing borrowed pointers."""
+
+    _fields_ = [
+        ("nonlocal_grid_version", ctypes.c_uint32),
+        ("nonlocal_grid_reserved", ctypes.c_uint32),
+        ("nonlocal_grid", ctypes.POINTER(KsOptionsDescriptor)),
+    ]
+
+
 class InitialGuessOptionsDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -1251,6 +1261,48 @@ class ResponseResultView(ctypes.Structure):
     ]
 
 
+ResponseValidate = ctypes.CFUNCTYPE(ctypes.c_int32, ctypes.c_void_p)
+ResponsePublish = ctypes.CFUNCTYPE(
+    ctypes.c_int32, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ResponseResultView)
+)
+
+
+class ResponseSequenceDescriptor(ctypes.Structure):
+    """Borrowed RHS matrix and synchronous lease/publication callbacks."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("gmres", ResponseGmresDescriptor),
+        ("rhs_count", ctypes.c_uint64),
+        ("row_stride", ctypes.c_uint64),
+        ("column_stride", ctypes.c_uint64),
+        ("rhs_element_count", ctypes.c_uint64),
+        ("max_numeric_bytes", ctypes.c_uint64),
+        ("validate", ResponseValidate),
+        ("validate_data", ctypes.c_void_p),
+        ("publish", ResponsePublish),
+        ("publish_data", ctypes.c_void_p),
+    ]
+
+
+class ResponseSequenceSummary(ctypes.Structure):
+    """Planned solver/staging/publication bounds, not full physical endpoint memory."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("workspace_limited", ctypes.c_int32),
+        ("published_count", ctypes.c_uint64),
+        ("converged_count", ctypes.c_uint64),
+        ("operator_actions", ctypes.c_uint64),
+        ("preconditioner_actions", ctypes.c_uint64),
+        ("peak_workspace_bytes", ctypes.c_uint64),
+        ("retained_solution_basis_bytes", ctypes.c_uint64),
+        ("staging_peak_bytes", ctypes.c_uint64),
+    ]
+
+
 @lru_cache(maxsize=8)
 def _load_response_library(path: str) -> ctypes.CDLL | None:
     """Bind only the additive CPU response protocol; an older library is explicit compatibility."""
@@ -1295,6 +1347,29 @@ def optional_response_library() -> ctypes.CDLL | None:
         if candidate.exists():
             return _load_response_library(str(candidate.resolve()))
     return None
+
+
+def optional_response_sequence_library() -> ctypes.CDLL | None:
+    """Bind the additive sequence protocol without changing selected-library failure policy."""
+    library = optional_response_library()
+    names = (
+        "generativeqc_response_sequence_workspace_v1",
+        "generativeqc_response_sequence_solve_v1",
+    )
+    if library is None or any(not hasattr(library, name) for name in names):
+        return None
+    library.generativeqc_response_sequence_workspace_v1.argtypes = [
+        ctypes.POINTER(ResponseSequenceDescriptor),
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    library.generativeqc_response_sequence_workspace_v1.restype = ctypes.c_int32
+    library.generativeqc_response_sequence_solve_v1.argtypes = [
+        ctypes.POINTER(ResponseSequenceDescriptor),
+        ctypes.POINTER(ResponseSequenceSummary),
+    ]
+    library.generativeqc_response_sequence_solve_v1.restype = ctypes.c_int32
+    return library
 
 
 def _installed_package_library() -> Path | None:
@@ -1395,15 +1470,20 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             void_pp,
         ]
         library.generativeqc_system_create_basis_template_v1.restype = ctypes.c_int
-    if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
-        library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
+    for name in (
+        "generativeqc_correlation_auxiliary_system_create_v1",
+        "generativeqc_ks_auxiliary_system_create_v1",
+        "generativeqc_scf_auxiliary_system_create_v1",
+    ):
+        create_auxiliary = getattr(library, name, None)
+        if create_auxiliary is None:
+            continue
+        create_auxiliary.argtypes = [
             ctypes.c_void_p,
             ctypes.POINTER(SystemDescriptor),
             void_pp,
         ]
-        library.generativeqc_correlation_auxiliary_system_create_v1.restype = (
-            ctypes.c_int
-        )
+        create_auxiliary.restype = ctypes.c_int
     library.generativeqc_system_create_ecp.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(SystemDescriptor),

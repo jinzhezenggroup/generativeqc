@@ -78,6 +78,7 @@ def reference(
     auxiliary_basis: Any = None,
     backend: str = "pyscf",
     case_snapshot: Any = None,
+    vv10_density_threshold: float = 1e-8,
 ) -> dict[str, Any]:
     """PySCF owns SCF, integrals, XC, partition and analytic moving-grid response.
 
@@ -87,8 +88,9 @@ def reference(
     Other RKS qualification consumers may select the XC functional, an explicit
     moved geometry and shared basis inputs. Nonlocal functionals use the same
     independent atomic rules for their second grid, including its full moving
-    response. PySCF's VV10 energy and gradient use the molecular 1e-8 density
-    threshold. The default PBE0 protocol keeps the original geometry and basis.
+    response. CPU PySCF retains its molecular 1e-8 density threshold; GPU
+    qualification callers can explicitly select a matching density domain.
+    The default PBE0 protocol keeps the original geometry and basis.
     An explicit PySCF auxiliary basis selects its independent density-fitted
     Hamiltonian, including auxiliary-center and metric response in the forces.
     The optional ``gpu4pyscf`` oracle retains independent grids and complete
@@ -208,7 +210,7 @@ def reference(
         cp.cuda.Stream.null.synchronize()
     started = perf_counter()
     with (
-        reference_vv10_domain(1e-8)
+        reference_vv10_domain(vv10_density_threshold)
         if backend == "gpu4pyscf" and engine.do_nlc()
         else nullcontext()
     ):

@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/wb97mv-anchor-delta-20261018/evidence.json",
+  "original_bytes": 75701,
+  "original_sha256": "8a6b68233ab341154a6e9039550b83f25b25436f2105cd0892eaa323aa0eec00",
+  "original_git_blob": "dca4845776fa1ddca41d19792d568923f0489f0a",
+  "stored_path": "benchmarks/results/wb97mv-anchor-delta-20261018/evidence.json.xz",
+  "stored_bytes": 5340,
+  "stored_sha256": "c90038c1cde900a15658c9177d2ddfb5e7b28f25d8cf283a9324adbff9fc0599",
+  "compression": "xz preset 9",
+  "scope": "Storage only. Complete original scientific evidence bytes, including every slower arm, first-use cost, gate, source identity and paired-state result, are retained unchanged."
+}

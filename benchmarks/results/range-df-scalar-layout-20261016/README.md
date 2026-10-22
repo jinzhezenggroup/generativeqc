@@ -100,7 +100,7 @@ claimed as fault-injection qualification. No CUDA skip becomes a GPU pass.
 
 ## Retained bytes and reproduction
 
-`evidence.json.xz` losslessly retains textual raw JSON, complete timing/work
+The Git-retained `evidence.json.xz` losslessly preserves raw JSON, timing/work
 records, source patches, harness versions, failed attempts and validation logs.
 `storage.json` authenticates stored and decoded bytes and member count. Binaries,
 compiler objects and compiler caches remain ignored local artifacts.
@@ -109,7 +109,10 @@ compiler logs consequently stay ignored locally; the archive keeps their hashes,
 sizes and exact 20-line completion excerpts in `build-receipts.json`. No timing,
 oracle, rejected optimization or test receipt is removed to satisfy the budget.
 
-To inspect or restore without executing historical scripts:
+First restore both bundles with the command in
+[`../range-separated-df-stable-20261015/`](../range-separated-df-stable-20261015/).
+The pinned existing Git objects retain every byte within the combined master/PR
+evidence budget. Then inspect without executing historical scripts:
 
 ```bash
 .venv/bin/python - <<'PY'
@@ -117,7 +120,7 @@ import hashlib, json, lzma
 from pathlib import Path, PurePosixPath
 root = Path("benchmarks/results/range-df-scalar-layout-20261016")
 manifest = json.loads((root / "storage.json").read_text())
-stored = (root / manifest["path"]).read_bytes()
+stored = (Path(".artifacts/range-df-history") / root / manifest["path"]).read_bytes()
 assert hashlib.sha256(stored).hexdigest() == manifest["stored_sha256"]
 decoded = lzma.decompress(stored)
 assert hashlib.sha256(decoded).hexdigest() == manifest["decoded_sha256"]

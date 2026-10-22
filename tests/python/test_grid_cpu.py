@@ -182,16 +182,19 @@ def test_partition_unity_coincidence_extremes_and_permutation() -> None:
 
 
 @pytest.mark.parametrize("atomic_number", [26, 54])
+@pytest.mark.parametrize("pruning,version", [("none", 2), ("radial-v1", 3)])
 def test_production_grid_transition_and_heavy_elements_are_finite_and_translation_covariant(
-    atomic_number: typing.Any,
+    atomic_number: int,
+    pruning: str,
+    version: int,
 ) -> None:
-    """Fe and Xe exercise sourced v2 radii beyond the light-element fixtures."""
-    spec = GridPolicy().resolve("lda-rks")
+    """Legacy and pruned Fe/Xe grids retain sourced radii and translation covariance."""
+    spec = GridPolicy(pruning=pruning).resolve("lda-rks")
     center = np.array([0.31, -0.27, 0.19])
     shift = np.array([-0.42, 0.16, 0.23])
     grid = MolecularGrid([Atom(atomic_number, tuple(center))], spec=spec)
     moved = MolecularGrid([Atom(atomic_number, tuple(center + shift))], spec=spec)
-    assert grid.spec.version == 2
+    assert grid.spec.version == version
     assert grid.resolved_radii == (dict(spec.element_radii)[atomic_number],)
     explicit = grid.explicit()
     moved_explicit = moved.explicit()

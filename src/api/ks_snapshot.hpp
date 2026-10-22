@@ -67,6 +67,18 @@ void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
 /** Read the physical allowance already authenticated at snapshot creation. */
 generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value);
+/** Query/copy the independent VV10 quadrature of the current token.
+ * A null output with zero capacity queries the count; shared grids return zero.
+ * The private wire contains 126 prescription entries followed by 6*N doubles
+ * for coordinates, weights, atom owners and unpartitioned atomic measures. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t capacity, std::size_t* count);
+/** Borrow the exact secondary resident grid only while its token is current. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_snapshot_cuda_nonlocal_grid_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
+    const double** points, const double** weights, const double** atomic_weights,
+    std::size_t* count);
 generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);

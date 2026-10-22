@@ -2615,22 +2615,37 @@ void generated_coulomb_budget() {
       std::size_t primitives = 0;
       for (const auto* system : {&first, &second})
         for (const auto& shell : system->shells) primitives += shell.primitives.size();
-      for (unsigned derivative_order : {0U, 1U}) {
-        const auto capacity =
-            cuda_direct_coulomb_device_bytes(2, dimension, 4, shells, primitives, derivative_order);
-        CudaDirectJkPlan* raw{};
-        CudaDirectJkDiagnostic diagnostic;
-        require(create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity,
-                                           &raw, diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
-                detail.c_str());
-        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
-            raw, destroy_cuda_direct_jk_plan);
-        require(diagnostic.device_bytes <= capacity,
-                "generated J density metadata exceeded the shape-only budget");
-        require((std::string(diagnostic.schedule).find("generated-shell") != std::string::npos) ==
-                    (angular <= 2),
-                "shape-only J budget lost generated admission or changed through-f fallback");
-      }
+      for (unsigned derivative_order : {0U, 1U})
+        for (const auto cartesian_nao :
+             {std::size_t{0}, generativeqc::molecule::cartesian_ao_count(first)}) {
+          const auto capacity = cuda_direct_coulomb_device_bytes(
+              2, dimension, 4, shells, primitives, derivative_order, false, cartesian_nao);
+          CudaDirectJkPlan* raw{};
+          CudaDirectJkDiagnostic diagnostic;
+          require(
+              create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity, &raw,
+                                         diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+          std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+              raw, destroy_cuda_direct_jk_plan);
+          require(diagnostic.device_bytes <= capacity,
+                  "generated J density metadata exceeded the shape-only budget");
+          FockBuildSpec value_spec;
+          value_spec.derivative_order = 0;
+          value_spec.exchange.present = false;
+          // The composite schedule label may describe canonical K while J
+          // still has its generated owner. Query the actual J capability.
+          require(
+              cuda_direct_jk_generated_coulomb_available(plan.get(), value_spec) == (angular <= 2),
+              ("J budget changed generated admission: l=" + std::to_string(angular) +
+               " representation=" + std::to_string(representation) + " derivative=" +
+               std::to_string(derivative_order) + " Cartesian=" + std::to_string(cartesian_nao) +
+               " capacity=" + std::to_string(capacity) + " schedule=" + diagnostic.schedule)
+                  .c_str());
+          if (derivative_order && angular <= 2)
+            require(plan->generated_exchange && plan->generated_exchange->force_capability,
+                    "metadata-aware derivative capacity lost its shell force lease");
+        }
     }
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }

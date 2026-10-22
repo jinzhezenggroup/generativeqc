@@ -54,6 +54,8 @@ struct CudaStationaryBinding {
   /** Optional typed geometry consumer. Selection remains launch-local and
    * never changes the identity of the strict final SCF state. */
   decltype(geometry) geometry_fp32{};
+  /** Optional immutable atom-prefix/radius topology; no per-point owner upload. */
+  int (*grid_topology)(void*, const std::size_t*, const double*, std::size_t, char*, std::size_t){};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */

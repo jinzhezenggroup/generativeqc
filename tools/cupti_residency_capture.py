@@ -10,11 +10,11 @@ owners independently establish scientific payload/dependency identities.
 from __future__ import annotations
 
 import ctypes
-import os
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from tools.audit_replay_allocations import _integer, _require
+from tools.residency_allocation import require_cupti_allocation
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -81,15 +81,28 @@ QUERY_APIS = {
 
 
 class CuptiCapture:
-    """One fresh-process bounded capture; GPU work must be Slurm-assigned.
+    """One fresh-process bounded capture inside a verified GPU allocation.
 
     CUPTI activity ownership is process-global. Do not combine this qualification
     process with another CUPTI profiler. Storage remains process-owned after stop
     to keep callbacks safe; a second capture must use another process.
     """
 
-    def __init__(self, path: Path, *, capacity: int = 1 << 18) -> None:
-        _require(bool(os.environ.get("SLURM_JOB_ID")), "CUPTI capture requires Slurm")
+    def __init__(
+        self,
+        path: Path,
+        *,
+        capacity: int = 1 << 18,
+        native_library: Path | None = None,
+        qz_receipt: Path | None = None,
+        qz_receipt_sha256: str | None = None,
+    ) -> None:
+        require_cupti_allocation(
+            path,
+            native_library=native_library,
+            qz_receipt=qz_receipt,
+            qz_receipt_sha256=qz_receipt_sha256,
+        )
         _require(
             type(capacity) is int and 1 <= capacity <= 1 << 20,
             "invalid activity capacity",

@@ -26,6 +26,7 @@ for carbon in ${README_BENCHMARK_SIZES:-1 2 3 4 5 6 7}; do
         --qm7 "$QM7_DATASET" --carbon "$carbon" --samples "$samples" \
         --source-revision "$README_CBS_SOURCE_REVISION" \
         --hf-reference "${README_CBS_HF_REFERENCE:-exact}" \
+        --policy "${README_CBS_POLICY:-standard}" \
         --budget-mib "${README_CBS_BUDGET_MIB:-65536}" --output "$directory/$engine.json" \
         > "$directory/$engine.log" 2>&1 || result=$?
     printf '{"exit_code":%s,"point_time_limit_seconds":%s}\n' "$result" "$limit" \

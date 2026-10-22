@@ -101,6 +101,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
 ) -> None:
     """Execute the actual public predicate without loading a CUDA library."""
     from generativeqc import _native
+    from generativeqc._df_precision import fitted_scf_budget_admitted
     from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
     method = resolve_method("WB97M-V", spin="unpolarized")
@@ -137,6 +138,9 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
     namespace = {
         "self": owner,
         "_native": _native,
+        # This range-separated route requests no application budget. Use the
+        # admission helper to preserve the strict precision fallback boundary.
+        "fitted_budget": fitted_scf_budget_admitted(owner, None),
         "basis_has_ecp": override.get("ecp", False),
         "density_fitting_mode": (
             _native.DENSITY_FITTING_CUDA
@@ -231,6 +235,8 @@ def _mixed_pyscf_energy(
     pyscf = pytest.importorskip("pyscf")
     from pyscf import df, dft, gto, scf
 
+    from tools._pyscf_vv10_domain import vv10_density_domain
+
     pyscf.lib.num_threads(1)
     atoms = tuple(Atom.from_value(atom) for atom in raw_atoms)
     labels = [f"{symbol}{index}" for index, (symbol, _) in enumerate(raw_atoms)]
@@ -317,7 +323,10 @@ def _mixed_pyscf_energy(
     mean_field.conv_tol = 1e-12
     mean_field.conv_tol_grad = 1e-10
     mean_field.max_cycle = 200
-    energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
+    # This is a matched-domain force oracle, including every displaced point.
+    # Preserve upstream CPU defaults outside this explicit qualification scope.
+    with vv10_density_domain(1e-10):
+        energy = mean_field.kernel(dm0=mean_field.get_init_guess(key="1e"))
     assert mean_field.converged
     return float(energy)
 
@@ -400,7 +409,7 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
         calc.prepare_batch([atoms]) as batch,
         pytest.raises(ValueError, match="dense-export"),
     ):
-        batch._public_dft_cpu_force(0, atoms)
+        batch._public_dft_cpu_force(0, tuple(Atom.from_value(atom) for atom in atoms))
 
 
 @pytest.mark.parametrize(

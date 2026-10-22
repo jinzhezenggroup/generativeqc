@@ -201,6 +201,7 @@ struct Fixture {
 template<bool Unrestricted>
 void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
            double coulomb, double exchange, std::uint8_t active) {
+  fixture.batch.direct_force_relative_response = false;
   const auto& batch = fixture.batch;
   const unsigned shell_class = direct_quartet_shell_class_device(
       batch.shell_angular[batch.shell_pair_first[task.first_pair]],
@@ -305,6 +306,22 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
     }
     ++comparisons;
   }
+  auto relative_batch = batch;
+  relative_batch.direct_force_relative_response = true;
+  std::array<double,24> relative_sources{};
+  std::array<double,12> relative_combined{};
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Separate>(
+      relative_batch,task,screening,bounds,density,&active,relative_sources.data(),0,coulomb,exchange);
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Combined>(
+      relative_batch,task,screening,bounds,density,&active,relative_combined.data(),0,coulomb,exchange);
+  for (std::size_t coordinate = 0; coordinate < expected.size(); ++coordinate)
+    if (!std::isfinite(relative_sources[coordinate]) ||
+        std::abs(relative_sources[coordinate] - expected[coordinate]) >
+            3e-12 * (1 + std::abs(expected[coordinate]))) std::exit(8);
+  for (std::size_t coordinate = 0; coordinate < combined_control.size(); ++coordinate)
+    if (!std::isfinite(relative_combined[coordinate]) ||
+        std::abs(relative_combined[coordinate] - combined_control[coordinate]) >
+            3e-12 * (1 + std::abs(combined_control[coordinate]))) std::exit(9);
   auto mixed_batch = batch;
   mixed_batch.direct_force_fp32 = true;
   std::array<double, 24> mixed_sources{};
@@ -375,7 +392,49 @@ void campaign() {
               check<Unrestricted>(fixture,{9,4,1},0,1.7,-0.23,1);
             }
 }
+struct NonfiniteRelativeRoots : LowOrderSourceRoots<kPsssShellClass> {
+  inline static bool relative_called = false;
+  static weighted::IndependentGradient evaluate_relative(
+      const weighted::Geometry&, const double*) {
+    relative_called = true;
+    weighted::IndependentGradient result{};
+    result.center[0][0] = std::numeric_limits<double>::quiet_NaN();
+    return result;
+  }
+};
+
+template<bool Unrestricted, DirectForceOutputMode Mode>
+void nonfinite_relative_fallback() {
+  for (unsigned centers : {0U,1U}) {
+    Fixture fixture({1,0,0,0},centers,0,Unrestricted);
+    const std::uint8_t active = 1;
+    const ActiveShellQuartetTile task{9,1,0};
+    std::array<double,24> expected, actual;
+    expected.fill(.25);
+    actual = expected;
+    fixture.batch.direct_force_relative_response = false;
+    contract_two_electron_force_low_order_sources_task<Unrestricted,kPsssShellClass,false,
+        LowOrderSourceRoots<kPsssShellClass>,Mode>(
+        fixture.batch,task,0,fixture.schwarz.data(),fixture.density.data(),&active,
+        expected.data(),1.7,-.23);
+    fixture.batch.direct_force_relative_response = true;
+    NonfiniteRelativeRoots::relative_called = false;
+    contract_two_electron_force_low_order_sources_task<Unrestricted,kPsssShellClass,false,
+        NonfiniteRelativeRoots,Mode>(
+        fixture.batch,task,0,fixture.schwarz.data(),fixture.density.data(),&active,
+        actual.data(),1.7,-.23);
+    if (!NonfiniteRelativeRoots::relative_called) std::exit(10);
+    for (std::size_t coordinate = 0; coordinate < actual.size(); ++coordinate)
+      if (std::bit_cast<std::uint64_t>(actual[coordinate]) !=
+          std::bit_cast<std::uint64_t>(expected[coordinate])) std::exit(11);
+  }
+}
+
 int main() {
+  nonfinite_relative_fallback<false,DirectForceOutputMode::Separate>();
+  nonfinite_relative_fallback<true,DirectForceOutputMode::Separate>();
+  nonfinite_relative_fallback<false,DirectForceOutputMode::Combined>();
+  nonfinite_relative_fallback<true,DirectForceOutputMode::Combined>();
   campaign<false>();
   campaign<true>();
   if (!(controls > shared && shared > 0 && controls == force_calls)) return 2;

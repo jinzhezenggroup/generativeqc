@@ -12,10 +12,11 @@ from pathlib import Path, PurePosixPath
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--extract", type=Path)
+    parser.add_argument("--archive", type=Path, help="verified Git-restored xz bundle")
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parent
     storage = json.loads((root / "storage.json").read_text())
-    stored = (root / storage["path"]).read_bytes()
+    stored = (arguments.archive or root / storage["path"]).read_bytes()
     if hashlib.sha256(stored).hexdigest() != storage["stored_sha256"]:
         raise ValueError("stored evidence digest mismatch")
     decoder = lzma.LZMADecompressor(memlimit=256 << 20)

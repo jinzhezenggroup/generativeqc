@@ -5,10 +5,12 @@ This campaign measures the production implementation at master
 from #2399. It does not substitute earlier RHF-only or single-basis CCSD(T)
 measurements for the complete CBS endpoint.
 
-![Complete DF-CCSD(T)/CBS E+F](df-cbs.svg)
-
-See [timings and observed work](timings.md), [retained receipts](summary.json.xz)
-and [build/publication provenance](manifest.json).
+See [timings and observed work](timings.md). This superseded homepage campaign's
+original figure, receipts, driver and manifest are recoverable through the
+published Git revision in [snapshot.json](snapshot.json). All eight original
+files were restored and compared byte for byte before retiring their payloads
+from the current tree. The snapshot preserves failures and unchecked points;
+none are reclassified as completed or qualified.
 
 The later [full DF-HF/RI-JK campaign](../readme-cbs-full-20261014/README.md)
 uses a different reference/fitting model. This older baseline is retained,
@@ -35,7 +37,7 @@ dependencies, avoiding an older system cuSOLVER discovered by the Python
 loader. Thus API cold **excludes process startup/native DSO loading**; it still
 includes calculator creation and the first complete calculation. Initial
 loader failures and preliminary C1–C3 checks on node4 are retained separately
-in [supplementary receipts](supplement.json.xz), not pooled into the primary
+in the recoverable `supplement.json.xz`, not pooled into the primary
 series. C1–C3 were rerun on node1 to standardize the host/driver/power setting,
 not to select the fastest sample.
 
@@ -169,13 +171,15 @@ long enough for its point limits. Run the independent CPU oracle separately
 thread pools are fixed to one thread by the runner. Review the retained host,
 GPU UUID, driver, library digest, source and environment for each observation.
 
-Render collected raw runs or reproduce the figure from the compact archive:
+Restore the original campaign before reproducing its figure. A shallow clone
+must first fetch the revision in `snapshot.json`; recovery never fetches implicitly:
 
 ```bash
+python tools/restore_retained_evidence.py \
+  --manifest benchmarks/results/readme-cbs-20261013/snapshot.json \
+  --all --output .artifacts/readme-cbs-history
 PYTHONPATH=.:python python -m tools.render_readme_cbs \
-  --runs .artifacts/readme-cbs --output .artifacts/readme-cbs-publication
-PYTHONPATH=.:python python -m tools.render_readme_cbs \
-  --summary benchmarks/results/readme-cbs-20261013/summary.json.xz \
+  --summary .artifacts/readme-cbs-history/benchmarks/results/readme-cbs-20261013/summary.json.xz \
   --output .artifacts/readme-cbs-replay
 ```
 
@@ -184,7 +188,7 @@ reviewed results directory. The compact archive retains native/reference JSON
 receipts and outcome hashes; build logs, libraries and raw traces stay local.
 The archived `measured-driver.py.xz` retains the actual native runner before
 full-DF options were added. Early reference receipts used Python 3.13's
-`hashlib.file_digest`; applying the [driver delta](early-reference-driver.patch)
+`hashlib.file_digest`; applying the recovered `early-reference-driver.patch`
 to that snapshot reconstructs the early runner. The current default exact-HF
 protocol remains unchanged; `README_CBS_HF_REFERENCE=df` explicitly selects
 the new, separately reported model.

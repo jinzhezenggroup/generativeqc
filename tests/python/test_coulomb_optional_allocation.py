@@ -27,6 +27,7 @@ STUBS = r"""
 #include "scf/direct_block_schedule.hpp"
 #include "scf/cuda/direct_spd_force_schedule.hpp"
 using generativeqc::scf::cuda_execution::select_direct_order_seven_page_size;
+using generativeqc::scf::cuda_execution::select_direct_weighted_force_response;
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
 constexpr int cudaLimitStackSize=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
@@ -51,6 +52,7 @@ cudaError_t cudaMemsetAsync(void* p,int v,std::size_t n,cudaStream_t) {
   std::memset(p,v,n); return cudaSuccess;
 }
 namespace runtime {
+cudaError_t cuda_ensure_stack_limit(std::size_t) { return cudaSuccess; }
 std::size_t size_mul(std::size_t a,std::size_t b) { return a*b; }
 std::size_t size_add(std::size_t a,std::size_t b) { return a+b; }
 int cuda_target_info_from_properties(cudaDeviceProp) { return 0; }
@@ -95,6 +97,7 @@ constexpr unsigned kSchwarzThreads=32;
  F(direct_ao_shells) F(direct_ao_angular) F(shell_ao_offsets)
 struct HostBatch {
   std::size_t nbf=1, direct_nbf=1;
+  std::vector<std::uint8_t> shell_angular{0};
 #define V(name) std::vector<std::int64_t> name{0,1};
   METADATA(V)
 #undef V
@@ -110,6 +113,7 @@ using GeneratedShellPairDensityBounds = ShellPairDensityBounds;
 }
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
+  std::uint8_t direct_maximum_shell_angular{255};
   unsigned direct_coulomb_reachable=0;
   unsigned direct_hermite_convolution=0;
   bool direct_pair_materialized_values=false;
@@ -117,6 +121,7 @@ struct DeviceBatch {
   bool direct_pair_cooperative_derivatives=false;
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
+  bool direct_force_relative_response{true};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -165,6 +170,21 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
+  if(argc==2 && std::strcmp(argv[1],"--response-policy-only")==0) {
+    assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
+    DeviceBatch original;
+    configure_direct_coulomb_recurrence(original);
+    assert(original.direct_force_relative_response);
+    for(const auto* selector : {"0", "unknown", "", "1", "relative"}) {
+      assert(setenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES",selector,1)==0);
+      DeviceBatch prepared;
+      configure_direct_coulomb_recurrence(prepared);
+      assert(prepared.direct_force_relative_response==select_direct_weighted_force_response(selector));
+      assert(original.direct_force_relative_response);
+    }
+    assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
+    return 0;
+  }
   if(argc==2 && std::strcmp(argv[1],"--budget-only")==0) {
     HostBatch host; DeviceBatch borrowed;
     auto owner=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
@@ -296,7 +316,7 @@ def compile_cached_probe(
 @pytest.fixture(scope="module")
 def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("void configure_direct_coulomb_recurrence(")
+    begin = source.index("void configure_direct_")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     for stage, anchor in enumerate(
@@ -316,6 +336,15 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cpp.write_text(STUBS + preparation + DRIVER)
     compile_cached_probe(cpp, binary)
     return binary
+
+
+def test_weighted_response_policy_is_captured_per_prepared_owner(
+    allocation_probe: Path,
+) -> None:
+    """Explicit rollback never mutates an already prepared arithmetic policy."""
+    subprocess.run(
+        [str(allocation_probe), "--response-policy-only"], check=True, timeout=10
+    )
 
 
 def test_compensated_j_exact_and_one_byte_short_budget(allocation_probe: Path) -> None:
