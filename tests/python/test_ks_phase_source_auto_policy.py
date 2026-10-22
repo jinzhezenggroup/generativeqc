@@ -61,6 +61,18 @@ using namespace generativeqc::scf::cuda_execution;
 constexpr auto screened = DirectJkSourceAutoPolicy::screened_hybrid_cold;
 constexpr auto pure = DirectJkSourceAutoPolicy::screened_cold;
 constexpr auto generic = DirectJkSourceAutoPolicy::generic_f;
+constexpr auto small = DirectJkSourceAutoPolicy::small_screened_cold;
+static_assert(!direct_jk_source_auto_refusal(64,64,8,0,true,false,small,1e-12));
+static_assert(!direct_jk_source_auto_refusal(96,100,100,2,true,false,small,1e-12));
+static_assert(!direct_jk_source_auto_refusal(128,128,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(63,64,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(128,129,8,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,3,true,true,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,7,2,true,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,false,false,small,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,true,false,small,0.0));
+static_assert(direct_jk_source_value_ceiling(DirectJkSourceSelection::automatic,small,2)
+              ==(512ULL<<20));
 constexpr auto automatic = DirectJkSourceSelection::automatic;
 static_assert(direct_jk_source_selection(nullptr)==automatic);
 static_assert(direct_jk_source_selection("auto")==automatic);
