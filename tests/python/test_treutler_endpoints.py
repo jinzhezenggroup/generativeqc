@@ -192,3 +192,45 @@ def test_adjusted_spin_and_independent_vv10_grids(fitted: bool) -> None:
     )
     assert actual.energy == pytest.approx(energy, abs=2e-8)
     np.testing.assert_allclose(actual.forces, forces, atol=3e-7, rtol=0)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("fitted", [False, True])
+def test_tight_xc_keeps_default_vv10_level_three(device: str, fitted: bool) -> None:
+    """Compare both defaults with independent PySCF SCF and full grid responses."""
+    require_endpoint(device)
+    calculator = Calculator(
+        method="wb97m-v-rks",
+        basis="sto-3g",
+        basis_representation="spherical",
+        device=device,
+        density_fitting=device if fitted else "none",
+        auxiliary_basis="def2-svp" if fitted else None,
+        ks_options=KsOptions(grid_accuracy="tight"),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-13,
+        max_iterations=100,
+    )
+    assert calculator.ks_options.grid == GridSpec.treutler(4)
+    assert calculator.ks_options.nonlocal_grid == GridSpec.treutler(3)
+    assert calculator.ks_options.has_separate_nonlocal_grid
+
+    # Public CPU meta-GGA forces remain unsupported; the CUDA check exercises
+    # the full analytic force including XC and VV10 moving-grid responses.
+    forces = device == "cuda"
+    actual = calculator.singlepoint(
+        WATER, properties=("energy", "forces") if forces else ("energy",)
+    )
+    reference_energy, reference_forces = reference(
+        calculator,
+        fitted=fitted,
+        functional="WB97M_V",
+        grid_level=4,
+        nonlocal_level=3,
+        forces=forces,
+    )
+    assert actual.energy == pytest.approx(reference_energy, abs=2e-8)
+    if forces:
+        np.testing.assert_allclose(actual.forces, reference_forces, atol=3e-7, rtol=0)
+        np.testing.assert_allclose(np.sum(actual.forces, axis=0), 0, atol=2e-10)
