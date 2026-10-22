@@ -85,7 +85,11 @@ def main(argv: list[str] | None = None) -> None:
             output.flush()
 
         save("initialization")
+        previous_selector = os.environ.get("GENERATIVEQC_DF_RANGE_EXCHANGE")
         try:
+            # main() is also called in-process. Keep the selected operator local
+            # to this campaign, including failed or interrupted measurements.
+            os.environ["GENERATIVEQC_DF_RANGE_EXCHANGE"] = arguments.selector
             _measure(arguments, payload, save)
         except BaseException as error:
             payload["failure"] = {
@@ -95,6 +99,11 @@ def main(argv: list[str] | None = None) -> None:
             }
             save("failed")
             raise
+        finally:
+            if previous_selector is None:
+                os.environ.pop("GENERATIVEQC_DF_RANGE_EXCHANGE", None)
+            else:
+                os.environ["GENERATIVEQC_DF_RANGE_EXCHANGE"] = previous_selector
 
 
 def _measure(arguments: argparse.Namespace, payload: dict, save: typing.Any) -> None:
@@ -105,7 +114,6 @@ def _measure(arguments: argparse.Namespace, payload: dict, save: typing.Any) -> 
 
     from benchmarks._retained_basis import load_retained_basis
 
-    os.environ["GENERATIVEQC_DF_RANGE_EXCHANGE"] = arguments.selector
     atoms = list(WATER)
     if arguments.case == "water-dimer":
         atoms += [

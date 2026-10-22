@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import typing
 from types import SimpleNamespace
 
@@ -66,20 +67,27 @@ def test_existing_outputs_are_rejected_before_preparation(
 
 
 @pytest.mark.parametrize("error", [ImportError, RuntimeError, KeyboardInterrupt])
+@pytest.mark.parametrize("previous_selector", [None, "inherited"])
 def test_initialization_failures_keep_owned_journal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: typing.Any
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: typing.Any,
+    previous_selector: str | None,
 ) -> None:
+    set_previous_selector(monkeypatch, previous_selector)
     output = tmp_path / "new.json"
 
     def failed(
         arguments: typing.Any, payload: typing.Any, save: typing.Any
     ) -> typing.Any:
         assert json.loads(output.read_text())["stage"] == "initialization"
+        assert os.environ["GENERATIVEQC_DF_RANGE_EXCHANGE"] == "df"
         raise error("initialization failed")
 
     monkeypatch.setattr(runner, "_measure", failed)
     with pytest.raises(error, match="initialization failed"):
         runner.main(arguments(output))
+    assert os.environ.get("GENERATIVEQC_DF_RANGE_EXCHANGE") == previous_selector
     receipt = json.loads(output.read_text())
     assert receipt["stage"] == "failed"
     assert receipt["failure"] == {
@@ -88,6 +96,14 @@ def test_initialization_failures_keep_owned_journal(
         "message": "initialization failed",
     }
     assert receipt["samples"] == []
+
+
+def set_previous_selector(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
+    """Exercise both an absent override and exact restoration of caller state."""
+    if value is None:
+        monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    else:
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", value)
 
 
 def install_endpoint(
@@ -166,8 +182,6 @@ def install_endpoint(
 
     class Snapshot:
         def __init__(self, *args: typing.Any) -> None:
-            import os
-
             self.density_fitted = True
             self.range_density_fitted = (
                 os.environ["GENERATIVEQC_DF_RANGE_EXCHANGE"] == "df"
@@ -184,12 +198,19 @@ def install_endpoint(
 
 @pytest.mark.parametrize("selector", ["direct", "df"])
 @pytest.mark.parametrize("endpoint", ["energy", "forces"])
+@pytest.mark.parametrize("previous_selector", [None, "direct", "df", "inherited"])
 def test_complete_workload_and_loaded_identity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selector: str, endpoint: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    selector: str,
+    endpoint: str,
+    previous_selector: str | None,
 ) -> None:
+    set_previous_selector(monkeypatch, previous_selector)
     state, loaded = install_endpoint(monkeypatch, tmp_path)
     output = tmp_path / "new.json"
     runner.main(arguments(output, "--selector", selector, "--endpoint", endpoint))
+    assert os.environ.get("GENERATIVEQC_DF_RANGE_EXCHANGE") == previous_selector
     receipt = json.loads(output.read_text())
     assert receipt["stage"] == "complete" and "failure" not in receipt
     assert receipt["library"] == str(loaded)
@@ -230,9 +251,16 @@ def test_complete_workload_and_loaded_identity(
 
 
 @pytest.mark.parametrize("phase", ["preparation", "runtime"])
+@pytest.mark.parametrize("selector", ["direct", "df"])
+@pytest.mark.parametrize("previous_selector", [None, "direct", "df", "inherited"])
 def test_failures_retain_actual_stage_binary_and_prior_samples(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    selector: str,
+    previous_selector: str | None,
 ) -> None:
+    set_previous_selector(monkeypatch, previous_selector)
     _state, loaded = install_endpoint(
         monkeypatch,
         tmp_path,
@@ -241,7 +269,8 @@ def test_failures_retain_actual_stage_binary_and_prior_samples(
     )
     output = tmp_path / "new.json"
     with pytest.raises(RuntimeError, match=phase + " failed"):
-        runner.main(arguments(output))
+        runner.main(arguments(output, "--selector", selector))
+    assert os.environ.get("GENERATIVEQC_DF_RANGE_EXCHANGE") == previous_selector
     receipt = json.loads(output.read_text())
     assert receipt["stage"] == "failed"
     assert receipt["library"] == str(loaded)
