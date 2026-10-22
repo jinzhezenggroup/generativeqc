@@ -101,3 +101,20 @@ geometry, lifetime, capacity, sanitizer and complete endpoint qualification.
 See the [angular mapping decision](2026-10-22-df-hermite-angular-mapping.md),
 [strict-density DF Fast decision](2026-10-22-default-grid-df-fast-gradient.md), and
 [final-state stopping decision](2026-10-22-final-state-aware-ks-stopping.md).
+
+## Clean-source publication follow-up
+
+Clean commit `1178a03c7f45074cc705a7accd676f0ffc1b6d2a` rebuilt matching core and
+all ten stationary AOT library/manifest pairs. Core SHA-256 is
+`05bbb70e37fc8836216fca394b2d84e5c6676a6f08820e7937073cc449f63f14`.
+All 24 geometry cases now pass together against this binary, including the
+corrected Cartesian-orbital/spherical-auxiliary fixture and all 96 E/F calls.
+
+The [complete README campaign](../../../../benchmarks/results/readme-final-20261022/README.md)
+retains 192 fresh populations / 768 complete calls from this source. It reports
+174 qualified populations and the same 18 default-grid/fitting failures across
+all three profiles. All 256 Fast calls execute one solve. Standard/Fast win
+44/58 and 45/58 qualified warm comparisons, but slower valid cold/warm points
+remain visible. Small strict-fallback Fast calls retain host-policy overhead;
+same-GPU instrumented B3LYP/3 native batch/force work is essentially equal.
+No diagnostic timing replaces an official point and no universal speedup follows.

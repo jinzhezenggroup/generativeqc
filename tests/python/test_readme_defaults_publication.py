@@ -74,8 +74,7 @@ def test_default_campaign_retains_complete_inventory_and_actual_work() -> None:
 def test_current_campaign_recomputes_independent_gates_and_complete_inventory() -> None:
     """An edited pass flag or receipt cannot silently change the README evidence."""
     directory = (
-        Path(__file__).resolve().parents[2]
-        / "benchmarks/results/readme-repaired-20261021"
+        Path(__file__).resolve().parents[2] / "benchmarks/results/readme-final-20261022"
     )
     manifest = json.loads((directory / "publication.json").read_bytes())
     files = {
