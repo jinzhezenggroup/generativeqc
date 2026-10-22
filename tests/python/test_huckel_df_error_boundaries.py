@@ -172,7 +172,7 @@ unsigned cuda_df_iteration_diis_history(const ScfOptions& options) { return opti
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJkPlan* plan,
     const Matrix&, const Matrix&, const Matrix&, const std::vector<std::int32_t>&,
     const Matrix&, unsigned, double, double, Matrix& final_density,
-    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned) {
+    std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned, bool) {
   if (boundary == Boundary::Compact && injection_enabled) return injected_status;
   if (boundary == Boundary::Iteration || boundary == Boundary::FinalHost)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
@@ -210,13 +210,13 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system, const co
   return result;
 }
 void finalize_density_fitting_rhf(const DensityFittingScfData&, const Matrix&, std::size_t,
-    Matrix&, const ScfOptions&, ScfResult&, CudaDensityFittingJkPlan*, std::size_t, bool = false);
+    Matrix&, const ScfOptions&, ScfResult&, CudaDensityFittingJkPlan*, std::size_t, bool = false, bool = false);
 """
 
 _FINALIZE = r"""
 void finalize_density_fitting_rhf(const DensityFittingScfData&, const Matrix&, std::size_t,
     Matrix& density, const ScfOptions&, ScfResult& result,
-    CudaDensityFittingJkPlan* plan, std::size_t slot, bool) {
+    CudaDensityFittingJkPlan* plan, std::size_t slot, bool, bool) {
   in_finalization = true;
   try { device_df_eigen({1}, nullptr, nullptr, plan, slot); }
   catch (...) { in_finalization = false; throw; }

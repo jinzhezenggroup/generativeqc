@@ -88,3 +88,17 @@ its provisional stages and final target iterations must remain distinguishable.
 Requalify complete same-model E/F, dense-reference status, warm/final-state
 lifetime and actual work before extending to other owners, spins, grids or
 precision domains. A residual tolerance is never a universal force-error bound.
+
+## Review correction: HF owner admission
+
+Loose E/D values alone cannot authorize the relaxed HF physical ceiling: direct
+and fitted UHF share the scalar stopping helper, and explicit loose ECP controls
+bypass Python's strict defaults. A residual of `5e-6` at E/D `1e-9`/`1e-5` must
+remain rejected for these unsupported owners. HF iteration and force validation
+now receive explicit restricted all-electron owner admission, defaulting to
+strict for compatibility callers. UHF independently stays strict. DF graph reuse
+includes admission in its captured-option identity, and final DF selection checks
+spin and ECP ownership again. Physical-reference exports retain strict gates.
+Qualified RHF preserves its independently measured `1e-5` policy; no quadrature,
+fitting, or evidence acceptance gate changes. Host boundary tests and native
+iteration/final-force fixtures cover strict exclusion and qualified acceptance.

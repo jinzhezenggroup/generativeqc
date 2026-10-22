@@ -61,7 +61,8 @@ __global__ void update_convergence_kernel(
     bool guard_energy_roundoff, const double* energy, double* previous_energy,
     const double* next_density, double* density, std::uint8_t* active, std::uint8_t* converged,
     std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    bool qualified_owner) {
   // A warp owns one system.  This is intentionally a one-warp block because
   // all scalar state transitions are performed by lane zero after the warp
   // reduction; the matrix walk itself is spread over the 32 lanes.
@@ -94,9 +95,9 @@ __global__ void update_convergence_kernel(
     iterations[system] = iteration;
     energy_change[system] = change;
     density_rms[system] = rms;
-    const bool did_converge =
-        hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
-                               density_tolerance, rms, physical_maximum, guard_energy_roundoff);
+    const bool did_converge = hf_iteration_converged(
+        energy[system], previous_energy[system], energy_tolerance, density_tolerance, rms,
+        physical_maximum, guard_energy_roundoff, qualified_owner);
     if (did_converge) {
       converged[system] = 1;
       active[system] = 0;
@@ -124,7 +125,8 @@ __global__ void update_uhf_convergence_kernel(
     bool guard_energy_roundoff, const double* energy, double* previous_energy,
     const double* next_density, double* density, std::uint8_t* active, std::uint8_t* converged,
     std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    bool /*qualified_owner*/) {
   // Keep UHF's two spin matrices under one warp so the convergence reduction
   // and scalar state transition have the same ordering as RHF.
   const std::int32_t system = static_cast<std::int32_t>(blockIdx.x);
@@ -186,8 +188,8 @@ __global__ void validate_force_residual_kernel(std::int32_t batch_size, std::int
                                                std::int32_t nbf, double density_tolerance,
                                                const double* residual, std::uint8_t* active,
                                                std::uint8_t* converged, std::uint32_t* tested_count,
-                                               std::uint8_t* tested_items,
-                                               double energy_tolerance) {
+                                               std::uint8_t* tested_items, double energy_tolerance,
+                                               bool qualified_owner) {
   const auto system = static_cast<std::int32_t>(blockIdx.x);
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t size = static_cast<std::size_t>(spin_count) * nbf * nbf;
@@ -195,7 +197,8 @@ __global__ void validate_force_residual_kernel(std::int32_t batch_size, std::int
   if (threadIdx.x == 0) {
     atomicAdd(tested_count, 1U);
     if (tested_items != nullptr) tested_items[system] = 1U;
-    if (maximum > scf_stationarity_tolerance(energy_tolerance, density_tolerance, 1e-8)) {
+    if (maximum > hf_stationarity_tolerance(energy_tolerance, density_tolerance,
+                                            qualified_owner && spin_count == 1)) {
       // The canonical projection can change the physical residual. An accepted
       // iterative state alone never licenses forces from a worse final state.
       active[system] = 0;
@@ -312,17 +315,18 @@ void launch_update_convergence_kernel(
     double density_tolerance, bool guard_energy_roundoff, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    bool qualified_owner) {
   if (retain_converged_density) {
     update_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, qualified_owner);
   } else {
     update_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, qualified_owner);
   }
 }
 
@@ -332,17 +336,18 @@ void launch_update_uhf_convergence_kernel(
     double density_tolerance, bool guard_energy_roundoff, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual, const std::uint32_t* approximate_item_census) {
+    const double* physical_residual, const std::uint32_t* approximate_item_census,
+    bool qualified_owner) {
   if (retain_converged_density) {
     update_uhf_convergence_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, qualified_owner);
   } else {
     update_uhf_convergence_kernel<false><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, energy_tolerance, density_tolerance, guard_energy_roundoff, energy,
         previous_energy, next_density, density, active, converged, iterations, energy_change,
-        density_rms, physical_residual, approximate_item_census);
+        density_rms, physical_residual, approximate_item_census, qualified_owner);
   }
 }
 
@@ -351,10 +356,11 @@ void launch_validate_force_residual_kernel(cudaStream_t stream, std::int32_t bat
                                            double density_tolerance,
                                            const double* physical_residual, std::uint8_t* active,
                                            std::uint8_t* converged, std::uint32_t* tested_count,
-                                           std::uint8_t* tested_items, double energy_tolerance) {
+                                           std::uint8_t* tested_items, double energy_tolerance,
+                                           bool qualified_owner) {
   validate_force_residual_kernel<<<batch_size, 32, 0, stream>>>(
       batch_size, spin_count, nbf, density_tolerance, physical_residual, active, converged,
-      tested_count, tested_items, energy_tolerance);
+      tested_count, tested_items, energy_tolerance, qualified_owner);
 }
 
 void launch_tail_rhf_loop_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

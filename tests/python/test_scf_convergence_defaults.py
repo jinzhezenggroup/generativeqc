@@ -116,6 +116,14 @@ def test_physical_limits_are_capped_and_tight_controls_restore_strict_policy(
 int main() {
   using namespace generativeqc::scf;
   assert(standard_scf_convergence_requested(1e-9,1e-5));
+  // Loose public controls cannot grant owner qualification. The unsupported
+  // UHF/ECP residual from the regression must fail while qualified RHF passes.
+  assert(hf_stationarity_tolerance(1e-9,1e-5,false)==1e-8);
+  assert(hf_stationarity_tolerance(1e-9,1e-5,true)==1e-5);
+  assert(5e-6 > hf_stationarity_tolerance(1e-9,1e-5,false));
+  assert(5e-6 < hf_stationarity_tolerance(1e-9,1e-5,true));
+  assert(hf_stationarity_tolerance(1e-12,1e-5,true)==1e-8);
+  assert(hf_stationarity_tolerance(1e-9,1e-12,false)==1e-12);
   assert(scf_stationarity_tolerance(1e-9,1e-5,1e-9)==1e-5);
   assert(scf_stationarity_tolerance(1e-3,1e-2,1e-9)==1e-5);
   assert(scf_stationarity_tolerance(1e-10,1e-5,1e-9)==1e-9);

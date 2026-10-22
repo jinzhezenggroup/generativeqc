@@ -80,6 +80,7 @@ struct PersistentScfState {
   unsigned max_iterations{};
   double energy_tolerance{};
   double density_tolerance{};
+  bool qualified_standard_owner{};
 
   // Ready entries are revoked before every attempted solve. A matched entry
   // survives privately until a successful final endpoint republishes it.

@@ -35,6 +35,13 @@ GENERATIVEQC_CONVERGENCE_HD constexpr double scf_stationarity_tolerance(
   return density_tolerance < ceiling ? density_tolerance : ceiling;
 }
 
+/** HF admission is an owner property, not a consequence of loose controls. */
+GENERATIVEQC_CONVERGENCE_HD constexpr double hf_stationarity_tolerance(
+    double energy_tolerance, double density_tolerance, bool qualified_owner) noexcept {
+  return qualified_owner ? scf_stationarity_tolerance(energy_tolerance, density_tolerance, 1e-8)
+                         : (density_tolerance < 1e-8 ? density_tolerance : 1e-8);
+}
+
 }  // namespace generativeqc::scf
 
 #undef GENERATIVEQC_CONVERGENCE_HD

@@ -35,7 +35,7 @@ struct Device {
 
 void check_convergence(unsigned spins, bool retain, bool require_physical, bool approximate,
                        double tolerance, double energy_tolerance = 1e-12,
-                       double allowed_residual = 0.0) {
+                       double allowed_residual = 0.0, bool qualified_owner = false) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned n = 8, batch = 6;
   const std::size_t size = spins * n * n;
@@ -58,7 +58,7 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
   launch(retain, batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, false, energy.data,
          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
          change.data, rms.data, require_physical ? d_residual.data : nullptr,
-         approximate ? census.data : nullptr);
+         approximate ? census.data : nullptr, qualified_owner);
   check(cudaGetLastError());
   const auto flags = converged.read();
   const auto counts = iterations.read();
@@ -72,6 +72,31 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
       throw std::runtime_error("physical convergence changed density-retention semantics");
   }
 
+  if (require_physical && !approximate) {
+    // Exercise the fitted owner independently with the same adversarial
+    // residuals, including unsupported loose UHF and unqualified RHF owners.
+    Device<double> df_alpha(std::vector<double>(batch * n * n, 0.25)),
+        df_beta(std::vector<double>(batch * n * n, 0.25)),
+        df_next(std::vector<double>(batch * n * n, 0.25 + 1e-12)),
+        df_previous(std::vector<double>(batch, -1));
+    Device<std::uint8_t> df_active(std::vector<std::uint8_t>{1, 1, 1, 1, 1, 0}),
+        df_converged(std::vector<std::uint8_t>(batch, 0));
+    Device<std::uint32_t> df_iterations(std::vector<std::uint32_t>(batch, 1));
+    if (spins == 1)
+      generativeqc::scf::cuda_df::launch_update_device_convergence_kernel(
+          batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, energy.data,
+          df_previous.data, df_next.data, df_alpha.data, df_active.data, df_converged.data,
+          df_iterations.data, change.data, rms.data, d_residual.data, qualified_owner);
+    else
+      generativeqc::scf::cuda_df::launch_update_device_uhf_convergence_kernel(
+          batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, energy.data,
+          df_previous.data, df_next.data, df_next.data, df_alpha.data, df_beta.data, df_active.data,
+          df_converged.data, df_iterations.data, change.data, rms.data, d_residual.data);
+    check(cudaGetLastError());
+    if (df_converged.read() != flags)
+      throw std::runtime_error("direct and DF owner admission disagree");
+  }
+
   // The rebuilt force determinant must be checked separately: iteration
   // acceptance says nothing about a later projection's physical residual.
   Device<std::uint8_t> final_active(std::vector<std::uint8_t>{1, 1, 1, 1, 1, 0}),
@@ -82,7 +107,7 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
   Device<std::uint8_t> tested_items(std::vector<std::uint8_t>(batch, 0));
   launch_validate_force_residual_kernel(nullptr, batch, spins, n, tolerance, d_residual.data,
                                         final_active.data, final_converged.data, tested.data,
-                                        tested_items.data, energy_tolerance);
+                                        tested_items.data, energy_tolerance, qualified_owner);
   check(cudaGetLastError());
   if (final_converged.read() != std::vector<std::uint8_t>{1, 1, 0, 0, 0, 0} ||
       final_active.read() != std::vector<std::uint8_t>{1, 1, 0, 0, 0, 0} || tested.read()[0] != 5 ||
@@ -181,7 +206,10 @@ int main() {
     // original ceiling. Check both iteration and rebuilt-force consumers,
     // including localized beta errors, NaNs and inactive neighbors.
     for (unsigned spins : {1U, 2U}) {
-      check_convergence(spins, true, true, false, 1e-5, 1e-9, 1e-5);
+      check_convergence(spins, true, true, false, 1e-5, 1e-9, spins == 1 ? 1e-5 : 1e-8, true);
+      // Explicit loose controls do not qualify ECP/unknown owners. UHF stays
+      // strict even if a caller accidentally supplies restricted admission.
+      check_convergence(spins, true, true, false, 1e-5, 1e-9, 1e-8, false);
       check_convergence(spins, true, true, false, 1e-5, 1e-12, 1e-8);
     }
     std::cout << "Physical force convergence and final-state rejection passed\n";

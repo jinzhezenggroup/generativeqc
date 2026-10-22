@@ -488,6 +488,16 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history);
 
+/** Explicit admission from a restricted all-electron HF owner. */
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
+    const std::vector<double>& orthogonalizer, const std::vector<double>& initial_density,
+    const std::vector<std::int32_t>& occupied, const std::vector<double>& nuclear_repulsion,
+    unsigned max_iterations, double energy_tolerance, double density_tolerance,
+    std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
+    std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
+    bool qualified_standard_owner);
+
 /** UHF counterpart of the device-resident DF SCF loop. */
 generativeqc_status run_cuda_density_fitting_uhf_device_scf(
     CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
