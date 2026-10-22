@@ -14,6 +14,7 @@
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_density_fitting_basis.hpp"
+#include "scf/cuda_density_fitting_md.hpp"
 
 namespace generativeqc::scf {
 
@@ -159,7 +160,12 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
       : apply_metric_transform   ? "transformed_three_center_generation"
                                  : "raw_three_center_generation",
       stream);
-  if (derivative_coordinate < 0) {
+  if (packed_pairs && source->raw_hermite && !low_output) {
+    cuda_error = cuda_df_md_raw_tile(source->raw_hermite, stream, pair_begin, pair_count,
+                                     auxiliary_begin, auxiliary_count, output);
+    if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
+    runtime::cuda_trace::trace_counter("raw_hermite_values", tile_elements);
+  } else if (derivative_coordinate < 0) {
     launch_build_cuda_df_transformed_tile_kernel(
         false, blocks, source_threads, 0, stream, source->batch, source->cartesian_nbf,
         source->cartesian_naux, source->public_nbf, source->public_naux, source->dummy_index,
@@ -326,12 +332,63 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
                                                              : "auxiliary";
   if (implementation.value_mapping == 2U && implementation.raw_value_mapping == 0U)
     mapping = "raw-auxiliary/transformed-primitive";
+  if (implementation.raw_hermite) mapping = "packed-Hermite/transformed-primitive";
   const char* math = implementation.value_math == 3U   ? "manifest"
                      : implementation.value_math == 1U ? "specialized_polynomial"
                      : implementation.value_math == 2U ? "specialized_rys"
                      : implementation.has_auxiliary_g  ? "generated_rys_auxiliary_g_polynomial"
                                                        : "generated_rys";
+  if (implementation.raw_hermite)
+    math = implementation.has_auxiliary_g ? "prepared_hermite/generated_rys_auxiliary_g_polynomial"
+                                          : "prepared_hermite/generated_rys";
   return {math, mapping, true, true};
+}
+
+generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegralSource* source,
+                                                      const core::System& orbital,
+                                                      const core::System& auxiliary,
+                                                      std::size_t additional_device_budget,
+                                                      std::size_t additional_host_budget,
+                                                      std::string& detail) {
+  detail.clear();
+  if (!source || !source->implementation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  auto& state = *static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation);
+  if (state.raw_hermite || state.generated_value_tiles.load(std::memory_order_relaxed)) {
+    detail = "raw Hermite preparation requires a fresh integral source";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (state.batch_size != 1 || !state.automatic_value_mapping || state.value_math ||
+      !additional_device_budget || !additional_host_budget)
+    return GENERATIVEQC_STATUS_SUCCESS;
+  if (!cuda_density_fitting_integral_source_geometry_matches(source, 0, orbital, auxiliary)) {
+    detail = "raw Hermite preparation inputs differ from the physical source";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  // This is optional reuse, not a new resource allowance. Cap even an ample
+  // remainder to keep the topology-sized preparation bounded on large bases.
+  constexpr std::size_t maximum = 256U << 20;
+  const auto device_cap = std::min({additional_device_budget, maximum,
+                                    std::numeric_limits<std::size_t>::max() - state.device_bytes});
+  const auto host_cap = std::min({additional_host_budget, maximum,
+                                  std::numeric_limits<std::size_t>::max() - state.host_peak_bytes});
+  const auto selected = cudaSetDevice(state.device_id);
+  if (selected != cudaSuccess) return source_cuda_status(selected);
+  CudaDfMdResources resources;
+  auto status = create_cuda_df_md_raw(state.device_id, orbital, auxiliary, device_cap, host_cap,
+                                      &state.raw_hermite, resources, detail);
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+    detail.clear();  // Transactional refusal retains the existing source.
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  state.device_bytes += resources.device_bytes;
+  state.host_bytes += resources.host_resident_bytes;
+  state.host_peak_bytes += resources.host_peak_bytes;
+  runtime::df_progress::number("raw_hermite_device_bytes", resources.device_bytes);
+  runtime::df_progress::number("raw_hermite_host_peak_bytes", resources.host_peak_bytes);
+  runtime::df_progress::number("raw_hermite_orbital_primitives", resources.orbital_primitives);
+  runtime::df_progress::number("raw_hermite_auxiliary_primitives", resources.auxiliary_primitives);
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 std::size_t cuda_density_fitting_integral_source_host_bytes(

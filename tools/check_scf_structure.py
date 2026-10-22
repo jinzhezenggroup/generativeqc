@@ -124,6 +124,8 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     ),
 }
 CUDA_ALLOWED["cuda_df_source"] = (
+    "scf/cuda/df_md_raw.hpp",
+    "scf/cuda_density_fitting_md.hpp",
     "runtime/cuda_component_trace.hpp",
     # The CUDA-free construction planner shares checked metadata sizes only.
     "scf/df_source_capacity.hpp",
