@@ -49,7 +49,15 @@ def emit_df_md_j_header() -> str:
                 for index, state in enumerate(_hermite_states(pair + auxiliary))
             }
             mappings.extend(
-                radial[tuple(a + b for a, b in zip(first, second, strict=True))]
+                # A Hermite state has exactly three Cartesian exponents. Keep
+                # that fixed-width type in the address-map lookup as well.
+                radial[
+                    (
+                        first[0] + second[0],
+                        first[1] + second[1],
+                        first[2] + second[2],
+                    )
+                ]
                 for first in _hermite_states(pair)
                 for second in _hermite_states(auxiliary)
             )
