@@ -280,12 +280,12 @@
         "path": "src/posthf/ump2_force.cpp",
         "symbol": "derivative: third -> local"
       },
-      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md.",
+      "reason": "Retain this explicit spin-frame stage for the initial complete native CPU analytic-force endpoint. Alpha/beta coefficients stay in their own slots. Later shell consumers reuse the stage or consume its borrowed local span synchronously. Independent total-force/FD, spin-permutation and resource/failure gates qualify correctness and admission, not required storage or profitability. Bounded memory does not bound semantic work. See .agents/notes/implemented/numerics/2026-10-19-native-ump2-analytic-forces.md. Range-DF integration review (2026-10-23): these file digests also cover separate operator-matched DF entry points; the two ERI shell derivative consumers, UMP2 producer and capacity owner are unchanged from bbd41a427. The same retained-pending-evidence disposition and endpoint/work/storage gaps remain.",
       "residency": "Host std::vector<double>, di*dj*dk*dl elements; only one spin channel is staged at a time",
       "resource_owner": "unrestricted_force_cpu admits provider/reference, ijab weights, rank-two state, O(N^3) blocks, GMRES, VJP and simultaneous shell staging before work. The staging sum is 8*(d*N^3+d^2*N^2+d^3*N+d^4) bytes using maximum shell extent d; four rank-two pullback planes and the 8 MiB derivative scratch allowance are charged separately. This numeric-payload bound excludes allocator/object and stack overhead and is not measured RSS.",
       "source_bindings": {
-        "src/integrals/s_integrals.cpp": "a555368e4473fa0e9c56b6cf7a737d99d52d2d24bfbbb168c7d9b95e54a5afb8",
-        "src/integrals/s_integrals.hpp": "0857306c01be92cd67eabb9838acfdcd6083e69df3de3216818f0c82297d4060",
+        "src/integrals/s_integrals.cpp": "e1384c6f65f33739392e1e2bb30e6ac7d423b5520ee4ce52391af35871a86a69",
+        "src/integrals/s_integrals.hpp": "d4b79e899491ad83f12637a415ae3026ff7c439212c93ca6af161fbcf89836f0",
         "src/posthf/capacity.hpp": "d0111d0b24f14aef79024ec52a1a7ff9a1f962ff97966ff12c0e553ee8cfe93e",
         "src/posthf/ump2_force.cpp": "5da0c7f86e2659fbd351a9c532412312854ec05c498d97dd6be97cfa0515f04b",
         "src/posthf/ump2_force.hpp": "dfbad8aeb603d9a0f253be9597faed38085cb046713a553c8e90e909f133b62f"
