@@ -168,6 +168,27 @@ endpoints against the optimized FP64
 path without disabling that reuse. `benchmarks/pbe0_fast_fock.py` retains first
 calls, alternating repeats, executed J/K work and independent observable gates.
 
+## DF XC proposals
+
+Default-grid CUDA DF PBE/r2SCAN RKS, including canonical r2SCAN-3c, have a
+separate `df-xc-budget-v1` capability. With 24–1200 orbital AOs, 2–96 atoms,
+shells through d and the default level-3 Treutler grid, Fast can use the shared
+FP32 XC matrix products during bounded SCF proposals. DF J, metric solves,
+XC point algebra and final physical Focks remain FP64. This does not advertise
+mixed DF integrals. The proposal uses the same budget floors, candidate control
+ceilings and strict final validation described above; explicit tighter controls
+remain tighter. Hybrids, nonlocal models, UKS, other grids and older libraries
+keep their existing DF SCF policy.
+
+The complete-model gradient qualification at 96–1200 AOs can combine this
+proposal with mixed semilocal geometry. Its separate identity is
+`<method>-df-rks-treutler-xc-budget-fp32-v1`, and it requires the live final
+snapshot's authenticated force allowance. DF integral/metric response, moving
+grid response, corrections and reductions remain FP64. Smaller admitted SCF
+models keep strict gradients. Cold receipts require actual mixed XC work and
+consecutive strict final builds; frozen warm receipts require a fresh strict
+Fock/audit bound to the returned state. Explicit observable targets still audit.
+
 ## Strict-Density Gradient Routes
 
 All-electron CUDA
@@ -188,8 +209,14 @@ only its electronic derivative work is narrowed. Both corrections are included
 in the returned energy/forces and endpoint timing. This is not all-GPU 3c.
 
 CUDA density-fitted PBE/PBE0/B3LYP/r2SCAN/M06-2X RKS also select mixed semilocal
-geometry with 24–96 AOs, 2–12 atoms, orbital shells through d, and explicit
-`GridSpec(24, 8, 16)` or `GridSpec(48, 16, 32)` (unit radii, three Becke passes).
+geometry with orbital shells through d. Default Treutler/Lebedev/NWChem
+level-3 grids use a separately qualified domain of 96–1200 AOs and 2–96 atoms;
+smaller default-grid inputs keep the strict path because conversion costs do
+not reliably amortize. The original explicit `GridSpec(24, 8, 16)` and
+`GridSpec(48, 16, 32)` domain remains 24–96 AOs and 2–12 atoms (unit radii,
+three Becke passes). The default-grid record is
+`<method>-df-rks-treutler-budget-fp32-v1`; legacy tensor grids retain their
+original qualification identifiers.
 Canonical r2SCAN-3c DF uses the same domain with its defining def2-mTZVPP basis
 and unchanged FP64 D4/native CPU gCP corrections. Its electronic precision
 record identifies r2SCAN DF; complete-model qualification also requires both
@@ -199,13 +226,14 @@ This domain requires native DF J and, for hybrids, DF K with the default
 the XC name. Changed exchange compositions, arbitrary corrected DF, mixed
 full-range J/K providers, COSX and UKS retain the audit fallback. WB97M-V has
 the separate complete-model domain below.
-In this fitted path **only semilocal geometry arithmetic narrows**: SCF, AO
+In this strict-density fitted path **only semilocal geometry arithmetic narrows**: SCF, AO
 generation, one-electron/Pulay sources, DF integrals and metric response, and
 global reductions remain FP64. The direct-path AO/integral narrowing described
 below does not apply to DF. This support does not promise a speedup for every
 system or complete singlepoint.
-DF energy-only requests have no admitted mixed operator. Eligible strict native
-endpoints use the Standard fallback; explicit targets still request an audit.
+Outside the separately qualified DF XC proposal domain, energy-only requests
+have no admitted mixed operator. Eligible strict native endpoints use the
+Standard fallback; explicit targets still request an audit.
 
 CUDA DF RHF has a separate native shell-derivative candidate: 24–96 orbital
 AOs, up to 512 auxiliary AOs, 2–12 atoms, orbital shells through d and auxiliary
@@ -389,9 +417,25 @@ It does not imply FP32 execution or promise a speedup for every workload.
 
 Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
-observable-budget audit is claimed**. Its solver controls are at least as strict
-as `1e-10` energy, `1e-8` density and `1e-12` screening; stricter caller settings
-are preserved. These controls are not a bound on force error.
+observable-budget audit is claimed**. Its CUDA solver defaults are `1e-9` energy change, `1e-5` density change and
+`1e-12` screening for all-electron RHF and canonical restricted PBE, PBE0,
+B3LYP, r2SCAN (including r2SCAN-3c), and M06-2X on the default grid. CPU,
+unrestricted, correlated and other model/grid domains, and older native
+libraries, retain `1e-10` energy and `1e-8` density. `Calculator` and Fast's
+Standard fallback resolve the same defaults. Explicit tighter controls are
+preserved; neither FP64 arithmetic nor solver thresholds bound force error.
+
+Eligible CUDA owners cap the physical AO commutator at `1e-5`. KS must also
+pass its complete canonical final-state proof before accepting convergence;
+a rejected proof continues SCF without publishing a warm seed. Either tighter
+energy or density controls restore the strict physical residual ceiling.
+Trace, idempotency, ownership and force-token checks remain mandatory.
+This AO norm is different from GPU4PySCF's orbital-gradient norm. Qualification
+compares complete energies and forces against independent, tightly converged
+same-grid/same-fitted-model references. It does not remove quadrature or fitting
+error, and it does not turn a failed dense-reference comparison into a pass.
+For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
+`density_tolerance=1e-10`.
 
 Supplying an explicit `TargetAccuracy`, including with Fast or FP64, requests a complete
 same-backend comparison. Balanced, Strict and `audit_auto` also request these

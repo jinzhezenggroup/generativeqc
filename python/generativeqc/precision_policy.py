@@ -18,6 +18,7 @@ from time import perf_counter
 from ._api_types import Atom, MethodCapabilities, Result
 from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
 from ._df_precision import DF_GRADIENT_QUALIFICATIONS
+from ._scf_convergence import default_scf_controls
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
@@ -57,14 +58,18 @@ def _budget_target(budget: TargetErrorBudget, *, forces: bool = True) -> TargetA
 def _budget_fock_controls(
     calculator: Calculator, budget: TargetErrorBudget, requested: dict
 ) -> dict[str, float]:
-    """Select controls for shared Direct modules, independently of XC identity.
+    """Select controls for shared Direct modules or separately qualified DF XC.
 
-    Native preparation checks the actual provider and basis/resource domain.
+    Direct admission is independent of XC identity; DF authenticates its local
+    complete model and keeps J strict. Native preparation checks the actual
+    provider and basis/resource domain.
     Older libraries, unsupported providers and tighter budgets stay strict.
     Explicit caller tolerances are ceilings, never silently loosened.
     The density ceiling matches the native owner's maximum authenticated force
     stationarity allowance; it is not an observable-error estimate.
     """
+    from ._df_precision import fitted_scf_budget_admitted
+
     capability = getattr(
         getattr(calculator, "_library", None),
         "generativeqc_application_fock_precision_version_v2",
@@ -72,14 +77,18 @@ def _budget_fock_controls(
     )
     ks_options = getattr(calculator, "_ks_options", None)
     model = getattr(ks_options, "_method_ir", None)
+    fitted = bool(getattr(calculator, "_density_fitting_mode", None))
+    available = (
+        fitted_scf_budget_admitted(calculator, budget)
+        if fitted
+        else capability is not None and capability() == 2
+    )
     if (
-        capability is None
-        or capability() != 2
+        not available
         or model is None
         or model.spin != "unpolarized"
         or not ks_options.execution_plan.self_consistent
         or ks_options.xc_schedule != "device_fused"
-        or getattr(calculator, "_density_fitting_mode", None)
         or budget.energy_abs < 1e-5
         or budget.force_max_abs < 1e-4
         or (budget.force_rms is not None and budget.force_rms < 3e-5)
@@ -270,11 +279,8 @@ def _standard_fallback_admitted(
         and (budget.force_rms is None or budget.force_rms >= 3e-5)
         and all(
             0 < getattr(calculator, attribute, math.inf) <= limit
-            for attribute, limit in (
-                ("_energy_tolerance", 1e-10),
-                ("_density_tolerance", 1e-8),
-                ("_screening_tolerance", 1e-12),
-            )
+            for name, limit in default_scf_controls(calculator).items()
+            for attribute in ("_" + name,)
         )
         and work.get("requested_mode") == "fp64"
         and work.get("effective_bits") == 64
@@ -544,7 +550,13 @@ def _complete_gradient_admission(
 
     correction = result.dispersion
     if (
-        electronic in ("r2scan-rks-budget-fp32-v1", "r2scan-df-rks-budget-fp32-v1")
+        electronic
+        in (
+            "r2scan-rks-budget-fp32-v1",
+            "r2scan-df-rks-budget-fp32-v1",
+            "r2scan-df-rks-treutler-budget-fp32-v1",
+            "r2scan-df-rks-treutler-xc-budget-fp32-v1",
+        )
         and correction_model.identity
         == resolve_method("R2SCAN-3c", spin="unpolarized").identity
         and isinstance(correction, R2SCAN3CCorrectionResult)
@@ -623,8 +635,10 @@ class PrecisionCalculator:
     stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
     RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
     SCF state stays strict on those other routes; unsupported domains use FP64 audits.
-    Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
-    still require the audit fallback and have no mixed-arithmetic acceleration.
+    Qualified DF RKS may narrow semilocal geometry. Default-grid DF PBE/r2SCAN
+    RKS may also use FP32 XC matrix products in bounded SCF proposals; DF J and
+    the metric remain FP64. Other DF requests retain their strict fallback or
+    audit path.
     Explicit targets/audit profiles cost two full endpoints, or three after
     rejection. FP64 does not imply FP32 arithmetic or a universal speed guarantee.
     Prepared batches reuse native candidate plans and engine-local warm seeds.
@@ -663,22 +677,27 @@ class PrecisionCalculator:
         self._lock = threading.RLock()
         self._options = {"method": method, "basis": basis, "device": device, **options}
         if policy.profile in ("standard", "fp64", "fast"):
-            # A speed profile must not turn caller-supplied loose convergence
-            # controls into an implicitly certified strict endpoint.
-            for name, ceiling in (
-                ("energy_tolerance", 1e-10),
-                ("density_tolerance", 1e-8),
-                ("screening_tolerance", 1e-12),
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "screening_tolerance",
             ):
                 requested = self._options.get(name)
                 if requested is not None:
                     requested = float(requested)
                     if not math.isfinite(requested) or requested <= 0:
                         raise ValueError(f"{name} must be finite and positive")
-                self._options[name] = min(
-                    ceiling, ceiling if requested is None else requested
-                )
         self._candidate = Calculator(**self._options, precision="fp64")
+        if policy.profile in ("standard", "fp64", "fast"):
+            # Select the same qualified Standard controls as Calculator after
+            # resolving the native library and complete model. Unsupported
+            # owners and older libraries keep their strict defaults. Tight
+            # caller values survive both Standard and Fast fallback paths.
+            for name, ceiling in default_scf_controls(self._candidate).items():
+                requested = self._options.get(name)
+                value = min(ceiling, ceiling if requested is None else float(requested))
+                self._options[name] = value
+                setattr(self._candidate, "_" + name, value)
         self._fp64_properties = self._candidate.capabilities.supported_properties
         if self._candidate.capabilities.family not in (
             "hartree_fock",
@@ -1121,6 +1140,11 @@ class PrecisionCalculator:
                 fast_native
                 and self._fast_fock
                 and (
+                    not gradient
+                    or gradient.get("returned_mode") == "fp64"
+                    or qualified_gradient
+                )
+                and (
                     strict_warm
                     or _budget_fock_work_admitted(candidate_calculator, work)
                 )
@@ -1137,7 +1161,11 @@ class PrecisionCalculator:
                     (),
                     tuple(solves),
                     perf_counter() - started,
-                    reference="direct-fock-budget-v2/shared-module-qualification",
+                    reference=(
+                        "df-xc-budget-v1/strict-j-shared-xc-qualification"
+                        if candidate_calculator._density_fitting_mode
+                        else "direct-fock-budget-v2/shared-module-qualification"
+                    ),
                     gradient_admission=gradient_admission,
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,

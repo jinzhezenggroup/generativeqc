@@ -677,6 +677,36 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
             orbital.ecp_terms.empty() &&
                 std::none_of(orbital.atoms.begin(), orbital.atoms.end(),
                              [](const auto& atom) { return atom.ecp_core != 0; }));
+    CudaDfRawChargeView raw_charge;
+    if (plan->md_coulomb && matching_source && plan->batch_size == 1 && system == 0 &&
+        metric.full_rank && metric.owner_identity &&
+        std::all_of(terms.begin(), terms.end(),
+                    [](const auto& term) { return term.exchange_coefficient == 0; })) {
+      raw_charge = {plan->md_coulomb,
+                    [](void* context, const double* density, double* charge, std::string& message) {
+                      const auto error = cuda_execution::cuda_df_md_charge(
+                          static_cast<cuda_execution::CudaDfMdOwner*>(context), density, charge);
+                      return error == cudaSuccess
+                                 ? GENERATIVEQC_STATUS_SUCCESS
+                                 : cuda_failure(error, "DF Hermite response charge", message);
+                    },
+                    plan->device_id,
+                    reinterpret_cast<void*>(plan->stream),
+                    plan->nbf,
+                    plan->naux,
+                    plan->md_coulomb_resources.device_bytes,
+                    metric.owner_identity,
+                    [](void* context, const double* density, const double* potential,
+                       double coefficient, double* gradient, std::string& message) {
+                      const auto error = cuda_execution::cuda_df_md_three_center_gradient(
+                          static_cast<cuda_execution::CudaDfMdOwner*>(context), density, potential,
+                          coefficient, gradient);
+                      return error == cudaSuccess
+                                 ? GENERATIVEQC_STATUS_SUCCESS
+                                 : cuda_failure(error, "DF Hermite response derivative", message);
+                    },
+                    orbital.atoms.size()};
+    }
     const auto status = execute_cuda_df_hf_gradient(
         plan->device_id, reinterpret_cast<void*>(plan->stream), plan->integral_source, system,
         orbital, auxiliary, raw_a, {}, {}, terms, plan->metric_relative_threshold, schedule,
@@ -684,7 +714,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr,
-        select_borrowed_density ? borrowed_response_density : nullptr, mixed_shell);
+        select_borrowed_density ? borrowed_response_density : nullptr, mixed_shell,
+        raw_charge.context ? &raw_charge : nullptr);
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && mixed_shell) {
       // The failed transactional bridge drained its arena. Drop both optional
       // arithmetic/census storage and the consumed projection lease on replay.

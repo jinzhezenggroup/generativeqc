@@ -56,6 +56,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         block_auto=False,
         auto_properties=None,
         transport_v2=False,
+        standard_convergence=False,
     )
 
     class Backend:
@@ -63,6 +64,14 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
+            if state.standard_convergence:
+                from generativeqc import _native
+
+                self._method = _native.METHOD_RHF
+                self._device_name = options.get("device")
+                self._library = SimpleNamespace(
+                    generativeqc_standard_scf_convergence_version_v1=lambda: 1
+                )
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")
             self._ks_options = options.get("ks_options")
@@ -252,6 +261,22 @@ def test_fast_strict_fallback_retains_standard_without_repeating_endpoint(
     assert report.scope == "native_fp64"
     assert report.target is None and report.errors == ()
     assert "no-observable-audit" in report.reference
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_new_standard_controls_keep_single_solve_fallback(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    """A new convergence capability cannot create an extra fallback audit."""
+    backend.standard_convergence = True
+    backend.block_auto = True
+    backend.outputs = [strict_native_result()]
+    calculator = PrecisionCalculator(policy=profile, device="cuda")
+    assert calculator._candidate._energy_tolerance == 1e-9
+    assert calculator._candidate._density_tolerance == 1e-5
+    output = calculator.singlepoint(ATOMS)
+    assert len(backend.calls) == output.precision_validation.solve_count == 1
+    assert output.precision_validation.errors == ()
 
 
 @pytest.mark.parametrize(
@@ -452,7 +477,9 @@ def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
     assert select(calculator, budget, {}) == {}
 
 
-@pytest.mark.parametrize("missing", [None, "exchange_k", "coulomb_recurrence"])
+@pytest.mark.parametrize(
+    "missing", [None, "exchange_k", "coulomb_recurrence", "unqualified_gradient"]
+)
 def test_budget_fock_requires_actual_fp32_exchange_work(
     backend: SimpleNamespace, missing: str | None
 ) -> None:
@@ -475,6 +502,16 @@ def test_budget_fock_requires_actual_fp32_exchange_work(
             for name in ("coulomb_j", "exchange_k", "coulomb_recurrence")
         ],
     }
+    if missing == "unqualified_gradient":
+        # A complete mixed SCF census cannot qualify an unknown mixed force.
+        # Cold proposals must retain the same audit fallback as warm replay.
+        work["gradient"] = {
+            "schema_version": 4,
+            "owner": "python-stationary-cuda",
+            "qualification": "unknown",
+            "complete": True,
+            "returned_mode": "mixed",
+        }
     backend.outputs = [result(executed_backend="cuda", precision=work)]
     if missing:
         backend.outputs.append(result(executed_backend="cuda"))
@@ -1304,9 +1341,16 @@ def test_nonlocal_fast_uses_real_strict_scf_policy(backend: SimpleNamespace) -> 
     )
 
 
-@pytest.mark.parametrize("fitted", (False, True))
+@pytest.mark.parametrize(
+    "electronic",
+    (
+        "r2scan-rks-budget-fp32-v1",
+        "r2scan-df-rks-budget-fp32-v1",
+        "r2scan-df-rks-treutler-budget-fp32-v1",
+    ),
+)
 def test_composite_gradient_admission_requires_all_canonical_correction_sources(
-    fitted: bool,
+    electronic: str,
 ) -> None:
     """A complete electronic record alone cannot certify another corrected graph."""
     from generativeqc.dispersion import (
@@ -1321,9 +1365,6 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
     gcp = GCPCorrectionResult(0, 0.0, gradient, "cpu", "", "native", "graph")
     correction = R2SCAN3CCorrectionResult(0, 0.0, gradient, "cuda+cpu", "", d4, gcp)
     calculator = SimpleNamespace(_dispersion_method_ir=resolve_method("R2SCAN-3c"))
-    electronic = (
-        "r2scan-df-rks-budget-fp32-v1" if fitted else "r2scan-rks-budget-fp32-v1"
-    )
     assert implementation._complete_gradient_admission(
         calculator, result(dispersion=correction), electronic
     ) == electronic.replace("r2scan-", "r2scan-3c-", 1)

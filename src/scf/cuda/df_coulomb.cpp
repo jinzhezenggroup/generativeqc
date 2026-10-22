@@ -22,7 +22,39 @@ namespace generativeqc::scf::cuda_df {
 using runtime::cuda_trace::trace_call;
 using runtime::cuda_trace::TraceOperation;
 
-// Coulomb needs two bounded raw passes unless an admitted K traversal supplies its charge.
+namespace {
+/** Apply the retained full-rank metric to one raw charge using the incumbent
+ * factor-first vector solve. Hermite and raw-panel producers share this exact
+ * operation; the new source must not change spectral cutoffs or response data. */
+generativeqc_status apply_raw_coulomb_metric(CudaDensityFittingJkPlan& plan, std::size_t system,
+                                             double* charge, double* panel_vector,
+                                             std::string& detail) {
+  const auto* q = plan.metric_eigenvectors + system * plan.naux * plan.naux;
+  auto status = trace_call("ri_j_metric_eigen_projection", plan.stream,
+                           [&] { return plan.metric_project->launch(q, charge, panel_vector); });
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    detail = "project raw DF charge eigendirections failed";
+    return status;
+  }
+  launch_scale_metric_projection(plan.stream, plan.naux, 1,
+                                 plan.metric_eigenvalues + system * plan.naux, false, panel_vector);
+  const auto cuda_error = cudaPeekAtLastError();
+  if (cuda_error != cudaSuccess)
+    return cuda_failure(cuda_error, "scale raw DF charge eigendirections", detail);
+  status = trace_call("ri_j_metric_scaled_rotation", plan.stream,
+                      [&] { return plan.metric_rotate->launch(q, panel_vector, charge); });
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    detail = "rotate inverse-applied raw DF charge failed";
+    return status;
+  }
+  runtime::cuda_trace::trace_counter("streamed_coulomb_factor_first", 1);
+  runtime::cuda_trace::trace_counter("streamed_coulomb_factor_gemvs", 2);
+  runtime::cuda_trace::trace_counter("streamed_coulomb_factor_flops", 4 * plan.naux * plan.naux);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+}  // namespace
+
+// Coulomb consumes either native Hermite vectors or the bounded raw-panel fallback.
 generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* density,
                                   std::string& detail, bool raw_charge_ready) {
   plan.revoke_projection_leases();
@@ -35,6 +67,35 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
   TraceOperation trace(
       "ri_j", plan.stream,
       {plan.batch_size, plan.nbf, plan.naux, plan.integral_source != nullptr, plan.streamed});
+  if (plan.md_coulomb) {
+    // Admission freezes a single full-rank streamed plan. Neither raw tensor
+    // tiles nor response/projection leases participate in these vector products.
+    if (!raw_charge_ready) {
+      const auto error = trace_call("ri_j_md_charge", plan.stream, [&] {
+        return cuda_execution::cuda_df_md_charge(plan.md_coulomb, density, plan.auxiliary_density);
+      });
+      if (error != cudaSuccess) return cuda_failure(error, "DF Hermite charge", detail);
+    }
+    const auto status = apply_raw_coulomb_metric(plan, 0, plan.auxiliary_density,
+                                                 plan.exchange_intermediate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto error = trace_call("ri_j_md_projection", plan.stream, [&] {
+      return cuda_execution::cuda_df_md_project(plan.md_coulomb, plan.auxiliary_density,
+                                                plan.coulomb);
+    });
+    if (error != cudaSuccess) return cuda_failure(error, "DF Hermite projection", detail);
+    runtime::cuda_trace::trace_counter("coulomb_md_owner_bytes",
+                                       plan.md_coulomb_resources.device_bytes);
+    // These count submitted complete unscreened traversals. Graph replay must
+    // be measured from executed kernels, not multiplied by host submissions.
+    runtime::cuda_trace::trace_counter("coulomb_md_submitted_charge_passes", !raw_charge_ready);
+    runtime::cuda_trace::trace_counter("coulomb_md_submitted_projection_passes", 1);
+    runtime::cuda_trace::trace_counter("coulomb_md_submitted_primitive_interactions",
+                                       (raw_charge_ready ? 1 : 2) *
+                                           plan.md_coulomb_resources.orbital_primitives *
+                                           plan.md_coulomb_resources.auxiliary_primitives);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
   if (df_packed_pairs(plan.value_storage.pairs)) {
     // The packed density dies after rho=B*d. Its same scratch is then the
     // packed J output, so no per-batch pair vectors or allocation are needed.
@@ -160,30 +221,8 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
           // Keep eigendirections until after division. Only two length-Naux
           // vectors are live, in the charge owner and existing K scratch;
           // source work stays at the same two complete raw-tensor passes.
-          const auto* q = plan.metric_eigenvectors + system * plan.naux * plan.naux;
-          auto status = trace_call("ri_j_metric_eigen_projection", plan.stream, [&] {
-            return plan.metric_project->launch(q, charge, panel_vector);
-          });
-          if (status != GENERATIVEQC_STATUS_SUCCESS) {
-            detail = "project raw DF charge eigendirections failed";
-            return status;
-          }
-          launch_scale_metric_projection(plan.stream, plan.naux, 1,
-                                         plan.metric_eigenvalues + system * plan.naux, false,
-                                         panel_vector);
-          cuda_error = cudaPeekAtLastError();
-          if (cuda_error != cudaSuccess)
-            return cuda_failure(cuda_error, "scale raw DF charge eigendirections", detail);
-          status = trace_call("ri_j_metric_scaled_rotation", plan.stream,
-                              [&] { return plan.metric_rotate->launch(q, panel_vector, charge); });
-          if (status != GENERATIVEQC_STATUS_SUCCESS) {
-            detail = "rotate inverse-applied raw DF charge failed";
-            return status;
-          }
-          runtime::cuda_trace::trace_counter("streamed_coulomb_factor_first", 1);
-          runtime::cuda_trace::trace_counter("streamed_coulomb_factor_gemvs", 2);
-          runtime::cuda_trace::trace_counter("streamed_coulomb_factor_flops",
-                                             4 * plan.naux * plan.naux);
+          const auto status = apply_raw_coulomb_metric(plan, system, charge, panel_vector, detail);
+          if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         }
         auto* output = plan.coulomb + system * plan.matrix_elements;
         if (packed_pairs) {

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_md_j.cuh",
+  "role": "scientific",
+  "subsystem": "df_values",
+  "reason": "Unscreened tensor-free DF J consumer: GPU Hermite preparation reuses the retained normalized Cartesian recurrence; density precontraction, public projection and first-center derivative projection consume compiler-owned order-eleven radial/transpose mathematics. Admission, metric solve and budgets belong to df_md_owner/df_md_plan; screening remains absent.",
+  "regions": []
+}

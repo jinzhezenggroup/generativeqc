@@ -127,3 +127,41 @@ unset and `auto` remain dense because bounded response and geometry rebuild can
 regress substantially. The 384/1856 unequal case remains numerically unqualified.
 The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records domain evidence, validation and conditions for revisiting selection.
+
+## Streamed pure-J contractions
+
+Prepared restricted pure-J streamed sources automatically select native
+Hermite charge/projection when the complete owner fits. Unset or
+`GENERATIVEQC_DF_MD_COULOMB=1` enables this policy; `0` restores the previous
+raw-value path and other values are rejected. The control is part of prepared-source
+identity. Admission requires one streamed system, a full-rank metric, orbital
+angular momentum through f, auxiliary angular momentum through g, and enough
+value capacity for the complete optional owner. Native topology counts reserve
+its exact device footprint before the planner sizes fallback panels. Device
+and host storage remain included in the enclosing diagnostics.
+
+The owner replaces raw three-center value regeneration with two vector
+contractions and the existing metric solve. It remains unscreened; retained
+integral sources remain available. Pure-J force response borrows the same
+stream-bound owner to recompute auxiliary charge from its exact current density,
+then applies the unchanged metric solve. A strict direct Hermite contraction
+adds the three-center atom derivatives without emitting public-AO weight panels;
+the original metric derivative remains in the response owner. Raised potential
+storage is included in the value reservation. It does not reuse an earlier SCF
+potential. Explicit panel/slice diagnostic controls retain
+their existing paths. Unsupported domains and
+optional capacity refusals use the existing bounded path. Device failures
+propagate. The owner and captured graphs share the value plan's stream and
+must retire before that stream is destroyed.
+
+`tests/python/test_df_md_plan_cuda.py` exercises independent metric/J parity,
+budget fallback and changed-input replay against the compiled core. Run it in
+a finite Slurm GPU allocation with `GENERATIVEQC_TEST_DF_MD_PLAN=1` and an
+explicit `GENERATIVEQC_LIBRARY`. Adding `GENERATIVEQC_TEST_DF_MD_FORCE=1`
+checks complete Coulomb gradients against independent displaced libcint
+energies, zero/changed density, borrowed-owner identity and failure propagation.
+`tests/python/test_df_md_endpoint_cuda.py` adds independent complete SCF/force,
+frozen replay and changed-geometry checks for the automatic and rollback paths.
+Resident fitted tensors retain their existing selection. See the
+[default decision](../../.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md)
+for qualification and fallback rationale.

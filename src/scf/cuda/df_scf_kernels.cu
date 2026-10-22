@@ -146,10 +146,13 @@ void launch_validate_device_occupied_kernel(dim3 grid, dim3 block, std::size_t s
 // Existing DF arithmetic and reduction order; host orchestration compiles separately.
 __global__ void assemble_rhf_fock_kernel(std::size_t elements, const double* hcore,
                                          const double* coulomb, const double* exchange,
-                                         double* fock) {
+                                         double* fock, std::uint64_t* completed_builds) {
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= elements) return;
   fock[element] = hcore[element] + coulomb[element] - 0.5 * exchange[element];
+  // Exactly one thread records the physical pass on the owning stream. Graph
+  // capture does not execute this store; every actual replay/tail does.
+  if (element == 0 && completed_builds) ++*completed_builds;
 }
 
 __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hcore,
@@ -207,7 +210,7 @@ __global__ void update_device_convergence_kernel(
     std::size_t batch_size, std::size_t nbf, double energy_tolerance, double density_tolerance,
     const double* energy, double* previous_energy, const double* next_density, double* density,
     std::uint8_t* active, std::uint8_t* converged, std::uint32_t* iterations, double* energy_change,
-    double* density_rms, const double* physical_residual) {
+    double* density_rms, const double* physical_residual, bool qualified_owner) {
   const std::size_t system = blockIdx.x;
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_elements = nbf * nbf;
@@ -232,7 +235,7 @@ __global__ void update_device_convergence_kernel(
     energy_change[system] = change;
     density_rms[system] = rms;
     if (hf_iteration_converged(energy[system], previous_energy[system], energy_tolerance,
-                               density_tolerance, rms, physical_maximum)) {
+                               density_tolerance, rms, physical_maximum, true, qualified_owner)) {
       converged[system] = 1;
       active[system] = 0;
     } else {
@@ -313,9 +316,10 @@ __global__ void update_device_uhf_convergence_kernel(
 
 void launch_assemble_rhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
-                                     const double* coulomb, const double* exchange, double* fock) {
+                                     const double* coulomb, const double* exchange, double* fock,
+                                     std::uint64_t* completed_builds) {
   assemble_rhf_fock_kernel<<<grid, block, shared_bytes, stream>>>(elements, hcore, coulomb,
-                                                                  exchange, fock);
+                                                                  exchange, fock, completed_builds);
 }
 void launch_assemble_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
@@ -358,10 +362,11 @@ void launch_update_device_convergence_kernel(
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual) {
+    const double* physical_residual, bool qualified_owner) {
   update_device_convergence_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, energy_tolerance, density_tolerance, energy, previous_energy, next_density,
-      density, active, converged, iterations, energy_change, density_rms, physical_residual);
+      density, active, converged, iterations, energy_change, density_rms, physical_residual,
+      qualified_owner);
 }
 void launch_tail_cuda_density_fitting_scf_graph_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,

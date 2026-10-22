@@ -1,12 +1,13 @@
 # Published GPU benchmark artifacts
 
-The [2026-10-21 repaired README comparison](readme-repaired-20261021/README.md)
+The [2026-10-22 README comparison](readme-final-20261022/README.md)
 remeasures all eight HF/DFT methods in Direct and DF with native Standard/Fast
 and one GPU4PySCF default SCF profile. Both engines include complete moving-grid
 force response. The report retains common independent accuracy gates, actual
-work, failed populations and the [remaining configuration differences](readme-repaired-20261021/conditions.md).
-The [superseded comparison](readme-unified-20261021/README.md) retains its
-original tables and a verified published-Git snapshot.
+work, failed populations and the [remaining configuration differences](readme-final-20261022/conditions.md).
+The [previous repaired comparison](readme-repaired-20261021/README.md) and
+[earlier comparison](readme-unified-20261021/README.md) retain their original
+tables and verified published-Git snapshots.
 
 The [initial 2026-10-20 default-grid refresh](readme-defaults-20261020/README.md)
 retains 765 complete cold/warm E+F calls across all eight HF/DFT methods,

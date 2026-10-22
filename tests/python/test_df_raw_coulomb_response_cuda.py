@@ -161,6 +161,9 @@ def test_streamed_pure_coulomb_complete_endpoint(
     from generativeqc import Calculator
 
     assert os.environ.get("SLURM_JOB_ID")
+    # This test qualifies the retained raw-panel response, independently of
+    # the default tensor-free owner and its separate endpoint tests.
+    monkeypatch.setenv("GENERATIVEQC_DF_MD_COULOMB", "0")
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     monkeypatch.setenv("GENERATIVEQC_DF_COULOMB_RESPONSE", "auto")
     if execution == "auto":
@@ -213,6 +216,7 @@ def test_raw_coulomb_geometry_rebuild(monkeypatch: Any, tmp_path: Path) -> None:
     from benchmarks._cases import benchmark_cases
 
     lib.num_threads(1)
+    monkeypatch.setenv("GENERATIVEQC_DF_MD_COULOMB", "0")
     atoms = benchmark_cases()["water-tetramer-def2-svp-spherical"].atoms
     moved = [
         (symbol, tuple(np.asarray(xyz) + (0, 0, 0.025) if i == 1 else xyz))

@@ -34,6 +34,10 @@ namespace {
 struct CudaFailure {
   cudaError_t status;
 };
+// Preserve a borrowed producer's native status through the arena's stream drain.
+struct RawChargeFailure {
+  generativeqc_status status;
+};
 
 /** Prepare shell envelopes once, independently of auxiliary panels and weights.
  * Native code owns normalized-basis traversal and storage. The compiler owns
@@ -941,7 +945,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     DfGradientResources* resources, const CudaDfMetricView* device_metric, void* blas_handle,
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
     const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
-    const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell) {
+    const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell,
+    const CudaDfRawChargeView* raw_charge) {
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -982,6 +987,18 @@ generativeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (raw_charge &&
+      (!source || !device_metric || !device_metric->full_rank || !raw_charge->context ||
+       !raw_charge->submit || raw_charge->device_id != device ||
+       raw_charge->stream != stream_handle || raw_charge->nbf != n || raw_charge->naux != a ||
+       !raw_charge->device_bytes || !raw_charge->owner_identity ||
+       raw_charge->owner_identity != device_metric->owner_identity ||
+       (raw_charge->derivative && raw_charge->natom != orbital.atoms.size()) ||
+       !std::all_of(terms.begin(), terms.end(),
+                    [](const auto& term) { return term.exchange_coefficient == 0; }))) {
+    detail = "borrowed raw charge differs from the full-rank Coulomb source/metric owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (borrowed_density &&
@@ -1824,7 +1841,36 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                  return term.exchange_coefficient == 0;
                                });
       std::function<void(std::size_t, std::size_t, double*)> raw_coulomb_reader;
-      if (raw_coulomb && coulomb_policy != "slices") {
+      std::function<void(const double*, double*)> raw_charge_reader;
+      std::function<void(const double*, const double*, double)> raw_derivative_consumer;
+      if (raw_coulomb && coulomb_policy == "auto" && raw_charge) {
+        // Recompute from the exact density frame supplied to this force call.
+        // The value owner's stream and identity were checked before allocation;
+        // its E/H storage remains charged to that owner, never to this arena.
+        if (raw_charge->device_bytes >
+            std::numeric_limits<std::size_t>::max() - arena.stats.borrowed_device_bytes)
+          throw std::bad_alloc();
+        arena.stats.borrowed_device_bytes += raw_charge->device_bytes;
+        runtime::cuda_trace::trace_counter("response_md_charge_borrowed_bytes",
+                                           raw_charge->device_bytes);
+        raw_charge_reader = [&](const double* density, double* charge) {
+          const auto status = raw_charge->submit(raw_charge->context, density, charge, detail);
+          if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
+          runtime::cuda_trace::trace_counter("response_md_charge_calls", 1);
+        };
+        if (raw_charge->derivative && !mixed_shell && gradient_copies == 1 && !shell_diagnostics &&
+            !screening_features && shell_target == 0) {
+          raw_derivative_consumer = [&](const double* density, const double* potential,
+                                        double coefficient) {
+            runtime::cuda_trace::TraceRegion contraction("three_center_md_derivative",
+                                                         arena.stream);
+            const auto status = raw_charge->derivative(raw_charge->context, density, potential,
+                                                       coefficient, derivative_output, detail);
+            if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
+            runtime::cuda_trace::trace_counter("response_md_derivative_calls", 1);
+          };
+        }
+      } else if (raw_coulomb && coulomb_policy != "slices") {
         // The response owns a tile-sized weight interval that is dead during
         // charge preparation. Emit the source's native pair-major panel there;
         // the charge GEMM consumes it before either the next read or W emission.
@@ -2127,7 +2173,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                        : std::span<const std::int64_t>{},
           packed_block_rows, read_fitted, single_fitted_tensor,
           owned_occupied ? &owned_buffers : nullptr,
-          coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader));
+          coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader,
+          raw_charge_reader, raw_derivative_consumer));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an
@@ -2279,6 +2326,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     detail = std::string("generated DF-HF CUDA failure: ") + cudaGetErrorString(error.status);
     return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
                                                      : GENERATIVEQC_STATUS_CUDA_ERROR;
+  } catch (const RawChargeFailure& error) {
+    return error.status;
   } catch (const CudaDfResponseBlasFailure& error) {
     detail = "generated DF-HF metric response cuBLAS failure (status " +
              std::to_string(static_cast<int>(error.status)) + ")";

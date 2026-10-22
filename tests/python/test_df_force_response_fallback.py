@@ -47,9 +47,19 @@ struct TraceOperation { TraceOperation(const char*,void*,TraceShape) {} };
 void trace_counter(const char*,std::uint64_t) {}
 }
 namespace generativeqc::scf {
+namespace cuda_execution {
+struct CudaDfMdOwner {};
+// The optional producer stays absent in this strict occupied-response fixture.
+int cuda_df_md_charge(CudaDfMdOwner*,const double*,double*) { assert(false); return 3; }
+int cuda_df_md_three_center_gradient(CudaDfMdOwner*,const double*,const double*,double,double*) {
+  assert(false); return 3;
+}
+}
 CudaDfFinalStateToken current;
 int mode=0,precision_authentication_calls=0;
 struct CudaDensityFittingJkPlan {
+  cuda_execution::CudaDfMdOwner* md_coulomb=nullptr;
+  struct { std::size_t device_bytes=0; } md_coulomb_resources;
   std::size_t nbf=2,naux=8,batch_size=1,matrix_elements=4,tensor_elements_per_system=32;
   std::size_t row_tile=2,auxiliary_tile=8,stored_pair_count=3,stored_tensor_elements_per_system=24;
   std::size_t projection_capacity=16,panel_capacity=32,factor_basis_identity=1;
@@ -130,7 +140,9 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
     std::span<const DensityFittingDensityResponse>,double,unsigned,std::size_t,std::size_t,
     std::vector<double>& output,std::string&,DfGradientResources* resources,const CudaDfMetricView*,void*,
     const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView*,
-    const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell) {
+    const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell,
+    const CudaDfRawChargeView* raw_charge) {
+  assert(!raw_charge);
   assert(!active->final_projection_token); // The lease is consumed before any response attempt.
   assert(!mixed_shell && precision_authentication_calls==0);
   assert(resources && !resources->precision_work_collected);

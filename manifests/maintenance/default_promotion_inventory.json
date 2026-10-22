@@ -43,7 +43,8 @@
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
-      "python/generativeqc_compiler/tensor/ad_program.py"
+      "python/generativeqc_compiler/tensor/ad_program.py",
+      "src/scf/fock_prepared.cpp"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -1801,6 +1802,31 @@
         "tests/python/test_array_api_comparison_where_ad.py",
         "docs/developer/tensor_ir.md",
         ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
+      ]
+    },
+    {
+      "id": "scf.df-md-coulomb",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_MD_COULOMB"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_md_plan.cpp",
+        "src/scf/cuda/df_md_owner.cu",
+        "src/scf/cuda/df_coulomb.cpp",
+        ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
+      ],
+      "rationale": "Automatic pure-J Hermite contractions replace dense three-center regeneration for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes current-density response charge and contracts three-center atom derivatives; metric response remains in the existing bridge. Resident factors, unsupported angular domains, rank truncation and bounded capacity refusals retain their existing paths. Explicit 0 restores raw regeneration. Independent angular, metric, force, geometry/replay, sanitizer and complete cold/warm endpoints qualify the bounded default.",
+      "revisit_condition": "Renew source-matched endpoint, resource, independent numerical and lifetime qualification before broadening residency, angular domains or screening. Keep the optional owner inside the existing value/response allowance and preserve rank/capacity fallbacks; explicit resource changes are not default timing evidence.",
+      "evidence": [
+        "tests/python/test_df_md_plan_cuda.py",
+        "tests/python/test_df_md_endpoint_cuda.py",
+        "docs/developer/df_packed_storage.md",
+        "note:.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md"
       ]
     },
     {

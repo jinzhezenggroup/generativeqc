@@ -1,4 +1,4 @@
-"""Execute stopping admission without a CUDA device."""
+"""Execute stopping admission and HF work publication without a CUDA device."""
 
 from __future__ import annotations
 
@@ -66,5 +66,61 @@ int main() {
         [source],
         tmp_path / "stopping",
         compile_args=["-std=c++20", f"-I{ROOT / 'src'}"],
+    )
+    subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_hf_work_never_infers_from_iterations_or_hides_an_attempt(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Missing/discarded work is unavailable even after a successful solve."""
+    source = tmp_path / "work.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <limits>
+#include "scf/hf_fock_work.hpp"
+int main() {
+  using namespace generativeqc::scf;
+  ScfResult result;
+  result.converged = true;
+  result.iterations = 123;
+  assert(!completed_hf_fock_work(result,false,false));
+  assert(!completed_hf_fock_work(result,false,true));
+  result.fock_builds = 17;
+  assert(completed_hf_fock_work(result,false,true) == 17);
+  auto& work = result.precision;
+  work.operator_work_counters_valid = true;
+  work.mixed_stage_fock_builds = 9;
+  work.strict_stage_fock_builds = 3;
+  work.post_scf_fock_builds = 2;
+  assert(!completed_hf_fock_work(result,false,false));
+  result.executed_fock_builds = 19;
+  assert(completed_hf_fock_work(result,false,false) == 19);
+  assert(!completed_hf_fock_work(result,true,false));
+  assert(!completed_hf_fock_work(result,true,true));
+  auto& guess = result.preliminary_guess;
+  guess.target_attempts = 2;
+  assert(!completed_hf_fock_work(result,false,false));
+  assert(!completed_hf_fock_work(result,false,true));
+  guess.target_attempts = 1;
+  guess.work_counters_complete = false;
+  assert(!completed_hf_fock_work(result,false,false));
+  assert(!completed_hf_fock_work(result,false,true));
+  guess.work_counters_complete = true;
+  guess.discarded_target_fock_builds = 1;
+  assert(!completed_hf_fock_work(result,false,false));
+  guess.discarded_target_fock_builds = 0;
+  result.executed_fock_builds.reset();
+  assert(!completed_hf_fock_work(result,false,false));
+  result.converged = false;
+  assert(!completed_hf_fock_work(result,false,true));
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [source],
+        tmp_path / "work",
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}", f"-I{ROOT / 'include'}"],
     )
     subprocess.run([executable], check=True, capture_output=True, text=True, timeout=10)

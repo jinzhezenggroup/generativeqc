@@ -305,6 +305,8 @@ struct CudaDensityFittingDeviceScfItem {
   double energy{};
   double energy_change{};
   double density_rms{};
+  /** Completed physical RHF assembly passes, including inactive-lane work. */
+  std::uint64_t fock_builds{};
 };
 
 /** Metric conditioning, workspace, and device-allocation diagnostics. */
@@ -342,6 +344,10 @@ struct CudaDensityFittingMetricDiagnostic {
   DfPairStorage pair_storage{DfPairStorage::Dense};
   std::size_t stored_factor_bytes{}, raw_factor_bytes{}, contraction_scratch_bytes{};
   std::size_t occupied_rank_capacity{};
+  /** Default-admitted tensor-free pure-J owner (false = fallback/rollback);
+   * its buffers are included in totals above. */
+  bool md_coulomb{};
+  std::size_t md_coulomb_device_bytes{};
 };
 
 /**
@@ -481,6 +487,16 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     unsigned max_iterations, double energy_tolerance, double density_tolerance,
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history);
+
+/** Explicit admission from a restricted all-electron HF owner. */
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
+    const std::vector<double>& orthogonalizer, const std::vector<double>& initial_density,
+    const std::vector<std::int32_t>& occupied, const std::vector<double>& nuclear_repulsion,
+    unsigned max_iterations, double energy_tolerance, double density_tolerance,
+    std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
+    std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
+    bool qualified_standard_owner);
 
 /** UHF counterpart of the device-resident DF SCF loop. */
 generativeqc_status run_cuda_density_fitting_uhf_device_scf(

@@ -168,8 +168,8 @@ class Calculator:
         ccsd_level_shift: float = 0.0,
         ccsd_frozen_core: int = 0,
         max_iterations: int = 100,
-        energy_tolerance: float = 1.0e-10,
-        density_tolerance: float = 1.0e-8,
+        energy_tolerance: float | None = None,
+        density_tolerance: float | None = None,
         diis_history: int = 8,
         screening_tolerance: float | None = None,
         precision: str = "fp64",
@@ -195,6 +195,12 @@ class Calculator:
         iteration convergence. Until an explicit audit/estimator is attached,
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
+
+        Omitted SCF controls resolve to energy/density tolerances 1e-9/1e-5
+        on qualified CUDA RHF and default-grid restricted local KS owners.
+        Other models/backends and older libraries retain 1e-10/1e-8. Explicit
+        values are preserved. Convergence controls are solver conditions, not
+        observable-error bounds; see the application precision guide.
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
@@ -822,8 +828,14 @@ class Calculator:
         self._representation_name = basis_representation
         self._device_id = int(device_id)
         self._max_iterations = int(max_iterations)
-        self._energy_tolerance = float(energy_tolerance)
-        self._density_tolerance = float(density_tolerance)
+        # Resolve omitted controls after loading the native capability and the
+        # complete method. Explicit values, including tighter ones, are kept.
+        self._energy_tolerance = float(
+            1e-10 if energy_tolerance is None else energy_tolerance
+        )
+        self._density_tolerance = float(
+            1e-8 if density_tolerance is None else density_tolerance
+        )
         self._diis_history = int(diis_history)
         if screening_tolerance is None:
             screening_tolerance = 0.0 if self._method in _CORRELATED_METHODS else 1e-12
@@ -929,6 +941,13 @@ class Calculator:
         self._capabilities = _native_method_capabilities(
             self._library, self._method_name, self._method
         )
+        from ._scf_convergence import default_scf_controls
+
+        convergence_defaults = default_scf_controls(self)
+        if energy_tolerance is None:
+            self._energy_tolerance = convergence_defaults["energy_tolerance"]
+        if density_tolerance is None:
+            self._density_tolerance = convergence_defaults["density_tolerance"]
         if self._automatic_libxc_name is not None:
             self._capabilities = replace(
                 self._capabilities, supported_properties=frozenset({"energy"})
@@ -1024,9 +1043,14 @@ class Calculator:
             and self._ks_options.has_range_exchange
             and cuda_nonlocal_force_basis_eligible(self._basis)
         )
+        from ._df_precision import fitted_scf_budget_admitted
+
+        fitted_budget = fitted_scf_budget_admitted(
+            self, self._application_precision_budget
+        )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
-            and self._precision_mode == _native.PRECISION_FP64
+            and (self._precision_mode == _native.PRECISION_FP64 or fitted_budget)
             and not basis_has_ecp
             and self._automatic_libxc_name is None
             and self._density_fitted_composite_force_eligible()
@@ -1162,7 +1186,7 @@ class Calculator:
                 # DF changes the Hamiltonian. Keep its backend explicit; the
                 # stationary force consumer is admitted only through the
                 # token-bound auxiliary/metric-response provider above.
-                if self._precision_mode != _native.PRECISION_FP64:
+                if self._precision_mode != _native.PRECISION_FP64 and not fitted_budget:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
                     )

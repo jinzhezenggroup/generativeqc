@@ -126,8 +126,8 @@ print(first.energies)
 
 **HF/DFT energy + analytic forces — RTX 5090**
 
-Standard and Fast outperform GPU4PySCF in **43/58 accuracy-qualified warm cases**.
-For 96-atom Direct ωB97M-V, warm speedups are **3.74× (Standard)** and **3.96× (Fast)**.
+Standard and Fast outperform GPU4PySCF in **44/58** and **45/58** accuracy-qualified warm cases.
+For 96-atom Direct ωB97M-V, warm speedups are **3.89× (Standard)** and **4.14× (Fast)**.
 
 ![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
 
@@ -137,7 +137,7 @@ Default XC/VV10 grids, native SCF policies and full grid-response forces;
 plotted points pass common independent energy/force accuracy gates.
 Cold includes setup; warm is the median of three frozen-density calls.
 Gaps mark accuracy failures.
-See [measurements and conditions](benchmarks/results/readme-repaired-20261021/README.md).
+See [measurements and conditions](benchmarks/results/readme-final-20261022/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

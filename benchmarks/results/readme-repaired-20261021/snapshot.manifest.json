@@ -1,123 +1,96 @@
 {
-  "schema": "generativeqc.benchmark-publication.v1",
-  "source": {
-    "revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
-    "dirty": false
-  },
-  "decision": {
-    "status": "inconclusive",
-    "scope": "performance",
-    "reason": "Qualified scoped advantages coexist with slower cases and accuracy failures; no universal superiority claim."
-  },
-  "reproduction": {
-    "command": [
-      "python",
-      "benchmarks/results/readme-repaired-20261021/reproduce.py",
-      "--output",
-      ".artifacts/readme-repaired-replay"
-    ]
-  },
-  "archives": [],
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "7522994e2e2e477e11c41cb2c2dbe74a2ce600e9",
+  "file_count": 18,
+  "total_bytes": 855107,
   "files": [
     {
-      "path": "README.md",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/README.md",
       "bytes": 4316,
       "sha256": "e2c182b2cd229d3bae144f6ea15f9ea43bca47022886260b0996fbdcae5475e1"
     },
     {
-      "path": "auxiliary-inputs.json.xz",
-      "role": "input",
+      "path": "benchmarks/results/readme-repaired-20261021/auxiliary-inputs.json.xz",
       "bytes": 3072,
       "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
     },
     {
-      "path": "comparisons.json.xz",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/comparisons.json.xz",
       "bytes": 6864,
       "sha256": "053f02e7da956f752b2258b9d86a799067cf4e52b6e052e9f731e5c53c961b68"
     },
     {
-      "path": "conditions.md",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/conditions.md",
       "bytes": 7643,
       "sha256": "7b169b9080ac0e4ef7f139ed1ef9686955fb8cf8ce1c4541c2df440584121ec0"
     },
     {
-      "path": "diagnostics.json.xz",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/diagnostics.json.xz",
       "bytes": 24500,
       "sha256": "7fd3403ff6198a932c8accf2287e85a1e8d3fde3a8c52408be7c2d5f59e891d6"
     },
     {
-      "path": "fast.json.xz",
-      "role": "samples",
+      "path": "benchmarks/results/readme-repaired-20261021/fast.json.xz",
       "bytes": 232188,
       "sha256": "0ea30dc82cd711e6e9efaf48fdc97ab2dcf64b9fabd36689769c5b6d01553753"
     },
     {
-      "path": "gpu4pyscf.json.xz",
-      "role": "samples",
+      "path": "benchmarks/results/readme-repaired-20261021/gpu4pyscf.json.xz",
       "bytes": 182216,
       "sha256": "744e1f5b2fbf89d16d02a49691b3b84d6d423d7d5535322b0e66c621b00fc763"
     },
     {
-      "path": "jobs.json.xz",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/jobs.json.xz",
       "bytes": 10792,
       "sha256": "9a0dc3721d2db5b9af52af4baff224edef32eaf5b86b571613c4ab4b5fe713a4"
     },
     {
-      "path": "oracles.json.xz",
-      "role": "input",
+      "path": "benchmarks/results/readme-repaired-20261021/oracles.json.xz",
       "bytes": 56528,
       "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
     },
     {
-      "path": "provenance.json.xz",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/provenance.json.xz",
       "bytes": 22064,
       "sha256": "b447e2ca30965206e175410cfbf26a98ce99049a1af7181479adcd2133f1d6fa"
     },
     {
-      "path": "qualification.json.xz",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/publication.json",
+      "bytes": 3579,
+      "sha256": "bcee3b0baaa574f57f072dbea988090c45b97ef6aba448cdff66f998754f6c27"
+    },
+    {
+      "path": "benchmarks/results/readme-repaired-20261021/qualification.json.xz",
       "bytes": 26672,
       "sha256": "c6cef559c0eb5c8eb1e5ecb8ad95b87f4dc262de6a2035b7197dfd5242e95821"
     },
     {
-      "path": "reference-reuse.json",
-      "role": "input",
+      "path": "benchmarks/results/readme-repaired-20261021/reference-reuse.json",
       "bytes": 17138,
       "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
     },
     {
-      "path": "reproduce.py",
-      "role": "reproduction",
+      "path": "benchmarks/results/readme-repaired-20261021/reproduce.py",
       "bytes": 3788,
       "sha256": "0c5a75df8df2cc1290122d5280748962eaed343870565e2cd475bddc83f5d900"
     },
     {
-      "path": "standard.json.xz",
-      "role": "samples",
+      "path": "benchmarks/results/readme-repaired-20261021/standard.json.xz",
       "bytes": 214064,
       "sha256": "b91f068cc67c4f886a16adfeb12644b21752f14fe08cd739d5698f5db63a122d"
     },
     {
-      "path": "timings.md",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/timings.md",
       "bytes": 20930,
       "sha256": "88f9fcb416ca3ee84745ce47c85f29eb088766a862a4f2ce30ce606db661ba3c"
     },
     {
-      "path": "validation.json.xz",
-      "role": "evidence",
+      "path": "benchmarks/results/readme-repaired-20261021/validation.json.xz",
       "bytes": 2744,
       "sha256": "3f756d22354526e8c8920772787deabf6b928655449e9bb40f01a5dcd6b2de61"
     },
     {
-      "path": "work.md",
-      "role": "summary",
+      "path": "benchmarks/results/readme-repaired-20261021/work.md",
       "bytes": 16009,
       "sha256": "81b1e5bf4828e19494d938faf391a8fc85f78e88858f40a78f5d799763312651"
     }

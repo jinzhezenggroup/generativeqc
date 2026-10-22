@@ -25,6 +25,7 @@
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
@@ -678,7 +679,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     const DensityFittingScfData& data, const Matrix& orthogonalizer, std::vector<Matrix> density,
     const std::vector<std::size_t>& occupied, const ScfOptions& options, ScfResult& result,
     CudaDensityFittingJkPlan* plan, std::size_t system, bool device_candidate,
-    const solver::PhysicalFockOperation& physical) {
+    const solver::PhysicalFockOperation& physical, bool qualified_standard_owner = false) {
   result.converged = false;
   const auto n = data.one_electron.nbf;
   const auto enabled = [](const char* name) {
@@ -733,15 +734,21 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   const solver::PhysicalFockOperation device_physical = [&](const auto& current, const auto& d) {
     return evaluate_cuda_density_fitting_final_fock(plan, current, d, data.one_electron.hcore);
   };
+  solver::FinalStateLimits limits{
+      options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
+      device_candidate && !reference_validation && !options.export_physical_reference &&
+          identity.model.spec.spin == FockSpin::Unrestricted};
+  if (!options.export_physical_reference && qualified_standard_owner &&
+      identity.model.spec.spin == FockSpin::Restricted &&
+      standard_scf_convergence_requested(options.energy_tolerance, options.density_tolerance))
+    limits.stationarity_tolerance =
+        scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance, 1e-8);
   auto selected = solver::select_final_state(
       identity, data.one_electron.overlap, data.one_electron.hcore, orthogonalizer,
       data.one_electron.nuclear_repulsion, std::move(density),
       device_candidate ? &snapshot.candidate : nullptr,
-      reference_validation ? physical : device_physical, eigen,
-      {options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
-       device_candidate && !reference_validation && !options.export_physical_reference &&
-           identity.model.spec.spin == FockSpin::Unrestricted},
-      options.compute_forces, force, reference_validation ? nullptr : &operations);
+      reference_validation ? physical : device_physical, eigen, limits, options.compute_forces,
+      force, reference_validation ? nullptr : &operations);
   if (selected.status == solver::FinalStateStatus::OutOfMemory) throw std::bad_alloc();
   if (!selected.state && selected.provider_exception)
     std::rethrow_exception(selected.provider_exception);
@@ -790,13 +797,11 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   return std::move(*selected.state);
 }
 
-[[maybe_unused]] void finalize_density_fitting_rhf(const DensityFittingScfData& data,
-                                                   const Matrix& orthogonalizer,
-                                                   std::size_t occupied, Matrix& density,
-                                                   const ScfOptions& options, ScfResult& result,
-                                                   CudaDensityFittingJkPlan* cuda_plan = nullptr,
-                                                   std::size_t cuda_system = 0,
-                                                   bool device_candidate = false) {
+[[maybe_unused]] void finalize_density_fitting_rhf(
+    const DensityFittingScfData& data, const Matrix& orthogonalizer, std::size_t occupied,
+    Matrix& density, const ScfOptions& options, ScfResult& result,
+    CudaDensityFittingJkPlan* cuda_plan = nullptr, std::size_t cuda_system = 0,
+    bool device_candidate = false, bool qualified_standard_owner = false) {
   host_trace::Region final_trace("finalization");
 #if !GENERATIVEQC_HAS_CUDA
   (void)cuda_plan;
@@ -849,9 +854,9 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       for (std::size_t k = 0; k < fock.size(); ++k) fock[k] += coulomb[k] - .5 * exchange[k];
       return solver::PhysicalFockFrame{current, true, {std::move(fock)}};
     };
-    auto state =
-        select_cuda_df_final_state(data, orthogonalizer, {density}, {occupied}, options, result,
-                                   cuda_plan, cuda_system, device_candidate, physical);
+    auto state = select_cuda_df_final_state(data, orthogonalizer, {density}, {occupied}, options,
+                                            result, cuda_plan, cuda_system, device_candidate,
+                                            physical, qualified_standard_owner);
     response_token.identity = state.identity;
     density = std::move(state.density[0]);
     final_fock = std::move(state.fock[0]);
@@ -2123,12 +2128,15 @@ ScfResult run_rhf_density_fitting_cuda_impl(
           {static_cast<std::int32_t>(occupied)}, {data.one_electron.nuclear_repulsion},
           options.max_iterations, options.energy_tolerance, options.density_tolerance,
           device_final_density, device_records, detail, data.one_electron.overlap,
-          cuda_df_iteration_diis_history(options));
+          cuda_df_iteration_diis_history(options),
+          !options.export_physical_reference && system.ecp_terms.empty() &&
+              std::none_of(system.atoms.begin(), system.atoms.end(),
+                           [](const auto& atom) { return atom.ecp_core != 0; }));
     });
     runtime::df_progress::number("compact_dispatch_status", device_status);
-    if (device_records.size() == 1)
-      result.fock_builds += device_records.front().iterations;
-    else if (options.preliminary_guess)
+    if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == 1)
+      result.fock_builds += device_records.front().fock_builds;
+    else
       result.preliminary_guess.work_counters_complete = false;
     // A resource rejection must not trigger an undisclosed host SCF retry.
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
@@ -2142,8 +2150,11 @@ ScfResult run_rhf_density_fitting_cuda_impl(
       result.energy_change = device_records.front().energy_change;
       result.density_rms = device_records.front().density_rms;
       result.converged = true;
-      finalize_density_fitting_rhf(data, orthogonalizer, occupied, density, options, result,
-                                   plan.get(), 0, true);
+      finalize_density_fitting_rhf(
+          data, orthogonalizer, occupied, density, options, result, plan.get(), 0, true,
+          system.ecp_terms.empty() &&
+              std::none_of(system.atoms.begin(), system.atoms.end(),
+                           [](const auto& atom) { return atom.ecp_core != 0; }));
       return result;
     }
     if (!options.density_fitting_host_retry) {
@@ -2720,7 +2731,13 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       return run_cuda_density_fitting_rhf_device_scf(
           plan, hcore, orthogonalizer, initial_density, occupied, nuclear, options.max_iterations,
           options.energy_tolerance, options.density_tolerance, device_final_density, device_records,
-          device_detail, overlap, cuda_df_iteration_diis_history(options));
+          device_detail, overlap, cuda_df_iteration_diis_history(options),
+          std::all_of(source_indices.begin(), source_indices.end(), [&](auto index) {
+            const auto& system = systems[index];
+            return !options.export_physical_reference && system.ecp_terms.empty() &&
+                   std::none_of(system.atoms.begin(), system.atoms.end(),
+                                [](const auto& atom) { return atom.ecp_core != 0; });
+          }));
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         device_status == GENERATIVEQC_STATUS_CUDA_ERROR) {
@@ -2732,14 +2749,11 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == data.size() &&
         std::all_of(device_records.begin(), device_records.end(),
                     [](const CudaDensityFittingDeviceScfItem& item) { return item.converged; });
-    unsigned device_rounds = 0;
-    for (const auto& record : device_records)
-      device_rounds = std::max(device_rounds, record.iterations);
     for (std::size_t slot = 0; slot < data.size(); ++slot) {
       auto& result = outputs[source_indices[slot]].scf;
-      if (device_records.size() == data.size())
-        result.fock_builds += device_rounds;
-      else if (options.preliminary_guess)
+      if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == data.size())
+        result.fock_builds += device_records[slot].fock_builds;
+      else
         result.preliminary_guess.work_counters_complete = false;
     }
     if (device_converged) {
@@ -2755,9 +2769,12 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         result.density_rms = device_records[slot].density_rms;
         result.converged = true;
         try {
-          finalize_density_fitting_rhf(data[slot], orthogonalizers[slot],
-                                       static_cast<std::size_t>(occupied[slot]), densities[slot],
-                                       options, result, plan, slot, true);
+          finalize_density_fitting_rhf(
+              data[slot], orthogonalizers[slot], static_cast<std::size_t>(occupied[slot]),
+              densities[slot], options, result, plan, slot, true,
+              systems[source].ecp_terms.empty() &&
+                  std::none_of(systems[source].atoms.begin(), systems[source].atoms.end(),
+                               [](const auto& atom) { return atom.ecp_core != 0; }));
           outputs[source].status = GENERATIVEQC_STATUS_SUCCESS;
         } catch (const std::bad_alloc&) {
           outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;

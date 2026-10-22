@@ -8,6 +8,7 @@
 #include <limits>
 #include <optional>
 
+#include "scf/cuda/df_md_owner.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
@@ -141,6 +142,10 @@ struct CudaDensityFittingJkPlan {
   // X is shared by materialization/J/K and the spectral force response.
   bool streamed{};
   CudaDensityFittingIntegralSource* integral_source{};
+  // Optional pure-J contractions borrow this plan's stream and metric. Keep
+  // the incumbent source for forces and explicit resource/domain fallbacks.
+  cuda_execution::CudaDfMdOwner* md_coulomb{};
+  cuda_execution::CudaDfMdResources md_coulomb_resources{};
   double* inverse_square_roots{};
   std::vector<double> streamed_raw_three_center;
   std::vector<double> streamed_inverse_square_roots;

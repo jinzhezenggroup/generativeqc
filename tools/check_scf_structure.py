@@ -38,6 +38,8 @@ ALLOWED = {
 # Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
 # projection and all reference modules retain their narrower dependency rules.
 SOURCE_EXACT_ALLOWED = {
+    # Share scalar convergence limits without importing host solver ownership.
+    "scf/cuda/scf_convergence_policy.cuh": ("scf/convergence_limits.hpp",),
     "scf/cuda/direct_md_j.hpp": ("scf/cuda/md_j_engine_contract.hpp",),
     "scf/cuda/direct_md_j.cu": ("scf/cuda/md_j_engine.cuh",),
     # The immutable DF basis lease is exported only by its actual source owner;
@@ -148,6 +150,7 @@ CUDA_ALLOWED["cuda_df_source"] = (
 CUDA_MODULES["cuda_df_runtime"] = (
     "df_plan",
     "df_plan_setup",
+    "df_md_plan",
     "df_plan_internal",
     "df_setup_internal",
     "df_plan_lifetime",
@@ -180,6 +183,9 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "solver/cuda/symmetric_eigen_handles.hpp",
     "runtime/cuda_component_trace.hpp",
     "tensor/cuda_vector_contraction.hpp",
+    "scf/cuda/df_md_owner.hpp",
+    "scf/cuda/df_md_layout.hpp",
+    "scf/cuda_density_fitting_md.hpp",
     "scf/cuda/df_metric_kernels.",
     "scf/cuda/df_jk_kernels.",
     "scf/cuda/df_packed_values.",

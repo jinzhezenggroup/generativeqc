@@ -21,15 +21,31 @@ the incumbent. No accuracy threshold is relaxed and failed samples remain
 unranked. The ordinary stopping predicate is shared by production and host
 behavioral tests rather than extracted from a local assignment block.
 
+HF work publication also needs an executed census: CUDA DF RHF increments
+one stream-owned counter in each physical Fock assembly. Capture does not
+increment it, but graph replays and inactive-lane work do. Reset occurs at
+each solve; the existing allocation owner and budget include its eight bytes.
+Direct HF owns a separate per-item device counter at its actual Fock builder
+boundary, charged to the existing arena. Historical precision fields that
+reconstruct counts from iterations are not used to certify this new export. Incomplete or discarded
+attempts remain unavailable, never reconstructed from SCF iterations.
+
 ## Evidence and revisit conditions
 
 The original M06-2X/3 errors and rollback comparison remain in the earlier
-note and published evidence. Host contracts cover complete model identity and
-strict stopping. The automatic domain reuses the existing independently qualified
-geometry/force evidence; the guard does not change its arithmetic. Timings retain
-their original source identities and are not relabeled as measurements of this
-restricted policy. A future timing refresh must measure its own source revision.
+note and published evidence. Host contracts cover complete model identity,
+strict stopping, missing/discarded work and failed attempts. Device tests
+exercise counter capture, replay, reset and unchanged assembly arithmetic;
+the automatic model domain reuses the existing independently qualified
+geometry/force evidence because its admission guard does not change arithmetic.
+Historical timings retain their original source identities and are not relabeled
+as measurements of this restricted policy or its new HF work counters. A future
+timing refresh must measure its own source revision.
 
 Extend automatic model admission only with independent acceptance on its
 full intended numerical domain. Do not use a size whitelist to conceal the
 known small-system failure, or loosen the common energy/force gates.
+
+The independently qualified Standard solver contract is described in the
+[superseding convergence decision](2026-10-22-standard-cold-scf-convergence.md).
+It retains these failed total-error populations and the strict-probe policy.

@@ -281,8 +281,20 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
             "final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted",
             "device_final_validation_default_eligible(",
             'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    # Resource guards must belong to this consumer's admission, not merely
+    # occur elsewhere (for example in the independent early-final SCF probe).
+    admission = re.search(r"\bconst bool device_validation\s*=\s*([^;]+);", source)
+    if admission is None or any(
+        fragment not in admission.group(1)
+        for fragment in (
+            "device_final_validation_requested(",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
+            "default_device_validation)",
             "final_validation_partial && matrix_products.library_enabled()",
-            "!final_stationary_weights_ready;",
+            "!final_stationary_weights_ready",
         )
     ):
         raise ValueError("KS final-validation default owner or resource guard drifted")
@@ -771,12 +783,23 @@ def _discover_partial_phase_values(root: Path) -> dict[str, str]:
     return result
 
 
+def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
+    """Inventory optional prepared value owners without pinning their admission syntax."""
+    relative = Path("src/scf/fock_prepared.cpp")
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
+    return {
+        f"hf-runtime:{name}": relative.as_posix()
+        for name in re.findall(r'"(GENERATIVEQC_DF_MD_COULOMB)"', source)
+    }
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
         _discover_scf_options(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
+        _discover_prepared_df_controls(root),
         _discover_ks_phase_values(root),
         _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),

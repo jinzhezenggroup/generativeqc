@@ -14,8 +14,11 @@ observations, not timings for the repaired implementation.
 The [verified Git snapshot](snapshot.manifest.json) binds all 19 original files,
 989,391 bytes, to published master `0e691d4000414ecb5fbf563232819178511e1642`. Byte-for-byte recovery
 was verified before retiring superseded timing payloads from the current tree.
-The independent oracle receipts, auxiliary inputs and reuse contracts remain
-locally available; the new campaign keeps its own complete live evidence.
+The identical independent [oracle receipts](../readme-repaired-20261021/oracles.json.xz),
+[auxiliary inputs](../readme-repaired-20261021/auxiliary-inputs.json.xz) and
+[reuse contracts](../readme-repaired-20261021/reference-reuse.json) remain locally
+available in the successor campaign. Redundant copies are retired here; exact
+original recovery still includes them. The current campaign keeps its own complete evidence.
 No history was rewritten and no Release or external archive was created.
 
 To restore the exact original report, publication manifest and replay script:

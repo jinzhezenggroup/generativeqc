@@ -294,8 +294,18 @@
     },
     "readme-repaired-20261021": {
       "owner": "README common-accuracy complete E/F comparison",
-      "reason": "All 192 current-source populations retain 768 complete E/F calls, independent references, exact controls, full Fast work and all accuracy failures. Lossless records support scoped observations; superseded timings have a byte-verified published Git snapshot. No numerical waiver, external archive or budget increase.",
+      "reason": "Superseded complete endpoint data are retained through the byte-verified published Git snapshot. Original numerical references and timing/work tables remain in the checkout; no accuracy failure or historical observation is relabelled.",
       "review_document": "benchmarks/results/readme-repaired-20261021/README.md"
+    },
+    "readme-final-20261022": {
+      "owner": "README complete default-grid E/F refresh after DF and cold-SCF repairs",
+      "reason": "Retain all 192 source-matched populations and 768 complete E/F calls, unchanged independent oracle receipts, executed controls and Fast solve work, all 18 accuracy failures, final geometry tests and sanitizer provenance. Superseded timing payloads have verified published-Git recovery; duplicate older oracle inputs remain in the successor tree. No numerical waiver, external archive or increased budget.",
+      "review_document": "benchmarks/results/readme-final-20261022/README.md"
+    },
+    "cold-scf-defaults-20261022": {
+      "owner": "Default CUDA SCF convergence and final-state acceptance",
+      "reason": "Source-bound targeted endpoints, independent same-model energy/force oracles, unchanged dense-reference failures, original failed test logs, strict compatibility results and native boundary checks. Complete vectors and reconstruction provenance are retained; no historical timing is relabeled and existing size caps are unchanged.",
+      "review_document": "benchmarks/results/cold-scf-defaults-20261022/README.md"
     }
   },
   "files": [
@@ -556,30 +566,6 @@
       "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
     },
     {
-      "path": "benchmarks/results/readme-repaired-20261021/fast.json.xz",
-      "family": "readme-repaired-20261021",
-      "bytes": 232188,
-      "sha256": "0ea30dc82cd711e6e9efaf48fdc97ab2dcf64b9fabd36689769c5b6d01553753",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete current-source endpoint timings, E/F arrays, controls and semantic work, including all accuracy failures"
-    },
-    {
-      "path": "benchmarks/results/readme-repaired-20261021/gpu4pyscf.json.xz",
-      "family": "readme-repaired-20261021",
-      "bytes": 182216,
-      "sha256": "744e1f5b2fbf89d16d02a49691b3b84d6d423d7d5535322b0e66c621b00fc763",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete current-source endpoint timings, E/F arrays, controls and semantic work, including all accuracy failures"
-    },
-    {
-      "path": "benchmarks/results/readme-repaired-20261021/standard.json.xz",
-      "family": "readme-repaired-20261021",
-      "bytes": 214064,
-      "sha256": "b91f068cc67c4f886a16adfeb12644b21752f14fe08cd739d5698f5db63a122d",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete current-source endpoint timings, E/F arrays, controls and semantic work, including all accuracy failures"
-    },
-    {
       "bytes": 194601,
       "classification": "required-compact-accepted-evidence",
       "family": "retention-checkout",
@@ -618,6 +604,38 @@
       "sha256": "ba1cafd587978b6abc0a87d067508a6eb615bc379dfc4fbd3bf6ed4ba0378506",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/fast.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 229144,
+      "sha256": "cb7f8aae0a10ff4c9086c85211b1a37484400f12a82ba809749b04bba602e220",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/gpu4pyscf.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 182196,
+      "sha256": "a425188614661fe2205118f95624ce69a7ebb3e8f5c6b37d1c47827944dbb2f7",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/standard.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 212484,
+      "sha256": "4c35332c306bc2ea410e543da8e49da703c02cb852eb0846a99448b0cd451e77",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/cold-scf-defaults-20261022/evidence.json.xz",
+      "family": "cold-scf-defaults-20261022",
+      "classification": "required-compact-accepted-evidence",
+      "role": "default-solver-qualification-with-retained-model-error-failures",
+      "bytes": 148780,
+      "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
