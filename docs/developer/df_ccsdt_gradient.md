@@ -77,8 +77,14 @@ Replay requires admission of both ordinary matrix execution and matrix audit.
 Its matrix arena shares storage with the later independent audit because their
 lifetimes are disjoint. Preflight charges the maximum of the two arenas, not
 their sum, plus all prepared descriptors. If the enlarged arena does not fit,
-preflight retries the original audit arena and retains scalar fresh replay.
-Dropping the shared arena or matrix provider also clears replay admission.
+preflight retains the original audit arena and completes core-cache admission,
+then tries successively halved replay batches inside the existing scratch lease.
+This independent replay batch cannot enlarge device storage or displace the
+selected operator batch, audit or core cache. A distinct replay tail descriptor
+is charged to the host budget and prepared before execution. If no replay batch
+fits, fresh replay remains scalar. Dropping the shared arena or matrix provider
+also clears replay admission. Progress traces expose the executed replay batch
+as `df_lambda_primal_batch_size`; the operator/audit batch remains unchanged.
 `lambda_primal_matrix_requested` and `lambda_primal_matrix` distinguish request
 from actual execution; `lambda_audit_arena_bytes` includes the admitted shared
 arena and is a capacity reservation, not measured peak VRAM.
