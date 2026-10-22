@@ -53,7 +53,8 @@ void launch_validate_force_residual_kernel(cudaStream_t stream, std::int32_t bat
                                            double density_tolerance,
                                            const double* physical_residual, std::uint8_t* active,
                                            std::uint8_t* converged, std::uint32_t* tested_count,
-                                           std::uint8_t* tested_items);
+                                           std::uint8_t* tested_items,
+                                           double energy_tolerance = 1e-10);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_tail_rhf_loop_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

@@ -301,6 +301,11 @@
       "owner": "README complete default-grid E/F refresh after DF and cold-SCF repairs",
       "reason": "Retain all 192 source-matched populations and 768 complete E/F calls, unchanged independent oracle receipts, executed controls and Fast solve work, all 18 accuracy failures, final geometry tests and sanitizer provenance. Superseded timing payloads have verified published-Git recovery; duplicate older oracle inputs remain in the successor tree. No numerical waiver, external archive or increased budget.",
       "review_document": "benchmarks/results/readme-final-20261022/README.md"
+    },
+    "cold-scf-defaults-20261022": {
+      "owner": "Default CUDA SCF convergence and final-state acceptance",
+      "reason": "Source-bound targeted endpoints, independent same-model energy/force oracles, unchanged dense-reference failures, original failed test logs, strict compatibility results and native boundary checks. Complete vectors and reconstruction provenance are retained; no historical timing is relabeled and existing size caps are unchanged.",
+      "review_document": "benchmarks/results/cold-scf-defaults-20261022/README.md"
     }
   },
   "files": [
@@ -623,6 +628,14 @@
       "sha256": "4c35332c306bc2ea410e543da8e49da703c02cb852eb0846a99448b0cd451e77",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/cold-scf-defaults-20261022/evidence.json.xz",
+      "family": "cold-scf-defaults-20261022",
+      "classification": "required-compact-accepted-evidence",
+      "role": "default-solver-qualification-with-retained-model-error-failures",
+      "bytes": 148780,
+      "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

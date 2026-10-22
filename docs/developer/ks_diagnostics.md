@@ -56,7 +56,16 @@ and residual separately from the original historical rows.
 
 ## Final-state-aware CUDA stopping
 
-Ordinary strict-FP64 RKS also checks the maximum absolute AO commutator entry,
+The qualified CUDA Standard defaults use the solver contract documented in
+[application precision](../user/application_precision.md). Before accepting an
+ordinary Standard stop, the owner runs the complete resident physical/canonical
+proof with matching `1e-5` density/stationarity ceilings. Rejection continues
+SCF. This mandatory proof includes fitted exchange and canonical M06-2X;
+it is independent of the optional strict-tolerance early-probe control below.
+Range/nonlocal, budget/mixed, UKS, incremental, ECP, chunked and missing-resident
+owners retain their stricter physical policy.
+
+With strict energy/density requests, FP64 RKS also checks the maximum absolute AO commutator entry,
 which is distinct from the spin-RMS `physical_residual_max` above. Eligible
 single-iteration CUDA owners can stop before this conservative `1e-9` AO
 margin is reached only after passing the complete resident final-state proof
@@ -74,7 +83,7 @@ token-bound validation. Device and solver errors retain normal failure handling.
 Unset `GENERATIVEQC_KS_EARLY_FINAL_PROBE` admits only canonical PBE, PBE0,
 B3LYP and r2SCAN compositions on the default Treutler grid (including the
 electronic part of r2SCAN-3c). Generated split hybrids, custom mixtures and
-other grids retain conservative stopping. `0` disables the proof; explicit
+other grids retain conservative stopping. `0` disables this optional strict-tolerance probe; explicit
 `1` permits experimental admission while retaining every physical and resource
 gate. Other values fail explicitly. Set the
 control before constructing the owner. Fast/budget, mixed precision, UKS,

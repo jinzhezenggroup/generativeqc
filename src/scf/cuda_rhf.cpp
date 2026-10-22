@@ -4159,7 +4159,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           resources.stream_, static_cast<std::int32_t>(batch_size),
           static_cast<std::int32_t>(spin_count), static_cast<std::int32_t>(nbf),
           options.density_tolerance, residual, active, converged, final_fock_rebuild_count,
-          warm_mask);
+          warm_mask, options.energy_tolerance);
       cuda_error = cudaGetLastError();
     }
     if (cuda_error != cudaSuccess) {

@@ -34,11 +34,12 @@ struct Device {
 };
 
 void check_convergence(unsigned spins, bool retain, bool require_physical, bool approximate,
-                       double tolerance) {
+                       double tolerance, double energy_tolerance = 1e-12,
+                       double allowed_residual = 0.0) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned n = 8, batch = 6;
   const std::size_t size = spins * n * n;
-  const double bound = std::min(1e-8, tolerance);
+  const double bound = allowed_residual > 0 ? allowed_residual : std::min(1e-8, tolerance);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   std::vector<double> residual(batch * size, 0);
   const double peaks[]{bound / 2, bound, 3 * bound, nan, std::numeric_limits<double>::infinity(),
@@ -54,7 +55,7 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
   Device<std::uint32_t> census(std::vector<std::uint32_t>{0, 0, 1, 1, 0, 0});
   const auto launch =
       spins == 1 ? launch_update_convergence_kernel : launch_update_uhf_convergence_kernel;
-  launch(retain, batch, 32, 0, nullptr, batch, n, 1e-12, tolerance, false, energy.data,
+  launch(retain, batch, 32, 0, nullptr, batch, n, energy_tolerance, tolerance, false, energy.data,
          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
          change.data, rms.data, require_physical ? d_residual.data : nullptr,
          approximate ? census.data : nullptr);
@@ -81,7 +82,7 @@ void check_convergence(unsigned spins, bool retain, bool require_physical, bool 
   Device<std::uint8_t> tested_items(std::vector<std::uint8_t>(batch, 0));
   launch_validate_force_residual_kernel(nullptr, batch, spins, n, tolerance, d_residual.data,
                                         final_active.data, final_converged.data, tested.data,
-                                        tested_items.data);
+                                        tested_items.data, energy_tolerance);
   check(cudaGetLastError());
   if (final_converged.read() != std::vector<std::uint8_t>{1, 1, 0, 0, 0, 0} ||
       final_active.read() != std::vector<std::uint8_t>{1, 1, 0, 0, 0, 0} || tested.read()[0] != 5 ||
@@ -176,6 +177,13 @@ int main() {
           for (bool approximate : {false, true})
             for (double tolerance : {1e-10, 1e-6})
               check_convergence(spins, retain, physical, approximate, tolerance);
+    // Standard admits a bounded residual; a tight energy request restores the
+    // original ceiling. Check both iteration and rebuilt-force consumers,
+    // including localized beta errors, NaNs and inactive neighbors.
+    for (unsigned spins : {1U, 2U}) {
+      check_convergence(spins, true, true, false, 1e-5, 1e-9, 1e-5);
+      check_convergence(spins, true, true, false, 1e-5, 1e-12, 1e-8);
+    }
     std::cout << "Physical force convergence and final-state rejection passed\n";
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

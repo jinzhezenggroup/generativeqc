@@ -42,6 +42,7 @@ def controller_probe(
 #include <stdexcept>
 #include <string>
 #include "scf/types.hpp"
+#include "scf/convergence_limits.hpp"
 #include "dft/ks_stopping_policy.hpp"
 namespace scf = generativeqc::scf;
 int cudaGetLastError() { return 0; }
@@ -58,6 +59,9 @@ void launch_copy_matrix_kernel(unsigned,unsigned,unsigned,int,std::size_t n,
     const double* a,double* out) {for(std::size_t i=0;i<n;++i)out[i]=a[i];}
 void require(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 struct Consumer {
+  // The incremental-only probe has no resident canonical-proof owner; this
+  // capability is deliberately excluded by the real CUDA admission policy.
+  bool standard_convergence_active() const noexcept { return false; }
   bool fast_anchor_active=false, early_final_probe_requested=true;
   bool budget_stationarity=false, warm_energy_baseline=false;
   bool pending_nonlocal_seed=false, pending_nonlocal_frozen=false;

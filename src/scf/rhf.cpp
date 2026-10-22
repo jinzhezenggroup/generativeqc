@@ -25,6 +25,7 @@
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
@@ -733,15 +734,20 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   const solver::PhysicalFockOperation device_physical = [&](const auto& current, const auto& d) {
     return evaluate_cuda_density_fitting_final_fock(plan, current, d, data.one_electron.hcore);
   };
+  solver::FinalStateLimits limits{
+      options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
+      device_candidate && !reference_validation && !options.export_physical_reference &&
+          identity.model.spec.spin == FockSpin::Unrestricted};
+  if (!options.export_physical_reference &&
+      standard_scf_convergence_requested(options.energy_tolerance, options.density_tolerance))
+    limits.stationarity_tolerance =
+        scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance, 1e-8);
   auto selected = solver::select_final_state(
       identity, data.one_electron.overlap, data.one_electron.hcore, orthogonalizer,
       data.one_electron.nuclear_repulsion, std::move(density),
       device_candidate ? &snapshot.candidate : nullptr,
-      reference_validation ? physical : device_physical, eigen,
-      {options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
-       device_candidate && !reference_validation && !options.export_physical_reference &&
-           identity.model.spec.spin == FockSpin::Unrestricted},
-      options.compute_forces, force, reference_validation ? nullptr : &operations);
+      reference_validation ? physical : device_physical, eigen, limits, options.compute_forces,
+      force, reference_validation ? nullptr : &operations);
   if (selected.status == solver::FinalStateStatus::OutOfMemory) throw std::bad_alloc();
   if (!selected.state && selected.provider_exception)
     std::rethrow_exception(selected.provider_exception);

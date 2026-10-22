@@ -56,6 +56,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         block_auto=False,
         auto_properties=None,
         transport_v2=False,
+        standard_convergence=False,
     )
 
     class Backend:
@@ -63,6 +64,14 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             if state.block_auto and options["precision"] == "auto":
                 raise NotImplementedError("unavailable AUTO domain")
             self.options = options
+            if state.standard_convergence:
+                from generativeqc import _native
+
+                self._method = _native.METHOD_RHF
+                self._device_name = options.get("device")
+                self._library = SimpleNamespace(
+                    generativeqc_standard_scf_convergence_version_v1=lambda: 1
+                )
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")
             self._ks_options = options.get("ks_options")
@@ -252,6 +261,22 @@ def test_fast_strict_fallback_retains_standard_without_repeating_endpoint(
     assert report.scope == "native_fp64"
     assert report.target is None and report.errors == ()
     assert "no-observable-audit" in report.reference
+
+
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_new_standard_controls_keep_single_solve_fallback(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    """A new convergence capability cannot create an extra fallback audit."""
+    backend.standard_convergence = True
+    backend.block_auto = True
+    backend.outputs = [strict_native_result()]
+    calculator = PrecisionCalculator(policy=profile, device="cuda")
+    assert calculator._candidate._energy_tolerance == 1e-9
+    assert calculator._candidate._density_tolerance == 1e-5
+    output = calculator.singlepoint(ATOMS)
+    assert len(backend.calls) == output.precision_validation.solve_count == 1
+    assert output.precision_validation.errors == ()
 
 
 @pytest.mark.parametrize(

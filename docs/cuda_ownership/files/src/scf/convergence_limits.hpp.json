@@ -1,0 +1,6 @@
+{
+  "path": "src/scf/convergence_limits.hpp",
+  "role": "runtime",
+  "subsystem": "scf_tensor",
+  "reason": "Shared host/device scalar tolerance policy keeps physical iteration and final-state consumers consistent; it contains no tensor contraction or method driver."
+}

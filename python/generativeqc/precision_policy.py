@@ -18,6 +18,7 @@ from time import perf_counter
 from ._api_types import Atom, MethodCapabilities, Result
 from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
 from ._df_precision import DF_GRADIENT_QUALIFICATIONS
+from ._scf_convergence import default_scf_controls
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
@@ -278,11 +279,8 @@ def _standard_fallback_admitted(
         and (budget.force_rms is None or budget.force_rms >= 3e-5)
         and all(
             0 < getattr(calculator, attribute, math.inf) <= limit
-            for attribute, limit in (
-                ("_energy_tolerance", 1e-10),
-                ("_density_tolerance", 1e-8),
-                ("_screening_tolerance", 1e-12),
-            )
+            for name, limit in default_scf_controls(calculator).items()
+            for attribute in ("_" + name,)
         )
         and work.get("requested_mode") == "fp64"
         and work.get("effective_bits") == 64
@@ -679,22 +677,27 @@ class PrecisionCalculator:
         self._lock = threading.RLock()
         self._options = {"method": method, "basis": basis, "device": device, **options}
         if policy.profile in ("standard", "fp64", "fast"):
-            # A speed profile must not turn caller-supplied loose convergence
-            # controls into an implicitly certified strict endpoint.
-            for name, ceiling in (
-                ("energy_tolerance", 1e-10),
-                ("density_tolerance", 1e-8),
-                ("screening_tolerance", 1e-12),
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "screening_tolerance",
             ):
                 requested = self._options.get(name)
                 if requested is not None:
                     requested = float(requested)
                     if not math.isfinite(requested) or requested <= 0:
                         raise ValueError(f"{name} must be finite and positive")
-                self._options[name] = min(
-                    ceiling, ceiling if requested is None else requested
-                )
         self._candidate = Calculator(**self._options, precision="fp64")
+        if policy.profile in ("standard", "fp64", "fast"):
+            # Select the same qualified Standard controls as Calculator after
+            # resolving the native library and complete model. Unsupported
+            # owners and older libraries keep their strict defaults. Tight
+            # caller values survive both Standard and Fast fallback paths.
+            for name, ceiling in default_scf_controls(self._candidate).items():
+                requested = self._options.get(name)
+                value = min(ceiling, ceiling if requested is None else float(requested))
+                self._options[name] = value
+                setattr(self._candidate, "_" + name, value)
         self._fp64_properties = self._candidate.capabilities.supported_properties
         if self._candidate.capabilities.family not in (
             "hartree_fock",

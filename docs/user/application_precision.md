@@ -417,9 +417,25 @@ It does not imply FP32 execution or promise a speedup for every workload.
 
 Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
-observable-budget audit is claimed**. Its solver controls are at least as strict
-as `1e-10` energy, `1e-8` density and `1e-12` screening; stricter caller settings
-are preserved. These controls are not a bound on force error.
+observable-budget audit is claimed**. Its CUDA solver defaults are `1e-9` energy change, `1e-5` density change and
+`1e-12` screening for all-electron RHF and canonical restricted PBE, PBE0,
+B3LYP, r2SCAN (including r2SCAN-3c), and M06-2X on the default grid. CPU,
+unrestricted, correlated and other model/grid domains, and older native
+libraries, retain `1e-10` energy and `1e-8` density. `Calculator` and Fast's
+Standard fallback resolve the same defaults. Explicit tighter controls are
+preserved; neither FP64 arithmetic nor solver thresholds bound force error.
+
+Eligible CUDA owners cap the physical AO commutator at `1e-5`. KS must also
+pass its complete canonical final-state proof before accepting convergence;
+a rejected proof continues SCF without publishing a warm seed. Either tighter
+energy or density controls restore the strict physical residual ceiling.
+Trace, idempotency, ownership and force-token checks remain mandatory.
+This AO norm is different from GPU4PySCF's orbital-gradient norm. Qualification
+compares complete energies and forces against independent, tightly converged
+same-grid/same-fitted-model references. It does not remove quadrature or fitting
+error, and it does not turn a failed dense-reference comparison into a pass.
+For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
+`density_tolerance=1e-10`.
 
 Supplying an explicit `TargetAccuracy`, including with Fast or FP64, requests a complete
 same-backend comparison. Balanced, Strict and `audit_auto` also request these
