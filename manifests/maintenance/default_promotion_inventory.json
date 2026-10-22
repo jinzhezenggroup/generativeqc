@@ -1813,15 +1813,18 @@
         1598
       ],
       "sources": [
-        "src/dft/cuda_ks.cpp"
+        "src/dft/cuda_ks.cpp",
+        "src/dft/ks_stopping_policy.hpp"
       ],
-      "rationale": "Eligible strict-FP64 restricted single-iteration owners may replace only the conservative AO-maximum margin with the existing complete canonical final-state proof on the current physical F[D]. Energy, density-change, spin-RMS and all final-state acceptance gates remain unchanged. Numerical rejection continues from the intact density proposal without publishing borrowed orbital scratch; driver/solver failures propagate. Explicit 0 restores the incumbent policy. Pure-J DF is eligible; Fast, mixed, fitted exchange, range/nonlocal, UKS, incremental, ECP, chunks and missing resident workspace/library retain the incumbent. No new persistent numeric storage is required.",
+      "rationale": "Automatic admission additionally requires the canonical PBE, PBE0, B3LYP or r2SCAN electronic composition and default Treutler/Lebedev/NWChem grid. Generated split hybrids (including M06-2X), custom mixtures and other grids retain the incumbent; explicit 1 is experimental and does not bypass owner/final-state gates. Eligible strict-FP64 restricted single-iteration owners may replace only the conservative AO-maximum margin with the existing complete canonical final-state proof on the current physical F[D]. Energy, density-change, spin-RMS and all final-state acceptance gates remain unchanged. Numerical rejection continues from the intact density proposal without publishing borrowed orbital scratch; driver/solver failures propagate. Explicit 0 restores the incumbent policy. Pure-J DF is eligible; Fast, mixed, fitted exchange, range/nonlocal, UKS, incremental, ECP, chunks and missing resident workspace/library retain the incumbent. No new persistent numeric storage is required.",
       "revisit_condition": "Qualify other solver/provider/precision/lifetime domains independently. Preserve the unchanged final canonical-density test, failed-proof continuation and token-bound force validation. Complete cold/warm timings and semantic work, including rejected probes, must support any performance claim; unchanged-iteration populations may incur a small extra proof cost.",
       "evidence": [
         "docs/developer/ks_diagnostics.md",
         "tests/python/test_ks_early_final_probe_cuda.py",
         "tests/python/test_ks_warm_orbital_failure.py",
-        ".agents/notes/implemented/performance/2026-10-22-final-state-aware-ks-stopping.md"
+        ".agents/notes/implemented/performance/2026-10-22-final-state-aware-ks-stopping.md",
+        "tests/python/test_scf_review_contracts.py",
+        ".agents/notes/implemented/numerics/2026-10-22-restrict-early-final-promotion.md"
       ]
     }
   ]

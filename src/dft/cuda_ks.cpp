@@ -21,6 +21,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -378,7 +379,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   // Eligible strict solves may replace the conservative AO-maximum margin
   // only with a successful complete canonical final-state proof.
-  bool early_final_probe_requested{true};
+  bool early_final_probe_requested{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
@@ -1449,6 +1450,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
         throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
     }
+    early_final_probe_requested = early_final_probe_default_model(
+        functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
+        exchange_coefficient, grid_spec == default_grid_spec());
+    if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
+      early_final_probe_requested = std::strcmp(setting, "1") == 0;
+    }
     const bool range_incremental_eligible =
         !has_range_correction ||
         (range_correction->backend == scf::FockBackend::Cuda &&
@@ -1465,11 +1474,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
              scf::direct_jk_incremental_exact_eligible(strategy) && range_incremental_eligible,
          true, precision_schedule.any_lower_precision()});
     incremental_direct_jk = incremental_direct_jk_policy.active;
-    if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
-      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
-        throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
-      early_final_probe_requested = std::strcmp(setting, "1") == 0;
-    }
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
@@ -3280,13 +3284,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refine_incremental_energy(physical.density_change, physical.residual,
                               physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
-    bool converged = has_energy_history && full_energy_history && !pending_nonlocal_seed &&
-                     !pending_nonlocal_frozen &&
-                     (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2) &&
-                     output.energy_change < options.energy_tolerance &&
-                     physical.density_change < options.density_tolerance &&
-                     physical.residual < physical_stationarity_tolerance() &&
-                     physical.maximum_residual < physical_stationarity_tolerance();
+    bool converged = ordinary_ks_converged(
+        {output.iterations, warm_energy_baseline, full_energy_history,
+         !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+             (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
+         output.energy_change, physical.density_change, physical.residual,
+         physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
+         physical_stationarity_tolerance()});
     bool early_final_probe_ran = false;
     // The final contract admits a 1e-8 AO maximum but separately checks the
     // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay
