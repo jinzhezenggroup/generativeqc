@@ -320,7 +320,8 @@ int main() {
 
 def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
-    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    # Preserve the producer/flag audit without depending on call-site wrapping.
+    owner = " ".join(_source("src/scf/cuda/direct_coulomb.cpp").split())
     assert "const bool bounded_through_f = through_f;" in direct
     assert "dispatch.canonical_coulomb || dispatch.canonical_exchange" in direct
     assert "mixed_j, plan->canonical_pairs != nullptr" in direct
