@@ -162,6 +162,8 @@ def test_false_owner_descriptors_fail_closed(
 def test_stopped_watchdog_cancellation_is_bounded_and_reclaims_registered_group(
     owned: int, tmp_path: Path
 ) -> None:
+    # Existence is the readiness signal: publish only the fully written PID.
+    # write_text(target) exposes an empty file before its contents are written.
     pid_file = tmp_path / "target.pid"
     process = compiler_lifetime.start_owned_process(
         [
@@ -169,7 +171,13 @@ def test_stopped_watchdog_cancellation_is_bounded_and_reclaims_registered_group(
             "-I",
             "-S",
             "-c",
-            f"import os,pathlib,time;pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()));time.sleep(60)",
+            (
+                "import os,pathlib,time;"
+                f"target=pathlib.Path({str(pid_file)!r});"
+                "pending=target.with_suffix('.pending');"
+                "pending.write_text(str(os.getpid()));pending.replace(target);"
+                "time.sleep(60)"
+            ),
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
