@@ -77,7 +77,13 @@ def test_hf_complete_work_and_frozen_replay(fitted: bool) -> None:
     if fitted:
         gradient.auxbasis_response = True
     forces = -gradient.kernel()
-    calculator = Calculator(method="rhf", basis="def2-svp", device="cuda", **options)
+    calculator = Calculator(
+        method="rhf",
+        basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        **options,
+    )
     try:
         with calculator.prepare_batch([atoms], warm_start=True) as owner:
             counts = []
