@@ -1891,7 +1891,21 @@ generativeqc_status execute_cuda_df_hf_gradient(
         const auto bytes = whitened->pair_count * a * sizeof(double);
         arena.stats.borrowed_device_bytes += bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_whitened_bytes", bytes);
-        read_fitted = [&](std::size_t begin, std::size_t count, double* values) {
+        read_fitted = [&, root_ready = false](std::size_t begin, std::size_t count,
+                                              double* values) mutable {
+          const double* fitted_response_root = device_metric->inverse_square_root;
+          if (whitened->spectral_basis) {
+            // Full-rank panel response never writes the first metric interval.
+            // Prepare R there on the first actual read: pure-J response uses
+            // its vector-only map and need not prepare this unused panel map.
+            if (!root_ready) {
+              cuda_df::launch_spectral_response_root(arena.stream, a, device_metric->eigenvectors,
+                                                     device_metric->eigenvalues, workspace);
+              check(cudaGetLastError());
+              root_ready = true;
+            }
+            fitted_response_root = workspace;
+          }
           runtime::cuda_trace::TraceRegion projection("response_fitted_panel_projection",
                                                       arena.stream);
           const double one = 1, zero = 0;
@@ -1905,7 +1919,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
             // into the bounded auxiliary-major panel used by the response.
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, mi, static_cast<int>(count), ai, &one, whitened->data, ai,
-                 device_metric->inverse_square_root + begin * a, ai, &zero, values, mi}));
+                 fitted_response_root + begin * a, ai, &zero, values, mi}));
             runtime::cuda_trace::trace_counter("response_fitted_panel_gemms", 1);
           } else {
             // Project the whole packed panel with GEMM into the tail of its
@@ -1921,8 +1935,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
             auto* packed_values = workspace + 4 * a * a;
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, static_cast<int>(pairs), static_cast<int>(count), ai, &one,
-                 whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
-                 packed_panel, static_cast<int>(pairs)}));
+                 whitened->data, ai, fitted_response_root + begin * a, ai, &zero, packed_panel,
+                 static_cast<int>(pairs)}));
             for (std::size_t p = 0; p < count; ++p) {
               check(cudaMemcpyAsync(packed_values, packed_panel + p * pairs, pairs * sizeof(double),
                                     cudaMemcpyDeviceToDevice, arena.stream));

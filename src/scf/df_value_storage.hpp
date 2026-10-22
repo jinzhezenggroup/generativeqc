@@ -13,6 +13,8 @@ namespace generativeqc::scf {
  * Dense permits arbitrary public tensors. SymmetricLower is admitted only
  * for physical integral sources; it stores unit-weight (mu>=nu) pairs with Q
  * contiguous. Geometry/metric/source ownership remains part of the plan token.
+ * SymmetricLowerSingle drops raw A and may retain full-rank fitted factors in
+ * metric eigen-coordinates; the private response view records their gauge.
  */
 enum class DfPairStorage { Dense, SymmetricLower, SymmetricLowerSingle };
 
