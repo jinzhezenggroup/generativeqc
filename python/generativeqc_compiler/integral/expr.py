@@ -1274,7 +1274,25 @@ class Graph:
             memo[identifier] = derivative
             return derivative
 
-        return visit(expression.identifier)
+        # Preserve derivative rules and operand order without using Python's
+        # call stack: high-angular ERIs contain very deep sum chains.
+        # Select predicates are structural controls, so only their arms need
+        # derivatives (matching the rule above).
+        pending = [(expression.identifier, False)]
+        while pending:
+            identifier, ready = pending.pop()
+            if identifier in memo:
+                continue
+            if ready:
+                visit(identifier)  # All recursive lookups now hit memo.
+                continue
+            node = self.nodes[identifier]
+            arguments = (
+                node.arguments[2:] if node.operation == "select_le" else node.arguments
+            )
+            pending.append((identifier, True))
+            pending.extend((argument, False) for argument in reversed(arguments))
+        return memo[expression.identifier]
 
     def _topological_order_tuple(self, roots: Sequence[Expr]) -> tuple[int, ...]:
         """Return a cached immutable dependency-first order for ordered roots.
@@ -1296,16 +1314,20 @@ class Graph:
         visited: set[int] = set()
         order: list[int] = []
 
-        def visit(identifier: int) -> None:
-            if identifier in visited:
-                return
-            visited.add(identifier)
-            for argument in self.nodes[identifier].arguments:
-                visit(argument)
-            order.append(identifier)
-
-        for identifier in identifiers:
-            visit(identifier)
+        # Explicit DFS keeps source ordering identical to recursive postorder,
+        # including shared nodes, while admitting deep generated expressions.
+        pending = [(identifier, False) for identifier in reversed(identifiers)]
+        while pending:
+            identifier, ready = pending.pop()
+            if ready:
+                order.append(identifier)
+            elif identifier not in visited:
+                visited.add(identifier)
+                pending.append((identifier, True))
+                pending.extend(
+                    (argument, False)
+                    for argument in reversed(self.nodes[identifier].arguments)
+                )
         result = tuple(order)
         if len(self._topological_orders) >= _TOPOLOGICAL_ORDER_CACHE_LIMIT:
             oldest = next(iter(self._topological_orders))
