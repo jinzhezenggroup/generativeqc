@@ -192,6 +192,14 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                std::uint64_t* mixed_coulomb_work_count = nullptr,
                                                bool mixed_exchange = false);
 
+/** Propose a strict-FP64 full-range RKS step using a coarser J/K screening
+ * cutoff. No prepared provider identity is mutated. NOT_IMPLEMENTED permits
+ * ordinary execution; final physical validation must use the ordinary facade.
+ */
+generativeqc_status enqueue_prepared_cuda_fock_proposal(
+    const PreparedFockPlan& plan, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, int* numerical_error, double screening, std::string& detail);
+
 /** Enqueue the prepared primary full-range J/K plus one compatible exact
  * SR/LR exchange correction through a single Direct density-preparation pass.
  * Unsupported domains return NOT_IMPLEMENTED so consumers can retain the

@@ -146,6 +146,18 @@ int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
     if(std::string(argv[1])=="bounded-proposals") {
+      using generativeqc::dft::ks_incremental_proposal_screening;
+      for(unsigned count:{0U,1U,8U,9U,100U}) {
+        require(ks_incremental_proposal_screening(false,count,1e-13)==1e-13,
+                "ordinary/full/warm action inherited provisional screening");
+        require(ks_incremental_proposal_screening(true,count,0.0)==0.0,
+                "unscreened source inherited screening");
+        require(ks_incremental_proposal_screening(true,count,1e-8)==1e-8,
+                "proposal requested a finer unprepared source");
+        require(ks_incremental_proposal_screening(true,count,1e-13)==
+                    (count>0 && count<=8 ? 1e-9 : 1e-13),
+                "coarser proposal budget escaped the finite solve-wide limit");
+      }
       for(unsigned requested:{0U,1U,3U,8U,100U}) {
         const auto interval=ks_incremental_proposal_interval(true,requested,1);
         require(interval>=1 && interval<=8,"screened proposal chain is unbounded");

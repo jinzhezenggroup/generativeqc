@@ -18,4 +18,18 @@ constexpr unsigned ks_incremental_proposal_interval(bool audited_proposals,
                                                                       : maximum_proposals;
 }
 
+/** A coarser cutoff accelerates only the first eight provisional delta actions
+ * in a solve, across refresh epochs. Exhaustion restores the prepared cutoff;
+ * neither warm/full builds nor unscreened requests may inherit this policy.
+ * This is a proposal heuristic, not a bound on accumulated Fock error. Only
+ * the independent full-density tail may certify the final state.
+ */
+constexpr double ks_incremental_proposal_screening(bool audited_delta, unsigned delta_builds,
+                                                   double prepared_screening) noexcept {
+  return audited_delta && delta_builds > 0 && delta_builds <= 8 && prepared_screening > 0.0 &&
+                 prepared_screening < 1e-9
+             ? 1e-9
+             : prepared_screening;
+}
+
 }  // namespace generativeqc::dft

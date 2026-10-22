@@ -130,3 +130,6 @@ E/F evidence, complete cold/warm timings, and public resource accounting.
 
 Final-head CUDA KS SHA256: `7218190a885f66e287a4e8ee65052e3fbca05426a42c51229412cb30cab8b9ad`.
 Final-head library SHA256: `16174b3618d8124e2b18e872c9b0a4908e7c7f9f3453508da2f04d78602e395f`.
+
+The [coarser provisional-screening follow-up](2026-10-23-provisional-delta-screening.md)
+extends this controller while preserving its warm and full-density proof rules.

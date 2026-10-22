@@ -64,3 +64,40 @@ All 200 recorded endpoints pass. Final-head tests: 81 controller/resource,
 130 promotion-inventory and 5 independent CUDA tests passed.
 Final CUDA KS SHA256: `7218190a885f66e287a4e8ee65052e3fbca05426a42c51229412cb30cab8b9ad`.
 Final library SHA256: `16174b3618d8124e2b18e872c9b0a4908e7c7f9f3453508da2f04d78602e395f`.
+
+## Coarser provisional screening follow-up
+
+The next candidate explicitly requests 1e-9 screening for at most eight eligible
+delta actions per solve, with existing producer caps retained. Prepared physical
+screening remains immutable. Full/warm/force actions and the two closing physical
+energies retain the original cutoff; unsupported producers fall back. Admission
+adds no functional whitelist. The global incremental selector remains opt-in;
+`GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` selects the previous policy.
+
+Three new rotated-order rounds (same scientific settings and complete endpoint
+protocol above) give these cold medians in seconds:
+
+| Atoms | Master | Previous V5 | New | New/master |
+| --- | ---: | ---: | ---: | ---: |
+| 12 | 3.29684 | 3.33437 | 3.13103 | -5.03% |
+| 48 | 13.13335 | 12.51437 | 11.73880 | -10.62% |
+| 96 | 30.37949 | 29.01222 | 27.19843 | -10.47% |
+
+Warm medians (master/new) are 0.39101/0.38869, 2.68802/2.69306 and
+8.39806/8.33651 s; all perform one full Fock. Cold Focks remain 10/9/9 with six
+deltas. The new 96-atom result is 6.25% faster than V5 in the same rounds.
+Timing is sampled, not a universal latency guarantee. Separate intrusive traces
+show J/K 8.81 to 6.86 s, including K 6.82 to 4.84 s; they are excluded from rankings.
+
+[coarse-screening.json](coarse-screening.json) retains the new full-precision
+populations, all 134 independently qualified E/F endpoints including pilots and
+diagnostics, source/binary identities and worst errors. Maximum errors are
+6.03e-12 Eh/atom, 2.04e-6 maximum and 6.35e-7 RMS Eh/Bohr. Seven independent
+CUDA tests and 222 host/controller/inventory tests pass. The sampled functional
+and lifecycle coverage is described in the
+[decision note](../../../.agents/notes/implemented/performance/2026-10-23-provisional-delta-screening.md).
+Raw source, forces, failures, reference receipts and runners remain in
+`../evidence-delta-d-expand-20261023/`. The measured native base remains
+`afa0a1690be3c0c46774b0f3c2044b8f9a37fd9e`; the PR integration base is `bbd41a427`.
+The measured final library SHA256 is
+`ad3f854f5a22351d470a59258a1f64e4e5cdc96fa60302fdd1dd3eb4bb6d4add`.

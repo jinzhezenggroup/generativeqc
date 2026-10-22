@@ -345,6 +345,18 @@ proposals for eligible owners. Other values are errors. Explicit strict
 tolerances and owners lacking the required proof retain their ordinary
 incremental policy.
 
+Eligible proposals can also use a coarser `1e-9` J/K screening cutoff for at most
+the first eight delta builds of a solve, across periodic refreshes. This applies
+only to an already screened source whose prepared cutoff is tighter, with MD-J
+and, when needed, generated full-range K available. Existing conservative
+producer caps, including the MD-J error cap, remain in force. Unsupported providers fall
+back to the prepared cutoff. The prepared source is immutable: full builds,
+warm calls, final physical proof and analytic forces use the original cutoff.
+The proposal cutoff is a convergence heuristic, not an accumulated-error bound.
+`GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` disables this extra screening
+while preserving bounded delta proposals; `1` or unset enables it, and other
+values are errors. The global incremental selector remains opt-in.
+
 For all-electron RKS without range or nonlocal contributions, a validated
 density reused internally at the same
 geometry follows the ordinary full-density warm path, including its energy

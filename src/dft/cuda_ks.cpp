@@ -353,6 +353,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
   bool incremental_proposals_requested{true}, incremental_proposals_active{};
+  bool incremental_coarse_screening_requested{true};
   bool fast_anchor_eligible{}, fast_anchor_active{}, fast_anchor_ready{}, pending_fast_delta{};
   void* fast_anchor_arena{};
   double *fast_anchor_density{}, *fast_delta_density{}, *fast_anchor_j{}, *fast_anchor_exchange{},
@@ -639,6 +640,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                    has_exchange ? exchange : nullptr, jk_error,
                                    provider.strategy().screening_tolerance, detail, beta,
                                    has_exchange && spins == 2 ? exchange + matrix : nullptr);
+    }
+    // Intermediate delta operators only propose densities. Keep the prepared
+    // target's cutoff immutable; full builds, warm replay and final proof use
+    // the ordinary facade. Unsupported producers retain the original action.
+    const double screening = ks_incremental_proposal_screening(
+        incremental_proposals_active && incremental_coarse_screening_requested &&
+            pending_incremental_delta && !mixed,
+        output.incremental_direct_jk.delta_builds, provider.strategy().screening_tolerance);
+    if (screening > provider.strategy().screening_tolerance) {
+      const auto status = scf::enqueue_prepared_cuda_fock_proposal(
+          provider, alpha, matrix, j, has_exchange ? exchange : nullptr, jk_error, screening,
+          detail);
+      if (status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        runtime::cuda_trace::trace_counter("incremental_coarse_screening", 1);
+        return status;
+      }
     }
     return scf::enqueue_prepared_cuda_fock(
         provider, alpha, beta, matrix, j, exchange,
@@ -1533,6 +1550,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
         throw std::invalid_argument("GENERATIVEQC_KS_INCREMENTAL_PROPOSALS requires 0 or 1");
       incremental_proposals_requested = std::strcmp(setting, "1") == 0;
+    }
+    if (const auto* setting = std::getenv("GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING requires 0 or 1");
+      incremental_coarse_screening_requested = std::strcmp(setting, "1") == 0;
     }
     fast_anchor_eligible = admit_fast_anchor_delta(
         budget_fock, budget_stationarity, functional,

@@ -120,6 +120,12 @@ def _probe_library() -> Any:
         ct.POINTER(ct.c_double),
     ]
     library.md_j_probe_execute.restype = ct.c_int
+    library.md_j_probe_propose.argtypes = [
+        *library.md_j_probe_execute.argtypes[:-1],
+        ct.c_double,
+        ct.POINTER(ct.c_double),
+    ]
+    library.md_j_probe_propose.restype = ct.c_int
     library.md_j_probe_capture.argtypes = library.md_j_probe_execute.argtypes[:-1]
     library.md_j_probe_capture.restype = ct.c_int
     library.md_j_probe_replay.argtypes = [ct.c_void_p, ct.POINTER(ct.c_double)]
@@ -278,6 +284,15 @@ class ResidentMdJProbe:
         seconds = ct.c_double()
         status = self._probe.md_j_probe_execute(
             *self._buffer_arguments(), ct.byref(seconds)
+        )
+        return self._publish(values, status, seconds)
+
+    def evaluate_proposal(self, density: Any, screening: float) -> Any:
+        """Exercise a provisional cutoff without rebuilding the prepared owner."""
+        values = self._upload_density(density)
+        seconds = ct.c_double()
+        status = self._probe.md_j_probe_propose(
+            *self._buffer_arguments(), screening, ct.byref(seconds)
         )
         return self._publish(values, status, seconds)
 
