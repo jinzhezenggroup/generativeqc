@@ -128,18 +128,19 @@ regress substantially. The 384/1856 unequal case remains numerically unqualified
 The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records domain evidence, validation and conditions for revisiting selection.
 
-## Experimental streamed pure-J contractions
+## Streamed pure-J contractions
 
-`GENERATIVEQC_DF_MD_COULOMB=1` opts prepared restricted pure-J sources into a
-native Hermite charge/projection candidate. Unset or `0` preserves the existing
-selection; other values are rejected. The control is part of prepared-source
+Prepared restricted pure-J streamed sources automatically select native
+Hermite charge/projection when the complete owner fits. Unset or
+`GENERATIVEQC_DF_MD_COULOMB=1` enables this policy; `0` restores the previous
+raw-value path and other values are rejected. The control is part of prepared-source
 identity. Admission requires one streamed system, a full-rank metric, orbital
 angular momentum through f, auxiliary angular momentum through g, and enough
 value capacity for the complete optional owner. Native topology counts reserve
 its exact device footprint before the planner sizes fallback panels. Device
 and host storage remain included in the enclosing diagnostics.
 
-The candidate replaces raw three-center value regeneration with two vector
+The owner replaces raw three-center value regeneration with two vector
 contractions and the existing metric solve. It remains unscreened; retained
 integral sources remain available. Pure-J force response borrows the same
 stream-bound owner to recompute auxiliary charge from its exact current density,
@@ -159,6 +160,8 @@ a finite Slurm GPU allocation with `GENERATIVEQC_TEST_DF_MD_PLAN=1` and an
 explicit `GENERATIVEQC_LIBRARY`. Adding `GENERATIVEQC_TEST_DF_MD_FORCE=1`
 checks complete Coulomb gradients against independent displaced libcint
 energies, zero/changed density, borrowed-owner identity and failure propagation.
-This experimental control does not imply
-complete energy/force or performance qualification; see the
-[consumer-work investigation](../../.agents/notes/proposed/2026-10-22-df-consumer-work-gap.md).
+`tests/python/test_df_md_endpoint_cuda.py` adds independent complete SCF/force,
+frozen replay and changed-geometry checks for the automatic and rollback paths.
+Resident fitted tensors retain their existing selection. See the
+[default decision](../../.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md)
+for qualification and fallback rationale.

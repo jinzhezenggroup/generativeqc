@@ -38,6 +38,10 @@ GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v1(voi
 
 GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v2(void) { return 2; }
 
+/** Strict DF Coulomb with budget-selected local XC proposals and FP64 closure.
+ * Independent of Direct mixed J/K; older libraries retain strict DF execution. */
+GENERATIVEQC_API uint32_t generativeqc_application_df_xc_precision_version_v1(void) { return 1; }
+
 /** Optional Python provenance transport, independent of the stable SCF ABI.
  * A missing/computation-only result must not inherit a previous force record. */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v1(

@@ -57,14 +57,18 @@ def _budget_target(budget: TargetErrorBudget, *, forces: bool = True) -> TargetA
 def _budget_fock_controls(
     calculator: Calculator, budget: TargetErrorBudget, requested: dict
 ) -> dict[str, float]:
-    """Select controls for shared Direct modules, independently of XC identity.
+    """Select controls for shared Direct modules or separately qualified DF XC.
 
-    Native preparation checks the actual provider and basis/resource domain.
+    Direct admission is independent of XC identity; DF authenticates its local
+    complete model and keeps J strict. Native preparation checks the actual
+    provider and basis/resource domain.
     Older libraries, unsupported providers and tighter budgets stay strict.
     Explicit caller tolerances are ceilings, never silently loosened.
     The density ceiling matches the native owner's maximum authenticated force
     stationarity allowance; it is not an observable-error estimate.
     """
+    from ._df_precision import fitted_scf_budget_admitted
+
     capability = getattr(
         getattr(calculator, "_library", None),
         "generativeqc_application_fock_precision_version_v2",
@@ -72,14 +76,18 @@ def _budget_fock_controls(
     )
     ks_options = getattr(calculator, "_ks_options", None)
     model = getattr(ks_options, "_method_ir", None)
+    fitted = bool(getattr(calculator, "_density_fitting_mode", None))
+    available = (
+        fitted_scf_budget_admitted(calculator, budget)
+        if fitted
+        else capability is not None and capability() == 2
+    )
     if (
-        capability is None
-        or capability() != 2
+        not available
         or model is None
         or model.spin != "unpolarized"
         or not ks_options.execution_plan.self_consistent
         or ks_options.xc_schedule != "device_fused"
-        or getattr(calculator, "_density_fitting_mode", None)
         or budget.energy_abs < 1e-5
         or budget.force_max_abs < 1e-4
         or (budget.force_rms is not None and budget.force_rms < 3e-5)
@@ -549,6 +557,7 @@ def _complete_gradient_admission(
             "r2scan-rks-budget-fp32-v1",
             "r2scan-df-rks-budget-fp32-v1",
             "r2scan-df-rks-treutler-budget-fp32-v1",
+            "r2scan-df-rks-treutler-xc-budget-fp32-v1",
         )
         and correction_model.identity
         == resolve_method("R2SCAN-3c", spin="unpolarized").identity
@@ -1126,6 +1135,11 @@ class PrecisionCalculator:
                 fast_native
                 and self._fast_fock
                 and (
+                    not gradient
+                    or gradient.get("returned_mode") == "fp64"
+                    or qualified_gradient
+                )
+                and (
                     strict_warm
                     or _budget_fock_work_admitted(candidate_calculator, work)
                 )
@@ -1142,7 +1156,11 @@ class PrecisionCalculator:
                     (),
                     tuple(solves),
                     perf_counter() - started,
-                    reference="direct-fock-budget-v2/shared-module-qualification",
+                    reference=(
+                        "df-xc-budget-v1/strict-j-shared-xc-qualification"
+                        if candidate_calculator._density_fitting_mode
+                        else "direct-fock-budget-v2/shared-module-qualification"
+                    ),
                     gradient_admission=gradient_admission,
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,

@@ -1373,6 +1373,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           CudaXcAoPrecision::Fp64, 0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
     const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
+    bool fitted_xc_budget = false;
     if (application_precision) {
       for (const auto* control :
            {"GENERATIVEQC_EXPERIMENTAL_PBE_POINT_FP32",
@@ -1384,13 +1385,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
       unsigned maximum_angular = 0;
       for (const auto& shell : provider.system().shells)
         maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-      budget_fock = options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-                    admit_application_fock(
-                        options.application_precision_budget, molecule::ao_count(provider.system()),
-                        provider.system().atoms.size(), maximum_angular,
-                        spins == 1 && options.xc_execution_schedule ==
-                                          scf::ScfOptions::XcExecutionSchedule::DeviceFused,
-                        provider.system().ecp_terms.empty(), fock_precision.coulomb);
+      // DF has no mixed J provider. A separate local pure-J qualification
+      // admits only XC matrix products, with the existing bounded proposal and
+      // strict physical closure. Never report a nonexistent FP32 DF recurrence.
+      fitted_xc_budget =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO && fitted_coulomb &&
+          !fitted_exchange && !has_exchange && !has_range_correction && !nonlocal_correlation &&
+          grid_spec == default_grid_spec() &&
+          (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
+           functional == semilocal_family_code(SemilocalFamily::R2scan)) &&
+          options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
+          molecule::ao_count(provider.system()) >= 24 &&
+          molecule::ao_count(provider.system()) <= 1200 && provider.system().atoms.size() >= 2 &&
+          provider.system().atoms.size() <= 96 && maximum_angular <= 2 &&
+          provider.system().ecp_terms.empty() &&
+          admit_application_df_xc_budget(
+              options.application_precision_budget,
+              spins == 1 && options.xc_execution_schedule ==
+                                scf::ScfOptions::XcExecutionSchedule::DeviceFused);
+      budget_fock =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+          (fitted_xc_budget ||
+           admit_application_fock(
+               options.application_precision_budget, molecule::ao_count(provider.system()),
+               provider.system().atoms.size(), maximum_angular,
+               spins == 1 && options.xc_execution_schedule ==
+                                 scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+               provider.system().ecp_terms.empty(), fock_precision.coulomb));
       budget_stationarity =
           budget_fock && (options.energy_tolerance > 1e-10 || options.density_tolerance > 1e-8 ||
                           options.screening_tolerance > 1e-12);
@@ -1434,7 +1455,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         xc_layout.fast_paths, fitted_coulomb, nonlocal_correlation != nullptr,
         experimental_mixed_point, experimental_mixed_contractions,
         budget_fock ? fock_precision : scf::CudaFockPrecisionCapabilities{}, has_range_correction,
-        range_correction && scf::cuda_range_exchange_precision_capability(*range_correction));
+        range_correction && scf::cuda_range_exchange_precision_capability(*range_correction),
+        fitted_xc_budget);
     if (precision_schedule.any_lower_precision()) {
       mixed_warmup =
           resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),

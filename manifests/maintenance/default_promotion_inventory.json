@@ -1806,7 +1806,7 @@
     },
     {
       "id": "scf.df-md-coulomb",
-      "classification": "needs-qualification",
+      "classification": "already-default",
       "controls": [
         "hf-runtime:GENERATIVEQC_DF_MD_COULOMB"
       ],
@@ -1820,8 +1820,14 @@
         "src/scf/cuda/df_coulomb.cpp",
         ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
       ],
-      "rationale": "Default-off pure-J Hermite contractions replace dense three-center regeneration only for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes exact response charge and contracts three-center atom derivatives in Hermite form; metric response remains in the existing bridge. Unsupported angular domains and bounded capacity refusals keep the incumbent. Independent charge/projection/derivative and integrated force tests qualify this candidate; default promotion still requires complete endpoint evidence.",
-      "revisit_condition": "Qualify metric-applied J, complete energy/force and cold/warm endpoints, changed geometry and constrained-memory fallback with source-matched binaries and executed-work traces; independently qualify screening and response before any default promotion."
+      "rationale": "Automatic pure-J Hermite contractions replace dense three-center regeneration for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes current-density response charge and contracts three-center atom derivatives; metric response remains in the existing bridge. Resident factors, unsupported angular domains, rank truncation and bounded capacity refusals retain their existing paths. Explicit 0 restores raw regeneration. Independent angular, metric, force, geometry/replay, sanitizer and complete cold/warm endpoints qualify the bounded default.",
+      "revisit_condition": "Renew source-matched endpoint, resource, independent numerical and lifetime qualification before broadening residency, angular domains or screening. Keep the optional owner inside the existing value/response allowance and preserve rank/capacity fallbacks; explicit resource changes are not default timing evidence.",
+      "evidence": [
+        "tests/python/test_df_md_plan_cuda.py",
+        "tests/python/test_df_md_endpoint_cuda.py",
+        "docs/developer/df_packed_storage.md",
+        "note:.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md"
+      ]
     },
     {
       "id": "ks.final-state-aware-stopping",

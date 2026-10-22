@@ -65,12 +65,12 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
   result.one_electron_value_override = one_electron_policy.diagnostic_override;
   result.one_electron_value_capability_fallback = one_electron_policy.capability_fallback;
   if (needs(strategy.spec, FockApproximation::DensityFitted)) {
-    // Freeze the experimental policy in prepared-source identity; changing
+    // Freeze the bounded automatic policy in prepared-source identity; changing
     // it must not silently reuse a previously selected value owner.
     const char* md = std::getenv("GENERATIVEQC_DF_MD_COULOMB");
     if (md && std::string_view(md) != "0" && std::string_view(md) != "1")
       throw std::invalid_argument("GENERATIVEQC_DF_MD_COULOMB must be 0 or 1");
-    result.df_md_coulomb_requested = md && std::string_view(md) == "1";
+    result.df_md_coulomb_requested = !md || std::string_view(md) == "1";
     result.df_pair_storage_request = requested_df_pair_storage_request();
     result.df_pair_storage = requested_df_pair_storage();
     result.df_value_mapping = cuda_policy::df_value_mapping_requested();

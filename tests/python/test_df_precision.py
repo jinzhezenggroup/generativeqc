@@ -10,9 +10,78 @@ from generativeqc import GridSpec, TargetErrorBudget, _native
 from generativeqc._df_precision import (
     fitted_gradient_admission,
     fitted_gradient_precision,
+    fitted_scf_budget_admitted,
 )
 from generativeqc._ks_snapshot import NativeKsSnapshot
 from generativeqc_compiler.method import ExactExchangePrimitive, resolve_method
+
+
+@pytest.mark.parametrize(
+    "method,admitted",
+    (
+        ("pbe-rks", True),
+        ("r2scan-rks", True),
+        ("pbe0-rks", False),
+        ("pbe-uks", False),
+        ("b3lyp-rks", False),
+        ("wb97m-v-rks", False),
+    ),
+)
+def test_df_xc_proposals_have_independent_capability_and_model_gates(
+    method: str, admitted: bool
+) -> None:
+    """A Direct capability cannot authorize nonexistent mixed DF integrals."""
+    from generativeqc.ks import KsOptions, resolve_ks_options
+    from generativeqc.precision_policy import _budget_fock_controls
+
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(
+            generativeqc_application_df_xc_precision_version_v1=lambda: 1
+        ),
+        _device_name="cuda",
+        _density_fitting_mode=_native.DENSITY_FITTING_CUDA,
+        _ks_options=resolve_ks_options(method, KsOptions()),
+    )
+    budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
+    assert fitted_scf_budget_admitted(calculator, budget) is admitted
+    assert bool(_budget_fock_controls(calculator, budget, {})) is admitted
+    if admitted:
+        tighter = {
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-10,
+            "screening_tolerance": 1e-14,
+        }
+        assert _budget_fock_controls(calculator, budget, tighter) == tighter
+    for name, value in (
+        ("_device_name", "cpu"),
+        ("_density_fitting_mode", _native.DENSITY_FITTING_CPU_REFERENCE),
+        (
+            "_ks_options",
+            resolve_ks_options(method, KsOptions(grid=GridSpec(48, 16, 32))),
+        ),
+        (
+            "_library",
+            SimpleNamespace(
+                generativeqc_application_fock_precision_version_v2=lambda: 2
+            ),
+        ),
+        (
+            "_library",
+            SimpleNamespace(
+                generativeqc_application_df_xc_precision_version_v1=lambda: 0
+            ),
+        ),
+    ):
+        original = getattr(calculator, name)
+        setattr(calculator, name, value)
+        assert not fitted_scf_budget_admitted(calculator, budget)
+        setattr(calculator, name, original)
+    for tighter_budget in (
+        TargetErrorBudget(1e-6, 1e-4, 3e-5),
+        TargetErrorBudget(1e-5, 1e-5, 3e-5),
+        TargetErrorBudget(1e-5, 1e-4, 3e-6),
+    ):
+        assert not fitted_scf_budget_admitted(calculator, tighter_budget)
 
 
 @pytest.fixture
@@ -49,6 +118,40 @@ def model(monkeypatch: pytest.MonkeyPatch) -> Any:
         nao=24, natom=3, shells=(SimpleNamespace(angular_momentum=2),)
     )
     return calculator, state, basis, provider
+
+
+@pytest.mark.parametrize("method", ("pbe", "r2scan"))
+def test_df_budget_scf_gradient_requires_live_allowance_and_separate_identity(
+    model: Any, method: str
+) -> None:
+    """The combined route cannot borrow a strict-density gradient identity."""
+    from generativeqc.ks import KsOptions, resolve_ks_options
+
+    calculator, state, basis, provider = model
+    calculator._library = SimpleNamespace(
+        generativeqc_application_df_xc_precision_version_v1=lambda: 1
+    )
+    calculator._device_name = "cuda"
+    calculator._ks_options = resolve_ks_options(method + "-rks", KsOptions())
+    calculator._precision_mode = _native.PRECISION_AUTO
+    calculator._energy_tolerance = 1e-6
+    calculator._density_tolerance = 1e-4
+    calculator._screening_tolerance = 1e-10
+    object.__setattr__(state._source, "method_ir", resolve_method(method.upper()))
+    object.__setattr__(state._source, "coefficients", (1.0, 1.0, 0.0))
+    object.__setattr__(state._source, "grid_spec", GridSpec.treutler())
+    object.__setattr__(state._source, "stationarity_tolerance", 1e-4)
+    basis.nao, basis.natom = 96, 12
+    provider.value = ("density-fitted", None, 1e-10)
+    assert fitted_gradient_admission(calculator, state, basis) == (
+        f"{method}-df-rks-treutler-xc-budget-fp32-v1"
+    )
+    for allowance in (0.0, 1.01e-4, float("nan")):
+        object.__setattr__(state._source, "stationarity_tolerance", allowance)
+        assert fitted_gradient_admission(calculator, state, basis) is None
+    object.__setattr__(state._source, "stationarity_tolerance", 1e-4)
+    calculator._density_tolerance = 1.01e-4
+    assert fitted_gradient_admission(calculator, state, basis) is None
 
 
 @pytest.mark.parametrize("name", ("PBE", "PBE0", "B3LYP", "R2SCAN", "M06-2X"))

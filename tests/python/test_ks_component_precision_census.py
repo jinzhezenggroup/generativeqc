@@ -440,6 +440,29 @@ int main() {
     assert(fast_fock.uses_lower_precision(cuda_ks_precision_region::kXcMatrixContractions));
     assert(!fast_fock.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
     assert(resolve_cuda_ks_iteration_precision(fast_fock, true, true).is_strict_fp64());
+    // The independently admitted DF proposal narrows only shared XC products.
+    // Refinement must restore those too; no mixed J or K capability is invented.
+    const auto fitted = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_AUTO, capabilities, true, false,
+        false, false, {}, false, false, true);
+    assert(fitted.uses_lower_precision(cuda_ks_precision_region::kXcMatrixContractions));
+    for (const auto region : {cuda_ks_precision_region::kCoulombJ,
+                             cuda_ks_precision_region::kExactExchange,
+                             cuda_ks_precision_region::kDensityContraction,
+                             cuda_ks_precision_region::kTau,
+                             cuda_ks_precision_region::kXcPointAlgebra,
+                             cuda_ks_precision_region::kFinalAudit})
+      assert(!fitted.uses_lower_precision(region));
+    assert(resolve_cuda_ks_iteration_precision(fitted, true, true).is_strict_fp64());
+    for (const bool nonlocal_graph : {false, true}) {
+      bool refused = false;
+      try {
+        resolve_cuda_ks_precision_schedule(
+            GENERATIVEQC_PRECISION_AUTO, capabilities, true, nonlocal_graph,
+            false, false, {true, false}, false, false, true);
+      } catch (const std::invalid_argument&) { refused = true; }
+      assert(refused);
+    }
     for (const bool nonlocal_graph : {false, true}) {
       const auto pure = resolve_cuda_ks_precision_schedule(
           GENERATIVEQC_PRECISION_AUTO, capabilities, false, nonlocal_graph,

@@ -168,6 +168,27 @@ endpoints against the optimized FP64
 path without disabling that reuse. `benchmarks/pbe0_fast_fock.py` retains first
 calls, alternating repeats, executed J/K work and independent observable gates.
 
+## DF XC proposals
+
+Default-grid CUDA DF PBE/r2SCAN RKS, including canonical r2SCAN-3c, have a
+separate `df-xc-budget-v1` capability. With 24–1200 orbital AOs, 2–96 atoms,
+shells through d and the default level-3 Treutler grid, Fast can use the shared
+FP32 XC matrix products during bounded SCF proposals. DF J, metric solves,
+XC point algebra and final physical Focks remain FP64. This does not advertise
+mixed DF integrals. The proposal uses the same budget floors, candidate control
+ceilings and strict final validation described above; explicit tighter controls
+remain tighter. Hybrids, nonlocal models, UKS, other grids and older libraries
+keep their existing DF SCF policy.
+
+The complete-model gradient qualification at 96–1200 AOs can combine this
+proposal with mixed semilocal geometry. Its separate identity is
+`<method>-df-rks-treutler-xc-budget-fp32-v1`, and it requires the live final
+snapshot's authenticated force allowance. DF integral/metric response, moving
+grid response, corrections and reductions remain FP64. Smaller admitted SCF
+models keep strict gradients. Cold receipts require actual mixed XC work and
+consecutive strict final builds; frozen warm receipts require a fresh strict
+Fock/audit bound to the returned state. Explicit observable targets still audit.
+
 ## Strict-Density Gradient Routes
 
 All-electron CUDA
@@ -205,13 +226,14 @@ This domain requires native DF J and, for hybrids, DF K with the default
 the XC name. Changed exchange compositions, arbitrary corrected DF, mixed
 full-range J/K providers, COSX and UKS retain the audit fallback. WB97M-V has
 the separate complete-model domain below.
-In this fitted path **only semilocal geometry arithmetic narrows**: SCF, AO
+In this strict-density fitted path **only semilocal geometry arithmetic narrows**: SCF, AO
 generation, one-electron/Pulay sources, DF integrals and metric response, and
 global reductions remain FP64. The direct-path AO/integral narrowing described
 below does not apply to DF. This support does not promise a speedup for every
 system or complete singlepoint.
-DF energy-only requests have no admitted mixed operator. Eligible strict native
-endpoints use the Standard fallback; explicit targets still request an audit.
+Outside the separately qualified DF XC proposal domain, energy-only requests
+have no admitted mixed operator. Eligible strict native endpoints use the
+Standard fallback; explicit targets still request an audit.
 
 CUDA DF RHF has a separate native shell-derivative candidate: 24–96 orbital
 AOs, up to 512 auxiliary AOs, 2–12 atoms, orbital shells through d and auxiliary

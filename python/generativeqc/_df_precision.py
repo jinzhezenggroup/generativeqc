@@ -1,7 +1,7 @@
 """Application-budget admission for the complete fitted stationary consumer.
 
-This policy does not narrow the SCF or fitted integral producer. Only the shared
-semilocal geometry consumer has independent mixed-arithmetic qualification.
+SCF proposals and semilocal geometry have separate qualification identities.
+The fitted integral, metric and integral-response producers remain strict.
 """
 
 from __future__ import annotations
@@ -13,11 +13,50 @@ from . import _native
 from .force_aware_numerics import TargetErrorBudget
 from .profiles import canonical_hash
 
+
+def fitted_scf_budget_admitted(calculator: Any, budget: Any) -> bool:
+    """Recognize the separate strict-J/mixed-XC proposal capability.
+
+    This constructor-level gate authenticates the complete local model, stock
+    grid, transport and budget. Native preparation additionally checks actual
+    basis dimensions, angular momenta, resources and the final physical state.
+    It grants no mixed DF-integral or mixed-gradient capability.
+    """
+    from .ks import GridSpec
+
+    options = getattr(calculator, "_ks_options", None)
+    capability = getattr(
+        getattr(calculator, "_library", None),
+        "generativeqc_application_df_xc_precision_version_v1",
+        None,
+    )
+    if (
+        capability is None
+        or capability() != 1
+        or getattr(calculator, "_device_name", None) != "cuda"
+        or getattr(calculator, "_density_fitting_mode", None)
+        != _native.DENSITY_FITTING_CUDA
+        or not isinstance(budget, TargetErrorBudget)
+        or budget.energy_abs < 1e-5
+        or budget.force_max_abs < 1e-4
+        or (budget.force_rms is not None and budget.force_rms < 3e-5)
+        or options is None
+        or options.xc_schedule != "device_fused"
+        or options.grid != GridSpec.treutler(level=3)
+        or getattr(options, "_method_ir", None) is None
+    ):
+        return False
+    return _qualified_models().get(options.method_ir.identity) in (
+        "pbe-df-rks-budget-fp32-v1",
+        "r2scan-df-rks-budget-fp32-v1",
+    )
+
+
 DF_GRADIENT_QUALIFICATIONS = frozenset(
     f"{name}-df-rks{domain}-budget-fp32-v1"
     for domain in ("", "-treutler")
     for name in ("pbe", "pbe0", "b3lyp", "r2scan", "m06-2x")
-)
+) | frozenset(f"{name}-df-rks-treutler-xc-budget-fp32-v1" for name in ("pbe", "r2scan"))
 
 
 @lru_cache(maxsize=1)
@@ -55,6 +94,24 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
     if type(source) is not NativeKsSnapshot:
         return None
     default_grid = source.grid_spec == GridSpec.treutler(level=3)
+    strict_scf = (
+        calculator._precision_mode == _native.PRECISION_FP64
+        and calculator._energy_tolerance <= 1e-10
+        and calculator._density_tolerance <= 1e-8
+        and calculator._screening_tolerance <= 1e-12
+    )
+    # A budget-converged state has its own combined endpoint qualification.
+    # Require the live native snapshot's authenticated force allowance; neither
+    # a model label nor a caller's relaxed density tolerance grants this path.
+    budget_scf = (
+        default_grid
+        and fitted_scf_budget_admitted(calculator, budget)
+        and calculator._precision_mode == _native.PRECISION_AUTO
+        and calculator._energy_tolerance <= 1e-6
+        and calculator._density_tolerance <= 1e-4
+        and calculator._screening_tolerance <= 1e-10
+        and 0 < getattr(source, "stationarity_tolerance", 0) <= 1e-4
+    )
     # Default Treutler grids have separate complete-model qualification. Keep
     # legacy tensor-grid limits distinct; a new grid label never widens those.
     # Below 96 AOs, complete default-grid endpoints do not reliably amortize
@@ -68,11 +125,8 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
         source.backend != "cuda"
         or source.hamiltonian != "all-electron"
         or state.identity.spin != "unpolarized"
-        or calculator._precision_mode != _native.PRECISION_FP64
+        or not (strict_scf or budget_scf)
         or calculator._density_fitting_mode != _native.DENSITY_FITTING_CUDA
-        or calculator._energy_tolerance > 1e-10
-        or calculator._density_tolerance > 1e-8
-        or calculator._screening_tolerance > 1e-12
         or not qualified_shape
         or any(shell.angular_momentum > 2 for shell in basis.shells)
         or (
@@ -105,6 +159,8 @@ def fitted_gradient_admission(calculator: Any, state: Any, basis: Any) -> str | 
         1e-10,
     ):
         return None
+    if budget_scf:
+        return qualification.replace("-df-rks-budget-", "-df-rks-treutler-xc-budget-")
     return (
         qualification.replace("-df-rks-", "-df-rks-treutler-")
         if default_grid

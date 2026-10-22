@@ -1024,9 +1024,14 @@ class Calculator:
             and self._ks_options.has_range_exchange
             and cuda_nonlocal_force_basis_eligible(self._basis)
         )
+        from ._df_precision import fitted_scf_budget_admitted
+
+        fitted_budget = fitted_scf_budget_admitted(
+            self, self._application_precision_budget
+        )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
-            and self._precision_mode == _native.PRECISION_FP64
+            and (self._precision_mode == _native.PRECISION_FP64 or fitted_budget)
             and not basis_has_ecp
             and self._automatic_libxc_name is None
             and self._density_fitted_composite_force_eligible()
@@ -1162,7 +1167,7 @@ class Calculator:
                 # DF changes the Hamiltonian. Keep its backend explicit; the
                 # stationary force consumer is admitted only through the
                 # token-bound auxiliary/metric-response provider above.
-                if self._precision_mode != _native.PRECISION_FP64:
+                if self._precision_mode != _native.PRECISION_FP64 and not fitted_budget:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
                     )

@@ -452,7 +452,9 @@ def test_budget_fock_controls_use_shared_modules_and_new_native_capability(
     assert select(calculator, budget, {}) == {}
 
 
-@pytest.mark.parametrize("missing", [None, "exchange_k", "coulomb_recurrence"])
+@pytest.mark.parametrize(
+    "missing", [None, "exchange_k", "coulomb_recurrence", "unqualified_gradient"]
+)
 def test_budget_fock_requires_actual_fp32_exchange_work(
     backend: SimpleNamespace, missing: str | None
 ) -> None:
@@ -475,6 +477,16 @@ def test_budget_fock_requires_actual_fp32_exchange_work(
             for name in ("coulomb_j", "exchange_k", "coulomb_recurrence")
         ],
     }
+    if missing == "unqualified_gradient":
+        # A complete mixed SCF census cannot qualify an unknown mixed force.
+        # Cold proposals must retain the same audit fallback as warm replay.
+        work["gradient"] = {
+            "schema_version": 4,
+            "owner": "python-stationary-cuda",
+            "qualification": "unknown",
+            "complete": True,
+            "returned_mode": "mixed",
+        }
     backend.outputs = [result(executed_backend="cuda", precision=work)]
     if missing:
         backend.outputs.append(result(executed_backend="cuda"))
