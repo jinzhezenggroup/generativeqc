@@ -166,6 +166,7 @@ Matrix prepare_initial_density(const core::System& system, const auto&, const Ma
 struct Diis { explicit Diis(unsigned) {} Matrix update(const Matrix& f, const Matrix&) { return f; } };
 struct CudaDensityFittingDeviceScfItem {
   bool converged{}; unsigned iterations{}; double energy{}, energy_change{}, density_rms{};
+  std::uint64_t fock_builds{};
 };
 unsigned cuda_df_iteration_diis_history(const ScfOptions& options) { return options.diis_history; }
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJkPlan* plan,
@@ -177,7 +178,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJk
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   for (auto source : plan->sources) {
     final_density.push_back(2);
-    records.push_back({true, 2, 20.0 + source, 0, 0});
+    records.push_back({true, 2, 20.0 + source, 0, 0, 3});
   }
   return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -287,7 +288,12 @@ int main(int argc, char** argv) {
     assert(neighbor.scf.energy == expected.scf.energy);
     assert(neighbor.scf.density == expected.scf.density);
     assert(neighbor.scf.iterations == expected.scf.iterations);
-    assert(neighbor.scf.fock_builds == expected.scf.fock_builds);
+    // A compact numerical refusal affects the whole physical batch: its
+    // missing execution census cannot be certified by the successful retry.
+    if (boundary == Boundary::Compact)
+      assert(!neighbor.scf.preliminary_guess.work_counters_complete);
+    else
+      assert(neighbor.scf.fock_builds == expected.scf.fock_builds);
     assert(neighbor.scf.preliminary_guess.outcome == initial_guess::PreliminaryOutcome::Used);
     assert(neighbor.scf.preliminary_guess.target_attempts == 1);
     assert(core_attempts.back() == 0);

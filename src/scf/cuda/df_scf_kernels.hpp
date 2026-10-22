@@ -54,7 +54,8 @@ void launch_validate_device_occupied_kernel(dim3 grid, dim3 block, std::size_t s
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_assemble_rhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
-                                     const double* coulomb, const double* exchange, double* fock);
+                                     const double* coulomb, const double* exchange, double* fock,
+                                     std::uint64_t* completed_builds = nullptr);
 
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_assemble_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

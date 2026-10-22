@@ -1585,6 +1585,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto failed = arena_pointer<std::uint8_t>(resources.arena_, layout.failed);
   auto final_fock_reuse_mask =
       arena_pointer<std::uint8_t>(resources.arena_, layout.final_fock_reuse_mask);
+  auto executed_fock_builds =
+      arena_pointer<std::uint64_t>(resources.arena_, layout.executed_fock_builds);
   auto final_fock_rebuild_count =
       arena_pointer<std::uint32_t>(resources.arena_, layout.final_fock_rebuild_count);
   auto spin_active = arena_pointer<std::uint8_t>(resources.arena_, layout.spin_active);
@@ -2766,6 +2768,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // The exact provider is resolved/validated by run_hf_cuda_bucket_cached.
   // Dense, packed, generated and streamed paths below are execution schedules
   // of that same operator; retain their fused standard-HF kernel ownership.
+  // Count at the physical operator boundary on the same stream. Device graph
+  // capture records this operation without incrementing it; replays count the
+  // active items before convergence/finalization changes their masks.
+  const auto count_fock_application = [&]() -> cudaError_t {
+    launch_count_fock_application_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
+                                         static_cast<std::int32_t>(batch_size), active,
+                                         executed_fock_builds);
+    return cudaPeekAtLastError();
+  };
   const auto launch_fock_builder = [&](const double* density_input, bool allow_mixed_precision,
                                        bool track_incremental_work) -> cudaError_t {
     fock_screening_tolerance = screened_reference_iterations && allow_mixed_precision
@@ -2773,7 +2784,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                    : options.screening_tolerance;
     if (resident_values && resident_values->active()) {
       const auto resident_status = resident_values->enqueue(density_input, hcore, fock);
-      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) return cudaSuccess;
+      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) return count_fock_application();
       return resident_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ? cudaErrorMemoryAllocation
                                                                   : cudaErrorUnknown;
     }
@@ -2951,8 +2962,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                         direct_transform_temporary, hcore, fock);
       if (transform_error != cudaSuccess) return transform_error;
     }
-    return cudaPeekAtLastError();
+    const auto build_error = cudaPeekAtLastError();
+    return build_error == cudaSuccess ? count_fock_application() : build_error;
   };
+  cuda_error = cudaMemsetAsync(executed_fock_builds, 0, batch_size * sizeof(std::uint64_t),
+                               resources.stream_);
+  if (cuda_error != cudaSuccess) {
+    fill_global_failure(outputs, cuda_status(cuda_error));
+    return outputs;
+  }
   launch_initialize_state_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
                                  static_cast<std::int32_t>(batch_size), cached_energy_baseline_hit,
                                  energy, active, converged, failed, iterations, previous_energy,
@@ -5254,6 +5272,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   std::vector<std::uint8_t> host_converged(batch_size);
   std::vector<std::uint8_t> host_failed(batch_size);
   std::vector<std::uint32_t> host_iterations(batch_size);
+  std::vector<std::uint64_t> host_executed_fock_builds(batch_size);
   std::vector<double> host_incremental_max_abs_delta_density(batch_size, 0.0);
   std::vector<unsigned long long> host_incremental_full_build_count(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
@@ -5290,6 +5309,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       {host_converged.data(), converged, batch_size * sizeof(std::uint8_t),
        SourcePayload::converged},
       {host_failed.data(), failed, batch_size * sizeof(std::uint8_t), SourcePayload::failed},
+      {host_executed_fock_builds.data(), executed_fock_builds, batch_size * sizeof(std::uint64_t),
+       SourcePayload::final_fock_count},
       {host_iterations.data(), iterations, batch_size * sizeof(std::uint32_t),
        SourcePayload::iterations},
       {host_incremental_max_abs_delta_density.data(),
@@ -5555,6 +5576,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     result.density_rms = host_density_rms[system];
     result.converged = host_converged[system] != 0 && host_failed[system] == 0;
     result.initial_density_used = host.warm_mask[system] != 0;
+    if (result.converged) result.executed_fock_builds = host_executed_fock_builds[system];
     result.precision.requested_mode = requested_precision_mode;
     // A numerical failure can occur after an operator application but before
     // the iteration/final-audit counters advance. Do not certify that partial

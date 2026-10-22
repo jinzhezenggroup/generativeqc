@@ -29,17 +29,19 @@ and complete moving-grid force response remain unchanged.
 The following are 96-atom Direct Standard measurements. The first E/D pass
 means the first complete target iterate satisfying energy and density-change
 conditions; it does **not** certify final physical/canonical acceptance.
+Cold and warm durations below are from these same instrumented v1 receipts;
+warm is the median of the three frozen-density calls.
 Tail time sums disjoint completed iteration/finish host intervals after that
 pass. It is observed work, not a promised removable cost.
 
-| Method | Total iterations | First E/D pass | Later iterations | Later seconds |
-| --- | ---: | ---: | ---: | ---: |
-| PBE | 15 | 11 | 4 | 3.540 |
-| PBE0 | 15 | 11 | 4 | 7.214 |
-| B3LYP | 16 | 11 | 5 | 9.264 |
-| r2SCAN | 14 | 11 | 3 | 3.242 |
-| r2SCAN-3c | 16 | 12 | 4 | 9.471 |
-| M06-2X | 16 | 11 | 5 | 9.989 |
+| Method | Total iterations | First E/D pass | Later iterations | Later seconds | Cold seconds | Warm median seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PBE | 15 | 11 | 4 | 3.540 | 27.684 | 6.867 |
+| PBE0 | 15 | 11 | 4 | 7.214 | 41.007 | 8.332 |
+| B3LYP | 16 | 11 | 5 | 9.264 | 44.193 | 8.784 |
+| r2SCAN | 14 | 11 | 3 | 3.242 | 29.270 | 7.398 |
+| r2SCAN-3c | 16 | 12 | 4 | 9.471 | 67.915 | 19.088 |
+| M06-2X | 16 | 11 | 5 | 9.989 | 46.590 | 8.949 |
 
 GPU4PySCF repeats HF/PBE/PBE0/r2SCAN-3c in 10/11/9/11 cycles. Its default
 energy tolerance is 1e-9 and its orbital-gradient norm tolerance resolves

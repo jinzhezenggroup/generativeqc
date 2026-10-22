@@ -646,7 +646,7 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
       (16 * sizeof(double) + 2 * sizeof(std::int32_t) + 2 * sizeof(std::uint8_t) +
        sizeof(std::uint32_t) + (occupied_exchange ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0));
   const long double scf_bytes =
-      control_bytes + df_scf_workspace_allowance(nbf, batch_size) +
+      control_bytes + sizeof(std::uint64_t) + df_scf_workspace_allowance(nbf, batch_size) +
       static_cast<long double>(df_eigen_device_reservation(nbf)) +
       static_cast<long double>(df_final_snapshot_device_reservation(nbf, batch_size) +
                                df_final_validation_device_reservation(nbf)) +

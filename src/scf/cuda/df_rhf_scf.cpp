@@ -186,6 +186,9 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     if (status == GENERATIVEQC_STATUS_SUCCESS)
       status = allocate(reinterpret_cast<void**>(&state->d_info), batch_size * sizeof(int),
                         "allocate CUDA DF SCF solver status");
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = allocate(reinterpret_cast<void**>(&state->d_fock_builds), sizeof(std::uint64_t),
+                        "allocate CUDA DF physical Fock counter");
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       delete state;
       return status;
@@ -257,6 +260,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   if (cuda_error == cudaSuccess)
     cuda_error = cudaMemsetAsync(d_iterations, 0, batch_size * sizeof(std::uint32_t), plan->stream);
   if (cuda_error == cudaSuccess)
+    cuda_error = cudaMemsetAsync(state->d_fock_builds, 0, sizeof(std::uint64_t), plan->stream);
+  if (cuda_error == cudaSuccess)
     cuda_error = cudaMemsetAsync(d_active, 1, batch_size * sizeof(std::uint8_t), plan->stream);
   if (cuda_error != cudaSuccess)
     return cuda_failure(cuda_error, "upload CUDA DF device RHF SCF state", detail);
@@ -300,7 +305,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
         *plan, *state, d_density, nullptr, factors_ready, detail, retained_seed);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     launch_assemble_rhf_fock_kernel(blocks_for(expected), kThreads, 0, plan->stream, expected,
-                                    d_hcore, plan->coulomb, plan->alpha_exchange, d_fock);
+                                    d_hcore, plan->coulomb, plan->alpha_exchange, d_fock,
+                                    state->d_fock_builds);
     cudaError_t iteration_error = cudaPeekAtLastError();
     if (iteration_error != cudaSuccess) {
       return cuda_failure(iteration_error, "assemble CUDA DF device RHF Fock", detail);
@@ -478,8 +484,13 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     all_converged = all_terminal();
   }
   final_density.resize(expected);
+  std::uint64_t completed_fock_builds{};
   cuda_error = cudaMemcpyAsync(final_density.data(), d_density, matrix_bytes,
                                cudaMemcpyDeviceToHost, plan->stream);
+  if (cuda_error == cudaSuccess)
+    cuda_error =
+        cudaMemcpyAsync(&completed_fock_builds, state->d_fock_builds, sizeof(completed_fock_builds),
+                        cudaMemcpyDeviceToHost, plan->stream);
   if (cuda_error == cudaSuccess) cuda_error = cudaStreamSynchronize(plan->stream);
   if (cuda_error != cudaSuccess)
     return cuda_failure(cuda_error, "read CUDA DF device RHF density", detail);
@@ -499,6 +510,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     result.energy = host_energy[system];
     result.energy_change = host_energy_change[system];
     result.density_rms = host_density_rms[system];
+    result.fock_builds = completed_fock_builds;
     if (!result.converged) result.status = GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
   }
   publish_scf_final_frames(*state, results);

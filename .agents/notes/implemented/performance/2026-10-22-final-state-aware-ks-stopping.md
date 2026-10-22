@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-22
 
+Automatic model/grid admission is superseded by the
+[qualified-domain restriction](../numerics/2026-10-22-restrict-early-final-promotion.md).
+The measurements below retain their original, broader v1/v2/v3 scope.
+
 ## Problem
 
 The [cold-SCF diagnosis](../../proposed/2026-10-22-cold-scf-stop-gates.md)

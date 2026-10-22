@@ -33,11 +33,6 @@ def controller_probe(
     policy_end = source.index(
         "    if (incremental_direct_jk_policy.requested", policy_start
     )
-    gate_start = source.index("    const bool has_energy_history =")
-    gate_end = (
-        source.index(";", source.index("converged = has_energy_history", gate_start))
-        + 1
-    )
     unit = r"""
 #include <algorithm>
 #include <cmath>
@@ -47,6 +42,7 @@ def controller_probe(
 #include <stdexcept>
 #include <string>
 #include "scf/types.hpp"
+#include "dft/ks_stopping_policy.hpp"
 namespace scf = generativeqc::scf;
 int cudaGetLastError() { return 0; }
 void check(int) {}
@@ -111,16 +107,21 @@ struct Consumer {
         "void finalize_incremental_jk_components()",
     ):
         unit += _definition(source, signature)
-    # Execute the actual ordinary stopping block. Incremental owners cannot
-    # enter the optional final probe, so this is their complete stop decision.
-    unit += (
-        """
+    # Exercise the same callable stopping policy as the CUDA owner, without
+    # depending on the spelling or placement of its local assignments.
+    unit += """
   bool stop(double change, double residual, double maximum) {
-    struct {double density_change, residual, maximum_residual;} physical{change,residual,maximum};
+    refine_incremental_energy(change, residual, maximum);
+    return generativeqc::dft::ordinary_ks_converged(
+        {output.iterations, warm_energy_baseline,
+         !incremental_direct_jk || incremental_energy_full_builds >= 2,
+         !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+             (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
+         output.energy_change, change, residual, maximum,
+         options.energy_tolerance, options.density_tolerance,
+         physical_stationarity_tolerance()});
+  }
 """
-        + source[gate_start:gate_end]
-        + "\nreturn converged;\n}\n"
-    )
     unit += r"""
   void build(bool closure) {
     final_closure=closure;

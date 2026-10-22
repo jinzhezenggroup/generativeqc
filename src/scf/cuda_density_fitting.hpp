@@ -305,6 +305,8 @@ struct CudaDensityFittingDeviceScfItem {
   double energy{};
   double energy_change{};
   double density_rms{};
+  /** Completed physical RHF assembly passes, including inactive-lane work. */
+  std::uint64_t fock_builds{};
 };
 
 /** Metric conditioning, workspace, and device-allocation diagnostics. */
@@ -342,7 +344,8 @@ struct CudaDensityFittingMetricDiagnostic {
   DfPairStorage pair_storage{DfPairStorage::Dense};
   std::size_t stored_factor_bytes{}, raw_factor_bytes{}, contraction_scratch_bytes{};
   std::size_t occupied_rank_capacity{};
-  /** Opt-in tensor-free pure-J owner; its buffers are included in totals above. */
+  /** Default-admitted tensor-free pure-J owner (false = fallback/rollback);
+   * its buffers are included in totals above. */
   bool md_coulomb{};
   std::size_t md_coulomb_device_bytes{};
 };

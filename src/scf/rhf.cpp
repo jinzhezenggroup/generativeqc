@@ -2126,9 +2126,9 @@ ScfResult run_rhf_density_fitting_cuda_impl(
           cuda_df_iteration_diis_history(options));
     });
     runtime::df_progress::number("compact_dispatch_status", device_status);
-    if (device_records.size() == 1)
-      result.fock_builds += device_records.front().iterations;
-    else if (options.preliminary_guess)
+    if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == 1)
+      result.fock_builds += device_records.front().fock_builds;
+    else
       result.preliminary_guess.work_counters_complete = false;
     // A resource rejection must not trigger an undisclosed host SCF retry.
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
@@ -2732,14 +2732,11 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == data.size() &&
         std::all_of(device_records.begin(), device_records.end(),
                     [](const CudaDensityFittingDeviceScfItem& item) { return item.converged; });
-    unsigned device_rounds = 0;
-    for (const auto& record : device_records)
-      device_rounds = std::max(device_rounds, record.iterations);
     for (std::size_t slot = 0; slot < data.size(); ++slot) {
       auto& result = outputs[source_indices[slot]].scf;
-      if (device_records.size() == data.size())
-        result.fock_builds += device_rounds;
-      else if (options.preliminary_guess)
+      if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == data.size())
+        result.fock_builds += device_records[slot].fock_builds;
+      else
         result.preliminary_guess.work_counters_complete = false;
     }
     if (device_converged) {

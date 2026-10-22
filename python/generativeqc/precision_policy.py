@@ -637,8 +637,10 @@ class PrecisionCalculator:
     stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
     RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
     SCF state stays strict on those other routes; unsupported domains use FP64 audits.
-    Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
-    still require the audit fallback and have no mixed-arithmetic acceleration.
+    Qualified DF RKS may narrow semilocal geometry. Default-grid DF PBE/r2SCAN
+    RKS may also use FP32 XC matrix products in bounded SCF proposals; DF J and
+    the metric remain FP64. Other DF requests retain their strict fallback or
+    audit path.
     Explicit targets/audit profiles cost two full endpoints, or three after
     rejection. FP64 does not imply FP32 arithmetic or a universal speed guarantee.
     Prepared batches reuse native candidate plans and engine-local warm seeds.

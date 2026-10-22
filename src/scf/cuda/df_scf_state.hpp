@@ -150,6 +150,9 @@ struct PersistentScfState {
   std::uint8_t* d_active{};
   std::uint8_t* d_converged{};
   std::uint32_t* d_iterations{};
+  // One assembly pass evaluates every lane, including inactive items. This
+  // execution counter also advances on device graph tails, never on capture.
+  std::uint64_t* d_fock_builds{};
   int* d_info{};
 
   // Additional UHF state.

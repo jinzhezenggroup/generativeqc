@@ -878,7 +878,8 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
           (16.0L * sizeof(double) + 2.0L * sizeof(std::int32_t) + 2.0L * sizeof(std::uint8_t) +
            sizeof(std::uint32_t) +
            (candidate->occupied_scf_reserved ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0)) +
-      df_scf_workspace_allowance(nbf, batch_size) + matrix_bytes +  // graph bookkeeping
+      sizeof(std::uint64_t) + df_scf_workspace_allowance(nbf, batch_size) +
+      matrix_bytes +  // graph bookkeeping and execution-owned Fock counter
       df_eigen_device_reservation(nbf) + df_final_snapshot_device_reservation(nbf, batch_size) +
       df_final_validation_device_reservation(nbf);
   const std::size_t persistent_scf_bytes =

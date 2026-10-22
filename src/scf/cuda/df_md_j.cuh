@@ -105,7 +105,8 @@ __global__ void df_md_project(DfMdView view, double* output) {
  * atomics and has a fixed source traversal. Angular source groups must be
  * launched sequentially on the owning stream. Padding lanes are initialized
  * and participate in every barrier/shuffle; no partial warp uses stale roots.
- * This complete unscreened path is a qualification seam, not a default policy. */
+ * The prepared owner admits this unscreened path within its qualified default
+ * domain; df_md_plan owns the capacity and angular fallback decisions. */
 template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Response = false>
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
                                DfMdView auxiliary, std::size_t auxiliary_begin,

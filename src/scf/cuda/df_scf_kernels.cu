@@ -146,10 +146,13 @@ void launch_validate_device_occupied_kernel(dim3 grid, dim3 block, std::size_t s
 // Existing DF arithmetic and reduction order; host orchestration compiles separately.
 __global__ void assemble_rhf_fock_kernel(std::size_t elements, const double* hcore,
                                          const double* coulomb, const double* exchange,
-                                         double* fock) {
+                                         double* fock, std::uint64_t* completed_builds) {
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= elements) return;
   fock[element] = hcore[element] + coulomb[element] - 0.5 * exchange[element];
+  // Exactly one thread records the physical pass on the owning stream. Graph
+  // capture does not execute this store; every actual replay/tail does.
+  if (element == 0 && completed_builds) ++*completed_builds;
 }
 
 __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hcore,
@@ -313,9 +316,10 @@ __global__ void update_device_uhf_convergence_kernel(
 
 void launch_assemble_rhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
-                                     const double* coulomb, const double* exchange, double* fock) {
+                                     const double* coulomb, const double* exchange, double* fock,
+                                     std::uint64_t* completed_builds) {
   assemble_rhf_fock_kernel<<<grid, block, shared_bytes, stream>>>(elements, hcore, coulomb,
-                                                                  exchange, fock);
+                                                                  exchange, fock, completed_builds);
 }
 void launch_assemble_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,

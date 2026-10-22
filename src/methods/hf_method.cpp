@@ -15,6 +15,7 @@
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/hf_fock_work.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -312,7 +313,10 @@ class HfPreparedBatch final : public PreparedBatch,
               (flags & GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING) != 0,
               (flags & GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING) != 0,
               execution.device_id(), std::move(auxiliary_template),
-              options.resolved_fock_build->schedule == scf::FockSchedule::CudaDfResident) {}
+              options.resolved_fock_build->schedule == scf::FockSchedule::CudaDfResident),
+        counted_cuda_df_rhf_(capabilities.method == GENERATIVEQC_METHOD_RHF &&
+                             options.resolved_fock_build->schedule ==
+                                 scf::FockSchedule::CudaDfResident) {}
 
   [[nodiscard]] std::size_t size() const noexcept override { return plan_.size(); }
 
@@ -324,6 +328,15 @@ class HfPreparedBatch final : public PreparedBatch,
     for (scf::FleetItemResult& item : native) {
       BatchItemResult result;
       result.status = item.status;
+      if (item.executed_backend == GENERATIVEQC_BACKEND_CUDA) {
+        result.target_fock_work.emplace();
+        result.target_fock_work->begin_attempt();
+        result.target_fock_work->finish_attempt(
+            item.status == GENERATIVEQC_STATUS_SUCCESS
+                ? scf::completed_hf_fock_work(item.scf, item.warm_start_fallback,
+                                              counted_cuda_df_rhf_)
+                : std::nullopt);
+      }
       result.calculation = adapt_result(std::move(item.scf), item.executed_backend);
       result.bucket_id = item.bucket_id;
       result.warm_start_used = item.warm_start_used;
@@ -392,6 +405,7 @@ class HfPreparedBatch final : public PreparedBatch,
 
  private:
   scf::FleetPlan plan_;
+  bool counted_cuda_df_rhf_{};
 };
 
 }  // namespace

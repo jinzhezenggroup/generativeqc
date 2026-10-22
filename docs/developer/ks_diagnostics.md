@@ -71,8 +71,12 @@ speculative final token or force weights are published. A successful proof
 may retain its physical eigenframe; force export still performs the normal
 token-bound validation. Device and solver errors retain normal failure handling.
 
-`GENERATIVEQC_KS_EARLY_FINAL_PROBE=0` restores the conservative policy; unset
-or `1` permits this proof when eligible. Other values fail explicitly. Set the
+Unset `GENERATIVEQC_KS_EARLY_FINAL_PROBE` admits only canonical PBE, PBE0,
+B3LYP and r2SCAN compositions on the default Treutler grid (including the
+electronic part of r2SCAN-3c). Generated split hybrids, custom mixtures and
+other grids retain conservative stopping. `0` disables the proof; explicit
+`1` permits experimental admission while retaining every physical and resource
+gate. Other values fail explicitly. Set the
 control before constructing the owner. Fast/budget, mixed precision, UKS,
 fitted exchange, range-separated/nonlocal, incremental J/K, ECP and device
 chunks retain their incumbent stopping policy, as do owners without the
