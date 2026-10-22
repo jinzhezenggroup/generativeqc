@@ -136,6 +136,15 @@ follow-up are recorded in the
 
 ## Cache layers and toolchain requirements
 
+The experimental [integral AD owner](../user/experimental_array_api.md#differentiate-through-gaussian-integrals)
+is a separate opt-in compilation route. Its RHF/UHF CPU and CUDA variants
+generate integral/normalization parameter derivatives and stationary source
+weights. Second order uses primal scalar instruction tapes with generated local
+AD rules. `compile_runtime` compiles the `.cpp` or `.cu` artifact on a miss;
+the identity includes the contraction and tape runtime headers. Native SCF,
+orbital response, explicit-integral J/K and eigensolver execution use the linked
+library. This route does not change the ordinary method rows above.
+
 The [build guide](../developer/build.md#compiler-cache-generated-shards-and-compile-units)
 owns launcher precedence, minimum versions and private-worker lifecycle. The
 following separates the endpoint artifact owners from that build contract.

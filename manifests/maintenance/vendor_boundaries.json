@@ -484,6 +484,16 @@
         "cusolverDnXsyevjSetTolerance": 1,
         "cusolverGetProperty": 1
       }
+    },
+    "src/scf/cuda/explicit_integral_backend.cu": {
+      "classification": "infrastructure",
+      "contract": "src/scf/explicit_integral_backend.hpp",
+      "reason": "The explicit-integral owner prepares and destroys its borrowed matrix-product handle on its own stream. All GEMM submissions use the shared Tensor provider; eigen dispatch uses the shared ordinary solver.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 1,
+        "cublasSetStream": 1
+      }
     }
   }
 }

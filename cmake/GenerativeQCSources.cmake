@@ -139,6 +139,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/fleet.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
+    src/scf/explicit_integral_backend.cpp
     src/scf/rhf.cpp
     src/scf/cuda/df_source_domain.cpp
     src/scf/cuda/rhf_policy.cpp)
@@ -234,6 +235,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/solver/cuda/symmetric_eigen_handles.cpp
       src/solver/cuda/symmetric_eigen_workspace.cpp
       src/scf/cuda/eigensolver_kernels.cu
+      src/scf/cuda/explicit_integral_backend.cu
       src/scf/cuda_hf_entry.cpp)
   else()
     target_sources(${target} PRIVATE

@@ -214,6 +214,75 @@ class _GradientFunction:
         self.function.close()
 
 
+def _gradient_jvp(
+    function: _GradientFunction,
+    primals: tuple[Any, ...],
+    tangents: tuple[Any, ...],
+    backend: str | None,
+    options: dict[str, Any],
+) -> tuple[Any, Any]:
+    """Forward-over-reverse with second-order molecular jets captured up front.
+
+    Input/source snapshots are bound only after both TensorIR transforms. A
+    fresh compiled variant prevents a cached first-order source graph from
+    being mistaken for a quadratic jet on a later Hessian evaluation.
+    """
+    from ._array_api_molecular import _SOURCE_ORDER
+
+    if function.allow_external_mask_where or function.allow_comparison_where:
+        raise ValueError("second-order mask gradients are unsupported")
+    base = _compiled(function.function, backend, options)
+    try:
+        names, _ = _arguments(base, tuple(range(len(primals))))
+        base = base._variant(names)
+        token = _SOURCE_ORDER.set(2)
+        try:
+            primal, feeds = base._prepare(*primals)
+        finally:
+            _SOURCE_ORDER.reset(token)
+        if tuple(primal.outputs) != ("output",) or primal.outputs["output"].spec.shape:
+            raise ValueError("gradient JVP requires a scalar objective")
+        reverse = transpose_program(primal, ("output",), inputs=function.names)
+        for seed, original in reverse.input_map.items():
+            feeds[seed] = np.ones((), dtype=primal.outputs[original].spec.dtype)
+        derivative = (
+            _combine(primal, reverse.program)
+            if function.with_value
+            else reverse.program
+        )
+        forward = linearize(derivative, names)
+        specs = {
+            node.attrs["name"]: node.spec for node in primal.nodes if node.op == "input"
+        }
+        directions = dict(zip(names, tangents, strict=True))
+        for seed, name in forward.input_map.items():
+            feeds[seed] = _seed(directions[name], specs[name], f"tangent {name}")
+        values = base._execution.execute(_combine(derivative, forward.program), feeds)
+        reverse_names = {
+            original: generated for generated, original in reverse.output_map.items()
+        }
+        forward_names = {
+            original: generated for generated, original in forward.output_map.items()
+        }
+        gradients = tuple(
+            _eager.wrap(values[reverse_names[name]]) for name in function.names
+        )
+        products = tuple(
+            _eager.wrap(values[forward_names[reverse_names[name]]])
+            for name in function.names
+        )
+        first = gradients[0] if function.single else gradients
+        second = products[0] if function.single else products
+        if function.with_value:
+            return (
+                (_eager.wrap(values["output"]), first),
+                (_eager.wrap(values[forward_names["output"]]), second),
+            )
+        return first, second
+    finally:
+        base.close()
+
+
 def _jvp(
     function: Any,
     primals: Any,
@@ -234,6 +303,10 @@ def _jvp(
         or len(primals) != len(tangents)
     ):
         raise TypeError("primals and tangents must be matching tuples")
+    if isinstance(function, _GradientFunction):
+        if allow_external_mask_where or allow_comparison_where:
+            raise ValueError("second-order mask gradients are unsupported")
+        return _gradient_jvp(function, primals, tangents, backend, options)
     positions = tuple(
         position
         for position, tangent in enumerate(tangents)
