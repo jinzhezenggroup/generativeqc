@@ -36,8 +36,11 @@ The original M06-2X/3 errors and rollback comparison remain in the earlier
 note and published evidence. Host contracts cover complete model identity,
 strict stopping, missing/discarded work and failed attempts. Device tests
 exercise counter capture, replay, reset and unchanged assembly arithmetic;
-independent geometry/force qualification and a new complete README campaign
-must accompany the changed native timing revision.
+the automatic model domain reuses the existing independently qualified
+geometry/force evidence because its admission guard does not change arithmetic.
+Historical timings retain their original source identities and are not relabeled
+as measurements of this restricted policy or its new HF work counters. A future
+timing refresh must measure its own source revision.
 
 Extend automatic model admission only with independent acceptance on its
 full intended numerical domain. Do not use a size whitelist to conceal the
