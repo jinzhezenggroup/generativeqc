@@ -1,4 +1,4 @@
-# CUDA hybrid KS warm-factor replay
+# CUDA hybrid KS density factors
 
 Exact-factor warm replay is enabled by default for eligible restricted,
 strict-FP64 DF warm seeds. An unset `GENERATIVEQC_CUDA_KS_WARM_FACTOR` or an
@@ -8,7 +8,44 @@ the ownership, precision, metric-rank or projection-capacity checks below. It
 changes neither the DF Hamiltonian nor convergence, physical-residual, or
 final-state export gates. First-K matrix auditing remains off by default.
 
-## Representation and ownership
+## Native cold density factors
+
+Eligible strict-FP64 restricted DF owners recover an algebraic factor for the
+native cold density before the first RI-K call. Automatic admission requires at
+least 384 AOs, an occupied rank no greater than half the AO count, a compatible
+prepared occupied provider and an available matrix-library binding. The density
+and initial-guess algorithm remain unchanged. Imported and transported densities
+retain dense first K; they cannot inherit native-cold provenance.
+
+`GENERATIVEQC_CUDA_KS_COLD_FACTOR=0` restores dense first K. Explicit `1` permits
+small-system qualification while retaining the rank, capacity and numerical
+guards; other values are errors. The owner reuses existing device iteration
+scratch and retains at most one `nao`-element host spectrum, included in its host
+capacity report. Failure to reserve that optional spectrum leaves dense K active.
+
+The proof uses the same FP64 limits as RHF density-seed exchange: a finite,
+ascending spectrum with no eigenvalue below `-1e-13`, discarded Frobenius norm at
+most `1e-12`, and reconstruction of every original density entry with maximum
+error at most `1e-12` and RMS error at most `1e-13`. The recovered rank must equal
+the method's restricted occupation. Both triangles are checked, so a symmetric
+eigensolver cannot authorize a factor for a mismatched upper triangle. Numerical
+refusal retains dense K; runtime failures drain borrowed buffers and propagate.
+
+The prepared restricted facade applies occupation two. The seed coefficients
+therefore reconstruct `D = 2 C C^T`; they carry no canonical generation, warm
+orbital frame or stationary force-projection lease. A subsequent canonical SCF
+update establishes those identities independently. `ks_cold_factor` traces the
+proof and refusal, and `ks_iteration.algebraic_cold_factor` distinguishes its
+first K from canonical/warm factors. The existing explicit
+`GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT=1` diagnostic also checks this first
+occupied K against dense K at the identical D; its historical `warm_seed_audit_*`
+counter names remain unchanged. Audit timings are not clean measurements.
+
+Run `generativeqc_ks_cuda_tests --df-cold-factor` through a finite `srun` allocation
+for independent CPU endpoint checks, same-density GPU K auditing, ensemble and
+external-seed fallback, changed geometry, failed begin and fresh retry.
+
+## Warm representation and ownership
 
 The ordinary last-good warm slot stores a density. Eligible DF solves instead
 store the exact AO coefficients that generated that density with the existing

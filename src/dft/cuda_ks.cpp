@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -16,6 +17,7 @@
 #include <type_traits>
 
 #include "dft/application_precision.hpp"
+#include "dft/cuda_ks_cold_factor_policy.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
@@ -35,6 +37,7 @@
 #include "runtime/resource_usage.hpp"
 #include "runtime/solver_region_cuda.cuh"
 #include "scf/convergence_limits.hpp"
+#include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/direct_jk_source_lease.hpp"
 #include "scf/cuda/direct_jk_source_policy.hpp"
 #include "scf/cuda/eigensolver.hpp"
@@ -49,6 +52,7 @@
 #include "scf/cuda/structured_matrix.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
+#include "scf/df_density_seed_policy.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -329,6 +333,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
+  // Algebraic cold factors have no canonical generation and cannot lend W/U.
+  bool cold_fitted_factor_ready{};
+  std::vector<double> cold_factor_spectrum;
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};
@@ -1639,9 +1646,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                      : options.max_iterations);
     output.dft_diagnostic.history.reserve(diagnostic_iterations);
     final_validation_diagnostic.determinant.eigenframes.reserve(spins);
+    // Optional O(n) spectrum storage is the only extra capacity used by cold
+    // factor recovery. Failure to reserve it keeps the ordinary dense path.
+    if (fitted_exchange && spins == 1 && occupations[0] > 0 && occupations[0] <= n / 2) {
+      try {
+        cold_factor_spectrum.resize(n);
+      } catch (const std::bad_alloc&) {
+        cold_factor_spectrum.clear();
+      }
+    }
     resource.retained_host_numeric_bytes =
-        (host_xc_density.capacity() + host_xc_alpha.capacity() + host_xc_beta.capacity() +
-         host_xc_potential.capacity()) *
+        (cold_factor_spectrum.capacity() + host_xc_density.capacity() + host_xc_alpha.capacity() +
+         host_xc_beta.capacity() + host_xc_potential.capacity()) *
             sizeof(double) +
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
@@ -1886,12 +1902,80 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
   ~Impl() { cleanup(); }
 
+  /** Prove D=2*C*C^T for a native cold density using existing device scratch.
+   * No density entry is replaced. Numerical refusal leaves dense RI-K active;
+   * runtime errors propagate after draining all borrowed scratch/host buffers.
+   * tmp1 owns the accepted algebraic C only until the next canonical update.
+   * It does not publish a warm-orbital frame or a final projection lease.
+   */
+  void prepare_cold_fitted_factor() {
+    const bool requested = cold_fitted_factor_requested(
+        std::getenv("GENERATIVEQC_CUDA_KS_COLD_FACTOR"), n, occupations[0]);
+    if (!requested || !fitted_exchange || spins != 1 || !occupied_fock_binding ||
+        occupied_fock_binding.unrestricted || occupied_fock_binding.nbf != n ||
+        occupied_fock_binding.device_id != device || occupied_fock_binding.stream != stream ||
+        precision_schedule.any_lower_precision() || !matrix_products.library_enabled() ||
+        cold_factor_spectrum.size() != n)
+      return;
+    runtime::cuda_trace::TraceRegion trace("ks_cold_factor", stream);
+    auto& values = cold_factor_spectrum;
+    int info{};
+    try {
+      check(cudaMemcpyAsync(tmp2, density, matrix * sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream));
+      check(eigensolver->launch(1, tmp2, effective, eigenvalues, solver_info, final_enabled),
+            "CUDA KS density factor eigensolver failed");
+      check(cudaMemcpyAsync(values.data(), eigenvalues, n * sizeof(double), cudaMemcpyDeviceToHost,
+                            stream));
+      check(cudaMemcpyAsync(&info, solver_info, sizeof(info), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+      movement.scalar_d2h_bytes += n * sizeof(double) + sizeof(info);
+      ++movement.synchronizations;
+      if (info) {
+        runtime::cuda_trace::trace_counter("solver_rejected", 1);
+        return;
+      }
+      const auto spectrum = scf::density_seed_spectrum(values);
+      runtime::cuda_trace::trace_counter("candidate_rank", spectrum.rank);
+      // The prepared facade consumes exactly the method's integer occupation.
+      // Never pad a smaller factor or truncate an ensemble to that rank.
+      if (!spectrum.within_discarded_budget() || spectrum.rank != occupations[0]) {
+        runtime::cuda_trace::trace_counter("spectrum_rejected", 1);
+        return;
+      }
+      // The prepared RKS facade supplies occupation two, so absorb half D.
+      for (double& value : values) value *= 0.5;
+      check(cudaMemcpyAsync(eigenvalues, values.data(), n * sizeof(double), cudaMemcpyHostToDevice,
+                            stream));
+      scf::cuda_df::launch_density_exchange_factor(stream, n, spectrum.rank, tmp2, eigenvalues,
+                                                   tmp1);
+      check(cudaPeekAtLastError());
+      build_density(tmp1, nullptr, final_enabled, effective);
+      scf::cuda_df::launch_density_exchange_error(stream, matrix, density, effective, residual);
+      check(cudaPeekAtLastError());
+      double errors[2]{};
+      check(cudaMemcpyAsync(errors, residual, sizeof(errors), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+      movement.setup_h2d_bytes += n * sizeof(double);
+      movement.scalar_d2h_bytes += sizeof(errors);
+      ++movement.synchronizations;
+      cold_fitted_factor_ready = scf::density_seed_reconstruction_accepted(errors[0], errors[1]);
+      occupied_fitted_factor_ready = cold_fitted_factor_ready;
+      runtime::cuda_trace::trace_counter(
+          cold_fitted_factor_ready ? "accepted" : "reconstruction_rejected", 1);
+    } catch (...) {
+      (void)cudaStreamSynchronize(stream);
+      cold_fitted_factor_ready = occupied_fitted_factor_ready = false;
+      throw;
+    }
+  }
+
   void begin(const std::vector<double>* input, bool reuse_warm, CudaKsSeedOrigin seed_origin) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
     final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_fitted_projection_ready = false;
     final_generation = 0;
-    occupied_fitted_factor_ready = false;
+    cold_fitted_factor_ready = occupied_fitted_factor_ready = false;
     pending_fitted_occupied = false;
     // Arbitrary imported/changed-geometry seeds never borrow a previous frame.
     // A same-owner factor-backed warm seed can restore its own exact AO C below.
@@ -2106,6 +2190,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(density, cold_seed, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
       }
+      if (!use_warm && (!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess))
+        prepare_cold_fitted_factor();
     } catch (...) {
       cudaStreamSynchronize(stream);
       is_failed = true;
@@ -2130,7 +2216,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::trace_counter("explicit_seed", input != nullptr);
     runtime::cuda_trace::trace_counter("warm_density_generation", warm_density_generation);
     runtime::cuda_trace::trace_counter("warm_factor_generation", warm_factor_generation);
-    runtime::cuda_trace::trace_counter("warm_factor_restored", occupied_fitted_factor_ready);
+    runtime::cuda_trace::trace_counter("warm_factor_restored",
+                                       use_warm && occupied_fitted_factor_ready);
     runtime::cuda_trace::trace_counter("retained_state_bytes", resource.state_device_bytes);
     runtime::cuda_trace::trace_counter("retained_xc_bytes", resource.xc_device_bytes);
     runtime::cuda_trace::trace_counter("retained_provider_bytes", resource.provider_device_bytes);
@@ -3009,8 +3096,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       pending_mixed_density =
           xc && !xc->density_binding(density_phase).precision.arithmetic.is_strict_fp64();
       // Provider selection stays inside the prepared Fock facade. For a fitted
-      // hybrid, arbitrary cold/imported seeds have no trusted canonical factor
-      // and stay dense. Verified same-owner warm seeds may restore the exact C.
+      // hybrid, imported seeds stay dense. Native cold seeds may use a proved
+      // algebraic factor; same-owner warm seeds may restore their exact AO C.
       // After a successful proposal becomes the current density,
       // tmp1 still owns the exact AO canonical C that generated that proposal;
       // borrow it on the next iteration without a host round trip.
@@ -3018,13 +3105,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
           fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
       runtime::cuda_trace::trace_counter("dense_k", fitted_exchange && !use_occupied_fitted);
       runtime::cuda_trace::trace_counter("occupied_k", use_occupied_fitted);
+      const bool cold_factor =
+          use_occupied_fitted && output.iterations == 0 && cold_fitted_factor_ready;
+      runtime::cuda_trace::trace_counter("algebraic_cold_factor", cold_factor);
       runtime::cuda_trace::trace_counter(
           "factor_density_generation",
-          use_occupied_fitted ? (output.iterations == 0 ? warm_factor_generation : generation + 1)
-                              : 0);
+          use_occupied_fitted && !cold_factor
+              ? (output.iterations == 0 ? warm_factor_generation : generation + 1)
+              : 0);
       runtime::cuda_trace::trace_counter(
           "factor_solve_epoch",
-          use_occupied_fitted ? (output.iterations == 0 ? warm_factor_epoch : solve_epoch) : 0);
+          use_occupied_fitted
+              ? (cold_factor || output.iterations != 0 ? solve_epoch : warm_factor_epoch)
+              : 0);
       runtime::cuda_trace::TraceRegion jk_trace("ks_jk", stream);
       pending_fitted_occupied = use_occupied_fitted;
       pending_fitted_projection_scratch_generation = 0;
@@ -3849,17 +3942,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The final-state product proof is shared by every prepared full-range
     // global hybrid; the semilocal XC family does not change its matrix algebra.
     const auto& final_spec = provider.strategy().spec;
-    const bool direct_global_hybrid =
+    const bool full_range_global_hybrid =
         has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
-        !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
-        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
+        provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
         final_spec.derivative_order == 0 && final_spec.coulomb.present &&
         final_spec.coulomb.coefficient == 1.0 &&
-        final_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        (final_spec.coulomb.approximation == scf::FockApproximation::Exact ||
+         final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted) &&
         final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
-        final_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        final_spec.exchange.approximation == final_spec.coulomb.approximation &&
         final_spec.exchange.op == scf::FockOperator::FullRange;
     // The proof consumes the final matrices, not the XC family or J builder.
     // Admit only complete all-electron full-range pure-J models; range,
@@ -3880,7 +3974,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool strict_final_arithmetic =
         !precision_schedule.any_lower_precision() || strict_refinement;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_global_hybrid, strict_final_arithmetic, full_range_coulomb_only);
+        n, spins, full_range_global_hybrid, strict_final_arithmetic, full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
