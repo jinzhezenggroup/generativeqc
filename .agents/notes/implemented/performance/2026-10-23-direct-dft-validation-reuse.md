@@ -147,3 +147,17 @@ should measure native preparation ownership, repeated snapshot/grid transport,
 and the force grid's many bounded submissions and synchronizations. Broader
 native compiled force admission for d shells requires its own scientific and
 resource qualification; the existing s/p admission is not widened here.
+
+## Evidence storage
+
+After master advanced, the PR integration exceeded the 64 MiB evidence budget
+by 9,844 bytes. The existing `pbe0-cuda-schedule-20261006` original/integration
+bundles were re-encoded with XZ preset 9/extreme, reducing their combined size
+by 32,284 bytes. Their decoded streams remain byte-identical: SHA-256
+`57eb3538801ec1e79e068f41cf6b27d3296bd3e1757435275490f1793f8a8213`
+and `0c81dd83736f9c5003b328ed78c04b1363c7afc670cf6135ca3e8c0ff9caa1f8`,
+respectively. Only encoded sizes/hashes and dependent storage bindings in the
+manifests, review inventory and validation attachments change. Historical
+scientific values, source streams and qualification outputs are preserved.
+The existing ten publication tests independently recheck both qualification
+outputs and rejection of rehashed invalid force/work/provenance samples.
