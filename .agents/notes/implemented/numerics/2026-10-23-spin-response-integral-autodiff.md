@@ -97,9 +97,10 @@ different coefficient digits, which otherwise shift total energies by about
 2.4e-8 Hartree and obscure a tight gate. CUDA RHF/UHF and water acceptance runs through
 finite Slurm allocations on node n1 with an RTX 5090. Generated integral
 values/JVP/VJP, energies, gradients and joint HVPs are compared to the CPU
-chain and independent references. All six real-device tests pass, including
+chain and independent references. All seven real-device gates pass, including
 default first order, the one-electron empty response space and public Array API
-joint HVP composition. Compute Sanitizer memcheck/leak qualification of the
+joint HVP composition and rejection/recovery after finite-input contraction
+overflow. Compute Sanitizer memcheck/leak qualification of the
 RHF/UHF complete integral/JVP/VJP/response endpoints reports zero errors and
 zero leaked bytes. Six shared native Fock/RHF/UHF/GMRES regressions also pass.
 No large-basis throughput claim follows

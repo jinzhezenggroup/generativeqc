@@ -54,27 +54,6 @@ struct Resources {
   ~Resources() { cleanup(); }
 };
 
-__global__ void contract(std::size_t n, const double* eri, const double* da, const double* db,
-                         double* j, double* ka, double* kb, bool unrestricted) {
-  const auto ab = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (ab >= n * n) return;
-  const auto a = ab / n, b = ab % n;
-  double sum_j = 0, sum_a = 0, sum_b = 0;
-  for (std::size_t c = 0; c < n; ++c)
-    for (std::size_t d = 0; d < n; ++d) {
-      double term_j, term_a, term_b;
-      explicit_hf_terms(da[c * n + d], unrestricted ? db[c * n + d] : 0,
-                        eri[ab * n * n + c * n + d], eri[((a * n + c) * n + b) * n + d], term_j,
-                        term_a, term_b);
-      sum_j += term_j;
-      sum_a += term_a;
-      sum_b += term_b;
-    }
-  j[ab] = sum_j;
-  ka[ab] = sum_a;
-  kb[ab] = sum_b;
-}
-
 class CudaExplicitIntegrals final : public ExplicitIntegralBackend {
   std::size_t n_, n2_;
   Resources resources_;
@@ -128,8 +107,8 @@ class CudaExplicitIntegrals final : public ExplicitIntegralBackend {
     check(cudaSetDevice(resources_.device));
     check(cudaMemcpy(alpha_, da.data(), n2_ * sizeof(double), cudaMemcpyHostToDevice));
     if (spin) check(cudaMemcpy(beta_, db.data(), n2_ * sizeof(double), cudaMemcpyHostToDevice));
-    contract<<<(n2_ + 127) / 128, 128, 0, resources_.stream>>>(n_, eri_, alpha_, beta_, j_, ka_,
-                                                               kb_, spin);
+    explicit_hf_contract<<<(n2_ + 127) / 128, 128, 0, resources_.stream>>>(n_, eri_, alpha_, beta_,
+                                                                           j_, ka_, kb_, spin);
     check(cudaGetLastError());
     check(cudaStreamSynchronize(resources_.stream));
     DirectJkMatrices result;
@@ -148,6 +127,11 @@ class CudaExplicitIntegrals final : public ExplicitIntegralBackend {
                          cudaMemcpyDeviceToHost));
       }
     }
+    // Generated scalar rules reject intermediate overflow. A failed term or
+    // overflowing reduction must fail before a partial Fock can reach SCF.
+    for (const auto* values : {&result.coulomb, &result.exchange_alpha, &result.exchange_beta})
+      if (!std::all_of(values->begin(), values->end(), [](double v) { return std::isfinite(v); }))
+        throw std::runtime_error("nonfinite explicit CUDA Fock contraction");
     result.coulomb_exchange_work = {true, 1, spin ? 2u : 1u};
     return result;
   }

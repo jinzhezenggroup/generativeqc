@@ -180,7 +180,11 @@ extern "C" int integral_ad_hf_weights(std::size_t n, const double* state,
 
 
 def emit_dense_hf_terms() -> str:
-    """Generate raw ordered J/K summands for the explicit-integral CUDA provider."""
+    """Generate ordered J/K algebra and its bounded explicit-integral schedule.
+
+    The compiler owns the exchange index permutation and contraction order as
+    well as scalar TensorIR terms. Native code owns storage, streams and launch.
+    """
     spec = TensorSpec(role="input")
     a, b, g, x = (
         input_tensor(name, spec) for name in ("alpha", "beta", "coulomb", "exchange")
@@ -188,9 +192,37 @@ def emit_dense_hf_terms() -> str:
     program = Program(
         {"j": multiply(add(a, b), g), "ka": multiply(a, x), "kb": multiply(b, x)}
     )
-    return emit_scalar_cpp(
+    helper = emit_scalar_cpp(
         program,
         function_name="explicit_hf_terms",
         input_order=("alpha", "beta", "coulomb", "exchange"),
         output_order=("j", "ka", "kb"),
     ).replace("inline bool", "__device__ inline bool")
+    return (
+        helper
+        + r"""
+static __global__ void explicit_hf_contract(std::size_t n, const double* eri,
+    const double* da, const double* db, double* j, double* ka, double* kb,
+    bool unrestricted) {
+  const auto ab = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (ab >= n*n) return;
+  const auto a=ab/n, b=ab%n;
+  double sum_j=0, sum_a=0, sum_b=0;
+  for (std::size_t c=0; c<n; ++c)
+    for (std::size_t d=0; d<n; ++d) {
+      double term_j, term_a, term_b;
+      if (!explicit_hf_terms(da[c*n+d], unrestricted ? db[c*n+d] : 0,
+          eri[ab*n*n+c*n+d], eri[((a*n+c)*n+b)*n+d], term_j, term_a, term_b)) {
+        j[ab]=ka[ab]=kb[ab]=NAN;
+        return;
+      }
+      sum_j += term_j;
+      sum_a += term_a;
+      sum_b += term_b;
+    }
+  j[ab]=sum_j;
+  ka[ab]=sum_a;
+  kb[ab]=sum_b;
+}
+"""
+    )

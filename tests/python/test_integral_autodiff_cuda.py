@@ -143,3 +143,53 @@ def test_cuda_array_api_joint_hvp(tmp_path: Path) -> None:
     for cpu, gpu in zip(results[0], results[1], strict=True):
         for expected, actual in zip(cpu, gpu, strict=True):
             np.testing.assert_allclose(actual, expected, atol=2e-8, rtol=2e-7)
+
+
+def test_cuda_fock_overflow_fails_and_recovers(
+    tmp_path: Path, required_native_cxx: Any
+) -> None:
+    """Finite external inputs that overflow a contraction cannot publish garbage."""
+    import ctypes as ct
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    native = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+    source = tmp_path / "overflow.cpp"
+    library = tmp_path / "overflow.so"
+    source.write_text(r"""
+#include <stdexcept>
+#include <string>
+#include "scf/explicit_integral_backend.hpp"
+extern "C" int check_overflow() {
+  using namespace generativeqc::scf;
+  try {
+    auto provider=make_cuda_explicit_integrals(0,1,{1e308},8u<<20);
+    auto spec=make_hf_fock_spec(FockSpin::Restricted);
+    spec.derivative_order=0;
+    try {
+      provider->build(spec,{2.0},{});
+      return 1;
+    } catch (const std::runtime_error& error) {
+      if (std::string(error.what()).find("nonfinite")==std::string::npos) return 2;
+    }
+    const auto valid=provider->build(spec,{0.5},{});
+    if (valid.coulomb.at(0)!=5e307 || valid.exchange_alpha.at(0)!=5e307) return 3;
+    return 0;
+  } catch (...) { return 4; }
+}
+""")
+    required_native_cxx.build_shared(
+        (source,),
+        library,
+        compile_args=(
+            "-std=c++20",
+            "-O1",
+            f"-I{root / 'src'}",
+            f"-I{root / 'include'}",
+        ),
+        link_args=(str(native), f"-Wl,-rpath,{native.parent}"),
+    )
+    loaded = ct.CDLL(str(library))
+    loaded.check_overflow.restype = ct.c_int
+    loaded.check_overflow.argtypes = []
+    assert loaded.check_overflow() == 0

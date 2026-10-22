@@ -18,7 +18,9 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("#pragma once\n#include <cmath>\n" + emit_dense_hf_terms())
+    args.output.write_text(
+        "#pragma once\n#include <cmath>\n#include <cstddef>\n" + emit_dense_hf_terms()
+    )
 
 
 if __name__ == "__main__":
