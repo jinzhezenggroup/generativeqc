@@ -575,7 +575,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
                   plan->stored_pair_count,
                   df_packed_pairs(plan->value_storage.pairs),
                   plan->factor_basis_identity,
-                  metric};
+                  metric,
+                  plan->resident_spectral_factors};
     }
     CudaDfOccupiedResponseView streamed_factors;
     if (!borrow && plan->integral_source &&

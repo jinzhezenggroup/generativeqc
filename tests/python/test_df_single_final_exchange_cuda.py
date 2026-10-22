@@ -146,11 +146,11 @@ def test_single_final_k_and_response_replay(
                 not reused
             )
             assert counters.get("response_occupied_charge_inverse_gemms", 0) == (
-                0 if reused else 2
+                0 if reused else 1
             )
             assert counters.get(
                 "response_occupied_charge_inverse_gemms_avoided", 0
-            ) == (2 if reused else 0)
+            ) == (1 if reused else 0)
             if reused:
                 rank = mol.nelectron // 2
                 auxiliary_count = mf.with_df.auxmol.nao_nr()
@@ -185,9 +185,9 @@ def test_single_final_k_and_response_replay(
                 assert counters.get("response_symmetric_occupied_pairs", 0) == 0
                 assert counters.get("response_symmetric_expansion_copy_bytes", 0) == 0
                 assert counters["response_retained_fitted_charge_panels"] > 0
-            assert counters.get("response_fitted_occupied_metric_root_gemms") == (
-                2 if metric == "spectral" else 1
-            )
+            # Single packed factors already carry the metric eigenbasis. Both
+            # root policies need only the remaining rotation into physical P.
+            assert counters.get("response_fitted_occupied_metric_root_gemms") == 1
             assert counters.get("response_retained_metric_root", 0) == (
                 metric != "spectral"
             )

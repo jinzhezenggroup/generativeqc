@@ -90,9 +90,10 @@ inline cublasStatus_t df_occupied_to_metric_eigenbasis(
       &zero, eigenfactors, auxiliary});
 }
 
-/** Full-rank fitted B already contains one inverse root. Apply the immutable
- * plan's symmetric second root to S[aux,occ,occ] in one contraction. This
- * never constructs M^-1 or reconstructs a discarded metric direction.
+/** Full-rank fitted values already contain one inverse root. Right-multiply
+ * S[aux,occ,occ] by its gauge's response root: M^-1/2 for symmetric B, or
+ * lambda^-1/2 Q^T for spectral E. The result uses physical auxiliary indices.
+ * This never constructs M^-1 or reconstructs a discarded metric direction.
  * Input and output occupy disjoint, already charged response intervals.
  */
 inline cublasStatus_t df_occupied_apply_metric_root(

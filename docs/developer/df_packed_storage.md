@@ -49,10 +49,19 @@ owner is charged to source storage and retires with the physical source;
 geometry or basis changes require fresh preparation. `raw_hermite_values` in
 the CUDA trace reports the actual generated output count.
 
-The explicit `packed-single` experiment retains only fitted B in the same
+The `packed-single` representation retains only one fitted tensor in the same
 lower-pair order. It generates raw A once in bounded panels during setup, but
-does not retain those panels. J/K, including qualified final physical Fock
-validation, reuses B without claiming a raw-A owner. Validated canonical or
+does not retain those panels. If every system's metric is full rank, it retains
+`E = A Q diag(lambda^-1/2)` in metric eigen-coordinates. Setup projects raw A
+before scaling, preserving weak-direction cancellation, and omits the large
+rotation back to the original auxiliary basis. J/K contract the complete
+auxiliary axis and are invariant under this orthogonal change. Force views and
+final occupied projections carry the same immutable gauge and metric identity.
+Rank-truncated or mixed-rank batches retain symmetric `B = E Q^T` throughout.
+The `packed` and dense representations also retain symmetric B.
+
+J/K, including qualified final physical Fock validation, reuse the fitted
+tensor without claiming a raw-A owner. Validated canonical or
 strictly reconstructed corrected occupied factors can use a separately budgeted
 force response with `GENERATIVEQC_DF_RESPONSE_SPACE=occupied`.
 `GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE=fitted` projects retained B in bounded
@@ -68,11 +77,16 @@ records the numerical gates and complete-endpoint evidence.
 
 For the qualified full-rank fitted occupied consumer,
 `GENERATIVEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
-metric transformation. `auto` and `retained-root` apply the plan's immutable
-symmetric inverse root `X` directly to the projected factors `S = C^T B C`:
-`U = S X`. This uses one GEMM into the existing disjoint retained staging
-interval, with no final factor copy. `spectral` retains the two-GEMM
-eigenvector/scale route for independent comparisons. Raw and rank-truncated
+metric transformation. `auto` and `retained-root` apply the matching second
+root to the projected factors `S = C^T B C`: `U = S R`. For symmetric B,
+`R = M^-1/2`; for spectral E, `R = diag(lambda^-1/2) Q^T`. The latter is
+prepared in the otherwise unused full-rank inverse-matrix response workspace,
+without a new allocation or a second retained AO tensor. Pure-J potentials,
+occupied projections and bounded general-density panels all use the matching
+map to physical auxiliary indices. This uses one GEMM into the existing disjoint
+retained staging interval, with no final factor copy. `spectral` retains the
+divide-before-rotate diagnostic; it requires two GEMMs for symmetric B and one
+when E is already projected. Raw and rank-truncated
 consumers retain their original spectral response, including discarded-direction
 derivatives; they cannot borrow this root shortcut. The choice adds no device
 allocation and grants no raw final-projection lease. Trace counters report the

@@ -172,9 +172,12 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
                     assert (
                         counters["resident_whitening_factor_panels"] == expected_panels
                     )
+                    # Full-rank single-packed values stay in metric eigen
+                    # coordinates. Their response retains the physical E/F
+                    # contract above without rotating every AO pair back.
+                    assert counters.get("resident_whitening_spectral_basis", 0) > 0
                     assert (
-                        counters["resident_whitening_factor_gemms"]
-                        == 2 * expected_panels
+                        counters["resident_whitening_factor_gemms"] <= expected_panels
                     )
                     assert expected_panels < 96
             else:
