@@ -270,7 +270,8 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
             "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
             "!fitted_coulomb && !fitted_exchange && !has_range_correction",
             "!nonlocal_correlation &&",
-            "!incremental_direct_jk && provider.system().ecp_terms.empty()",
+            "ordinary_final_operator && provider.system().ecp_terms.empty()",
+            "standard_convergence_active() && final_closure && incremental_energy_full_builds >= 2",
             "atom.ecp_core != 0",
             "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
             "final_spec.coulomb.op == scf::FockOperator::FullRange",
@@ -734,6 +735,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_KS_INCREMENTAL_PROPOSALS)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_EARLY_FINAL_PROBE)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_XC_SPATIAL_ORDER)"', source))
     controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
