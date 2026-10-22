@@ -1920,6 +1920,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_coefficients,
                            occupied};
   configure_direct_weighted_force_response(device_batch);
+  configure_direct_block_screening(device_batch);
   if (!host.shell_angular.empty())
     device_batch.direct_maximum_shell_angular =
         *std::max_element(host.shell_angular.begin(), host.shell_angular.end());

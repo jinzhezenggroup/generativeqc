@@ -126,6 +126,9 @@ struct DeviceBatch {
    * the bucket total to each result. */
   bool direct_force_fp32{};
   unsigned long long* direct_force_precision_work{};
+  /** Default-off conservative block prefilter, frozen before graph capture.
+   * Exact shell screening, generated stream ABI and ERI/J/K stay FP64. */
+  bool direct_fp32_block_screening{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

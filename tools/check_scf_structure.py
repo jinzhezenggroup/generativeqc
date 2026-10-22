@@ -285,6 +285,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
 CUDA_MODULES["cuda_direct_queues"] = (
     "direct_queue_index",
     "direct_screening",
+    "direct_coarse_screening",
     "direct_task_encoding",
     "direct_page_screening",
     "direct_queue_profile",

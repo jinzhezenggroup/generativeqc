@@ -1879,6 +1879,29 @@
         "docs/developer/df_packed_storage.md",
         "note:.agents/notes/implemented/performance/2026-10-22-prepared-hermite-raw-df.md"
       ]
+    },
+    {
+      "id": "hf.conservative-fp32-block-screening",
+      "classification": "retained-opt-in",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/direct_coarse_screening.cuh",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "Default-off coarse block rejection uses directed FP32 enclosures, followed by the incumbent FP64 predicate for every survivor. Shell density storage, exact screening, ERI and contractions remain FP64. Scalar INT8 and integer Tensor Core outer-product experiments are standalone benchmarks, not production modes; microbenchmark wins do not qualify molecular endpoints.",
+      "revisit_condition": "Promote only with source-matched complete cold/warm/moved endpoint gains and independent numerical and task-set gates. Consider prepared FP32 bound storage only after charging preparation, memory and invalidation costs.",
+      "evidence": [
+        "note:.agents/notes/implemented/performance/2026-10-23-conservative-block-screening.md",
+        "tests:tests/native/test_direct_coarse_screening_cuda.cu",
+        "tests:tests/python/test_hf_resources.py",
+        "docs:docs/developer/fock_build.md"
+      ]
     }
   ]
 }

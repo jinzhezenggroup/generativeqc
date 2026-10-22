@@ -5,6 +5,31 @@ The internal C++ boundaries in `src/scf/fock_build.hpp` and
 resolved execution strategy and prepared integral sources. CPU and CUDA
 providers can be selected independently.
 
+`GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING=1` enables an experimental NVCC
+block prefilter for bounded Direct task compaction and its native force/fallback
+consumers. Set it before preparing an owner; unset, `0`, and other values keep
+the incumbent gate. Upward FP32 bound conversion and multiplication, downward
+threshold conversion, and positive-underflow protection permit only proven
+early rejection. Every survivor still passes the original FP64 block and shell
+predicates. Nonfinite/uncertain cases fall through. Compatibility compilers
+retain FP64 screening because their directed-rounding semantics are unqualified.
+Schwarz preparation, the 24-byte shell-density ABI, generated streaming gates,
+ERI, J/K and force arithmetic retain their existing precision.
+
+Qualification uses `benchmarks/direct_screening_endpoint.py` for complete
+strict-FP64 Direct PBE0/r2SCAN-3c water-96 and QM7 C7 RHF/def2-SVP E/F, with
+cold, frozen warm, optional changed geometry, and independent tighter references.
+`benchmarks/direct_screening_probe.cu` separately compares FP64, FP32,
+prepared FP32, tile-scaled INT8 and actual INT8 WMMA on synthetic sorted bounds.
+The tiled scalar INT8 control uses the same warp/refinement mapping as WMMA.
+Its timers include packing and FP64 refinement; its task identities must match
+FP64 for both sparse and all-survive thresholds. INT8/Tensor Core experiments
+are not selectable molecular backends.
+Run every device qualification through a finite Slurm allocation. See the
+[screening decision](../../.agents/notes/implemented/performance/2026-10-23-conservative-block-screening.md)
+for evidence and limits; no default or endpoint speedup follows from synthetic
+throughput alone.
+
 Standard fitted CUDA RHF/UHF resolves to the `CudaDfResident` schedule. This
 names the existing preferred device-resident SCF (including its admitted host
 retry), not a second approximation or a new kernel implementation. CPU fitted

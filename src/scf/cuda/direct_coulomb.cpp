@@ -50,7 +50,13 @@ void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
       select_direct_weighted_force_response(selector ? selector : "");
 }
 
+void configure_direct_block_screening(DeviceBatch& batch) noexcept {
+  const auto* selection = std::getenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING");
+  batch.direct_fp32_block_screening = selection && std::string_view(selection) == "1";
+}
+
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
+  configure_direct_block_screening(batch);
   configure_direct_weighted_force_response(batch);
   batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
   batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();

@@ -310,13 +310,20 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     assert changed.identity == baseline.identity
 
 
-def test_ks_final_validation_selection_changes_resource_identity(
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
+        "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
+    ],
+)
+def test_direct_execution_selection_changes_resource_identity(
     monkeypatch: typing.Any,
+    variable: str,
 ) -> None:
     """Prepared/restarted owners must retain the actual proof-execution policy."""
     from types import SimpleNamespace
 
-    variable = "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"
     library = SimpleNamespace()
     monkeypatch.delenv(variable, raising=False)
     automatic = estimate_hf_resources([H2], backend="cuda", library=library)
