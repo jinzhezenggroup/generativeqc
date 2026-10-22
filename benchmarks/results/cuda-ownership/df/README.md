@@ -29,7 +29,7 @@ The storage-only gzip-to-XZ migration preserves every decoded byte and all
 original-file checksums. XZ uses LZMA2 preset 9 extreme, a 64 MiB dictionary,
 lc=3, lp=0, pb=0 and CRC64; the decoded archive remains 3,795,930 bytes.
 
-`oh-diagnostic.json` retains every isolated worker, the diagnostic drivers and
+`oh-diagnostic.json.xz` retains every isolated worker, the diagnostic drivers and
 complete extracted profiler reports with checksums. An isolated five-sample
 diagnostic with the same OH preamble returned ratio 0.999955. Graph-node Nsight traces found unchanged cuSOLVER work accounting for
 about 76% of GPU time and DF bulk kernel times of 6.206/6.265 ms. These observations
@@ -85,7 +85,7 @@ in the samples. Cases beyond the public AO inventory have no total-budget claim.
 `validation.json.xz` retains exact CPU/GPU test logs and XML as text with their
 original checksums, suite totals, sanitizer conclusions and source identities.
 `raw-source.json.xz` retains all 24 independent libcint/NumPy raw/source comparisons,
-including coordinate derivatives and public transforms. These two XZ companions
+including coordinate derivatives and public transforms. These XZ companions
 decode to the exact original JSON bytes, bound by stored and decoded sizes and
 SHA-256 in `validation-files.json`; use `xz -dc FILE.json.xz` to inspect them.
 Physical input files are retained in `fixtures/`; the exact measured source

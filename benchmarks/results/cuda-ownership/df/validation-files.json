@@ -1,9 +1,9 @@
 {
   "files": [
     {
-      "bytes": 10427,
+      "bytes": 10426,
       "path": "README.md",
-      "sha256": "0ced24d8c490385e8b2bdc9c51d90dd9990258c1b3a449e06279a71f4364c2e9"
+      "sha256": "6d313be168ee07e76a6f137852538d10d115031fdc90162cbfb24ef3841f39ba"
     },
     {
       "bytes": 17733,
@@ -41,9 +41,11 @@
       "sha256": "28504b5f062df97d6112e952de5681d3c02efb7cb9e9a3ffaa7f21a5a57da061"
     },
     {
-      "bytes": 125980,
-      "path": "oh-diagnostic.json",
-      "sha256": "90a23962e51b76ef285e2aa1dc32f4b3d05864b4dc3bf855b35a6a5403357576"
+      "bytes": 11716,
+      "path": "oh-diagnostic.json.xz",
+      "sha256": "53dd1d23fb110ff30286d35ed0aeeeda7afd9e762890b74eb71bac64fb666b6f",
+      "decoded_bytes": 125980,
+      "decoded_sha256": "90a23962e51b76ef285e2aa1dc32f4b3d05864b4dc3bf855b35a6a5403357576"
     },
     {
       "bytes": 43792,
