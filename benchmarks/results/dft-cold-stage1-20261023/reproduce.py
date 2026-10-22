@@ -105,12 +105,64 @@ def main() -> None:
                         assert check["passed"], (name, check)
                         checks.append(check)
                     result["moved_default_reference"][name] = checks
+    # The final DF trajectory has its own five pairs and source identities.
+    moved_path = ROOT / "df-moved.json.xz"
+    if moved_path.exists():
+        records = read(moved_path.name)
+        moved_references = read("cooperative-moved.json.xz")
+        for name, record in records.items():
+            view = copy.deepcopy(record)
+            view["samples"] = view["samples"][:2]
+            view["warm_repeats"] = 1
+            qualified = qualify([view], oracles, reference_reuse=reuse)[0]
+            assert qualified["status"] == "qualified", (name, qualified)
+            result["qualification"]["df-moved/" + name] = qualified
+            reference = moved_references[f"pbe0-direct-{record['atoms']}-gpu4pyscf.json"]
+            assert record["moved_geometry_bohr"] == reference["geometry_bohr"]
+            checks = []
+            for sample in record["samples"][2:]:
+                checked_sample(sample, record)
+                check = errors(
+                    sample["energy"], sample["forces"], reference["samples"][0], record["atoms"]
+                )
+                assert check["passed"], (name, check)
+                checks.append(check)
+            result["moved_default_reference"]["df-moved/" + name] = checks
+        for atoms in (48, 96):
+            for phase in ("cold", "warm", "moved", "moved-warm"):
+                populations = [
+                    [
+                        s["seconds"]
+                        for name, r in sorted(records.items())
+                        if variant in name and r["atoms"] == atoms
+                        for s in r["samples"]
+                        if s["phase"] == phase
+                    ]
+                    for variant in ("baseline", "stage1")
+                ]
+                assert all(len(population) == 5 for population in populations)
+                result["timing"][f"df-moved/{atoms}/{phase}"] = timing(*populations)
     # Final combined-source cohorts, when present, are independent populations.
     for path in sorted(ROOT.glob("stage1-*.json.xz")):
-        for name, record in read(path.name).items():
+        records = read(path.name)
+        for name, record in records.items():
             qualified = qualify([record], oracles, reference_reuse=reuse)[0]
             assert qualified["status"] == "qualified", (path.name, name, qualified)
             result["qualification"][path.name + "/" + name] = qualified
+        if path.name.startswith("stage1-pairs-"):
+            for phase in ("cold", "warm"):
+                populations = []
+                for variant in ("baseline", "stage1"):
+                    # Each process contributes one statistic; its three warm
+                    # calls are not three independent cold-start replicates.
+                    values = [
+                        median(s["seconds"] for s in r["samples"] if s["phase"] == phase)
+                        for name, r in sorted(records.items())
+                        if variant in name
+                    ]
+                    assert len(values) == 5
+                    populations.append(values)
+                result["timing"][path.name + "/" + phase] = timing(*populations)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

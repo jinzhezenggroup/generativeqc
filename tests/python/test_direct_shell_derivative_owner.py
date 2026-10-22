@@ -660,11 +660,9 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
         "exchange && exchange->force_capability && exchange->shared && exchange->force"
         in bridge
     )
-    assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr && '
-        "cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U"
-        in " ".join(bridge.split())
-    )
+    # The executable selector probe in test_one_electron_implicit_cooperative
+    # covers default and explicit mappings. Keep this audit about borrowing
+    # prepared Direct metadata, independently of selector expression syntax.
     assert "hcore_schedule, 1.0, output, source->stream" in bridge
     assert "1, 1.0, output, source->stream" in bridge
     assert (
