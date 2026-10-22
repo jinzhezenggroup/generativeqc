@@ -19,7 +19,7 @@ Slurm assigned `CUDA_VISIBLE_DEVICES=1`, retained unchanged. Each variant has si
 fresh-process observations per case, alternating baseline/candidate and
 candidate/baseline order. All 24 measured observations and four excluded
 qualification/cache-prime observations are retained by workload in
-[water24.samples.json](water24.samples.json) and
+[water24.samples.json.gz](water24.samples.json.gz) and
 [methane34.samples.json.gz](methane34.samples.json.gz).
 
 Conventional unscreened RHF supplies Fock/orbitals; only correlation is fitted.
@@ -155,7 +155,8 @@ no oracle numeric state enters a native endpoint.
 
 ## Lossless storage
 
-The methane samples are stored as gzip to retain complete historical evidence
-within the repository budget. The adjacent [storage receipt](methane34.samples.storage.json)
-pins the original merged Git blob and both byte identities. `gzip -dc` restores
+The water and methane samples are stored as gzip to retain complete historical evidence
+within the repository budget. The adjacent [water](water24.samples.storage.json) and
+[methane](methane34.samples.storage.json) storage receipts pin the original
+merged Git blobs and both byte identities. `gzip -dc` restores
 the exact original JSON; no samples or historical verdicts were changed.
