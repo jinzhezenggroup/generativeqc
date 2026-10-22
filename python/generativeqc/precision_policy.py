@@ -18,6 +18,7 @@ from time import perf_counter
 from ._api_types import Atom, MethodCapabilities, Result
 from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
 from ._df_precision import DF_GRADIENT_QUALIFICATIONS
+from ._scf_convergence import default_scf_controls
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
@@ -57,14 +58,18 @@ def _budget_target(budget: TargetErrorBudget, *, forces: bool = True) -> TargetA
 def _budget_fock_controls(
     calculator: Calculator, budget: TargetErrorBudget, requested: dict
 ) -> dict[str, float]:
-    """Select controls for shared Direct modules, independently of XC identity.
+    """Select controls for shared Direct modules or separately qualified DF XC.
 
-    Native preparation checks the actual provider and basis/resource domain.
+    Direct admission is independent of XC identity; DF authenticates its local
+    complete model and keeps J strict. Native preparation checks the actual
+    provider and basis/resource domain.
     Older libraries, unsupported providers and tighter budgets stay strict.
     Explicit caller tolerances are ceilings, never silently loosened.
     The density ceiling matches the native owner's maximum authenticated force
     stationarity allowance; it is not an observable-error estimate.
     """
+    from ._df_precision import fitted_scf_budget_admitted
+
     capability = getattr(
         getattr(calculator, "_library", None),
         "generativeqc_application_fock_precision_version_v2",
@@ -72,14 +77,18 @@ def _budget_fock_controls(
     )
     ks_options = getattr(calculator, "_ks_options", None)
     model = getattr(ks_options, "_method_ir", None)
+    fitted = bool(getattr(calculator, "_density_fitting_mode", None))
+    available = (
+        fitted_scf_budget_admitted(calculator, budget)
+        if fitted
+        else capability is not None and capability() == 2
+    )
     if (
-        capability is None
-        or capability() != 2
+        not available
         or model is None
         or model.spin != "unpolarized"
         or not ks_options.execution_plan.self_consistent
         or ks_options.xc_schedule != "device_fused"
-        or getattr(calculator, "_density_fitting_mode", None)
         or budget.energy_abs < 1e-5
         or budget.force_max_abs < 1e-4
         or (budget.force_rms is not None and budget.force_rms < 3e-5)
@@ -119,14 +128,165 @@ def _budget_fock_work_admitted(calculator: Calculator, work: dict) -> bool:
         and operator.get("arithmetic_mode") == "mixed"
         and operator.get("count", 0) > 0
     }
+    # A pure semilocal proposal may use the faster generated FP64 J while XC
+    # or density contractions remain budget selected. Strict J is no less accurate than its admitted
+    # recurrence-only mixed counterpart; require its actual complete dtype row
+    # instead of demanding unnecessary FP32 work or inventing a recurrence count.
+    j_rows = [
+        row
+        for row in work.get("operators", ())
+        if row.get("name") == "coulomb_j" and row.get("count", 0) > 0
+    ]
+    strict_j = bool(j_rows) and all(
+        row.get("arithmetic_mode") == "strict"
+        and all(
+            row.get(field) == "fp64"
+            for field in ("storage", "compute", "accumulation", "reduction")
+        )
+        for row in j_rows
+    )
+    mixed_proposal = any(
+        row.get("name") in ("xc", "matrix_product", "density_build")
+        and row.get("compute") == "fp32"
+        and row.get("arithmetic_mode") == "mixed"
+        and row.get("count", 0) > 0
+        for row in work.get("operators", ())
+    )
+    pure_strict_j = (
+        options.coefficients[2] == 0
+        and not options.has_range_exchange
+        and strict_j
+        and mixed_proposal
+    )
     return (
         work.get("operator_work_counters_valid") is True
         and work.get("complete") is True
         and work.get("operator_inventory_complete") is True
-        and required <= observed
+        and (required <= observed or pure_strict_j)
         and work.get("strict_stage_fock_builds", 0) >= 2
         and work.get("strict_refinement_applied") is True
         and work.get("final_residual_audits", 0) > 0
+    )
+
+
+def _budget_fock_strict_warm_admitted(
+    calculator: Calculator, result: typing.Any, *, qualified_gradient: bool = False
+) -> bool:
+    """Accept a fully revalidated FP64 warm endpoint without inventing mixed work.
+
+    A prepared warm seed can already satisfy the budget's physical SCF gates.
+    Repeating an approximate proposal merely to prove positive FP32 work would
+    perturb that seed. Require a complete strict operator census and a fresh
+    physical audit bound to the returned state instead. Missing/legacy evidence,
+    cold results and mixed attempts retain the incumbent audit fallback.
+    Explicit observable targets are handled by the caller and never use this
+    qualification shortcut. This is not a per-call observable-error estimate.
+    """
+    options = getattr(calculator, "_ks_options", None)
+    work = result.precision or {}
+    if (
+        options is None
+        or getattr(options, "_method_ir", None) is None
+        or getattr(result, "warm_start_used", False) is not True
+        or getattr(result, "warm_start_fallback", True) is not False
+        or work.get("operator_work_counters_valid") is not True
+        or work.get("complete") is not True
+        or work.get("operator_inventory_complete") is not True
+        or work.get("effective_bits") != 64
+        or work.get("mixed_stage_fock_builds") != 0
+        or work.get("strict_stage_fock_builds", 0) < 1
+        or work.get("final_residual_audits", 0) < 1
+        or (
+            work.get("gradient")
+            and work["gradient"].get("returned_mode") != "fp64"
+            and not qualified_gradient
+        )
+    ):
+        return False
+    required = {"coulomb_j", "xc", "fock_assembly", "physical_residual"}
+    if options.coefficients[2] != 0 or options.has_range_exchange:
+        required.add("exchange_k")
+    if options.execution_plan.nonlocal_correlation:
+        required.add("nonlocal_correlation")
+    observed = set()
+    for operator in work.get("operators", ()):
+        if operator.get("count", 0) <= 0:
+            continue
+        if operator.get("arithmetic_mode") != "strict" or any(
+            operator.get(field) != "fp64"
+            for field in ("storage", "compute", "accumulation", "reduction")
+        ):
+            return False
+        observed.add(operator.get("name"))
+    identity = work.get("returned_state_identity")
+    events = work.get("scf_fock_timeline", ())
+    # The same returned density must own both the strict physical Fock and its
+    # audit. A historical audit from a different generation cannot authorize it.
+    bound = {
+        event.get("kind")
+        for event in events
+        if identity and event.get("state") == identity and event.get("count", 0) > 0
+    }
+    return required <= observed and {"strict_fock", "final_audit"} <= bound
+
+
+def _standard_fallback_admitted(
+    calculator: Calculator,
+    candidate: typing.Any,
+    precision: str,
+    budget: TargetErrorBudget,
+) -> bool:
+    """Retain a completed Standard endpoint when Fast cannot narrow its work.
+
+    This is the native Standard contract, not an observable-error certificate.
+    Require strict execution under the native final-state contract, and never
+    extend the fallback to tighter budgets or caller-relaxed solver controls.
+    Direct HF can reuse an already checked final Fock on a warm call; fitted
+    HF lacks the optional work ledger. Keep those accounting limits explicit
+    without repeating an otherwise completed Standard endpoint.
+    Explicit TargetAccuracy requests bypass this policy in the caller.
+    """
+    work = candidate.precision or {}
+    gradient = work.get("gradient") or {}
+    strict_work = (
+        work.get("operator_work_counters_valid") is True
+        and work.get("strict_stage_fock_builds", 0) > 0
+        and (
+            work.get("final_residual_audits", 0) > 0
+            or (
+                calculator.capabilities.family == "hartree_fock"
+                and getattr(candidate, "warm_start_used", False) is True
+                and getattr(candidate, "warm_start_fallback", True) is False
+                and work.get("skipped_final_fock_builds", 0) > 0
+            )
+        )
+    )
+    # The fitted HF owner predates the detailed work ledger. Its strict native
+    # result still enforces the Standard physical-final-state contract; absence
+    # of counters must remain unknown rather than induce a second strict solve.
+    fitted_hf = (
+        calculator.capabilities.family == "hartree_fock"
+        and bool(getattr(calculator, "_density_fitting_mode", None))
+        and work.get("operator_work_counters_valid") is False
+        and not gradient
+    )
+    return (
+        precision == "fp64"
+        and candidate.converged
+        and candidate.executed_backend == "cuda"
+        and budget.energy_abs >= 1e-5
+        and budget.force_max_abs >= 1e-4
+        and (budget.force_rms is None or budget.force_rms >= 3e-5)
+        and all(
+            0 < getattr(calculator, attribute, math.inf) <= limit
+            for name, limit in default_scf_controls(calculator).items()
+            for attribute in ("_" + name,)
+        )
+        and work.get("requested_mode") == "fp64"
+        and work.get("effective_bits") == 64
+        and work.get("mixed_stage_fock_builds") == 0
+        and (strict_work or fitted_hf)
+        and (not gradient or gradient.get("returned_mode") == "fp64")
     )
 
 
@@ -135,7 +295,8 @@ class PrecisionPolicy:
     """Select arithmetic by application budget, or request explicit audits.
 
     Fast's ``budget`` reuses the adaptive-policy allowance type and controls
-    native FP32 admission. It is not a measured per-call error certificate.
+    native FP32 admission. CCSDTCBSCalculator also uses this allowance for
+    final FP64 convergence limits. It is not a measured per-call error certificate.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
     Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
     is invented. Supplying a target opts into the full audit, including its cost.
@@ -389,7 +550,13 @@ def _complete_gradient_admission(
 
     correction = result.dispersion
     if (
-        electronic in ("r2scan-rks-budget-fp32-v1", "r2scan-df-rks-budget-fp32-v1")
+        electronic
+        in (
+            "r2scan-rks-budget-fp32-v1",
+            "r2scan-df-rks-budget-fp32-v1",
+            "r2scan-df-rks-treutler-budget-fp32-v1",
+            "r2scan-df-rks-treutler-xc-budget-fp32-v1",
+        )
         and correction_model.identity
         == resolve_method("R2SCAN-3c", spin="unpolarized").identity
         and isinstance(correction, R2SCAN3CCorrectionResult)
@@ -468,8 +635,10 @@ class PrecisionCalculator:
     stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
     RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
     SCF state stays strict on those other routes; unsupported domains use FP64 audits.
-    Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
-    still require the audit fallback and have no mixed-arithmetic acceleration.
+    Qualified DF RKS may narrow semilocal geometry. Default-grid DF PBE/r2SCAN
+    RKS may also use FP32 XC matrix products in bounded SCF proposals; DF J and
+    the metric remain FP64. Other DF requests retain their strict fallback or
+    audit path.
     Explicit targets/audit profiles cost two full endpoints, or three after
     rejection. FP64 does not imply FP32 arithmetic or a universal speed guarantee.
     Prepared batches reuse native candidate plans and engine-local warm seeds.
@@ -508,22 +677,27 @@ class PrecisionCalculator:
         self._lock = threading.RLock()
         self._options = {"method": method, "basis": basis, "device": device, **options}
         if policy.profile in ("standard", "fp64", "fast"):
-            # A speed profile must not turn caller-supplied loose convergence
-            # controls into an implicitly certified strict endpoint.
-            for name, ceiling in (
-                ("energy_tolerance", 1e-10),
-                ("density_tolerance", 1e-8),
-                ("screening_tolerance", 1e-12),
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "screening_tolerance",
             ):
                 requested = self._options.get(name)
                 if requested is not None:
                     requested = float(requested)
                     if not math.isfinite(requested) or requested <= 0:
                         raise ValueError(f"{name} must be finite and positive")
-                self._options[name] = min(
-                    ceiling, ceiling if requested is None else requested
-                )
         self._candidate = Calculator(**self._options, precision="fp64")
+        if policy.profile in ("standard", "fp64", "fast"):
+            # Select the same qualified Standard controls as Calculator after
+            # resolving the native library and complete model. Unsupported
+            # owners and older libraries keep their strict defaults. Tight
+            # caller values survive both Standard and Fast fallback paths.
+            for name, ceiling in default_scf_controls(self._candidate).items():
+                requested = self._options.get(name)
+                value = min(ceiling, ceiling if requested is None else float(requested))
+                self._options[name] = value
+                setattr(self._candidate, "_" + name, value)
         self._fp64_properties = self._candidate.capabilities.supported_properties
         if self._candidate.capabilities.family not in (
             "hartree_fock",
@@ -695,7 +869,10 @@ class PrecisionCalculator:
         Audits suspend that plan with bounded host seed storage; later execution
         restores only its own seeds, never an auditor's density. Candidate batch
         timing is shared, not invented per-item or divided equally among items.
-        ``maximum_seed_bytes`` bounds numeric seed staging when an audit is needed.
+        Auditors may warm from their own same-geometry, same-control densities;
+        every audit still recomputes its observables. ``maximum_seed_bytes``
+        bounds combined candidate and auditor numeric seed staging. Optional
+        audit history is discarded when that bound cannot accommodate it.
         """
         from ._precision_batch import PreparedPrecisionBatch
 
@@ -950,22 +1127,45 @@ class PrecisionCalculator:
                 route_reasons.append("geometry_correction_not_qualified")
         if self.policy.profile == "fast" and target is None:
             work = candidate.precision or {}
+            strict_warm = (
+                fast_native
+                and self._fast_fock
+                and _budget_fock_strict_warm_admitted(
+                    candidate_calculator,
+                    candidate,
+                    qualified_gradient=qualified_gradient,
+                )
+            )
             if (
                 fast_native
                 and self._fast_fock
-                and _budget_fock_work_admitted(candidate_calculator, work)
+                and (
+                    not gradient
+                    or gradient.get("returned_mode") == "fp64"
+                    or qualified_gradient
+                )
+                and (
+                    strict_warm
+                    or _budget_fock_work_admitted(candidate_calculator, work)
+                )
             ):
                 validation = PrecisionValidation(
                     self.policy.profile,
                     None,
                     model,
-                    "qualified_budget_fock",
+                    "qualified_budget_fock_strict_warm"
+                    if strict_warm
+                    else "qualified_budget_fock",
                     tuple(route_reasons),
                     (),
                     (),
                     tuple(solves),
                     perf_counter() - started,
-                    reference="direct-fock-budget-v2/shared-module-qualification",
+                    reference=(
+                        "df-xc-budget-v1/strict-j-shared-xc-qualification"
+                        if candidate_calculator._density_fitting_mode
+                        else "direct-fock-budget-v2/shared-module-qualification"
+                    ),
                     gradient_admission=gradient_admission,
                     scope="qualification_not_per_call_observable_audit",
                     budget=self.policy.budget,
@@ -1063,6 +1263,24 @@ class PrecisionCalculator:
                     perf_counter() - started,
                     reference="pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
                     scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
+                )
+                return replace(candidate, precision_validation=validation)
+            if _standard_fallback_admitted(
+                candidate_calculator, candidate, candidate_precision, self.policy.budget
+            ):
+                validation = PrecisionValidation(
+                    self.policy.profile,
+                    None,
+                    model,
+                    "strict_standard_fallback",
+                    (*route_reasons, "fast_route_unavailable_using_standard"),
+                    (),
+                    (),
+                    tuple(solves),
+                    perf_counter() - started,
+                    reference="native-standard-fp64-final-state-checks-no-observable-audit",
+                    scope="native_fp64",
                     budget=self.policy.budget,
                 )
                 return replace(candidate, precision_validation=validation)

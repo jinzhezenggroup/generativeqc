@@ -51,7 +51,8 @@ class DirectJkSourceLease {
       const char* trace_name, bool cold_phase = false, bool generic_fock = false,
       double screening = 0.0, std::size_t value_ceiling = 8ULL << 30, bool own_outputs = true,
       DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
-      std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1);
+      std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1,
+      bool fit_buckets_to_capacity = false);
   bool active() const noexcept { return direct_ != nullptr; }
   bool mixed_recurrence() const noexcept { return mixed_recurrence_; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }

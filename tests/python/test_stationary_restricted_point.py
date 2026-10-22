@@ -407,7 +407,7 @@ struct Owner {
   struct { int* error{}; } context;
   size_t launches{},point_count{},pair_visits{},becke_pair_state_evaluations{},
       center_distance_evaluations{},geometry_batches{};
-  bool retains_becke_pair_state() const { return false; }
+  bool retains_becke_pair_state(bool = false) const { return false; }
 };
 template<class Function>
 int guarded(Owner*,char*,size_t,Function function) {

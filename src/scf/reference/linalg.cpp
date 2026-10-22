@@ -16,6 +16,14 @@ Matrix identity(std::size_t n) {
   return result;
 }
 
+// Keep this validation fallback's hot loop placement independent of new CUDA
+// objects in the shared library. On GCC/Zen 4, an unrelated 32-byte link shift
+// changed an identical 768-AO product from 74 to 124 ms. Alignment changes no
+// arithmetic or accumulation order and keeps integral additions from slowing
+// the host final-state proof.
+#if __has_cpp_attribute(gnu::aligned)
+[[gnu::aligned(64)]]
+#endif
 Matrix multiply(const Matrix& a, const Matrix& b, std::size_t n) {
   Matrix out(n * n, 0.0);
   for (std::size_t i = 0; i < n; ++i) {

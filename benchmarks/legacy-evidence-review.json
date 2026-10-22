@@ -1,5 +1,10 @@
 {
   "families": {
+    "cbs-fast-memory-20261021": {
+      "owner": "CBS GMRES capacity and Lambda endpoint qualification",
+      "reason": "Exact compressed final endpoints, independent full-vector finite differences, closed Lambda work traces and separately identified superseded screens/CPU failures retain scientific and negative evidence together. Splitting screens increases total storage by 29144 bytes through lost shared compression. Source/binary identities, reconstruction patch, manifest and executable gate replay bind the record; all existing storage caps remain unchanged.",
+      "review_document": "benchmarks/results/cbs-fast-memory-20261021/README.md"
+    },
     "ks-resident-final-validation-default-20261011": {
       "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
@@ -276,9 +281,42 @@
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
       "reason": "Retain all 63 original complete native FP64 populations (756 timed E+F calls) unchanged, plus the explicit-budget WB97M-V DF/96 partial population with one cold and four warm endpoints and an actual four-hour timeout receipt. Actual semantic SCF work, scalar convergence/independent accuracy gates, source/binary/raw-record hashes and separate primer receipts remain bound to their sources. The 12 DF/48 and five DF/96 calls remain explicitly unchecked; an incomplete five-repeat warm set is not plotted. Historical GPU4PySCF timings and oracle arrays are referenced unchanged rather than duplicated or recomputed. Detailed SCF histories, native force vectors, binaries and logs remain ignored. Superseded figures are archived losslessly to preserve the unchanged 64 MiB cap; this storage review does not waive the earlier promotion acceptance hold.",
       "review_document": "benchmarks/results/readme-refresh-20261015/README.md"
+    },
+    "readme-defaults-20261020": {
+      "owner": "README default-grid complete endpoint measurements",
+      "reason": "All 256 stock-configuration receipts retain actual E/F arrays, cold/warm samples, Fast audit/fallback work, all 64 unsupported DF populations and the partial reference warm failure. No scientific qualification is inferred; large logs stay ignored and limits are unchanged.",
+      "review_document": "benchmarks/results/readme-defaults-20261020/README.md"
+    },
+    "df-g-shell-20261021": {
+      "owner": "default auxiliary-g response partition qualification",
+      "reason": "Lossless original20 complete endpoint samples, dense independent references, baseline comparisons,34-test GPU result and failed packaging attempt, source/library/cache identities and executed shell/g-remainder work trace. No external archive or increased storage budget. Six existing evidence payloads are losslessly compressed to keep the aggregate cap.",
+      "review_document": "benchmarks/results/df-g-shell-20261021/README.md"
+    },
+    "readme-repaired-20261021": {
+      "owner": "README common-accuracy complete E/F comparison",
+      "reason": "Superseded complete endpoint data are retained through the byte-verified published Git snapshot. Original numerical references and timing/work tables remain in the checkout; no accuracy failure or historical observation is relabelled.",
+      "review_document": "benchmarks/results/readme-repaired-20261021/README.md"
+    },
+    "readme-final-20261022": {
+      "owner": "README complete default-grid E/F refresh after DF and cold-SCF repairs",
+      "reason": "Retain all 192 source-matched populations and 768 complete E/F calls, unchanged independent oracle receipts, executed controls and Fast solve work, all 18 accuracy failures, final geometry tests and sanitizer provenance. Superseded timing payloads have verified published-Git recovery; duplicate older oracle inputs remain in the successor tree. No numerical waiver, external archive or increased budget.",
+      "review_document": "benchmarks/results/readme-final-20261022/README.md"
+    },
+    "cold-scf-defaults-20261022": {
+      "owner": "Default CUDA SCF convergence and final-state acceptance",
+      "reason": "Source-bound targeted endpoints, independent same-model energy/force oracles, unchanged dense-reference failures, original failed test logs, strict compatibility results and native boundary checks. Complete vectors and reconstruction provenance are retained; no historical timing is relabeled and existing size caps are unchanged.",
+      "review_document": "benchmarks/results/cold-scf-defaults-20261022/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz",
+      "family": "cbs-fast-memory-20261021",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-oracles-work-and-failed-screens",
+      "bytes": 140240,
+      "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414"
+    },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
       "family": "bounded-dft-schedules-2475-2479",
@@ -360,6 +398,14 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
+      "path": "benchmarks/results/df-g-shell-20261021/receipts.json.xz",
+      "family": "df-g-shell-20261021",
+      "bytes": 169040,
+      "sha256": "1362d92328a63bac1cbfd62eefacbc094d454c0b61d41d2b381cf3331156572a",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts"
+    },
+    {
       "bytes": 485607,
       "classification": "required-compact-accepted-evidence",
       "family": "ecp-consumers-171",
@@ -368,44 +414,12 @@
       "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c"
     },
     {
-      "bytes": 163839,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/baseline-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "b6d64658b7af26627a3eb91da6d0186b7223259bc70daca7a310c3d89c05d0fb"
-    },
-    {
-      "bytes": 164181,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/candidate-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "8b714e66cc0efb7a41d5bafcf20aef88cd2a2cadfdf987427104419a38daa71a"
-    },
-    {
-      "bytes": 164181,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-policy-171",
-      "path": "benchmarks/results/ecp-policy-171/compatibility/candidate-source-identity.json",
-      "role": "source-provenance",
-      "sha256": "76342f9fc7c4486428d813fee960699c637a7842e9a17f688d8ff89b2991ce16"
-    },
-    {
       "bytes": 142575,
       "classification": "required-compact-accepted-evidence",
       "family": "ecp-projector-171",
       "path": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip",
       "role": "legacy-evidence-archive",
       "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
-    },
-    {
-      "bytes": 152798,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-real-f-171",
-      "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
-      "role": "source-provenance",
-      "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
       "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
@@ -422,14 +436,6 @@
       "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
-    },
-    {
-      "bytes": 162452,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/promotion.json",
-      "role": "decision-or-audit-record",
-      "sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745"
     },
     {
       "bytes": 143684,
@@ -474,16 +480,16 @@
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 756252,
-      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f",
+      "bytes": 737308,
+      "sha256": "aee8ec43398dcdaacef7e43e5ccc086e03c4328a9d674e8666e9dd8240c4e154",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
     },
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 612472,
-      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
+      "bytes": 599132,
+      "sha256": "4fa1fd8b7a8873090eea1d68f4cb212c8d4455ebfe69159b99bd7ad8106e7e00",
       "classification": "required-compact-accepted-evidence",
       "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
     },
@@ -520,6 +526,22 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
+      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
+      "family": "r2scan3c-final-validation-20261015",
+      "bytes": 185084,
+      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
+    },
+    {
+      "path": "benchmarks/results/readme-defaults-20261020/receipts.json.xz",
+      "family": "readme-defaults-20261020",
+      "bytes": 594836,
+      "sha256": "226813e5e07af11387926a1ec1dd9f5dbfa1054be54cbe78faa692a6d03327bb",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete default-latency receipts including failures; numerical accuracy remains unqualified"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 298072,
@@ -534,6 +556,14 @@
       "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
+    },
+    {
+      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
+      "family": "readme-refresh-20261015",
+      "bytes": 176084,
+      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
     },
     {
       "bytes": 194601,
@@ -568,14 +598,6 @@
       "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     },
     {
-      "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
-      "family": "r2scan3c-final-validation-20261015",
-      "bytes": 185084,
-      "sha256": "9a9fdf4b4e8c1fedea423fe911ad1de460ab8e73e7a618699cc4074e1839a32b",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Source-bound complete E+F comparison arrays, independent references, paired phase samples and honest descriptive/work-confounded outcomes"
-    },
-    {
       "path": "benchmarks/results/wb97mv-hessian-dispatch-20261017/samples.json.xz",
       "family": "wb97mv-hessian-dispatch-20261017",
       "bytes": 177452,
@@ -584,12 +606,36 @@
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
     },
     {
-      "path": "benchmarks/results/readme-refresh-20261015/native-summary.json.xz",
-      "family": "readme-refresh-20261015",
-      "bytes": 176084,
-      "sha256": "bb5664205e76bf1017e60671986e409fcaac42bf5a76d584d18e20b6371aec48",
+      "path": "benchmarks/results/readme-final-20261022/fast.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 229144,
+      "sha256": "cb7f8aae0a10ff4c9086c85211b1a37484400f12a82ba809749b04bba602e220",
       "classification": "required-compact-accepted-evidence",
-      "role": "Original complete native E+F populations plus ordered partial DF/96 endpoints, work/gates and source/binary/raw/Slurm/primer receipts; incomplete warm sets and unchecked accuracy remain explicit"
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/gpu4pyscf.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 182196,
+      "sha256": "a425188614661fe2205118f95624ce69a7ebb3e8f5c6b37d1c47827944dbb2f7",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/standard.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 212484,
+      "sha256": "4c35332c306bc2ea410e543da8e49da703c02cb852eb0846a99448b0cd451e77",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/cold-scf-defaults-20261022/evidence.json.xz",
+      "family": "cold-scf-defaults-20261022",
+      "classification": "required-compact-accepted-evidence",
+      "role": "default-solver-qualification-with-retained-model-error-failures",
+      "bytes": 148780,
+      "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

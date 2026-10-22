@@ -3418,8 +3418,8 @@ def test_geometry_resource_budget_changes_fail_closed(
         ),
         (
             "void launch_geometry(",
-            "owner.phased_storage &&",
-            "true &&",
+            "bool(owner.phased_storage)",
+            "true",
             "native_launch_geometry_sha256",
         ),
         (

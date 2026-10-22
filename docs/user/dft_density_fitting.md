@@ -7,6 +7,14 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
+CUDA HF/KS accepts orbital shells through f and fitting auxiliaries through g
+(`l=4`) for energies and first nuclear derivatives, including spherical JKFIT
+bases. Auxiliary-center and metric response use the native bounded derivative
+owner. This does not extend orbital-g or higher-derivative support.
+The generated shell derivative consumer includes auxiliary g, reusing its
+primitive geometry across shell components. Generic and bounded panel paths
+remain available; mixed shell arithmetic remains limited to auxiliary s/p/d/f.
+
 Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
 under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes
 only the initial density: the molecular fitted operators, auxiliary basis,
@@ -50,6 +58,9 @@ The CUDA mixed force planner dry-queries the native LR derivative capacity under
 live final-state token before AO/Becke tile admission. It charges that independent
 owner alongside the complete nonlocal/grid inventory, with the same conservative
 bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.
+This derivative-only allowance uses the actual Cartesian dimension. The primary
+SCF provider keeps its separate allowance for optional Coulomb acceleration,
+including when it also owns first-order resources.
 The derivative bridge then enforces that additional allowance. Its reported host/device
 bounds do not include the DF response owner's separate resource envelope and
 must not be interpreted as a whole-force peak-memory bound. Both the final-state
@@ -181,11 +192,23 @@ upload path. This is therefore not a zero-upload resident whole-force path.
 Full-rank J-only response contracts the resident whitened factor once with the
 folded density, applies its symmetric metric root to that charge, and emits
 bounded three-center and metric cotangents. It does not repeatedly refit AO
-panels or construct exchange-style AO Gram matrices. Rank-deficient metrics,
-mixed J/K terms and diagnostic algebra retain their general response routes.
-`GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects the original bounded-panel
-route for qualification; the default is `auto`. Both preserve the same metric
-gauge, auxiliary-center response and derivative consumer.
+panels or construct exchange-style AO Gram matrices. When only the raw source
+is available, it instead reads bounded pair-major panels into existing response
+scratch, contracts their density charges, then applies the metric inverse in
+eigenvector order. This batches source reads without extra storage or a tensor
+transpose. Rank-deficient metrics, mixed J/K terms and diagnostic algebra retain
+their general response routes. `GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects
+the original fitted-panel route for qualification; `slices` retains individual
+auxiliary reads for source-only J. The default is `auto`. All preserve the same
+metric gauge, auxiliary-center response and derivative consumer. The selection
+is recorded in resource and restart identities.
+
+Sufficiently large full-rank source-only pure-J response automatically uses the
+generated shell derivative consumer, including auxiliary g functions. This
+selection does not require a retained raw/fitted tensor and leaves pair layout,
+screening and precision unchanged. Small, unprobed, diagnostic and unsupported
+owners keep their existing routes. `GENERATIVEQC_DF_WEIGHTED_EXECUTION=generic`
+retains the bounded generic consumer for qualification or rollback.
 
 The known native DF snapshot provider separately bounds its additional paired
 one-electron/publication storage; DF response scratch stays in its independent

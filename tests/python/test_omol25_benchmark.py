@@ -85,7 +85,7 @@ def test_protocol_preserves_diffuse_basis_and_hf_geometries() -> None:
     )
     assert original["properties"] == ["energy", "forces"]
     assert original["force_return"] == "host_array_in_timed_endpoint"
-    assert original["nonlocal_density_threshold"] == 1e-8
+    assert original["nonlocal_density_threshold"] == 1e-10
     assert original["reference_nonlocal_weight_threshold"] == 1e-14
     first, second = original["geometries_bohr"]
     assert first[0] == second[0] and first[2] == second[2]

@@ -53,6 +53,27 @@ struct CudaDfMetricView {
   // raw-tensor view exists. Pointer equality alone cannot detect allocator reuse.
   std::uint64_t owner_identity{};
 };
+/** Stream-ordered raw auxiliary-charge consumer borrowed from the exact value
+ * source/metric owner. It recomputes A^T D from the density supplied by response;
+ * no earlier SCF density or cached potential is assumed. Submission uses the
+ * borrowed stream, overwrites naux outputs, allocates nothing, and propagates
+ * native status/detail. The enclosing value plan retains and budgets context
+ * through the response bridge's stream drain. No basis data is downloaded. */
+struct CudaDfRawChargeView {
+  using Submit = generativeqc_status (*)(void*, const double*, double*, std::string&);
+  void* context{};
+  Submit submit{};
+  int device_id{-1};
+  void* stream{};
+  std::size_t nbf{}, naux{}, device_bytes{};
+  std::uint64_t owner_identity{};
+  // Optional direct contraction of D_ij v_P d(ij|P)/dR. The bridge retains
+  // metric response and authenticates the atom extent before any submission.
+  using Derivative = generativeqc_status (*)(void*, const double*, const double*, double, double*,
+                                             std::string&);
+  Derivative derivative{};
+  std::size_t natom{};
+};
 /** Borrow of one canonical column-major C, with D=density_scale*C*C^T.
  * The plan owner validates the method token, exact density and device
  * generation before constructing this view. A zero-rank spin has no pointer.
@@ -105,7 +126,7 @@ struct CudaDfPackedRawTensorView {
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
 };
-/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2.
+/** Immutable resident forward values C[AO-pair,Q]=A M^-1/2, or E=A Q lambda^-1/2.
  * The owning J/K plan retains this allocation across SCF and force, and the
  * same metric factors define its auxiliary axis. Full-rank bounded response
  * may apply the inverse square root again without regenerating raw integrals.
@@ -117,6 +138,9 @@ struct CudaDfWhitenedTensorView {
   bool packed_pairs{};
   std::uint64_t owner_identity{};
   CudaDfMetricView metric{};
+  // The eigensystem and owner identity bind E's auxiliary coordinates. To
+  // recover A M^-1, multiply E by lambda^-1/2 Q^T, never by M^-1/2.
+  bool spectral_basis{};
 };
 /** Exclusive, stream-ordered borrow from the existing J/K tensor allocation.
  * Dense plans keep two mutable buffers; the third is immutable when resident_raw
@@ -245,6 +269,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
     const CudaDfOccupiedResponseView* occupied = nullptr,
-    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false);
+    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr, bool mixed_shell = false,
+    const CudaDfRawChargeView* raw_charge = nullptr);
 }  // namespace generativeqc::scf
 #endif

@@ -34,6 +34,10 @@ namespace {
 struct CudaFailure {
   cudaError_t status;
 };
+// Preserve a borrowed producer's native status through the arena's stream drain.
+struct RawChargeFailure {
+  generativeqc_status status;
+};
 
 /** Prepare shell envelopes once, independently of auxiliary panels and weights.
  * Native code owns normalized-basis traversal and storage. The compiler owns
@@ -48,10 +52,8 @@ __global__ void build_df_pair_force_norms(DfShellBasisView view, const double* p
   while ((first + 1) * (first + 2) / 2 <= index) ++first;
   const auto second = index - first * (first + 1) / 2;
   const auto& b = view.basis;
-  const auto* a_power =
-      b.term_angular + view.ao_offsets[first] * molecule::kMaximumAoExpansionTerms * 3;
-  const auto* b_power =
-      b.term_angular + view.ao_offsets[second] * molecule::kMaximumAoExpansionTerms * 3;
+  const auto* a_power = b.term_angular + view.ao_offsets[first] * view.expansion_terms * 3;
+  const auto* b_power = b.term_angular + view.ao_offsets[second] * view.expansion_terms * 3;
   const unsigned la = a_power[0] + a_power[1] + a_power[2];
   const unsigned lb = b_power[0] + b_power[1] + b_power[2];
   double distance2 = 0;
@@ -81,8 +83,7 @@ __global__ void build_df_auxiliary_value_norms(DfShellBasisView view, std::size_
   const auto shell = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
   if (shell >= shells) return;
   const auto& b = view.basis;
-  const auto* power =
-      b.term_angular + view.ao_offsets[shell] * molecule::kMaximumAoExpansionTerms * 3;
+  const auto* power = b.term_angular + view.ao_offsets[shell] * view.expansion_terms * 3;
   const unsigned angular = power[0] + power[1] + power[2];
   double bound = 0;
   for (auto p = b.primitive_offsets[shell]; p < b.primitive_offsets[shell + 1]; ++p)
@@ -284,9 +285,26 @@ struct Arena {
     if (stream && owns_stream) (void)cudaStreamDestroy(stream);
   }
   void* allocate(std::size_t bytes) {
-    if (bytes > budget - stats.device_bytes) throw std::bad_alloc();
+    if (bytes > budget - stats.device_bytes) {
+      runtime::cuda_trace::trace_counter("response_failed_budget_request_bytes", bytes);
+      runtime::cuda_trace::trace_counter("response_failed_retained_device_bytes",
+                                         stats.device_bytes);
+      throw std::bad_alloc();
+    }
     void* p = nullptr;
-    check(runtime::resource_cuda_malloc(&p, bytes));
+    const auto status = runtime::resource_cuda_malloc(&p, bytes);
+    if (status != cudaSuccess) {
+      // Preserve the failing live set before exceptional cleanup frees it.
+      // A declared allowance failure and physical-device pressure need
+      // different repairs; both otherwise collapse to the public OOM status.
+      runtime::cuda_trace::trace_counter("response_failed_device_request_bytes", bytes);
+      runtime::cuda_trace::trace_counter("response_failed_retained_device_bytes",
+                                         stats.device_bytes);
+      std::size_t free_bytes{}, total_bytes{};
+      if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess)
+        runtime::cuda_trace::trace_counter("response_failure_free_device_bytes", free_bytes);
+      check(status);
+    }
     try {
       pointers.push_back(p);
     } catch (...) {
@@ -349,7 +367,9 @@ struct ShellMetadata {
   std::vector<SignatureGroup> signature_groups;
   DfShellBasisView view, signature_view;
   ShellMetadata(const core::System& system, const HostBasis& host, DfDerivativeBasisView basis,
-                Arena& arena, bool signatures) {
+                Arena& arena, bool signatures,
+                std::size_t expansion_terms = molecule::kMaximumAoExpansionTerms) {
+    view.expansion_terms = signature_view.expansion_terms = expansion_terms;
     offsets.reserve(system.shells.size() + 1);
     for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
       offsets.push_back(std::lower_bound(host.ao_shells.begin(), host.ao_shells.end(), shell) -
@@ -357,7 +377,7 @@ struct ShellMetadata {
     offsets.push_back(host.ao_shells.size());
     ids.reserve(system.shells.size());
     if (signatures) signature_ids.reserve(system.shells.size());
-    for (unsigned l = 0; l < 4; ++l) {
+    for (unsigned l = 0; l < 5; ++l) {
       view.begin[l] = ids.size();
       for (std::size_t shell = 0; shell < system.shells.size(); ++shell)
         if (system.shells[shell].angular_momentum == l) ids.push_back(shell);
@@ -389,7 +409,7 @@ struct ShellMetadata {
   }
   DfShellBasisView panel(std::size_t begin, std::size_t count) const {
     auto result = view;
-    for (unsigned l = 0; l < 4; ++l) {
+    for (unsigned l = 0; l < 5; ++l) {
       const auto first = ids.begin() + view.begin[l], end = first + view.count[l];
       const auto low =
           std::partition_point(first, end, [&](auto shell) { return offsets[shell + 1] <= begin; });
@@ -442,7 +462,7 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
                                std::size_t panel_begin, std::size_t panel_count, std::size_t nbf,
                                std::span<const double> weights, DfDerivativePairs pairs,
                                bool full_domain) {
-  constexpr unsigned classes = 64;
+  constexpr unsigned classes = 80;
   std::array<std::array<unsigned long long, kDfWeightMagnitudeBins>, classes> histograms{};
   std::array<unsigned long long, classes> samples{}, loads{};
   const auto packed_stride = nbf * (nbf + 1) / 2;
@@ -453,9 +473,9 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
   for (unsigned a = 0; a < 4; ++a)
     for (unsigned b = 0; b < 4; ++b) {
       if (pairs != DfDerivativePairs::full && a < b) continue;
-      for (unsigned c = 0; c < 4; ++c) {
+      for (unsigned c = 0; c < 5; ++c) {
         if (!full_domain && (a > 1 || b > 1 || c > 1 || a + b + c == 0)) continue;
-        const auto class_index = 16 * a + 4 * b + c;
+        const auto class_index = 20 * a + 5 * b + c;
         const auto a_begin = orbital.view.begin[a], a_end = a_begin + orbital.view.count[a];
         const auto b_begin = orbital.view.begin[b], b_end = b_begin + orbital.view.count[b];
         const auto c_begin = auxiliary.view.begin[c], c_end = c_begin + auxiliary.view.count[c];
@@ -505,8 +525,8 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
                                      kDfWeightMagnitudeBins);
   for (unsigned a = 0; a < 4; ++a)
     for (unsigned b = 0; b < 4; ++b)
-      for (unsigned c = 0; c < 4; ++c) {
-        const auto class_index = 16 * a + 4 * b + c;
+      for (unsigned c = 0; c < 5; ++c) {
+        const auto class_index = 20 * a + 5 * b + c;
         if (!samples[class_index]) continue;
         char name[128];
         std::snprintf(name, sizeof(name), "shell_%u%u%u_weight_effective_samples", a, b, c);
@@ -925,7 +945,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     DfGradientResources* resources, const CudaDfMetricView* device_metric, void* blas_handle,
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
     const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
-    const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell) {
+    const CudaDfBorrowedResponseDensity* borrowed_density, bool mixed_shell,
+    const CudaDfRawChargeView* raw_charge) {
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -966,6 +987,18 @@ generativeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (raw_charge &&
+      (!source || !device_metric || !device_metric->full_rank || !raw_charge->context ||
+       !raw_charge->submit || raw_charge->device_id != device ||
+       raw_charge->stream != stream_handle || raw_charge->nbf != n || raw_charge->naux != a ||
+       !raw_charge->device_bytes || !raw_charge->owner_identity ||
+       raw_charge->owner_identity != device_metric->owner_identity ||
+       (raw_charge->derivative && raw_charge->natom != orbital.atoms.size()) ||
+       !std::all_of(terms.begin(), terms.end(),
+                    [](const auto& term) { return term.exchange_coefficient == 0; }))) {
+    detail = "borrowed raw charge differs from the full-rank Coulomb source/metric owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (borrowed_density &&
@@ -1145,6 +1178,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                               {1, n, a, source != nullptr, true, source_index});
     runtime::cuda_trace::TraceRegion preparation("response_allocation_and_uploads",
                                                  reinterpret_cast<cudaStream_t>(stream_handle));
+    runtime::cuda_trace::trace_counter("response_declared_device_budget_bytes", maximum_bytes);
     PinnedResponseSlice packed_slice;
     PinnedResponsePanels raw_panels;
     // The host destination must outlive Arena's exceptional-path stream drain.
@@ -1169,6 +1203,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // source/metric/diagnostic eligibility. Small or unprobed targets retain
     // the generic route. Packed response has a separate qualification boundary.
     bool promoted_default = false;
+    bool promoted_source_coulomb = false;
+    const long double fixed_response_elements =
+        4.0L * a * a + (3.0L + terms.size()) * n * n + 2.0L * terms.size() * a;
     unsigned derivative_architecture = 0;
     const char* upload_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_UPLOAD_PROBE");
     const char* scatter_diagnostic = std::getenv("GENERATIVEQC_DF_RESPONSE_SCATTER_PROBE");
@@ -1182,30 +1219,63 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const bool source_schedule_eligible = df_response_shell_source_eligible(
         source != nullptr, packed_raw != nullptr, whitened != nullptr,
         occupied && device_metric && device_metric->full_rank, source_schedule == "qualify");
+    const char* source_algebra = std::getenv("GENERATIVEQC_DF_RESPONSE_ALGEBRA");
+    const char* source_coulomb_policy = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
+    // Pure-J cotangents do not need occupied/fitted tensor residency to use
+    // the generated shell consumer. Keep this admission separate from the
+    // resident profile: it changes only derivative execution, not pair folding,
+    // screening, precision, raw-value storage or occupied/exchange policy.
+    const bool source_coulomb_eligible =
+        source && device_metric && device_metric->full_rank && !borrowed && !packed_raw &&
+        !whitened && !occupied && (!source_algebra || std::string_view(source_algebra) == "blas") &&
+        (!source_coulomb_policy || std::string_view(source_coulomb_policy) == "auto" ||
+         std::string_view(source_coulomb_policy) == "slices") &&
+        std::all_of(terms.begin(), terms.end(),
+                    [](const auto& term) { return term.exchange_coefficient == 0; });
     runtime::cuda_trace::trace_counter("response_source_derivative_qualification_requested",
                                        source_schedule == "qualify");
-    if (!auxiliary_g && device_metric && schedule == 0 && source_schedule_eligible &&
+    if (device_metric && schedule == 0 && (source_schedule_eligible || source_coulomb_eligible) &&
         !(upload_diagnostic && *upload_diagnostic) &&
         !(scatter_diagnostic && *scatter_diagnostic) &&
         !(serial_diagnostic && std::string_view(serial_diagnostic) == "1")) {
       check(runtime::cuda_architecture(device, derivative_architecture));
-      promoted_default = df_shell_execution_preferred(n, a, derivative_architecture);
+      const bool sufficient_work = df_shell_execution_preferred(n, a, derivative_architecture);
+      promoted_default = source_schedule_eligible && sufficient_work;
+      // Ordinary shell metadata owns one ID and one AO offset per shell, plus
+      // two terminal offsets. Reserve it together with positions/output and
+      // the existing minimum response tile before changing the default route.
+      // A budget that admits only generic response must keep that fallback.
+      const long double shell_metadata_bytes =
+          (static_cast<long double>(orbital.shells.size()) + auxiliary.shells.size()) *
+              (sizeof(std::int32_t) + sizeof(std::int64_t)) +
+          2 * sizeof(std::int64_t);
+      const long double pending_device_bytes =
+          shell_metadata_bytes + 6.0L * atoms * sizeof(double) +
+          (fixed_response_elements + 2.0L * n * n) * sizeof(double);
+      const long double pending_host_bytes =
+          shell_metadata_bytes +
+          (static_cast<long double>(positions.capacity()) + result.capacity()) * sizeof(double);
+      const bool source_shell_fits =
+          pending_device_bytes <= maximum_bytes - arena.stats.device_bytes &&
+          pending_host_bytes < maximum_bytes - arena.stats.host_bytes;
+      promoted_source_coulomb = source_coulomb_eligible && sufficient_work && source_shell_fits;
+      runtime::cuda_trace::trace_counter(
+          "response_source_coulomb_shell_budget_refused",
+          source_coulomb_eligible && sufficient_work && !source_shell_fits);
       // The generalized packed preference is a candidate, not measured promotion
       // evidence. Keep automatic response on the established symmetric/full
       // routes; explicit packed selection remains available for qualification.
     }
     const char* execution_control = std::getenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION");
     const std::string_view execution =
-        execution_control ? execution_control : (promoted_default ? "shell" : "generic");
+        execution_control ? execution_control
+                          : (promoted_default || promoted_source_coulomb ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
-    // The whole-shell consumer has only s/p/d/f class metadata. Auxiliary g
-    // uses the same six-term generated derivative as the correlation sink;
-    // never omit its class or reinterpret six-term metadata with stride three.
-    if (auxiliary_g && execution != "generic")
-      throw std::invalid_argument("auxiliary g DF-HF derivatives require generic execution");
+    // Shell reuse includes auxiliary g using the compiler's raised polynomial
+    // domain. Metric response retains its independent complete contraction.
     const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
-    mixed_shell = mixed_shell && shell_execution;
+    mixed_shell = mixed_shell && shell_execution && !auxiliary_g;
     if (mixed_shell) {
       precision_work =
           static_cast<unsigned long long*>(arena.allocate(sizeof(observed_precision_work)));
@@ -1214,6 +1284,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     }
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
+    runtime::cuda_trace::trace_counter("response_source_coulomb_shell_promoted",
+                                       promoted_source_coulomb && !execution_control);
     const bool full_shell_domain = execution == "shell";
     // A work-qualified shell domain admits the same analytically bounded
     // force-component screen on every CUDA architecture. Small or diagnostic
@@ -1229,7 +1301,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     // Unsupported states retain dense response, folding its two ordered
     // adjoints when a generated shell consumer is available.
     const bool packed_pairs = pair_policy == "packed" && shell_execution && full_shell_domain &&
-                              borrowed && borrowed->occupied_response;
+                              !auxiliary_g && borrowed && borrowed->occupied_response;
     const auto derivative_pairs = packed_pairs ? DfDerivativePairs::packed
                                   : pair_policy == "symmetric" || pair_policy == "packed" ||
                                           (pair_policy == "auto" && promoted_default)
@@ -1310,8 +1382,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
         runtime::host_trace::Region metadata("df_shell_metadata", n);
         runtime::cuda_trace::TraceRegion metadata_device("shell_metadata_preparation",
                                                          arena.stream);
-        shell_o = std::make_unique<ShellMetadata>(orbital, host_o, o, arena, primitive_buckets);
-        shell_x = std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, primitive_buckets);
+        shell_o = std::make_unique<ShellMetadata>(orbital, host_o, o, arena, primitive_buckets,
+                                                  expansion_terms);
+        shell_x = std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, primitive_buckets,
+                                                  expansion_terms);
         runtime::cuda_trace::trace_counter(
             "shell_signature_id_bytes",
             (shell_o->signature_ids.size() + shell_x->signature_ids.size()) * sizeof(std::int32_t));
@@ -1401,10 +1475,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
       // basis metadata, coordinates and final output have been charged. Every
       // new response allocation is owned here; launch wrappers allocate
       // nothing. Full borrowed J/K tensors stay charged to the value plan.
-      const long double fixed_elements =
-          4.0L * a * a + (3.0L + terms.size()) * n * n + 2.0L * terms.size() * a;
+      const long double fixed_elements = fixed_response_elements;
       const auto available = maximum_bytes - arena.stats.device_bytes;
-      if ((fixed_elements + 2.0L * n * n) * sizeof(double) > available) throw std::bad_alloc();
+      if ((fixed_elements + 2.0L * n * n) * sizeof(double) > available) {
+        runtime::cuda_trace::trace_counter("response_fixed_storage_refused", 1);
+        throw std::bad_alloc();
+      }
       const auto panel_capacity =
           static_cast<std::size_t>((available / sizeof(double) - fixed_elements) / (1.0L * n * n));
       std::size_t occupied_retained = 0, occupied_largest = 0, occupied_coefficients = 0;
@@ -1433,7 +1509,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
           (!requested_scatter || !*requested_scatter);
       // A requested fitted occupied route must not silently fall through to
       // the AO-space repeated-fit algorithm if its small factors cannot fit.
-      if (occupied && whitened && !owned_occupied) throw std::bad_alloc();
+      if (occupied && whitened && !owned_occupied) {
+        runtime::cuda_trace::trace_counter("response_occupied_storage_refused", 1);
+        throw std::bad_alloc();
+      }
       // If two complete tensors do not fit, a streamed owner can still supply
       // one raw tensor once. Transform it in place and retain a smaller W panel.
       // This prevents both the unstable raw-Gram fallback and repeated source
@@ -1667,8 +1746,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
         throw std::invalid_argument("unknown DF response algebra (use scalar or blas)");
       const char* coulomb_control = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
       const std::string_view coulomb_policy = coulomb_control ? coulomb_control : "auto";
-      if (coulomb_policy != "auto" && coulomb_policy != "panels")
-        throw std::invalid_argument("unknown DF Coulomb response (use auto or panels)");
+      if (coulomb_policy != "auto" && coulomb_policy != "panels" && coulomb_policy != "slices")
+        throw std::invalid_argument("unknown DF Coulomb response (use auto, panels or slices)");
       if (borrowed && (algebra != "blas" || serial_dot || gradient_copies != 1))
         throw std::invalid_argument(
             "resident JK scratch requires BLAS response without serial/scatter probes");
@@ -1752,6 +1831,58 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.read_occupied_panels = &source_panel_reader;
       }
       std::function<void(std::size_t, std::size_t, double*)> read_fitted;
+      // A pure-J streamed source can contract D before its metric solve. Keep
+      // retained factors, exchange, truncated metrics and explicit panel/dot
+      // diagnostics on their existing independently qualified paths.
+      const bool raw_coulomb = source && device_metric->full_rank && !borrowed && !owned_occupied &&
+                               !whitened && !single_fitted_tensor && !packed_pairs &&
+                               coulomb_policy != "panels" && algebra == "blas" && !serial_dot &&
+                               std::all_of(terms.begin(), terms.end(), [](const auto& term) {
+                                 return term.exchange_coefficient == 0;
+                               });
+      std::function<void(std::size_t, std::size_t, double*)> raw_coulomb_reader;
+      std::function<void(const double*, double*)> raw_charge_reader;
+      std::function<void(const double*, const double*, double)> raw_derivative_consumer;
+      if (raw_coulomb && coulomb_policy == "auto" && raw_charge) {
+        // Recompute from the exact density frame supplied to this force call.
+        // The value owner's stream and identity were checked before allocation;
+        // its E/H storage remains charged to that owner, never to this arena.
+        if (raw_charge->device_bytes >
+            std::numeric_limits<std::size_t>::max() - arena.stats.borrowed_device_bytes)
+          throw std::bad_alloc();
+        arena.stats.borrowed_device_bytes += raw_charge->device_bytes;
+        runtime::cuda_trace::trace_counter("response_md_charge_borrowed_bytes",
+                                           raw_charge->device_bytes);
+        raw_charge_reader = [&](const double* density, double* charge) {
+          const auto status = raw_charge->submit(raw_charge->context, density, charge, detail);
+          if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
+          runtime::cuda_trace::trace_counter("response_md_charge_calls", 1);
+        };
+        if (raw_charge->derivative && !mixed_shell && gradient_copies == 1 && !shell_diagnostics &&
+            !screening_features && shell_target == 0) {
+          raw_derivative_consumer = [&](const double* density, const double* potential,
+                                        double coefficient) {
+            runtime::cuda_trace::TraceRegion contraction("three_center_md_derivative",
+                                                         arena.stream);
+            const auto status = raw_charge->derivative(raw_charge->context, density, potential,
+                                                       coefficient, derivative_output, detail);
+            if (status != GENERATIVEQC_STATUS_SUCCESS) throw RawChargeFailure{status};
+            runtime::cuda_trace::trace_counter("response_md_derivative_calls", 1);
+          };
+        }
+      } else if (raw_coulomb && coulomb_policy != "slices") {
+        // The response owns a tile-sized weight interval that is dead during
+        // charge preparation. Emit the source's native pair-major panel there;
+        // the charge GEMM consumes it before either the next read or W emission.
+        raw_coulomb_reader = [&](std::size_t begin, std::size_t count, double* values) {
+          const auto status = generate_cuda_density_fitting_raw_tile(
+              source, source_index, 0, n * n, begin, count, -1, stream_handle, values, detail);
+          if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+          if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+          arena.stats.recomputed_value_bytes += n * n * count * sizeof(double);
+          arena.stats.value_slices += count;
+        };
+      }
       if (whitened && !borrowed && !owned_occupied) {
         // The forward plan already owns this immutable tensor. Reading it is
         // an explicit borrow, not extra response allocation or raw regeneration.
@@ -1760,7 +1891,21 @@ generativeqc_status execute_cuda_df_hf_gradient(
         const auto bytes = whitened->pair_count * a * sizeof(double);
         arena.stats.borrowed_device_bytes += bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_whitened_bytes", bytes);
-        read_fitted = [&](std::size_t begin, std::size_t count, double* values) {
+        read_fitted = [&, root_ready = false](std::size_t begin, std::size_t count,
+                                              double* values) mutable {
+          const double* fitted_response_root = device_metric->inverse_square_root;
+          if (whitened->spectral_basis) {
+            // Full-rank panel response never writes the first metric interval.
+            // Prepare R there on the first actual read: pure-J response uses
+            // its vector-only map and need not prepare this unused panel map.
+            if (!root_ready) {
+              cuda_df::launch_spectral_response_root(arena.stream, a, device_metric->eigenvectors,
+                                                     device_metric->eigenvalues, workspace);
+              check(cudaGetLastError());
+              root_ready = true;
+            }
+            fitted_response_root = workspace;
+          }
           runtime::cuda_trace::TraceRegion projection("response_fitted_panel_projection",
                                                       arena.stream);
           const double one = 1, zero = 0;
@@ -1774,7 +1919,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
             // into the bounded auxiliary-major panel used by the response.
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, mi, static_cast<int>(count), ai, &one, whitened->data, ai,
-                 device_metric->inverse_square_root + begin * a, ai, &zero, values, mi}));
+                 fitted_response_root + begin * a, ai, &zero, values, mi}));
             runtime::cuda_trace::trace_counter("response_fitted_panel_gemms", 1);
           } else {
             // Project the whole packed panel with GEMM into the tail of its
@@ -1790,8 +1935,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
             auto* packed_values = workspace + 4 * a * a;
             checked(generativeqc_tensor::submit_column_gemm(
                 {handle, true, false, static_cast<int>(pairs), static_cast<int>(count), ai, &one,
-                 whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
-                 packed_panel, static_cast<int>(pairs)}));
+                 whitened->data, ai, fitted_response_root + begin * a, ai, &zero, packed_panel,
+                 static_cast<int>(pairs)}));
             for (std::size_t p = 0; p < count; ++p) {
               check(cudaMemcpyAsync(packed_values, packed_panel + p * pairs, pairs * sizeof(double),
                                     cudaMemcpyDeviceToDevice, arena.stream));
@@ -1811,7 +1956,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                              2 * a * whitened->pair_count * count);
         };
       } else if (source && device_metric->full_rank && !borrowed && !owned_occupied &&
-                 !single_fitted_tensor && tile < a) {
+                 !single_fitted_tensor && !raw_coulomb && tile < a) {
         // Corrected or arbitrary densities need no SCF-factor lease. Keep all
         // eigendirections of a small AO-pair block until after division by
         // lambda, then emit only the requested public auxiliary columns of
@@ -2030,10 +2175,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
               runtime::cuda_trace::trace_counter("three_center_shell_panels", 1);
             }
             if (metric_weights || !shell_execution || !full_shell_domain)
-              check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
-                                              derivative_output, arena.stream, 0, result.size(),
-                                              gradient_copies, shell_execution && !metric_weights,
-                                              expansion_terms));
+              check(launch_df_derivative_tile(
+                  o, x, r, kind, range, count, weights, schedule, derivative_output, arena.stream,
+                  0, result.size(), gradient_copies,
+                  shell_execution && !full_shell_domain && !metric_weights, expansion_terms));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },
@@ -2042,7 +2187,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                        : std::span<const std::int64_t>{},
           packed_block_rows, read_fitted, single_fitted_tensor,
           owned_occupied ? &owned_buffers : nullptr,
-          coulomb_policy == "auto" ? whitened : nullptr));
+          coulomb_policy != "panels" ? whitened : nullptr, raw_coulomb, raw_coulomb_reader,
+          raw_charge_reader, raw_derivative_consumer));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an
@@ -2194,6 +2340,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     detail = std::string("generated DF-HF CUDA failure: ") + cudaGetErrorString(error.status);
     return error.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
                                                      : GENERATIVEQC_STATUS_CUDA_ERROR;
+  } catch (const RawChargeFailure& error) {
+    return error.status;
   } catch (const CudaDfResponseBlasFailure& error) {
     detail = "generated DF-HF metric response cuBLAS failure (status " +
              std::to_string(static_cast<int>(error.status)) + ")";

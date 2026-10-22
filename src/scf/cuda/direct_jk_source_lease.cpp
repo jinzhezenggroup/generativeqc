@@ -41,7 +41,7 @@ generativeqc_status DirectJkSourceLease::prepare(
     std::size_t direct_nbf, std::size_t required, std::size_t budget, const char* selection_value,
     const char* trace_name, bool cold_phase, bool generic_fock, double screening,
     std::size_t value_ceiling, bool own_outputs, DirectJkSourceAutoPolicy auto_policy,
-    std::uint32_t bucket_mask, unsigned spins) {
+    std::uint32_t bucket_mask, unsigned spins, bool fit_buckets_to_capacity) {
   using namespace posthf;
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
@@ -146,7 +146,8 @@ generativeqc_status DirectJkSourceLease::prepare(
       checked_mul(checked_add(output_elements_, correction_elements_), sizeof(double));
   // Match the common response owner's conservative host-preparation inventory;
   // explicit scratch includes the diagnostic integer and last-action census.
-  const auto bucket_layout_bytes = !mixed_recurrence_ && bucket_mask == (1U << 28) - 1 &&
+  const auto bucket_layout_bytes = !mixed_recurrence_ && !fit_buckets_to_capacity &&
+                                           bucket_mask == (1U << 28) - 1 &&
                                            source_operator_ == FockOperator::FullRange
                                        ? 0
                                        : checked_mul(systems.size(), 28 * sizeof(std::size_t));
@@ -204,10 +205,24 @@ generativeqc_status DirectJkSourceLease::prepare(
                        available > remaining_reserve ? available - remaining_reserve : 0);
   source_value_count_ = cuda_direct_jk_resident_value_bytes(direct_.get()) / sizeof(double);
   source_screening_ = screening;
-  const auto selected_values =
+  auto selected_values =
       cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_mask) / sizeof(double);
-  const auto required_values =
+  auto required_values =
       checked_mul(selected_values, mixed_recurrence_ ? sizeof(float) : sizeof(double));
+  if (fit_buckets_to_capacity && required_values > allowance) {
+    std::array<std::size_t, 28> bucket_bytes{};
+    for (unsigned bucket = 0; bucket < bucket_bytes.size(); ++bucket)
+      bucket_bytes[bucket] =
+          checked_mul(cuda_direct_jk_selected_resident_value_bytes(direct_.get(), 1U << bucket) /
+                          sizeof(double),
+                      mixed_recurrence_ ? sizeof(float) : sizeof(double));
+    bucket_mask = direct_jk_fit_resident_buckets(bucket_bytes, allowance, bucket_mask);
+    selected_values =
+        cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_mask) / sizeof(double);
+    required_values =
+        checked_mul(selected_values, mixed_recurrence_ ? sizeof(float) : sizeof(double));
+  }
+  runtime::df_progress::Scope::number("selected_source_bucket_mask", bucket_mask);
   const auto compensation_elements = cuda_direct_jk_compensation_elements(direct_.get(), spins);
   runtime::df_progress::Scope::number("required_source_value_bytes", required_values);
   runtime::df_progress::Scope::number("source_value_allowance_bytes", allowance);

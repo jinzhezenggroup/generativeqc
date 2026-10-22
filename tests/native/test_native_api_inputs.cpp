@@ -233,6 +233,31 @@ void correlation_auxiliary_forwarding(generativeqc_context* cpu_context) {
           "legacy RI-MP2 accepted a correlation-only auxiliary handle");
 }
 
+void scf_auxiliary_roles(generativeqc_context* context) {
+  auto orbital = system(context, 0.8);
+  auto auxiliary = system(context, 0.3);
+  auxiliary->scf_auxiliary = true;
+  auto request = descriptor(GENERATIVEQC_METHOD_RHF, auxiliary.get());
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+  generativeqc_ks_options options{};
+  request.ks_options = &options;
+  for (const auto method : {GENERATIVEQC_METHOD_RHF, GENERATIVEQC_METHOD_UHF,
+                            GENERATIVEQC_METHOD_PBE_RKS, GENERATIVEQC_METHOD_PBE_UKS}) {
+    request.method = method;
+    require(api::valid_system_roles(*orbital, request), "complete SCF DF role rejected");
+    require(!api::valid_system_roles(*auxiliary, request), "SCF auxiliary became orbital");
+  }
+  request.method = GENERATIVEQC_METHOD_MP2;
+  require(!api::valid_system_roles(*orbital, request), "SCF auxiliary entered correlation");
+  request.method = GENERATIVEQC_METHOD_RHF;
+  for (const auto mode :
+       {GENERATIVEQC_DENSITY_FITTING_NONE, GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE,
+        GENERATIVEQC_DENSITY_FITTING_FULL_CUDA}) {
+    request.density_fitting_mode = mode;
+    require(!api::valid_system_roles(*orbital, request), "SCF auxiliary entered another provider");
+  }
+}
+
 void ks_auxiliary_roles(generativeqc_context* context) {
   auto orbital = system(context, 0.8);
   auto auxiliary = system(context, 0.3);
@@ -298,6 +323,7 @@ int main() {
     }
     correlation_auxiliary_forwarding(context.get());
     ks_auxiliary_roles(context.get());
+    scf_auxiliary_roles(context.get());
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

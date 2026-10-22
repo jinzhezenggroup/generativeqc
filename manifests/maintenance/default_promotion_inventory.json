@@ -43,7 +43,8 @@
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp",
-      "python/generativeqc_compiler/tensor/ad_program.py"
+      "python/generativeqc_compiler/tensor/ad_program.py",
+      "src/scf/fock_prepared.cpp"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -245,15 +246,18 @@
         "src/scf/cuda/rhf_resident_values.cpp",
         "src/scf/cuda_rhf.cpp"
       ],
-      "rationale": "Unset/auto conservatively selects a phase-local exact FP64 source only for fresh single restricted unscreened physical-reference buckets with uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs and an iteration limit of at least eight. The static domain heuristic is not an observed reuse count or a universal profitability model. Complete numeric admission, an 8-GiB value ceiling and a 256-MiB free-device reserve retain exact fallback. Local graphs and values retire before correlation; refused/warm calls reuse ordinary bucket graphs. Explicit 0 restores the original schedule and 1 requests values without bypassing scientific/resource gates.",
-      "revisit_condition": "Broaden the cold/domain heuristic only with new source-matched complete E+F comparisons and independent gates, including quickly converged fresh seeds and generated/lower-angular schedules. Preserve final physical Fock/census audits, compensated FP64 arithmetic and bounded lifetime; do not pool retained opt-in measurements with new default-auto qualification.",
+      "rationale": "Unset/auto retains the existing fresh single restricted unscreened physical-reference domain: uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs, iteration limit at least eight, 8-GiB value ceiling. Ordinary restricted FP64 cold solves additionally admit through-d screened domains with 64 or more public AOs and at most 128 Cartesian AOs, iteration limit at least eight and a 512-MiB value ceiling. These require a fresh single-system bucket, internal guess and no active public resource ledger. Other ordinary sizes refuse before provider cloning/sorting. Complete numeric admission and free-device reserve retain exact fallback. Phase graphs retire before values; warm/reused buckets retain ordinary graphs. Final derivative metadata is explicitly produced from the selected final density. Explicit 0 restores the streamed schedule and 1 remains subject to scientific/resource gates. The static domain guard is not a universal profitability model.",
+      "revisit_condition": "Broaden either cold/domain heuristic only with source-matched complete cold/warm/moved E+F comparisons and independent gates, including quickly converged fresh seeds, larger sizes and constrained resources. Forced larger ordinary domains currently regress despite fitting memory. Preserve final physical Fock/census audits, derivative density identity, compensated FP64 arithmetic and bounded lifetime; never pool forced exploratory populations with actual default-auto qualification.",
       "evidence": [
         "docs/developer/scf_module_boundaries.md",
         ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
         "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
         "tests/python/test_rhf_reference_cache_policy.py",
         "tests/python/test_rhf_resident_values_lifetime.py",
-        "tests/python/test_rhf_phase_resident_values_cuda.py"
+        "tests/python/test_rhf_phase_resident_values_cuda.py",
+        ".agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md",
+        "benchmarks/results/direct-cold-resident-20261023/README.md",
+        "tests/python/test_rhf_ordinary_resident_cuda.py"
       ]
     },
     {
@@ -564,7 +568,8 @@
         "hf-runtime:GENERATIVEQC_DF_DIIS_DOTS",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_STORAGE",
         "hf-runtime:GENERATIVEQC_DF_RESPONSE_SPACE",
-        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC"
+        "hf-runtime:GENERATIVEQC_DF_OCCUPIED_METRIC",
+        "hf-runtime:GENERATIVEQC_DF_COULOMB_RESPONSE"
       ],
       "owner_issues": [
         404,
@@ -612,7 +617,6 @@
       "id": "df.value-candidates",
       "classification": "negative-evidence",
       "controls": [
-        "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING",
         "hf-runtime:GENERATIVEQC_DF_VALUE_RAW_MAPPING",
         "hf-runtime:GENERATIVEQC_DF_VALUE_MATH"
       ],
@@ -623,7 +627,7 @@
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "Alternative generated DF value mappings/math remain explicit candidates after retained cold complete-endpoint regressions; the established generic/scalar route remains the safe default.",
+      "rationale": "Alternative generated DF value scalar math and raw primitive-lane candidates remain explicit after retained cold complete-endpoint regressions. The separate prepared-Hermite entry covers automatic packed-source reuse; it does not promote these alternatives.",
       "revisit_condition": "Reopen only with new complete cold/warm/changed-geometry evidence that beats the current route without changing the scientific model or force gates.",
       "evidence": [
         "issue:#405",
@@ -1252,7 +1256,7 @@
     },
     {
       "id": "cc.lambda-df-mixed-precision-warmup",
-      "classification": "guarded-promotion-candidate",
+      "classification": "already-default",
       "controls": [
         "cc-option:lambda.df_mixed_precision"
       ],
@@ -1264,16 +1268,21 @@
         "src/cc/lambda_response_cuda.cu",
         "src/cc/df_lambda_cuda.cu",
         "python/generativeqc_compiler/cc/df_mixed_precision.py",
-        "tools/generate_df_lambda.py"
+        "tools/generate_df_lambda.py",
+        "src/methods/df_ccsdt_force.cu"
       ],
-      "rationale": "Default-off auxiliary-only FP32 Lambda preconvergence borrows idle shared strict scratch with a half-size strict Q tile. FP64 primal/core/RHS/Krylov algebra and individual-Q widening remain intact. Only a finite proposal crosses a permanent precision boundary into a new original FP64 GMRES solve with a fresh physical residual and empty history. Independent expanded FP64 audit and every parameter/factor/force VJP are unchanged; optional resource refusal retains bounded FP64 actions and nonfinite failures do not publish or silently retry.",
-      "revisit_condition": "Do not promote by default without representative source-matched complete cold E+F cohorts on additional sizes/devices, original independent energy/force and residual gates, total mixed-plus-strict work counts and resource/lifetime/sanitizer coverage. Borrowed scratch capacity is not an allocator peak; extra warmup iterations must be charged to endpoint time.",
+      "rationale": "Scoped default within grouped CUDA DF-CBS Fast force calls; Standard, energy-only, standalone and supplied-problem defaults remain off. Auxiliary-only FP32 Lambda preconvergence borrows idle shared strict scratch. Fast compensates the owner's Q-cap halving to preserve the ordinary Q32 ceiling subject to bounded admission. FP64 primal/core/RHS/Krylov algebra and individual-Q widening remain intact. Only a finite proposal crosses a permanent precision boundary into a new FP64 GMRES solve with a fresh physical action and empty history. Independent expanded FP64 audit and every parameter/factor/force VJP retain the selected Fast physical limits; optional resource refusal retains bounded FP64 actions and nonfinite failures do not publish or silently retry. Native telemetry distinguishes requests from executed work. Repeated matched C4 endpoints, larger C1-C7 controls and independent C2/water force checks qualify this consumer, not a universal precision/performance policy.",
+      "revisit_condition": "Broaden beyond the qualified CBS Fast consumer only with source-matched complete endpoint, independent numerical and additional-device evidence. Preserve total mixed-plus-strict work accounting, bounded refusal and lifetime contracts. Revisit the requested cap if shared scratch planning changes; borrowed capacity is not a measured allocator peak and all warmup work belongs in endpoint time.",
       "evidence": [
         "docs/developer/df_ccsdt.md",
         ".agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md",
         "benchmarks/results/df-lambda-mixed-warmup-20261011/publication.json",
         "tests/python/test_df_lambda_mixed_precision.py",
-        "tests/python/test_df_triples_mixed_endpoint.py"
+        "tests/python/test_df_triples_mixed_endpoint.py",
+        "docs/user/ccsdt_cbs.md",
+        ".agents/notes/implemented/performance/2026-10-21-cbs-fast-lambda.md",
+        "tests/python/test_full_df_cbs_native.py",
+        "benchmarks/results/cbs-fast-lambda-20261021/publication.json"
       ]
     },
     {
@@ -1795,6 +1804,80 @@
         "tests/python/test_array_api_comparison_where_ad.py",
         "docs/developer/tensor_ir.md",
         ".agents/notes/implemented/numerics/2026-10-19-primal-comparison-where-ad.md"
+      ]
+    },
+    {
+      "id": "scf.df-md-coulomb",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_MD_COULOMB"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_md_plan.cpp",
+        "src/scf/cuda/df_md_owner.cu",
+        "src/scf/cuda/df_coulomb.cpp",
+        ".agents/notes/proposed/2026-10-22-df-consumer-work-gap.md"
+      ],
+      "rationale": "Automatic pure-J Hermite contractions replace dense three-center regeneration for a fresh single-system streamed full-rank plan with sufficient remaining value capacity. The same source owner recomputes current-density response charge and contracts three-center atom derivatives; metric response remains in the existing bridge. Resident factors, unsupported angular domains, rank truncation and bounded capacity refusals retain their existing paths. Explicit 0 restores raw regeneration. Independent angular, metric, force, geometry/replay, sanitizer and complete cold/warm endpoints qualify the bounded default.",
+      "revisit_condition": "Renew source-matched endpoint, resource, independent numerical and lifetime qualification before broadening residency, angular domains or screening. Keep the optional owner inside the existing value/response allowance and preserve rank/capacity fallbacks; explicit resource changes are not default timing evidence.",
+      "evidence": [
+        "tests/python/test_df_md_plan_cuda.py",
+        "tests/python/test_df_md_endpoint_cuda.py",
+        "docs/developer/df_packed_storage.md",
+        "note:.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md"
+      ]
+    },
+    {
+      "id": "ks.final-state-aware-stopping",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_EARLY_FINAL_PROBE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/ks_stopping_policy.hpp"
+      ],
+      "rationale": "Automatic admission additionally requires the canonical PBE, PBE0, B3LYP or r2SCAN electronic composition and default Treutler/Lebedev/NWChem grid. Generated split hybrids (including M06-2X), custom mixtures and other grids retain the incumbent; explicit 1 is experimental and does not bypass owner/final-state gates. Eligible strict-FP64 restricted single-iteration owners may replace only the conservative AO-maximum margin with the existing complete canonical final-state proof on the current physical F[D]. Energy, density-change, spin-RMS and all final-state acceptance gates remain unchanged. Numerical rejection continues from the intact density proposal without publishing borrowed orbital scratch; driver/solver failures propagate. Explicit 0 restores the incumbent policy. Pure-J DF is eligible; Fast, mixed, fitted exchange, range/nonlocal, UKS, incremental, ECP, chunks and missing resident workspace/library retain the incumbent. No new persistent numeric storage is required.",
+      "revisit_condition": "Qualify other solver/provider/precision/lifetime domains independently. Preserve the unchanged final canonical-density test, failed-proof continuation and token-bound force validation. Complete cold/warm timings and semantic work, including rejected probes, must support any performance claim; unchanged-iteration populations may incur a small extra proof cost.",
+      "evidence": [
+        "docs/developer/ks_diagnostics.md",
+        "tests/python/test_ks_early_final_probe_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        ".agents/notes/implemented/performance/2026-10-22-final-state-aware-ks-stopping.md",
+        "tests/python/test_scf_review_contracts.py",
+        ".agents/notes/implemented/numerics/2026-10-22-restrict-early-final-promotion.md"
+      ]
+    },
+    {
+      "id": "df.prepared-hermite-raw",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/df_source.cpp",
+        "src/scf/cuda/df_md_raw.cu",
+        "src/scf/fock_prepared.cpp",
+        "src/scf/rhf.cpp"
+      ],
+      "rationale": "Automatic mapping prepares reusable normalized Hermite E only for a fresh single-system resident packed source within the unchanged planner remainder and a 256-MiB optional cap. Packed raw tiles retain strict FP64, every ordered primitive product, auxiliary g, public component conventions and factor-ordered whitening. Explicit mappings/math, batches and insufficient capacity retain the generic source. No grids, convergence thresholds, screening or force response change.",
+      "revisit_condition": "Preserve independent raw/energy/force gates, resource refusal and lifetime tests, and complete cold/warm endpoint work counts. Requalify other residency/batch domains. Do not trade fitted/occupied owners or larger panel work for E storage; retain the demonstrated host validation loop alignment across link changes.",
+      "evidence": [
+        "tests/python/test_df_md_raw_cuda.py",
+        "tests/python/test_df_md_raw_endpoint_cuda.py",
+        "docs/developer/df_packed_storage.md",
+        "note:.agents/notes/implemented/performance/2026-10-22-prepared-hermite-raw-df.md"
       ]
     }
   ]

@@ -32,4 +32,12 @@ void launch_scale_metric_projection_to(cudaStream_t stream, std::size_t dimensio
                                        std::size_t pairs, const double* eigenvalues,
                                        bool square_root, const double* projected, double* scaled);
 
+/** Form column-major R=lambda^-1/2 Q^T for a full-rank spectral forward factor.
+ * Response borrows its otherwise unused inverse-matrix workspace for R. The
+ * output must be disjoint from Q/eigenvalues; no allocation or cutoff occurs.
+ */
+void launch_spectral_response_root(cudaStream_t stream, std::size_t dimension,
+                                   const double* eigenvectors, const double* eigenvalues,
+                                   double* root);
+
 }  // namespace generativeqc::scf::cuda_df

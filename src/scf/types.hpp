@@ -274,6 +274,9 @@ struct ScfResult {
   bool initial_density_used{};
   /** CPU physical operator evaluations, counting a joint UHF J/K as one build. */
   std::size_t fock_builds{};
+  /** Independently counted completed CUDA Direct Fock applications. Missing
+   * means this execution did not publish a complete physical census. */
+  std::optional<std::uint64_t> executed_fock_builds;
   /** Exact incremental Direct-J/K execution provenance, when requested. */
   IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /**

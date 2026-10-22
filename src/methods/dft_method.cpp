@@ -120,19 +120,33 @@ unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
+enum class KsProviderPurpose { scf, derivative_only };
+
+/** Keep SCF's established optional J allowance separate from a lazy force lease.
+ * Derivative order alone cannot distinguish these owners: the primary SCF
+ * provider also retains first-order resources for the eventual force. */
 std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
-                              unsigned direct_derivative_order = 0) {
+                              unsigned direct_derivative_order = 0,
+                              KsProviderPurpose purpose = KsProviderPurpose::scf) {
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
     std::size_t primitives = 0;
     for (const auto& shell : system.shells)
       primitives = runtime::add_capacity(primitives, shell.primitives.size());
+    // The lazy first-order LR owner competes with composite grid response
+    // under one capacity cap. Use its known Cartesian size rather than the
+    // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
+    // The primary provider needs its established allowance even when it also
+    // owns derivatives; tightening that cap can silently evict its MD-J source.
+    const auto cartesian_nao =
+        purpose == KsProviderPurpose::derivative_only ? molecule::cartesian_ao_count(system) : 0U;
     return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
                                                  system.shells.size(), primitives,
-                                                 direct_derivative_order, true);
+                                                 direct_derivative_order, true, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;
+  (void)purpose;
 #endif
   return 0;
 }
@@ -1171,7 +1185,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Authenticate the restricted exact full-range derivative source. Pure J
    * uses the same spatial recurrence, including when a separate D4/gCP owner
    * contributes geometry corrections. Their forces do not change this source. */
-  bool qualified_spatial_force_default() const {
+  bool qualified_spatial_force_default(
+      const scf::DirectForcePrecisionRequest* precision = nullptr) const {
     const auto& strategy = fock_.strategy();
     const auto& spec = strategy.spec;
     const bool pure_coulomb = !spec.exchange.present;
@@ -1190,10 +1205,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
         !execution_plan_.nonlocal_correlation && system_.ecp_terms.empty() &&
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
+    // This schedule contracts the authenticated final density. Its arithmetic
+    // follows the force invocation, not the earlier SCF proposal precision or
+    // availability of a fused stationary binding. Python's strict fallback and
+    // a mixed-force retry therefore retain the same FP64 source optimization.
+    const bool strict_force = !precision || (!precision->mixed_weighted &&
+                                             !precision->mixed_geometry && !precision->mixed_grid);
     return dft::spatial_spd_force_default_eligible(
-        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range,
-        options_.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
-            (admitted_cuda_stationary_binding() && application_gradient_qualification() == 0));
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range, strict_force);
   }
 
   generativeqc_status cuda_full_range_integral_derivatives(
@@ -1283,7 +1302,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
       // Keep cold and warm admission identical: this is the same conservative
       // capacity used before constructing the separate first-order LR owner.
-      bytes = ks_provider_bytes(system_, backend_, 1U);
+      bytes = ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     }
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1418,8 +1437,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // Charge it on every call, including reuse, before creating any storage;
     // maximum_bytes independently bounds compact host and additional device use.
     const auto derivative_device_bytes =
-        range_derivative_correction_ ? range_derivative_correction_->diagnostic().device_bytes
-                                     : ks_provider_bytes(system_, backend_, 1U);
+        range_derivative_correction_
+            ? range_derivative_correction_->diagnostic().device_bytes
+            : ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     std::size_t primary_device_bytes{};
     status = dft::mixed_rsh_df_primary_device_allowance(maximum_bytes, derivative_device_bytes,
                                                         primary_device_bytes, detail);
@@ -1782,8 +1802,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       status =
           cuda_->prepare_resident_final_stationary_weights(expected, weights, diagnostic, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-      status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
-                                                qualified_spatial_force_default(), precision);
+      status =
+          stationary_controller_->gradient(density, weights, fock_, current, output, detail,
+                                           qualified_spatial_force_default(precision), precision);
       if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
           (precision->mixed_geometry || precision->mixed_grid)) {
         // Failed geometry never publishes a partial result. Reset every source

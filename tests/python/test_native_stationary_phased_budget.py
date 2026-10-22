@@ -31,6 +31,40 @@ def _definition(source: str, signature: str) -> str:
     return source[start:end]
 
 
+def test_pair_state_accounting_tracks_executed_schedule(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Reserved FP64 phase panels must not undercount bounded FP32 pair work."""
+    body = _definition(
+        (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text(),
+        "bool retains_becke_pair_state(",
+    )
+    source = tmp_path / "pair_work.cpp"
+    source.write_text(
+        "#include <cassert>\n#include <cstddef>\n#include <initializer_list>\n"
+        "constexpr size_t stationary_becke_retained_max_atoms=32;\n"
+        "struct Owner { bool phased_storage; size_t atoms,becke_threads_per_point;\n"
+        + body
+        + "\n};\n"
+        + r"""
+int main() {
+  for(size_t atoms:{size_t(3),size_t(32),size_t(33),size_t(48),size_t(128)})
+    for(size_t threads:{size_t(1),size_t(32)})
+      for(bool phased:{false,true}) for(bool fp32:{false,true}) {
+        const Owner owner{phased,atoms,threads};
+        const size_t expected = (threads>1 && atoms<=32) || (phased && !fp32) ? 1 : 2;
+        assert((owner.retains_becke_pair_state(fp32)?1U:2U)==expected);
+        if(!fp32) assert(owner.retains_becke_pair_state()==owner.retains_becke_pair_state(false));
+      }
+}
+"""
+    )
+    binary = native_cxx.build_executable(
+        [source], tmp_path / "pair_work", compile_args=["-std=c++20"]
+    )
+    subprocess.run([binary], check=True, timeout=10)
+
+
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
 def test_cached_phase_reservation_and_bounded_fallback(
     profile: str, tmp_path: Path, native_cxx: NativeCxx

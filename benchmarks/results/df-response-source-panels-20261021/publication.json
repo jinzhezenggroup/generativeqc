@@ -1,0 +1,75 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "0e691d4000414ecb5fbf563232819178511e1642",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Independent adjoints and molecular endpoints qualify bounded raw-source batching. Large generic warm remains incomplete; shell and host-cache are separately labelled diagnostics."
+  },
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--mem=16G",
+      "--time=00:10:00",
+      "bash",
+      "source-batching-v3/test.sh"
+    ]
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 1974,
+      "sha256": "aefd5eac3d2e9519dc6fcea5f196973cce594b95e4a7458e17be614859224df7"
+    },
+    {
+      "path": "measurements.json.xz",
+      "role": "samples",
+      "bytes": 21952,
+      "sha256": "9e27685b6654f7544bf63e138ca69b8581592b2f3083623c49f16f59f3500a95"
+    },
+    {
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "bytes": 1924,
+      "sha256": "af57b9a6fecfe8ab788a1d62225e7e860a3be9a6fdfb9b39953f79d7456911d9"
+    },
+    {
+      "path": "reproduction.json.xz",
+      "role": "reproduction",
+      "bytes": 17072,
+      "sha256": "8a70ff50d8210654db5088974ade96747c8d88854527dd8ec42edb4951bd6068"
+    },
+    {
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "bytes": 6752,
+      "sha256": "e99d370fd203b386cb493d0444b56f008394739c5750a6fc9d48f25324303087"
+    },
+    {
+      "path": "summary.json.xz",
+      "role": "summary",
+      "bytes": 3204,
+      "sha256": "a10b298a51fec8dc516fca9d1c2a9b649323ed23529c8c4689b8c47cf3ca7067"
+    },
+    {
+      "path": "traces.json.xz",
+      "role": "samples",
+      "bytes": 10276,
+      "sha256": "0d62c3a1625dd640d8aa9ece0a1dc405b9ccc1ff131dc95f843fdfb7c29fc129"
+    },
+    {
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "bytes": 2764,
+      "sha256": "e976debd2489c0769bd217351ee7a6987cf9d7d126884042134ad6a22e013d4a"
+    }
+  ]
+}

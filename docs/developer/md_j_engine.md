@@ -33,7 +33,7 @@ or screening equivalence with upstream.
 
 | Stage | Pinned GPU4PySCF | Integrated GenerativeQC equivalent and compatibility choice |
 | --- | --- | --- |
-| Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity plus every ordered primitive product. Resident sparse weighted E transforms factor the contraction, normalization and Cartesian/spherical maps without materializing dense C. This reuses the established transform pipeline. |
+| Decontraction and sorting | `scf/j_engine.py`: `SortedGTO.from_mol(decontract=True)`, sorted basis and `C D C^T` | `MdJHost` keeps original public-shell identity and folds same-shell primitive exchange. Distinct shells retain all ordered products. Resident sparse weighted E transforms factor contraction, normalization and Cartesian/spherical maps without materializing dense C. |
 | Pair layout | `j_engine.py`: `(li,lj)` pair mappings sorted by `q_cond`, packed `pair_loc` | Within total-angular classes 0–4, a deterministic active-prefix, descending-q, primitive-ID permutation drives packed Hermite intervals. `md_j_engine_pair_loc` rewrites only Hermite offsets. Original shell/primitive identities and transform slots stay valid. Total-angular grouping is sufficient after the separate bra/ket E transforms; it is not upstream's raw-shell ordering. |
 | Density precontraction | `lib/gvhf-md/contract_Et.cu`: `Et_dot_dm` | Existing `md_j_density` contracts the actual public density into resident primitive Hermite density using cached E. UKS uses alpha+beta; nonsymmetric density retains both AO directions. |
 | Hierarchical screening | `j_engine.py` / `md_contract_j.cu`: float32 log q and q+dm, widths 1/2/4/8/16/32 | Six FP64 linear bound levels retain q, qD, a recipe-specific minimum field, and density. Reference nodes maximize leaf Schwarz minima; primitive nodes minimize target source thresholds. The reference recipe preserves the leaf's left-associated upward-rounded `(q_out*q_in)*density_in` expression. The complete primitive recipe uses the precontracted source norm described below at both coarse and leaf decisions. |
@@ -74,12 +74,46 @@ compiler-emitted Hermite norms. Absolute coefficient sums remain valid for
 signed/general contractions. The bound belongs to each primitive, rather than
 being copied from its contracted parent.
 
-Each directed primitive product receives an omission allowance of
-`min(screening_tolerance, 1e-12) / (target_pair_primitives * primitive_count)`.
-The target multiplicity is the actual number of ordered primitive products in
-that output's original shell pair. Source-prefix admission retains the smaller
-allowance based on the global maximum target multiplicity. Target-prefix and
-coarse tile admission use the actual-target thresholds described below.
+Within a single shell, exchanging primitive indices leaves the Gaussian product
+unchanged. The MD owner stores only one of `(p,q)` and `(q,p)`, and its cached E
+transform includes a factor of two when `p != q`. Diagonal primitive pairs keep
+unit weight. The product center is the shell center. J density precontraction,
+AO projection and the shared exact J/K source consumer all use this same
+weighted transform. Distinct shells, including different contraction columns
+on the same atom, retain every ordered product. All retained MD recipes use
+this inventory; the non-MD fallback is unchanged.
+
+Let `epsilon = min(screening_tolerance, 1e-12)`, `m` be the target's
+retained primitive multiplicity within its original shell pair, and `N` the
+complete retained primitive census. Norms include the folded E weights, so the
+omission certificate covers the original contracted J. Each target receives
+an allowance `epsilon/m`, rounded down. Its
+source threshold is the larger of two independently certified choices:
+
+- the uniform threshold `(epsilon/(m*N))/q_target`, rounded down;
+- a histogram boundary whose complete source-norm tail is at most
+  `(epsilon/m)/q_target`, rounded down.
+
+The histogram counts positive finite source norms by their FP64 bit pattern.
+Each bin contributes its integer count times its exact upper endpoint, with
+upward-rounded multiplication and accumulation. The owner limits the primitive
+census to signed 32-bit capacity, so converting counts to FP64 is exact. The
+result bounds the sum of **all** sources below each boundary, including sources
+that will be removed from traversal prefixes. Zero norms need no budget;
+unknown/infinite norms always survive a finite threshold. Overflow in a tail
+bound retains work. Choosing the larger threshold selects one complete
+certificate and never combines two separately spent allowances.
+
+Source-prefix admission uses the global maximum target norm and multiplicity,
+so its threshold is no larger than any individual target threshold. Target
+admission compares its threshold with the global maximum source norm. Hence
+prefix omissions and leaf omissions belong to each target's same certified
+tail. Summing at most `m` target shares bounds the complete absolute screening
+error for every public J entry by `epsilon`. A single hierarchy pass builds
+prefixes and node bounds; no host readback or second budget-splitting pass is
+needed. The [source-tail decision](../../.agents/notes/implemented/performance/2026-10-20-md-j-source-tail-budget.md)
+records the proof, measured tradeoffs and rejected alternatives. Other systems and inactive gaps only make the certificate conservative.
+
 After density precontraction, each source gets the outward-rounded triangle
 bound `sum_t abs((E D)_t) * norm(Lambda_t)`. This preserves cancellation within
 the represented Hermite source and is stored in the existing hierarchy's `qD`
@@ -87,9 +121,8 @@ field. It is not capped by the uncontracted primitive norm times the shell
 density envelope: precontraction rounding near underflow can make that envelope
 smaller than the norm of the stored source. The output primitive norm times
 this source bound bounds the directed contribution to any output AO. A tile
-stages the source norm and a cached downward-rounded ratio
-`allowance / output_norm`. The hierarchy computes this threshold once per
-primitive per replay, reduces its minimum across each node, and uses infinity
+stages the source norm and the cached certified threshold. The hierarchy
+computes its threshold once per primitive, reduces its minimum across each node, and uses infinity
 for inactive/padded targets. A tile is rejected only when neither direction
 has a nonzero maximum source norm at or above the opposite minimum target
 threshold. The inner loop applies the same leaf threshold. This avoids repeated allowance divisions and bound products for
@@ -108,15 +141,17 @@ primitive remains in the prefix if it can contribute as either an output or a
 source. Target admission compares the global maximum source norm with its
 actual threshold; source admission uses the global maximum output norm and
 maximum target multiplicity. The rectangular/triangular
-work inventory is constructed from those prefixes.
+work inventory is constructed from those frozen prefixes. Source counting,
+tail construction and hierarchy updates execute in stream order and are
+refreshed on every replay.
 Small geometry bounds cannot restore a quadratic traversal over the entire
 unpruned primitive inventory. Prefixes are recomputed in captured graphs too;
 changing density magnitude never relies on pointer identity. All ordinary E,
 density and output mappings remain complete, including primitives excluded from
 the current source traversal.
 
-This recipe additionally charges one FP64 bound per primitive and one small
-device census. Its hierarchy and bound storage must fit the same owner's
+This recipe additionally charges one FP64 bound per primitive and a device
+census containing prefix lengths, source-norm bin counts and tail bounds. Its hierarchy and bound storage must fit the same owner's
 remaining capacity. An unadmitted optional recipe retains the existing
 incumbent provider and its documented screening contract; inspect diagnostics
 when requiring a particular recipe. An unset selector requests `primitive`.
@@ -152,6 +187,20 @@ Memory-bounded traversal alone is not evidence of work or performance improvemen
 
 Source lanes form a two-dimensional bra/ket batch. Each source has one radial
 recurrence owner; component lanes read that source's strided compact simplex.
+The common Coulomb prefactor is folded into the Boys seed scale before the
+linear radial recurrence, sharing it across both admitted directions and
+removing one multiplication per output dot. This changes FP64 rounding order;
+the unscaled generated entry point remains available for independent comparison.
+Compact FP64 radial evaluation opts into the shared Boys owner's reciprocal
+reuse: one square root supplies the erf seed and one reciprocal supplies all
+upward recurrence orders. Other Boys consumers retain their original arithmetic.
+For orders one through eight, the compact evaluator uses the existing positive
+incomplete-gamma series owner within the established small-argument domain:
+thresholds 0.25, 0.75, 1.25 and 2 for orders one through four, then 6 for
+orders five through eight. Order zero retains its original evaluator. A bounded
+series failure falls back to the shared Boys owner. This does not extend the series region into the established upward
+recurrence domain. Both changes retain FP64 storage and accumulation and require
+independent high-precision seed/radial and complete energy/force qualification.
 Bra partials remain in registers across ket batches, then reuse the radial
 workspace for reduction. Ket partials reduce across contiguous bra shuffle
 groups before a single writer updates each shared element. Global atomics

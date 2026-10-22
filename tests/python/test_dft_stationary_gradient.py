@@ -341,6 +341,120 @@ def test_force_budget_needs_native_allowance_and_never_relaxes_response_default(
         source.stationarity_tolerance = 1e-4
 
 
+@pytest.fixture
+def authenticated_state(monkeypatch: pytest.MonkeyPatch) -> typing.Any:
+    """Use the real content proof with a controllable native lifetime boundary."""
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source.stationarity_tolerance = 1e-5
+    value = state()
+    # A native-authorized density discrepancy exercises the difference between
+    # force and strict response policies even with a zero reported residual.
+    density = value.density.copy()
+    density[0, 0, 0] += 2e-6
+    value = replace(value, density=density, _source=source)
+    source._identity = value.identity
+    source._residual = value.physical_residual
+    source._arrays = {
+        name: getattr(value, name).copy()
+        for name in (
+            "density",
+            "fock",
+            "coefficients",
+            "orbital_energies",
+            "occupations",
+            "weighted_density",
+            "overlap",
+        )
+    }
+    live = SimpleNamespace(current=True)
+
+    def check_current(snapshot: NativeKsSnapshot) -> None:
+        if not live.current:
+            raise ValueError("stale native snapshot")
+
+    monkeypatch.setattr(NativeKsSnapshot, "check_current", check_current)
+    return value, live
+
+
+def test_repeated_validation_keeps_policy_and_native_lifetime_gates(
+    authenticated_state: typing.Any,
+) -> None:
+    value, live = authenticated_state
+    force = StationaryDerivativeContract.for_native_force(value)
+    assert force.validate(value) is value
+    assert StationaryDerivativeContract.for_native_force(value).validate(value) is value
+    with pytest.raises(ValueError, match="density reconstruction"):
+        StationaryDerivativeContract(value.identity).validate(value)
+    assert force.validate(value) is value
+    live.current = False
+    with pytest.raises(ValueError, match="stale"):
+        force.validate(value)
+
+
+@pytest.mark.parametrize("flag", ["successful", "converged", "physical"])
+def test_repeated_validation_rechecks_state_gates(
+    authenticated_state: typing.Any,
+    flag: str,
+) -> None:
+    value, _ = authenticated_state
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    object.__setattr__(value, flag, False)
+    with pytest.raises(ValueError, match="successful converged physical"):
+        contract.validate(value)
+
+
+def test_repeated_validation_rechecks_native_allowance(
+    authenticated_state: typing.Any,
+) -> None:
+    value, _ = authenticated_state
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    object.__setattr__(value._source, "stationarity_tolerance", 1e-8)
+    with pytest.raises(ValueError, match="density reconstruction"):
+        contract.validate(value)
+
+
+@pytest.mark.parametrize("change", ["replace", "shape", "writable", "alias"])
+def test_repeated_validation_rejects_changed_array_contents_or_interpretation(
+    authenticated_state: typing.Any,
+    change: str,
+) -> None:
+    value, _ = authenticated_state
+    if change in ("writable", "alias"):
+        backing = value.overlap.copy()
+        array = backing.view()
+        if change == "alias":
+            array.flags.writeable = False
+        object.__setattr__(value, "overlap", array)
+    contract = StationaryDerivativeContract.for_native_force(value)
+    contract.validate(value)
+    if change == "replace":
+        object.__setattr__(value, "overlap", 2 * value.overlap)
+    elif change == "shape":
+        value.overlap.shape = (4,)
+    else:
+        backing[0, 0] = -1
+    with pytest.raises(ValueError):
+        contract.validate(value)
+
+
+def test_validated_state_does_not_extend_its_own_lifetime(
+    authenticated_state: typing.Any,
+) -> None:
+    import weakref
+
+    value, _ = authenticated_state
+    value = replace(value)
+    source = value._source
+    StationaryDerivativeContract.for_native_force(value).validate(value)
+    reference = weakref.ref(value)
+    del value
+    assert reference() is None
+    assert source is authenticated_state[0]._source
+
+
 @pytest.mark.parametrize(
     "field",
     [

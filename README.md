@@ -124,50 +124,38 @@ print(first.energies)
 
 ## Benchmarks
 
-**Complete HF/DFT energy + analytic forces — production comparison pending.**
-The headline comparison must use each engine's fastest independently qualified
-production configuration for the same scientific task and energy/force accuracy
-targets on RTX 5090. Identical DFT grids are not required: grid resolution,
-pruning, screening and precision may differ when both configurations pass the
-same independent accuracy gates. Cold includes setup and the first E+F call;
-warm uses the same declared reuse policy for both engines. See the
-[production-comparison policy](docs/maintainer/performance_engineering.md#readme-production-comparisons).
+**HF/DFT energy + analytic forces — RTX 5090**
 
-LDA/PBE calculations now use angular-pruned production grids by default, with
-`GridPolicy(pruning="none")` retaining the previous unpruned prescription.
-The LDA/PBE [GPU qualification runner](benchmarks/grid_pruning_gpu.py) compares
-complete energy-plus-force endpoints against independent dense references;
-GPU4PySCF uses its own NWChem-pruned production grids. This does not qualify
-pruning defaults for VV10 or turn the historical matched-grid plots into a
-production ranking.
+Standard and Fast outperform GPU4PySCF in **44/58** and **45/58** accuracy-qualified warm cases.
+For 96-atom Direct ωB97M-V, warm speedups are **3.89× (Standard)** and **4.14× (Fast)**.
 
-The previous fixed, unpruned `(48, 16, 32)` HF/DFT plots are historical
-matched-grid diagnostics, not evidence of either engine's best production
-configuration. They remain in the
-[measurement report and figures](benchmarks/results/readme-refresh-20261015/README.md),
-[Direct timing/work table](benchmarks/results/readme-refresh-20261015/timings.md),
-[DF timing/work table](benchmarks/results/readme-refresh-20261015/df-timings.md), and
-[r²SCAN-3c update](benchmarks/results/xc-diagonal-potential-20261016/README.md#homepage-update).
-The [GPU4PySCF/96 supplement](benchmarks/results/readme-gpu4pyscf96-20261018/README.md)
-adds independent Direct/DF comparator timings on the historical quadrature,
-without rerunning or relabelling native measurements. It remains retained
-diagnostic evidence, not qualification of a pruned VV10 production ranking.
-No replacement HF/DFT ranking is published until both engines' selected
-configurations have complete endpoint measurements and independent energy/force
-qualification. Historical measurements and failed or unchecked cases are not
-relabelled as production-qualified results.
+![Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
+
+![Density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+
+Default XC/VV10 grids, native SCF policies and full grid-response forces;
+plotted points pass common independent energy/force accuracy gates.
+Cold includes setup; warm is the median of three frozen-density calls.
+Gaps mark accuracy failures.
+See [measurements and conditions](benchmarks/results/readme-final-20261022/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 
-![Complete GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
+![Standard and Fast GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
 
 MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
 DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
 gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
 correlation within each basis group. Timings cover the
 complete two-group E+F endpoint, not just SCF or summed component timings.
-See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-full-20261014/timings.md)
-and [inputs, protocol and limitations](benchmarks/results/readme-cbs-full-20261014/README.md).
+[Fast](docs/user/ccsdt_cbs.md#fast-convergence) relaxes SCF, CCSD and force-response
+convergence and defaults to FP32 DF-CCSD and Lambda preconvergence, followed
+by FP64 final solves, independent residual checks and response. The curves use one fresh
+complete call per mode and molecule, with the same binary and GPU within each
+pair; they do not imply a speedup for every case. All Fast points pass
+constituent and composite energy/full-force checks against Standard.
+See the [C1–C7 timing/work table](benchmarks/results/cbs-fast-memory-20261021/timings.md)
+and [inputs, independent checks and limitations](benchmarks/results/cbs-fast-memory-20261021/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
 identical-Hamiltonian speedup measurements.

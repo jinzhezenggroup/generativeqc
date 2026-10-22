@@ -6,12 +6,12 @@ CUDA compilation, GPU accuracy/performance or the full GenerativeQC runtime.
 
 import ctypes as ct
 import importlib.util
-import shutil
-import subprocess
 from pathlib import Path
 
 import numpy as np
 import pytest
+from _df_occupied_provider_support import column_adapters
+from conftest import NativeCxx
 
 HERE = Path(__file__).resolve()
 EMITTER = (
@@ -134,11 +134,10 @@ extern "C" int symmetric_gram(int a,int r,double scale,const double* u,double* o
 
 @pytest.fixture(scope="session", params=[True, False], ids=["syrk", "gemm-provider"])
 def native(
-    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+    tmp_path_factory: pytest.TempPathFactory,
+    request: pytest.FixtureRequest,
+    required_native_cxx: NativeCxx,
 ) -> ct.CDLL:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     spec = importlib.util.spec_from_file_location(
         "isolated_df_occupied_emitter", EMITTER
     )
@@ -154,6 +153,7 @@ def native(
     (folder / "cublas_v2.h").write_text(header)
     code = (
         standin
+        + column_adapters()
         + "\nnamespace generativeqc::scf::generated {\n"
         + module.emit_occupied_response_helpers()
         + "\n}\n"
@@ -161,21 +161,10 @@ def native(
     )
     (folder / "test.cpp").write_text(code)
     output = folder / "lowering.so"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            str(folder / "test.cpp"),
-            "-o",
-            str(output),
-        ],
-        check=True,
+    required_native_cxx.build_shared(
+        [folder / "test.cpp"],
+        output,
+        compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror", "-O2"),
     )
     lib = ct.CDLL(str(output))
     lib.has_syrk = has_syrk

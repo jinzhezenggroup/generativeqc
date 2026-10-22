@@ -65,19 +65,20 @@ std::optional<Matrix> prepare_df_huckel_density(const core::System&,const Densit
 }
 Matrix prepare_initial_density(const core::System&,const auto&,const Matrix&,std::size_t,const Matrix*,std::optional<EigenResult>&,int,int){return {1.0};}
 void discard_density_fitting_tensor_storage(DensityFittingScfData&){}
-struct CudaDensityFittingDeviceScfItem {bool converged{};unsigned iterations{};double energy{},energy_change{},density_rms{};};
+struct CudaDensityFittingDeviceScfItem {bool converged{};unsigned iterations{};double energy{},energy_change{},density_rms{};std::uint64_t fock_builds{};};
 unsigned cuda_df_iteration_diis_history(const ScfOptions& options){return options.diis_history;}
-generativeqc_status run_cuda_density_fitting_rhf_device_scf(int*,const Matrix&,const Matrix&,const Matrix&,const std::vector<std::int32_t>&,const Matrix&,unsigned max_iterations,double,double,Matrix& final_density,std::vector<CudaDensityFittingDeviceScfItem>& records,std::string&,const Matrix&,unsigned){
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(int*,const Matrix&,const Matrix&,const Matrix&,const std::vector<std::int32_t>&,const Matrix&,unsigned max_iterations,double,double,Matrix& final_density,std::vector<CudaDensityFittingDeviceScfItem>& records,std::string&,const Matrix&,unsigned,bool){
   if (device_behavior == 2) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   if (device_behavior == 3) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   if (device_behavior == 4) return GENERATIVEQC_STATUS_SUCCESS;
   const unsigned cycles = device_behavior == 1 ? 13U : max_iterations;
   device_cycles += cycles;
   final_density = {2.0};
-  records={{device_behavior == 1,cycles,0,1,1}};
+  // Execution census deliberately differs from the returned SCF history.
+  records={{device_behavior == 1,cycles,0,1,1,cycles+2U}};
   return GENERATIVEQC_STATUS_SUCCESS;
 }
-void finalize_density_fitting_rhf(const DensityFittingScfData&,const Matrix&,std::size_t,Matrix& d,const ScfOptions&,ScfResult& r,int*,std::size_t=0,bool=false){r.density=d;}
+void finalize_density_fitting_rhf(const DensityFittingScfData&,const Matrix&,std::size_t,Matrix& d,const ScfOptions&,ScfResult& r,int*,std::size_t=0,bool=false,bool=false){r.density=d;}
 struct Diis {Diis(unsigned){} Matrix update(const Matrix& f,const Matrix&){return f;}};
 generativeqc_status execute_cuda_density_fitting_rhf_jk(int*,const Matrix&,Matrix& j,Matrix& k,std::string&){++host_cycles;j={0};k={0};return GENERATIVEQC_STATUS_SUCCESS;}
 double electronic_energy(const Matrix&,const Matrix&,const Matrix&){return host_cycles;}
@@ -152,6 +153,11 @@ int main() {
       system, auxiliary, options, 0, nullptr, nullptr);
   assert(device_cycles == 32 && host_cycles == 32);
   assert(!ordinary.converged && ordinary.iterations == 32);
+  assert(ordinary.fock_builds == 66 && ordinary.preliminary_guess.work_counters_complete);
+  device_behavior = 1;
+  const auto completed = run_rhf_density_fitting_cuda_impl(
+      system, auxiliary, options, 0, nullptr, nullptr);
+  assert(completed.converged && completed.iterations == 13 && completed.fock_builds == 15);
 
   // The real admission helper must run before any DF preparation or SCF work.
   device_cycles = host_cycles = preparations = 0;

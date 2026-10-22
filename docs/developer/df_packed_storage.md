@@ -38,10 +38,30 @@ use exact bounded expansion. The common planner charges both immutable owners,
 one `max(n*rank_capacity*a,n*n*q)` scratch buffer and two `n*n*q` buffers, plus
 the existing source, metric, library and SCF reservations.
 
-The explicit `packed-single` experiment retains only fitted B in the same
+For a fresh single-system resident packed plan, automatic value mapping reuses
+GPU-prepared normalized Hermite coefficients when they fit the unspent value
+budget (at most 256 MiB). The existing fitted/occupied owners and panel sizes
+stay fixed. Each raw output sums every ordered primitive product in FP64;
+screening, metric rank and factor-ordered whitening are unchanged. Auxiliary g
+and mixed Cartesian/spherical bases are supported. Explicit value mappings,
+batches and capacity refusals retain the bounded generic source. The immutable
+owner is charged to source storage and retires with the physical source;
+geometry or basis changes require fresh preparation. `raw_hermite_values` in
+the CUDA trace reports the actual generated output count.
+
+The `packed-single` representation retains only one fitted tensor in the same
 lower-pair order. It generates raw A once in bounded panels during setup, but
-does not retain those panels. J/K, including qualified final physical Fock
-validation, reuses B without claiming a raw-A owner. Validated canonical or
+does not retain those panels. If every system's metric is full rank, it retains
+`E = A Q diag(lambda^-1/2)` in metric eigen-coordinates. Setup projects raw A
+before scaling, preserving weak-direction cancellation, and omits the large
+rotation back to the original auxiliary basis. J/K contract the complete
+auxiliary axis and are invariant under this orthogonal change. Force views and
+final occupied projections carry the same immutable gauge and metric identity.
+Rank-truncated or mixed-rank batches retain symmetric `B = E Q^T` throughout.
+The `packed` and dense representations also retain symmetric B.
+
+J/K, including qualified final physical Fock validation, reuse the fitted
+tensor without claiming a raw-A owner. Validated canonical or
 strictly reconstructed corrected occupied factors can use a separately budgeted
 force response with `GENERATIVEQC_DF_RESPONSE_SPACE=occupied`.
 `GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE=fitted` projects retained B in bounded
@@ -57,11 +77,16 @@ records the numerical gates and complete-endpoint evidence.
 
 For the qualified full-rank fitted occupied consumer,
 `GENERATIVEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
-metric transformation. `auto` and `retained-root` apply the plan's immutable
-symmetric inverse root `X` directly to the projected factors `S = C^T B C`:
-`U = S X`. This uses one GEMM into the existing disjoint retained staging
-interval, with no final factor copy. `spectral` retains the two-GEMM
-eigenvector/scale route for independent comparisons. Raw and rank-truncated
+metric transformation. `auto` and `retained-root` apply the matching second
+root to the projected factors `S = C^T B C`: `U = S R`. For symmetric B,
+`R = M^-1/2`; for spectral E, `R = diag(lambda^-1/2) Q^T`. The latter is
+prepared in the otherwise unused full-rank inverse-matrix response workspace,
+without a new allocation or a second retained AO tensor. Pure-J potentials,
+occupied projections and bounded general-density panels all use the matching
+map to physical auxiliary indices. This uses one GEMM into the existing disjoint
+retained staging interval, with no final factor copy. `spectral` retains the
+divide-before-rotate diagnostic; it requires two GEMMs for symmetric B and one
+when E is already projected. Raw and rank-truncated
 consumers retain their original spectral response, including discarded-direction
 derivatives; they cannot borrow this root shortcut. The choice adds no device
 allocation and grants no raw final-projection lease. Trace counters report the
@@ -127,3 +152,41 @@ unset and `auto` remain dense because bounded response and geometry rebuild can
 regress substantially. The 384/1856 unequal case remains numerically unqualified.
 The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
 records domain evidence, validation and conditions for revisiting selection.
+
+## Streamed pure-J contractions
+
+Prepared restricted pure-J streamed sources automatically select native
+Hermite charge/projection when the complete owner fits. Unset or
+`GENERATIVEQC_DF_MD_COULOMB=1` enables this policy; `0` restores the previous
+raw-value path and other values are rejected. The control is part of prepared-source
+identity. Admission requires one streamed system, a full-rank metric, orbital
+angular momentum through f, auxiliary angular momentum through g, and enough
+value capacity for the complete optional owner. Native topology counts reserve
+its exact device footprint before the planner sizes fallback panels. Device
+and host storage remain included in the enclosing diagnostics.
+
+The owner replaces raw three-center value regeneration with two vector
+contractions and the existing metric solve. It remains unscreened; retained
+integral sources remain available. Pure-J force response borrows the same
+stream-bound owner to recompute auxiliary charge from its exact current density,
+then applies the unchanged metric solve. A strict direct Hermite contraction
+adds the three-center atom derivatives without emitting public-AO weight panels;
+the original metric derivative remains in the response owner. Raised potential
+storage is included in the value reservation. It does not reuse an earlier SCF
+potential. Explicit panel/slice diagnostic controls retain
+their existing paths. Unsupported domains and
+optional capacity refusals use the existing bounded path. Device failures
+propagate. The owner and captured graphs share the value plan's stream and
+must retire before that stream is destroyed.
+
+`tests/python/test_df_md_plan_cuda.py` exercises independent metric/J parity,
+budget fallback and changed-input replay against the compiled core. Run it in
+a finite Slurm GPU allocation with `GENERATIVEQC_TEST_DF_MD_PLAN=1` and an
+explicit `GENERATIVEQC_LIBRARY`. Adding `GENERATIVEQC_TEST_DF_MD_FORCE=1`
+checks complete Coulomb gradients against independent displaced libcint
+energies, zero/changed density, borrowed-owner identity and failure propagation.
+`tests/python/test_df_md_endpoint_cuda.py` adds independent complete SCF/force,
+frozen replay and changed-geometry checks for the automatic and rollback paths.
+Resident fitted tensors retain their existing selection. See the
+[default decision](../../.agents/notes/implemented/performance/2026-10-22-default-df-hermite-and-xc-proposals.md)
+for qualification and fallback rationale.

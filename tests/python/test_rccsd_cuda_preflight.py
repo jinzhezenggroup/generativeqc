@@ -24,9 +24,10 @@ def _function(source: str, signature: str) -> str:
 
 def test_all_problem_fields_rejected_before_cuda_owner(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
-    cache = shutil.which("ccache")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if compiler is None or cache is None:
-        pytest.skip("C++ compiler and ccache required")
+        pytest.skip("C++ compiler and sccache/ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     cpu = (ROOT / "src/cc/solver.cpp").read_text()
     cuda = (ROOT / "src/cc/cuda_solver.cu").read_text()
     # Extract current production validators and the entry through construction.
@@ -73,6 +74,7 @@ def test_all_problem_fields_rejected_before_cuda_owner(tmp_path: Path) -> None:
 
 PREFIX = r"""
 #include "cc/solver.hpp"
+#include "cc/phase_observation.hpp"
 #include "denominators.hpp"
 #include <algorithm>
 #include <cmath>

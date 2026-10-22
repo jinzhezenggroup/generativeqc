@@ -124,6 +124,8 @@ def md_engine(tmp_path_factory: pytest.TempPathFactory) -> Any:
     owner.contract_values.restype = ctypes.c_int
     owner.primitive_norm.argtypes = [ctypes.c_double, ctypes.c_uint, ctypes.c_uint]
     owner.primitive_norm.restype = ctypes.c_double
+    owner.boys_seeds.argtypes = [ctypes.c_uint, ctypes.c_double, array, array]
+    owner.boys_seeds.restype = ctypes.c_int
     return owner
 
 
@@ -178,6 +180,10 @@ RADIAL_CASES = tuple(
         (0.0, (1.0, 0.0, 0.0)),
         (1e-12, (1.0, -2.0, 3.0)),
         (0.249999, (2.0, 0.0, -1.0)),
+        (0.25, (2.0, 0.0, -1.0)),
+        (math.nextafter(0.75, 0.0), (1.0, 2.0, -3.0)),
+        (math.nextafter(1.25, 0.0), (-3.0, 2.0, 1.0)),
+        (math.nextafter(2.0, 0.0), (1.0, -2.0, 3.0)),
         (0.75, (1.0, 2.0, -3.0)),
         (1.25, (-3.0, 2.0, 1.0)),
         (2.0, (1.0, -2.0, 3.0)),
@@ -225,9 +231,16 @@ def test_source_norm_covers_normalized_basis_subnormal_precontraction(
         "using cudaStream_t=void*; using cudaError_t=int;\n"
     )
     native = (ROOT / "src/scf/cuda/direct_md_j.cu").read_text()
-    kernels = "\n".join(
-        cpp_function_definition(native, name)
-        for name in ("md_j_density", "md_j_primitive_source_norms")
+    kernels = (
+        cpp_function_definition(
+            (ROOT / "src/scf/cuda/md_j_engine.cuh").read_text(),
+            "md_j_engine_count_source_norm",
+        )
+        + "\n"
+        + "\n".join(
+            cpp_function_definition(native, name)
+            for name in ("md_j_density", "md_j_primitive_source_norms")
+        )
     )
     source, binary = tmp_path / "source_norm.cpp", tmp_path / "source_norm"
     source.write_text(
@@ -244,6 +257,9 @@ struct Dim { unsigned x; };
 Dim threadIdx{}, blockIdx{}, blockDim{32};
 template<class T> T atomicMax(T* address,T value) {
   const T previous=*address; *address=std::max(previous,value); return previous;
+}
+template<class T> T atomicAdd(T* address,T value) {
+  const T previous=*address; *address+=value; return previous;
 }
 long long __double_as_longlong(double value) {
   long long bits; std::memcpy(&bits,&value,sizeof(bits)); return bits;
@@ -281,6 +297,9 @@ int main() {
     md_j_density(batch,md,0,1,false,&density,nullptr);
     md_j_primitive_source_norms(md,0,1);
     assert(state.maximum_source_norm==leaf.qd);
+    unsigned long long counted=0;
+    for (const auto count:state.source_norm_counts) counted+=count;
+    assert(counted==static_cast<unsigned>(leaf.qd>0.));
     std::printf("%.17g %.17g %.17g %.17g\n",primitive.exponent,represented,leaf.qd,
                 md_j_bound_product_up(q,density_bound));
     state={}; md_j_primitive_source_norms(md,1,2);
@@ -348,9 +367,58 @@ def test_compact_radial_matches_full_auxiliary_and_high_precision(
     np.testing.assert_array_equal(compact[[0, -1]], (23.5, -71.25))
     expected, bound = _closed_radial(order, rho, tuple(displacement))
     assert np.all(np.isfinite(compact[1:-1]))
-    np.testing.assert_allclose(compact[1:-1], full, rtol=2e-14, atol=1e-290)
-    error = np.abs(compact[1:-1] - expected)
-    assert np.all(error <= 3e-12 * bound + 1e-290), (order, rho, argument, error.max())
+    # The compact and full owners now use different FP64 Boys evaluation
+    # orders. Near a zero derivative, relative agreement with another rounded
+    # recurrence is not an accuracy oracle. Keep the original independent
+    # absolute-term bound and require BOTH implementations to satisfy it.
+    for actual in (compact[1:-1], full):
+        error = np.abs(actual - expected)
+        assert np.all(error <= 3e-12 * bound + 1e-290), (
+            order,
+            rho,
+            argument,
+            error.max(),
+        )
+
+
+@pytest.mark.parametrize("order", range(9))
+def test_boys_reciprocal_and_default_against_high_precision(
+    md_engine: Any, order: int
+) -> None:
+    """Qualify seeds directly at both sides of every retained branch boundary.
+
+    The default is exercised too: other direct/derivative consumers retain
+    its rounding and do not opt in to the compact J arithmetic.
+    """
+    boundaries = (1e-8, 0.25, 0.75, 1.25, 2.0, 6.0)
+    arguments = [0.0, 1e-300, 1e-12, 0.1, 1.0, 10.0, 100.0, 1e4]
+    arguments += [
+        neighbor
+        for value in boundaries
+        for neighbor in (
+            math.nextafter(value, 0.0),
+            value,
+            math.nextafter(value, math.inf),
+        )
+    ]
+    for argument in arguments:
+        reused, retained = np.empty(order + 1), np.empty(order + 1)
+        assert md_engine.boys_seeds(order, argument, reused, retained) == 0
+        with mp.workdps(80):
+            t = mp.mpf(argument)
+            exact = np.asarray(
+                [
+                    float(
+                        mp.mpf(1) / (2 * n + 1)
+                        if t == 0
+                        else mp.gammainc(mp.mpf(n) + mp.mpf("0.5"), 0, t)
+                        / (2 * t ** (mp.mpf(n) + mp.mpf("0.5")))
+                    )
+                    for n in range(order + 1)
+                ]
+            )
+        for actual in (reused, retained):
+            np.testing.assert_allclose(actual, exact, rtol=3e-12, atol=1e-290)
 
 
 @pytest.mark.parametrize("order", range(9))
@@ -371,8 +439,9 @@ def test_displacement_reversal_has_exact_cartesian_parity(
     "directions", (0, 1, 2, 3), ids=("neither", "forward", "reverse", "both")
 )
 @pytest.mark.parametrize("lanes", (1, 7, 32))
+@pytest.mark.parametrize("scaled", (False, True), ids=("unscaled", "scaled-seeds"))
 def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
-    md_engine: Any, bra: int, ket: int, directions: int, lanes: int
+    md_engine: Any, bra: int, ket: int, directions: int, lanes: int, scaled: bool
 ) -> None:
     """Includes all 15 canonical angular pairs and the ten reversed views."""
     counts = (math.comb(bra + 3, 3), math.comb(ket + 3, 3))
@@ -390,7 +459,7 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
             exponents,
             positions,
             density,
-            directions,
+            directions | (8 if scaled else 0),
             lanes,
             values,
             cooperative,
@@ -401,7 +470,12 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
     for output in (values, cooperative, reference):
         np.testing.assert_array_equal(output[[0, -1]], (23.5, -71.25))
     np.testing.assert_allclose(values[1:-1], reference[1:-1], rtol=3e-13, atol=3e-13)
-    np.testing.assert_array_equal(values, cooperative)
+    if scaled:
+        # Moving the common prefactor changes rounding, not the mathematical
+        # contraction. Both independent oracle gates below remain unchanged.
+        np.testing.assert_allclose(values, cooperative, rtol=3e-13, atol=3e-13)
+    else:
+        np.testing.assert_array_equal(values, cooperative)
     if not directions & 1:
         np.testing.assert_array_equal(values[1 : 1 + counts[0]], np.zeros(counts[0]))
     if not directions & 2:
@@ -438,8 +512,9 @@ def test_all_pair_contractions_match_independent_reciprocal_full_auxiliaries(
 
 
 @pytest.mark.parametrize("angular", range(5))
+@pytest.mark.parametrize("scaled", (False, True))
 def test_self_source_uses_full_forward_weight_without_reciprocal_half(
-    md_engine: Any, angular: int
+    md_engine: Any, angular: int, scaled: bool
 ) -> None:
     count = math.comb(angular + 3, 3)
     exponents = np.asarray((0.61, 0.61))
@@ -453,7 +528,7 @@ def test_self_source_uses_full_forward_weight_without_reciprocal_half(
             exponents,
             positions,
             density,
-            1 | 4,
+            1 | 4 | (8 if scaled else 0),
             32,
             *outputs,
         )
@@ -462,9 +537,44 @@ def test_self_source_uses_full_forward_weight_without_reciprocal_half(
     np.testing.assert_allclose(
         outputs[0][1:-1], outputs[2][1:-1], rtol=3e-14, atol=1e-14
     )
-    np.testing.assert_array_equal(outputs[0][1:-1], outputs[1][1:-1])
+    if scaled:
+        np.testing.assert_allclose(
+            outputs[0][1:-1], outputs[1][1:-1], rtol=3e-13, atol=3e-13
+        )
+    else:
+        np.testing.assert_array_equal(outputs[0][1:-1], outputs[1][1:-1])
     np.testing.assert_array_equal(outputs[0][count + 1 : -1], np.zeros(count))
     assert np.linalg.norm(outputs[0][1 : count + 1]) > 0
+
+
+@pytest.mark.parametrize(("bra", "ket"), ANGULAR_PAIRS)
+@pytest.mark.parametrize("exponent_scale", (1e-6, 1e6))
+def test_seed_prefactor_range_against_full_auxiliary(
+    md_engine: Any, bra: int, ket: int, exponent_scale: float
+) -> None:
+    """Scale moves across many decades without changing the dimensionless roots.
+
+    The independent full auxiliary retains late output scaling. Rescaling the
+    displacement keeps cancellation and all angular components exercised in
+    both very diffuse and very tight primitive domains.
+    """
+    size = math.comb(bra + 3, 3) + math.comb(ket + 3, 3)
+    exponents = np.asarray((0.17, 3.1)) * exponent_scale
+    positions = np.asarray((0.31, -0.17, 0.51, -0.19, 0.43, -0.07)) / math.sqrt(
+        exponent_scale
+    )
+    density = np.random.default_rng(91 + 5 * bra + ket).normal(size=size + 7)
+    outputs = [np.full(size + 2, np.nan) for _ in range(3)]
+    assert (
+        md_engine.contract_values(
+            bra, ket, exponents, positions, density, 3 | 8, 7, *outputs
+        )
+        == 0
+    )
+    assert np.isfinite(outputs[0][1:-1]).all()
+    np.testing.assert_allclose(
+        outputs[0][1:-1], outputs[2][1:-1], rtol=3e-12, atol=1e-290
+    )
 
 
 def test_generation_is_standalone_deterministic_and_preserves_unchanged_output(
@@ -515,6 +625,20 @@ PROBE = r"""
 using namespace generativeqc::scf::cuda_execution;
 
 template<unsigned Order>
+void boys_impl(double t, double* reused, double* retained) {
+  boys_values<Order, double, true>(t, reused);
+  boys_values<Order>(t, retained);
+}
+extern "C" int boys_seeds(unsigned order, double t, double* reused, double* retained) {
+  switch (order) {
+#define CASE(N) case N: boys_impl<N>(t, reused, retained); return 0
+    CASE(0); CASE(1); CASE(2); CASE(3); CASE(4); CASE(5); CASE(6); CASE(7); CASE(8);
+#undef CASE
+  }
+  return -1;
+}
+
+template<unsigned Order>
 void radial_impl(double rho, const double* d, double* compact, double* full) {
   Vec3<double> p{d[0], d[1], d[2]}, q{0.0, 0.0, 0.0};
   md_engine_radial<Order>(rho, p, q, compact + 1);
@@ -549,11 +673,17 @@ void contract_impl(const double* exponent, const double* position, const double*
   MdJView md{};
   md.density = const_cast<double*>(density);
   const bool forward = flags & 1U, reverse = flags & 2U;
-  md_engine_contract<B,K>(bra, ket, md, forward, reverse, result + 1, result + 1 + nb);
+  if (!(flags & 8U))
+    md_engine_contract<B,K>(bra, ket, md, forward, reverse, result + 1, result + 1 + nb);
   const double rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
   const double prefactor = 2.0 * pow(kPi, 2.5) /
       (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
   double radial[md_j_hermite_count(B + K)];
+  if (flags & 8U) {
+    md_engine_radial<B+K>(rho, bra.product, ket.product, radial, prefactor);
+    md_engine_contract_radial<B,K>(radial, density + bra.hermite_offset,
+        density + ket.hermite_offset, forward, reverse, result + 1, result + 1 + nb);
+  }
   md_engine_radial<B+K>(rho, bra.product, ket.product, radial);
   for (unsigned lane = 0; lane < lanes; ++lane)
     md_engine_contract_radial<B,K>(radial, density + bra.hermite_offset,

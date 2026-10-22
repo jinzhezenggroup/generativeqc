@@ -7,6 +7,7 @@
 #include <string_view>
 #include <utility>
 
+#include "cc/phase_observation.hpp"
 #include "integrals/electron_interaction_source.hpp"
 #include "methods/df_ccsdt_force.hpp"
 #include "molecule/nuclear_gradient.hpp"
@@ -136,8 +137,9 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
     bool lambda_resident_krylov = false,
     double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
-    DFCorrelationDemand demand = {}) {
+    DFCorrelationDemand demand = {}, core::CorrelationConvergence convergence = {}) {
   const auto started = Clock::now();
+  cc::phase_observation::Scope observed_endpoint(cc::phase_observation::Site::endpoint_inclusive);
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
   runtime::df_progress::Scope trace(replay_state ? "df_ccsdt_response_replay" : "df_ccsdt_native");
@@ -170,7 +172,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                                         physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
                 packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2,
-                demand.df_reference);
+                demand.df_reference, convergence);
   if (retained_host_bytes >= state.budget)
     throw std::length_error("DF correlation retained caller state exhausts complete budget");
   if (demand.mp2 && !state.df_mp2_mode) {
@@ -353,13 +355,16 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
     lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
     lambda_options.df_mixed_precision = lambda_mixed_precision;
+    // Record the actual executing owner's request, including resource refusal.
+    result.primal.lambda_fp32_requested = lambda_mixed_precision;
     lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
-    lambda_options.cc_tolerance = 1e-9;
-    lambda_options.lambda_tolerance = 1e-9;
+    lambda_options.convergence = state.convergence;
+    lambda_options.cc_tolerance = state.convergence.cc_residual();
+    lambda_options.lambda_tolerance = state.convergence.lambda_residual();
     const auto lambda_external = checked_add(tbytes, fbytes);
     lambda_options.max_bytes = difference(budget, lambda_external);
     lambda_options.gmres.max_workspace_bytes = lambda_options.max_bytes;
-    lambda_options.gmres.absolute_tolerance = 1e-12;
+    lambda_options.gmres.absolute_tolerance = state.convergence.response_solve();
     // Acceptance still uses a freshly evaluated FP64 residual and the separate
     // independent equation. Only redundant intermediate operator replays change.
     lambda_options.gmres.true_residual_every = lambda_true_residual_interval;
@@ -533,6 +538,9 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     Trace::label("phase", state.df_reference ? "df_orbital_and_nuclear_response"
                                              : "exact_orbital_and_nuclear_response");
   auto orbital_options = frame_options;
+  orbital_options.convergence = state.convergence;
+  if (state.convergence.relaxed())
+    orbital_options.gmres.absolute_tolerance = state.convergence.response_solve();
   orbital_options.df_reference = state.df_reference;
   hf::RHFFrameDFPreconditionerPreparation preconditioner;
   if (orbital_options.df_preconditioning) {
@@ -854,7 +862,7 @@ DFCCSDTResult run_df_ccsdt_native(
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
     bool lambda_serial_scratch_reuse, std::optional<bool> ccsd_mixed_precision,
     bool lambda_mixed_precision, bool lambda_resident_krylov, double ccsd_mixed_switch_residual,
-    DFCorrelationDemand demand) {
+    DFCorrelationDemand demand, core::CorrelationConvergence convergence) {
   if (demand.mp2 && with_triples) throw std::invalid_argument("DF-MP2 cannot request CC triples");
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
@@ -895,7 +903,7 @@ DFCCSDTResult run_df_ccsdt_native(
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
         diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
-        lambda_resident_krylov, ccsd_mixed_switch_residual, demand);
+        lambda_resident_krylov, ccsd_mixed_switch_residual, demand, convergence);
   };
   try {
     return finish(attempt());
@@ -922,10 +930,22 @@ DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& executi
                                               const core::System& system,
                                               const core::System& auxiliary,
                                               const generativeqc_method_descriptor& descriptor,
-                                              bool forces, DFCorrelationDemand demand) {
+                                              bool forces, DFCorrelationDemand demand,
+                                              core::CorrelationConvergence convergence) {
+  // Fast requests the existing bounded FP32 auxiliary warmup by default.
+  // Switch well before the selected physical residual threshold; only the
+  // subsequent FP64 epoch and independent replay can publish convergence.
+  const bool mixed = convergence.relaxed() && !demand.mp2;
+  const bool lambda_mixed = mixed && forces;
+  // The experimental Lambda owner halves the requested cap for its shared
+  // FP32 scratch epoch. Compensate here to preserve the ordinary Q32 ceiling
+  // for the later FP64 solve/audit. Its bounded planner may still choose less.
+  const std::size_t lambda_cap = lambda_mixed ? 64 : 32;
+  const double mixed_switch = std::max(cc::SolverOptions{}.df_mixed_precision_switch_residual,
+                                       100.0 * convergence.cc_residual());
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, 32, 0, {}, true, false, true, false, true, {}, 30, true,
-                             true, true, nullptr, true, false, false, false,
-                             cc::SolverOptions{}.df_mixed_precision_switch_residual, demand);
+                             true, true, lambda_cap, 0, {}, true, false, true, false, true, {}, 30,
+                             true, true, true, nullptr, true, mixed, lambda_mixed, false,
+                             mixed_switch, demand, convergence);
 }
 }  // namespace generativeqc::methods::detail

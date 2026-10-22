@@ -325,3 +325,22 @@ def test_ks_final_validation_selection_changes_resource_identity(
     monkeypatch.setenv(variable, "1")
     resident = estimate_hf_resources([H2], backend="cuda", library=library)
     assert len({automatic.identity, reference.identity, resident.identity}) == 3
+
+
+def test_df_coulomb_response_selection_changes_resource_identity(
+    monkeypatch: typing.Any,
+) -> None:
+    """A prepared owner cannot silently switch raw-source execution policy."""
+    from types import SimpleNamespace
+
+    variable = "GENERATIVEQC_DF_COULOMB_RESPONSE"
+    identities = set()
+    for policy in (None, "auto", "slices", "panels"):
+        if policy is None:
+            monkeypatch.delenv(variable, raising=False)
+        else:
+            monkeypatch.setenv(variable, policy)
+        # Identity construction needs no CUDA context or device allocation.
+        plan = estimate_hf_resources([H2], backend="cuda", library=SimpleNamespace())
+        identities.add(plan.identity)
+    assert len(identities) == 4

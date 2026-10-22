@@ -27,6 +27,7 @@
 #include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/correlation_convergence.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
@@ -50,8 +51,10 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
   return result;
 }
 
-cc::SolverOptions cc_options(const generativeqc_method_descriptor& d, std::size_t budget) {
+cc::SolverOptions cc_options(const generativeqc_method_descriptor& d, std::size_t budget,
+                             core::CorrelationConvergence convergence = {}) {
   cc::SolverOptions options;
+  options.convergence = convergence;
   options.max_bytes = budget;
   if (d.ccsd_max_iterations) options.max_iterations = d.ccsd_max_iterations;
   options.diis_size = d.ccsd_diis_history;
@@ -69,16 +72,19 @@ cc::SolverOptions cc_options(const generativeqc_method_descriptor& d, std::size_
   return options;
 }
 
-scf::ScfOptions reference_options(const generativeqc_method_descriptor& d, std::size_t budget) {
+scf::ScfOptions reference_options(const generativeqc_method_descriptor& d, std::size_t budget,
+                                  core::CorrelationConvergence convergence = {}) {
+  convergence.validate();
   if (!std::isfinite(d.energy_tolerance) || d.energy_tolerance < 0 ||
       !std::isfinite(d.density_tolerance) || d.density_tolerance < 0)
     throw std::invalid_argument("invalid RCCSD reference convergence threshold");
   scf::ScfOptions options;
   options.max_iterations = d.max_iterations ? d.max_iterations : 100;
   options.diis_history = d.diis_history ? d.diis_history : 8;
-  options.energy_tolerance = d.energy_tolerance > 0 ? std::min(d.energy_tolerance, 1e-11) : 1e-11;
+  options.energy_tolerance =
+      d.energy_tolerance > 0 ? std::min(d.energy_tolerance, convergence.scf_energy()) : 1e-11;
   options.density_tolerance =
-      d.density_tolerance > 0 ? std::min(d.density_tolerance, 1e-11) : 1e-11;
+      d.density_tolerance > 0 ? std::min(d.density_tolerance, convergence.scf_density()) : 1e-11;
   options.screening_tolerance = 0;
   options.compute_forces = false;
   options.export_physical_reference = true;
@@ -448,6 +454,7 @@ RccsdNativeState execute_rccsd_prepared(
     reference_source.source.reset();
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
+    state.convergence = correlation_options.convergence;
     state.reference = reference;
     state.df_reference = fitted_reference;
     state.reference_interaction_source = std::move(borrowed_reference_source);
@@ -664,6 +671,12 @@ RccsdNativeState execute_rccsd_prepared(
     performance.diis_gram_calls = state.solved.diagnostic.diis_gram_calls;
     performance.diis_coefficient_calls = state.solved.diagnostic.diis_coefficient_calls;
     performance.diis_combine_calls = state.solved.diagnostic.diis_combine_calls;
+    performance.ccsd_fp32_requested = correlation_options.df_mixed_precision;
+    performance.ccsd_fp32_executed = state.solved.diagnostic.df_mixed_precision;
+    performance.ccsd_fp32_refused = state.solved.diagnostic.df_mixed_precision_refused;
+    performance.ccsd_fp32_evaluations = state.solved.diagnostic.df_mixed_evaluations;
+    performance.ccsd_fp32_gemm_calls = state.solved.diagnostic.df_fp32_gemm_calls;
+    performance.ccsd_fp32_cast_elements = state.solved.diagnostic.df_precision_cast_elements;
     if (cuda) {
       execution.observe_numeric_peak(
           runtime::ExecutionMemorySpace::Device,
@@ -926,7 +939,7 @@ RccsdNativeState run_rccsd_native_state(
     bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
     std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
     std::optional<bool> df_mixed_precision, double df_mixed_precision_switch_residual,
-    bool df_mp2_mode, bool df_reference) {
+    bool df_mp2_mode, bool df_reference, core::CorrelationConvergence convergence) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -949,7 +962,7 @@ RccsdNativeState run_rccsd_native_state(
     throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RCCSD warm state exhausts correlation memory budget");
   const auto phase_budget = budget - external_reservation_bytes;
-  auto solver_options = cc_options(descriptor, phase_budget);
+  auto solver_options = cc_options(descriptor, phase_budget, convergence);
   solver_options.df_matrix_gemm = df_matrix_gemm;
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
   solver_options.derived_denominators = derived_denominators;
@@ -967,7 +980,7 @@ RccsdNativeState run_rccsd_native_state(
   // The fresh expanded replay consumes final amplitudes, not retained adjoint
   // intermediates. Optional batching preserves ordered Q checks and admission.
   solver_options.df_replay_auxiliary_batch = execution.cuda_requested() && correlation_auxiliary;
-  auto reference = reference_options(descriptor, phase_budget);
+  auto reference = reference_options(descriptor, phase_budget, convergence);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;
   if (auxiliary_reference_bytes >= phase_budget)
@@ -1035,8 +1048,9 @@ std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
   runtime::ExecutionContext execution(context);
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
-  auto solver_options = cc_options(descriptor, budget);
-  auto reference = reference_options(descriptor, budget);
+  const auto convergence = correlation_convergence(descriptor);
+  auto solver_options = cc_options(descriptor, budget, convergence);
+  auto reference = reference_options(descriptor, budget, convergence);
   const auto reference_capacity = posthf::rhf_reference_capacity(
       system, reference.diis_history, execution.backend() == GENERATIVEQC_BACKEND_CPU_REFERENCE);
   if (reference_capacity > budget)

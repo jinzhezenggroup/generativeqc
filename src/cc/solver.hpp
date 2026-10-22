@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "core/correlation_convergence.hpp"
+
 namespace generativeqc::cc {
 
 /** Conservative native auto policy for the qualified contraction-dominated domain.
@@ -62,6 +64,7 @@ struct SolverOptions {
   // tolerance; the decimal literal 1e-7 is one representable step smaller.
   double df_mixed_precision_switch_residual{100.0 * 1e-9};
   unsigned df_mixed_precision_max_evaluations{24};
+  core::CorrelationConvergence convergence;
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
@@ -179,6 +182,7 @@ struct SolverResult {
   std::vector<double> t1, t2;
   SolverDiagnostic diagnostic;
   [[nodiscard]] bool converged() const noexcept { return status == SolveStatus::Converged; }
+  core::CorrelationConvergence convergence;
 };
 
 // Shared admission defaults to the conventional representation. Only an owner

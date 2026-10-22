@@ -198,16 +198,21 @@ def test_callback_exception_is_preserved_and_its_python_vector_outlives_native_c
     assert not retained[0].flags.writeable
 
 
+@pytest.mark.parametrize("collect_basis", [False, True])
 def test_cpu_native_workspace_exact_limit_and_one_byte_below(
     library: Any,
+    collect_basis: bool,
 ) -> None:
     from generativeqc._response_native import workspace_bytes
 
     options = GMRESOptions()
-    required = workspace_bytes(library, 4, options)
+    required = workspace_bytes(library, 4, options, collect_basis=collect_basis)
     operator = MatrixOperator(np.eye(4))
     failed = solve(
-        operator, np.ones(4), options=replace(options, max_workspace_bytes=required - 1)
+        operator,
+        np.ones(4),
+        options=replace(options, max_workspace_bytes=required - 1),
+        collect_basis=collect_basis,
     )
     assert not failed.converged and failed.reason == "workspace_limit"
     assert operator.actions == 0
@@ -215,9 +220,11 @@ def test_cpu_native_workspace_exact_limit_and_one_byte_below(
         operator,
         np.ones(4),
         options=replace(options, max_workspace_bytes=required),
+        collect_basis=collect_basis,
         raise_on_failure=True,
     )
     assert exact.workspace_bytes == required
+    assert bool(exact.basis.shape[1]) is collect_basis
     np.testing.assert_allclose(exact.solution, np.ones(4))
 
 

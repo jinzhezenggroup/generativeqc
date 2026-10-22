@@ -147,6 +147,10 @@ class StationaryKsState:
     converged: bool
     physical: bool
     _source: object = field(default=None, repr=False)
+    # One bounded certificate belongs to this detached state, never to the
+    # prepared batch. Keeping array references prevents identity reuse without
+    # introducing a snapshot -> state cycle or extending the native lease.
+    _validated_algebra: object = field(default=None, init=False, repr=False)
 
     @classmethod
     def from_native(
@@ -281,19 +285,77 @@ class StationaryDerivativeContract:
         return payload
 
     def validate(self, state: typing.Any) -> None:
-        """Require both numerical consistency and the live native #162 proof."""
+        """Require numerical consistency and recheck the live native #162 proof.
+
+        A force composition validates the same detached state at admission and
+        publication. Reuse its algebra only for identical bytes-backed arrays
+        and policy; native content/epoch checks remain mandatory on every call.
+        """
         from ._ks_snapshot import NativeKsSnapshot
 
-        self._validate_arrays(state)
+        tolerance = self._validate_state(state)
+        arrays = self._immutable_algebra_inputs(state)
+        policy = self.to_payload()
+        proof = state._validated_algebra
+        reusable = (
+            arrays is not None
+            and proof is not None
+            and proof[0] is state._source
+            and proof[1] == policy
+            and proof[2] == tolerance
+            and all(
+                old[0] is new[0] and old[1:] == new[1:]
+                for old, new in zip(proof[3], arrays, strict=True)
+            )
+        )
+        if not reusable:
+            self._validate_arrays(state)
         if type(state._source) is not NativeKsSnapshot:
             raise ValueError(
                 "stationary derivatives require a current native #162 snapshot"
             )
         state._source.validate(state)
+        if arrays is not None and not reusable:
+            # Publish success only after both algebra and native authentication.
+            object.__setattr__(
+                state, "_validated_algebra", (state._source, policy, tolerance, arrays)
+            )
         return state
 
-    def _validate_arrays(self, state: typing.Any) -> typing.Any:
-        """Check array algebra only; this diagnostic never proves stationarity."""
+    @staticmethod
+    def _immutable_algebra_inputs(state: typing.Any) -> tuple | None:
+        """Admit only immutable host storage; other executors retain full checks.
+
+        A read-only view over writable storage is insufficient. NumPy permits
+        shape/stride/dtype changes even on read-only arrays, so retain their
+        interpretation as well as strong references to the original objects.
+        """
+        if type(state) is not StationaryKsState:
+            return None
+        inputs = []
+        for name in (
+            "density",
+            "fock",
+            "coefficients",
+            "orbital_energies",
+            "occupations",
+            "weighted_density",
+            "overlap",
+        ):
+            array = base = getattr(state, name)
+            if type(array) is not np.ndarray:
+                return None
+            while type(base) is np.ndarray:
+                if base.flags.writeable:
+                    return None
+                base = base.base
+            if type(base) is not bytes:
+                return None
+            inputs.append((array, array.shape, array.strides, array.dtype))
+        return tuple(inputs)
+
+    def _validate_state(self, state: typing.Any) -> float:
+        """Recheck cheap state gates and the current native allowance every time."""
         from ._ks_snapshot import NativeKsSnapshot
 
         if not isinstance(state, StationaryKsState):
@@ -314,6 +376,11 @@ class StationaryDerivativeContract:
             or not 0 <= state.physical_residual <= residual_tolerance
         ):
             raise ValueError("physical residual exceeds the stationary derivative gate")
+        return residual_tolerance
+
+    def _validate_arrays(self, state: typing.Any) -> typing.Any:
+        """Check array algebra only; this diagnostic never proves stationarity."""
+        residual_tolerance = self._validate_state(state)
 
         spins = 1 if self.spin == "unpolarized" else 2
         overlap = _matrix(state.overlap, "overlap")
@@ -336,9 +403,8 @@ class StationaryDerivativeContract:
         eye = np.eye(n)
         for block in range(spins):
             c = coefficients[block]
-            if not np.allclose(
-                c.T @ overlap @ c, eye, atol=_ARRAY_TOLERANCE, rtol=1e-10
-            ):
+            overlap_c = overlap @ c
+            if not np.allclose(c.T @ overlap_c, eye, atol=_ARRAY_TOLERANCE, rtol=1e-10):
                 raise ValueError("orbitals are not S-orthonormal")
             expected_density = (c * occupations[block]) @ c.T
             if not np.allclose(
@@ -350,8 +416,9 @@ class StationaryDerivativeContract:
                 weighted[block], expected_weighted, atol=_ARRAY_TOLERANCE, rtol=1e-10
             ):
                 raise ValueError("weighted-density reconstruction mismatch")
-            residual = fock[block] @ c - (overlap @ c) * energies[block]
-            scale = max(1.0, float(np.max(np.abs(fock[block] @ c))))
+            fock_c = fock[block] @ c
+            residual = fock_c - overlap_c * energies[block]
+            scale = max(1.0, float(np.max(np.abs(fock_c))))
             if float(np.max(np.abs(residual))) > _ARRAY_TOLERANCE * scale:
                 raise ValueError(
                     "Fock eigen residual exceeds the stationary derivative gate"

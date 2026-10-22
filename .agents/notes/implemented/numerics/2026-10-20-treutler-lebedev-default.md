@@ -55,6 +55,9 @@ traversal. The equal-radius phased/binary-scaled optimization is not admitted
 for adjusted partitions. Its reserved storage remains part of conservative
 capacity planning; diagnostics report the route actually eligible to execute.
 
+The subsequent [Treutler phased decision](../performance/2026-10-20-treutler-phased.md)
+supersedes the phased restriction above. The binary-scaled restriction remains.
+
 ## Rejected alternatives
 
 - Importing PySCF during runtime or generation would violate the production

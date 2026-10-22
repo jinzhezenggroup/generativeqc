@@ -13,22 +13,22 @@
 namespace generativeqc::scf::cuda_execution {
 namespace {
 
-/** Each output AO pair has target_count primitive products and at most
- * primitive_count sources. Apportioning by that actual target multiplicity
- * bounds the sum of omitted absolute contributions by min(tolerance,1e-12).
- * Source-prefix admission uses the global maximum multiplicity; target and
- * tile admission reuse the actual-target thresholds. This bounds
- * screening error, independently of FP64 accumulation error. */
+/** Divide a capped omission budget by the target multiplicity and source
+ * census, rounding down. Zero counts select the complete owner census. A
+ * caller using a smaller census must separately certify omitted sources.
+ * This bounds screening, independently of FP64 accumulation error. */
 __host__ __device__ inline double md_j_primitive_allowance(MdJView md, double screening,
-                                                           std::size_t target_count = 0) {
+                                                           std::size_t target_count = 0,
+                                                           std::size_t source_count = 0) {
   if (!target_count) target_count = md.maximum_pair_primitives;
+  if (!source_count) source_count = md.primitive_count;
 #ifdef __CUDA_ARCH__
   return __ddiv_rd(__ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(target_count)),
-                   double(md.primitive_count));
+                   double(source_count));
 #else
   return std::nextafter(
       std::nextafter(std::fmin(screening, kMdJDensityErrorCap) / double(target_count), 0.0) /
-          double(md.primitive_count),
+          double(source_count),
       0.0);
 #endif
 }
@@ -51,6 +51,53 @@ __device__ inline double md_j_engine_source_threshold(double output_norm, double
   if (allowance == 0.0 || !(output_norm >= 0.0) || output_norm == kMdJBoundInfinity) return 0.0;
   if (output_norm == 0.0) return INFINITY;
   return __ddiv_rd(allowance, output_norm);
+}
+
+/** Count positive finite source norms by exponent and leading mantissa, without rounding or atomics
+ * on floating point sums. All sources contribute, including prefix omissions;
+ * multiple systems only make the subsequent certificate more conservative. */
+__device__ inline void md_j_engine_count_source_norm(MdJPrimitiveScreenState* state, double norm) {
+  if (!(norm > 0.0)) return;
+  const auto bin = static_cast<unsigned>(
+      static_cast<unsigned long long>(__double_as_longlong(norm)) >> kMdJSourceNormShift);
+  if (bin < kMdJSourceNormBins) atomicAdd(state->source_norm_counts + bin, 1ULL);
+}
+
+/** Bound the sum of norms strictly below each exact bin boundary. A bin's
+ * count times its exact upper endpoint bounds all its members. Upward-rounded
+ * products/additions preserve that bound, including subnormals and overflow.
+ * The owner caps the primitive census at INT32_MAX, so count-to-double
+ * conversion is exact. The scan runs once per density on the owning stream. */
+__global__ void md_j_engine_source_tails(MdJPrimitiveScreenState* state) {
+  if (blockIdx.x || threadIdx.x) return;
+  double sum = 0.0;
+  for (unsigned bin = 0; bin < kMdJSourceNormBins; ++bin) {
+    state->source_norm_tails[bin] = sum;
+    const auto count = state->source_norm_counts[bin];
+    if (count && bin + 1 < kMdJSourceNormBins) {
+      const double upper =
+          __longlong_as_double(static_cast<long long>(bin + 1) << kMdJSourceNormShift);
+      sum = __dadd_ru(sum, __dmul_ru(double(count), upper));
+    }
+  }
+}
+
+/** Largest bin boundary whose complete source tail fits this target's
+ * allowance. The returned threshold is finite: unknown/infinite source bounds
+ * always survive. Zero tolerance or unknown target bounds fail open. */
+__device__ inline double md_j_engine_tail_threshold(const MdJPrimitiveScreenState* state,
+                                                    double output_norm, double allowance) {
+  if (!(allowance > 0.0) || !(output_norm > 0.0) || output_norm == kMdJBoundInfinity) return 0.0;
+  const double limit = __ddiv_rd(allowance, output_norm);
+  unsigned lower = 0, upper = kMdJSourceNormBins;
+  while (lower + 1 < upper) {
+    const auto middle = lower + (upper - lower) / 2;
+    if (state->source_norm_tails[middle] <= limit)
+      lower = middle;
+    else
+      upper = middle;
+  }
+  return __longlong_as_double(static_cast<long long>(lower) << kMdJSourceNormShift);
 }
 
 /** One warp constructs every level for 32 leaves, including neutral padding.
@@ -81,14 +128,27 @@ __global__ void md_j_engine_hierarchy(MdJView md, unsigned angular, std::size_t 
         // density envelope. Either direction can keep this q-sorted position.
         bound.qd = output[position].qd;
         const auto pair = md.pairs[primitive.pair];
-        bound.minimum = md_j_engine_source_threshold(
-            bound.q,
-            md_j_primitive_allowance(md, screening, pair.primitive_end - pair.primitive_begin));
-        const auto allowance = md_j_primitive_allowance(md, screening);
+        const double budget = fmin(screening, kMdJDensityErrorCap);
+        const auto multiplicity = pair.primitive_end - pair.primitive_begin;
+        // Each threshold independently bounds the complete omitted source
+        // sum by epsilon/m. Choosing the larger selects one complete proof;
+        // it does not combine independently spent omission allowances.
+        bound.minimum = fmax(md_j_engine_source_threshold(
+                                 bound.q, md_j_primitive_allowance(md, budget, multiplicity)),
+                             md_j_engine_tail_threshold(md.primitive_screen, bound.q,
+                                                        __ddiv_rd(budget, double(multiplicity))));
         const bool target = md.primitive_screen->maximum_source_norm != 0.0 &&
                             md.primitive_screen->maximum_source_norm >= bound.minimum;
-        const bool source = bound.qd != 0.0 && md_j_bound_product_up(md.primitive_maximum_bound,
-                                                                     bound.qd) >= allowance;
+        // The global maxima make this threshold no larger than any target's.
+        // Therefore a removed source is below every target's own threshold;
+        // a removed target has every source below its threshold. Prefix and
+        // leaf omissions belong to the same already-certified source tail.
+        const double minimum_threshold =
+            fmax(md_j_engine_source_threshold(md.primitive_maximum_bound,
+                                              md_j_primitive_allowance(md, budget)),
+                 md_j_engine_tail_threshold(md.primitive_screen, md.primitive_maximum_bound,
+                                            __ddiv_rd(budget, double(md.maximum_pair_primitives))));
+        const bool source = bound.qd != 0.0 && bound.qd >= minimum_threshold;
         if (target || source)
           atomicMax(md.primitive_screen->active + angular, static_cast<unsigned>(position + 1));
       }
@@ -291,7 +351,6 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
       for (unsigned ket_begin = 0; ket_begin < task.ket_count; ket_begin += ket_lanes) {
         const auto ket_slot = ket_begin + ket_lane;
         bool forward = false, reverse = false;
-        double prefactor = 0.0;
         if (md_j_tile_source_valid(inventory, task, bra_slot, ket_slot)) {
           const auto bra = bra_cache[bra_slot], ket = ket_cache[ket_slot];
           if (bra.system >= begin && bra.system < end && bra.system == ket.system) {
@@ -306,17 +365,20 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
                            : md_j_engine_direction(md, ket.pair, bra.pair, screening));
             if (forward || reverse) {
               if (component_lane == 0) {
+                // Only the radial producer consumes the scale; component lanes
+                // reuse its scaled seeds through shared memory.
+                const double prefactor =
+                    2.0 * pow(kPi, 2.5) /
+                    (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
                 const auto rho = bra.exponent * ket.exponent / (bra.exponent + ket.exponent);
                 md_engine_radial<BraAngular + KetAngular, sources>(rho, bra.product, ket.product,
-                                                                   radial + source_lane);
+                                                                   radial + source_lane, prefactor);
                 if constexpr (CountWork) {
                   ++roots;
                   forwards += forward;
                   reverses += reverse;
                 }
               }
-              prefactor = 2.0 * pow(kPi, 2.5) /
-                          (bra.exponent * ket.exponent * sqrt(bra.exponent + ket.exponent));
             }
           }
         }
@@ -325,10 +387,8 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
           for (unsigned slot = 0; slot < bra_outputs; ++slot) {
             const auto component = slot * components + component_lane;
             if (component < bra_components)
-              bra_values[slot] +=
-                  prefactor *
-                  md_engine_forward_component<BraAngular, KetAngular, sources>(
-                      radial + source_lane, ket_density + ket_slot * ket_components, component);
+              bra_values[slot] += md_engine_forward_component<BraAngular, KetAngular, sources>(
+                  radial + source_lane, ket_density + ket_slot * ket_components, component);
           }
         // Every physical lane participates in each shuffle, including padded
         // tails and screened sources. Only bra_lane==0 writes the shared sum;
@@ -337,9 +397,8 @@ __launch_bounds__(kMdJSourceThreads, (md_j_engine_resident_blocks<BraAngular, Ke
           const auto component = slot * components + component_lane;
           double value = 0.0;
           if (reverse && component < ket_components)
-            value = prefactor *
-                    md_engine_reverse_component<BraAngular, KetAngular, sources>(
-                        radial + source_lane, bra_density + bra_slot * bra_components, component);
+            value = md_engine_reverse_component<BraAngular, KetAngular, sources>(
+                radial + source_lane, bra_density + bra_slot * bra_components, component);
           for (unsigned stride = bra_lanes / 2; stride; stride /= 2)
             value += __shfl_down_sync(0xffffffffU, value, stride, bra_lanes);
           if (bra_lane == 0 && ket_slot < task.ket_count && component < ket_components)
@@ -417,6 +476,10 @@ void launch_md_j_engine_class(cudaStream_t stream, MdJView md, std::size_t begin
 
 void launch_md_j_engine(cudaStream_t stream, MdJView md, std::size_t begin, std::size_t end,
                         double screening) {
+  if (md.primitive_screen) {
+    md_j_engine_source_tails<<<1, 1, 0, stream>>>(md.primitive_screen);
+    runtime::cuda_resource_check(cudaPeekAtLastError());
+  }
   for (unsigned angular = 0; angular < 5; ++angular) {
     const auto count = md.hierarchy_layout.buckets[angular].count;
     const auto aligned = (count + 31) / 32 * 32;

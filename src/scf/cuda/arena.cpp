@@ -344,6 +344,7 @@ bool make_layout(
       !workspace.append<std::uint8_t>(batch_size, made.failed) ||
       !workspace.append<std::uint8_t>(batch_size, made.final_fock_reuse_mask) ||
       !workspace.append<std::uint32_t>(1, made.final_fock_rebuild_count) ||
+      !workspace.append<std::uint64_t>(batch_size, made.executed_fock_builds) ||
       !workspace.append<std::uint8_t>(batch_size * spin_count, made.spin_active) ||
       !workspace.append<std::uint32_t>(batch_size, made.iterations) ||
       !workspace.append<int>(batch_size * spin_count, made.solver_info) ||

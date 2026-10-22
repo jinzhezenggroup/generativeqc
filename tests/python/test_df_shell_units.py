@@ -15,6 +15,7 @@ from generativeqc_compiler.integral.df_rys_shell import (
 )
 from generativeqc_compiler.integral.df_shell_derivatives import (
     SHELL_CLASSES,
+    SUPPORTED_SHELL_CLASSES,
     emit_df_shell_derivatives_cuda,
     select_shell_classes,
 )
@@ -44,12 +45,12 @@ def test_units_cover_all_classes_once_and_are_deterministic(
     units: typing.Any,
 ) -> None:
     assert units == dict(emit_df_shell_units())
-    assert len(units) == 1 + 4 * len(SHELL_CLASSES)
+    assert len(units) == 1 + 4 * len(SUPPORTED_SHELL_CLASSES)
     registry = units["generated_df_shell_dispatch.hpp"]
     calls = re.findall(r"operator\(\)<(\d),(\d),(\d)>\(df_shell_(\d{3})\)", registry)
-    assert [tuple(map(int, row[:3])) for row in calls] == list(SHELL_CLASSES)
+    assert [tuple(map(int, row[:3])) for row in calls] == list(SUPPORTED_SHELL_CLASSES)
     assert all("".join(row[:3]) == row[3] for row in calls)
-    for angular in SHELL_CLASSES:
+    for angular in SUPPORTED_SHELL_CLASSES:
         name = "".join(map(str, angular))
         source = units[f"df_shell_{name}.cu"]
         assert f'GENERATIVEQC_DF_SHELL_MATH_HEADER "df_shell_math_{name}.cuh"' in source
@@ -115,7 +116,7 @@ def test_class_local_math_change_does_not_invalidate_neighbors(
 
 @pytest.mark.parametrize("classes", [[], [(4, 0, 0)], [(0, 0)], [(0, 0, 0)] * 2])
 def test_invalid_subsets_are_rejected(classes: typing.Any) -> None:
-    with pytest.raises(ValueError, match="supported s/p/d/f"):
+    with pytest.raises(ValueError, match="supported orbital s/p/d/f"):
         select_shell_classes(classes)
 
 

@@ -8,7 +8,10 @@ all numerical objects. Execution templates remain native runtime-owned.
 import typing
 
 from .df_rys_shell import emit_df_rys_policy_cpp, emit_df_rys_shell_cuda
-from .df_shell_derivatives import SHELL_CLASSES, emit_df_shell_derivatives_cuda
+from .df_shell_derivatives import (
+    SUPPORTED_SHELL_CLASSES,
+    emit_df_shell_derivatives_cuda,
+)
 
 
 def emit_df_shell_units() -> typing.Any:
@@ -19,14 +22,14 @@ def emit_df_shell_units() -> typing.Any:
         '#include "scf/cuda/df_shell_dispatch.cuh"',
         "namespace generativeqc::scf {",
     ]
-    for angular in SHELL_CLASSES:
+    for angular in SUPPORTED_SHELL_CLASSES:
         name = "".join(map(str, angular))
         registry.append(f"extern const DfShellDispatch df_shell_{name};")
     registry += [
         "namespace generated_df_dispatch {",
         "template<class Function> void for_each_class(Function function) {",
     ]
-    for angular in SHELL_CLASSES:
+    for angular in SUPPORTED_SHELL_CLASSES:
         name = "".join(map(str, angular))
         parameters = ",".join(map(str, angular))
         registry.append(
@@ -34,7 +37,7 @@ def emit_df_shell_units() -> typing.Any:
         )
     registry += ["}", "}", "} // namespace generativeqc::scf", ""]
     yield "generated_df_shell_dispatch.hpp", "\n".join(registry)
-    for angular in SHELL_CLASSES:
+    for angular in SUPPORTED_SHELL_CLASSES:
         name = "".join(map(str, angular))
         parameters = ",".join(map(str, angular))
         polynomial = f"df_shell_polynomial_{name}.cuh"

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -9,8 +10,35 @@ namespace generativeqc::scf::cuda_execution {
 
 enum class DirectJkSourceSelection { automatic, disabled, forced, invalid };
 
-/** RHF keeps its qualified domain; KS also admits bounded screened SPD sources. */
-enum class DirectJkSourceAutoPolicy { generic_f, screened_cold, screened_hybrid_cold };
+/** Distinct reuse domains for reference, ordinary cold HF and hybrid KS owners. */
+enum class DirectJkSourceAutoPolicy {
+  generic_f,
+  screened_cold,
+  screened_hybrid_cold,
+  small_screened_cold
+};
+
+/** Fit whole angular buckets without changing the omitted buckets' operator.
+ * Higher total pair angular momentum has more recurrence work per retained
+ * value, so admit it first. Unselected buckets use the existing streamed
+ * consumer. Subtraction-based capacity checks remain valid near SIZE_MAX. */
+inline std::uint32_t direct_jk_fit_resident_buckets(const std::array<std::size_t, 28>& bytes,
+                                                    std::size_t capacity,
+                                                    std::uint32_t requested) noexcept {
+  std::uint32_t selected = 0;
+  for (int degree = 12; degree >= 0; --degree)
+    for (unsigned first = 0; first < 7; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        if (first + second != static_cast<unsigned>(degree)) continue;
+        const auto bucket = first * (first + 1) / 2 + second;
+        const auto bit = std::uint32_t{1} << bucket;
+        if ((requested & bit) && bytes[bucket] <= capacity) {
+          selected |= bit;
+          capacity -= bytes[bucket];
+        }
+      }
+  return selected;
+}
 
 /** Capture an experimental selection once per phase, never in kernel replay.
  * Callers supply method-specific controls and the incumbent value ceiling.
@@ -61,6 +89,12 @@ constexpr const char* direct_jk_source_auto_refusal(
     DirectJkSourceAutoPolicy policy = DirectJkSourceAutoPolicy::generic_f,
     double screening = 0.0) noexcept {
   if (!cold_phase) return "auto: reused reference bucket";
+  // Small screened sources amortize during ordinary HF, whose fused streamed
+  // Fock is already efficient at larger sizes. Reject before cloning/sorting
+  // the provider; fitting in memory alone does not establish profitability.
+  const bool small = policy == DirectJkSourceAutoPolicy::small_screened_cold;
+  if (small && (maximum_angular > 2 || direct_nbf > 128))
+    return "auto: outside small screened cold domain";
   if (policy != DirectJkSourceAutoPolicy::generic_f && maximum_angular <= 2) {
     if (!(screening > 0.0)) return "auto: screened SPD source requires a positive mask";
   } else if (maximum_angular != 3 || !generic_fock) {
@@ -72,7 +106,7 @@ constexpr const char* direct_jk_source_auto_refusal(
   const bool screened_spd =
       policy == DirectJkSourceAutoPolicy::screened_hybrid_cold && maximum_angular <= 2;
   const auto minimum_aos = screened_spd ? 24U : 64U;
-  const auto minimum_direct_aos = screened_spd ? 24U : 128U;
+  const auto minimum_direct_aos = screened_spd ? 24U : (small ? 64U : 128U);
   if (nbf < minimum_aos || direct_nbf < minimum_direct_aos)
     return "auto: source below cold reuse threshold";
   if (maximum_iterations < 8) return "auto: short iteration limit";
@@ -83,6 +117,7 @@ constexpr const char* direct_jk_source_auto_refusal(
 constexpr std::size_t direct_jk_source_value_ceiling(DirectJkSourceSelection selection,
                                                      DirectJkSourceAutoPolicy policy,
                                                      unsigned maximum_angular) noexcept {
+  if (policy == DirectJkSourceAutoPolicy::small_screened_cold) return 512ULL << 20;
   if (selection == DirectJkSourceSelection::forced ||
       (policy != DirectJkSourceAutoPolicy::generic_f && maximum_angular <= 2))
     return 16ULL << 30;

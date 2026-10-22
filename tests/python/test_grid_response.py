@@ -59,7 +59,10 @@ def test_partition_sources_match_independent_multistep_differences(
 
 
 def decimal_partition(
-    points: typing.Any, centers: typing.Any, iterations: typing.Any
+    points: typing.Any,
+    centers: typing.Any,
+    iterations: typing.Any,
+    radii: typing.Any = None,
 ) -> typing.Any:
     """Independent scalar high-precision direct products (not generated/log-DAG)."""
 
@@ -74,6 +77,15 @@ def decimal_partition(
                 mu = (
                     distance(point, centers[a]) - distance(point, centers[b])
                 ) / distance(centers[a], centers[b])
+                if radii is not None:
+                    # Independent direct-product Treutler reference, including
+                    # both clipping surfaces; no production graph is evaluated.
+                    ratio = (radii[b] / radii[a]).sqrt()
+                    adjustment = min(
+                        Decimal(".5"), max(Decimal("-.5"), (ratio - 1 / ratio) / 4)
+                    )
+                    mu = min(Decimal(1), max(Decimal(-1), mu))
+                    mu += adjustment * (1 - mu * mu)
                 for _ in range(iterations):
                     mu = mu * (3 - mu * mu) / 2
                 pair = (1 - mu) / 2

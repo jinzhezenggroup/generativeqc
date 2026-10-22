@@ -423,7 +423,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+    // AUTO DF has a separate pure-J proposal capability. The fitted provider
+    // stays strict; actual grid/shape admission and final FP64 closure belong
+    // to CudaKsPlan, which alone chooses the executed XC schedule.
+    const bool df_xc_budget = dft::admit_application_df_xc_budget(
+        options.application_precision_budget,
+        backend == GENERATIVEQC_BACKEND_CUDA && execution_plan.spin_channels == 1 &&
+            !fock.exchange.present && !execution_plan.range_exchange &&
+            !execution_plan.nonlocal_correlation && !scaled_or_hybrid &&
+            (functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe) ||
+             functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan)));
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && !df_xc_budget)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;

@@ -21,6 +21,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -33,6 +34,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "runtime/solver_region_cuda.cuh"
+#include "scf/convergence_limits.hpp"
 #include "scf/cuda/direct_jk_source_lease.hpp"
 #include "scf/cuda/direct_jk_source_policy.hpp"
 #include "scf/cuda/eigensolver.hpp"
@@ -376,6 +378,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
+  // Eligible strict solves may replace the conservative AO-maximum margin
+  // only with a successful complete canonical final-state proof.
+  bool early_final_probe_requested{}, standard_convergence_model{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
@@ -405,13 +410,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * rebased incumbent energy. No density, Fock or force evaluation is skipped. */
   bool retain_range_source_for_replay(bool use_warm) const {
     const auto replay = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY");
+    // Admission follows the next warm consumer, not the cold proposal's
+    // precision schedule. Application-budget warm revalidation starts strict;
+    // it may borrow a strict lease, but never relabel a mixed recurrence lease.
+    const bool strict_warm = !precision_schedule.any_lower_precision() ||
+                             (options.application_precision_budget[0] > 0.0 &&
+                              (experimental_mixed_point || budget_fock));
     return use_warm && range_source_active() && std::isfinite(range_warm_energy) &&
-           (replay.empty() || replay == "1") &&
+           !phase_source->mixed_recurrence() && strict_warm && (replay.empty() || replay == "1") &&
            range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == range_selection_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
-           !precision_schedule.any_lower_precision() && !runtime::active_device_resource_ledger;
+           !runtime::active_device_resource_ledger;
   }
 
   bool range_source_active() const noexcept {
@@ -505,23 +516,40 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // consumers even after a geometry move. Warm calls only retain an existing
     // audited source; they never construct a quartic one for a single Fock.
     // Complete endpoints qualify screened SPD sources on substantial grids.
-    // The short budget-confirmation tail cannot amortize a second quartic
-    // source after retiring the mixed lease. Explicit residency requests still
-    // exercise strict sources; automatic refinement retains streamed values.
-    if (automatic_range && (!nonlocal_outer_active || strict_refinement ||
-                            xc_layout.npoint < 65536 || maximum_angular > 2))
+    // Application-budget refinement publishes a strict lease for both its
+    // remaining target work and same-owner warm consumers. The mixed lease is
+    // retired first, so the optional ceiling and complete-resource bounds still
+    // apply to one optional source. Ordinary AUTO keeps its streamed tail.
+    const bool budget_range_refinement = strict_refinement && budget_fock && budget_stationarity;
+    if (automatic_range &&
+        (!nonlocal_outer_active || (strict_refinement && !budget_range_refinement) ||
+         xc_layout.npoint < 65536 || maximum_angular > 2))
       return;
     const bool source_cold_phase = cold || (automatic_range && nonlocal_outer_active);
     const auto buckets = direct_jk_resident_bucket_policy(
         std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
         std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
-        automatic_range ? 4ULL << 30
+        automatic_range ? 16ULL << 30
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
                                     provider.cuda_direct_source(), source_strategy.spec);
+    // Pure J already has a generated strict consumer (and may own faster MD-J).
+    // A quartic cache, especially an FP32 cache rebuilt in FP64 at handoff,
+    // costs more than the saved J applications over a complete cold solve.
+    // The short strict tail of a relaxed application-budget hybrid uses that same
+    // generated provider. Rebuilding all FP32 source values in FP64 for two
+    // closing Focks costs more than streaming those strict applications.
+    // Mixed hybrid proposals, explicitly tighter stopping controls, uncovered
+    // high-angular/range operators and forced requests keep their residency policy.
+    if (requested == DirectJkSourceSelection::automatic && !has_range_correction &&
+        (!has_exchange || !budget_fock || (strict_refinement && budget_stationarity)) &&
+        maximum_angular <= 2 &&
+        scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
+                                                        source_strategy.spec))
+      return;
     // Refuse warm/seeded or small candidates before cloning the provider or
     // sorting compact rows. A permitted iteration limit is not expected reuse.
     if (requested == DirectJkSourceSelection::automatic) {
@@ -557,7 +585,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
               has_range_correction ? "cuda_ks_range_resident_values_prepare"
                                    : "cuda_ks_resident_values_prepare",
               source_cold_phase, generic_fock, source_strategy.screening_tolerance, buckets.ceiling,
-              false, auto_policy, buckets.mask, spins),
+              false, auto_policy, buckets.mask, spins,
+              automatic_range && !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -615,7 +644,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
         mixed ? mixed_coulomb_work_counter() : nullptr, mixed && pending_mixed_exchange);
   }
 
+  /** Standard convergence requires a complete resident physical proof.
+   * Partial/nonlocal/mixed/ECP owners retain their independent policy. */
+  bool standard_convergence_active() const noexcept {
+    return standard_convergence_model &&
+           scf::standard_scf_convergence_requested(options.energy_tolerance,
+                                                   options.density_tolerance) &&
+           spins == 1 && !budget_fock && !has_range_correction && !nonlocal_correlation &&
+           !incremental_direct_jk && !precision_schedule.any_lower_precision() &&
+           configured_chunk_width() == 1 && final_validation_partial &&
+           matrix_products.library_enabled() && provider.system().ecp_terms.empty() &&
+           std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                        [](const auto& atom) { return atom.ecp_core != 0; });
+  }
+
   double physical_stationarity_tolerance() const noexcept {
+    if (standard_convergence_active())
+      return scf::scf_stationarity_tolerance(options.energy_tolerance, options.density_tolerance,
+                                             1e-9);
     return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
   }
 
@@ -1346,6 +1392,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           CudaXcAoPrecision::Fp64, 0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
     const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
+    bool fitted_xc_budget = false;
     if (application_precision) {
       for (const auto* control :
            {"GENERATIVEQC_EXPERIMENTAL_PBE_POINT_FP32",
@@ -1357,13 +1404,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
       unsigned maximum_angular = 0;
       for (const auto& shell : provider.system().shells)
         maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-      budget_fock = options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-                    admit_application_fock(
-                        options.application_precision_budget, molecule::ao_count(provider.system()),
-                        provider.system().atoms.size(), maximum_angular,
-                        spins == 1 && options.xc_execution_schedule ==
-                                          scf::ScfOptions::XcExecutionSchedule::DeviceFused,
-                        provider.system().ecp_terms.empty(), fock_precision.coulomb);
+      // DF has no mixed J provider. A separate local pure-J qualification
+      // admits only XC matrix products, with the existing bounded proposal and
+      // strict physical closure. Never report a nonexistent FP32 DF recurrence.
+      fitted_xc_budget =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO && fitted_coulomb &&
+          !fitted_exchange && !has_exchange && !has_range_correction && !nonlocal_correlation &&
+          grid_spec == default_grid_spec() &&
+          (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
+           functional == semilocal_family_code(SemilocalFamily::R2scan)) &&
+          options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
+          molecule::ao_count(provider.system()) >= 24 &&
+          molecule::ao_count(provider.system()) <= 1200 && provider.system().atoms.size() >= 2 &&
+          provider.system().atoms.size() <= 96 && maximum_angular <= 2 &&
+          provider.system().ecp_terms.empty() &&
+          admit_application_df_xc_budget(
+              options.application_precision_budget,
+              spins == 1 && options.xc_execution_schedule ==
+                                scf::ScfOptions::XcExecutionSchedule::DeviceFused);
+      budget_fock =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+          (fitted_xc_budget ||
+           admit_application_fock(
+               options.application_precision_budget, molecule::ao_count(provider.system()),
+               provider.system().atoms.size(), maximum_angular,
+               spins == 1 && options.xc_execution_schedule ==
+                                 scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+               provider.system().ecp_terms.empty(), fock_precision.coulomb));
       budget_stationarity =
           budget_fock && (options.energy_tolerance > 1e-10 || options.density_tolerance > 1e-8 ||
                           options.screening_tolerance > 1e-12);
@@ -1407,7 +1474,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         xc_layout.fast_paths, fitted_coulomb, nonlocal_correlation != nullptr,
         experimental_mixed_point, experimental_mixed_contractions,
         budget_fock ? fock_precision : scf::CudaFockPrecisionCapabilities{}, has_range_correction,
-        range_correction && scf::cuda_range_exchange_precision_capability(*range_correction));
+        range_correction && scf::cuda_range_exchange_precision_capability(*range_correction),
+        fitted_xc_budget);
     if (precision_schedule.any_lower_precision()) {
       mixed_warmup =
           resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
@@ -1421,6 +1489,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the incumbent UKS schedule until independent open-shell qualification.
       if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
         throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
+    }
+    early_final_probe_requested = early_final_probe_default_model(
+        functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
+        exchange_coefficient, grid_spec == default_grid_spec());
+    // Primitive 450 is the complete M06-2X functional. Its solver error is
+    // qualified separately from the retained default-grid error; exact mixing
+    // and the complete final-state proof remain required.
+    standard_convergence_model =
+        early_final_probe_requested ||
+        (functional == (0x20000U | 450U) && options.semilocal_exchange_scale == 1.0 &&
+         options.semilocal_correlation_scale == 1.0 && exchange_coefficient == -0.27 &&
+         grid_spec == default_grid_spec());
+    if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
+      early_final_probe_requested = std::strcmp(setting, "1") == 0;
     }
     const bool range_incremental_eligible =
         !has_range_correction ||
@@ -1911,13 +1995,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     stabilize_occupations = false;
     final_closure = false;
     // A resident, same-model warm proposal already passed the strict physical
-    // gates. Re-evaluate it in FP64 before perturbing it with approximate XC:
+    // gates. Re-evaluate it in FP64 before perturbing it with approximate J/K or XC:
     // a converged frozen replay should not manufacture another mixed SCF.
     // This selects arithmetic, not convergence: every ordinary energy,
     // density and residual gate still runs. Cold/external/moved seeds retain
     // the admitted warmup, and ordinary AUTO keeps its incumbent contract.
-    strict_refinement =
-        use_warm && options.application_precision_budget[0] > 0.0 && experimental_mixed_point;
+    strict_refinement = use_warm && options.application_precision_budget[0] > 0.0 &&
+                        (experimental_mixed_point || budget_fock);
     pending_mixed_coulomb = false;
     pending_mixed_exchange = false;
     pending_mixed_range_exchange = false;
@@ -2893,6 +2977,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
       pending_mixed_coulomb =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      // Pure-J proposals benefit from the generated strict shell consumer:
+      // generic mixed recurrence repeats substantially more component work.
+      // Select before submission so the work ledger reports actual FP64 J.
+      // Hybrid/resident schedules retain their independently qualified policy.
+      if (pending_mixed_coulomb && !has_exchange && !has_range_correction &&
+          !(phase_source && phase_source->active()) &&
+          scf::cuda_direct_jk_generated_coulomb_available(provider.cuda_direct_source(),
+                                                          provider.strategy().spec))
+        pending_mixed_coulomb = false;
       pending_mixed_exchange = has_exchange && iteration_precision.uses_lower_precision(
                                                    cuda_ks_precision_region::kExactExchange);
       pending_mixed_range_exchange =
@@ -3239,13 +3332,40 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refine_incremental_energy(physical.density_change, physical.residual,
                               physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
-    const bool converged = has_energy_history && full_energy_history && !pending_nonlocal_seed &&
-                           !pending_nonlocal_frozen &&
-                           (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2) &&
-                           output.energy_change < options.energy_tolerance &&
-                           physical.density_change < options.density_tolerance &&
-                           physical.residual < physical_stationarity_tolerance() &&
-                           physical.maximum_residual < physical_stationarity_tolerance();
+    bool converged = ordinary_ks_converged(
+        {output.iterations, warm_energy_baseline, full_energy_history,
+         !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+             (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
+         output.energy_change, physical.density_change, physical.residual,
+         physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
+         physical_stationarity_tolerance()});
+    bool early_final_probe_ran = false;
+    // The final contract admits a 1e-8 AO maximum but separately checks the
+    // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay
+    // intact. Optional/device/backend cases without this qualified ownership
+    // retain the incumbent conservative stopping policy.
+    const bool early_final_probe_eligible =
+        early_final_probe_requested && spins == 1 && !budget_fock && !fitted_exchange &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
+        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+        final_validation_partial && matrix_products.library_enabled() &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    // Prove the force consumer's complete physical/canonical state before
+    // publishing convergence or a warm seed. Rejection resumes the intact
+    // DIIS proposal and invalidates only the borrowed orbital scratch.
+    if (converged && standard_convergence_active()) {
+      early_final_probe_ran = true;
+      converged = probe_current_final_state();
+    } else if (!converged && early_final_probe_eligible && has_energy_history &&
+               full_energy_history && output.energy_change < options.energy_tolerance &&
+               physical.density_change < options.density_tolerance &&
+               physical.residual < physical_stationarity_tolerance() &&
+               physical.maximum_residual < std::min(1e-8, options.density_tolerance)) {
+      early_final_probe_ran = true;
+      converged = probe_current_final_state();
+    }
     // Once the initialized target already passes every physical stationarity
     // gate, confirm its energy with another complete F[D] at that same D.
     // Applying a sub-tolerance proposal can otherwise inject summation noise
@@ -3415,15 +3535,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
-        // Only the candidate changes the frame representation. Preserve the
-        // incumbent orthonormal path unless exact AO warm reuse was selected.
-        const bool retain_ao = fitted_exchange && spins == 1 && warm_factor_replay_enabled();
-        check(cudaMemcpyAsync(warm_orbitals, retain_ao ? tmp1 : tmp2, elements * sizeof(double),
-                              cudaMemcpyDeviceToDevice, stream));
-        warm_orbitals_ready = true;
-        warm_orbitals_are_ao = retain_ao;
-        ++movement.warm_orbital_frames_retained;
-        occupied_fitted_factor_ready = fitted_exchange;
+        if (early_final_probe_ran) {
+          // The rejected proof borrowed tmp1/tmp2/effective/residual. Proposal
+          // D has separate storage, but its old eigen scratch is no longer a
+          // valid warm orbital frame. The next ordinary sweep rebuilds it.
+          occupied_fitted_factor_ready = false;
+          invalidate_warm_orbitals();
+        } else {
+          // Only the candidate changes the frame representation. Preserve the
+          // incumbent orthonormal path unless exact AO warm reuse was selected.
+          const bool retain_ao = fitted_exchange && spins == 1 && warm_factor_replay_enabled();
+          check(cudaMemcpyAsync(warm_orbitals, retain_ao ? tmp1 : tmp2, elements * sizeof(double),
+                                cudaMemcpyDeviceToDevice, stream));
+          warm_orbitals_ready = true;
+          warm_orbitals_are_ao = retain_ao;
+          ++movement.warm_orbital_frames_retained;
+          occupied_fitted_factor_ready = fitted_exchange;
+        }
       } else {
         occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();
@@ -3544,6 +3672,41 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
   }
 
+  /** Test the current physical F[D] before publishing a final generation.
+   * Numerical rejection continues from the still-owned DIIS proposal; driver,
+   * allocation and eigensolver failures propagate normally. No force weights
+   * or warm seed are authorized by this speculative proof. */
+  bool probe_current_final_state() {
+    runtime::cuda_trace::TraceRegion trace("ks_early_final_probe", stream);
+    runtime::cuda_trace::trace_counter("early_final_probes", 1);
+    prepare_final_frame();
+    scf::solver::FinalStateLimits limits;
+    limits.density_tolerance = options.density_tolerance;
+    if (standard_convergence_active())
+      limits.stationarity_tolerance = physical_stationarity_tolerance();
+    limits.energy_tolerance = options.energy_tolerance;
+    limits.maximum_corrections = 0;
+    limits.require_canonicality = true;
+    scf::solver::FinalStateDiagnostic products;
+    std::string detail;
+    if (!resident_final_products(true, provider.one_electron().nuclear_repulsion, products, detail))
+      throw std::runtime_error(detail.empty() ? "CUDA KS early final-state products failed"
+                                              : detail);
+    auto identity = final_identity();
+    identity.determinant.factor = {owner, 1, generation, generation};
+    const KsFinalStateEvidence evidence{identity,      generation,
+                                        true,          output.dft_diagnostic.components,
+                                        output.energy, output.dft_diagnostic.physical_residual};
+    KsFinalStateDiagnostic diagnostic;
+    const bool accepted = validate_ks_final_state_evidence(identity, n, evidence, limits, products,
+                                                           diagnostic, detail);
+    runtime::cuda_trace::trace_counter(accepted ? "early_final_accepts" : "early_final_rejects", 1);
+    // Reuse only the verified physical eigenframe. The public force path still
+    // performs its own token-bound proof before staging D/W in shared scratch.
+    final_frame_ready = accepted;
+    return accepted;
+  }
+
   void stage_stationary_weights() {
     constexpr unsigned threads = 128;
     build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
@@ -3621,7 +3784,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       prepare_final_frame();
       scf::solver::FinalStateLimits limits;
       limits.density_tolerance = options.density_tolerance;
-      if (budget_stationarity) limits.stationarity_tolerance = physical_stationarity_tolerance();
+      if (budget_stationarity || standard_convergence_active())
+        limits.stationarity_tolerance = physical_stationarity_tolerance();
       limits.energy_tolerance = options.energy_tolerance;
       limits.maximum_corrections = 0;
       limits.require_canonicality = true;
@@ -3710,9 +3874,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         final_spec.coulomb.op == scf::FockOperator::FullRange && !final_spec.exchange.present &&
         (final_spec.coulomb.approximation == scf::FockApproximation::Exact ||
          final_spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
+    // AUTO can propose mixed iterates and then close with fresh FP64 F[D].
+    // The final proof consumes that strict frame; the historical proposal
+    // schedule does not change its algebra or relax any token/numerical gate.
+    const bool strict_final_arithmetic =
+        !precision_schedule.any_lower_precision() || strict_refinement;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision(),
-        full_range_coulomb_only);
+        n, spins, direct_global_hybrid, strict_final_arithmetic, full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
@@ -3790,7 +3958,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
-    if (budget_stationarity) limits.stationarity_tolerance = physical_stationarity_tolerance();
+    if (budget_stationarity || standard_convergence_active())
+      limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
     limits.require_canonicality = true;

@@ -54,7 +54,8 @@ void launch_validate_device_occupied_kernel(dim3 grid, dim3 block, std::size_t s
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_assemble_rhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                      cudaStream_t stream, std::size_t elements, const double* hcore,
-                                     const double* coulomb, const double* exchange, double* fock);
+                                     const double* coulomb, const double* exchange, double* fock,
+                                     std::uint64_t* completed_builds = nullptr);
 
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_assemble_uhf_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -93,7 +94,7 @@ void launch_update_device_convergence_kernel(
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual = nullptr);
+    const double* physical_residual = nullptr, bool qualified_owner = false);
 
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_tail_cuda_density_fitting_scf_graph_kernel(

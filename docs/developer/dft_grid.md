@@ -395,7 +395,15 @@ runner `python -m benchmarks.readme_pbe0_indexed_becke` with
 
 ### Generated Becke atom adjoints
 
-Ordinary phased CUDA first derivatives use binary-scaled Becke products by
+Treutler radius-adjusted partitions use the same bounded phased CUDA
+first-derivative schedule as equal-radius partitions. Both pair phases borrow
+the immutable elemental radii and evaluate the common coordinate-adjustment
+graph, including its chain rule. Ragged atom extents supply point owners;
+geometry rebinding refreshes center geometry without changing topology. Phase
+storage remains optional, with the bounded cooperative traversal as fallback.
+Adjusted partitions retain logarithmic products.
+
+Equal-radius phased CUDA first derivatives use binary-scaled Becke products by
 default for 96–128-atom owners with center geometry, already-admitted phase
 storage, and no primitive-adjoint selection. The lowering retains
 ordered switch products as a mantissa and integer exponent instead of sums
@@ -417,7 +425,7 @@ lowering, not a Hessian/response representation change. See the
 [binary-scaled product decision](../../.agents/notes/implemented/performance/2026-10-12-becke-binary-scaled-products.md).
 
 `GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE=normalized-adjoints` selects an
-experimental lowering of the authenticated equal-radius normalized-product AD
+experimental lowering of the authenticated normalized-product AD
 composition. The canonical scalar graph emits the exp pullback with its primal
 product already bound and the log pullback without an unused primal logarithm.
 Atom adjoints are produced at the normalization boundary and reused by incident
@@ -425,6 +433,8 @@ pairs. Exact single-zero and multiple-zero semantics, ordered four-word reverse
 and atom gather, moving points and geometry rebinding remain intact. The dead
 distance-adjoint field is reused until gather; no additional scratch or launch
 is required. Overflow/premature-underflow cuts use the original pair reverse.
+For Treutler partitions, pair reverse composes these product adjoints with the
+same adjusted-coordinate derivatives as the ordinary phased route.
 
 The default remains `off`. The older `coefficients` experiment and ordinary
 phased/generic AD routes remain available; old artifacts lacking the normalized

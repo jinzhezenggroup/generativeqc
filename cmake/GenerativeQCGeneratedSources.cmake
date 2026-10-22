@@ -900,7 +900,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       --output "${GENERATIVEQC_DF_GENERATED_HEADER}"
       --policy-output "${GENERATIVEQC_DF_POLICY_HEADER}")
 
-  # The native views and compiler both admit all 4^3 s/p/d/f classes. Keep
+  # Orbital s/p/d/f and auxiliary through-g share generated shell reuse. Keep
   # stable per-class output paths; profile edits must not reshuffle units.
   set(GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/df_shells")
   set(GENERATIVEQC_DF_SHELL_SOURCES)
@@ -908,7 +908,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY}/generated_df_shell_dispatch.hpp")
   foreach(_a RANGE 0 3)
     foreach(_b RANGE 0 3)
-      foreach(_c RANGE 0 3)
+      foreach(_c RANGE 0 4)
         set(_class "${_a}${_b}${_c}")
         list(APPEND GENERATIVEQC_DF_SHELL_SOURCES
              "${GENERATIVEQC_DF_SHELL_UNIT_DIRECTORY}/df_shell_${_class}.cu")
@@ -1123,6 +1123,20 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_engine_cuda.py"
     ARGS --output "${GENERATIVEQC_MD_J_ENGINE_HEADER}"
     COMMENT "Generating compact reference-aligned MD Coulomb engine")
+
+  set(GENERATIVEQC_DF_MD_J_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_md_j.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_md_j_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_md_j.py"
+    OUTPUTS "${GENERATIVEQC_DF_MD_J_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/df_md_j_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+    ARGS --output "${GENERATIVEQC_DF_MD_J_HEADER}"
+    COMMENT "Generating compiler-owned DF Hermite charge/J contractions")
 
   set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")

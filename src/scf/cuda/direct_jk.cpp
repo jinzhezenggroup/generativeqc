@@ -143,11 +143,22 @@ struct MdJHost {
     if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
         host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
       return false;
+    // A same-shell primitive pair has identical spatial products under
+    // exchanging its two primitive indices. Store one triangular descriptor;
+    // the cached E transform carries the off-diagonal multiplicity of two.
+    // Distinct shells retain every ordered product, including coincident atoms.
+    auto primitive_census = static_cast<std::size_t>(host.shell_pair_primitive_offsets.back());
+    for (std::size_t pair = 0; pair < total_pairs; ++pair) {
+      const auto shell = host.shell_pair_first[pair];
+      if (shell != host.shell_pair_second[pair]) continue;
+      const auto count = static_cast<std::size_t>(host.shell_primitive_offsets[shell + 1] -
+                                                  host.shell_primitive_offsets[shell]);
+      primitive_census -= count * (count - 1) / 2;
+    }
     bytes = kMdSourceFixedBytes + (work_counts ? sizeof(MdJWorkCounts) : 0) +
             direct_jk_product(total_pairs,
                               sizeof(MdJPair) + 3 * sizeof(double) + sizeof(std::uint32_t));
-    bytes += direct_jk_product(host.shell_pair_primitive_offsets.back(),
-                               sizeof(MdJPrimitive) + sizeof(std::uint32_t));
+    bytes += direct_jk_product(primitive_census, sizeof(MdJPrimitive) + sizeof(std::uint32_t));
     bytes += direct_jk_product(host.system_shell_offsets.size(), 3 * sizeof(std::int64_t));
     if (bytes > available) return false;
     std::map<MdTransformShell, std::size_t> signatures;
@@ -191,8 +202,11 @@ struct MdJHost {
         transform_slots.insert(transform_slots.end(), layout.slots.begin(), layout.slots.end());
         map = maps.emplace(signature, std::make_pair(offset, layout.values)).first;
       }
-      const auto primitive_count =
-          host.shell_pair_primitive_offsets[index + 1] - host.shell_pair_primitive_offsets[index];
+      const auto shell_primitives =
+          host.shell_primitive_offsets[first + 1] - host.shell_primitive_offsets[first];
+      const auto primitive_count = first == second ? shell_primitives * (shell_primitives + 1) / 2
+                                                   : host.shell_pair_primitive_offsets[index + 1] -
+                                                         host.shell_pair_primitive_offsets[index];
       const auto pair_hermites = direct_jk_product(primitive_count, count);
       const auto pair_transforms = direct_jk_product(primitive_count, map->second.second);
       const auto extra_bytes =
@@ -210,6 +224,7 @@ struct MdJHost {
            first_primitive < host.shell_primitive_offsets[first + 1]; ++first_primitive) {
         for (auto second_primitive = host.shell_primitive_offsets[second];
              second_primitive < host.shell_primitive_offsets[second + 1]; ++second_primitive) {
+          if (first == second && second_primitive > first_primitive) continue;
           primitives.push_back({static_cast<std::uint32_t>(index),
                                 first_primitive,
                                 second_primitive,
@@ -437,15 +452,19 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
-                                             unsigned derivative_order, bool reserve_optional_md) {
+                                             unsigned derivative_order, bool reserve_optional_md,
+                                             std::size_t cartesian_nao) {
   auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
   const auto add = [&](std::size_t n, std::size_t width) {
     bytes = runtime::size_add(bytes, runtime::size_mul(n, width));
   };
-  // Shape-only upper bound for the optional spd Cartesian source. The public
-  // spherical-to-Cartesian ratio is at most 6/5; 2 keeps integer admission
-  // conservative without needing angular metadata or a geometry upload.
-  const auto cart = runtime::size_mul(nao, 2);
+  // Metadata-aware callers can avoid reserving four times the Cartesian
+  // matrix storage for a nearly Cartesian public basis. This is still a dry
+  // capacity query; no topology packing, CUDA work or allocation is needed.
+  // Shape-only callers retain the existing through-f conservative envelope.
+  direct_jk_require(!cartesian_nao || cartesian_nao >= nao,
+                    "Cartesian direct J/K dimension is smaller than the public basis");
+  const auto cart = cartesian_nao ? cartesian_nao : runtime::size_mul(nao, 2);
   const auto public_elements = runtime::size_mul(batch, runtime::size_mul(nao, nao));
   const auto cart_elements = runtime::size_mul(batch, runtime::size_mul(cart, cart));
   add(cart_elements, 4 * sizeof(double));    // Density, J, J correction and Schwarz.
@@ -2098,6 +2117,16 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, false,
                                             nullptr, -1.0, census, detail);
+}
+
+bool cuda_direct_jk_generated_coulomb_available(const CudaDirectJkPlan* plan,
+                                                FockBuildSpec spec) noexcept {
+  if (!plan || !spec.coulomb.present || spec.coulomb.op != FockOperator::FullRange ||
+      spec.derivative_order != 0)
+    return false;
+  return direct_jk_generated_full_range_value_available(*plan) ||
+         (!plan->generated_exchange && plan->generated_coulomb &&
+          plan->generated_coulomb->value_capability);
 }
 
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,

@@ -22,17 +22,19 @@ def reference(
     fitted: bool,
     functional: str,
     spin: int = 0,
-    xc_level: int | None = None,
     nonlocal_level: int | None = None,
     forces: bool = True,
+    atom_values: list | None = None,
+    grid_level: int | None = None,
 ) -> tuple[float, np.ndarray | None]:
     """Share basis input only; PySCF owns quadrature, SCF and analytic gradients."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
 
     pyscf.lib.num_threads(1)
-    atoms = tuple(Atom.from_value(a) for a in WATER)
-    labels = [f"{symbol}{i}" for i, (symbol, _) in enumerate(WATER)]
+    atom_values = WATER if atom_values is None else atom_values
+    atoms = tuple(Atom.from_value(a) for a in atom_values)
+    labels = [f"{symbol}{i}" for i, (symbol, _) in enumerate(atom_values)]
 
     def basis_dict(selected: Any) -> dict:
         basis = {label: [] for label in labels}
@@ -62,8 +64,8 @@ def reference(
     mf.small_rho_cutoff = 0
     mf.conv_tol, mf.conv_tol_grad = 1e-12, 1e-10
     mf.direct_scf_tol, mf.max_cycle = 1e-14, 100
-    if xc_level is not None:
-        mf.grids.level = xc_level
+    if grid_level is not None:
+        mf.grids.level = grid_level
     if nonlocal_level is not None:
         mf.nlcgrids.level = nonlocal_level
     if fitted and functional == "WB97M_V":
@@ -80,7 +82,8 @@ def reference(
             return provider(mol, dm, hermi=hermi, omega=omega)
 
         mf.get_k = mixed_k
-    # Neither XC nor VV10 radial/angular/pruning defaults are replaced.
+    # Default-grid callers leave both prescriptions untouched. Larger schedule
+    # gates may explicitly select levels while retaining the reference family.
     energy = mf.kernel()
     assert mf.converged
     if not forces:
@@ -223,7 +226,7 @@ def test_tight_xc_keeps_default_vv10_level_three(device: str, fitted: bool) -> N
         calculator,
         fitted=fitted,
         functional="WB97M_V",
-        xc_level=4,
+        grid_level=4,
         nonlocal_level=3,
         forces=forces,
     )

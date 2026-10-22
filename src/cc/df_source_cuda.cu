@@ -13,6 +13,7 @@
 
 #include "cc/df_source.hpp"
 #include "cc/df_source_response.hpp"
+#include "cc/phase_observation.hpp"
 #include "df_mo_source_generated.hpp"
 #include "generated_df_cc_source_cuda.cuh"
 #include "generated_symmetric_matrix_function.cuh"
@@ -103,6 +104,7 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   runtime::df_progress::Scope::number("factors_only", factors_only ? 1 : 0);
   const auto started = Clock::now();
   const auto n = ref.nbf, o = ref.nocc, q = molecule::ao_count(auxiliary);
+  phase_observation::Scope observed_source(phase_observation::Site::source_inclusive, n, q);
   if (!n || !o || o >= n || !q || molecule::ao_count(orbital) != n || device < 0 || !budget ||
       !std::isfinite(relative_threshold) || relative_threshold <= 0 || relative_threshold >= 1 ||
       ref.coefficients.size() != checked_mul(n, n) ||
@@ -242,6 +244,8 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     posthf::generated::transform_df_mo_source(
         n, q, coefficients.get(), plan.inverse_square_roots, bmo.get(), transformed.get(),
         [&](std::size_t mu) {
+          phase_observation::Scope production(phase_observation::Site::source_gpu_submission, mu, q,
+                                              reinterpret_cast<std::uintptr_t>(stream));
           check_status(scf::generate_cuda_density_fitting_raw_expansion(
                            plan.integral_source, 0, mu * n, n, 0, q, stream, row.get(),
                            row_low.get(), detail),
@@ -251,6 +255,9 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
         },
         [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k, const double* a,
             const double* b, double* output) {
+          phase_observation::Scope projection(phase_observation::Site::source_transform_submission,
+                                              result.transform_gemms, k,
+                                              reinterpret_cast<std::uintptr_t>(stream));
           // The two orbital projections can cancel large diffuse AO values.
           // Consume raw residuals in the first and compensate both dots. The
           // final metric projection retains ordinary FP64 cuBLAS execution.
@@ -266,7 +273,11 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
           result.transform_summands =
               checked_add(result.transform_summands, checked_mul(checked_mul(m, columns), k));
         });
-    runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    {
+      phase_observation::Scope wait(phase_observation::Site::explicit_wait, 0, 0,
+                                    reinterpret_cast<std::uintptr_t>(stream));
+      runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    }
     if (retain_response_state) retained_coefficients = std::move(coefficients);
   }
   result.source_values = checked_mul(result.source_rows, layout.row_values);
@@ -279,7 +290,10 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   runtime::OwnedCudaBuffer<double> arena(device, layout.packing_values, stream);
   runtime::OwnedCudaBuffer<int> error(device, 1, stream);
   generated::df_source::CudaState state{o, v, q, bmo.get(), arena.get(), error.get(), stream};
+  phase_observation::Scope packing(phase_observation::Site::source_pack_submission, o, v,
+                                   reinterpret_cast<std::uintptr_t>(stream));
   const auto factors = generated::df_source::pack_cuda(state);
+  packing.close();
   int failed = 0;
   runtime::cuda_resource_check(
       cudaMemcpyAsync(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream));
@@ -288,10 +302,20 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   bmo.reset();
   runtime::OwnedCudaBuffer<double> block(device, layout.largest_block, stream);
   auto download = [&](std::vector<double>& values, const double* device_values, std::size_t count) {
+    phase_observation::Scope host(phase_observation::Site::source_host_preparation, 0, count);
     values.resize(count);
+    host.close();
+    phase_observation::Scope copy(phase_observation::Site::source_copy_submission, 0, bytes(count),
+                                  reinterpret_cast<std::uintptr_t>(stream));
     runtime::cuda_resource_check(cudaMemcpyAsync(values.data(), device_values, bytes(count),
                                                  cudaMemcpyDeviceToHost, stream));
-    runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    copy.close();
+    {
+      phase_observation::Scope wait(phase_observation::Site::explicit_wait, 0, 0,
+                                    reinterpret_cast<std::uintptr_t>(stream));
+      runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+    }
+    phase_observation::Scope validation(phase_observation::Site::source_validation, 0, count);
     if (!std::all_of(values.begin(), values.end(), [](double x) { return std::isfinite(x); }))
       throw std::runtime_error("nonfinite native CUDA DF-CC integral block");
     result.factor_block_d2h_bytes = checked_add(result.factor_block_d2h_bytes, bytes(count));
@@ -301,6 +325,9 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   download(result.bvv, factors.bvv, checked_mul(q, checked_mul(v, v)));
   auto block_gemm = [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k,
                         const double* a, const double* b, double* output) {
+    phase_observation::Scope block_submission(phase_observation::Site::source_block_submission,
+                                              result.block_gemms, k,
+                                              reinterpret_cast<std::uintptr_t>(stream));
     gemm(ta, tb, m, columns, k, a, b, output);
     ++result.block_gemms;
     result.block_summands =

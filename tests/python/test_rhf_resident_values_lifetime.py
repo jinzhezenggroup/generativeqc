@@ -134,7 +134,7 @@ FockBuildSpec make_hf_fock_spec(FockSpin spin, FockApproximation approximation) 
   return spec;
 }
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t,std::size_t,std::size_t,
-                                            std::size_t,std::size_t,unsigned,bool) { return 4096; }
+                                            std::size_t,std::size_t,unsigned,bool,std::size_t) { return 4096; }
 generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
     int, const std::vector<core::System>& systems, double screening,
     std::size_t budget, cudaStream_t value, CudaDirectJkPlan** output,

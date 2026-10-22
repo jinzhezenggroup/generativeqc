@@ -294,6 +294,92 @@ of that Python float. During capture, negative-zero float literals are rejected 
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
 
+### Captured products
+
+`xp.prod(x, axis=None, dtype=None, keepdims=False)` captures generic finite
+float32/float64 arrays using the existing TensorIR multiplication and static
+gather/reshape operations. Axes may be signed integers, unique tuples, `None`
+(all axes), or `()` (identity). Reduced zero extents produce the empty product
+1; zero extents on retained axes produce an empty output. `keepdims=True`
+retains reduced axes of length one. `dtype=None` preserves the input dtype;
+explicit `float32`/`float64` requests cast generic inputs before reduction.
+Scientific index annotations, spin, symmetry and compressed representations
+are outside this capture contract.
+
+Pairwise multiplication with separate odd tails gives a bounded static graph;
+no input is duplicated to pad an odd extent. Capture preflights gather positions,
+nodes, rounds and retained intermediate bytes before creating index maps.
+Backend byte/work/node budgets still apply to the complete program. Multiplication
+is polynomial, so existing first-order JVP/VJP rules remain valid at one or
+multiple zero factors without a comparison-selector opt-in or division by an
+input. Native execution is limited here to the existing materializing CPU FP64
+contract. Native FP32 and CUDA products are unqualified; public CUDA capture is
+explicitly rejected. Higher derivatives, scientific endpoints and performance
+are outside this slice. Standard eager `prod` behavior is unchanged.
+
+The comparison target is [Array API 2025.12 prod](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.prod.html).
+
+### Captured variance
+
+`xp.var(x, axis=None, correction=0.0, keepdims=False)` captures generic finite
+float32/float64 arrays with their input dtype unchanged. It computes a centered
+two-pass variance: subtract the mean, square, sum and scale by `1/(M-correction)`.
+This avoids subtracting two large raw moments. Signed integer axes, unique
+tuples, `None`, scalar arrays and `()` are supported; `()` gives zero at every
+element. Empty retained dimensions give empty outputs. Scientific index, spin,
+symmetry and representation annotations are rejected before identity cases.
+
+Correction must be a finite static Python int or float, with a nonempty
+reduction, positive divisor and finite nonzero scaling coefficient in the input
+dtype. All executed intermediate values must remain finite. Nonpositive
+divisors and empty reductions are rejected during capture; standard eager
+NaN behavior remains available. No `dtype` keyword or `std` capture is added.
+Capture preflights all new buffers and nodes against a conservative 256 MiB
+retained-storage bound; complete-program backend byte/work/node gates remain.
+
+Existing first-order AD composes the centered derivative, including zero at
+constant inputs. This is the existing real-arithmetic AD convention, without a
+claim about classical derivatives of floating-point rounding. Opt-in native
+execution uses only the existing CPU FP64 contract. Public CUDA compile/lower,
+execution and AD entries reject this unqualified operation. Native FP32, higher
+derivatives, molecular endpoints and performance are outside this slice.
+
+The comparison target is [Array API 2025.12 var](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.var.html);
+this finite captured subset does not implement its full IEEE special cases.
+
+### Explicit reduction dtype
+
+Captured generic finite `sum` and `prod` accept `dtype=xp.float32` or
+`dtype=xp.float64`. The existing TensorIR cast converts each input element
+before arithmetic; casting only the result would have different precision and
+overflow behavior. `dtype=None` and explicit same-dtype requests preserve the
+existing graph without an extra cast. Empty sums/products retain identities
+0/1 in the requested dtype. Standard eager behavior is unchanged.
+
+Explicit dtype requests reject scientific index spaces, spin, symmetries and
+non-general representations, including same-dtype requests. `sum(dtype=None)`
+retains its existing scientific contract. Integer, Boolean and complex targets
+remain unsupported by capture. Nonfinite conversion or arithmetic results fail
+the existing finite contract. Conversion preflight includes the entire target
+buffer and reduction intermediates within 256 MiB before building gather
+positions; backend byte/node limits still apply.
+
+Reference execution supports both real dtypes. First-order AD uses the existing
+cast convention: convert tangents to the forward target dtype and cotangents
+back to the input dtype. This convention does not treat IEEE rounding as an
+everywhere differentiable function. Products retain zero-safe polynomial AD.
+Opt-in native CPU execution admits only the already supported float64 input,
+output and arithmetic; float32 inputs are not admitted by requesting float64
+output. Public explicit-dtype CUDA capture is rejected before native compilation
+or device work. Raw TensorIR primitive admission remains separate. These limits
+do not qualify native float32, CUDA, full IEEE semantics or full Array API
+conformance. The compiler capability report retains `array_api_version=None`.
+
+The precision contract follows [Array API 2025.12 sum](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.sum.html)
+and the product specification linked above.
+The compiler continues to report `array_api_version=None`; the public eager
+namespace's existing standard discovery does not qualify capture conformance.
+
 ## Generic native molecular method sources
 
 Use `xp.MolecularModel` to connect any **existing, supported** native
@@ -603,6 +689,31 @@ separately from the tie selection convention; no mathematical differentiability
 at ties or Hessian qualification is claimed. The operations reuse comparisons and
 `where`, with shared broadcast values and unchanged resource budgets. Their
 capability entries retain native CPU/CUDA qualification unset.
+
+Captured `max(x, axis=None, keepdims=False)` and `min` accept finite generic
+float32/float64 static arrays. Axis accepts a signed integer, a unique tuple of
+axes, or `None`; an empty tuple is a detached identity. `keepdims` must be a
+Python bool. An actual zero-length reduced axis raises; a zero-length retained
+axis gives an empty output. Scientific annotations and nonfinite capture remain
+unsupported. The existing eager IEEE behavior is unchanged. The
+[max](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.max.html)
+and [min](https://data-apis.org/array-api/2025.12/API_specification/generated/array_api.min.html)
+specifications permit errors for empty reductions and implementation-defined
+signed-zero order.
+
+Capture pairs adjacent values in a balanced tree, preserving the earliest
+C-order value on ties, including its zero sign. Before constructing the graph,
+it limits total gather positions to 65,536, pairwise rounds to 64, and estimated
+new retained tensor storage to 256 MiB. Ordinary backend node, work and byte
+budgets still apply and may reject smaller programs. Put static options inside
+a function, for example `xp.compile(lambda x: xp.max(x, axis=(0, -1)),
+backend="reference")`, following the existing array-only runtime argument
+contract. First-order comparison-selector AD requires
+`allow_comparison_where=True` wherever comparisons remain in the graph; empty
+axis and singleton identities use the existing identity AD. Tie gradients are
+only a deterministic branch convention. CPU FP64 execution/AD uses the existing
+opt-in native path; capability qualification flags remain unset, and native
+float32 and CUDA reductions are not qualified.
 
 Captured `clip(x, min=None, max=None)` accepts generic finite float32/float64
 arrays. Each bound can be absent, a finite static scalar under the existing exact

@@ -1,21 +1,12 @@
 {
   "schema": 1,
   "files": {
-    "python/generativeqc_compiler/method/df_hf_response_cuda.py": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "HF response emits the existing direct-NT panel charge and the TensorIR-qualified direct-NN retained-factor charge/metric-root vector contraction. Both borrow the response owner's handle and workspace; shared-binding migration remains #1890 debt.",
-      "references": {
-        "cublasDgemm": 2
-      }
-    },
     "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "Occupied DF response emits vendor matrix products from method code; canonical lowering must own these submissions.",
+      "reason": "Occupied DF response borrows shared Tensor column GEMM views; its symmetric metric Gram retains direct SYRK and GEMM fallback pending canonical lowering.",
       "references": {
-        "cublasDgemm": 5,
-        "cublasDgemmStridedBatched": 2,
+        "cublasDgemm": 1,
         "cublasDsyrk": 2
       }
     },

@@ -60,8 +60,9 @@ jobs:
     outputs:
       test_scope: ${{ steps.prose_scope.outcome == 'success' && steps.prose_scope.outputs.scope == 'prose' && 'prose' || 'full' }}
     runs-on: macos-26
-    # Keep the 40-minute qualification budget inside a separate finite job budget.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
+    # Cold merge-queue compilation can exceed the routine 30-minute budget.
+    # Retain a finite job cap and all existing scientific step/suite limits.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') && 75 || 30 }}
     env:
       CUMETAL_COMMIT: e87f368060cf09a45b148b4f8892470c74093ebd
       CUMETAL_SOURCE: /tmp/cuda-metal

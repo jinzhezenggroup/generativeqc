@@ -24,7 +24,8 @@ struct MdSourceTask {
 inline constexpr std::size_t kMdSourceFixedBytes =
     sizeof(double) + sizeof(std::uint32_t) + sizeof(unsigned long long);
 
-/** One unordered shell pair; primitive products retain their ordered contraction. */
+/** One unordered shell pair. Same-shell primitive exchange is folded into the
+ * cached E transforms; distinct shells retain every ordered primitive product. */
 struct MdJPair {
   std::int32_t system, first, second;
   std::int32_t first_ao, second_ao, first_count, second_count;
@@ -55,10 +56,17 @@ struct MdJWorkCounts {
 
 /** Device-only replay census for complete primitive J. Prefixes are refreshed
  * after the current density bound, including every captured graph replay. */
+// Finite IEEE-754 bins; unknown/infinite norms are never omitted.
+// Keep the leading two mantissa bits as well as the exponent. All boundaries
+// are exact nonnegative FP64 bit patterns, including the subnormal domain.
+constexpr unsigned kMdJSourceNormShift = 50;
+constexpr unsigned kMdJSourceNormBins = 2047 * 4;
 struct MdJPrimitiveScreenState {
   double maximum_density;
   double maximum_source_norm;
   std::uint32_t active[5];
+  unsigned long long source_norm_counts[kMdJSourceNormBins];
+  double source_norm_tails[kMdJSourceNormBins];
 };
 
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.

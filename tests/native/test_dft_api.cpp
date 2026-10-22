@@ -803,8 +803,10 @@ void mixed_df_rsh_cpu_endpoints() {
       // basis/grid: DF full-range J/K with the orbital basis as auxiliary,
       // and unfitted get_k(omega=0.3) for the LR correction. Generic RSH uses
       // PBE + 0.2*HF + 0.6*LR_HF(0.3); WB97M-V retains its complete VV10 term.
-      // Reproduce with tools/verify_mixed_df_rsh_cpu.py (H2 and H2- doublet).
-      const double oracle = wb97mv ? (open_shell ? -0.8191434240565644 : -1.2886176659087356)
+      // Explicitly match rho >= 1e-10 with tools/verify_mixed_df_rsh_cpu.py
+      // --vv10-density-cutoff 1e-10 (H2 and H2- doublet). CPU PySCF defaults
+      // remain 1e-8; these values were independently reconverged, not fitted.
+      const double oracle = wb97mv ? (open_shell ? -0.8191434237585024 : -1.2886176657015223)
                                    : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
       require(std::abs(cold - oracle) < 2e-10,
               "mixed-DF CPU RSH differs from its independent matched-grid oracle");

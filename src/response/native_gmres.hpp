@@ -34,7 +34,7 @@ struct GmresOptions {
   std::size_t true_residual_every{1};
   std::size_t stagnation_window{25};
   double stagnation_tolerance{1e-14};
-  /** Optional owned diagnostics; conservative workspace already reserves these.
+  /** Optional owned diagnostics; workspace reserves each requested payload.
    * Disabled for existing native consumers unless explicitly requested.
    */
   bool collect_history{};

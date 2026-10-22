@@ -1039,6 +1039,13 @@ class CompiledFunction:
             if symbolic is not None and function is globals().get(function.__name__)
             else function
         )
+        if builtins.any(
+            function is candidate
+            for candidate in (prod, _symbolic_backend.prod, var, _symbolic_backend.var)
+        ):
+            # Direct compilation uses static defaults. Nondefault reduction
+            # options belong in a closure, not runtime array feeds.
+            signature = signature.replace(parameters=(signature.parameters["x"],))
         unsupported = {
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
@@ -1122,9 +1129,12 @@ class CompiledFunction:
         if program is None:
             from ._array_api_molecular import _MolecularCapture
 
-            with _MolecularCapture(
-                self._backend, self._options["device"], set(specs)
-            ) as capture:
+            with (
+                _MolecularCapture(
+                    self._backend, self._options["device"], set(specs)
+                ) as capture,
+                _symbolic_backend._capture_backend(self._backend),
+            ):
                 program = trace(
                     self._function,
                     specs,

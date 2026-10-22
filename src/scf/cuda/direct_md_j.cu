@@ -102,7 +102,11 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
   const double beta = batch.primitive_exponents[primitive.second];
   const auto first = atom_position<double>(batch, batch.shell_atoms[pair.first], -1);
   const auto second = atom_position<double>(batch, batch.shell_atoms[pair.second], -1);
-  const auto product = product_center(alpha, first, beta, second);
+  // A same-shell product is exactly centered on that shell. Its triangular
+  // primitive inventory combines (p,q) with (q,p); using the exact center also
+  // removes irrelevant exponent-order rounding from that symmetry identity.
+  const auto product =
+      pair.first == pair.second ? first : product_center(alpha, first, beta, second);
   if (threadIdx.x == 0) {
     primitive.exponent = alpha + beta;
     primitive.product = product;
@@ -114,6 +118,8 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                  beta, coefficients[axis]);
   const double weight = batch.primitive_coefficients[primitive.first] *
                         batch.primitive_coefficients[primitive.second];
+  const double multiplicity =
+      pair.first == pair.second && primitive.first != primitive.second ? 2.0 : 1.0;
   if (threadIdx.x == 0) md.transforms[primitive.transform_offset] = weight * 0.0;
   const auto base = static_cast<std::int64_t>(pair.system) * batch.nbf;
   for (unsigned component = threadIdx.x;
@@ -142,7 +148,10 @@ __global__ void md_j_transforms(DeviceBatch batch, MdJView md) {
                    coefficients[2].at(first_angular.z, second_angular.z, derivative.z);
         }
       }
-      md.transforms[primitive.transform_offset + slot] = weight * value;
+      // Scale the represented transform, after the original coefficient
+      // product, so J density/projection and the shared exact J/K consumer all
+      // receive the same folded primitive product without separate factors.
+      md.transforms[primitive.transform_offset + slot] = (weight * value) * multiplicity;
     }
   }
 }
@@ -229,6 +238,7 @@ __global__ void md_j_primitive_source_norms(MdJView md, std::size_t begin, std::
   const auto position =
       (primitive.hermite_offset - md.pair_loc_offsets[pair.angular]) / pair.hermites;
   md.hierarchy[md.hierarchy_layout.bucket_offsets[pair.angular] + position].qd = norm;
+  md_j_engine_count_source_norm(md.primitive_screen, norm);
   atomicMax(reinterpret_cast<unsigned long long*>(&md.primitive_screen->maximum_source_norm),
             static_cast<unsigned long long>(__double_as_longlong(norm)));
 }
