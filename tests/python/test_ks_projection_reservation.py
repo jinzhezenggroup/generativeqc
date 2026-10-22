@@ -51,7 +51,9 @@ def reservation_probe(
     matches = public[public.index("  bool matches(") : public.index("\n private:")]
     validation_start = prepared.index("    const auto reserved_rank =")
     validation_end = prepared.index("    for (const auto* term", validation_start)
-    initializer_start = prepared.index("  Impl(const core::System&")
+    initializer_start = prepared.index(
+        "  Impl(const core::System& system, const core::System* aux,"
+    )
     initializer_end = prepared.index(
         "    validate_resolved_fock_build", initializer_start
     )
@@ -86,6 +88,7 @@ struct Capture::Impl {
   std::size_t requested_budget;
   unsigned retained_fitted_derivative_order;
   FockOccupiedProjectionReservation projection_reservation;
+  bool external_integrals{};
   FockPreparationDiagnostic diagnostic;
   CudaDirectJkPlan* cuda_exact = nullptr;
 """
@@ -236,6 +239,9 @@ int main(int argc, char** argv) {
     const Capture generic(system,nullptr,strategy,0);
     assert(!generic.impl_->projection_reservation.restricted_rank);
     assert(generic.matches(system,nullptr,strategy,0,0));
+    generic.impl_->external_integrals = true;
+    assert(!generic.matches(system,nullptr,strategy,0,0));
+    generic.impl_->external_integrals = false;
     assert(!generic.matches(system,nullptr,strategy,0,0,0,0,reserved));
     assert(method.matches(system,nullptr,strategy,0,1U<<30,0,0,reserved));
     assert(!method.matches(system,nullptr,strategy,0,1U<<30));
