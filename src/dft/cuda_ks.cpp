@@ -21,6 +21,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
@@ -351,6 +352,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
+  bool incremental_proposals_requested{true}, incremental_proposals_active{};
+  bool incremental_coarse_screening_requested{true};
   bool fast_anchor_eligible{}, fast_anchor_active{}, fast_anchor_ready{}, pending_fast_delta{};
   void* fast_anchor_arena{};
   double *fast_anchor_density{}, *fast_delta_density{}, *fast_anchor_j{}, *fast_anchor_exchange{},
@@ -638,6 +641,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                    provider.strategy().screening_tolerance, detail, beta,
                                    has_exchange && spins == 2 ? exchange + matrix : nullptr);
     }
+    // Intermediate delta operators only propose densities. Keep the prepared
+    // target's cutoff immutable; full builds, warm replay and final proof use
+    // the ordinary facade. Unsupported producers retain the original action.
+    const double screening = ks_incremental_proposal_screening(
+        incremental_proposals_active && incremental_coarse_screening_requested &&
+            pending_incremental_delta && !mixed,
+        output.incremental_direct_jk.delta_builds, provider.strategy().screening_tolerance);
+    if (screening > provider.strategy().screening_tolerance) {
+      const auto status = scf::enqueue_prepared_cuda_fock_proposal(
+          provider, alpha, matrix, j, has_exchange ? exchange : nullptr, jk_error, screening,
+          detail);
+      if (status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        runtime::cuda_trace::trace_counter("incremental_coarse_screening", 1);
+        return status;
+      }
+    }
     return scf::enqueue_prepared_cuda_fock(
         provider, alpha, beta, matrix, j, exchange,
         has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, mixed, detail,
@@ -645,15 +664,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   /** Standard convergence requires a complete resident physical proof.
+   * Incremental solves must first establish the separate consecutive full-Fock
+   * energy history; reconstructed delta Focks cannot publish a final state.
    * Partial/nonlocal/mixed/ECP owners retain their independent policy. */
   bool standard_convergence_active() const noexcept {
     return standard_convergence_model &&
            scf::standard_scf_convergence_requested(options.energy_tolerance,
                                                    options.density_tolerance) &&
            spins == 1 && !budget_fock && !has_range_correction && !nonlocal_correlation &&
-           !incremental_direct_jk && !precision_schedule.any_lower_precision() &&
-           configured_chunk_width() == 1 && final_validation_partial &&
-           matrix_products.library_enabled() && provider.system().ecp_terms.empty() &&
+           !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+           final_validation_partial && matrix_products.library_enabled() &&
+           provider.system().ecp_terms.empty() &&
            std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                         [](const auto& atom) { return atom.ecp_core != 0; });
   }
@@ -1525,6 +1546,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
           "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
+    if (const auto* setting = std::getenv("GENERATIVEQC_KS_INCREMENTAL_PROPOSALS")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_INCREMENTAL_PROPOSALS requires 0 or 1");
+      incremental_proposals_requested = std::strcmp(setting, "1") == 0;
+    }
+    if (const auto* setting = std::getenv("GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING requires 0 or 1");
+      incremental_coarse_screening_requested = std::strcmp(setting, "1") == 0;
+    }
     fast_anchor_eligible = admit_fast_anchor_delta(
         budget_fock, budget_stationarity, functional,
         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
@@ -1923,6 +1954,37 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
 #endif
     const bool use_warm = !input && reuse_warm && warm_ready;
+    // Incremental storage is a prepared capability, but a previously audited
+    // resident density needs the ordinary full-density warm proof. Re-entering
+    // the delta controller would discard that energy history and force extra
+    // full builds even when no delta was applied. External/moved seeds do not
+    // carry this immutable owner's warm provenance and retain the cold policy.
+    // Keep unqualified UKS/ECP/range/nonlocal owners on their existing policy.
+    // Recompute on every begin so a later cold solve restores the capability.
+    const bool ordinary_incremental_warm =
+        use_warm && spins == 1 && !has_range_correction && !nonlocal_correlation &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    incremental_direct_jk = incremental_direct_jk_policy.active && !ordinary_incremental_warm;
+    // Only an owner with the complete Standard full-density closure may use a
+    // bounded chain of screened proposals. J/K linearity is independent of
+    // the XC family; inherit the ordinary Standard owner's existing model
+    // and proof admission without adding an incremental functional whitelist.
+    // A chain never supplies the final
+    // energy history or physical proof. Strict requests and unsupported owners
+    // retain the ordinary one-delta refresh policy; warm performs no proposals.
+    incremental_proposals_active = incremental_direct_jk && incremental_proposals_requested &&
+                                   provider.strategy().screening_tolerance > 0.0 &&
+                                   standard_convergence_active();
+    runtime::cuda_trace::trace_counter("incremental_proposals", incremental_proposals_active);
+    runtime::cuda_trace::trace_counter(
+        "incremental_refresh_interval",
+        incremental_direct_jk ? ks_incremental_proposal_interval(
+                                    incremental_proposals_active,
+                                    incremental_direct_jk_policy.requested_rebuild_interval,
+                                    incremental_direct_jk_policy.effective_rebuild_interval)
+                              : 0U);
     const auto* seed_selection = std::getenv("GENERATIVEQC_VV10_NATIVE_SEED");
     const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
     // Initialization only proposes densities; full target evaluations still
@@ -2858,9 +2920,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
         final_closure || strict_refinement)
       return false;
-    if (incremental_direct_jk_policy.effective_rebuild_interval != 0U &&
-        incremental_delta_updates >= incremental_direct_jk_policy.effective_rebuild_interval)
-      return false;
+    const auto interval = ks_incremental_proposal_interval(
+        incremental_proposals_active, incremental_direct_jk_policy.requested_rebuild_interval,
+        incremental_direct_jk_policy.effective_rebuild_interval);
+    if (interval != 0U && incremental_delta_updates >= interval) return false;
     if (incremental_direct_jk_policy.density_rms_threshold > 0.0 &&
         (!output.iterations || !std::isfinite(output.density_rms) ||
          output.density_rms > incremental_direct_jk_policy.density_rms_threshold))
@@ -2877,10 +2940,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * still requires consecutive full-density builds. */
   void refine_incremental_energy(double density_change, double residual,
                                  double maximum_residual) noexcept {
-    const double residual_tolerance = std::min(1e-9, options.density_tolerance);
+    const double residual_tolerance = physical_stationarity_tolerance();
+    const bool standard = standard_convergence_active();
+    // Start the safer full-density tail as soon as the density and RMS gates
+    // predict stationarity. Waiting for the AO maximum as well can spend the
+    // last useful iteration on a delta, then require two additional full Focks.
+    // The AO-maximum and canonicality gates still decide final acceptance;
+    // selecting full arithmetic early is not a convergence claim.
     if (incremental_direct_jk && density_change < options.density_tolerance &&
-        residual < residual_tolerance && maximum_residual < residual_tolerance)
+        residual < residual_tolerance && (standard || maximum_residual < residual_tolerance)) {
+      // A just-completed full F[D] is already the first physical energy in
+      // this refinement epoch. Count that real build instead of discarding it
+      // and demanding two more. A reconstructed delta energy never qualifies.
+      // The Standard stop still requires a second full build and the complete
+      // canonical final-state proof; explicit strict controls keep their policy.
+      if (!incremental_energy_refinement && !pending_incremental_delta && standard)
+        incremental_energy_full_builds = 1;
       incremental_energy_refinement = true;
+    }
   }
 
   const double* prepare_incremental_jk_density() {
@@ -3849,10 +3926,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The final-state product proof is shared by every prepared full-range
     // global hybrid; the semilocal XC family does not change its matrix algebra.
     const auto& final_spec = provider.strategy().spec;
+    // An admitted Standard incremental solve ends with consecutive ordinary
+    // full-density Focks and a canonical proof. Its current operator may use
+    // the same resident validation products as an ordinary solve; the earlier
+    // delta trajectory does not require exporting matrices to re-prove them.
+    const bool ordinary_final_operator =
+        !incremental_direct_jk ||
+        (standard_convergence_active() && final_closure && incremental_energy_full_builds >= 2);
     const bool direct_global_hybrid =
         has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
         !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
-        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        ordinary_final_operator && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
         final_spec.derivative_order == 0 && final_spec.coulomb.present &&
@@ -3863,10 +3947,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         final_spec.exchange.op == scf::FockOperator::FullRange;
     // The proof consumes the final matrices, not the XC family or J builder.
     // Admit only complete all-electron full-range pure-J models; range,
-    // incremental, nonlocal, ECP and lower-precision owners keep their policy.
+    // unclosed incremental, nonlocal, ECP and lower-precision owners keep their policy.
     const bool full_range_coulomb_only =
         !has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
-        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        ordinary_final_operator && provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
         final_spec.derivative_order == 0 && final_spec.coulomb.present &&

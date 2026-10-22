@@ -286,8 +286,8 @@ for these strict-FP64 restricted producers:
 
 Resource and live-generation checks still require the matrix-library handle,
 charged packets and no previously published stationary W/total-D lease. Smaller
-pure-J owners, UKS, fitted-exchange, RSH, ECP, nonlocal, mixed and incremental
-consumers are not admitted by the new pure-J policy.
+pure-J owners, UKS, fitted-exchange, RSH, ECP, nonlocal, mixed and unclosed
+incremental consumers are not admitted by the new pure-J policy.
 
 `GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=0` forces the reference route.
 Explicit `=1` requests the resident route outside the automatic scope, but does
@@ -335,6 +335,43 @@ finalization remains mandatory. Energy convergence requires two consecutive
 full-density builds. For ordinary RKS, the qualifying full-density build is
 already the final physical audit; UKS and ECP retain their separate corrective
 closure. A fresh solve resets this refinement phase.
+
+All-electron RKS owners admitted to the existing Standard stopping and complete
+resident final-state validation policies can use bounded screened ΔD proposals.
+ΔD admission adds no functional-name restriction: J/K linearity is independent
+of XC family, while the ordinary Standard model/grid and resource guards still
+apply.
+The requested rebuild interval bounds each proposal chain, capped at eight;
+zero also selects this finite cap. These operators only propose SCF steps:
+screening tolerances are not an accumulated-error certificate. Acceptance still
+requires two consecutive full-density energies and the complete physical and
+canonical-state proof. The density-change and RMS gates can start full-density
+refinement before the AO maximum passes; all gates remain required to finish.
+`GENERATIVEQC_KS_INCREMENTAL_PROPOSALS=0` restores the ordinary screened refresh
+cadence while retaining the final-state and warm policies; `1` or unset enables
+proposals for eligible owners. Other values are errors. Explicit strict
+tolerances and owners lacking the required proof retain their ordinary
+incremental policy.
+
+Eligible proposals can also use a coarser `1e-9` J/K screening cutoff for at most
+the first eight delta builds of a solve, across periodic refreshes. This applies
+only to an already screened source whose prepared cutoff is tighter, with MD-J
+and, when needed, generated full-range K available. Existing conservative
+producer caps, including the MD-J error cap, remain in force. Unsupported providers fall
+back to the prepared cutoff. The prepared source is immutable: full builds,
+warm calls, final physical proof and analytic forces use the original cutoff.
+The proposal cutoff is a convergence heuristic, not an accumulated-error bound.
+`GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` disables this extra screening
+while preserving bounded delta proposals; `1` or unset enables it, and other
+values are errors. The global incremental selector remains opt-in.
+
+For all-electron RKS without range or nonlocal contributions, a validated
+density reused internally at the same
+geometry follows the ordinary full-density warm path, including its energy
+history. Diagnostics therefore report incremental mode as requested but
+inactive on that call. External seeds, changed geometry and clearing the warm
+state restore the cold incremental policy. This does not enable the global
+incremental selector by default or expand resource-planning support.
 
 ### Model binding
 

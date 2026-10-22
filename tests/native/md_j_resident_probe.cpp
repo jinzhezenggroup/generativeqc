@@ -149,6 +149,30 @@ extern "C" int md_j_probe_execute(void* handle, const double* density, const dou
   }
 }
 
+/** Test the provisional action on the very same owner as ordinary execution.
+ * A later ordinary action must still observe the original screening identity. */
+extern "C" int md_j_probe_propose(void* handle, const double* density, const double* beta,
+                                  std::size_t elements, double* coulomb, double* exchange,
+                                  double* beta_exchange, int* numerical_error, double screening,
+                                  double* seconds) {
+  try {
+    auto& probe = checked_probe(handle);
+    if (!seconds || beta || beta_exchange)
+      throw std::invalid_argument("provisional probe requires restricted buffers");
+    require_cuda(cudaEventRecord(probe.started, probe.binding.stream));
+    std::string detail;
+    const auto status = generativeqc::scf::enqueue_prepared_cuda_fock_proposal(
+        probe.source, density, elements, coulomb, exchange, numerical_error, screening, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    finish_timing(probe, seconds);
+    last_error.clear();
+    return 0;
+  } catch (const std::exception& error) {
+    last_error = error.what();
+    return 1;
+  }
+}
+
 /** Capture the actual native resident value enqueue on its prepared stream.
  * No wrapper timing events, upload, download or host callbacks enter the graph.
  * Work-count diagnostics deliberately fence/download and are not capturable.

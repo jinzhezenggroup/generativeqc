@@ -128,3 +128,54 @@ int main() {
         [executable], capture_output=True, text=True, check=False, timeout=10
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_incremental_final_operator_requires_completed_physical_closure(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the admission predicate instead of pinning its internal spelling.
+
+    The real CUDA E/F regression exercises final-state reading end to end;
+    this host truth table additionally covers rejected incomplete histories.
+    """
+    ks = _source("src/dft/cuda_ks.cpp")
+    begin = ks.index("const bool ordinary_final_operator =")
+    gate = ks[begin : ks.index(";", begin) + 1]
+    source = tmp_path / "incremental_final_operator.cpp"
+    source.write_text(
+        """
+#include <cassert>
+#include <initializer_list>
+struct Consumer {
+  bool incremental_direct_jk, standard, final_closure;
+  unsigned incremental_energy_full_builds;
+  bool standard_convergence_active() const { return standard; }
+  bool admitted() const {
+"""
+        + gate
+        + """
+    return ordinary_final_operator;
+  }
+};
+int main() {
+  for (bool incremental : {false, true})
+    for (bool standard : {false, true})
+      for (bool closed : {false, true})
+        for (unsigned full_builds : {0U, 1U, 2U, 3U}) {
+          Consumer consumer{incremental, standard, closed, full_builds};
+          bool expected = !incremental;
+          if (incremental && standard && closed && full_builds > 1U)
+            expected = true;
+          assert(consumer.admitted() == expected);
+        }
+}
+""",
+        encoding="utf-8",
+    )
+    executable = native_cxx.build_executable(
+        [source], tmp_path / "incremental_final_operator", compile_args=["-std=c++17"]
+    )
+    completed = subprocess.run(
+        [executable], capture_output=True, text=True, check=False, timeout=10
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

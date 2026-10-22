@@ -620,10 +620,12 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb);
 
 cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool unrestricted,
                                                 double* alpha_exchange, double* beta_exchange,
-                                                DirectCoulombRange range, double omega) {
+                                                DirectCoulombRange range, double omega,
+                                                double proposal_screening = -1.0) {
   const bool full_range = range == DirectCoulombRange::Full;
   cudaError_t error = cudaSuccess;
   auto& shared = *p.shared;
+  const double screening = proposal_screening >= 0.0 ? proposal_screening : shared.screening;
   const auto b = shared.batch;
   const std::size_t batch = static_cast<std::size_t>(b.batch_size);
   const std::size_t public_matrix = product(static_cast<std::size_t>(b.nbf), b.nbf);
@@ -652,7 +654,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       error = direct_fock_streaming_launcher(p.selection, cls, unrestricted)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
-          b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+          b.positions, screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
           p.heads + cls, p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr,
           nullptr);
       if (error != cudaSuccess) return error;
@@ -660,8 +662,8 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
     if (shared.class_mask & kNativeStreamingFockShellClassMask) {
       launch_bounded_direct_dddd_streaming_kernel(
           unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
-          shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
-          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr,
+          shared.stream, b, p.topology, screening, shared.schwarz, p.direct_spin, shared.active,
+          p.direct_exchange, p.heads + kDdddShellClass, nullptr,
           p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
@@ -670,11 +672,11 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
       if (error != cudaSuccess) return error;
       launch_bounded_shell_fock_source(
-          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-          p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
-          p.bounded_value_overflow, shared.schwarz, p.direct_spin, shared.active, p.direct_exchange,
-          p.force_cursor, false, true);
+          unrestricted, shared.worker_blocks, shared.stream, b, screening, shared.shell_bounds,
+          p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+          p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow,
+          shared.schwarz, p.direct_spin, shared.active, p.direct_exchange, p.force_cursor, false,
+          true);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }
@@ -682,7 +684,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
     launch_bounded_shell_range_exchange_source(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        unrestricted, shared.worker_blocks, shared.stream, b, screening, shared.shell_bounds,
         p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
         p.system_density_bounds, p.bounded_value_overflow, shared.schwarz, p.direct_spin,
         shared.active, p.direct_exchange, p.force_cursor, range, omega);
@@ -745,7 +747,8 @@ cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool un
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
-                                       DirectCoulombRange range, double omega) {
+                                       DirectCoulombRange range, double omega,
+                                       double proposal_screening) {
   const bool full_range = range == DirectCoulombRange::Full;
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       (!full_range && !p.bounded_value_capability))
@@ -760,10 +763,14 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask",
                                      full_range ? p.selection.rys_fock_mask : 0);
+  if (proposal_screening != -1.0 && (!full_range || !std::isfinite(proposal_screening) ||
+                                     proposal_screening < p.shared->screening))
+    return cudaErrorInvalidValue;
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
-  return error == cudaSuccess ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange,
-                                                                    beta_exchange, range, omega)
-                              : error;
+  return error == cudaSuccess
+             ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
+                                                   range, omega, proposal_screening)
+             : error;
 }
 
 static cudaError_t validate_generated_full_range_derivative_inputs(

@@ -835,8 +835,8 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_final_validation_policy.hpp"
       ],
-      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with exact-direct J/K at 384 or more AOs and exact-direct or density-fitted pure-J KS at 544 or more AOs. Stationary-density energy confirmation repairs the ordinary strict exact-direct pure-J SCF tail without changing any convergence gate, replacing the temporary 1088-AO admission hold. Source-bound Direct/48/96 complete cold/warm/moved/moved-warm control/default comparisons retain independent scientific gates and semantic work. The repair and integrated-head cohorts retain their own native image identities and per-call work counts separately. The original 192 r2SCAN-3c calls and candidate plots remain historical and the +15.985% Direct/96 moved failure is still rejected. Positive Direct/48 benefits below the descriptive 2%/MAD label remain enabled; DF and the prior PBE0 384/768-AO evidence retain their separate scope. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 fallback remain unchanged; explicit 1 remains experimental outside the default scope.",
-      "revisit_condition": "Require source-bound complete cold/warm/moved/moved-warm endpoint nonregression and independent scientific acceptance for further changes; changed SCF work, a verifier repair or a warm-only gain cannot waive a slower complete endpoint. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified for default admission. Preserve original source identities and negatives; do not infer other-functional timing gains. Separately qualify UKS, fitted exchange, RSH, nonlocal, incremental, ECP, lower precision and device-chunk stationary confirmation; retain the bounded fallback and unchanged true maximum-residual gate.",
+      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with exact-direct J/K at 384 or more AOs and exact-direct or density-fitted pure-J KS at 544 or more AOs. Stationary-density energy confirmation repairs the ordinary strict exact-direct pure-J SCF tail without changing any convergence gate, replacing the temporary 1088-AO admission hold. Source-bound Direct/48/96 complete cold/warm/moved/moved-warm control/default comparisons retain independent scientific gates and semantic work. The repair and integrated-head cohorts retain their own native image identities and per-call work counts separately. The original 192 r2SCAN-3c calls and candidate plots remain historical and the +15.985% Direct/96 moved failure is still rejected. Positive Direct/48 benefits below the descriptive 2%/MAD label remain enabled; DF and the prior PBE0 384/768-AO evidence retain their separate scope. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 fallback remain unchanged; explicit 1 remains experimental outside the default scope. A Standard incremental owner may reuse the same final products only after two consecutive full-density energies and the complete canonical proof; provisional delta operators remain excluded.",
+      "revisit_condition": "Require source-bound complete cold/warm/moved/moved-warm endpoint nonregression and independent scientific acceptance for further changes; changed SCF work, a verifier repair or a warm-only gain cannot waive a slower complete endpoint. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified for default admission. Preserve original source identities and negatives; do not infer other-functional timing gains. Separately qualify UKS, fitted exchange, RSH, nonlocal, unclosed incremental, ECP, lower precision and device-chunk stationary confirmation; retain the bounded fallback and unchanged true maximum-residual gate.",
       "evidence": [
         "pr:#2220",
         "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
@@ -848,7 +848,8 @@
         "benchmarks:benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md",
         "benchmarks:benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md",
         "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
-        "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
+        "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz",
+        "note:.agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md"
       ]
     },
     {
@@ -1878,6 +1879,35 @@
         "tests/python/test_df_md_raw_endpoint_cuda.py",
         "docs/developer/df_packed_storage.md",
         "note:.agents/notes/implemented/performance/2026-10-22-prepared-hermite-raw-df.md"
+      ]
+    },
+    {
+      "id": "ks.incremental-proposals",
+      "classification": "retained-opt-in",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_PROPOSALS",
+        "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/ks_incremental_policy.hpp",
+        "src/scf/cuda_fock_execution.cpp",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "The global incremental Direct-J/K selector remains opt-in. Within a selected strict-FP64 exact Direct owner, bounded screened proposals inherit existing Standard model, spin, resource and complete final-proof admission without an additional functional whitelist. Zero or unset interval cannot create an unbounded screened chain: the cap is eight deltas. Proposal energies never count toward the mandatory full-density closing pair. Internally retained eligible same-geometry warm states use ordinary full-density proof; explicit seeds, changed geometry and clear restore cold policy. Explicit proposals=0 restores the ordinary screened cadence. Public resource budgets remain unsupported. The first eight eligible delta actions per solve may use 1e-9 screening through an explicit provisional MD-J/generated-K facade; the immutable target cutoff remains in force for full/warm/final/force consumers. Unsupported producers and exhausted proposal budgets retain the original cutoff; coarse_screening=0 disables only this heuristic.",
+      "revisit_condition": "Broaden provider, spin or proof capabilities only with independent cold/warm/displaced E/F validation. Preserve the global opt-in, finite screened epoch, fresh full closure and truthful work counters; sampled PBE0 speedups do not establish a universal functional or geometry performance guarantee.",
+      "evidence": [
+        "docs:docs/user/ks_options.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md",
+        "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/README.md",
+        "tests/python/test_ks_incremental_controller.py",
+        "tests/python/test_ks_incremental_convergence_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-23-provisional-delta-screening.md",
+        "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/coarse-screening.json"
       ]
     }
   ]
