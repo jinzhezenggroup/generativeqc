@@ -24,6 +24,75 @@ def _practical_auxiliary() -> Any:
     )
 
 
+@pytest.mark.parametrize("mapping", ("auto", "auxiliary"))
+def test_cuda_packed_lr_values_preserve_the_radial_operator(
+    mapping: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prepared full-range raw values must not replace the separate LR source.
+
+    Packed-single storage with automatic mapping admits prepared Hermite values
+    for the primary J/K owner. The LR owner must retain its omega-aware fallback.
+    Compare the complete energy and a nuclear derivative with an independently
+    fitted operator; the auxiliary mapping also exercises the generic fallback.
+    """
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires an explicitly Slurm-allocated CUDA device")
+    assert os.environ.get("SLURM_JOB_ID")
+    from benchmarks.df_component_ledger import read_trace
+
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "packed-single")
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_MAPPING", mapping)
+    trace = tmp_path / "packed-lr.jsonl"
+    monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace))
+    atoms = [
+        ("O", (0.0, 0.0, 0.0)),
+        ("H", (0.1, 1.43, 1.1)),
+        ("H", (-0.15, -1.45, 1.12)),
+    ]
+    calculator = Calculator(
+        method="wb97m-v-rks",
+        basis="def2-svp",
+        basis_representation="spherical",
+        auxiliary_basis="def2-svp",
+        device="cuda",
+        density_fitting="auto",
+        initial_guess=None,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-14,
+        max_iterations=200,
+    )
+    with calculator.prepare_batch([atoms], warm_start=True) as batch:
+        cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+    assert cold.executed_backend == warm.executed_backend == "cuda"
+    assert cold.energy == pytest.approx(
+        _mixed_pyscf_energy(calculator, atoms, 0, fitted_range=True), abs=2e-8
+    )
+    assert warm.energy == pytest.approx(cold.energy, abs=2e-10)
+    np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
+    energies = []
+    step = 2e-4
+    for sign in (1, -1):
+        moved = list(atoms)
+        moved[1] = (
+            atoms[1][0],
+            tuple(np.asarray(atoms[1][1]) + (0, 0, sign * step)),
+        )
+        energies.append(_mixed_pyscf_energy(calculator, moved, 0, fitted_range=True))
+    assert -cold.forces[1][2] == pytest.approx(
+        (energies[0] - energies[1]) / (2 * step), abs=3e-7
+    )
+    prepared = sum(
+        record["counters"].get("raw_hermite_values", 0) for record in read_trace(trace)
+    )
+    assert (prepared > 0) == (mapping == "auto")
+
+
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
 @pytest.mark.parametrize("spin", (0, 1))
 @pytest.mark.parametrize(
