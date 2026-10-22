@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
-from generativeqc import Calculator
+from generativeqc import Calculator, _native
 from generativeqc.experimental import array_api as xp
 from generativeqc.experimental.integral_autodiff import IntegralRHF
 
@@ -18,6 +19,12 @@ XYZ = np.array([[0.1, 0.0, -0.7], [-0.1, 0.0, 0.7]])
 
 @pytest.fixture(scope="module")
 def owner(tmp_path_factory: pytest.TempPathFactory) -> IntegralRHF:
+    # Source-only Array API conformance does not build the molecular library.
+    # Native CI explicitly configures its path and must never skip a missing build.
+    if not any(candidate.exists() for candidate in _native._candidate_paths()):
+        if os.environ.get("GENERATIVEQC_LIBRARY"):
+            pytest.fail("configured GENERATIVEQC_LIBRARY does not exist")
+        pytest.skip("integral RHF acceptance requires a built/installed library")
     result = IntegralRHF(
         ("H", "H"), cache=tmp_path_factory.mktemp("capture-integral-ad")
     )
@@ -119,7 +126,7 @@ def test_compiled_basis_updates_do_not_reuse_a_stale_state(
 
 
 def test_lowering_does_not_construct_native_integral_owner(
-    monkeypatch: pytest.MonkeyPatch, owner: IntegralRHF, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     def forbidden(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("capture evaluated a molecular source")
@@ -130,7 +137,7 @@ def test_lowering_does_not_construct_native_integral_owner(
         lambda r, alpha: model(r, exponents=alpha), argnums=(0, 1), cache=tmp_path
     )
     try:
-        program = compiled.lower(XYZ, owner.exponents)
+        program = compiled.lower(XYZ, np.ones(6))
         assert program.provenance["molecular_sources"]
     finally:
         compiled.close()
@@ -148,12 +155,10 @@ def test_unqualified_integral_ad_domains_fail_at_capture(
         )
 
 
-def test_basis_parameters_do_not_silently_enter_native_force_cut(
-    owner: IntegralRHF,
-) -> None:
+def test_basis_parameters_do_not_silently_enter_native_force_cut() -> None:
     model = xp.MolecularModel(("H", "H"), method="rhf")
     with pytest.raises(ValueError, match="continuous basis"):
-        model(XYZ, exponents=owner.exponents)
+        model(XYZ, exponents=np.ones(6))
 
 
 def test_integral_ad_controls_are_explicit() -> None:
