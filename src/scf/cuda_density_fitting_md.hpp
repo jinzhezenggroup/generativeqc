@@ -4,6 +4,20 @@
 
 namespace generativeqc::scf {
 
+/** Prepare reusable Hermite E for a fresh single-system packed raw source.
+ * The enclosing planner must pass only capacity left AFTER its unchanged
+ * resident value/SCF/setup reservation. This does not resize its panels or
+ * evict fitted/occupied factors. Explicit mappings, insufficient capacity and
+ * allocation refusal retain the bounded generic source. Geometry mismatch or
+ * CUDA execution failure is an error. All successful storage is charged to
+ * the source diagnostics before ownership transfers to the value plan. */
+generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegralSource* source,
+                                                      const core::System& orbital,
+                                                      const core::System& auxiliary,
+                                                      std::size_t additional_device_budget,
+                                                      std::size_t additional_host_budget,
+                                                      std::string& detail);
+
 /** Reserve complete optional device storage before sizing raw fallback tiles.
  * Pure native topology census; no GPU call, integral work or large allocation.
  * Unsupported angular domains and insufficient capacity return zero. */

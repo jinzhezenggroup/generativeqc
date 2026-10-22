@@ -217,6 +217,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/basis_transform_kernels.cu
       src/scf/cuda/df_source_setup.cpp
       src/scf/cuda/df_md_owner.cu
+      src/scf/cuda/df_md_raw.cu
       src/scf/cuda/df_md_plan.cpp
       src/scf/cuda/df_source.cpp
       src/scf/cuda/df_source_kernels.cu

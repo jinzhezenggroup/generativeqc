@@ -38,6 +38,17 @@ use exact bounded expansion. The common planner charges both immutable owners,
 one `max(n*rank_capacity*a,n*n*q)` scratch buffer and two `n*n*q` buffers, plus
 the existing source, metric, library and SCF reservations.
 
+For a fresh single-system resident packed plan, automatic value mapping reuses
+GPU-prepared normalized Hermite coefficients when they fit the unspent value
+budget (at most 256 MiB). The existing fitted/occupied owners and panel sizes
+stay fixed. Each raw output sums every ordered primitive product in FP64;
+screening, metric rank and factor-ordered whitening are unchanged. Auxiliary g
+and mixed Cartesian/spherical bases are supported. Explicit value mappings,
+batches and capacity refusals retain the bounded generic source. The immutable
+owner is charged to source storage and retires with the physical source;
+geometry or basis changes require fresh preparation. `raw_hermite_values` in
+the CUDA trace reports the actual generated output count.
+
 The explicit `packed-single` experiment retains only fitted B in the same
 lower-pair order. It generates raw A once in bounded panels during setup, but
 does not retain those panels. J/K, including qualified final physical Fock

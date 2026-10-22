@@ -367,6 +367,19 @@ struct PreparedFockPlan::Impl {
       const auto metadata_bytes = cuda_density_fitting_integral_source_device_bytes(source.get());
       auto tiles = plan_values(nbf, naux, metadata_bytes);
 #if GENERATIVEQC_HAS_CUDA
+      // Keep the selected B/U owners and panel sizes unchanged. Prepared E
+      // uses only the already unspent value allowance; a refusal falls back
+      // before any value generation or SCF state can borrow this source.
+      if (tiles.stores_full_three_center && df_packed_pairs(tiles.value_storage.pairs) &&
+          plan_budget > tiles.peak_workspace_bytes) {
+        const auto remaining = plan_budget - tiles.peak_workspace_bytes;
+        checked(try_prepare_cuda_df_md_raw_source(source.get(), system, *auxiliary, remaining,
+                                                  remaining, detail),
+                detail);
+        tiles.peak_workspace_bytes +=
+            cuda_density_fitting_integral_source_device_bytes(source.get()) - metadata_bytes;
+        diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
+      }
       if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested &&
           !tiles.stores_full_three_center) {
         // The incumbent deliberately spends spare capacity on raw panels. An

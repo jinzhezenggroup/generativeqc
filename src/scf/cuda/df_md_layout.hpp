@@ -48,10 +48,12 @@ inline unsigned hermites(unsigned angular) {
  * `invalid_argument` reports malformed/unsupported metadata. Either is an
  * explicit reason for a future provider to retain its existing bounded path.
  * No default admission is implied. Input coefficients must already carry the
- * canonical radial normalization; this function never normalizes them again. */
+ * canonical radial normalization; this function never normalizes them again.
+ * The raw-value owner requests transforms_only: the same primitive/E census
+ * then omits charge, potential and raised-response device scratch. */
 namespace df_md_layout_detail {
 inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t device_limit,
-                         std::size_t host_limit, bool materialize) {
+                         std::size_t host_limit, bool materialize, bool transforms_only = false) {
   using namespace df_md_layout_detail;
   if (system.shells.empty() || system.atoms.empty() ||
       (system.basis_representation != GENERATIVEQC_BASIS_CARTESIAN &&
@@ -99,10 +101,10 @@ inline DfMdLayout layout(const core::System& system, bool auxiliary, std::size_t
     throw std::length_error("DF MD primitive domain exceeds a one-dimensional CUDA grid");
   const auto metadata = add(multiply(primitive_count, sizeof(DfMdPrimitive)),
                             multiply(add(aos, auxiliary ? 1 : 0), sizeof(DfMdAo)));
-  result.device_bytes = add(
-      metadata, multiply(add(add(result.transform_elements, multiply(2, result.hermite_elements)),
-                             result.response_elements),
-                         sizeof(double)));
+  const auto scratch =
+      transforms_only ? 0 : add(multiply(2, result.hermite_elements), result.response_elements);
+  result.device_bytes =
+      add(metadata, multiply(add(result.transform_elements, scratch), sizeof(double)));
   // Public expansion temporaries are bounded by fifteen Cartesian g AOs with
   // six terms each. Include shell offsets, returned object and vector slack
   // below after actual allocation; the preflight deliberately reserves twice
