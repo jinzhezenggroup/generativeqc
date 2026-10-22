@@ -45,3 +45,7 @@ timing refresh must measure its own source revision.
 Extend automatic model admission only with independent acceptance on its
 full intended numerical domain. Do not use a size whitelist to conceal the
 known small-system failure, or loosen the common energy/force gates.
+
+The independently qualified Standard solver contract is described in the
+[superseding convergence decision](2026-10-22-standard-cold-scf-convergence.md).
+It retains these failed total-error populations and the strict-probe policy.

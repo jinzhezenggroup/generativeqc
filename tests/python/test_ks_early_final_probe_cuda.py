@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("legacy", [False, True], ids=["default", "rollback"])
-@pytest.mark.parametrize("tight", [False, True], ids=["native-tolerances", "tight"])
+@pytest.mark.parametrize("tight", [False, True], ids=["legacy-tolerances", "tight"])
 @pytest.mark.parametrize(
     "functional,spin", [("pbe", 0), ("r2scan", 0), ("pbe0", 0), ("pbe", 1)]
 )
@@ -66,8 +66,12 @@ def test_physical_export_frozen_warm_and_geometry(
         gradient.grid_response = True
         references.append((float(reference.e_tot), -cp.asnumpy(gradient.kernel())))
 
+    # Preserve the original strict oracle contract after the default policy
+    # changes; the separate Standard test qualifies its complete E/F budget.
     tolerances = (
-        {"energy_tolerance": 1e-12, "density_tolerance": 1e-10} if tight else {}
+        {"energy_tolerance": 1e-12, "density_tolerance": 1e-10}
+        if tight
+        else {"energy_tolerance": 1e-10, "density_tolerance": 1e-8}
     )
     calculator = Calculator(
         method=f"{functional}-{'uks' if spin else 'rks'}",

@@ -119,7 +119,9 @@ def test_single_packed_factor_cold_warm_and_force_replay(
     if response_space == "occupied":
         assert occupied_responses > 0
     elif response_space == "auto":
-        assert occupied_responses == 0
+        # Strict final corrections can reconstruct a checked occupied factor
+        # automatically while retaining the same immutable fitted B owner.
+        assert occupied_responses > 0
         assert borrowed_fitted_responses > 0
 
 

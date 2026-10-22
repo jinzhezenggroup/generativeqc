@@ -44,6 +44,20 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     unsigned max_iterations, double energy_tolerance, double density_tolerance,
     std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
     std::string& detail, const std::vector<double>& overlap, unsigned diis_history) {
+  return run_cuda_density_fitting_rhf_device_scf(plan, hcore, orthogonalizer, initial_density,
+                                                 occupied, nuclear_repulsion, max_iterations,
+                                                 energy_tolerance, density_tolerance, final_density,
+                                                 results, detail, overlap, diis_history, false);
+}
+
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan* plan, const std::vector<double>& hcore,
+    const std::vector<double>& orthogonalizer, const std::vector<double>& initial_density,
+    const std::vector<std::int32_t>& occupied, const std::vector<double>& nuclear_repulsion,
+    unsigned max_iterations, double energy_tolerance, double density_tolerance,
+    std::vector<double>& final_density, std::vector<CudaDensityFittingDeviceScfItem>& results,
+    std::string& detail, const std::vector<double>& overlap, unsigned diis_history,
+    bool qualified_standard_owner) {
   runtime::df_progress::Scope progress("compact_rhf_scf");
   detail.clear();
   // Hold at most the matching immutable input while revoking all published
@@ -278,7 +292,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   std::vector<int> host_info(batch_size);
   const bool options_changed = state->max_iterations != max_iterations ||
                                state->energy_tolerance != energy_tolerance ||
-                               state->density_tolerance != density_tolerance;
+                               state->density_tolerance != density_tolerance ||
+                               state->qualified_standard_owner != qualified_standard_owner;
   if (options_changed) {
     state->graph.reset();
     state->graph.device_id = plan->device_id;
@@ -288,6 +303,7 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
   state->max_iterations = max_iterations;
   state->energy_tolerance = energy_tolerance;
   state->density_tolerance = density_tolerance;
+  state->qualified_standard_owner = qualified_standard_owner;
   DeviceIterationGraph& iteration_graph = state->graph;
   // Restored factors are pageable immutable snapshots. Any early provider or
   // capture failure must drain their upload before dropping the final owner.
@@ -332,8 +348,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     launch_update_device_convergence_kernel(
         static_cast<unsigned>(batch_size), 32, 0, plan->stream, batch_size, plan->nbf,
         energy_tolerance, density_tolerance, d_energy, d_previous_energy, d_next_density, d_density,
-        d_active, d_converged, d_iterations, d_energy_change, d_density_rms,
-        state->d_diis_residual);
+        d_active, d_converged, d_iterations, d_energy_change, d_density_rms, state->d_diis_residual,
+        qualified_standard_owner);
     if (tail)
       launch_tail_cuda_density_fitting_scf_graph_kernel(1, 1, 0, plan->stream,
                                                         static_cast<std::int32_t>(batch_size),

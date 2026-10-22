@@ -20,6 +20,10 @@ generativeqc_progressive_hf_run_v1(generativeqc::scf::ProgressiveHFCallback call
 
 uint32_t generativeqc_ks_options_version(void) { return 1; }
 
+/** Matched iteration/final-state controls for qualified FP64 SCF endpoints.
+ * Python retains historical defaults when this additive capability is absent. */
+GENERATIVEQC_API uint32_t generativeqc_standard_scf_convergence_version_v1(void) { return 1; }
+
 /** Independent XC/VV10 quadrature with an unchanged public KS descriptor. */
 GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void) { return 1; }
 

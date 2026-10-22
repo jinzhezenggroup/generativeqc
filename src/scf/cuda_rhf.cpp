@@ -3459,6 +3459,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
+  const bool qualified_standard_owner =
+      !unrestricted && !mixed_precision_fock && !incremental_direct_jk &&
+      !options.export_physical_reference &&
+      std::all_of(systems.begin(), systems.end(), [](const auto& system) {
+        return system.ecp_terms.empty() &&
+               std::none_of(system.atoms.begin(), system.atoms.end(),
+                            [](const auto& atom) { return atom.ecp_core != 0; });
+      });
   const auto launch_iteration_post_eigensolver =
       [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     const bool screened_stage = screened_reference_iterations && allow_mixed_precision;
@@ -3490,7 +3498,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, qualified_standard_owner);
         } else {
           launch_update_uhf_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3498,7 +3506,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, qualified_standard_owner);
         }
       }
     } else {
@@ -3516,7 +3524,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, qualified_standard_owner);
         } else {
           launch_update_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3524,7 +3532,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, qualified_standard_owner);
         }
       }
     }
@@ -4159,7 +4167,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           resources.stream_, static_cast<std::int32_t>(batch_size),
           static_cast<std::int32_t>(spin_count), static_cast<std::int32_t>(nbf),
           options.density_tolerance, residual, active, converged, final_fock_rebuild_count,
-          warm_mask);
+          warm_mask, options.energy_tolerance, qualified_standard_owner);
       cuda_error = cudaGetLastError();
     }
     if (cuda_error != cudaSuccess) {

@@ -94,7 +94,7 @@ void launch_update_device_convergence_kernel(
     std::size_t nbf, double energy_tolerance, double density_tolerance, const double* energy,
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
-    const double* physical_residual = nullptr);
+    const double* physical_residual = nullptr, bool qualified_owner = false);
 
 /** Forward the caller's exact launch configuration on its existing stream. */
 void launch_tail_cuda_density_fitting_scf_graph_kernel(
