@@ -21,6 +21,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/ks_stopping_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -376,6 +377,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
+  // Eligible strict solves may replace the conservative AO-maximum margin
+  // only with a successful complete canonical final-state proof.
+  bool early_final_probe_requested{};
   mutable std::optional<CudaKsFinalStateToken> cached_final_token;
   KsFinalStateDiagnostic final_validation_diagnostic;
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
@@ -1445,6 +1449,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // the incumbent UKS schedule until independent open-shell qualification.
       if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
         throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
+    }
+    early_final_probe_requested = early_final_probe_default_model(
+        functional, options.semilocal_exchange_scale, options.semilocal_correlation_scale,
+        exchange_coefficient, grid_spec == default_grid_spec());
+    if (const char* setting = std::getenv("GENERATIVEQC_KS_EARLY_FINAL_PROBE")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument("GENERATIVEQC_KS_EARLY_FINAL_PROBE requires 0 or 1");
+      early_final_probe_requested = std::strcmp(setting, "1") == 0;
     }
     const bool range_incremental_eligible =
         !has_range_correction ||
@@ -3272,13 +3284,34 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refine_incremental_energy(physical.density_change, physical.residual,
                               physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
-    const bool converged = has_energy_history && full_energy_history && !pending_nonlocal_seed &&
-                           !pending_nonlocal_frozen &&
-                           (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2) &&
-                           output.energy_change < options.energy_tolerance &&
-                           physical.density_change < options.density_tolerance &&
-                           physical.residual < physical_stationarity_tolerance() &&
-                           physical.maximum_residual < physical_stationarity_tolerance();
+    bool converged = ordinary_ks_converged(
+        {output.iterations, warm_energy_baseline, full_energy_history,
+         !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+             (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2),
+         output.energy_change, physical.density_change, physical.residual,
+         physical.maximum_residual, options.energy_tolerance, options.density_tolerance,
+         physical_stationarity_tolerance()});
+    bool early_final_probe_ran = false;
+    // The final contract admits a 1e-8 AO maximum but separately checks the
+    // true F[D] canonical density. The 1e-9 spin-RMS and public E/D gates stay
+    // intact. Optional/device/backend cases without this qualified ownership
+    // retain the incumbent conservative stopping policy.
+    const bool early_final_probe_eligible =
+        early_final_probe_requested && spins == 1 && !budget_fock && !fitted_exchange &&
+        !has_range_correction && !nonlocal_correlation && !incremental_direct_jk &&
+        !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
+        final_validation_partial && matrix_products.library_enabled() &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    if (!converged && early_final_probe_eligible && has_energy_history && full_energy_history &&
+        output.energy_change < options.energy_tolerance &&
+        physical.density_change < options.density_tolerance &&
+        physical.residual < physical_stationarity_tolerance() &&
+        physical.maximum_residual < std::min(1e-8, options.density_tolerance)) {
+      early_final_probe_ran = true;
+      converged = probe_current_final_state();
+    }
     // Once the initialized target already passes every physical stationarity
     // gate, confirm its energy with another complete F[D] at that same D.
     // Applying a sub-tolerance proposal can otherwise inject summation noise
@@ -3448,15 +3481,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
-        // Only the candidate changes the frame representation. Preserve the
-        // incumbent orthonormal path unless exact AO warm reuse was selected.
-        const bool retain_ao = fitted_exchange && spins == 1 && warm_factor_replay_enabled();
-        check(cudaMemcpyAsync(warm_orbitals, retain_ao ? tmp1 : tmp2, elements * sizeof(double),
-                              cudaMemcpyDeviceToDevice, stream));
-        warm_orbitals_ready = true;
-        warm_orbitals_are_ao = retain_ao;
-        ++movement.warm_orbital_frames_retained;
-        occupied_fitted_factor_ready = fitted_exchange;
+        if (early_final_probe_ran) {
+          // The rejected proof borrowed tmp1/tmp2/effective/residual. Proposal
+          // D has separate storage, but its old eigen scratch is no longer a
+          // valid warm orbital frame. The next ordinary sweep rebuilds it.
+          occupied_fitted_factor_ready = false;
+          invalidate_warm_orbitals();
+        } else {
+          // Only the candidate changes the frame representation. Preserve the
+          // incumbent orthonormal path unless exact AO warm reuse was selected.
+          const bool retain_ao = fitted_exchange && spins == 1 && warm_factor_replay_enabled();
+          check(cudaMemcpyAsync(warm_orbitals, retain_ao ? tmp1 : tmp2, elements * sizeof(double),
+                                cudaMemcpyDeviceToDevice, stream));
+          warm_orbitals_ready = true;
+          warm_orbitals_are_ao = retain_ao;
+          ++movement.warm_orbital_frames_retained;
+          occupied_fitted_factor_ready = fitted_exchange;
+        }
       } else {
         occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();
@@ -3575,6 +3616,39 @@ struct CudaKsPlan::Impl : KsStateStorage {
             "CUDA KS final-state eigensolver launch failed");
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
+  }
+
+  /** Test the current physical F[D] before publishing a final generation.
+   * Numerical rejection continues from the still-owned DIIS proposal; driver,
+   * allocation and eigensolver failures propagate normally. No force weights
+   * or warm seed are authorized by this speculative proof. */
+  bool probe_current_final_state() {
+    runtime::cuda_trace::TraceRegion trace("ks_early_final_probe", stream);
+    runtime::cuda_trace::trace_counter("early_final_probes", 1);
+    prepare_final_frame();
+    scf::solver::FinalStateLimits limits;
+    limits.density_tolerance = options.density_tolerance;
+    limits.energy_tolerance = options.energy_tolerance;
+    limits.maximum_corrections = 0;
+    limits.require_canonicality = true;
+    scf::solver::FinalStateDiagnostic products;
+    std::string detail;
+    if (!resident_final_products(true, provider.one_electron().nuclear_repulsion, products, detail))
+      throw std::runtime_error(detail.empty() ? "CUDA KS early final-state products failed"
+                                              : detail);
+    auto identity = final_identity();
+    identity.determinant.factor = {owner, 1, generation, generation};
+    const KsFinalStateEvidence evidence{identity,      generation,
+                                        true,          output.dft_diagnostic.components,
+                                        output.energy, output.dft_diagnostic.physical_residual};
+    KsFinalStateDiagnostic diagnostic;
+    const bool accepted = validate_ks_final_state_evidence(identity, n, evidence, limits, products,
+                                                           diagnostic, detail);
+    runtime::cuda_trace::trace_counter(accepted ? "early_final_accepts" : "early_final_rejects", 1);
+    // Reuse only the verified physical eigenframe. The public force path still
+    // performs its own token-bound proof before staging D/W in shared scratch.
+    final_frame_ready = accepted;
+    return accepted;
   }
 
   void stage_stationary_weights() {
