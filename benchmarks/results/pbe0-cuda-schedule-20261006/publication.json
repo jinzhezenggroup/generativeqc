@@ -8,14 +8,14 @@
     {
       "path": "bundle.json.xz",
       "role": "samples",
-      "bytes": 756252,
-      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f"
+      "bytes": 737308,
+      "sha256": "aee8ec43398dcdaacef7e43e5ccc086e03c4328a9d674e8666e9dd8240c4e154"
     },
     {
       "path": "manifest.json",
       "role": "input",
       "bytes": 24591,
-      "sha256": "d4f4d4a2af5be4e3cd032167013f1441b035fc53d2727a48311df92286cc0ac2"
+      "sha256": "b8c3df49b6c058ab0ed22d00732903b113f5c5861517031245d0d16bc83b1d91"
     },
     {
       "path": "qualification.json",
@@ -26,8 +26,8 @@
     {
       "path": "evidence.json.gz",
       "role": "evidence",
-      "bytes": 13498,
-      "sha256": "127a7830652e34dd1f50bef2502c33be0761852e8ee01ac6c51b3990de07309d"
+      "bytes": 13497,
+      "sha256": "bf4a3940da4e81193934c3b88e004aac254b24524b314aec53f76bb1dbe93f45"
     },
     {
       "path": "verify.py",
@@ -44,14 +44,14 @@
     {
       "path": "integration-bundle.json.xz",
       "role": "samples",
-      "bytes": 612472,
-      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f"
+      "bytes": 599132,
+      "sha256": "4fa1fd8b7a8873090eea1d68f4cb212c8d4455ebfe69159b99bd7ad8106e7e00"
     },
     {
       "path": "integration-manifest.json",
       "role": "input",
       "bytes": 13661,
-      "sha256": "59bb9f3cf8da4252c3f48034af35bf007f0db19e6b5c16c8c99444143969abb1"
+      "sha256": "d2117b6bdc24bd94d77db26b4ffb81ed12941edb90209132cb7375fdefc57340"
     },
     {
       "path": "integration-qualification.json",
