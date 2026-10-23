@@ -129,3 +129,11 @@ GPU runners and the moved wrapper are retained in `runners.json.xz`; compiler
 cache statistics in `validation-logs.json.xz` belong to the shared server and
 can include concurrent compilations. Larger profiler streams and discarded
 pilots remain in ignored local and n1 `direct-dft96-cold-20261023` artifacts.
+
+The earlier 1,837-input inventory is stored as
+`stage2-final-source-inputs-delta.json.xz`, sharing unchanged hashes with the
+later complete inventory. Offline reproduction restores its original JSON
+bytes and authenticates their SHA-256. This reduces redundant storage from
+75,632 to 11,336 bytes; original compressed identity remains in provenance and
+existing Git history. No source input or numerical receipt is removed. The
+aggregate evidence limit remains unchanged.

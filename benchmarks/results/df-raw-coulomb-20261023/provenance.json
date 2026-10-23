@@ -17,8 +17,8 @@
     "generativeqc_stationary_r2scan_rks_spd.json": "02d5743a3f7be494eecc6b18fcfee51491dfa8f3e79daeb5121635728398a0f1"
   },
   "source_manifests": {
-    "stage2-final-source-inputs.json.xz": "08d0f7f9f7fb3317b006149d088de7bd828f2bc59ffe3b639fe690e9bd5c4be4",
-    "stage2-default-source-inputs.json.xz": "ebf5a80208937e6e33dc3aa3bd0a1b1d7c038b84d719f6b70ef74dafe215c79a"
+    "stage2-default-source-inputs.json.xz": "ebf5a80208937e6e33dc3aa3bd0a1b1d7c038b84d719f6b70ef74dafe215c79a",
+    "stage2-final-source-inputs-delta.json.xz": "79168ced2f19ca1ee0f79cbf14289ce8361c6281a0196b162f859da9fe399bc1"
   },
   "validation": {
     "native_endpoints": 576,
@@ -62,6 +62,14 @@
       "source_input_count": 6000,
       "source_manifest_file_sha256": "54ce17f5304edb9980207724e5e50b134dceb243e34940c7e57d5df74129bbee",
       "native_endpoint_calls": 24
+    }
+  },
+  "source_manifest_hash_scope": "uncompressed JSON bytes",
+  "historical_source_manifest_restoration": {
+    "stage2-final-source-inputs.json.xz": {
+      "uncompressed_sha256": "08d0f7f9f7fb3317b006149d088de7bd828f2bc59ffe3b639fe690e9bd5c4be4",
+      "compressed_sha256": "ae2d44f20da5d0d67400643cdbb1112dbcf019a4f3b47b05285129486543c238",
+      "delta": "stage2-final-source-inputs-delta.json.xz"
     }
   }
 }

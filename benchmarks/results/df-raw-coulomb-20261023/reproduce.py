@@ -55,6 +55,17 @@ def main() -> None:
         schema="generativeqc.readme-defaults-oracle.v1",
     )
     reuse = json.loads((REFERENCE / "reference-reuse.json").read_text())
+    # Recover the earlier 1,837-input inventory byte-for-byte; only its
+    # redundant hashes share storage with the later complete inventory.
+    subset = read("stage2-final-source-inputs-delta")
+    base_inputs = read(subset["base"])["files"]
+    restored = {
+        **subset["original_fields"],
+        "files": {name: subset["overrides"].get(name, base_inputs.get(name))
+                  for name in subset["paths"]},
+    }
+    restored_bytes = (json.dumps(restored, indent=2) + "\n").encode()
+    assert hashlib.sha256(restored_bytes).hexdigest() == subset["original_uncompressed_sha256"]
     moved_references = read("stage2-moved-reference")
     result = {"qualification": {}, "moved_default_reference": {}, "timing": {}}
     cohorts = [("stage2-pairs", 20), ("stage2-moved", 40), ("stage2-matrix", 12)]
