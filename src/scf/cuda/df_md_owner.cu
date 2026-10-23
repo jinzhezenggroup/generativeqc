@@ -1,7 +1,10 @@
 #include <array>
+#include <charconv>
+#include <cstdlib>
 #include <memory>
 #include <new>
 #include <stdexcept>
+#include <string_view>
 
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/df_md_j.cuh"
@@ -16,6 +19,7 @@ struct CudaDfMdOwner {
   DfMdView pair{}, auxiliary{};
   std::array<std::size_t, 8> pair_offsets{}, auxiliary_offsets{};
   std::size_t pair_hermites{}, auxiliary_hermites{}, pair_responses{}, auxiliary_responses{};
+  unsigned charge_splits{1};
   std::array<void*, 14> allocations{};
   std::size_t allocation_count{};
   CudaDfMdResources resources{};
@@ -50,6 +54,21 @@ struct CudaDfMdOwner {
 };
 
 namespace {
+/** Freeze this diagnostic schedule at owner creation, including graph replay.
+ * The default remains the qualified single-CTA reduction until full endpoint
+ * and independent derivative qualification establishes a useful crossover. */
+unsigned requested_charge_splits() {
+  const char* control = std::getenv("GENERATIVEQC_DF_MD_CHARGE_SPLITS");
+  if (!control) return 1;
+  const std::string_view value(control);
+  unsigned splits{};
+  const auto parsed = std::from_chars(value.data(), value.data() + value.size(), splits);
+  if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || !splits ||
+      splits > 64)
+    throw std::invalid_argument("GENERATIVEQC_DF_MD_CHARGE_SPLITS must be an integer in 1..64");
+  return splits;
+}
+
 generativeqc_status fail(cudaError_t error, std::string& detail) {
   detail = std::string("DF Hermite owner CUDA operation failed: ") + cudaGetErrorString(error);
   return error == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
@@ -104,6 +123,24 @@ cudaError_t contract_class(const CudaDfMdOwner& owner) {
   const auto p = owner.pair_offsets[P], np = owner.pair_offsets[P + 1] - p;
   const auto a = owner.auxiliary_offsets[A], na = owner.auxiliary_offsets[A + 1] - a;
   if (!np || !na) return cudaSuccess;
+  if constexpr (Charge) {
+    constexpr auto components = df_md_count(A + Response);
+    // Charge never consumes orbital primal potentials. Projection refreshes
+    // them before use, while force keeps its raised pair potentials separate.
+    // Reuse this existing allocation only when complete partials fit; there
+    // is no added arena, capacity overcommit or allocation during replay.
+    const auto capacity = owner.pair_hermites / na / components;
+    const auto splits = static_cast<unsigned>(std::min<std::size_t>(owner.charge_splits, capacity));
+    if (splits > 1) {
+      df_md_contract<P, A, true, Response><<<dim3(na, splits), 128, 0, owner.stream>>>(
+          owner.pair, p, np, owner.auxiliary, a, na, owner.pair.potential);
+      auto status = cudaPeekAtLastError();
+      if (status != cudaSuccess) return status;
+      df_md_reduce_charge<A, Response><<<(na * components + 127) / 128, 128, 0, owner.stream>>>(
+          owner.auxiliary, a, na, owner.pair.potential, splits);
+      return cudaPeekAtLastError();
+    }
+  }
   df_md_contract<P, A, Charge, Response>
       <<<Charge ? na : np, 128, 0, owner.stream>>>(owner.pair, p, np, owner.auxiliary, a, na);
   return cudaPeekAtLastError();
@@ -193,6 +230,7 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     // Layouts outlive the candidate, so failure destruction drains their uploads
     // before any pageable host metadata can be released by stack unwinding.
     auto candidate = std::make_unique<CudaDfMdOwner>();
+    candidate->charge_splits = requested_charge_splits();
     candidate->device = device;
     candidate->stream = stream;
     candidate->pair_offsets = pair_layout.offsets;

@@ -165,6 +165,16 @@ value capacity for the complete optional owner. Native topology counts reserve
 its exact device footprint before the planner sizes fallback panels. Device
 and host storage remain included in the enclosing diagnostics.
 
+An explicit `GENERATIVEQC_DF_MD_CHARGE_SPLITS=1..64` selects contiguous source
+partitions for charge and its raised response. Unset retains one partition.
+The count is frozen when the owner is created, including captured replay.
+Partials reuse dead orbital primal-potential storage and reduce in ascending
+partition order; each angular/derivative class independently falls back when
+its complete partials do not fit. No allocation is added. Partitioning changes
+FP64 summation order and remains an explicit tuning control, with numerical
+and endpoint evidence in the
+[decision note](../../.agents/notes/proposed/2026-10-23-df-md-charge-source-partitions.md).
+
 The owner replaces raw three-center value regeneration with two vector
 contractions and the existing metric solve. It remains unscreened; retained
 integral sources remain available. Pure-J force response borrows the same
