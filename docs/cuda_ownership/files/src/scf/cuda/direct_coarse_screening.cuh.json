@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_coarse_screening.cuh",
+  "reason": "Default-off directed-rounding block rejection enclosure; every survivor retains the incumbent FP64 screening and integral consumers. This is a conservative scheduling experiment, not a second integral implementation.",
+  "regions": [],
+  "role": "scientific",
+  "subsystem": "direct_integrals"
+}

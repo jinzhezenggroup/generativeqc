@@ -122,6 +122,7 @@ struct DeviceBatch {
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
   bool direct_force_relative_response{true};
+  bool direct_fp32_block_screening{};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -170,6 +171,21 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
+  if(argc==2 && std::strcmp(argv[1],"--screening-policy-only")==0) {
+    assert(unsetenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING")==0);
+    DeviceBatch original;
+    configure_direct_coulomb_recurrence(original);
+    assert(!original.direct_fp32_block_screening);
+    for(const auto* selector : {"0", "unknown", "", "1", "01"}) {
+      assert(setenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",selector,1)==0);
+      DeviceBatch prepared;
+      configure_direct_coulomb_recurrence(prepared);
+      assert(prepared.direct_fp32_block_screening==(std::strcmp(selector,"1")==0));
+      assert(!original.direct_fp32_block_screening);
+    }
+    assert(unsetenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING")==0);
+    return 0;
+  }
   if(argc==2 && std::strcmp(argv[1],"--response-policy-only")==0) {
     assert(unsetenv("GENERATIVEQC_DIRECT_WEIGHTED_FORCE_RESPONSES")==0);
     DeviceBatch original;
@@ -441,3 +457,10 @@ def test_successful_optional_preparation_is_unchanged(
         check=True,
         timeout=10,
     )
+
+
+def test_block_screening_policy_is_captured_per_prepared_owner(
+    allocation_probe: Path,
+) -> None:
+    """Only exact opt-in affects newly prepared owners; prior selection stays frozen."""
+    subprocess.run([str(allocation_probe), "--screening-policy-only"], check=True)

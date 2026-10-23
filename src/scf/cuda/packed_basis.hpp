@@ -128,6 +128,9 @@ struct DeviceBatch {
   unsigned long long* direct_force_precision_work{};
   /** DF-only radial identity; zero preserves ordinary Coulomb consumers. */
   double df_range_omega{};
+  /** Default-off conservative block prefilter, frozen before graph capture.
+   * Exact shell screening, generated stream ABI and ERI/J/K stay FP64. */
+  bool direct_fp32_block_screening{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution
