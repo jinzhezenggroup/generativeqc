@@ -54,7 +54,8 @@ def relative_name(value: str) -> PurePosixPath:
 
 
 def store(root: Path, name: str, value: Any) -> dict:
-    data = lzma.compress(pretty(value), preset=6)
+    encoded = json.dumps(value, separators=(",", ":"), allow_nan=False).encode()
+    data = lzma.compress(encoded, preset=6)
     if len(data) >= LIMIT:
         raise ValueError(
             f"logical part needs a finer scientific grouping: {name} ({len(data)} bytes)"
