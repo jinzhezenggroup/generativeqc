@@ -65,6 +65,16 @@ def main() -> None:
         "mode": args.mode,
         "arm": args.arm,
         "selector": args.selector,
+        "runtime_controls": {
+            name: os.environ.get(name)
+            for name in (
+                "GENERATIVEQC_CUDA_KS_COLD_FACTOR",
+                "GENERATIVEQC_CUDA_KS_WARM_FACTOR",
+                "GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT",
+                "GENERATIVEQC_DF_TRACE",
+                "GENERATIVEQC_DF_HOST_TRACE",
+            )
+        },
         "atoms": atoms,
         "gates": GATES,
         "samples": [],

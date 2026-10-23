@@ -8,6 +8,9 @@ namespace generativeqc::scf::initial_guess {
 struct HuckelDensityResult {
   Matrix density;
   std::size_t atomic_solves{}, occupied_atomic_orbitals{};
+  /** Exact molecular C[AO, occupied] used to form D = 2 C C^T. Keeping this
+   * existing payload avoids refactorizing D for a native fitted consumer. */
+  Matrix coefficients;
 };
 
 /** Neutral H-Ar configurations used by spherical average atomic RHF.

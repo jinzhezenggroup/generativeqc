@@ -50,6 +50,8 @@ def calculator(device: str, method: str, **overrides: object) -> Calculator:
 def independent_oracle(calc: Calculator, method: str) -> object:
     """Copy only scientific inputs; PySCF constructs and converges its own DF operator."""
     pyscf = pytest.importorskip("pyscf")
+    # PySCF does not eagerly expose DFT; this helper must work in isolation.
+    pytest.importorskip("pyscf.dft")
     pyscf.lib.num_threads(1)
     atoms = tuple(Atom.from_value(atom) for atom in WATER)
     labels = [f"{symbol}{index}" for index, (symbol, _) in enumerate(WATER)]

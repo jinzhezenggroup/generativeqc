@@ -25,6 +25,10 @@ namespace generativeqc::tensor {
 struct PanelProductDiagnostic;
 }
 
+namespace generativeqc::scf::initial_guess {
+struct NativeColdDensityFactor;
+}
+
 namespace generativeqc::dft {
 
 /** Optional lowering resources already reserved by the enclosing resource
@@ -97,6 +101,9 @@ struct CudaKsTransfers {
    * density export materializes D in dead scratch, without modifying the seed. */
   std::uint64_t fitted_warm_factor_publications{}, fitted_warm_factor_restores{};
   std::uint64_t fitted_warm_factor_fallbacks{};
+  /** Native cold factors accepted by the same-density device reconstruction
+   * gate, or declined without changing the incumbent dense first K. */
+  std::uint64_t fitted_cold_factor_restores{}, fitted_cold_factor_fallbacks{};
   /** Successful fixed-anchor Fast J/K actions, cumulative across solves.
    * Delta actions use the total current-minus-anchor density, not a chain of
    * preceding iterates. Optional allocation misses retain the ordinary solve.
@@ -244,9 +251,15 @@ class CudaKsPlan {
 
   /** Start fresh DIIS/history. A null seed reuses a compatible last-good
    * device density when requested; explicit seeds are normalized per spin.
-   * The native cold-guess origin changes source eligibility, not seed math. */
+   * The native cold-guess origin changes source eligibility, not seed math.
+   * An optional cold factor is borrowed only for this call and must reconstruct
+   * the admitted density; rejection preserves the dense first-K fallback. */
   void begin(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
-             CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External);
+             CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External,
+             const scf::initial_guess::NativeColdDensityFactor* cold_factor = nullptr);
+  /** Read-only capability/rollback query for optional native seed preparation.
+   * Ledger-bound, mixed, unrestricted and non-fitted owners retain dense K. */
+  bool accepts_native_cold_factor() const noexcept;
   bool active() const noexcept;
   bool pending() const noexcept;
   bool failed() const noexcept;

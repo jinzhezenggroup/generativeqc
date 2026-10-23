@@ -48,6 +48,7 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     "control",
     [
         "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR",
+        "ks-runtime:GENERATIVEQC_CUDA_KS_COLD_FACTOR",
         "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT",
     ],
 )

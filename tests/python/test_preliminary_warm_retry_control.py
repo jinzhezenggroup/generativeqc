@@ -351,6 +351,8 @@ Item run_dft(bool resident) {
   results[0].warm_start_used = true;
   std::vector<bool> ready(1, true);
   std::vector<std::optional<std::vector<double>>> preliminary_seeds(1);
+  struct ColdFactor { std::vector<double> coefficients; };
+  std::vector<ColdFactor> preliminary_factors(1);
   std::vector<initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(1);
   std::vector<bool> preliminary_requested(1, false);
   auto size = [] { return std::size_t{1}; };

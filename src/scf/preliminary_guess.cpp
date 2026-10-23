@@ -88,10 +88,12 @@ std::size_t minao_numeric_capacity_shape(std::size_t n, std::size_t atom_count,
 std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 const PreliminaryOptions& policy,
                                                 PreliminaryDiagnostic& diagnostic,
-                                                const EigenOperation& eigen) {
+                                                const EigenOperation& eigen,
+                                                std::vector<double>* coefficients) {
   const auto& system = target.system();
   if (policy.kind == PreliminaryKind::Huckel)
-    return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen);
+    return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen,
+                                          coefficients);
   // The CPU integral provider admits g, but the LDA AO-grid primitive only
   // admits through f. Decline before building an unusable extra integral owner.
   if (policy.kind == PreliminaryKind::Lda &&
@@ -157,8 +159,16 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
 std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
                                                                const PreliminaryOptions& policy,
                                                                PreliminaryDiagnostic& diagnostic,
-                                                               const EigenOperation& eigen) {
-  return prepare_impl(target, policy, diagnostic, eigen);
+                                                               const EigenOperation& eigen,
+                                                               NativeColdDensityFactor* factor) {
+  if (factor) *factor = {};
+  std::vector<double> coefficients;
+  auto density = prepare_impl(target, policy, diagnostic, eigen, factor ? &coefficients : nullptr);
+  if (factor && density && !coefficients.empty())
+    *factor = {&target, target.one_electron().nbf,
+               static_cast<std::size_t>(target.system().electron_count / 2),
+               std::move(coefficients)};
+  return density;
 }
 
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
@@ -172,7 +182,8 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
 std::optional<std::vector<double>> prepare_huckel_initial_density(
     const core::System& system, const integrals::IntegralData& target,
     const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
-    const EigenOperation& eigen) {
+    const EigenOperation& eigen, std::vector<double>* coefficients) {
+  if (coefficients) coefficients->clear();
   validate_preliminary_options(policy);
   if (policy.kind != PreliminaryKind::Huckel)
     throw std::invalid_argument("Huckel preparation requires its explicit provider kind");
@@ -185,6 +196,7 @@ std::optional<std::vector<double>> prepare_huckel_initial_density(
   solver::validate_seed(target.overlap, candidate.density, target.nbf,
                         {static_cast<unsigned>(system.electron_count)}, 2.0, eigen);
   diagnostic.outcome = PreliminaryOutcome::Used;
+  if (coefficients) *coefficients = std::move(candidate.coefficients);
   return std::move(candidate.density);
 }
 
@@ -255,7 +267,8 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
     // Admission is the larger peak: incoming seed + three snapshot/proposal
     // copies + four metric/spin matrices + two live product temporaries +
     // four eigensolver/validation matrices. Reserve sixteen FP64 matrices
-    // for that fourteen-matrix peak, not two simultaneous preparation phases.
+    // for that fourteen-matrix peak plus the optional density-generating C,
+    // not two simultaneous preparation phases. C has at most n*n entries.
     // Cached atomic frames and one serialized atomic owner are charged below;
     // the already retained target integrals belong to the target's inventory.
     auto bytes = checked_add(16U << 20, checked_mul(16 * sizeof(double), n2));

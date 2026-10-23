@@ -8,6 +8,7 @@
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -2642,6 +2643,7 @@ void minao_gpu_case() {
   std::cout << "CUDA MINAO GPU preparation and strict seed gates passed\n";
 }
 
+#include "ks_cold_factor_cases.hpp"
 #include "ks_density_provider_cases.hpp"
 }  // namespace
 
@@ -2663,6 +2665,10 @@ int main(int argc, char** argv) {
       ks_density_provider_cases();
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
+      run_density_fitted_cold_factor_case();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
       for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
         run_density_fitted_exchange_case(true, true, selection);
@@ -2678,6 +2684,7 @@ int main(int argc, char** argv) {
       return 0;
     }
     minao_gpu_case();
+    run_density_fitted_cold_factor_case();
     ks_density_provider_cases();
     prepared_cuda_fock_seam();
     registered_functional_code_seam();

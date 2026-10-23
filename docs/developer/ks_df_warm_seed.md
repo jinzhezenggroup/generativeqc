@@ -44,6 +44,43 @@ D in the dead `effective` scratch slot, not final coefficients, stationary weigh
 the current density, or force/projection storage. Pending-iteration exports remain
 invalid. Clearing the warm state clears both its storage tag and identity.
 
+## Native cold factors
+
+Native restricted Hückel preparation also preserves the occupied AO coefficients
+that generated its strictly admitted density. With `GENERATIVEQC_CUDA_KS_COLD_FACTOR`
+unset or `1`, an eligible strict-FP64 DF KS owner may consume this temporary factor
+for the first K build. `0`, empty and invalid values disable the optimization.
+Standard and Fast callers share this admission; a Fast force policy does not itself
+change the precision of its SCF owner.
+
+The factor is bound to the prepared target, AO dimension and occupied rank. The
+consumer applies the density's scalar electron-count normalization to C, rebuilds
+D on its own CUDA stream, and requires a finite maximum difference no greater than
+`1e-12` from the actual admitted density. The original D remains the operator input.
+The factor never certifies an external seed or a different geometry/owner. Missing,
+malformed, nonfinite or mismatching factors retain the ordinary dense first K.
+UKS, lower-precision SCF schedules, unavailable occupied providers and owners under
+an active resource ledger also retain that fallback. Optional host packing
+allocation failure declines the factor; CUDA execution failures remain errors.
+
+Preparation retains at most `nao * nocc` coefficients within the existing Hückel
+preflight bound. Begin temporarily packs one `nao * nao` host matrix, accounts for
+its capacity, and borrows existing device iteration scratch. There is no new
+retained device allocation or new auxiliary projection. The enclosing batch
+accounts for all live seed/factor capacities and releases each host factor after
+synchronous admission. Retry and changed-geometry seeds cannot borrow it. No
+CPU/reference work is added to production admission.
+
+`cold_factor_restored` in `ks_begin` distinguishes this path from warm replay;
+`cold_factor_density_error_e16_ceil` records its reconstruction error when tracing.
+The first occupied K uses the current solve epoch and density generation. The
+existing `GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT=1` diagnostic also audits the first
+occupied cold K against dense K at the same D, with the matrix gates below.
+Run `generativeqc_ks_cuda_tests --df-cold-factor` and
+`tests/python/test_ks_cold_factor_cuda.py` in a finite Slurm allocation for native
+and public batch/lifetime regression coverage. The latter uses the explicit
+`GENERATIVEQC_HUCKEL_CUDA_TEST=1` test opt-in.
+
 ## Diagnostic ledger
 
 `GENERATIVEQC_DF_TRACE` retains the existing validated component-trace format and
@@ -135,3 +172,7 @@ are `tests/python/test_ks_warm_factor.py` and
 See the [default-policy decision](../../.agents/notes/implemented/performance/2026-10-15-ks-df-warm-factor-default.md)
 and the [original qualification decision](../../.agents/notes/implemented/performance/2026-10-15-ks-df-warm-factor-candidate.md)
 for the implementation boundary, qualification scope and retained fallback policy.
+
+Native cold-factor default qualification, complete endpoint populations and source
+identities are retained in the [cold-factor receipt](../../benchmarks/results/ks-df-cold-factor-20261023/README.md).
+Its resource/fallback rationale is preserved in the [decision note](../../.agents/notes/implemented/performance/2026-10-23-ks-df-native-cold-factor.md).

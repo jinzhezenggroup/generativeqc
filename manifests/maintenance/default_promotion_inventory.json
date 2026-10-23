@@ -108,6 +108,30 @@
       ]
     },
     {
+      "id": "ks.df-native-cold-factor",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_COLD_FACTOR"
+      ],
+      "owner_issues": [
+        2696
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Unset or 1 reuses native restricted FP64 Huckel coefficients only after owner, shape, rank and same-density CUDA reconstruction admission. Explicit 0/invalid values, external seeds, mixed precision, UKS, unavailable providers and bounded resource owners retain dense first K. Complete Standard/Fast DF endpoints and first-K matrix audits pass; 96-atom cold medians improve about 10.0%/9.5%, with all physical Fock counts preserved.",
+      "revisit_condition": "Qualify new precision/spin/resource domains independently; retain dense rollback and all negative timing evidence. Sampled default-grid solver qualification does not establish quadrature convergence or universal speedup.",
+      "evidence": [
+        "docs/developer/ks_df_warm_seed.md",
+        "tests/native/ks_cold_factor_cases.hpp",
+        "tests/python/test_ks_cold_factor_cuda.py",
+        "issue:#2696",
+        ".agents/notes/implemented/performance/2026-10-23-ks-df-native-cold-factor.md",
+        "benchmarks/results/ks-df-cold-factor-20261023/README.md",
+        "benchmarks/results/ks-df-cold-factor-20261023/qualification.json.gz"
+      ]
+    },
+    {
       "id": "ks.df-warm-factor-replay",
       "classification": "already-default",
       "controls": [
@@ -142,7 +166,7 @@
       "sources": [
         "src/dft/cuda_ks.cpp"
       ],
-      "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
+      "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied native-cold or warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
       "revisit_condition": "Keep numerical matrix validation separate from production replay and clean performance evidence; do not promote the diagnostic overhead as part of the execution policy.",
       "evidence": [
         "docs/developer/ks_df_warm_seed.md",

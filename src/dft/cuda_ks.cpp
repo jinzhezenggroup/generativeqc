@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -52,6 +53,7 @@
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -329,7 +331,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
-  bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
+  bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{},
+      native_cold_factor_ready{};
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.
   bool warm_factor_storage{};
@@ -928,6 +931,84 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return !selection || std::strcmp(selection, "1") == 0;
   }
 
+  bool accepts_native_cold_factor() const noexcept {
+    // Optional seed work has no reservation in public resource plans yet.
+    // Like warm-factor replay, only unset/1 selects it; other values roll back.
+    const auto* selection = std::getenv("GENERATIVEQC_CUDA_KS_COLD_FACTOR");
+    return (!selection || std::strcmp(selection, "1") == 0) && fitted_exchange && spins == 1 &&
+           occupied_fock_binding && !precision_schedule.any_lower_precision() &&
+           !runtime::active_device_resource_ledger;
+  }
+
+  /** Authenticate a native C against the actual admitted D on this stream.
+   * Seed normalization can scale D, so apply that same scalar to C. Rebuild
+   * into dead scratch and require near-roundoff equality; neither the input D
+   * nor its target operator is changed. Any mismatch keeps dense first K.
+   * The buffers used here are ordinary iteration scratch, not a retained lease. */
+  bool restore_native_cold_factor(const scf::initial_guess::NativeColdDensityFactor& factor,
+                                  const std::vector<double>& input,
+                                  const std::vector<double>& prepared) {
+    if (!accepts_native_cold_factor() || factor.target != &provider || factor.nbf != n ||
+        !factor.occupied || factor.occupied != occupations[0] || factor.occupied > n ||
+        factor.coefficients.size() != n * factor.occupied)
+      return false;
+    std::size_t diagonal = 0;
+    for (std::size_t i = 1; i < n; ++i)
+      if (input[i * n + i] > input[diagonal]) diagonal = i * n + i;
+    const double scale = std::sqrt(prepared[diagonal] / input[diagonal]);
+    if (!(scale > 0.0) || !std::isfinite(scale)) return false;
+    std::vector<double> columns;
+    try {
+      columns.resize(matrix, 0.0);
+    } catch (const std::bad_alloc&) {
+      // Packing is optional. Allocation pressure must retain the already
+      // admitted dense seed rather than fail an otherwise viable solve.
+      return false;
+    }
+    runtime::sample_cpu_capacity(runtime::vector_bytes(columns));
+    // Bound even malformed finite factors before the reconstruction can form
+    // overflowing products; normal native coefficients are far below this.
+    const double ceiling = std::sqrt(std::numeric_limits<double>::max() / (4.0 * factor.occupied));
+    for (std::size_t row = 0; row < n; ++row)
+      for (std::size_t column = 0; column < factor.occupied; ++column) {
+        const double value = scale * factor.coefficients[row * factor.occupied + column];
+        if (!std::isfinite(value) || std::abs(value) > ceiling) return false;
+        columns[column * n + row] = value;
+      }
+    runtime::cuda_trace::TraceRegion trace("cold_factor_density_admission", stream);
+    const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
+    double maximum = std::numeric_limits<double>::infinity();
+    try {
+      check(cudaMemcpyAsync(tmp1, columns.data(), matrix * sizeof(double), cudaMemcpyHostToDevice,
+                            stream));
+      launch_build_density_kernel(blocks, 128, 0, stream, 1, n, occupied, tmp1, final_enabled,
+                                  tmp2);
+      // effective/proposal have no live iteration consumer before begin returns.
+      check(cudaMemsetAsync(effective, 0, sizeof(double), stream));
+      launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, matrix, density, tmp2,
+                                                proposal, effective);
+      check(cudaGetLastError());
+      check(cudaMemcpyAsync(&maximum, effective, sizeof(double), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      // The pageable coefficient and scalar staging must outlive queued copies.
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.setup_h2d_bytes += matrix * sizeof(double);
+    movement.scalar_d2h_bytes += sizeof(double);
+    ++movement.synchronizations;
+    if (!std::isfinite(maximum) || maximum > 1e-12) return false;
+    check(cudaMemcpyAsync(warm_orbitals, tmp1, matrix * sizeof(double), cudaMemcpyDeviceToDevice,
+                          stream));
+    occupied_fitted_factor_ready = warm_orbitals_ready = warm_orbitals_are_ao = true;
+    native_cold_factor_ready = true;
+    ++movement.fitted_cold_factor_restores;
+    runtime::cuda_trace::trace_counter("cold_factor_density_error_e16_ceil",
+                                       static_cast<std::uint64_t>(std::ceil(maximum * 1e16)));
+    return true;
+  }
+
   bool qualified_warm_factor() const noexcept {
     const auto binding = scf::prepared_cuda_occupied_fock_binding(provider);
     return warm_ready && warm_factor_storage && fitted_exchange && spins == 1 &&
@@ -1031,7 +1112,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       fock_error = std::max(fock_error, std::abs(delta_fock));
     }
     if (error || k_error >= 2e-11 || fock_error >= 2e-11)
-      throw std::runtime_error("CUDA KS warm-seed dense/occupied K/Fock audit failed");
+      throw std::runtime_error("CUDA KS seed dense/occupied K/Fock audit failed");
     runtime::cuda_trace::trace_counter("warm_seed_audit_k_max_abs_e16_ceil",
                                        static_cast<std::uint64_t>(std::ceil(k_error * 1e16)));
     runtime::cuda_trace::trace_counter("warm_seed_audit_fock_max_abs_e16_ceil",
@@ -1938,13 +2019,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
   ~Impl() { cleanup(); }
 
-  void begin(const std::vector<double>* input, bool reuse_warm, CudaKsSeedOrigin seed_origin) {
+  void begin(const std::vector<double>* input, bool reuse_warm, CudaKsSeedOrigin seed_origin,
+             const scf::initial_guess::NativeColdDensityFactor* cold_factor) {
     if (is_pending) throw std::logic_error("cannot replace a pending CUDA KS iteration");
     final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
     final_fitted_projection_ready = false;
     final_generation = 0;
     occupied_fitted_factor_ready = false;
     pending_fitted_occupied = false;
+    native_cold_factor_ready = false;
     // Arbitrary imported/changed-geometry seeds never borrow a previous frame.
     // A same-owner factor-backed warm seed can restore its own exact AO C below.
     invalidate_warm_orbitals();
@@ -2056,6 +2139,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!retain_range_source) retire_phase_source(false);
     std::vector<double> prepared;
     if (input) prepared = seed(input);  // Validate before replacing current state.
+    runtime::CpuRetainedCapacity prepared_capacity(runtime::vector_bytes(prepared));
     auto retained_history = std::move(output.dft_diagnostic.history);
     retained_history.clear();
     output = {};
@@ -2193,6 +2277,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaStreamSynchronize(stream));
         movement.density_h2d_bytes += elements * sizeof(double);
         ++movement.synchronizations;
+        if (cold_factor && seed_origin == CudaKsSeedOrigin::NativeColdGuess &&
+            !restore_native_cold_factor(*cold_factor, *input, prepared))
+          ++movement.fitted_cold_factor_fallbacks;
       } else {
         check(cudaMemcpyAsync(density, cold_seed, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
@@ -2221,7 +2308,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::trace_counter("explicit_seed", input != nullptr);
     runtime::cuda_trace::trace_counter("warm_density_generation", warm_density_generation);
     runtime::cuda_trace::trace_counter("warm_factor_generation", warm_factor_generation);
-    runtime::cuda_trace::trace_counter("warm_factor_restored", occupied_fitted_factor_ready);
+    runtime::cuda_trace::trace_counter("warm_factor_restored",
+                                       use_warm && occupied_fitted_factor_ready);
+    runtime::cuda_trace::trace_counter("cold_factor_restored",
+                                       !use_warm && occupied_fitted_factor_ready);
     runtime::cuda_trace::trace_counter("retained_state_bytes", resource.state_device_bytes);
     runtime::cuda_trace::trace_counter("retained_xc_bytes", resource.xc_device_bytes);
     runtime::cuda_trace::trace_counter("retained_provider_bytes", resource.provider_device_bytes);
@@ -3126,11 +3216,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       runtime::cuda_trace::trace_counter("occupied_k", use_occupied_fitted);
       runtime::cuda_trace::trace_counter(
           "factor_density_generation",
-          use_occupied_fitted ? (output.iterations == 0 ? warm_factor_generation : generation + 1)
-                              : 0);
+          use_occupied_fitted
+              ? (output.iterations == 0 && !native_cold_factor_ready ? warm_factor_generation
+                                                                     : generation + 1)
+              : 0);
       runtime::cuda_trace::trace_counter(
           "factor_solve_epoch",
-          use_occupied_fitted ? (output.iterations == 0 ? warm_factor_epoch : solve_epoch) : 0);
+          use_occupied_fitted
+              ? (output.iterations == 0 && !native_cold_factor_ready ? warm_factor_epoch
+                                                                     : solve_epoch)
+              : 0);
       runtime::cuda_trace::TraceRegion jk_trace("ks_jk", stream);
       pending_fitted_occupied = use_occupied_fitted;
       pending_fitted_projection_scratch_generation = 0;
@@ -4175,8 +4270,12 @@ CudaKsPlan::CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis,
                  range_provider) {}
 CudaKsPlan::~CudaKsPlan() = default;
 void CudaKsPlan::begin(const std::vector<double>* seed, bool reuse_warm,
-                       CudaKsSeedOrigin seed_origin) {
-  impl_->begin(seed, reuse_warm, seed_origin);
+                       CudaKsSeedOrigin seed_origin,
+                       const scf::initial_guess::NativeColdDensityFactor* cold_factor) {
+  impl_->begin(seed, reuse_warm, seed_origin, cold_factor);
+}
+bool CudaKsPlan::accepts_native_cold_factor() const noexcept {
+  return impl_->accepts_native_cold_factor();
 }
 bool CudaKsPlan::active() const noexcept { return impl_->is_active; }
 bool CudaKsPlan::pending() const noexcept { return impl_->is_pending; }

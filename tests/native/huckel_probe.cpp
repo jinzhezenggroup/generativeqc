@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -129,6 +130,20 @@ int main(int argc, char** argv) {
     const auto capacity = preliminary_numeric_capacity(system, policy);
     allocation::enabled = true;
     const auto result = huckel_density(system, integrals, policy, diagnostic);
+    // The retained factor is a witness of the original density, not an
+    // independently fitted or re-diagonalized replacement for that seed.
+    const auto occupied = static_cast<std::size_t>(system.electron_count / 2);
+    if (result.coefficients.size() != integrals.nbf * occupied)
+      throw std::runtime_error("Huckel density factor has the wrong occupied shape");
+    for (std::size_t row = 0; row < integrals.nbf; ++row)
+      for (std::size_t column = 0; column < integrals.nbf; ++column) {
+        double value = 0.0;
+        for (std::size_t orbital = 0; orbital < occupied; ++orbital)
+          value += 2.0 * result.coefficients[row * occupied + orbital] *
+                   result.coefficients[column * occupied + orbital];
+        if (std::abs(value - result.density[row * integrals.nbf + column]) > 1e-12)
+          throw std::runtime_error("Huckel factor does not reconstruct its original density");
+      }
     scf::solver::validate_seed(
         integrals.overlap, result.density, integrals.nbf,
         {static_cast<unsigned>(system.electron_count)}, 2.0,

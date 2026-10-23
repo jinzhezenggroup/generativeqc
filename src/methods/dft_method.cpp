@@ -592,7 +592,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
   std::optional<std::vector<double>> prepare_cold_initial_guess(
-      scf::initial_guess::PreliminaryDiagnostic& diagnostic) const {
+      scf::initial_guess::PreliminaryDiagnostic& diagnostic,
+      scf::initial_guess::NativeColdDensityFactor* factor = nullptr) const {
+    if (factor) *factor = {};
     if (!options_.preliminary_guess) return std::nullopt;
     scf::initial_guess::validate_preliminary_target(system_, fock_.strategy(), options_);
     diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
@@ -607,7 +609,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       if (cuda_) eigen = cuda_->seed_eigen_operation();
 #endif
       auto density = scf::initial_guess::prepare_preliminary_density(
-          fock_, *options_.preliminary_guess, diagnostic, eigen);
+          fock_, *options_.preliminary_guess, diagnostic, eigen, factor);
       diagnostic.preparation_seconds =
           std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
       return density;
@@ -2345,6 +2347,24 @@ class KsPreparedBatch final : public PreparedBatch,
         size(), scf::CoulombExchangeWork::empty());
     std::vector<bool> ready(size(), false);
     std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
+    std::vector<scf::initial_guess::NativeColdDensityFactor> preliminary_factors(size());
+    // Ragged preparation can keep earlier items' seeds alive while preparing
+    // another. Include optional factors in that same bounded host observation.
+    const auto seed_capacity = [&] {
+      // Unobserved batches must not scan every neighbor for each item.
+      if (!runtime::cpu_resource_observation.active) return std::size_t{};
+      std::size_t bytes = 0;
+      for (std::size_t i = 0; i < size(); ++i) {
+        if (preliminary_seeds[i])
+          bytes = runtime::add_capacity(bytes, runtime::vector_bytes(*preliminary_seeds[i]));
+        bytes = runtime::add_capacity(bytes,
+                                      runtime::vector_bytes(preliminary_factors[i].coefficients));
+      }
+      return bytes;
+    };
+    const auto observed_plan_capacity = [&](std::size_t exclude = SIZE_MAX) {
+      return runtime::cpu_resource_observation.active ? host_numeric_capacity(exclude) : 0;
+    };
     std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
     std::vector<bool> preliminary_requested(size(), false);
     // Allocate source-geometry metadata before launching any item. The success
@@ -2379,7 +2399,12 @@ class KsPreparedBatch final : public PreparedBatch,
           if (result.warm_start_used) {
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
           } else {
-            preliminary_seeds[i] = item.plan->prepare_cold_initial_guess(diagnostic);
+            runtime::CpuRetainedCapacity neighbors(observed_plan_capacity(i));
+            runtime::CpuRetainedCapacity seeds(seed_capacity());
+            auto* factor = item.plan->cuda_plan()->accepts_native_cold_factor()
+                               ? &preliminary_factors[i]
+                               : nullptr;
+            preliminary_seeds[i] = item.plan->prepare_cold_initial_guess(diagnostic, factor);
           }
         }
 #endif
@@ -2442,6 +2467,7 @@ class KsPreparedBatch final : public PreparedBatch,
               diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
           }
           preliminary_seeds[i].reset();
+          preliminary_factors[i] = {};
         }
         auto& item = items_[i];
         item.failure = nullptr;
@@ -2453,13 +2479,20 @@ class KsPreparedBatch final : public PreparedBatch,
         try {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
+            runtime::CpuRetainedCapacity retained(observed_plan_capacity());
+            runtime::CpuRetainedCapacity seeds(seed_capacity());
             if (!result.target_fock_work) result.target_fock_work.emplace();
             result.target_fock_work->begin_attempt();
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
-                        !attempt && !reuse && preliminary_seeds[i]
-                            ? dft::CudaKsSeedOrigin::NativeColdGuess
-                            : dft::CudaKsSeedOrigin::External);
+            cuda->begin(
+                seed, reuse && item.resident_warm && !preliminary_seeds[i],
+                !attempt && !reuse && preliminary_seeds[i] ? dft::CudaKsSeedOrigin::NativeColdGuess
+                                                           : dft::CudaKsSeedOrigin::External,
+                !attempt && !reuse && preliminary_factors[i].target ? &preliminary_factors[i]
+                                                                    : nullptr);
+            // begin synchronously validates/uploads C into its existing arena.
+            // No host factor survives an SCF iteration or a geometry change.
+            preliminary_factors[i] = {};
             running[i] = true;
             continue;
           }

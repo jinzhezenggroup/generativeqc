@@ -488,6 +488,8 @@ macro(generativeqc_add_native_tests)
     set_tests_properties(generativeqc_dft_cuda_tests PROPERTIES SKIP_RETURN_CODE 77)
     generativeqc_native_test(generativeqc_ks_cuda_tests tests/native/test_ks_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    add_test(NAME generativeqc_ks_df_cold_factor_tests COMMAND generativeqc_ks_cuda_tests --df-cold-factor)
+    set_tests_properties(generativeqc_ks_df_cold_factor_tests PROPERTIES SKIP_RETURN_CODE 77)
     target_include_directories(generativeqc_ks_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_sources(generativeqc_ks_cuda_tests PRIVATE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_split_hybrid_registry.cuh")

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <vector>
 
 #include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
@@ -18,6 +19,17 @@ class PreparedFockPlan;
 }
 
 namespace generativeqc::scf::initial_guess {
+
+/** Optional native cold-seed factor, borrowed only during the target's begin.
+ * Coefficients are row-major C[AO, occupied], without sqrt(occupation).
+ * The producer publishes them only after strict same-basis density admission.
+ * A consumer must authenticate the target and reconstruct its actual normalized
+ * density before using this factor. Arbitrary imported seeds have no certificate. */
+struct NativeColdDensityFactor {
+  const PreparedFockPlan* target{};
+  std::size_t nbf{}, occupied{};
+  std::vector<double> coefficients;
+};
 
 std::optional<PreliminaryOptions> preliminary_options(
     const generativeqc_initial_guess_options* descriptor);
@@ -48,7 +60,7 @@ void resolve_automatic_preliminary_guess(const core::System& system,
 std::optional<std::vector<double>> prepare_huckel_initial_density(
     const core::System& system, const integrals::IntegralData& target,
     const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
-    const EigenOperation& eigen);
+    const EigenOperation& eigen, std::vector<double>* coefficients = nullptr);
 
 /** Strict same-basis admission. No symmetry/trace repair or metric transport.
  * Ownership moves only after the raw candidate passes the existing ensemble gate. */
@@ -62,10 +74,10 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
  * other callers retain their existing default operation when none is supplied.
  * a failing supplied operation never silently retries on the reference backend.
  */
-std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
-                                                               const PreliminaryOptions& policy,
-                                                               PreliminaryDiagnostic& diagnostic,
-                                                               const EigenOperation& eigen = {});
+std::optional<std::vector<double>> prepare_preliminary_density(
+    const PreparedFockPlan& target, const PreliminaryOptions& policy,
+    PreliminaryDiagnostic& diagnostic, const EigenOperation& eigen = {},
+    NativeColdDensityFactor* factor = nullptr);
 
 using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
 /** The callback executes immutable target equations with fresh iterative state.

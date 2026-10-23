@@ -261,6 +261,6 @@ HuckelDensityResult huckel_density(const core::System& system,
                  coefficients[column * occupied + orbital];
       density[row * dimension + column] = density[column * dimension + row] = value;
     }
-  return {std::move(density), cache.size(), minimal};
+  return {std::move(density), cache.size(), minimal, std::move(coefficients)};
 }
 }  // namespace generativeqc::scf::initial_guess
