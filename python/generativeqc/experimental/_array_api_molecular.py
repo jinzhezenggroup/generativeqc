@@ -1,7 +1,9 @@
 """Explicit native molecular source cuts for first-order Array API capture.
 
-The native method owns SCF, integrals, and analytic nuclear derivatives. TensorIR
-owns only the surrounding expression and its chain rule. A source's first-order
+The default native source owns SCF, integrals, and analytic nuclear derivatives.
+The explicit integral-ad source generates the integral/normalization pullback
+for geometry and basis inputs and solves its primal with the shared RHF driver.
+TensorIR owns the surrounding expression and its chain rule. A source's first-order
 jet is bound at each actual geometry, never a differentiated iteration history
 or a numerical surrogate for the method's energy away from that geometry.
 """
@@ -51,6 +53,12 @@ class MolecularModel:
     invented. Coordinates are FP64 (natoms, 3) in Bohr; energy is in Hartree
     and complete native analytic gradients are in Hartree/Bohr.
 
+    ``differentiation="integral-ad"`` instead selects CPU FP64 conventional RHF
+    through generated Gaussian integrals, normalization and the stationary SCF
+    Lagrangian. Its optional flat ``exponents`` and ``coefficients`` call inputs
+    follow shell/primitive order. This mode is unscreened and first order, with
+    the default IntegralRHF byte/work/compiler bounds; it calls no force endpoint.
+
     CPU/CUDA selection is explicit and consistent with the compiled algebra.
     CUDA currently stages coordinates/results via the host. Native method and
     TensorIR compilation resource limits are independently enforced.
@@ -68,6 +76,7 @@ class MolecularModel:
     _controls: tuple[tuple[str, Any], ...]
     _resource_budget: Any
     _ks_options: KsOptions | None
+    _differentiation: str
 
     def __init__(
         self,
@@ -88,6 +97,7 @@ class MolecularModel:
         density_tolerance: float = 1e-10,
         screening_tolerance: float = 1e-14,
         resource_budget: Any = None,
+        differentiation: str = "native",
     ) -> None:
         """Bind a method selector and immutable first-order source contract.
 
@@ -102,6 +112,8 @@ class MolecularModel:
 
         from generativeqc.elements import atomic_number
 
+        if differentiation not in ("native", "integral-ad"):
+            raise ValueError("differentiation must be 'native' or 'integral-ad'")
         if not isinstance(elements, tuple) or not 1 <= len(elements) <= 256:
             raise ValueError("molecular elements must be a tuple of 1 to 256 nuclei")
         numbers = tuple(atomic_number(element) for element in elements)
@@ -149,7 +161,14 @@ class MolecularModel:
             if (
                 type(value) not in (int, float)
                 or not math.isfinite(value)
-                or value <= 0
+                or value < 0
+                or (
+                    value == 0
+                    and not (
+                        name == "screening_tolerance"
+                        and differentiation == "integral-ad"
+                    )
+                )
             ):
                 raise ValueError(f"molecular {name} must be finite and positive")
         if resource_budget is not None and not isinstance(
@@ -165,6 +184,30 @@ class MolecularModel:
         ):
             raise ValueError("unsupported molecular density_fitting mode")
         density_fitting = density_fitting.lower()
+        if differentiation == "integral-ad":
+            if (
+                method != "rhf"
+                or backend != "cpu"
+                or density_fitting != "none"
+                or multiplicity != 1
+                or ks_options is not None
+                or resource_budget is not None
+            ):
+                raise ValueError(
+                    "integral-ad requires CPU direct RHF without KS/resource overrides; "
+                    "use IntegralRHF for explicit integral execution budgets"
+                )
+            if max_iterations > 10000 or diis_history > 32:
+                raise ValueError(
+                    "integral-ad permits at most 10000 iterations and 32 DIIS vectors"
+                )
+            if screening_tolerance not in (0, 1e-14):
+                raise ValueError(
+                    "integral-ad is unscreened; screening_tolerance must be zero or default"
+                )
+            # The shared default is accepted for convenience, but the explicit
+            # mode always executes the complete unscreened differentiable sum.
+            screening_tolerance = 0.0
         if auxiliary_basis is not None and (
             not isinstance(auxiliary_basis, str)
             or not auxiliary_basis.strip()
@@ -207,6 +250,7 @@ class MolecularModel:
         )
         object.__setattr__(self, "_resource_budget", resource_budget)
         object.__setattr__(self, "_ks_options", ks_options)
+        object.__setattr__(self, "_differentiation", differentiation)
 
     def _payload(self) -> dict[str, Any]:
         payload = {
@@ -232,6 +276,8 @@ class MolecularModel:
                 None if self._resource_budget is None else asdict(self._resource_budget)
             ),
         }
+        if self._differentiation == "integral-ad":
+            payload["derivative"] = "stationary-rhf-through-integral-ad-v1"
         if not isinstance(self._method, str):
             # Canonical science, not a user label, determines deduplication/cache IDs.
             payload["method_ir_identity"] = self._method.identity
@@ -240,6 +286,8 @@ class MolecularModel:
         return payload
 
     def _calculator(self) -> Any:
+        if self._differentiation == "integral-ad":
+            return _IntegralRHFSource(self)
         from generativeqc import Calculator
 
         # Native Calculator retains the only scientific method registry and
@@ -311,20 +359,36 @@ class MolecularModel:
             )
         return energy, gradient
 
-    def __call__(self, coordinates: Any) -> Any:
+    def __call__(
+        self, coordinates: Any, *, exponents: Any = None, coefficients: Any = None
+    ) -> Any:
         """Evaluate native total energy, or bind a symbolic molecular source.
 
         Eager calls release their native owner before returning detached CPU
         storage. Compiled calls retain owners until the compiled function is
         closed; lowering alone never loads a native library or runs SCF.
+        Integral AD accepts optional finite FP64 rank-one basis parameters;
+        all other modes reject them. Omitted parameters use the named basis.
         """
+        parameters = {
+            name: value
+            for name, value in (
+                ("exponents", exponents),
+                ("coefficients", coefficients),
+            )
+            if value is not None
+        }
+        if parameters and self._differentiation != "integral-ad":
+            raise ValueError(
+                "continuous basis inputs require differentiation='integral-ad'"
+            )
         if isinstance(coordinates, VibeArray):
             capture = _CAPTURE.get()
             if capture is None:
                 raise NotImplementedError(
                     "molecular sources require public compile/AD capture"
                 )
-            return capture.bind(self, coordinates)
+            return capture.bind(self, coordinates, parameters)
         from generativeqc_compiler.array_api.trace import active_capture
 
         if active_capture():
@@ -337,10 +401,71 @@ class MolecularModel:
                 charge=self._charge,
                 multiplicity=self._multiplicity,
                 properties=("energy",),
+                **parameters,
             )
             return eager.wrap(self._result_values(result, coordinates, False)[0])
         finally:
             calculator.clear_cache()
+
+
+class _IntegralRHFSource:
+    """Adapt the explicit integral AD chain to the existing capture lifetime.
+
+    This is a source execution adapter, not a delegation to Calculator forces.
+    It retains raw basis parameters and differentiates the actual generated
+    integrals consumed by the shared native SCF solve.
+    """
+
+    def __init__(self, operator: MolecularModel) -> None:
+        from .integral_autodiff import IntegralRHF
+
+        controls = dict(operator._controls)
+        self.owner = IntegralRHF(
+            operator._numbers,
+            basis=operator._basis,
+            charge=operator._charge,
+            max_iterations=controls["max_iterations"],
+            diis_history=controls["diis_history"],
+            energy_tolerance=controls["energy_tolerance"],
+            density_tolerance=controls["density_tolerance"],
+        )
+        self._library = self.owner._calculator._library
+
+    def singlepoint(
+        self,
+        atoms: Any,
+        *,
+        charge: int,
+        multiplicity: int,
+        properties: tuple[str, ...],
+        **parameters: Any,
+    ) -> Any:
+        from types import SimpleNamespace
+
+        if charge != self.owner.charge or multiplicity != 1:
+            raise ValueError("integral AD source molecular identity changed")
+        coordinates = np.array([position for _, position in atoms], dtype=np.float64)
+        derivative = "forces" in properties
+        if derivative:
+            energy, gradient = self.owner.value_and_grad(coordinates, **parameters)
+        else:
+            energy = self.owner.energy(coordinates, **parameters)
+            gradient = None
+        diagnostic = self.owner.diagnostics()
+        return SimpleNamespace(
+            energy=energy,
+            forces=None if gradient is None else -gradient.coordinates,
+            basis_gradients=gradient,
+            integral_ad_diagnostics=diagnostic,
+            converged=True,
+            executed_backend="cpu_reference",
+            iterations=diagnostic["iterations"],
+            energy_change=diagnostic["energy_change"],
+            density_rms=diagnostic["density_rms"],
+        )
+
+    def clear_cache(self) -> None:
+        self.owner.close()
 
 
 @dataclass(frozen=True)
@@ -350,10 +475,27 @@ class _MolecularSource:
     energy: str
     gradient: str
     snapshot: str
+    parameter_names: tuple[str, ...] = ()
 
     @property
     def names(self) -> tuple[str, ...]:
-        return self.energy, self.gradient, self.snapshot
+        return (
+            self.energy,
+            self.gradient,
+            self.snapshot,
+            *(
+                name + "_" + parameter
+                for parameter in self.parameter_names
+                for name in (self.gradient, self.snapshot)
+            ),
+        )
+
+    @property
+    def snapshot_names(self) -> tuple[str, ...]:
+        return (
+            self.snapshot,
+            *(self.snapshot + "_" + name for name in self.parameter_names),
+        )
 
     def payload(self) -> dict[str, Any]:
         return {**self.operator._payload(), "geometry": self.geometry.logical_hash}
@@ -373,7 +515,13 @@ class _MolecularCapture:
     def __exit__(self, *unused: object) -> None:
         _CAPTURE.reset(self.token)
 
-    def bind(self, operator: MolecularModel, coordinates: VibeArray) -> VibeArray:
+    def bind(
+        self,
+        operator: MolecularModel,
+        coordinates: VibeArray,
+        parameters: dict[str, Any] | None = None,
+    ) -> VibeArray:
+        parameters = parameters or {}
         if operator._backend != self.backend or operator._device != self.device:
             raise ValueError(
                 "molecular source and compiled algebra must use the same backend/device"
@@ -399,7 +547,22 @@ class _MolecularCapture:
                 raise ValueError(
                     "molecular scientific coordinates require complete atom/cartesian domains"
                 )
-        geometry = Program({"coordinates": coordinates.node})
+        for name, value in parameters.items():
+            if (
+                not isinstance(value, VibeArray)
+                or value.dtype != "float64"
+                or len(value.shape) != 1
+                or not symbolic._is_generic_array(value)
+            ):
+                raise ValueError(
+                    f"{name} must be a generic rank-one float64 captured array"
+                )
+        geometry = Program(
+            {
+                "coordinates": coordinates.node,
+                **{name: value.node for name, value in parameters.items()},
+            }
+        )
         if any(
             node.op == "input" and node.attrs["name"].startswith(_PREFIX)
             for node in geometry.live_nodes
@@ -429,6 +592,7 @@ class _MolecularCapture:
                 prefix + "energy",
                 prefix + "gradient",
                 prefix + "snapshot",
+                tuple(parameters),
             )
             self.sources.append(source)
         energy = input_array(
@@ -443,7 +607,13 @@ class _MolecularCapture:
         snapshot = input_array(source.snapshot, detached_spec)
         # This exact local jet has value E at q=q0 and derivative g*dq.
         # g and q0 are immutable native snapshots, not differentiated SCF state.
-        return energy + symbolic.sum(gradient * (coordinates - snapshot))
+        result = energy + symbolic.sum(gradient * (coordinates - snapshot))
+        for name, value in parameters.items():
+            spec = replace(value.node.spec, role="input", differentiable=False)
+            basis_gradient = input_array(source.gradient + "_" + name, spec)
+            basis_snapshot = input_array(source.snapshot + "_" + name, spec)
+            result = result + symbolic.sum(basis_gradient * (value - basis_snapshot))
+        return result
 
 
 class _MolecularRuntime:
@@ -489,7 +659,9 @@ class _MolecularRuntime:
         cached = self.bound_programs.get(program.logical_hash)
         if cached is not None:
             return cached
-        snapshots = {source.snapshot for source in self.sources.values()}
+        snapshots = {
+            name for source in self.sources.values() for name in source.snapshot_names
+        }
         replacements = {}
         for node in program.nodes:
             if (
@@ -523,8 +695,13 @@ class _MolecularRuntime:
                 continue
             mark = time.perf_counter_ns() if profiling else 0
             coordinate_node = source.geometry.outputs["coordinates"]
+            parameter_values = {}
+            if source.parameter_names:
+                parameter_values = executor.execute(source.geometry, feeds)
             geometry = (
-                feeds[coordinate_node.attrs["name"]]
+                parameter_values["coordinates"]
+                if parameter_values
+                else feeds[coordinate_node.attrs["name"]]
                 if coordinate_node.op == "input"
                 else executor.execute(source.geometry, feeds)["coordinates"]
             )
@@ -540,13 +717,14 @@ class _MolecularRuntime:
                 self.record_profile(
                     "source_calculator_lookup", time.perf_counter_ns() - mark
                 )
-            derivative = bool({source.gradient, source.snapshot} & needed)
+            derivative = bool((set(source.names) - {source.energy}) & needed)
             mark = time.perf_counter_ns() if profiling else 0
             result = calculator.singlepoint(
                 source.operator._atoms(geometry),
                 charge=source.operator._charge,
                 multiplicity=source.operator._multiplicity,
                 properties=("energy", "forces") if derivative else ("energy",),
+                **{name: parameter_values[name] for name in source.parameter_names},
             )
             if profiling:
                 self.record_profile(
@@ -557,10 +735,27 @@ class _MolecularRuntime:
                 result, geometry, derivative
             )
             # Publish atomically only after the full requested endpoint succeeds.
-            feeds[source.energy] = energy
-            feeds[source.snapshot] = geometry
+            publication = {source.energy: energy, source.snapshot: geometry}
             if gradient is not None:
-                feeds[source.gradient] = np.array(gradient, copy=True)
+                publication[source.gradient] = np.array(gradient, copy=True)
+            for name in source.parameter_names:
+                publication[source.snapshot + "_" + name] = np.array(
+                    parameter_values[name], copy=True
+                )
+                if derivative:
+                    value = np.asarray(getattr(result.basis_gradients, name))
+                    if (
+                        value.dtype != np.float64
+                        or value.shape != parameter_values[name].shape
+                        or not np.isfinite(value).all()
+                    ):
+                        raise ArithmeticError(
+                            "integral AD source returned invalid basis derivatives"
+                        )
+                    publication[source.gradient + "_" + name] = np.array(
+                        value, copy=True
+                    )
+            feeds.update(publication)
             if profiling:
                 self.record_profile(
                     "source_result_publication", time.perf_counter_ns() - mark
@@ -575,7 +770,8 @@ class _MolecularRuntime:
                     else source.operator._method.identifier
                 ),
                 "calls": previous.get("calls", 0) + 1,
-                "force_calls": previous.get("force_calls", 0) + int(derivative),
+                "force_calls": previous.get("force_calls", 0)
+                + int(derivative and source.operator._differentiation == "native"),
                 "total_iterations": previous.get("total_iterations", 0)
                 + result.iterations,
                 "backend": result.executed_backend,
@@ -593,6 +789,10 @@ class _MolecularRuntime:
                 "nuclear_gradient": derivative,
                 "geometry_hash": canonical_hash(geometry.tolist()),
             }
+            if source.operator._differentiation == "integral-ad":
+                self.diagnostics[source.energy]["integral_ad"] = dict(
+                    result.integral_ad_diagnostics
+                )
             if profiling:
                 self.record_profile("source_diagnostics", time.perf_counter_ns() - mark)
 

@@ -132,9 +132,36 @@ struct PreparedFockPlan::Impl {
   initial_guess::OverlapOrthogonalizer overlap_cache;
   unsigned retained_fitted_derivative_order{};
   FockOccupiedProjectionReservation projection_reservation;
+  bool external_integrals{};
 
   const integrals::IntegralData& one_electron() const {
     return fitted ? fitted->one_electron : exact;
+  }
+
+  Impl(const core::System& system, integrals::IntegralData values)
+      : orbital(system),
+        device_id(-1),
+        requested_budget(0),
+        exact(std::move(values)),
+        external_integrals(true) {
+    auto spec = make_hf_fock_spec(FockSpin::Restricted);
+    spec.derivative_order = 0;
+    diagnostic.strategy = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+    const auto n = molecule::ao_count(system);
+    if (!n || n != exact.nbf || n > 256 || exact.overlap.size() != n * n ||
+        exact.hcore.size() != n * n || exact.eri.size() != n * n * n * n || exact.ncoord != 0 ||
+        !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
+        !exact.eri_derivative.empty())
+      throw std::invalid_argument("external RHF integral layout is invalid");
+    const auto finite = [](const auto& array) {
+      return std::all_of(array.begin(), array.end(), [](double x) { return std::isfinite(x); });
+    };
+    if (!finite(exact.overlap) || !finite(exact.hcore) || !finite(exact.eri) ||
+        !std::isfinite(exact.nuclear_repulsion))
+      throw std::invalid_argument("external RHF integrals must be finite");
+    const CpuFockProviderView provider(exact);
+    cpu_view.emplace(diagnostic.strategy, n, 0, provider, provider);
+    diagnostic.nbf = n;
   }
 
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
@@ -472,6 +499,8 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
                                    retained_direct_derivative_order,
                                    retained_fitted_derivative_order, projection_reservation)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
+PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values)
+    : impl_(std::make_unique<Impl>(system, std::move(values))) {}
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
@@ -567,7 +596,7 @@ CudaDirectJkPlan* PreparedFockPlan::cuda_direct_source() const noexcept {
   return impl_->cuda_exact.get();
 }
 bool PreparedFockPlan::matches_system(const core::System& system) const noexcept {
-  return same_system(impl_->orbital, system);
+  return !impl_->external_integrals && same_system(impl_->orbital, system);
 }
 DirectJkMatrices PreparedFockPlan::build(const std::vector<double>& density,
                                          const std::vector<double>& beta) const {
@@ -636,7 +665,7 @@ bool PreparedFockPlan::matches(
     int device, std::size_t budget, unsigned minimum_direct_derivative_order,
     unsigned minimum_fitted_derivative_order,
     FockOccupiedProjectionReservation projection_reservation) const noexcept {
-  if (projection_reservation != impl_->projection_reservation ||
+  if (impl_->external_integrals || projection_reservation != impl_->projection_reservation ||
       minimum_direct_derivative_order > 1 || minimum_fitted_derivative_order > 1 ||
       (minimum_direct_derivative_order &&
        (!impl_->cuda_exact ||

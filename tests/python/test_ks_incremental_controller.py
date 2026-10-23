@@ -43,8 +43,10 @@ def controller_probe(
 #include <string>
 #include "scf/types.hpp"
 #include "scf/convergence_limits.hpp"
+#include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
 namespace scf = generativeqc::scf;
+using generativeqc::dft::ks_incremental_proposal_interval;
 int cudaGetLastError() { return 0; }
 void check(int) {}
 // Host copies execute the same linear provider-buffer operations. No CUDA
@@ -59,9 +61,10 @@ void launch_copy_matrix_kernel(unsigned,unsigned,unsigned,int,std::size_t n,
     const double* a,double* out) {for(std::size_t i=0;i<n;++i)out[i]=a[i];}
 void require(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 struct Consumer {
-  // The incremental-only probe has no resident canonical-proof owner; this
-  // capability is deliberately excluded by the real CUDA admission policy.
-  bool standard_convergence_active() const noexcept { return false; }
+  // Simulate Standard proof admission for controller tests only. Real CUDA
+  // canonicality and molecular accuracy are qualified by independent endpoints.
+  bool standard_proof_owner=false;
+  bool standard_convergence_active() const noexcept { return standard_proof_owner; }
   bool fast_anchor_active=false, early_final_probe_requested=true;
   bool budget_stationarity=false, warm_energy_baseline=false;
   bool pending_nonlocal_seed=false, pending_nonlocal_frozen=false;
@@ -73,6 +76,7 @@ struct Consumer {
     throw std::runtime_error("generic incremental owner entered the Fast controller");
   }
   bool incremental_direct_jk=true, incremental_anchored=false, pending_incremental_delta=false;
+  bool incremental_proposals_active=false;
   bool incremental_energy_refinement=false;
   unsigned incremental_energy_full_builds=0;
   bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=false;
@@ -141,6 +145,79 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="bounded-proposals") {
+      using generativeqc::dft::ks_incremental_proposal_screening;
+      for(unsigned count:{0U,1U,8U,9U,100U}) {
+        require(ks_incremental_proposal_screening(false,count,1e-13)==1e-13,
+                "ordinary/full/warm action inherited provisional screening");
+        require(ks_incremental_proposal_screening(true,count,0.0)==0.0,
+                "unscreened source inherited screening");
+        require(ks_incremental_proposal_screening(true,count,1e-8)==1e-8,
+                "proposal requested a finer unprepared source");
+        require(ks_incremental_proposal_screening(true,count,1e-13)==
+                    (count>0 && count<=8 ? 1e-9 : 1e-13),
+                "coarser proposal budget escaped the finite solve-wide limit");
+      }
+      for(unsigned requested:{0U,1U,3U,8U,100U}) {
+        const auto interval=ks_incremental_proposal_interval(true,requested,1);
+        require(interval>=1 && interval<=8,"screened proposal chain is unbounded");
+        require(ks_incremental_proposal_interval(false,requested,1)==1,
+                "ordinary screened cadence changed without an audited owner");
+        require(ks_incremental_proposal_interval(false,requested,0)==0,
+                "exact-linear cadence changed without an audited owner");
+        Consumer probe;
+        probe.standard_proof_owner=probe.incremental_proposals_active=true;
+        probe.incremental_direct_jk_policy.requested_rebuild_interval=requested;
+        probe.incremental_direct_jk_policy.effective_rebuild_interval=1;
+        probe.options.energy_tolerance=1e-9;
+        probe.options.density_tolerance=1e-5;
+        probe.build(false);
+        for(unsigned i=0;i<interval;++i) {
+          probe.build(false);
+          require(probe.pending_incremental_delta,"proposal epoch refreshed prematurely");
+          require(probe.incremental_energy_full_builds==0,
+                  "a screened proposal manufactured full-density energy history");
+        }
+        probe.build(false);
+        require(!probe.pending_incremental_delta,"proposal limit did not refresh full density");
+        probe.output.energy_change=1e-10;
+        require(!probe.stop(2e-6,2e-6,2e-6),"one full audit certified a proposal chain");
+        probe.build(false);
+        require(!probe.pending_incremental_delta && probe.stop(2e-6,2e-6,2e-6),
+                "full-density refinement failed to close the provisional epoch");
+      }
+      return 0;
+    }
+    if(std::string(argv[1])=="standard-refinement") {
+      for(bool delta:{false,true}) {
+        Consumer probe;
+        probe.standard_proof_owner=true;
+        probe.options.energy_tolerance=1e-9;
+        probe.options.density_tolerance=1e-5;
+        probe.build(false);
+        if(delta)probe.build(false);
+        probe.output.energy_change=1e-10;
+        require(!probe.stop(2e-6,2e-6,2e-5),
+                "one full or reconstructed energy published Standard convergence");
+        require(probe.incremental_energy_refinement,
+                "Standard full-Fock refinement still waited for the legacy residual ceiling");
+        require(probe.incremental_energy_full_builds==(delta?0U:1U),
+                "refinement discarded a full build or counted a reconstructed delta");
+        probe.build(false);
+        if(delta) {
+          require(!probe.stop(2e-6,2e-6,2e-6),"delta/full energy pair certified convergence");
+          probe.build(false);
+        }
+        require(probe.stop(2e-6,2e-6,2e-6),"two physical energies did not satisfy Standard stop");
+        require(!probe.stop(2e-6,2e-6,2e-5),
+                "starting full refinement early relaxed the AO maximum acceptance gate");
+        probe.account_incremental_full_energy_finalization();
+        const auto& work=probe.output.incremental_direct_jk;
+        require(work.anchor_full_builds+work.delta_builds+work.post_scf_full_builds==
+                    probe.output.iterations,"Standard refinement fabricated a provider build");
+      }
+      return 0;
+    }
     if(std::string(argv[1])=="gate") {
       for(bool tight:{false,true}) {
         Consumer probe;
@@ -279,6 +356,34 @@ def test_actual_stopping_keeps_energy_density_residual_and_full_history_gates(
     """Evaluate ordinary/tight stop decisions instead of pinning source spelling."""
     result = subprocess.run(
         [str(controller_probe), "gate"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_standard_refinement_counts_only_executed_full_density_energies(
+    controller_probe: Path,
+) -> None:
+    """A real full Fock may seed the closing pair; a reconstructed delta may not."""
+    result = subprocess.run(
+        [str(controller_probe), "standard-refinement"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_bounded_proposals_preserve_full_density_closure(
+    controller_probe: Path,
+) -> None:
+    """An audited proposal epoch stays finite and cannot certify its own energy."""
+    result = subprocess.run(
+        [str(controller_probe), "bounded-proposals"],
         check=False,
         capture_output=True,
         text=True,

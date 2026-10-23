@@ -8,6 +8,7 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_integral_ad.cpp
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
     src/api/c_api_ks_hessian.cpp
