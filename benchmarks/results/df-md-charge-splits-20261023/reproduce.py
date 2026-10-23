@@ -39,7 +39,7 @@ def timing(before: list[float], after: list[float]) -> dict:
 def main() -> None:
     """Authenticate retained provenance, then qualify every native call."""
     data = json.loads(lzma.decompress((ROOT / "receipts.json.xz").read_bytes()))
-    manifest = data["source_manifest"].encode()
+    manifest = lzma.decompress((ROOT / data["source_manifest_path"]).read_bytes())
     assert hashlib.sha256(manifest).hexdigest() == data["source_manifest_sha256"]
     assert len(json.loads(manifest)["files"]) == 5984
     oracles = load_records(

@@ -36,7 +36,7 @@ compatibility coverage. WB97M-V is outside this pure-J streamed consumer.
 The immutable Release sm120 package was built on n1 with CUDA 12.9.1 and verified
 sccache 0.16.0 after authenticating 5,984 source inputs. All five stationary
 manifest targets were rebuilt. All device work uses finite Slurm RTX 5090 jobs
-and one numerical host thread. The bundle preserves the exact input manifest,
+and one numerical host thread. The separate `source-inputs.json.xz` preserves the exact input manifest; the receipt bundle preserves
 core/standalone package hashes, build controls, original runners, full energy and
 force arrays, semantic work counts, cache statistics and validation logs.
 
