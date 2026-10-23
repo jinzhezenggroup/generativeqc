@@ -5,8 +5,8 @@
   "original_bytes": 94609,
   "stored_bytes": 17005,
   "original_sha256": "cebcb412587854ca16114770de5f22b59c7ef16484f40c2988d98dd7a846c650",
-  "stored_sha256": "78d7fc42fcb2027f61137e479e70464872862b17a50b5afef36000dff9dedfb5",
+  "stored_sha256": "f201f77cd1a232e5a4a249d0e7e36197770329e8b841a71573998d9066945f2f",
   "original_git_blob": "b6b397bed070b43f70528d5a16857c9ca3bab178",
   "compression": "gzip, level 9, mtime 0",
-  "scope": "Exact-byte storage only; all historical numerical values, samples, settings and gates are retained."
+  "scope": "Exact-byte storage change only; every historical numerical value, sample, setting and gate is preserved."
 }
