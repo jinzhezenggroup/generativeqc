@@ -14,6 +14,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_density_fitting_md.hpp"
+#include "scf/explicit_integral_backend.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
 namespace generativeqc::scf {
@@ -140,34 +141,41 @@ struct PreparedFockPlan::Impl {
   unsigned retained_fitted_derivative_order{};
   FockOccupiedProjectionReservation projection_reservation;
   bool external_integrals{};
+  std::unique_ptr<ExplicitIntegralBackend> explicit_backend;
 
   const integrals::IntegralData& one_electron() const {
     return fitted ? fitted->one_electron : exact;
   }
 
-  Impl(const core::System& system, integrals::IntegralData values)
+  Impl(const core::System& system, integrals::IntegralData values, FockSpin spin,
+       FockBackend backend, int device, std::size_t budget)
       : orbital(system),
         device_id(-1),
         requested_budget(0),
         exact(std::move(values)),
         external_integrals(true) {
-    auto spec = make_hf_fock_spec(FockSpin::Restricted);
+    auto spec = make_hf_fock_spec(spin);
     spec.derivative_order = 0;
-    diagnostic.strategy = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+    diagnostic.strategy = resolve_fock_build(spec, backend, 0.0);
     const auto n = molecule::ao_count(system);
     if (!n || n != exact.nbf || n > 256 || exact.overlap.size() != n * n ||
         exact.hcore.size() != n * n || exact.eri.size() != n * n * n * n || exact.ncoord != 0 ||
         !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
         !exact.eri_derivative.empty())
-      throw std::invalid_argument("external RHF integral layout is invalid");
+      throw std::invalid_argument("external HF integral layout is invalid");
     const auto finite = [](const auto& array) {
       return std::all_of(array.begin(), array.end(), [](double x) { return std::isfinite(x); });
     };
     if (!finite(exact.overlap) || !finite(exact.hcore) || !finite(exact.eri) ||
         !std::isfinite(exact.nuclear_repulsion))
-      throw std::invalid_argument("external RHF integrals must be finite");
-    const CpuFockProviderView provider(exact);
-    cpu_view.emplace(diagnostic.strategy, n, 0, provider, provider);
+      throw std::invalid_argument("external HF integrals must be finite");
+    if (backend == FockBackend::Cuda) {
+      explicit_backend = make_cuda_explicit_integrals(device, n, exact.eri, budget);
+      device_id = device;
+    } else {
+      const CpuFockProviderView provider(exact);
+      cpu_view.emplace(diagnostic.strategy, n, 0, provider, provider);
+    }
     diagnostic.nbf = n;
   }
 
@@ -513,8 +521,10 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
                                    retained_direct_derivative_order,
                                    retained_fitted_derivative_order, projection_reservation)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
-PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values)
-    : impl_(std::make_unique<Impl>(system, std::move(values))) {}
+PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values,
+                                   FockSpin spin, FockBackend backend, int device,
+                                   std::size_t budget)
+    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget)) {}
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
@@ -551,6 +561,10 @@ void PreparedFockPlan::ensure_one_electron_derivatives() const {
   one.ncoord = coordinates;
 }
 initial_guess::EigenOperation PreparedFockPlan::eigen_operation(EigenUse use) const {
+  if (auto* explicit_owner = impl_->explicit_backend.get())
+    return [explicit_owner](const auto& matrix, const auto* overlap, const auto* x, std::size_t n) {
+      return explicit_owner->eigen(matrix, overlap, x, n);
+    };
   auto* plan = impl_->cuda_df.get();
   if (!plan) return {};
   const char* control = use == EigenUse::Setup          ? "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN"
@@ -614,6 +628,8 @@ bool PreparedFockPlan::matches_system(const core::System& system) const noexcept
 }
 DirectJkMatrices PreparedFockPlan::build(const std::vector<double>& density,
                                          const std::vector<double>& beta) const {
+  if (impl_->explicit_backend)
+    return impl_->explicit_backend->build(strategy().spec, density, beta);
   return impl_->cpu_view ? impl_->cpu_view->build(density, beta)
                          : impl_->cuda_view->build(density, beta);
 }

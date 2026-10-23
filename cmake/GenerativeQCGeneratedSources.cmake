@@ -471,6 +471,14 @@ macro(generativeqc_register_host_generated_sources target)
     COMMENT "Generating Array frontend SCF CPU tensor helpers")
 
   if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_register_generated_sources(
+      NAME generativeqc_integral_ad_codegen
+      TARGET ${target}
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_integral_ad.py"
+      OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_integral_ad.cuh"
+      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/rhf_integral_ad.py"
+      ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_integral_ad.cuh"
+      COMMENT "Generating explicit-integral HF CUDA contractions")
     set(GENERATIVEQC_SCF_DENSITY_CUDA_HEADER
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_density_cuda.cuh")
     generativeqc_register_generated_sources(
