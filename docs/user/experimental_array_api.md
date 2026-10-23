@@ -480,6 +480,142 @@ sampling changes the measured timing and disables the ordinary 5% parity verdict
 Run again without `--profile-molecular` for fair endpoint comparisons. Neither
 mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
 
+(differentiate-through-gaussian-integrals)=
+## Differentiate through Gaussian integrals
+
+Select `differentiation="integral-ad"` to differentiate the complete chain from
+Gaussian parameters to RHF total energy. This explicit CPU FP64 path generates
+S, T, nuclear-attraction and ordered two-electron integrals, including primitive
+and contraction normalization. The shared native SCF solver consumes those
+actual values. Its stationary Lagrangian supplies cotangents to the generated
+integral pullback, including the overlap/Pulay and nuclear-repulsion terms.
+Coordinates, primitive exponents and raw contraction coefficients all carry
+first derivatives. Runtime execution requires neither PySCF nor finite
+differences and does not call `Calculator.singlepoint` or its force endpoint.
+
+```python
+import numpy as np
+from generativeqc.experimental import array_api as xp
+from generativeqc.experimental.integral_autodiff import IntegralRHF
+
+# The standalone owner exposes the named basis parameters and explicit budgets.
+owner = IntegralRHF(("H", "H"), basis="sto-3g")
+r = np.array([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=np.float64)
+alpha = owner.exponents.copy()
+c = owner.coefficients.copy()
+energy, gradient = owner.value_and_grad(r, exponents=alpha, coefficients=c)
+# gradient.coordinates, gradient.exponents, gradient.coefficients
+owner.close()
+
+model = xp.MolecularModel(
+    ("H", "H"), method="rhf", differentiation="integral-ad",
+)
+
+def loss(r, log_alpha, c):
+    energy = model(r, exponents=xp.exp(log_alpha), coefficients=c)
+    return xp.square(energy) + 0.01 * xp.sum(r * r)
+
+loss_and_grad = xp.value_and_grad(loss, argnums=(0, 1, 2))
+value, (dr, dlog_alpha, dc) = loss_and_grad(r, np.log(alpha), c)
+loss_and_grad.close()
+```
+
+`grad`, `value_and_grad`, JVP and snapshot VJP compose with the surrounding
+Array API expressions. Each new geometry or basis input causes a fresh SCF
+solve; reusable VJP pullbacks retain the forward inputs. Capture and `lower()`
+do not execute SCF or compile integrals. The molecular source still has a
+first-order implicit derivative boundary: neither its SCF iteration history nor
+its converged density is differentiated as an unconstrained input. Nested AD,
+Hessians, unrestricted/DF/KS/post-HF methods, ECPs, spherical bases and CUDA are
+outside this integral-AD contract. The default `differentiation="native"`
+continues to use the existing method-specific analytic derivative endpoint and
+does not accept continuous basis parameters.
+
+(integral-ad-values-and-ownership)=
+### Integral AD values and ownership
+
+Coordinates are finite float64 arrays of shape `(natoms, 3)` in Bohr. Exponents
+are strictly positive float64 arrays in inverse square Bohr; raw coefficients
+are finite signed float64 arrays. Both basis inputs have shape `(nprimitive,)`
+in shell order, then primitive order, as exposed by `owner.shells`. Zero raw
+coefficients remain differentiable, but an identically zero or numerically
+singular contraction is invalid. Normalization is part of the differentiated
+expression, so a common coefficient scale per shell is a null direction.
+Omitted basis inputs retain the named/custom basis values. Topology, atomic
+numbers, charge and angular momenta are fixed structural data.
+
+`IntegralRHF` also accepts an all-electron Cartesian `BasisSet` snapshot or a
+sequence of `generativeqc.Shell` records for a custom Cartesian basis. ECP and
+spherical metadata are rejected before expansion into primitive inputs.
+`integrals(...)` returns an `IntegralValues` record containing
+`overlap`, `hcore = T + V`, chemists' ordered `eri`, and scalar `nuclear`.
+Matrix shapes are `(nao, nao)` and ERI shape is `(nao, nao, nao, nao)`, with
+Cartesian CCA component order. `integral_vjp(coordinates, cotangents, ...)`
+accepts a record with the same layout and arbitrary finite float64 weights;
+there is no symmetry requirement on cotangents. It returns an `IntegralGradient`
+without an SCF solve. `energy(...)` evaluates only the primal RHF endpoint.
+Energy is in Hartree; coordinate energy gradients are in Hartree/Bohr, and
+basis gradients are per corresponding raw input unit.
+
+Owner configuration is immutable. Calls copy input arrays before native
+execution. Returned value/gradient arrays are immutable owned snapshots that
+outlive `close()`. Later execution on a closed owner raises `RuntimeError`.
+Serialize execution and `close()` on a shared owner; independent owners may be
+used for independent calls.
+`diagnostics()` returns a detached record for the last successful energy call,
+including SCF convergence metrics, final physical residual, Fock-build count,
+primitive evaluation counts, and generated source/template identity. Array API
+`compilation_info()["molecular_calls"]` includes this record under `integral_ad`
+and reports zero native force-endpoint calls for this mode.
+
+(integral-ad-admission-and-resource-limits)=
+### Integral AD admission and resource limits
+
+This endpoint admits all-electron singlet RHF with a positive even electron
+count, up to 256 atoms and 256 Cartesian AOs, subject to the tighter budgets
+below. The source algebra admits s/p/d/f/g components; this does not guarantee
+that a complete high-angular basis fits the symbolic or native compile budget.
+Molecular acceptance currently covers s/p bases; emitted primitive acceptance
+includes d/f/g one-electron components and mixed ERIs through `(gg|ss)`.
+
+`IntegralRHF` defaults to `max_bytes=64 << 20`, `max_work=100_000_000`,
+`compiler_work=5_000_000`, and a finite `compile_timeout=300` seconds. Primal ERIs
+are dense. The numeric-array bound is
+`8 * (4*nao**4 + 200*nao**2 + 16*nprimitive + 32*natoms)` bytes; it excludes
+Python/compiler memory and opaque library scratch, and is not a process-RSS
+claim. The work limit bounds both the forward and streamed pullback primitive
+evaluations, including attraction centers and nuclear pairs. No molecular
+coordinate-by-ERI Jacobian is stored. Symbolic interning work is separately
+bounded. Compilation uses the shared verified compiler-cache adapter and
+artifact cache; failures do not select a different scientific implementation.
+
+`MolecularModel` uses these default integral budgets; its compiled tensor
+budgets independently constrain surrounding algebra. Use the standalone owner
+for custom integral budgets. Integral AD always uses unscreened integrals;
+`screening_tolerance=0` or the shared constructor default is accepted, while
+other screening values are rejected. `max_iterations` (at most 10000),
+`diis_history` (at most 32), and finite positive energy/density tolerances are
+honored. No KS/resource-budget override or density-fitting mode is accepted.
+
+Invalid shape/dtype/domain/resource inputs raise `ValueError`; invalid
+normalization, coincident nuclei or nonfinite integral arithmetic raise
+`ArithmeticError`. Native SCF nonconvergence, singular metric or failed final
+physical-stationarity checks raise `RuntimeError`. Compiler failures propagate.
+No new result or gradient is published on failure. Gradients describe a smooth
+converged RHF stationary branch; this is not a guarantee of a unique/global
+minimum at electronic state crossings.
+
+Independent CPU acceptance uses pinned PySCF/libcint values and reconverged
+energy differences, including multiple step sizes, normalization null
+directions, arbitrary integral cotangents and nonlinear outer losses:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  python -m pytest -q tests/python/test_integral_autodiff.py \
+  tests/python/test_integral_parameter_ad.py tests/python/test_array_api_integral_ad.py
+```
+
 ## Compose native RHF energies with the unified molecular operator
 
 `MolecularModel` is a GenerativeQC extension, not a standard Array API function.

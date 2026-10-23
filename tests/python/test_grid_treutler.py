@@ -209,11 +209,54 @@ def test_all_supported_families_default_to_level_three(method: str) -> None:
     options = resolve_ks_options(method)
     assert options.grid == GridSpec.treutler(3)
     assert options.nonlocal_grid is None  # VV10 inherits the identical level-3 grid.
-    assert resolve_ks_options(
-        method, KsOptions(grid_accuracy="tight")
-    ).grid == GridSpec.treutler(4)
+    tight = resolve_ks_options(method, KsOptions(grid_accuracy="tight"))
+    assert tight.grid == GridSpec.treutler(4)
+    if tight.has_nonlocal_correlation:
+        assert tight.nonlocal_grid == GridSpec.treutler(3)
+        assert tight.has_separate_nonlocal_grid
+    else:
+        assert tight.nonlocal_grid is None
     explicit = GridSpec(8, 4, 8)
     assert resolve_ks_options(method, KsOptions(grid=explicit)).grid == explicit
+
+
+@pytest.mark.parametrize("method", ["wb97m-v-rks", "wb97m-v-uks"])
+def test_vv10_defaults_keep_level_three_independent_of_treutler_xc(method: str) -> None:
+    standard = resolve_ks_options(method)
+    assert standard.grid == GridSpec.treutler(3)
+    assert standard.nonlocal_grid is None
+    assert not standard.has_separate_nonlocal_grid
+
+    tight = resolve_ks_options(method, KsOptions(grid_accuracy="tight"))
+    assert tight.grid == GridSpec.treutler(4)
+    assert tight.nonlocal_grid == GridSpec.treutler(3)
+    assert tight.has_separate_nonlocal_grid
+    assert tight.to_payload()["nonlocal_grid_provenance"]["level"] == 3
+
+    custom_treutler = resolve_ks_options(method, KsOptions(grid=GridSpec.treutler(2)))
+    assert custom_treutler.nonlocal_grid == GridSpec.treutler(3)
+    assert custom_treutler.has_separate_nonlocal_grid
+
+    shared = resolve_ks_options(
+        method,
+        KsOptions(grid_accuracy="tight", nonlocal_grid=GridSpec.treutler(4)),
+    )
+    assert shared.grid == shared.nonlocal_grid == GridSpec.treutler(4)
+    assert not shared.has_separate_nonlocal_grid
+    assert shared.identity != tight.identity
+
+    explicit_nonlocal = resolve_ks_options(
+        method,
+        KsOptions(grid_accuracy="tight", nonlocal_grid=GridSpec.treutler(1)),
+    )
+    assert explicit_nonlocal.nonlocal_grid == GridSpec.treutler(1)
+
+    legacy = GridSpec(8, 4, 8)
+    legacy_shared = resolve_ks_options(
+        method, KsOptions(grid=legacy, grid_accuracy="tight")
+    )
+    assert legacy_shared.nonlocal_grid is None
+    assert not legacy_shared.has_separate_nonlocal_grid
 
 
 def test_level_encoding_element_bounds_and_metadata_only_counts(

@@ -365,6 +365,23 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                           FockMatrixLayout::RowMajor);
 }
 
+generativeqc_status enqueue_prepared_cuda_fock_proposal(const PreparedFockPlan& plan,
+                                                        const double* density,
+                                                        std::size_t matrix_elements,
+                                                        double* coulomb, double* exchange,
+                                                        int* numerical_error, double screening,
+                                                        std::string& detail) {
+  if (!prepared_cuda_fock_binding(plan) || !plan.cuda_direct_source() ||
+      plan.cuda_fitted_source() || !exact_full_range(plan.strategy().spec.coulomb) ||
+      !exact_full_range(plan.strategy().spec.exchange)) {
+    detail = "provisional screening requires one exact Direct CUDA provider";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return enqueue_cuda_direct_jk_proposal_device(plan.cuda_direct_source(), plan.strategy().spec,
+                                                density, matrix_elements, coulomb, exchange,
+                                                numerical_error, screening, detail);
+}
+
 generativeqc_status enqueue_prepared_cuda_occupied_fock(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, const PreparedCudaOccupiedFockInput& occupied, double* coulomb,
