@@ -33,6 +33,23 @@ __device__ double schwarz_diagonal(const DeviceBatch& batch, std::int32_t system
   }
 }
 
+/** Public s/p/d pairs use the same sparse contraction with exact shell extents.
+ * Preserve the generic full-range evaluator for f shells and the scalar ssss
+ * shortcut. No symmetry folding changes the separately oriented bounds. */
+template <unsigned Order, unsigned First = 0>
+__device__ double public_schwarz_diagonal(const DeviceBatch& batch, std::int32_t system,
+                                          std::int32_t i, std::int32_t j) {
+  if constexpr (Order > 0 && First <= Order / 2U && Order / 2U - First <= 2U) {
+    const auto base = static_cast<std::int64_t>(system) * batch.nbf;
+    if (batch.shell_angular[batch.ao_shells[base + i]] == First)
+      return contracted_public_schwarz_shell_pair<First, Order / 2U - First>(batch, system, i, j);
+  }
+  if constexpr (First < 2)
+    return public_schwarz_diagonal<Order, First + 1>(batch, system, i, j);
+  else
+    return schwarz_diagonal<Order, false>(batch, system, i, j);
+}
+
 /** Unknown basis bounds keep all supported orders; proved bounds omit them
  * on the host, before loading or launching a larger private recurrence frame.
  */
