@@ -25,6 +25,16 @@ constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain
          domain.atoms <= 96;
 }
 
+/** Select each solve from a prepared capability without confusing a native
+ * cold guess with an imported density. Only the initial-guess owner may attest
+ * native provenance. Retained warm proof stays ordinary, and explicit opt-in
+ * preserves its broader external-seed contract. */
+constexpr bool ks_incremental_solve_active(bool prepared_active, bool automatic, bool ordinary_warm,
+                                           bool supplied_density, bool native_cold_guess) noexcept {
+  return prepared_active && !ordinary_warm &&
+         (!automatic || !supplied_density || native_cold_guess);
+}
+
 /** Bound an incremental proposal epoch whose consumer requires a fresh physical
  * full-density closure. These are provisional SCF operators, not a certificate
  * of the accumulated screening error. The closing full-Fock energy pair and

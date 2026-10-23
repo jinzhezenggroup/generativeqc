@@ -316,6 +316,8 @@ qualified energy `1e-9`, density `1e-5` and screening `1e-12` controls.
 The real Direct producer and complete physical/canonical final-state proof
 remain authoritative. This narrow cold default is a guarded performance choice,
 not a globally enabled incremental Fock setting.
+Native initial guesses, including the default Hückel guess, remain cold solves;
+supplying their density internally does not make them imported warm states.
 
 Same-owner frozen-density Warm retains its one-full-Fock proof. Imported or
 moved seeds, an active public resource ledger, Fast, DF, UKS, range/nonlocal
@@ -326,6 +328,12 @@ automatic choice; a present legacy selector also prevents automatic
 admission. Explicit `1/on` retains the broader experimental capability checks
 and the existing OR semantics between both selectors. Timing an incumbent
 control therefore requires an explicit `0`, not merely an unset selector.
+
+Fast retains its application precision policy and strict final-state validation;
+DF retains its fitted J/K provider. Neither automatically selects this Direct
+incremental controller. Explicit incremental `1/on` still rejects these
+incompatible precision/provider combinations rather than overriding their
+scientific contract.
 
 
 The benchmark-only `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1` (or `on`)

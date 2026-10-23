@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -913,6 +914,28 @@ void spd_optional_allocation_fallback() {
  * density orientation. Count actual source work separately from endpoint time.
  */
 void spd_canonical_range_values() {
+  // This census observes the generated J/K channels, not the separately
+  // qualified MD-J producer. Select that contract explicitly so an automatic
+  // MD-J choice cannot look like lost J work; restore the default for all
+  // other provider tests, including their MD-J numerical coverage.
+  struct GeneratedJScope {
+    bool present{};
+    std::string previous;
+    GeneratedJScope() {
+      if (const auto* value = std::getenv("GENERATIVEQC_DISABLE_MD_J")) {
+        present = true;
+        previous = value;
+      }
+      require(setenv("GENERATIVEQC_DISABLE_MD_J", "1", 1) == 0,
+              "could not select generated J for its channel census");
+    }
+    ~GeneratedJScope() {
+      if (present)
+        setenv("GENERATIVEQC_DISABLE_MD_J", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DISABLE_MD_J");
+    }
+  } generated_j_scope;
   for (unsigned angular : {0U, 1U, 2U}) {
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       generativeqc::core::System first;

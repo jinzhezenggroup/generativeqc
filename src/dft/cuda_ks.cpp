@@ -1987,11 +1987,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
-    // Automatic promotion never borrows external/imported/moved seed provenance.
+    // A native cold guess is still a cold solve even when represented by an
+    // explicit density buffer. Its existing provenance comes from the native
+    // initial-guess owner, never from external/imported/moved seeds.
     // Retained warm states use the existing full-density one-Fock proof. Explicit
     // opt-in callers retain their original external-seed eligibility.
-    incremental_direct_jk = incremental_direct_jk_policy.active && !ordinary_incremental_warm &&
-                            (!options.incremental_direct_jk_auto || input == nullptr);
+    incremental_direct_jk = ks_incremental_solve_active(
+        incremental_direct_jk_policy.active, options.incremental_direct_jk_auto,
+        ordinary_incremental_warm, input != nullptr,
+        seed_origin == CudaKsSeedOrigin::NativeColdGuess);
     // Only an owner with the complete Standard full-density closure may use a
     // bounded chain of screened proposals. J/K linearity is independent of
     // the XC family; inherit the ordinary Standard owner's existing model

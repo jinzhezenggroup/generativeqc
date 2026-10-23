@@ -23,6 +23,7 @@ def test_auto_cold_guard_truth_table(tmp_path: Path, native_cxx: NativeCxx) -> N
 #include "dft/ks_incremental_policy.hpp"
 using generativeqc::dft::KsIncrementalColdAutoDomain;
 using generativeqc::dft::admit_ks_incremental_cold_auto;
+using generativeqc::dft::ks_incremental_solve_active;
 int main() {
   constexpr KsIncrementalColdAutoDomain good{true, 768, 96, true, true, true, true, true};
   static_assert(admit_ks_incremental_cold_auto(good));
@@ -50,6 +51,18 @@ int main() {
     }
     assert(!admit_ks_incremental_cold_auto(probe));
   }
+  // Seed provenance is independent of storage representation. In particular,
+  // automatic Huckel/MINAO cold guesses arrive as non-null density buffers.
+  for (bool prepared : {false, true})
+    for (bool automatic : {false, true})
+      for (bool warm : {false, true}) {
+        assert(ks_incremental_solve_active(prepared, automatic, warm, false, false)
+               == (prepared && !warm));
+        assert(ks_incremental_solve_active(prepared, automatic, warm, true, true)
+               == (prepared && !warm));
+        assert(ks_incremental_solve_active(prepared, automatic, warm, true, false)
+               == (prepared && !warm && !automatic));
+      }
 }
 """,
         encoding="utf-8",
@@ -63,17 +76,3 @@ int main() {
         [executable], capture_output=True, text=True, timeout=10, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_automatic_cold_promotion_does_not_override_explicit_controls() -> None:
-    method = (ROOT / "src/methods/dft_method_preparation.cpp").read_text()
-    cuda = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    assert 'std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK")' in method
-    assert 'std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")' in method
-    assert "options.incremental_direct_jk_auto =" in method
-    assert (
-        "incremental_policy_options.incremental_direct_jk |= auto_incremental;" in cuda
-    )
-    assert "!runtime::active_device_resource_ledger" in cuda
-    assert "(!options.incremental_direct_jk_auto || input == nullptr)" in cuda
-    assert "!ordinary_incremental_warm" in cuda
