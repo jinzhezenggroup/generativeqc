@@ -392,10 +392,17 @@ int main() {
   const auto resident_values = plan_requested_density_fitting_tiles(
       DfPairStorageRequest::Automatic,1,768,3712,768,160,
       resident_split.value_bytes,100ULL<<20,true,0,true);
-  if (resident_split.total_bytes != split.total_bytes ||
-      resident_split.value_bytes + resident_split.response_bytes != split.total_bytes ||
-      resident_split.response_bytes < split.total_bytes/5 ||
+  // Complete-U admission may borrow fractional slack, but never the absolute
+  // live headroom or the shape-derived complete response reservation.
+  const auto response_floor = 64ULL*1024*1024 + 2ULL*(100ULL<<20) +
+      sizeof(double)*(4ULL*3712*3712 + 69ULL*768*768 + 2ULL*3712 +
+                      2ULL*3712*160*160);
+  if (resident_split.value_bytes + resident_split.response_bytes != resident_split.total_bytes ||
+      resident_split.total_bytes > split.observed_free_bytes-split.reserved_headroom_bytes ||
+      resident_split.reserved_headroom_bytes != split.reserved_headroom_bytes ||
+      resident_split.response_bytes < response_floor ||
       !resident_values.stores_full_three_center ||
+      resident_values.value_storage.rank_capacity != 160 ||
       resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 15;
   for (const auto unchanged : {
       resolve_df_budget({768,3712,96,1,0,true}, {}, 0),
