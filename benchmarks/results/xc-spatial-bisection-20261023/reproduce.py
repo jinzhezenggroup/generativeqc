@@ -1,4 +1,9 @@
 """Audit completed cohorts; preserve every source receipt and process observation."""
+import sys
+
+if sys.flags.optimize:
+ raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
+
 import copy, hashlib, json, lzma
 from pathlib import Path
 from statistics import median
