@@ -624,6 +624,9 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_cuda_fock_provider_tests tests/native/test_cuda_fock_provider.cpp
                        LIBRARIES CUDA::cudart)
+    add_test(NAME generativeqc_cuda_public_schwarz_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --public-schwarz-only)
+    set_tests_properties(generativeqc_cuda_public_schwarz_tests PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cuda_spd_force_spatial_tests
              COMMAND generativeqc_cuda_fock_provider_tests --spd-force-spatial-only)
     set_tests_properties(generativeqc_cuda_spd_force_spatial_tests PROPERTIES TIMEOUT 600)
