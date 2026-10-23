@@ -62,3 +62,22 @@ ancestor to the measured 4f65 source. Applying that patch to an isolated e8af
 checkout recovers the measured source without an external archive; the complete
 input inventory authenticates the resulting build inputs. Later integration
 receipts must remain separate from the five-pair measured population.
+
+## Current-base integration
+
+`integration.json.xz` retains a separate build and endpoint bridge at
+`af19ae37a09b965c560408f818b68c8aeb9073cd`, including all 28 native calls.
+The 16 integrated metric/J/force tests and eight partition derivative/replay
+tests under Compute Sanitizer pass. Standard/Fast cold/warm coverage for five
+other DF functionals and both moved r2SCAN-3c trajectories pass the unchanged
+independent gates. Moved maximum force errors are 1.1785e-7 and 1.2784e-5
+Eh/Bohr for Standard and Fast. This bridge is compatibility evidence; its
+single observations do not enter the historical five-pair speedup statistics.
+
+The build input inventory is stored as an authenticated delta against the
+historical inventory: 118 changed/new entries recover all 6,000 input hashes
+and the exact original manifest bytes. The bridge also retains compiler-cache
+statistics, the full build log, immutable package hashes and original runners.
+`reproduce.py` authenticates this delta and independently rechecks every call.
+Both larger historical bundles are explicitly registered by exact hash and
+size in the existing evidence review; all storage caps remain unchanged.

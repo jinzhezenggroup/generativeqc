@@ -311,6 +311,11 @@
       "owner": "bounded raw Coulomb complete cold endpoint qualification",
       "reason": "Two separately authenticated cohorts retain all 528 complete E/F calls, moved controls, independent references and failed AOT assembly receipts. Lossless compression retains original work, timing and numerical arrays; no scientific or storage budget is relaxed.",
       "review_document": "benchmarks/results/df-raw-coulomb-20261023/README.md"
+    },
+    "df-md-charge-splits-20261023": {
+      "owner": "bounded DF Hermite charge-partition endpoint qualification",
+      "reason": "Retains every independent complete energy/force receipt, separate historical and integrated source cohorts, exact source inventories and reconstruction patch, sanitizer and cache provenance. Lossless compression preserves full vectors and work counts without relaxing any storage or numerical gate.",
+      "review_document": "benchmarks/results/df-md-charge-splits-20261023/README.md"
     }
   },
   "files": [
@@ -665,6 +670,22 @@
       "role": "complete-endpoint-receipts",
       "bytes": 141708,
       "sha256": "2ae9438cf175a1265b43eb05fcb3564693d8ca2b17aa900a83307732552db102"
+    },
+    {
+      "path": "benchmarks/results/df-md-charge-splits-20261023/receipts.json.xz",
+      "family": "df-md-charge-splits-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-receipts",
+      "bytes": 188848,
+      "sha256": "757e6272004a110115977c6473d5fd13e8585149a3635d98550bfd270fe0bf7d"
+    },
+    {
+      "path": "benchmarks/results/df-md-charge-splits-20261023/source-inputs.json.xz",
+      "family": "df-md-charge-splits-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-input-identity-manifest",
+      "bytes": 242120,
+      "sha256": "e2c3f4a7d368283d73c5b49837a551eeb94373bb4cabb3ae8d135cdf0de5a39d"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

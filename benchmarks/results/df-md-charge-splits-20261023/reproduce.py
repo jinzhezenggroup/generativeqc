@@ -36,16 +36,8 @@ def timing(before: list[float], after: list[float]) -> dict:
     }
 
 
-def main() -> None:
-    """Authenticate retained provenance, then qualify every native call."""
-    data = json.loads(lzma.decompress((ROOT / "receipts.json.xz").read_bytes()))
-    manifest = lzma.decompress((ROOT / data["source_manifest_path"]).read_bytes())
-    assert hashlib.sha256(manifest).hexdigest() == data["source_manifest_sha256"]
-    assert len(json.loads(manifest)["files"]) == 5984
-    oracles = load_records(
-        [REFERENCE / "oracles.json.xz"], schema="generativeqc.readme-defaults-oracle.v1"
-    )
-    reuse = json.loads((REFERENCE / "reference-reuse.json").read_text())
+def qualify_cohorts(data: dict, oracles: list, reuse: dict) -> dict:
+    """Keep independent source populations separate while checking every call."""
     result = {"qualification": {}, "moved": {}, "timing": {}, "native_calls": 0}
     for cohort, records in data["cohorts"].items():
         for name, record in records.items():
@@ -77,6 +69,20 @@ def main() -> None:
             qualified = qualify([view], oracles, reference_reuse=reuse)[0]
             assert qualified["status"] == "qualified", (name, qualified)
             result["qualification"][cohort + "/" + name] = qualified
+    return result
+
+
+def main() -> None:
+    """Authenticate retained provenance, then qualify every native call."""
+    data = json.loads(lzma.decompress((ROOT / "receipts.json.xz").read_bytes()))
+    manifest = lzma.decompress((ROOT / data["source_manifest_path"]).read_bytes())
+    assert hashlib.sha256(manifest).hexdigest() == data["source_manifest_sha256"]
+    assert len(json.loads(manifest)["files"]) == 5984
+    oracles = load_records(
+        [REFERENCE / "oracles.json.xz"], schema="generativeqc.readme-defaults-oracle.v1"
+    )
+    reuse = json.loads((REFERENCE / "reference-reuse.json").read_text())
+    result = qualify_cohorts(data, oracles, reuse)
     assert result["native_calls"] == 104
     pairs = data["cohorts"]["stage7-v2-pairs"]
     for phase in ("cold", "warm"):
@@ -90,6 +96,22 @@ def main() -> None:
             assert len(values) == 5
             populations.append(values)
         result["timing"][phase] = timing(*populations)
+    integration = json.loads(lzma.decompress((ROOT / "integration.json.xz").read_bytes()))
+    delta = integration["source_manifest"]
+    original = json.loads(lzma.decompress((ROOT / delta["base"]).read_bytes()))
+    files = original["files"]
+    for name in delta["removed"]:
+        del files[name]
+    files.update(delta["changed"])
+    recovered = {
+        "source_revision": integration["source_revision"],
+        "files": dict(sorted(files.items())),
+    }
+    assert len(files) == delta["file_count"]
+    raw = (json.dumps(recovered, indent=2) + "\n").encode()
+    assert hashlib.sha256(raw).hexdigest() == delta["sha256"]
+    result["integration"] = qualify_cohorts(integration, oracles, reuse)
+    assert result["integration"]["native_calls"] == 28
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
