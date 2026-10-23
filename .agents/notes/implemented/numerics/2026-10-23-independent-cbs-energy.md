@@ -61,3 +61,29 @@ byte-preservation results without rerunning scientific calculations.
 
 Refs #2679. Revisit the numerical qualification after any change to the exact
 scientific model or when independently qualifying a new native source snapshot.
+
+## Lossless storage packaging
+
+The completed flat publication exceeded the aggregate evidence budget. Its 29
+Git-original files (211606 bytes) now have explicit mode, size, SHA-256 and storage
+bindings in `canonical.json`; all their bytes, including the original publication,
+sources, failed attempt and retry fixtures, are recoverable from files in the
+same delivered version. The old PR commit is informational rather than required
+for recovery. No historical evidence owned by another task or budget policy is
+changed, and no Release, remote backup or unmerged-history pointer is used.
+
+Use a real JSON/XZ record container, not a tar archive disguised under a different
+suffix. The outer publication inventories the actual stored files and uses the
+existing compressed-evidence reader. Its safe entry validates the storage and
+canonical inventories before writing only regular files into a new directory;
+it rejects traversal, collisions, unsupported modes, stale bytes and overwrites.
+The explicit strict replay separately validates the restored original publication
+and executes its unchanged replay against the original native source history.
+The shared validator does not itself interpret the file container; the entry's
+canonical and numerical checks are additional required reproduction steps.
+
+New storage negative tests and exact deterministic repacking were executed
+locally. The unchanged runner/checker bytes retain their real CPU-image 1/9
+negative and 9/9 corrected execution records; no fresh POSIX or cloud execution is
+claimed for this packaging step. No mathematical formula, scientific receipt,
+gate, native timing or current-master device qualification changes.
