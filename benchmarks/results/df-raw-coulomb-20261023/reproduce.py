@@ -11,8 +11,12 @@ import copy
 import hashlib
 import json
 import lzma
+import sys
 from pathlib import Path
 from statistics import median
+
+if not __debug__ or sys.flags.optimize:
+    raise RuntimeError("Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE")
 
 from benchmarks.readme_defaults_qualification import _comparison, qualify
 from benchmarks.readme_defaults_report import load_records
@@ -21,8 +25,27 @@ ROOT = Path(__file__).resolve().parent
 REFERENCE = ROOT.parent / "readme-final-20261022"
 
 
+def restored_population(name: str) -> bytes:
+    """Authenticate and recover the exact original UTF-8 receipt bytes."""
+    manifest = json.loads((ROOT / "receipt-populations.json").read_text())
+    packed = (ROOT / manifest["bundle"]).read_bytes()
+    if hashlib.sha256(packed).hexdigest() != manifest["bundle_sha256"]:
+        raise ValueError("Receipt population bundle hash mismatch")
+    decoded = json.loads(lzma.decompress(packed))
+    if set(decoded) != set(manifest["members"]):
+        raise ValueError("Receipt population member set mismatch")
+    key = name + ".json"
+    raw = decoded[key].encode("utf-8")
+    expected = manifest["members"][key]
+    if len(raw) != expected["bytes"] or hashlib.sha256(raw).hexdigest() != expected["sha256"]:
+        raise ValueError("Restored receipt population integrity mismatch")
+    return raw
+
+
 def read(name: str) -> dict:
     """Read losslessly retained named receipts."""
+    if name in {"stage2-moved", "default-moved", "stage2-pairs", "default-pairs", "stage2-matrix", "default-matrix"}:
+        return json.loads(restored_population(name))
     return json.loads(lzma.decompress((ROOT / (name + ".json.xz")).read_bytes()))
 
 
@@ -70,10 +93,7 @@ def main() -> None:
     result = {"qualification": {}, "moved_default_reference": {}, "timing": {}}
     cohorts = [("stage2-pairs", 20), ("stage2-moved", 40), ("stage2-matrix", 12)]
     # Integrated-default populations, if retained, remain distinct from opt-in.
-    cohorts += [
-        (path.name.removesuffix(".json.xz"), None)
-        for path in sorted(ROOT.glob("default-*.json.xz"))
-    ]
+    cohorts += [(name, None) for name in ("default-matrix", "default-moved", "default-pairs")]
     for bridge_path in sorted(ROOT.glob("*merge-bridge.json.xz")):
         bridge_name = bridge_path.name.removesuffix(".json.xz")
         bridge = read(bridge_name)

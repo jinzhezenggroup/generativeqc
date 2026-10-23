@@ -137,3 +137,15 @@ bytes and authenticates their SHA-256. This reduces redundant storage from
 75,632 to 11,336 bytes; original compressed identity remains in provenance and
 existing Git history. No source input or numerical receipt is removed. The
 aggregate evidence limit remains unchanged.
+
+### Lossless population storage and replay integrity
+
+The six stationary/moved/matrix population files share one XZ container,
+`receipt-populations.json.xz`, retaining each original UTF-8 JSON text verbatim.
+`receipt-populations.json` pins the container and every original decoded size and
+SHA-256 (and records the original compressed hashes for Git-history recovery).
+`reproduce.restored_population(name)` returns the exact original bytes; `read`
+uses the same authenticated path. No observations, failures, precision or timing
+populations are removed or combined statistically. Replay refuses Python
+`-O`, `-OO` and `PYTHONOPTIMIZE`, which otherwise disable its acceptance assertions.
+This storage-only repair adds no GPU or performance qualification.
