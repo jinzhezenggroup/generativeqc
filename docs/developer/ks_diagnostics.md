@@ -108,7 +108,7 @@ physical method, final tolerances, screening or operator precision admission:
 | `GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL` | Finite nonnegative threshold on the current pre-DIIS maximum absolute AO commutator entry. A positive value requests handoff once satisfied after at least two approximate observations. Unset/`0` disables this additional trigger. |
 | `GENERATIVEQC_KS_MIXED_MAX_ITERATIONS` | Unsigned cap on approximate observations, bounded by the user's `max_iterations`. Unset/`0` retains the original approximate iteration budget. |
 
-The automatic source policy uses a `1e-8` predicate for the immutable mixed
+The automatic source policy uses a `1e-7` predicate for the immutable mixed
 integral source of already-admitted relaxed Fast PBE0/B3LYP/M06-2X full-range
 restricted hybrids. It affects only provisional source
 rows and their consumers. The primary provider retains its requested screening
@@ -118,7 +118,7 @@ range/nonlocal, strict-control and unscreened owners retain their original
 predicates. Automatic admission is limited to 64–768 AOs and 2–96 atoms.
 `GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING=0` restores the original source;
 `1` permits other sizes without bypassing the remaining guards. Other values
-are errors. Set the control before preparation. The [qualification receipt](../../benchmarks/results/fast-source-screening-20261023/README.md)
+are errors. Set the control before preparation. The [qualification receipt](../../benchmarks/results/fast-source-floor-20261024/README.md)
 records the complete-endpoint evidence and its limits.
 
 Positive controls currently require a restricted CUDA KS owner. UKS rejects
