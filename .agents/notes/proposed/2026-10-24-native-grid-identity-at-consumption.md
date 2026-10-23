@@ -48,3 +48,22 @@ counts. All 160 calls pass independent full-vector numerical gates.
 receipts, source/cache/device provenance and an executable gate reproducer.
 This controlled comparison uses stock defaults and is separate from the
 combined-stack Stage15/16 experiments; neither establishes GPU4PySCF parity.
+
+## Integration and capacity-report compatibility
+
+The master-integrated source `79f906eb4ce2f099e73294ed56a3e6db4d24c7ca`
+passes a separate 24-call Standard/Fast, DF/Direct PBE/PBE0/3c full E/F smoke
+cohort and repeated prepared/unprepared hybrid E/F and memcheck. The original
+160-call performance cohort remains bound to its original production source.
+
+Compiler-heavy CI exposed a historical whole-function `ensure` fingerprint in
+the DFT-MP capacity report. Binding the grid artifact at its consumer changed
+that digest without changing AOT/JIT admission. Replace the prepared selection
+and request fingerprints with execution of the current owner against inert
+compiler/device boundaries. Check AOT versus JIT and ECP routes, native-grid
+fallback, precision forwarding to the request and source, request identity
+changes, and host/device refusal before compilation. Digests remain provenance.
+An equivalent conditional rewrite must pass; executable fault injection must
+still reject wrong routing, dropped policy and bypassed resource limits. This
+preserves no-runtime-compilation and capacity checks without making future
+behavior-preserving owner refactors update a historical source hash.

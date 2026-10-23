@@ -18,6 +18,32 @@ def read(path: Path) -> dict:
     return json.loads(lzma.decompress(path.read_bytes()) if path.suffix == '.xz' else path.read_bytes())
 
 
+def integration() -> int:
+    """Check the separately frozen master integration without pooling timings."""
+    data = read(ROOT/'integration.json.xz'); delta = data['source_manifest']
+    files = read(ROOT/delta['base'])['files']
+    for name in delta['removed']: del files[name]
+    files.update(delta['changed'])
+    manifest = dict(source_revision=data['source_revision'],files=dict(sorted(files.items())))
+    assert len(files)==delta['file_count']
+    assert hashlib.sha256((json.dumps(manifest,indent=2)+'\n').encode()).hexdigest()==delta['sha256']
+    refs=ROOT.parent/'readme-final-20261022'
+    oracles=load_records([refs/'oracles.json.xz'],schema='generativeqc.readme-defaults-oracle.v1')
+    reuse=read(refs/'reference-reuse.json'); count=0; domains=set()
+    for name,raw in data['records'].items():
+        record=json.loads(raw)
+        assert record['source_revision']==data['source_revision']
+        assert record['native_build']['library_sha256'] in data['support']['grid-binding-pr-integration-package-sha256.txt']
+        verdict=qualify([record],oracles,reference_reuse=reuse)[0]
+        assert verdict['status']=='qualified',(name,verdict)
+        assert len(record['samples'])==2
+        domains.add((record['arm'],record['mode'],record['method']))
+        count+=len(record['samples'])
+    assert domains=={(arm,mode,method) for arm in ('standard','fast') for mode in ('df','direct') for method in ('pbe','pbe0','r2scan-3c')}
+    assert count==24
+    return count
+
+
 def main() -> None:
     """Authenticate measured inputs, qualify all samples, and recompute MAD gates."""
     if not __debug__:
@@ -63,7 +89,7 @@ def main() -> None:
                 timing[f'{method}/{mode}/{phase}']=dict(baseline=b,candidate=a,baseline_median=bm,candidate_median=am,gain=gain,floor=floor,passes=gain>floor)
     assert calls == 160 and len(identities) == 1
     assert next(iter(identities)) in data['support']['grid-binding-pr-package-sha256.txt']
-    print(json.dumps(dict(calls=calls,timing=timing),indent=2))
+    print(json.dumps(dict(calls=calls,integration_calls=integration(),timing=timing),indent=2))
 
 
 if __name__ == '__main__':

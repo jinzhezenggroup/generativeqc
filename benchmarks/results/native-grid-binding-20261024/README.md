@@ -47,3 +47,14 @@ The reproducer rejects `-O`, authenticates the complete frozen source manifest,
 checks the runner/binary identity, requalifies all 160 calls and recomputes the
 paired statistics. Existing metric-GEMV receipts are gzip-compacted byte-for-byte to
 fit the unchanged evidence caps; no historical scientific values are modified.
+
+The separate `integration.json.xz` cohort authenticates source
+`79f906eb4ce2f099e73294ed56a3e6db4d24c7ca` after integrating master `be28a867c`.
+Its 24 complete calls cover PBE/PBE0/r2SCAN-3c, Standard/Fast and DF/Direct, with
+one cold and one warm sample each. All independent full-vector gates pass;
+prepared/unprepared hybrid E/F, geometry reuse/displacement and memcheck also
+pass. The reproducer rechecks this cohort separately. These correctness smoke
+samples do not replace or extend the earlier paired performance population.
+
+The integration archive is 113,628 bytes with SHA256
+`65bc8f0fc52eae06b47de86a6098a0fe0df84512934ca899aa337f268ed9c0d7`.
