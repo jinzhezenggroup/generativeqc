@@ -320,7 +320,8 @@ int main() {
 
 def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
-    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    # Preserve the producer/flag audit without depending on call-site wrapping.
+    owner = " ".join(_source("src/scf/cuda/direct_coulomb.cpp").split())
     assert "const bool bounded_through_f = through_f;" in direct
     assert "dispatch.canonical_coulomb || dispatch.canonical_exchange" in direct
     assert "mixed_j, plan->canonical_pairs != nullptr" in direct
@@ -660,11 +661,9 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
         "exchange && exchange->force_capability && exchange->shared && exchange->force"
         in bridge
     )
-    assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr && '
-        "cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U"
-        in " ".join(bridge.split())
-    )
+    # The executable selector probe in test_one_electron_implicit_cooperative
+    # covers default and explicit mappings. Keep this audit about borrowing
+    # prepared Direct metadata, independently of selector expression syntax.
     assert "hcore_schedule, 1.0, output, source->stream" in bridge
     assert "1, 1.0, output, source->stream" in bridge
     assert (

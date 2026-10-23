@@ -9,7 +9,7 @@ from conftest import NativeCxx
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize("scenario", [1, 2, 3])
+@pytest.mark.parametrize("scenario", [1, 2, 3, 4])
 def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     tmp_path: Path, native_cxx: NativeCxx, scenario: int
 ) -> None:
@@ -129,6 +129,9 @@ struct Owner {
     if (scenario == 1) throw std::runtime_error("source CUDA failure");
     phase_source = std::make_unique<int>(1);
     if (scenario == 2) throw std::bad_alloc();
+  }
+  void prepare_cold_fitted_factor() {
+    if (scenario == 4) throw std::runtime_error("cold factor preparation failure");
   }
   void retire_phase_source(bool) { ++retired; phase_source.reset(); }
   void restore_warm_seed() { throw std::logic_error("unexpected warm seed in cold begin probe"); }

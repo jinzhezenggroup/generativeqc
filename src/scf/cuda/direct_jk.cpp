@@ -1568,11 +1568,13 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
     double fixed_threshold, std::uint64_t* census, std::string& detail,
     double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true,
-    bool allow_materialized_fixed = false, bool mixed_exchange = false,
-    bool mixed_resident = false) {
+    bool allow_materialized_fixed = false, bool mixed_exchange = false, bool mixed_resident = false,
+    double proposal_screening = -1.0) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     const bool fixed = fixed_threshold >= 0;
+    const double screening =
+        proposal_screening >= 0.0 ? proposal_screening : plan->screening_tolerance;
     direct_jk_require(
         !fixed || (plan->canonical_pairs && fixed_threshold >= plan->screening_tolerance &&
                    std::isfinite(fixed_threshold)),
@@ -1718,12 +1720,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                    plan->diagnostic.batch_size, unrestricted, density, beta);
         direct_jk_check(cudaGetLastError());
         launch_md_source_jk(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
-                            true, false, unrestricted, plan->screening_tolerance, plan->bounds,
-                            density, beta, coulomb, nullptr, nullptr);
+                            true, false, unrestricted, screening, plan->bounds, density, beta,
+                            coulomb, nullptr, nullptr);
         direct_jk_check(cudaGetLastError());
       }
       launch_md_j(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
-                  unrestricted, plan->screening_tolerance, density, beta, coulomb);
+                  unrestricted, screening, density, beta, coulomb);
       direct_jk_check(cudaGetLastError());
       if (plan->md_j.work_counts) {
         // This opt-in fence/download is explicitly diagnostic, not clean timing.
@@ -1776,7 +1778,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     if (dispatch.generated_exchange)
       direct_jk_check(enqueue_generated_exchange(
           *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
-          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
+          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
+          proposal_screening));
     if (dispatch.canonical_coulomb || dispatch.canonical_exchange) {
       const bool canonical_strict_j = dispatch.canonical_coulomb && !mixed_j;
       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
@@ -2117,6 +2120,30 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, false,
                                             nullptr, -1.0, census, detail);
+}
+
+generativeqc_status enqueue_cuda_direct_jk_proposal_device(CudaDirectJkPlan* plan,
+                                                           FockBuildSpec spec,
+                                                           const double* density,
+                                                           std::size_t elements, double* coulomb,
+                                                           double* exchange, int* numerical_error,
+                                                           double screening, std::string& detail) {
+  if (!plan || !std::isfinite(screening) || screening < plan->screening_tolerance) {
+    detail = "invalid provisional J/K screening tolerance";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  // Optional density screening changes no immutable geometry/source identity.
+  // Fail before touching outputs when a consumer cannot honor the override.
+  if (spec.spin != FockSpin::Restricted || spec.derivative_order != 0 || !spec.coulomb.present ||
+      spec.coulomb.op != FockOperator::FullRange || !plan->md_j.minimum_bounds ||
+      (spec.exchange.present && (spec.exchange.op != FockOperator::FullRange ||
+                                 !direct_jk_generated_exchange_value_available(*plan, spec)))) {
+    detail = "provisional screening requires full-range MD-J and generated K";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return enqueue_cuda_direct_jk_device_impl(
+      plan, spec, density, nullptr, elements, coulomb, exchange, nullptr, numerical_error, false,
+      nullptr, -1.0, nullptr, detail, nullptr, 0, false, false, false, false, screening);
 }
 
 bool cuda_direct_jk_generated_coulomb_available(const CudaDirectJkPlan* plan,

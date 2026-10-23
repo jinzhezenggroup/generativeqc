@@ -13,6 +13,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/df_scf_library.hpp"
+#include "scf/df_density_seed_policy.hpp"
 #include "scf/df_exchange_policy.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 
@@ -83,10 +84,6 @@ generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
     trace_counter("unsupported", 1);
     return GENERATIVEQC_STATUS_SUCCESS;
   }
-  constexpr double spectral_threshold = 1e-13;
-  constexpr double discarded_frobenius_tolerance = 1e-12;
-  constexpr double maximum_tolerance = 1e-12;
-  constexpr double rms_tolerance = 1e-13;
   auto error = cudaMemcpyAsync(state.d_fock, density, plan.matrix_elements * sizeof(double),
                                cudaMemcpyDeviceToDevice, plan.stream);
   if (error != cudaSuccess) return cuda_failure(error, "copy density seed for eigensolve", detail);
@@ -108,21 +105,14 @@ generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
     trace_counter("solver_rejected", 1);
     return GENERATIVEQC_STATUS_SUCCESS;
   }
-  double discarded_square = 0;
-  for (std::size_t i = 0; i < values.size(); ++i) {
-    const double value = values[i];
-    if (!std::isfinite(value) || value < -spectral_threshold || (i && value < values[i - 1])) {
-      trace_counter("spectrum_rejected", 1);
-      return GENERATIVEQC_STATUS_SUCCESS;
-    }
-    if (value > spectral_threshold)
-      ++rank;
-    else
-      discarded_square += value * value;
+  const auto spectrum = density_seed_spectrum(values);
+  rank = spectrum.rank;
+  if (!spectrum.valid) {
+    trace_counter("spectrum_rejected", 1);
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
   trace_counter("candidate_rank", rank);
-  if (rank > state.alpha_factor_rank ||
-      discarded_square > discarded_frobenius_tolerance * discarded_frobenius_tolerance) {
+  if (rank > state.alpha_factor_rank || !spectrum.within_discarded_budget()) {
     trace_counter("rank_rejected", 1);
     return GENERATIVEQC_STATUS_SUCCESS;
   }
@@ -162,9 +152,8 @@ generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
   };
   record("seed_reconstruction_maximum", errors[0]);
   record("seed_reconstruction_rms", errors[1]);
-  record("seed_discarded_frobenius", std::sqrt(discarded_square));
-  accepted = std::isfinite(errors[0]) && std::isfinite(errors[1]) &&
-             errors[0] <= maximum_tolerance && errors[1] <= rms_tolerance;
+  record("seed_discarded_frobenius", std::sqrt(spectrum.discarded_square));
+  accepted = density_seed_reconstruction_accepted(errors[0], errors[1]);
   trace_counter(accepted ? "accepted" : "reconstruction_rejected", 1);
   runtime::df_progress::number("density_seed_rank", rank);
   return GENERATIVEQC_STATUS_SUCCESS;

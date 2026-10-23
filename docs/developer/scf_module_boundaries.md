@@ -330,10 +330,15 @@ and orbital-energy weighted-density expression. The optional
 from authenticated resident D/F/C/energies with borrowed matrix-library resources
 and the shared tensor primitive. It reuses four phase-local iteration matrices
 and an arena-charged bounded reduction packet array; it does not upload detached
-host matrices or allocate another dense arena/handle. The default is `0`; other
-values are errors. Small or unavailable-library owners, and repeated exports
-with a published stationary-weight lease, retain reference validation without
-recycling leased storage. An admitted provider failure is explicit, not a silent
+host matrices or allocate another dense arena/handle. An unset selector admits
+strict final RKS matrices for all-electron, full-range exact/fitted global
+hybrids at 384 AOs or more and pure-J exact/fitted models at 544 AOs or more.
+Range corrections, nonlocal correlation, incremental J/K and ECP models retain
+their existing default. Explicit `0` restores host validation; `1` requests
+device proof subject to resource and identity guards; other values are errors.
+Small or unavailable-library owners, and repeated exports with a published
+stationary-weight lease, retain reference validation without recycling leased
+storage. An admitted provider failure is explicit, not a silent
 reference retry. See the
 [resident final-validation decision](../../.agents/notes/implemented/performance/2026-10-10-ks-resident-final-validation.md)
 for layout, lifetime and qualification rationale.

@@ -69,7 +69,7 @@ def test_composed_coordinate_and_basis_chain_rule(
         assert record["force_calls"] == 0
         assert (
             record["integral_ad"]["derivative"]
-            == "stationary-rhf-through-integral-ad-v1"
+            == "stationary-rhf-through-integral-ad-v2"
         )
     finally:
         compiled.close()
@@ -143,13 +143,11 @@ def test_lowering_does_not_construct_native_integral_owner(
         compiled.close()
 
 
-@pytest.mark.parametrize(
-    "options", [{"method": "uhf"}, {"backend": "cuda"}, {"density_fitting": "cpu"}]
-)
+@pytest.mark.parametrize("options", [{"method": "pbe"}, {"density_fitting": "cpu"}])
 def test_unqualified_integral_ad_domains_fail_at_capture(
     options: dict[str, Any],
 ) -> None:
-    with pytest.raises(ValueError, match="CPU direct RHF"):
+    with pytest.raises(ValueError, match="direct RHF/UHF"):
         xp.MolecularModel(
             ("H", "H"), **{"method": "rhf", "differentiation": "integral-ad", **options}
         )
@@ -195,3 +193,65 @@ def test_nested_derivative_rejects_before_native_execution(
     finally:
         second.close()
         first.close()
+
+
+@pytest.mark.parametrize("with_value", [False, True])
+def test_forward_over_reverse_composed_molecular_hvp(
+    owner: IntegralRHF, tmp_path: Path, with_value: bool
+) -> None:
+    model = xp.MolecularModel(("H", "H"), method="rhf", differentiation="integral-ad")
+
+    def loss(r: Any, log_alpha: Any, c: Any) -> Any:
+        return xp.square(
+            model(1.03 * r, exponents=xp.exp(log_alpha), coefficients=c)
+        ) + 0.2 * xp.sum(r * r)
+
+    transform = xp.value_and_grad if with_value else xp.grad
+    derivative = transform(loss, argnums=(0, 1, 2), cache=tmp_path)
+    primals = (XYZ.copy(), np.log(owner.exponents), owner.coefficients.copy())
+    rng = np.random.default_rng(192)
+    directions = tuple(rng.normal(size=v.shape) * 0.2 for v in primals)
+    try:
+        first, product = xp.jvp(derivative, primals, directions, cache=tmp_path)
+        step = 1e-4
+        positive = derivative(
+            *(v + step * d for v, d in zip(primals, directions, strict=True))
+        )
+        negative = derivative(
+            *(v - step * d for v, d in zip(primals, directions, strict=True))
+        )
+        if with_value:
+            np.testing.assert_allclose(
+                product[0], (positive[0] - negative[0]) / (2 * step), atol=2e-8
+            )
+            first, product = first[1], product[1]
+            positive, negative = positive[1], negative[1]
+        for value, a, b in zip(product, positive, negative, strict=True):
+            np.testing.assert_allclose(
+                value, (a - b) / (2 * step), atol=2e-8, rtol=2e-6
+            )
+        expected = derivative(*primals)
+        if with_value:
+            expected = expected[1]
+        for actual, target in zip(first, expected, strict=True):
+            np.testing.assert_allclose(actual, target, atol=2e-10)
+    finally:
+        derivative.close()
+
+
+def test_uhf_molecular_source_gradient(owner: IntegralRHF, tmp_path: Path) -> None:
+    from generativeqc.experimental.integral_autodiff import IntegralUHF
+
+    direct = IntegralUHF(("He", "H"), spin_multiplicity=2, cache=tmp_path)
+    model = xp.MolecularModel(
+        ("He", "H"), method="uhf", multiplicity=2, differentiation="integral-ad"
+    )
+    compiled = xp.value_and_grad(lambda r: model(r), cache=tmp_path)
+    try:
+        value, derivative = compiled(XYZ)
+        expected, gradient = direct.value_and_grad(XYZ)
+        np.testing.assert_allclose(value, expected, atol=2e-11)
+        np.testing.assert_allclose(derivative, gradient.coordinates, atol=2e-10)
+    finally:
+        compiled.close()
+        direct.close()

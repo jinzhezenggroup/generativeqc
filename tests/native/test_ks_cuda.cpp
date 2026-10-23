@@ -2639,6 +2639,7 @@ void minao_gpu_case() {
   std::cout << "CUDA MINAO GPU preparation and strict seed gates passed\n";
 }
 
+#include "ks_cold_factor_cases.hpp"
 #include "ks_density_provider_cases.hpp"
 }  // namespace
 
@@ -2658,6 +2659,11 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
       ks_density_provider_cases();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
+      ks_cold_factor_cases();
+      std::cout << "Native CUDA DF cold-factor proof, fallback and physical-state gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
@@ -2707,6 +2713,7 @@ int main(int argc, char** argv) {
     rejected_api_requests_revoke_tokens();
     run_exact_exchange_case(true);
     run_exact_exchange_case(false);
+    ks_cold_factor_cases();
     run_density_fitted_exchange_case(true);
     run_density_fitted_exchange_case(true, false);
     run_density_fitted_exchange_case(false);

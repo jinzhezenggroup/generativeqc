@@ -484,13 +484,13 @@ mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
 ## Differentiate through Gaussian integrals
 
 Select `differentiation="integral-ad"` to differentiate the complete chain from
-Gaussian parameters to RHF total energy. This explicit CPU FP64 path generates
+Gaussian parameters to RHF/UHF total energy. This explicit FP64 path generates
 S, T, nuclear-attraction and ordered two-electron integrals, including primitive
 and contraction normalization. The shared native SCF solver consumes those
 actual values. Its stationary Lagrangian supplies cotangents to the generated
 integral pullback, including the overlap/Pulay and nuclear-repulsion terms.
 Coordinates, primitive exponents and raw contraction coefficients all carry
-first derivatives. Runtime execution requires neither PySCF nor finite
+first and second derivatives. Runtime execution requires neither PySCF nor finite
 differences and does not call `Calculator.singlepoint` or its force endpoint.
 
 ```python
@@ -523,13 +523,42 @@ loss_and_grad.close()
 `grad`, `value_and_grad`, JVP and snapshot VJP compose with the surrounding
 Array API expressions. Each new geometry or basis input causes a fresh SCF
 solve; reusable VJP pullbacks retain the forward inputs. Capture and `lower()`
-do not execute SCF or compile integrals. The molecular source still has a
-first-order implicit derivative boundary: neither its SCF iteration history nor
-its converged density is differentiated as an unconstrained input. Nested AD,
-Hessians, unrestricted/DF/KS/post-HF methods, ECPs, spherical bases and CUDA are
-outside this integral-AD contract. The default `differentiation="native"`
+do not execute SCF or compile integrals. `jvp(grad(loss), primals, directions)`
+uses a quadratic source jet and the analytic coupled orbital response, including
+outer nonlinear geometry and basis transformations. The SCF iteration history
+is not differentiated. `jvp(value_and_grad(loss), ...)` also returns the energy
+and its directional derivative. Arbitrary nesting of `grad` and orders above
+two are unsupported. DF/KS/post-HF methods, ECPs and spherical bases are outside
+this integral-AD contract. The default `differentiation="native"`
 continues to use the existing method-specific analytic derivative endpoint and
 does not accept continuous basis parameters.
+
+Use `derivative_order=2` on a standalone owner to enable `integral_jvp`, `hvp`
+and `hessian`. Directions use an `IntegralGradient` record with one array for
+each continuous input. `hessian` orders its axes as flattened xyz, exponents,
+then raw coefficients; its `parameters` tuple can select a subset. Mixed
+blocks include normalization and orbital relaxation. Returned Hessians are not
+symmetrized to hide response errors.
+
+```python
+from generativeqc.experimental.integral_autodiff import IntegralGradient, IntegralUHF
+
+owner = IntegralUHF(("He", "H"), spin_multiplicity=2, derivative_order=2)
+direction = IntegralGradient(np.ones_like(r), np.zeros_like(owner.exponents),
+                             np.zeros_like(owner.coefficients))
+hv = owner.hvp(r, direction)
+hessian = owner.hessian(r, parameters=("coordinates",))
+owner.close()
+```
+
+Select `backend="cuda"` on the standalone owner or `MolecularModel` to use
+CUDA FP64 integral values/pullbacks, explicit-integral J/K and the shared CUDA
+eigensolver. SCF/DIIS and Krylov iteration control, compact stationary weights
+and response matrix algebra remain on the host. CUDA does not recompute a
+different set of integrals or retry with a CPU integral/Fock/eigen provider.
+Device is a visible ordinal (`device=0` by default); the standalone compiler
+accepts `cuda_arch="sm_120"` by default. CUDA execution requires a CUDA native
+library and NVCC for an artifact-cache miss. Use the scheduler for GPU tests.
 
 (integral-ad-values-and-ownership)=
 ### Integral AD values and ownership
@@ -544,7 +573,7 @@ expression, so a common coefficient scale per shell is a null direction.
 Omitted basis inputs retain the named/custom basis values. Topology, atomic
 numbers, charge and angular momenta are fixed structural data.
 
-`IntegralRHF` also accepts an all-electron Cartesian `BasisSet` snapshot or a
+`IntegralHF`, `IntegralRHF` and `IntegralUHF` also accept an all-electron Cartesian `BasisSet` snapshot or a
 sequence of `generativeqc.Shell` records for a custom Cartesian basis. ECP and
 spherical metadata are rejected before expansion into primitive inputs.
 `integrals(...)` returns an `IntegralValues` record containing
@@ -553,7 +582,7 @@ Matrix shapes are `(nao, nao)` and ERI shape is `(nao, nao, nao, nao)`, with
 Cartesian CCA component order. `integral_vjp(coordinates, cotangents, ...)`
 accepts a record with the same layout and arbitrary finite float64 weights;
 there is no symmetry requirement on cotangents. It returns an `IntegralGradient`
-without an SCF solve. `energy(...)` evaluates only the primal RHF endpoint.
+without an SCF solve. `energy(...)` evaluates only the primal HF endpoint.
 Energy is in Hartree; coordinate energy gradients are in Hartree/Bohr, and
 basis gradients are per corresponding raw input unit.
 
@@ -571,23 +600,31 @@ and reports zero native force-endpoint calls for this mode.
 (integral-ad-admission-and-resource-limits)=
 ### Integral AD admission and resource limits
 
-This endpoint admits all-electron singlet RHF with a positive even electron
-count, up to 256 atoms and 256 Cartesian AOs, subject to the tighter budgets
-below. The source algebra admits s/p/d/f/g components; this does not guarantee
+This endpoint admits all-electron RHF and UHF with a positive electron count and
+compatible integer spin multiplicity, up to 256 atoms and 256 Cartesian AOs,
+subject to the tighter budgets below. `IntegralHF(method="uhf",
+spin_multiplicity=2, ...)` and `IntegralUHF(..., spin_multiplicity=2)` select a
+doublet; `MolecularModel` uses its existing `multiplicity=2` argument. The source algebra admits s/p/d/f/g components; this does not guarantee
 that a complete high-angular basis fits the symbolic or native compile budget.
 Molecular acceptance currently covers s/p bases; emitted primitive acceptance
-includes d/f/g one-electron components and mixed ERIs through `(gg|ss)`.
+includes d/f/g one-electron components and mixed ERIs. Compact second-order
+tapes also pass an independent mixed `(gg|gg)` primitive gate and Boys F0..F18
+checks; this is not a qualification of a complete g-shell molecular endpoint.
 
-`IntegralRHF` defaults to `max_bytes=64 << 20`, `max_work=100_000_000`,
+The standalone owners default to `max_bytes=64 << 20`, `max_work=100_000_000`,
 `compiler_work=5_000_000`, and a finite `compile_timeout=300` seconds. Primal ERIs
 are dense. The numeric-array bound is
-`8 * (4*nao**4 + 200*nao**2 + 16*nprimitive + 32*natoms)` bytes; it excludes
+reported by `owner.numeric_peak_bytes`, including retained source/state copies,
+response workspace and, on CUDA, lane-private integral scratch and bounded
+solver workspace. It excludes
 Python/compiler memory and opaque library scratch, and is not a process-RSS
 claim. The work limit bounds both the forward and streamed pullback primitive
 evaluations, including attraction centers and nuclear pairs. No molecular
 coordinate-by-ERI Jacobian is stored. Symbolic interning work is separately
 bounded. Compilation uses the shared verified compiler-cache adapter and
 artifact cache; failures do not select a different scientific implementation.
+Full Hessian diagnostics aggregate the work of all columns. A failed column
+does not replace the last successful call's diagnostics with a partial receipt.
 
 `MolecularModel` uses these default integral budgets; its compiled tensor
 budgets independently constrain surrounding algebra. Use the standalone owner
@@ -602,7 +639,7 @@ normalization, coincident nuclei or nonfinite integral arithmetic raise
 `ArithmeticError`. Native SCF nonconvergence, singular metric or failed final
 physical-stationarity checks raise `RuntimeError`. Compiler failures propagate.
 No new result or gradient is published on failure. Gradients describe a smooth
-converged RHF stationary branch; this is not a guarantee of a unique/global
+converged HF stationary branch; this is not a guarantee of a unique/global
 minimum at electronic state crossings.
 
 Independent CPU acceptance uses pinned PySCF/libcint values and reconverged
@@ -613,7 +650,19 @@ directions, arbitrary integral cotangents and nonlinear outer losses:
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
   python -m pytest -q tests/python/test_integral_autodiff.py \
-  tests/python/test_integral_parameter_ad.py tests/python/test_array_api_integral_ad.py
+  tests/python/test_integral_parameter_ad.py tests/python/test_integral_autodiff_second.py \
+  tests/python/test_array_api_integral_ad.py
+```
+
+Real-device tests additionally exercise RHF/UHF integral JVP/VJP and joint HVPs,
+p-shell independent references, and the Array API CUDA composition. Point
+`GENERATIVEQC_LIBRARY` to a CUDA build and run them in a finite GPU allocation:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:15:00 env GENERATIVEQC_INTEGRAL_AD_CUDA_TEST=1 \
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python:. \
+  python -m pytest -q tests/python/test_integral_autodiff_cuda.py
 ```
 
 ## Compose native RHF energies with the unified molecular operator
