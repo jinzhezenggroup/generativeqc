@@ -73,6 +73,9 @@ struct DfSymmetricAoPair {
 struct DfValueStorageOptions {
   DfPairStorage pairs{DfPairStorage::Dense};
   std::size_t rank_capacity{};
+  // Method-owned pure J may retain raw A in the single tensor slot. Admission
+  // still requires a full-rank metric; all other cases retain fitted B.
+  bool coulomb_only_raw{};
 };
 
 /** Checked capacities shared by the common planner and native allocator.

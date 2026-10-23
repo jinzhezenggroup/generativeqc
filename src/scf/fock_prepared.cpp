@@ -71,6 +71,10 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
     if (md && std::string_view(md) != "0" && std::string_view(md) != "1")
       throw std::invalid_argument("GENERATIVEQC_DF_MD_COULOMB must be 0 or 1");
     result.df_md_coulomb_requested = !md || std::string_view(md) == "1";
+    const char* raw_j = std::getenv("GENERATIVEQC_DF_RAW_COULOMB");
+    if (raw_j && std::string_view(raw_j) != "0" && std::string_view(raw_j) != "1")
+      throw std::invalid_argument("GENERATIVEQC_DF_RAW_COULOMB must be 0 or 1");
+    result.df_raw_coulomb_requested = raw_j && std::string_view(raw_j) == "1";
     result.df_pair_storage_request = requested_df_pair_storage_request();
     result.df_pair_storage = requested_df_pair_storage();
     result.df_value_mapping = cuda_policy::df_value_mapping_requested();
@@ -416,6 +420,13 @@ struct PreparedFockPlan::Impl {
       runtime::df_progress::number("value_storage",
                                    static_cast<unsigned>(tiles.value_storage.pairs));
       budget_trace.finish();
+      // Only the immutable pure-J method may request an unwhitened value
+      // representation. Keep the same capacity/panels and exact raw source.
+      tiles.value_storage.coulomb_only_raw =
+          coulomb_only_packing && diagnostic.variant.df_raw_coulomb_requested &&
+          tiles.stores_full_three_center &&
+          tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+          tiles.value_storage.rank_capacity == 0;
       data.value_storage = tiles.value_storage.pairs;
       diagnostic.variant.df_pair_storage = data.value_storage;
       CudaDensityFittingJkPlan* raw_plan{};

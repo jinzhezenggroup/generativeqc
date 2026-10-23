@@ -20,7 +20,7 @@ struct FockExecutionVariant {
   bool one_electron_value_override{}, one_electron_value_capability_fallback{};
   DfPairStorageRequest df_pair_storage_request{DfPairStorageRequest::Automatic};
   DfPairStorage df_pair_storage{DfPairStorage::Dense};
-  bool df_md_coulomb_requested{};
+  bool df_md_coulomb_requested{}, df_raw_coulomb_requested{};
   bool operator==(const FockExecutionVariant&) const = default;
 };
 

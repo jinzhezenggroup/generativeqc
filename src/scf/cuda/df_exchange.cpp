@@ -27,6 +27,10 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
                                    double* exchange, std::string& detail,
                                    bool density_is_column_major, std::size_t system_begin,
                                    std::size_t system_end) {
+  if (plan.resident_raw_coulomb) {
+    detail = "pure-J raw storage cannot supply a fitted exchange tensor";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   system_end = std::min(system_end, plan.batch_size);
   if (system_begin >= system_end) return GENERATIVEQC_STATUS_SUCCESS;
   plan.revoke_projection_leases();
