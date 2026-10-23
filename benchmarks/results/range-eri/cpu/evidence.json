@@ -5,8 +5,8 @@
       "sha256": "fe6d540a39e40c42918ad15d3e2c209f20924503707a00d5f418fdba80d034e9"
     },
     {
-      "path": "resources.json",
-      "sha256": "34b8418083b3035dede02532dd72c54bf732f5edaf8ec0ec40710e3d71ba1c9e"
+      "path": "resources.json.xz",
+      "sha256": "c6eb2f7331fd61b1fa4ed0916bf2c0ee2491286fa62448138dec45870319b035"
     },
     {
       "path": "artifacts.json",

@@ -50,7 +50,8 @@ FockBuildSpec make_rsh_primary_fock_spec(FockSpin spin, double short_range_excha
 }
 
 FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_exchange,
-                                            double long_range_exchange, double omega) {
+                                            double long_range_exchange, double omega,
+                                            FockApproximation approximation) {
   if (!std::isfinite(short_range_exchange) || !std::isfinite(long_range_exchange) ||
       !std::isfinite(omega) || omega < 0.0)
     throw std::invalid_argument(
@@ -60,7 +61,7 @@ FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_ex
   spec.coulomb.present = false;
   const double spin_factor = spin == FockSpin::Restricted ? -0.5 : -1.0;
   spec.exchange = {true, spin_factor * (long_range_exchange - short_range_exchange),
-                   FockOperator::LongRange, omega, FockApproximation::Exact};
+                   FockOperator::LongRange, omega, approximation};
   return spec;
 }
 
@@ -75,8 +76,7 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
     throw std::invalid_argument("WB97M-V composition requires CPU or CUDA Fock execution");
   auto expected_primary_spec =
       make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange);
-  // Range-separated DF currently fits only the ordinary full-range J/K owner.
-  // The LR correction remains an exact Direct provider with its own operator/omega identity.
+  // Each fitted radial operator has its own metric and immutable omega identity.
   const bool fitted_primary =
       primary.spec.coulomb.approximation == FockApproximation::DensityFitted &&
       primary.spec.exchange.approximation == FockApproximation::DensityFitted;
@@ -87,11 +87,15 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
   const auto expected_primary =
       resolve_fock_build(expected_primary_spec, backend, primary.screening_tolerance,
                          primary.metric_relative_threshold);
-  const auto expected_correction =
-      resolve_fock_build(make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
-                                                       dft::generated::kWb97mvLongExchange,
-                                                       dft::generated::kWb97mvOmega),
-                         backend, primary.screening_tolerance);
+  const auto expected_correction = resolve_fock_build(
+      make_rsh_correction_fock_spec(
+          spin, dft::generated::kWb97mvShortExchange, dft::generated::kWb97mvLongExchange,
+          dft::generated::kWb97mvOmega, correction.spec.exchange.approximation),
+      backend, primary.screening_tolerance, correction.metric_relative_threshold);
+  if (correction.spec.exchange.approximation == FockApproximation::DensityFitted &&
+      (!fitted_primary ||
+       correction.metric_relative_threshold != primary.metric_relative_threshold))
+    throw std::invalid_argument("long-range DF requires a matching fitted primary and cutoff");
   if (correction.backend != backend || primary != expected_primary ||
       correction != expected_correction || nonlocal.variant != dft::nlc::Vv10Variant::vv10 ||
       nonlocal.b != dft::generated::kWb97mvNonlocalB ||
@@ -609,8 +613,6 @@ ScfResult run_rks(
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
-    // DF changes only the full-range primary. The separate LR provider must
-    // still satisfy the exact Direct contract below.
     const bool primary_exchange =
         strategy.spec.exchange.present &&
         (strategy.spec.exchange.approximation == FockApproximation::Exact ||
@@ -620,10 +622,12 @@ ScfResult run_rks(
         correction.backend == FockBackend::Cpu && correction.spec.spin == FockSpin::Restricted &&
         correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
         correction.spec.exchange.present &&
-        correction.spec.exchange.approximation == FockApproximation::Exact &&
+        (correction.spec.exchange.approximation == FockApproximation::Exact ||
+         (correction.spec.exchange.approximation == FockApproximation::DensityFitted &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted)) &&
         correction.spec.exchange.op == FockOperator::LongRange;
     if (!primary_exchange || !correction_exchange)
-      throw std::invalid_argument("RSH RKS requires full-range primary K plus direct long-range K");
+      throw std::invalid_argument("RSH RKS requires full-range primary K plus a matched LR owner");
   }
   if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
     throw std::invalid_argument(std::string(method_name) +
@@ -637,9 +641,8 @@ ScfResult run_rks(
   // auxiliary request would incorrectly replace it with the orbital basis.
   if (!plan.matches_system(grid.system()) || basis.packed != dft::AoBasis(system).packed)
     throw std::invalid_argument("RKS refuses a stale geometry, basis, charge or spin binding");
-  if (long_range_correction &&
-      (!long_range_correction->matches(system, nullptr, long_range_correction->strategy(), -1, 0) ||
-       long_range_correction->one_electron().nbf != ints.nbf))
+  if (long_range_correction && (!long_range_correction->matches_system(system) ||
+                                long_range_correction->one_electron().nbf != ints.nbf))
     throw std::invalid_argument("RSH correction refuses a stale or incompatible source binding");
 
   const std::size_t n = ints.nbf;

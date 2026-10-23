@@ -1,5 +1,9 @@
 # Occupied DF execution and compact source qualification (#377–379)
 
+Storage-only compaction: `source-validation.json.gz` restores the exact original
+source-audit receipt with `gzip -dc`; encoded/decoded identities are recorded in
+`source-validation-storage.json`. No scientific record or acceptance changes.
+
 This bundle records current-master comparisons on NVIDIA GeForce RTX 5090
 (sm_120), production Release CUDA 12.9.1, spherical def2-SVP RHF water clusters,
 Naux=NAO and ranks 20/40/80/160. All real-device work uses finite Slurm jobs on

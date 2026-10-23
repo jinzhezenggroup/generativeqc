@@ -10,6 +10,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
@@ -229,6 +230,13 @@ struct PreparedFockPlan::Impl {
     if (has_df) {
       auxiliary = aux ? *aux : system;
       fitted.emplace();
+      if (strategy.spec.exchange.present &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted &&
+          strategy.spec.exchange.op == FockOperator::LongRange) {
+        if (strategy.spec.coulomb.present)
+          throw std::invalid_argument("long-range DF exchange requires a separate metric owner");
+        fitted->range_omega = strategy.spec.exchange.omega;
+      }
     }
     if (strategy.backend == FockBackend::Cpu) {
       auto ints = integrals::build_integrals(system, derivatives, full_exact);
@@ -244,8 +252,8 @@ struct PreparedFockPlan::Impl {
         fitted->one_electron = std::move(ints);
         const bool materialize_df_derivatives =
             derivatives && cpu_materialized_df_derivatives_requested();
-        fitted->raw = integrals::build_density_fitting_integrals(system, *auxiliary,
-                                                                 materialize_df_derivatives);
+        fitted->raw = integrals::build_density_fitting_integrals(
+            system, *auxiliary, materialize_df_derivatives, fitted->range_omega);
         if (derivatives && !materialize_df_derivatives) {
           fitted->raw.ncoord = system.atoms.size() * 3U;
           fitted->df_gradient_orbital = system;
@@ -392,9 +400,15 @@ struct PreparedFockPlan::Impl {
       CudaDensityFittingIntegralSource* raw_source{};
       std::vector<double> metrics;
       std::size_t nbf{}, naux{};
-      checked(create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary},
-                                                          &raw_source, metrics, nbf, naux, detail),
-              detail);
+      cuda_execution::CudaDfSourcePolicy source_policy;
+      if (!cuda_execution::resolve_cuda_df_source_policy(source_policy, detail))
+        throw std::invalid_argument(detail);
+      source_policy.range_omega = data.range_omega;
+      if (data.range_omega > 0.0) source_policy.value_math = 0U;
+      checked(
+          create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary}, &raw_source,
+                                                      metrics, nbf, naux, detail, &source_policy),
+          detail);
       std::unique_ptr<CudaDensityFittingIntegralSource,
                       decltype(&destroy_cuda_density_fitting_integral_source)>
           source(raw_source, &destroy_cuda_density_fitting_integral_source);
@@ -706,4 +720,5 @@ bool PreparedFockPlan::matches(
   }
   return !impl_->auxiliary || same_system(*impl_->auxiliary, auxiliary ? *auxiliary : orbital);
 }
+
 }  // namespace generativeqc::scf

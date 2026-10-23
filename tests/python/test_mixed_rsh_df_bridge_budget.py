@@ -142,7 +142,8 @@ def test_missing_native_capacity_query_fails_closed() -> None:
 
 
 @pytest.mark.parametrize("backend", ("cpu", "cuda"))
-def test_shared_snapshot_mixed_source_wire(backend: str) -> None:
+@pytest.mark.parametrize("fitted_range", (False, True))
+def test_shared_snapshot_mixed_source_wire(backend: str, fitted_range: bool) -> None:
     namespace = _snapshot_functions()
     checks = []
     correction = np.array([[0.2, -0.1, 0.3]])
@@ -158,9 +159,10 @@ def test_shared_snapshot_mixed_source_wire(backend: str) -> None:
         usage: object,
         usage_count: int,
     ) -> int:
+        checks.append("native")
         assert budget == 4096 and count == 15 and usage_count == 9
-        assert lr_count == (3 if backend == "cpu" else 0)
-        if backend == "cpu":
+        assert lr_count == (3 if backend == "cpu" and not fitted_range else 0)
+        if backend == "cpu" and not fitted_range:
             np.testing.assert_array_equal(
                 np.ctypeslib.as_array(lr, shape=(3,)), correction.ravel()
             )
@@ -171,6 +173,7 @@ def test_shared_snapshot_mixed_source_wire(backend: str) -> None:
 
     owner = SimpleNamespace(
         density_fitted=True,
+        range_density_fitted=fitted_range,
         backend=backend,
         check_current=lambda: checks.append("current"),
         _library=SimpleNamespace(
@@ -183,17 +186,21 @@ def test_shared_snapshot_mixed_source_wire(backend: str) -> None:
         owner,
         1,
         4096,
-        lr_correction=correction if backend == "cpu" else None,
+        lr_correction=correction if backend == "cpu" and not fitted_range else None,
     )
-    assert output.shape == (5, 1, 3) and checks == ["current", "current"]
+    assert output.shape == (5, 1, 3)
+    assert checks[0] == checks[-1] == "current" and "native" in checks
     assert work["mixed_rsh_df_provider"] == 1
-    assert work["additional_device_peak_includes_lazy_lr"] == (backend == "cuda")
+    assert work["additional_device_peak_includes_lazy_lr"] == (
+        backend == "cuda" and not fitted_range
+    )
 
 
 def test_shared_snapshot_mixed_source_missing_symbol_fails_closed() -> None:
     namespace = _snapshot_functions()
     owner = SimpleNamespace(
         density_fitted=True,
+        range_density_fitted=False,
         backend="cpu",
         check_current=lambda: None,
         _library=SimpleNamespace(),
@@ -207,8 +214,12 @@ def test_shared_snapshot_mixed_source_missing_symbol_fails_closed() -> None:
         )
 
 
-@pytest.mark.parametrize("mixed", [False, True])
-def test_wire_scope_names_additional_lr_without_double_count(mixed: bool) -> None:
+@pytest.mark.parametrize(
+    "mixed,fitted_range", [(False, False), (True, False), (True, True)]
+)
+def test_wire_scope_names_additional_lr_without_double_count(
+    mixed: bool, fitted_range: bool
+) -> None:
     namespace = _snapshot_functions()
 
     def evaluate(
@@ -232,6 +243,7 @@ def test_wire_scope_names_additional_lr_without_double_count(mixed: bool) -> Non
     owner = SimpleNamespace(
         backend="cuda",
         density_fitted=mixed,
+        range_density_fitted=fitted_range,
         check_current=lambda: None,
         _library=SimpleNamespace(
             generativeqc_ks_snapshot_cuda_integral_gradient_v1=evaluate
@@ -248,7 +260,7 @@ def test_wire_scope_names_additional_lr_without_double_count(mixed: bool) -> Non
         assert "one_electron_device_peak_bytes" not in work
         assert work["compact_source_publication_host_peak_bytes"] == 240
         assert work["density_fitted_response_resources_included"] == 0
-        assert work["additional_device_peak_includes_lazy_lr"] == 1
+        assert work["additional_device_peak_includes_lazy_lr"] == (not fitted_range)
     else:
         assert work["one_electron_device_peak_bytes"] == 5000
         assert "mixed_rsh_additional_device_peak_bytes" not in work
@@ -338,6 +350,7 @@ struct ResolvedFockBuild {
   Spec spec;
   FockBackend backend = FockBackend::Cuda;
   double screening_tolerance = 1e-12;
+  double metric_relative_threshold = 1e-10;
   bool operator==(const ResolvedFockBuild&) const = default;
 };
 struct PreparedFockPlan {
@@ -356,6 +369,10 @@ struct PreparedFockPlan {
     std::size_t nbf = 2, device_bytes = 100;
   };
   Diagnostic diagnostic() const { return {2, budget ? budget : 100}; }
+  reference::Matrix retained_energy_derivative(const reference::Matrix&,
+                                               const reference::Matrix&) const {
+    return {2, 2, 2};
+  }
 };
 struct Binding {
   int device_id = 0;
@@ -433,6 +450,7 @@ class Harness {
   } options_;
   struct Execution {
     bool range_exchange = true;
+    bool density_fitted_range_exchange = false;
     double range_omega = .3, short_range_exchange = .15, long_range_exchange = 1.;
   } execution_plan_;
   Harness() {
@@ -486,6 +504,21 @@ int main() {
   std::array<std::uint64_t, 9> work{};
   std::string detail;
   std::vector<scf::reference::Matrix> dw{{1, 0, 0, 1}};
+  {
+    Harness owner;
+    owner.execution_plan_.density_fitted_range_exchange = true;
+    owner.range_strategy_->spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    owner.range_correction_->model = *owner.range_strategy_;
+    constructed = 0;
+    std::size_t capacity = 1;
+    auto query = owner.cuda_integral_gradient_additional_device_bytes(token, capacity, detail);
+    require(query == GENERATIVEQC_STATUS_SUCCESS && capacity == 0 && constructed == 0,
+            "full RI-K reserved or allocated a lazy Direct LR owner");
+    auto result = owner.mixed_rsh_df_integral_gradient(
+        token, out, 5000, work, detail, &dw, &dw);
+    require(result == GENERATIVEQC_STATUS_SUCCESS && out.size() == 15 && constructed == 0,
+            "full RI-K did not differentiate its retained fitted owner");
+  }
   for (auto fitting_mode : {GENERATIVEQC_DENSITY_FITTING_CUDA,
                            GENERATIVEQC_DENSITY_FITTING_AUTO}) {
     Harness owner;
