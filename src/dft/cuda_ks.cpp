@@ -1540,17 +1540,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Keep the automatically promoted domain narrower than explicit opt-in.
     // In particular, public resource plans have no charged incremental arena
     // and must retain their incumbent solver; full physical closure is unchanged.
-    const bool auto_through_d = std::all_of(
-        provider.system().shells.begin(), provider.system().shells.end(),
-        [](const auto& shell) { return shell.angular_momentum <= 2U; });
+    const bool auto_through_d =
+        std::all_of(provider.system().shells.begin(), provider.system().shells.end(),
+                    [](const auto& shell) { return shell.angular_momentum <= 2U; });
     const bool auto_all_electron =
         provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     const bool auto_incremental = admit_ks_incremental_cold_auto(
         {options.incremental_direct_jk_auto, n, provider.system().atoms.size(),
-         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange &&
-             has_exchange && spins == 1 && !has_range_correction && !nonlocal_correlation &&
+         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
+             spins == 1 && !has_range_correction && !nonlocal_correlation &&
              scf::direct_jk_incremental_exact_eligible(strategy) &&
              !precision_schedule.any_lower_precision(),
          standard_convergence_model && grid_spec == default_grid_spec() && !budget_fock &&
@@ -1990,9 +1990,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Automatic promotion never borrows external/imported/moved seed provenance.
     // Retained warm states use the existing full-density one-Fock proof. Explicit
     // opt-in callers retain their original external-seed eligibility.
-    incremental_direct_jk =
-        incremental_direct_jk_policy.active && !ordinary_incremental_warm &&
-        (!options.incremental_direct_jk_auto || input == nullptr);
+    incremental_direct_jk = incremental_direct_jk_policy.active && !ordinary_incremental_warm &&
+                            (!options.incremental_direct_jk_auto || input == nullptr);
     // Only an owner with the complete Standard full-density closure may use a
     // bounded chain of screened proposals. J/K linearity is independent of
     // the XC family; inherit the ordinary Standard owner's existing model

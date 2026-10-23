@@ -27,11 +27,12 @@ def test_default_cold_warm_reset_and_explicit_off(
 
     assert os.environ.get("SLURM_JOB_ID")
     assert "CUDA_VISIBLE_DEVICES" in os.environ
-    water = (("O", (0.0, 0.0, 0.0)),
-             ("H", (0.0, 0.0, 1.8)),
-             ("H", (1.7, 0.0, -0.6)))
-    atoms = [(symbol, (xyz[0] + 6.0 * i, xyz[1], xyz[2]))
-             for i in range(4) for symbol, xyz in water]
+    water = (("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6)))
+    atoms = [
+        (symbol, (xyz[0] + 6.0 * i, xyz[1], xyz[2]))
+        for i in range(4)
+        for symbol, xyz in water
+    ]
     outcomes = {}
     for choice in ("unset", "off"):
         with monkeypatch.context() as scope:
@@ -56,8 +57,9 @@ def test_default_cold_warm_reset_and_explicit_off(
                         )
                         assert result.incremental_direct_jk["active"] == active
                         assert result.warm_start_used == (phase == "warm")
-                        records.append((float(result.energy),
-                                        np.array(result.forces, copy=True)))
+                        records.append(
+                            (float(result.energy), np.array(result.forces, copy=True))
+                        )
             finally:
                 calculator.clear_cache()
             outcomes[choice] = records

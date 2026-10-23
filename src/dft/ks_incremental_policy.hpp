@@ -25,7 +25,6 @@ constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain
          domain.atoms <= 96;
 }
 
-
 /** Bound an incremental proposal epoch whose consumer requires a fresh physical
  * full-density closure. These are provisional SCF operators, not a certificate
  * of the accumulated screening error. The closing full-Fock energy pair and

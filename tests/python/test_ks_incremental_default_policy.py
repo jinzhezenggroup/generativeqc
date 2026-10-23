@@ -71,7 +71,9 @@ def test_automatic_cold_promotion_does_not_override_explicit_controls() -> None:
     assert 'std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK")' in method
     assert 'std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")' in method
     assert "options.incremental_direct_jk_auto =" in method
-    assert "incremental_policy_options.incremental_direct_jk |= auto_incremental;" in cuda
+    assert (
+        "incremental_policy_options.incremental_direct_jk |= auto_incremental;" in cuda
+    )
     assert "!runtime::active_device_resource_ledger" in cuda
     assert "(!options.incremental_direct_jk_auto || input == nullptr)" in cuda
     assert "!ordinary_incremental_warm" in cuda
