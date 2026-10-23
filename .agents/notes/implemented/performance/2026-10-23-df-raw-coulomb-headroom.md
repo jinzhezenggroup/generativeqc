@@ -95,6 +95,17 @@ Python cases and 82 host cases. Source-matched evidence for the subsequent unset
 default and reviewed stage-one integration is retained separately; historical
 opt-in receipts must not be relabeled as that integrated default.
 
+The integrated default `e8af079a7f51f97e45a035e3c85c3b96af05a219` now has
+its own five alternating off/unset pairs, 48/96-atom moved pairs and six-method
+Standard/Fast matrix: all 264 additional calls pass. DF96 cold gains are
+18.120% for PBE and 16.428% for r2SCAN; moved gains are 20.617% and 19.299%.
+Static warm medians are 1.736%/0.323% slower, below the unchanged significance
+floor, and no warm speedup is claimed. The corrected final assembly passes all
+55 GPU Python cases, native numerics, pressure and zero-error memcheck gates.
+An initial stale standalone-AOT assembly failed identity validation; its failed
+receipts remain separate. See the [complete retained bundle](../../../../benchmarks/results/df-raw-coulomb-20261023/README.md)
+for immutable source/package identities, all 528 calls and offline reproduction.
+
 ## Revisit when
 
 Broaden raw storage only after source-matched complete cold/warm/moved evidence

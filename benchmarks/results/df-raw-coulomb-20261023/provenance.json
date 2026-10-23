@@ -1,0 +1,53 @@
+{
+  "schema": "generativeqc.df-raw-coulomb-provenance.v1",
+  "opt_in_source": "8b68f626c82e7bf0f33bd6a993f91ec64b5c790b",
+  "opt_in_core_sha256": "6339a04c0f2aa6f6ba50de726ac3b35bec7e43ab6182fe2539beb2421d43a936",
+  "integrated_default_source": "e8af079a7f51f97e45a035e3c85c3b96af05a219",
+  "default_libraries": {
+    "libgenerativeqc.so": "0b285c7493c1fd8402dab1543dd4c58f8e69106d6a69aba5490b0aa7d9c2b6d8",
+    "libgenerativeqc_stationary_b3lyp_rks_spd.so": "503c998b2afb7c0c028f7239120eecfcb5e88151d3e00a6750f00abe8c92a8c7",
+    "libgenerativeqc_stationary_m06_2x_rks_spd.so": "4cd0168f7e4763c5ab5aaf3f307c1caa0188013e27d87e2ed6ce3952b48c245f",
+    "libgenerativeqc_stationary_pbe0_rks_spd.so": "c0517d35695b7631ac8a48e094441b7996040d5d1b9d000c875de28d9ef39e1d",
+    "libgenerativeqc_stationary_pbe_rks_spd.so": "f994381f517ed2a90f42fcb46abf19506f4386e86f6d9107bbd822cb450400d2",
+    "libgenerativeqc_stationary_r2scan_rks_spd.so": "2dc5c5d48fcca29361f46a6767cb5b896448873b693de9114c5ba819ffa3e2f4",
+    "generativeqc_stationary_b3lyp_rks_spd.json": "c0a3fd54a21ee3b2b2e87788ceb1790b936be457ef49d6669199c6852f8daf76",
+    "generativeqc_stationary_m06_2x_rks_spd.json": "fe0ecbfbe27f7444325891d194b17c5ce48eea3b536d0870dbccc00da972cd14",
+    "generativeqc_stationary_pbe0_rks_spd.json": "a25b7e8c4baaa69809f4d10f3713cf28fc7bfcd76fbbd44bbf3ef162d936b0f3",
+    "generativeqc_stationary_pbe_rks_spd.json": "f8be299f7bb7d56977fd872743020c2b9abd15eb1e5bb19eea269ec586414cdf",
+    "generativeqc_stationary_r2scan_rks_spd.json": "02d5743a3f7be494eecc6b18fcfee51491dfa8f3e79daeb5121635728398a0f1"
+  },
+  "source_manifests": {
+    "stage2-final-source-inputs.json.xz": "08d0f7f9f7fb3317b006149d088de7bd828f2bc59ffe3b639fe690e9bd5c4be4",
+    "stage2-default-source-inputs.json.xz": "ebf5a80208937e6e33dc3aa3bd0a1b1d7c038b84d719f6b70ef74dafe215c79a"
+  },
+  "validation": {
+    "native_endpoints": 528,
+    "default_gpu_python_cases": 55,
+    "default_native": [
+      "independent raw-J/response with unset/0/1, rank fallback, changed geometry and exchange rejection",
+      "actual external headroom pressure and post-force replay",
+      "full exact/DF Fock composition"
+    ],
+    "raw_sanitizer_errors": 0,
+    "inventory_host_tests": 130,
+    "additional_host_tests": 167,
+    "documentation_and_boundary_tests": 58,
+    "documentation_subtests": 56,
+    "sphinx": "warnings-as-errors pass",
+    "materialization": "9 to 9; no changed sites"
+  },
+  "compiler_cache": {
+    "launcher": "/home/jzzeng/.local/bin/sccache",
+    "version": "sccache 0.16.0",
+    "statistics": "validation-logs.json.xz; shared server includes concurrent users"
+  },
+  "build": {
+    "configuration": "Release",
+    "cuda_architecture": "120-real",
+    "cuda": "12.9.1",
+    "cxx_pch": false,
+    "parallel": 8,
+    "native_aot": "five stationary manifest targets explicitly rebuilt after core"
+  },
+  "failure_retention": "The initial integrated assembly copied stale stationary artifacts and failed contract-identity validation. Failed receipts and logs are retained; the core hash is unchanged and final AOT identities are separate."
+}
