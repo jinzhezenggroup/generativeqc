@@ -134,6 +134,10 @@ generativeqc_status create_cuda_density_fitting_integral_source(
 void destroy_cuda_density_fitting_integral_source(
     CudaDensityFittingIntegralSource* source) noexcept;
 
+/** Immutable radial identity shared by raw value and nuclear-response replay. */
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept;
+
 /** Device bytes retained by an opaque bounded DF integral source. */
 std::size_t cuda_density_fitting_integral_source_device_bytes(
     const CudaDensityFittingIntegralSource* source) noexcept;

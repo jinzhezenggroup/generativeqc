@@ -32,12 +32,13 @@ inline generativeqc_status mixed_rsh_df_primary_device_allowance(std::size_t max
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-/** Recompose a fitted full-range primary and an exact Direct LR correction.
+/** Recompose a fitted full-range primary and an independently owned LR correction.
  *
  * Input rows are already multiplied by their *physical Fock-energy*
  * coefficients: [H', Pulay', J_DF', c_short K_DF(full)'] plus the independently
  * resolved (c_long-c_short) K_LR'.  In particular the correction is *not*
- * c_long K_LR', and DF never supplies an omega-dependent integral.
+ * c_long K_LR'. LR may be independently fitted or explicitly exact Direct;
+ * the caller must authenticate the same value/response approximation.
  *
  * Output rows match the ordinary RSH consumer:
  * [H', Pulay', J_DF', c_short (K_DF(full)'-K_LR'), c_long K_LR'].
@@ -49,12 +50,12 @@ inline generativeqc_status mixed_rsh_df_primary_device_allowance(std::size_t max
  * is deliberately not admitted here.
  */
 inline generativeqc_status compose_mixed_rsh_df_integral_sources(
-    std::span<const double> fitted_four, std::span<const double> direct_lr_correction,
+    std::span<const double> fitted_four, std::span<const double> lr_correction,
     std::size_t coordinates, double fitted_exchange_coefficient,
     double correction_exchange_coefficient, std::vector<double>& output, std::string& detail) {
   output.clear();
   if (!coordinates || coordinates > std::numeric_limits<std::size_t>::max() / 5 ||
-      fitted_four.size() != 4 * coordinates || direct_lr_correction.size() != coordinates ||
+      fitted_four.size() != 4 * coordinates || lr_correction.size() != coordinates ||
       !std::isfinite(fitted_exchange_coefficient) ||
       !std::isfinite(correction_exchange_coefficient) || correction_exchange_coefficient == 0.0) {
     detail = "mixed RSH-DF source shape or resolved exchange identity is invalid";
@@ -75,7 +76,7 @@ inline generativeqc_status compose_mixed_rsh_df_integral_sources(
     candidate[i] = fitted_four[i];
   }
   for (std::size_t i = 0; i < coordinates; ++i) {
-    const double lr = direct_lr_correction[i];
+    const double lr = lr_correction[i];
     const double short_range = fitted_four[3 * coordinates + i] - fraction * lr;
     const double long_range = long_fraction * lr;
     if (!std::isfinite(lr) || !std::isfinite(short_range) || !std::isfinite(long_range)) {

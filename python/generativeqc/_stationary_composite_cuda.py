@@ -833,6 +833,9 @@ class PreparedCompositeStationaryCudaGradient:
                 _integral_source_resources(
                     native_usage,
                     mixed_rsh_df=bool(getattr(source, "density_fitted", False)),
+                    lazy_lr_device_owner=not bool(
+                        getattr(source, "range_density_fitted", False)
+                    ),
                 )
             ),
             **(

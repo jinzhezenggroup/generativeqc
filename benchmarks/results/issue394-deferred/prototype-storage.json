@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "5c9ce272b4a5a367a9b962e31a76248b4d5bc59c",
+  "file_count": 1,
+  "total_bytes": 219056,
+  "retention": "Lossless xz is retained in this checkout; the same original bytes remain recoverable from the pinned existing Git revision. No scientific record, gate or negative result changes.",
+  "files": [
+    {
+      "path": "benchmarks/results/issue394-deferred/prototype.patch",
+      "bytes": 219056,
+      "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67",
+      "stored_path": "benchmarks/results/issue394-deferred/prototype.patch.xz",
+      "encoding": "xz",
+      "stored_bytes": 49864,
+      "stored_sha256": "9694d892b5fe1545e70f28ac236a6c93f57081193560fd5cecfc31c2f717eecd"
+    }
+  ]
+}

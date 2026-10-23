@@ -15,15 +15,15 @@ struct Response {
 };
 
 [[nodiscard]] double metric_value(double alpha, Vec3 a_center, Angular a, double gamma,
-                                  Vec3 c_center, Angular c);
+                                  Vec3 c_center, Angular c, double omega = 0.0);
 [[nodiscard]] double three_center_value(double alpha, Vec3 a_center, Angular a, double beta,
                                         Vec3 b_center, Angular b, double gamma, Vec3 c_center,
-                                        Angular c);
+                                        Angular c, double omega = 0.0);
 [[nodiscard]] Response metric_derivative(double alpha, Vec3 a_center, Angular a, double gamma,
-                                         Vec3 c_center, Angular c);
+                                         Vec3 c_center, Angular c, double omega = 0.0);
 [[nodiscard]] Response three_center_derivative(double alpha, Vec3 a_center, Angular a, double beta,
                                                Vec3 b_center, Angular b, double gamma,
-                                               Vec3 c_center, Angular c);
+                                               Vec3 c_center, Angular c, double omega = 0.0);
 
 }  // namespace generativeqc::integrals::generated_df_cpu
 

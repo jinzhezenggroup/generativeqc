@@ -747,3 +747,73 @@ def test_cbs_rejects_retained_output_before_native_work(
     assert error.value.code == 2
     assert existing.read_text(encoding="utf-8") == "original evidence"
     assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+@pytest.mark.parametrize("existing_output", [False, True])
+def test_range_df_rejects_retained_output_before_journal_or_science(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    existing_output: bool,
+) -> None:
+    """Exclusive creation alone must not publish new raw data into retained evidence."""
+    from benchmarks import _retention, range_separated_df
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    previous = retained / "existing.json"
+    previous.write_text("preserved reviewed evidence", encoding="utf-8")
+    target = previous if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("retained output reached scientific preparation")
+
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"generativeqc", "cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("retained output reached native/GPU/oracle import")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(range_separated_df, "_measure", forbidden)
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    with pytest.raises(SystemExit) as error:
+        range_separated_df.main(
+            [
+                "--device",
+                "cpu",
+                "--selector",
+                "df",
+                "--endpoint",
+                "energy",
+                "--build-boundary",
+                "no scientific work allowed",
+                "--output",
+                str(destination),
+            ]
+        )
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert previous.read_text(encoding="utf-8") == "preserved reviewed evidence"
+    assert not (retained / "new").exists()
+    assert not (tmp_path / ".artifacts").exists()

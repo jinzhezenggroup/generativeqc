@@ -45,3 +45,20 @@ convergence and strict numerical gates must be preserved.
 All real GPU validation must use finite Slurm `main` allocations with
 `--gres=gpu:5090:1` and preserve the assigned device visibility. No new benchmark
 or GPU validation was run to prepare this consolidation.
+
+## Restore the archived patch
+
+`prototype-storage.json` binds both the compressed bytes and the exact original
+bytes recorded in `status.json`. Decode with `xz -dc` for inspection.
+The supported offline Git recovery tool also verifies the original identity and
+refuses an existing output destination:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue394-deferred/prototype.patch \
+  --manifest benchmarks/results/issue394-deferred/prototype-storage.json \
+  --output .artifacts/issue394-prototype.patch
+```
+
+Recovery uses existing commit `5c9ce272b4a5a367a9b962e31a76248b4d5bc59c`;
+no external archive, release asset or rewritten history is required.
