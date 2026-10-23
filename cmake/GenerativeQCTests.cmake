@@ -107,6 +107,19 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_df_ccsd_precision_policy_tests
                      tests/native/test_df_ccsd_precision_policy.cpp NO_GENERATIVEQC)
   if(GENERATIVEQC_ENABLE_CUDA)
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia")
+      # Both FTZ modes must preserve the incumbent FP64 admission decisions.
+      foreach(_screening_ftz IN ITEMS false true)
+        set(_screening_target generativeqc_direct_coarse_screening_${_screening_ftz}_tests)
+        generativeqc_native_test(${_screening_target}
+                           tests/native/test_direct_coarse_screening_cuda.cu NO_GENERATIVEQC
+                           LIBRARIES CUDA::cudart SKIP_77)
+        target_include_directories(${_screening_target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        target_compile_options(${_screening_target} PRIVATE "--ftz=${_screening_ftz}")
+        set_target_properties(${_screening_target} PROPERTIES CUDA_STANDARD 20)
+        set_tests_properties(${_screening_target} PROPERTIES TIMEOUT 90)
+      endforeach()
+    endif()
     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
     if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND TARGET CUDA::cublasLt)

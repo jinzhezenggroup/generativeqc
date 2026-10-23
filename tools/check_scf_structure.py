@@ -203,6 +203,8 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda_density_fitting_integrals.hpp",
     "scf/density_fitting.hpp",
     "scf/df_exchange_policy.hpp",
+    # Shared scalar proof limits carry no backend or method-driver ownership.
+    "scf/df_density_seed_policy.hpp",
     "scf/df_streamed_k_policy.hpp",
     "scf/df_projected_exchange_schedule.hpp",
     "molecule/basis.hpp",
@@ -285,6 +287,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
 CUDA_MODULES["cuda_direct_queues"] = (
     "direct_queue_index",
     "direct_screening",
+    "direct_coarse_screening",
     "direct_task_encoding",
     "direct_page_screening",
     "direct_queue_profile",

@@ -154,12 +154,17 @@ void allocate(const DensityFittingTilePlan& tiles) {
     unit += prepared[call_start:call_end]
     unit += "}\n}\nusing namespace generativeqc;\n"
     unit += r"""
-struct NativeKsExecutionPlan { unsigned spin_channels=1; bool range_exchange=false; };
+struct NativeKsExecutionPlan {
+  unsigned spin_channels=1;
+  bool range_exchange=false;
+  bool density_fitted_range_exchange=false;
+};
 """
     unit += definition(
         method,
         "scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(",
     )
+    unit += definition(method, "std::size_t ks_fitted_provider_budget(")
     unit += r"""
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend) {
   assert(false); return 0;
@@ -236,6 +241,30 @@ int main(int argc, char** argv) {
     rsh.range_exchange=true;
     const auto rsh_method=method_prepare(system,rsh,strategy);
     assert(rsh_method.impl_->projection_reservation == reserved);
+    assert(rsh_method.impl_->retained_fitted_derivative_order == 1);
+    assert(rsh_method.matches(system,nullptr,strategy,0,1U<<30,0,1,reserved));
+    assert(!rsh_method.matches(system,nullptr,strategy,0,1U<<30,0,2,reserved));
+    rsh.density_fitted_range_exchange=true;
+    const auto fitted_rsh=method_prepare(system,rsh,strategy);
+    assert(fitted_rsh.impl_->projection_reservation == reserved);
+    assert(fitted_rsh.impl_->requested_budget == (1U<<29));
+    assert(fitted_rsh.matches(system,nullptr,strategy,0,1U<<29,0,1,reserved));
+    assert(!fitted_rsh.matches(system,nullptr,strategy,0,1U<<30,0,1,reserved));
+    ScfOptions budgets;
+    budgets.resolved_fock_build=strategy;
+    for (std::size_t bytes : {0U,2U,3U,1025U}) {
+      budgets.density_fitting_memory_budget_bytes=bytes;
+      const auto primary=ks_fitted_provider_budget(budgets,rsh,false);
+      const auto long_range=ks_fitted_provider_budget(budgets,rsh,true);
+      assert(primary+long_range == bytes);
+      assert(primary == bytes/2 && long_range == bytes-primary);
+    }
+    budgets.density_fitting_memory_budget_bytes=1;
+    bool small_rejected=false;
+    try { (void)ks_fitted_provider_budget(budgets,rsh,false); }
+    catch (const std::bad_alloc&) { small_rejected=true; }
+    assert(small_rejected); // Never reinterpret a zero half as automatic admission.
+    assert(ks_fitted_provider_budget(budgets,execution,false) == 1);
     const Capture generic(system,nullptr,strategy,0);
     assert(!generic.impl_->projection_reservation.restricted_rank);
     assert(generic.matches(system,nullptr,strategy,0,0));

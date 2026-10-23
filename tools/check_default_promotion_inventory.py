@@ -248,7 +248,7 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
     if not re.search(
         r"return\s+spins\s*==\s*1\s*&&\s*full_precision\s*&&\s*"
-        r"\(\(aos\s*>=\s*384\s*&&\s*direct_global_hybrid\)\s*\|\|\s*"
+        r"\(\(aos\s*>=\s*384\s*&&\s*\w+\)\s*\|\|\s*"
         r"\(aos\s*>=\s*544\s*&&\s*full_range_coulomb_only\)\);",
         policy,
     ) or any(
@@ -268,13 +268,13 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
         fragment not in source
         for fragment in (
             "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
-            "!fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!has_range_correction && !nonlocal_correlation",
             "!nonlocal_correlation &&",
             "provider.system().ecp_terms.empty()",
             "atom.ecp_core != 0",
             "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
             "final_spec.coulomb.op == scf::FockOperator::FullRange",
-            "final_spec.exchange.approximation == scf::FockApproximation::Exact",
+            "final_spec.exchange.approximation == final_spec.coulomb.approximation",
             "final_spec.exchange.op == scf::FockOperator::FullRange",
             "!has_exchange && !fitted_exchange && !has_range_correction && !nonlocal_correlation",
             "!final_spec.exchange.present",
@@ -733,6 +733,7 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_WARM_FACTOR(?:_AUDIT)?)"', source))
+    names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_COLD_FACTOR)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
     names.extend(
         re.findall(

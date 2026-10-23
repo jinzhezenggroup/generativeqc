@@ -58,7 +58,8 @@ class FockBuildSpec:
     """Version-1 FP64 semantics. Use ``hf`` for spin-dependent HF defaults.
 
     Presence differs from a zero coefficient: a present term still requests
-    its raw matrix. Reserved range operators fail during native preflight.
+    its raw matrix. Unsupported combinations fail during native preflight;
+    long-range DF exchange requires its own K-only metric owner.
     """
 
     spin: str = "restricted"

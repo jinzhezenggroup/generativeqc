@@ -135,8 +135,10 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
-  if (!generativeqc::api::valid_system_roles(*system, *descriptor)) {
-    context->last_detail = "correlation auxiliary handles require a correlation-only DF consumer";
+  if (!generativeqc::api::valid_system_roles(*system, *descriptor,
+                                             context->state.executed_backend)) {
+    context->last_detail =
+        "auxiliary handle role requires its matching method and density-fitting backend";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   try {

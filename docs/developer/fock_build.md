@@ -5,6 +5,40 @@ The internal C++ boundaries in `src/scf/fock_build.hpp` and
 resolved execution strategy and prepared integral sources. CPU and CUDA
 providers can be selected independently.
 
+`GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING=1` enables an experimental NVCC
+block prefilter for bounded Direct task compaction and its native force/fallback
+consumers. Set it before preparing an owner; unset, `0`, and other values keep
+the incumbent gate. Existing geometry/density reductions prepare upward-rounded
+FP32 block and system-density bounds once. The predecessor float supplies a
+lower endpoint; directed products and thresholds can prove either admission or
+rejection. Only overlapping intervals and nonfinite inputs read the original
+FP64 block metadata. Positive-underflow protection includes upward thresholds
+so both FTZ settings preserve the incumbent task set. Exact shell predicates
+remain FP64. Compatibility compilers retain FP64 block screening because their
+directed-rounding semantics are unqualified.
+Owners charge four additional bytes per block and system, refresh density in
+the existing reduction, and rebuild geometry metadata with its owner. HF replay
+freezes the selector. Shared J/K execution keeps K's spin-density cache separate
+from J's total-density reduction. No additional launch or synchronization is
+needed for preparation.
+Schwarz preparation, the 24-byte shell-density ABI, generated streaming gates,
+ERI, J/K and force arithmetic retain their existing precision.
+
+Qualification uses `benchmarks/direct_screening_endpoint.py` for complete
+strict-FP64 Direct PBE0/r2SCAN-3c water-96 and QM7 C7 RHF/def2-SVP E/F, with
+cold, frozen warm, optional changed geometry, and independent tighter references.
+`benchmarks/direct_screening_probe.cu` separately compares FP64, FP32,
+prepared FP32 rejection/interval gates, tile-scaled INT8 and actual INT8 WMMA on
+synthetic sorted bounds.
+The tiled scalar INT8 control uses the same warp/refinement mapping as WMMA.
+Its timers include packing and FP64 refinement; its task identities must match
+FP64 for both sparse and all-survive thresholds. INT8/Tensor Core experiments
+are not selectable molecular backends.
+Run every device qualification through a finite Slurm allocation. See the
+[screening decision](../../.agents/notes/implemented/performance/2026-10-23-prepared-block-screening.md)
+for evidence and limits; no default or endpoint speedup follows from synthetic
+throughput alone.
+
 Standard fitted CUDA RHF/UHF resolves to the `CudaDfResident` schedule. This
 names the existing preferred device-resident SCF (including its admitted host
 retry), not a second approximation or a new kernel implementation. CPU fitted

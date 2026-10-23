@@ -126,6 +126,16 @@ struct DeviceBatch {
    * the bucket total to each result. */
   bool direct_force_fp32{};
   unsigned long long* direct_force_precision_work{};
+  /** DF-only radial identity; zero preserves ordinary Coulomb consumers. */
+  double df_range_omega{};
+  /** Default-off conservative block prefilter, frozen before graph capture.
+   * Exact shell screening, generated stream ABI and ERI/J/K stay FP64. */
+  bool direct_fp32_block_screening{};
+  /** Optional owner-budgeted FP32 upper bounds. Geometry preparation refreshes
+   * block bounds; each density reduction refreshes system bounds on the same
+   * stream before any consumer. Null preserves the FP64 gate. */
+  float* direct_fp32_block_bounds{};
+  float* direct_fp32_density_bounds{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

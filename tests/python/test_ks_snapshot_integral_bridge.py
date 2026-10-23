@@ -49,6 +49,7 @@ def test_integral_bridge_converts_the_complete_signature(layout: str) -> None:
     )
     snapshot = SimpleNamespace(
         backend="cuda",
+        range_density_fitted=False,
         check_current=lambda: None,
         _library=SimpleNamespace(**{bridge: evaluate}),
         _batch=SimpleNamespace(_batch=ct.c_void_p(11), _context=None),
