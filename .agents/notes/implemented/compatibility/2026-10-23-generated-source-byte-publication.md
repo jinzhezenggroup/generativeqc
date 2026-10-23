@@ -3,6 +3,12 @@
 Status: implemented
 Date: 2026-10-23
 
+Predecessor: this decision implements the bounded source-byte publication
+follow-up in [the runtime-compilation inventory proposal](../../proposed/2026-10-23-runtime-compilation-inventory.md).
+It supersedes that proposed repair, preserving the original diagnostic and
+failed Windows evidence there. It does not complete the broader inventory's
+measurement or scientific acceptance scope.
+
 ## Problem
 
 The semantic source cache measures the caller's `source.encode("utf-8")`, but
