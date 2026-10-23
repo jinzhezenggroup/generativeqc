@@ -1,6 +1,39 @@
 #pragma once
 
+#include <cstddef>
+
 namespace generativeqc::dft {
+
+/** Bound a guarded automatic cold Direct hybrid default separately from the
+ * explicit incremental controller. The caller already owns default Standard
+ * FP64 controls; no public resource ledger can borrow uncounted anchor space. */
+struct KsIncrementalColdAutoDomain {
+  bool requested{};
+  std::size_t public_aos{};
+  std::size_t atoms{};
+  bool exact_fp64_direct_hybrid{};
+  bool standard_default_grid{};
+  bool through_d_shells{};
+  bool all_electron{};
+  bool no_resource_ledger{};
+};
+
+constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain) noexcept {
+  return domain.requested && domain.exact_fp64_direct_hybrid && domain.standard_default_grid &&
+         domain.through_d_shells && domain.all_electron && domain.no_resource_ledger &&
+         domain.public_aos >= 64 && domain.public_aos <= 768 && domain.atoms >= 2 &&
+         domain.atoms <= 96;
+}
+
+/** Select each solve from a prepared capability without confusing a native
+ * cold guess with an imported density. Only the initial-guess owner may attest
+ * native provenance. Retained warm proof stays ordinary, and explicit opt-in
+ * preserves its broader external-seed contract. */
+constexpr bool ks_incremental_solve_active(bool prepared_active, bool automatic, bool ordinary_warm,
+                                           bool supplied_density, bool native_cold_guess) noexcept {
+  return prepared_active && !ordinary_warm &&
+         (!automatic || !supplied_density || native_cold_guess);
+}
 
 /** Bound an incremental proposal epoch whose consumer requires a fresh physical
  * full-density closure. These are provisional SCF operators, not a certificate

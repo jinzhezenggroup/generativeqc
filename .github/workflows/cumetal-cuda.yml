@@ -197,6 +197,20 @@ jobs:
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: brew install llvm z3 ninja ccache nlohmann-json openssl@3 libarchive
 
+      - name: Fingerprint installed CuMetal dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        id: cumetal_dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Installed toolchains link Homebrew dylibs (including transitive
+          # dependencies). Never restore a build from another package inventory.
+          inventory="$(brew list --formula --versions | LC_ALL=C sort)"
+          test -n "$inventory"
+          printf '%s\n' "$inventory"
+          fingerprint="$(printf '%s\n' "$inventory" | shasum -a 256 | cut -d' ' -f1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
       - name: Restore CuMetal toolchain
         if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cache-cumetal
@@ -205,7 +219,7 @@ jobs:
           path: |
             /tmp/cuda-metal
             /tmp/cumetal-install
-          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
+          key: cumetal-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ steps.cumetal_dependencies.outputs.fingerprint }}
 
       - name: Restore CuMetal ccache
         id: cumetal_ccache

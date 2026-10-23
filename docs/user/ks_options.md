@@ -306,7 +306,35 @@ See the [default-selection decision](../../.agents/notes/implemented/performance
 and [stationary pure-J energy confirmation](../../.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
 for their evidence and limits.
 
-### Experimental incremental Direct-J/K and resource budgets
+### Guarded automatic cold incremental Direct-J/K and resource budgets
+
+When both incremental selectors are **unset**, normal CUDA Standard FP64
+full-range Direct global hybrids automatically select bounded incremental
+J/K proposals for an eligible *cold* solve: 64–768 public AOs, 2–96 atoms,
+all-electron restricted through-d basis, the canonical default grid and
+qualified energy `1e-9`, density `1e-5` and screening `1e-12` controls.
+The real Direct producer and complete physical/canonical final-state proof
+remain authoritative. This narrow cold default is a guarded performance choice,
+not a globally enabled incremental Fock setting.
+Native initial guesses, including the default Hückel guess, remain cold solves;
+supplying their density internally does not make them imported warm states.
+
+Same-owner frozen-density Warm retains its one-full-Fock proof. Imported or
+moved seeds, an active public resource ledger, Fast, DF, UKS, range/nonlocal
+and D4 owners, strict custom settings and unqualified geometry/size/resource
+domains keep the previous execution. Set
+`GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=0` (or `off`) to turn off the
+automatic choice; a present legacy selector also prevents automatic
+admission. Explicit `1/on` retains the broader experimental capability checks
+and the existing OR semantics between both selectors. Timing an incumbent
+control therefore requires an explicit `0`, not merely an unset selector.
+
+Fast retains its application precision policy and strict final-state validation;
+DF retains its fitted J/K provider. Neither automatically selects this Direct
+incremental controller. Explicit incremental `1/on` still rejects these
+incompatible precision/provider combinations rather than overriding their
+scientific contract.
+
 
 The benchmark-only `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1` (or `on`)
 selector is not supported by public KS resource planning. The current inventory
@@ -323,8 +351,9 @@ Explicit experimental execution without a `resource_budget` or `resource_plan`
 remains available under the native strict-FP64 exact-direct CUDA eligibility
 checks. It has no whole-calculation capacity guarantee. CPU, mixed-precision,
 and density-fitted execution remain excluded from incremental mode, and the
-legacy selector retains its PBE0 RKS restriction. No default or numerical/
-performance qualification changes with this planning guard.
+legacy selector retains its PBE0 RKS restriction. The public planning guard is unchanged: automatic admission refuses an active
+resource ledger rather than allocating unaccounted incremental anchor/closure
+storage.
 
 Incremental solves return to full-density J/K builds once the density-change and
 physical-residual gates are satisfied, even if the energy-change gate is not yet
@@ -363,15 +392,15 @@ warm calls, final physical proof and analytic forces use the original cutoff.
 The proposal cutoff is a convergence heuristic, not an accumulated-error bound.
 `GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` disables this extra screening
 while preserving bounded delta proposals; `1` or unset enables it, and other
-values are errors. The global incremental selector remains opt-in.
+values are errors. Outside the narrow automatic cold domain, the global incremental selector remains opt-in.
 
 For all-electron RKS without range or nonlocal contributions, a validated
 density reused internally at the same
 geometry follows the ordinary full-density warm path, including its energy
 history. Diagnostics therefore report incremental mode as requested but
 inactive on that call. External seeds, changed geometry and clearing the warm
-state restore the cold incremental policy. This does not enable the global
-incremental selector by default or expand resource-planning support.
+state restore the cold incremental policy. This does not expand resource-planning support or activate incremental
+execution in other domains.
 
 ### Model binding
 

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "scf/cuda/direct_coarse_screening.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
@@ -100,7 +101,17 @@ template <DirectScreeningPurpose Purpose>
 __device__ __forceinline__ bool bounded_direct_block_pair_survives_screening(
     std::size_t first_block, std::size_t second_block, std::int32_t system,
     double screening_tolerance, const double* shell_pair_block_bounds,
-    const double* system_density_bounds) {
+    const double* system_density_bounds, const float* prepared_block_bounds = nullptr,
+    const float* prepared_density_bounds = nullptr) {
+  // Both resolved outcomes bypass FP64 metadata loads. Only a threshold overlap
+  // or unsupported input repeats the original predicate; shell gates stay exact.
+  if (prepared_block_bounds && prepared_density_bounds) {
+    const auto decision = direct_fp32_block_decision<Purpose == DirectScreeningPurpose::Force>(
+        prepared_block_bounds[first_block], prepared_block_bounds[second_block],
+        prepared_density_bounds[system], screening_tolerance,
+        fmin(screening_tolerance, kForceDensityProductScreeningTolerance));
+    if (decision != DirectBlockDecision::Refine) return decision == DirectBlockDecision::Accept;
+  }
   const double quartet_bound =
       shell_pair_block_bounds[first_block] * shell_pair_block_bounds[second_block];
   if (quartet_bound < screening_tolerance) return false;
