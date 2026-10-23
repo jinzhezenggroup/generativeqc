@@ -1192,7 +1192,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   }
   if (quartet_direct || options.export_physical_reference) {
     // The default 1 KiB stack is insufficient for high-order recurrences.
-    // Through-d value/force paths are qualified at 32 KiB; preserve the larger
+    // Through-d value/force paths are qualified at 16 KiB; preserve the larger
     // policy ceiling for f and unknown metadata. The limit reserves driver
     // memory, so charging the f ceiling to every basis can prevent DF forces
     // from allocating their explicitly budgeted workspace.
@@ -1202,7 +1202,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
             : *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
     const auto required_stack =
         maximum_shell_angular <= 2
-            ? std::min(direct_schedule.cuda_stack_limit_bytes, std::size_t{32} << 10)
+            ? std::min(direct_schedule.cuda_stack_limit_bytes, std::size_t{16} << 10)
             : direct_schedule.cuda_stack_limit_bytes;
     // Preserve a higher context-wide limit established by another live owner.
     cuda_error = runtime::cuda_ensure_stack_limit(required_stack);

@@ -10,8 +10,9 @@ import pytest
 @pytest.mark.parametrize(
     "policy", ["full", "partial", "refused", "auto", "auto-refused"]
 )
+@pytest.mark.parametrize("fitted_primary", [False, True])
 def test_range_source_preserves_complete_geometry_and_warm_results(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, fitted_primary: bool
 ) -> None:
     """Exercise real source consumption, derivatives, retirement and new geometry.
 
@@ -64,6 +65,11 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
+            # The exact range correction owns its cache independently of the
+            # full-range primary. An orbital basis is a valid small auxiliary
+            # fixture; off/on compares the identical fitted approximation.
+            auxiliary_basis="def2-svp" if fitted_primary else None,
+            density_fitting="cuda" if fitted_primary else None,
             basis_representation="spherical",
             device="cuda",
             precision="fp64",
@@ -120,8 +126,13 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
 
 @pytest.mark.parametrize("policy", ["full", "partial", "auto"])
 @pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])
+@pytest.mark.parametrize("fitted_primary", [False, True])
 def test_range_replay_reuses_values_and_falls_back_after_policy_change(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, invalidate: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    policy: str,
+    invalidate: str,
+    fitted_primary: bool,
 ) -> None:
     """Retained and retired sources must both certify the same warm density.
 
@@ -167,6 +178,8 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     calculator = Calculator(
         method="wb97m-v",
         basis="def2-svp",
+        auxiliary_basis="def2-svp" if fitted_primary else None,
+        density_fitting="cuda" if fitted_primary else None,
         basis_representation="spherical",
         device="cuda",
         precision="fp64",
