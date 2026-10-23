@@ -1,0 +1,127 @@
+{
+  "schema": "generativeqc.independent-cbs-force-comparison.v1",
+  "native_provenance": {
+    "commit": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+    "path": "benchmarks/results/cbs-fast-memory-20261021/summary.json.xz",
+    "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414",
+    "publication_sha256": "beb7a877612cee29cf4b8afb8edfffd9265e28088ced52287b4e564ce2a89856",
+    "source": {
+      "base_revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+      "variant": "candidate",
+      "library_sha256": "65a401ed3db8fb303a5146f134cdb227af78928affe27e1f7571c09f270112de",
+      "base_archive_sha256": "dc5aad9325885642a2b1209e5a25424fb7addd9fc839860daff97cd43a8e6ee8",
+      "patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad",
+      "build_type": "Release",
+      "cuda_architecture": "sm120",
+      "cuda_version": "12.9.1",
+      "compiler": "GCC 11.4.0",
+      "compiler_cache": "ccache 4.5.1",
+      "file_sha256": {
+        "src/response/native_gmres.cpp": "ae03aac4eadc18c42b5e2a9705083e4726f345bf26c5f717e424f6754c66041e",
+        "src/response/native_gmres.hpp": "adfcb0bd4d1af3016c37c7fd301d850ad73380e41b2229a6bfe051a21674c668",
+        "benchmarks/readme_cbs.py": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+        "python/generativeqc/cbs.py": "696bd25e6ceac23ba557e5fe7437089ffd06b985b4b98e2ea698a43bd44d4027",
+        "python/generativeqc/_response_native.py": "02c7ea9ff860ab3a670079b33628cf9a32c592f79ca3db35fb4d18c45e5c5a52",
+        "python/generativeqc/response_solver.py": "8628555616718adbe6d2ad3a6f5ecee58c53b1b1cacfe2b15c1aff0c4381cfc8"
+      }
+    }
+  },
+  "force_gate_eh_per_bohr": 5e-06,
+  "translation_gate_eh_per_bohr": 1e-06,
+  "central_comparison_sha256": "29ae23f00db0693d20173290e7d4ecf4576f30014ffb8b491303c18f86b138df",
+  "molecules": [
+    {
+      "carbon": 4,
+      "status": "INCOMPLETE",
+      "policies": {
+        "standard": {
+          "translation_eh_per_bohr": {
+            "low/df-ccsd(t)": 3.1618761428542363e-13,
+            "low/mp2": 3.186973254742931e-13,
+            "low/rhf": 1.131057053571638e-13,
+            "high/mp2": 2.5089175528791863e-13,
+            "high/rhf": 6.173026499689538e-13,
+            "composite": 1.1541340799725575e-12
+          },
+          "steps": []
+        },
+        "fast": {
+          "translation_eh_per_bohr": {
+            "low/df-ccsd(t)": 3.543354845647606e-13,
+            "low/mp2": 2.806166757296502e-13,
+            "low/rhf": 2.346838001709983e-13,
+            "high/mp2": 4.968534264571112e-13,
+            "high/rhf": 6.554565917804567e-14,
+            "composite": 7.303966459426547e-13
+          },
+          "steps": []
+        }
+      },
+      "tasks": {
+        "C4-h0-minus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C4-h0-plus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C4-h1-minus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C4-h1-plus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        }
+      }
+    },
+    {
+      "carbon": 7,
+      "status": "INCOMPLETE",
+      "policies": {
+        "standard": {
+          "translation_eh_per_bohr": {
+            "low/df-ccsd(t)": 1.9268267537064787e-13,
+            "low/mp2": 9.064589356899688e-13,
+            "low/rhf": 6.155596865564661e-13,
+            "high/mp2": 8.18338886238168e-13,
+            "high/rhf": 7.212125861799645e-13,
+            "composite": 1.188203615359873e-12
+          },
+          "steps": []
+        },
+        "fast": {
+          "translation_eh_per_bohr": {
+            "low/df-ccsd(t)": 5.05918223980828e-13,
+            "low/mp2": 7.557461600971038e-13,
+            "low/rhf": 4.4447431846172947e-13,
+            "high/mp2": 3.4403382920267234e-13,
+            "high/rhf": 4.0788422986381967e-13,
+            "composite": 1.2624909798142347e-12
+          },
+          "steps": []
+        }
+      },
+      "tasks": {
+        "C7-h0-minus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C7-h0-plus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C7-h1-minus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        },
+        "C7-h1-plus": {
+          "status": "INCOMPLETE",
+          "outcome": null
+        }
+      }
+    }
+  ],
+  "status": "INCOMPLETE"
+}
