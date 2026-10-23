@@ -1,4 +1,7 @@
 """Audit completed cohorts; preserve every source receipt and process observation."""
+if not __debug__:
+ raise SystemExit("Evidence verification requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE.")
+
 import copy, hashlib, json, lzma
 from pathlib import Path
 from statistics import median

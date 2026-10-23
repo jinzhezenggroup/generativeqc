@@ -71,7 +71,8 @@ copy, so a failed copy cannot publish a factor. No convergence gate changes.
 
 An explicit `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=1` may separately request an
 optional strict range-integral cache for a fitted full-range primary. Automatic
-DF range caching remains disabled. The cache has its own exact Direct provider,
+admission follows the bounded strict-FP64 restricted VV10 cold-reuse policy
+described in [native XC](xc_native_cuda.md). The cache has its own exact Direct provider,
 complete resource accounting and exact fallback. Warm-energy rebasing preserves
 the unchanged fitted primary when its final factor/projection proof is live;
 only the independent range contribution needs rebasing. Optional range values
