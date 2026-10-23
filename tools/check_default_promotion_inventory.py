@@ -736,6 +736,9 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     names.extend(re.findall(r'"(GENERATIVEQC_CUDA_KS_COLD_FACTOR)"', source))
     names.extend(re.findall(r'"(GENERATIVEQC_KS_FAST_ANCHOR_DELTA)"', source))
     names.extend(
+        re.findall(r'"(GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING)"', source)
+    )
+    names.extend(
         re.findall(
             r'"(GENERATIVEQC_KS_INCREMENTAL_(?:PROPOSALS|COARSE_SCREENING))"', source
         )

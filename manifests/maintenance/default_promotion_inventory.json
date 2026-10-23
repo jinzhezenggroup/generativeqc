@@ -1990,6 +1990,30 @@
         "tests:tests/python/test_hf_resources.py",
         "docs:docs/developer/fock_build.md"
       ]
+    },
+    {
+      "id": "ks.mixed-source-coarse-screening",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/application_precision.hpp"
+      ],
+      "rationale": "The qualified automatic policy selects a 1e-8 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64\u2013768 AOs and 2\u201396 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; 180 independent E/F endpoint checks pass.",
+      "revisit_condition": "Extend the automatic model, size or resource domain only with repeated complete cold/warm/moved/reset endpoints, independent energy/force gates, semantic source-work and precision counts, and bounded-resource fallbacks. Preserve fresh strict closure, opt-out and the measured gain/nonregression floors.",
+      "evidence": [
+        "tests/python/test_ks_mixed_source_policy.py",
+        "docs:docs/developer/ks_diagnostics.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-fast-provisional-source-screening.md",
+        "tests/python/test_ks_mixed_source_cuda.py",
+        "tests/python/test_ks_fast_strict_tail_cuda.py",
+        "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
+      ]
     }
   ]
 }

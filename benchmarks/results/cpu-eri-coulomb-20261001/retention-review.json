@@ -15,12 +15,14 @@
       "role": "Complete primary normalized 960-endpoint numerical/timing observations, individual process outputs and logs, all-repeat errors, provenance and frozen inputs; only the byte-exact reconstructible duplicate observations aggregate is omitted."
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 343092,
-      "sha256": "75854daee5495f7346cc4c8f2c110ea3ea6145caf2d73435cc371fe23f8f636c",
+      "bytes": 141068,
+      "sha256": "45f32b74c895322b951bb3c58ed1056247745273739f50f2009dcd3ff288892e",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
+      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign.",
+      "decoded_bytes": 6022366,
+      "decoded_sha256": "87b600377291255bf59c2ae76a0e8744090d05a9be22abd3e7b14b1e1cd5cde4"
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.xz",
