@@ -62,19 +62,19 @@ byte-preservation results without rerunning scientific calculations.
 Refs #2679. Revisit the numerical qualification after any change to the exact
 scientific model or when independently qualifying a new native source snapshot.
 
-## Lossless storage packaging
+## Local lossless packaging experiment
 
-The completed flat publication exceeded the aggregate evidence budget. Its 29
-Git-original files (211606 bytes) now have explicit mode, size, SHA-256 and storage
-bindings in `canonical.json`; all their bytes, including the original publication,
-sources, failed attempt and retry fixtures, are recoverable from files in the
-same delivered version. The old PR commit is informational rather than required
-for recovery. No historical evidence owned by another task or budget policy is
-changed, and no Release, remote backup or unmerged-history pointer is used.
+The completed flat publication initially exceeded the aggregate evidence budget.
+Local commit `9204370a8f7fc87e527c8ca22fa40963479245d5` tested a lossless JSON/XZ
+layout with explicit mode, size, SHA-256 and storage bindings for all 29 original
+files (211606 bytes). Every original byte, including the publication, sources,
+failed attempt and retry fixtures, was recoverable from that candidate. The
+candidate required no old-PR recovery pointer, external archive, policy change
+or modification of another task's historical evidence.
 
-Use a real JSON/XZ record container, not a tar archive disguised under a different
-suffix. The outer publication inventories the actual stored files and uses the
-existing compressed-evidence reader. Its safe entry validates the storage and
+The candidate used a real JSON/XZ record container, not a tar archive disguised
+under a different suffix. Its outer publication inventoried actual stored files
+using the existing compressed-evidence reader. Its safe entry validated the storage and
 canonical inventories before writing only regular files into a new directory;
 it rejects traversal, collisions, unsupported modes, stale bytes and overwrites.
 The explicit strict replay separately validates the restored original publication
@@ -87,3 +87,23 @@ locally. The unchanged runner/checker bytes retain their real CPU-image 1/9
 negative and 9/9 corrected execution records; no fresh POSIX or cloud execution is
 claimed for this packaging step. No mathematical formula, scientific receipt,
 gate, native timing or current-master device qualification changes.
+
+The final 153942-byte local candidate passed the actual integrated retention
+gate at upstream `839a260002504954f7c0457b67683b53eadab084`. Subsequent upstream
+growth caused the normal integration at `bfc18215ccea3ae536c26ee933689c470981b79d`
+to fail again: 67134496 > 67108864 bytes. Both outcomes remain recorded; no
+packing result is described as a permanent capacity reservation or an
+irreducible size bound. Earlier public-head CI run `39837866197` failed its one
+retention test at 67320282 > 67108864; that failure is not reclassified as PASS.
+
+## Forward restoration after delivered headroom
+
+On 2026-10-24, upstream `be28a867c143d27bf39138ec189b0697ccfb2364` made sufficient
+headroom available under the unchanged 64 MiB policy. A subsequent forward
+commit restores all 29 public `7c55c844d` file blobs and modes exactly. Directly
+reviewable original files avoid maintaining the additional unpack entry when it
+is no longer needed. The local packing commits, including `9204370a8` and
+`bfc18215c`, remain in branch ancestry; no reset, rebase or history rewrite is
+used. The original measured wrapper, post-measurement retry fix, failed attempt,
+publication and all numerical inputs/results are unchanged. CI and exact-head
+review must still qualify the new public head before protected merge.
