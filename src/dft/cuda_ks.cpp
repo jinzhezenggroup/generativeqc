@@ -1805,16 +1805,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // The optional semilocal execution copy changes only point order and
         // is excluded under a public ledger until a fleet planner reserves it.
         const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
-        // Unset selects the qualified spatial schedule; explicit 0 keeps the
-        // canonical execution order for diagnostics and paired comparisons.
-        if ((!spatial_choice || std::string_view(spatial_choice) == "1") && admit_ao &&
+        // Unset/1 keeps qualified center grouping; 2 is the explicit tile-aligned
+        // bisection candidate. Explicit 0 keeps canonical execution order.
+        const bool bisected = spatial_choice && std::string_view(spatial_choice) == "2";
+        if ((!spatial_choice || std::string_view(spatial_choice) == "1" || bisected) && admit_ao &&
             borrow_resident_grid && !nonlocal_correlation &&
             !runtime::active_device_resource_ledger) {
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
                                          sizeof(std::size_t)));
-          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes);
+          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes, bisected);
           resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
         }
         if (admit_ao) {

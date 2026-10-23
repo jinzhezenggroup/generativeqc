@@ -296,6 +296,11 @@ class CudaXcPlan {
    * path is qualified for semilocal SCF; nonlocal consumers stay canonical. */
   bool prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
                             std::size_t device_budget);
+  /** Explicit alternative to center grouping: recursive spatial cuts align to
+   * this owner's execution tile. Shares the same resource/lifetime contract;
+   * the original overload and its default schedule remain unchanged. */
+  bool prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
+                            std::size_t device_budget, bool recursive_bisection);
   std::size_t spatial_grid_device_bytes() const noexcept { return spatial_grid_bytes_; }
   /** Canonical atom/radial/angular order for moving-grid force consumers.
    * Spatial SCF execution keeps a separate exact permutation of these values;

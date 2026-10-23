@@ -2,6 +2,7 @@
 #define GENERATIVEQC_DFT_GRID_SPATIAL_ORDER_HPP
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <numeric>
@@ -11,6 +12,62 @@
 #include "dft/grid.hpp"
 
 namespace generativeqc::dft {
+
+namespace spatial_grid_detail {
+/** Partition whole execution tiles along the widest coordinate extent.
+ * Each leaf retains original-index order, so equal coordinates and nth_element's
+ * unspecified within-partition order cannot change the resulting permutation.
+ * Recursion halves the number of tiles and uses only logarithmic stack space.
+ */
+inline void bisect(std::vector<std::size_t>& order, std::size_t first, std::size_t last,
+                   const std::vector<double>& points, std::size_t tile_points) {
+  const auto count = last - first;
+  if (count <= tile_points) {
+    std::sort(order.begin() + first, order.begin() + last);
+    return;
+  }
+  std::array<double, 3> low, high;
+  low.fill(std::numeric_limits<double>::infinity());
+  high.fill(-std::numeric_limits<double>::infinity());
+  for (auto i = first; i < last; ++i)
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      const auto x = points[3 * order[i] + axis];
+      low[axis] = std::min(low[axis], x);
+      high[axis] = std::max(high[axis], x);
+    }
+  unsigned axis = 0;
+  for (unsigned candidate = 1; candidate < 3; ++candidate)
+    if (high[candidate] - low[candidate] > high[axis] - low[axis]) axis = candidate;
+  const auto tiles = 1 + (count - 1) / tile_points;
+  const auto middle = first + (tiles / 2) * tile_points;
+  std::nth_element(order.begin() + first, order.begin() + middle, order.begin() + last,
+                   [&](auto a, auto b) {
+                     const auto x = points[3 * a + axis], y = points[3 * b + axis];
+                     return x != y ? x < y : a < b;
+                   });
+  bisect(order, first, middle, points, tile_points);
+  bisect(order, middle, last, points, tile_points);
+}
+}  // namespace spatial_grid_detail
+
+/** Exact tile-aligned spatial bisection, with one point-index array and no
+ * change to quadrature, owner identities or AO screening. The final leaf may
+ * be short. Only the execution copy is permuted; force consumers keep the
+ * canonical MolecularGrid. This alternative fits the center-group allowance.
+ */
+inline std::vector<std::size_t> bisected_grid_order(const MolecularGrid& grid,
+                                                    std::size_t tile_points) {
+  const auto& points = grid.points();
+  const auto n = grid.point_count();
+  if (!tile_points || !n || points.size() / 3 != n || points.size() % 3)
+    throw std::invalid_argument("invalid bisected grid shape or tile size");
+  for (const auto coordinate : points)
+    if (!std::isfinite(coordinate)) throw std::invalid_argument("nonfinite grid point");
+  std::vector<std::size_t> order(n);
+  std::iota(order.begin(), order.end(), std::size_t{0});
+  spatial_grid_detail::bisect(order, 0, n, points, tile_points);
+  return order;
+}
 
 /** Exact execution permutation, independent of quadrature and AO screening.
  * Visit centers by a deterministic nearest-neighbor walk, then stably group
