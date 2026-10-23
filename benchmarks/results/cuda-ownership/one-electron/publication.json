@@ -13,10 +13,10 @@
       "sha256": "bf253ce5c0c3091128a8b5f41410c17021084f427e2c2bb20bca0c9bcab650d9"
     },
     {
-      "bytes": 140958,
-      "path": "samples.json.gz",
+      "bytes": 40028,
+      "path": "samples.json.xz",
       "role": "samples",
-      "sha256": "7818df517eb30891ac8478f677a65d3672f2b93796d34fa1608c21bcfcced1da"
+      "sha256": "7b801edb44f75e949dfafe500cd028d9527db7839196d9026d947523f1fb94a4"
     },
     {
       "bytes": 61496,
