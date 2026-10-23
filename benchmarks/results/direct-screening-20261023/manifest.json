@@ -1,11 +1,11 @@
 {
-  "schema": "generativeqc.conservative-block-screening-comparisons.v2",
-  "source_base": "a524db91d",
-  "source_identity": "67542bfded3279389c27a336e5f65fac4633724a2e7371f779513c9910d8521a",
+  "schema": "generativeqc.conservative-block-screening-comparisons.v3",
+  "source_base": "1e77b239e551856741abedc0b45a6e8461f261b9",
+  "source_identity": "cfb0d305f8537387a109eeab1ff5be4ab70d63f5da3c1061277bb8bde1564783",
   "files": {
     "receipts.json.xz": {
-      "bytes": 14760,
-      "sha256": "90f7a300a1137fec13e3d2326cb0308862e47c6423b07b60df504ac11e94908e"
+      "bytes": 98768,
+      "sha256": "d807538ca6246e83f08cf9236746c8fcf6dbcc56f0a678442e0c3a697e4025bf"
     }
   }
 }

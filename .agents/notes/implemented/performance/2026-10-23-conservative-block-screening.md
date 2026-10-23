@@ -3,6 +3,11 @@
 Status: implemented (explicit opt-in)
 Date: 2026-10-23
 
+Superseded by [prepared interval admission](2026-10-23-prepared-block-screening.md).
+This note preserves the initial rejection-only experiment and diagnosis. Its
+original evidence is retained in Git commit `2fe65ffff7c92ef6b7c98057e21dd95f5b715315`;
+the current evidence bundle qualifies the replacement.
+
 ## Problem
 
 RTX 5090 has relatively weak FP64 throughput, but Direct screening precision is
