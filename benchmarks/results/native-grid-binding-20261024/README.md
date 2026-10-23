@@ -58,3 +58,11 @@ samples do not replace or extend the earlier paired performance population.
 
 The integration archive is 113,628 bytes with SHA256
 `65bc8f0fc52eae06b47de86a6098a0fe0df84512934ca899aa337f268ed9c0d7`.
+
+A second distinct integration cohort, `integration-v2.json.xz`, authenticates
+source `58b71159cf7feabab8df163a5572d90a56a744b3` after integrating master `8577482bb`.
+All 24 complete Standard/Fast, DF/Direct, PBE/PBE0/r2SCAN-3c calls independently
+pass, as do prepared/unprepared hybrid E/F, reuse/displacement and memcheck.
+Its 117,196 bytes have SHA256
+`e73692bf8ac70390746db96edb6b23166a296af050536ddaac2e7e3dc44122b2`. Both older source identities
+and their original evidence remain intact; timings are not pooled.
