@@ -103,8 +103,9 @@ MKL thread and preserve Slurm GPU visibility.
 ## Reading and reproducing the evidence
 
 - `summary.json.xz`: qualifications, all sample times/work counts, paired
-  diagnostics, profile CSVs, relevant logs/cache statistics, binary hashes and
-  exact build/run scripts.
+  diagnostics, public Schwarz profile rows, relevant logs/cache statistics,
+  binary hashes and exact build/run scripts. Complete profile CSV hashes and
+  raw locations are retained; unrelated kernel rows remain in those raw files.
 - `recheck.py`: opt-in host-only artifact-integrity and independent-reference
   requalification using the retained raw campaign, including preserved paired
   diagnostic failures. This is historical evidence checking, not a required
