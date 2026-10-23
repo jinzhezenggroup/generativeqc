@@ -25,6 +25,13 @@ Matrix energy_weighted_density(const Matrix& coefficients, const std::vector<dou
   return weighted;
 }
 
+Matrix physical_weighted_density(const Matrix& density, const Matrix& fock, std::size_t n,
+                                 double occupation_weight) {
+  Matrix weighted = multiply(multiply(density, fock, n), density, n);
+  for (double& value : weighted) value /= occupation_weight;
+  return weighted;
+}
+
 double uhf_electronic_energy(const Matrix& alpha_density, const Matrix& beta_density,
                              const Matrix& hcore, const Matrix& alpha_fock,
                              const Matrix& beta_fock) {

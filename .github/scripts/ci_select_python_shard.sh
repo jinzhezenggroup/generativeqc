@@ -258,6 +258,10 @@ measured_core_runtime_paths=(
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
   "${measured_core_runtime_paths[@]}"
+  # Run 39351749228 reached minute 28 before the final tight VV10 case.
+  # Preserve the core modulo slot, but transfer the complete endpoint file
+  # to posthf (838 s in the same run) with whole-file fixture ownership.
+  tests/python/test_treutler_endpoints.py
   # Run 39266084600 reached the 30-minute core-b cap in this module's
   # late shared-emitter setup. Retain its modulo slot, but keep the whole
   # module and fixture on the existing loadfile lane (1235 s that run).
@@ -559,6 +563,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # These measured complete UCCSD owners keep all numerical/failure
     # gates and module-local oracle caches under the existing loadfile.
     for path in \
+      tests/python/test_treutler_endpoints.py \
       tests/python/test_ccsdt_cbs_native.py \
       tests/python/test_uccsd_lambda.py \
       tests/python/test_uccsd_t_owner.py \

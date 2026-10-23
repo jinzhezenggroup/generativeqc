@@ -33,23 +33,39 @@ namespace {
 /** Apply Q diag(lambda^-1/2) Q^T to one public raw panel in factor order.
  * Forming the explicit inverse root first loses weak-direction cancellation
  * when it subsequently contracts raw A. The two products below preserve the
- * same symmetric whitening convention, cutoff and eigensystem. Setup borrows
- * the already charged exchange panel before any SCF consumer exists; raw
- * values and their immutable caches remain intact.
+ * same cutoff and eigensystem. Single packed full-rank owners keep the scaled
+ * eigenprojection directly: their J/K auxiliary contraction is gauge-invariant
+ * and their response view records the spectral basis. Other owners keep the
+ * symmetric factor, borrowing already charged exchange scratch during setup.
  */
 generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::size_t system,
                                         std::size_t pairs, const double* raw, double* output,
                                         const double* eigenvectors,
-                                        const double* scaled_eigenvectors, std::string& detail) {
+                                        const double* scaled_eigenvectors,
+                                        const double* eigenvalues, std::string& detail) {
   const auto offset = system * plan.naux * plan.naux;
+  auto* projected = plan.resident_spectral_factors ? output : plan.exchange_intermediate;
   auto status =
       runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream, [&] {
         return scf_matrix_product_view(plan, true, false, plan.naux, pairs, plan.naux,
-                                       eigenvectors + offset, plan.naux, raw, plan.naux,
-                                       plan.exchange_intermediate, plan.naux, 1.0, 0.0,
-                                       "project raw CUDA DF metric factors", detail);
+                                       eigenvectors + offset, plan.naux, raw, plan.naux, projected,
+                                       plan.naux, 1.0, 0.0, "project raw CUDA DF metric factors",
+                                       detail);
       });
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  if (plan.resident_spectral_factors) {
+    launch_scale_metric_projection(plan.stream, plan.naux, pairs, eigenvalues + system * plan.naux,
+                                   true, output);
+    const auto error = cudaPeekAtLastError();
+    if (error != cudaSuccess) return cuda_failure(error, "scale resident DF eigenfactors", detail);
+    runtime::cuda_trace::trace_counter("resident_whitening_spectral_basis", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_panels", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_gemms", 1);
+    runtime::cuda_trace::trace_counter("resident_whitening_factor_flops",
+                                       2 * pairs * plan.naux * plan.naux);
+    runtime::cuda_trace::trace_counter("resident_whitening_projection_elements", pairs * plan.naux);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
   status = runtime::cuda_trace::trace_call("resident_metric_scaled_rotation", plan.stream, [&] {
     return scf_matrix_product_view(plan, false, false, plan.naux, pairs, plan.naux,
                                    scaled_eigenvectors + offset, plan.naux,
@@ -76,7 +92,7 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
 generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                                                  const double* inverse, const double* eigenvectors,
                                                  const double* scaled_eigenvectors,
-                                                 std::string& detail) {
+                                                 const double* eigenvalues, std::string& detail) {
   runtime::cuda_trace::TraceOperation trace("resident_three_center_materialization", plan.stream,
                                             {plan.batch_size, plan.nbf, plan.naux, true, false});
   if (df_packed_pairs(plan.value_storage.pairs)) {
@@ -104,10 +120,11 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
         ++generated_panels;
         if (raw) continue;
         auto* output = plan.three_center + (system * plan.stored_pair_count + pair) * plan.naux;
-        const auto transform = plan.metric_full_rank[system]
-                                   ? whiten_factor_panel(plan, system, count, panel, output,
-                                                         eigenvectors, scaled_eigenvectors, detail)
-                                   : GENERATIVEQC_STATUS_SUCCESS;
+        const auto transform =
+            plan.metric_full_rank[system]
+                ? whiten_factor_panel(plan, system, count, panel, output, eigenvectors,
+                                      scaled_eigenvectors, eigenvalues, detail)
+                : GENERATIVEQC_STATUS_SUCCESS;
         if (transform != GENERATIVEQC_STATUS_SUCCESS) return transform;
         if (!plan.metric_full_rank[system]) {
           const auto product =
@@ -129,7 +146,7 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
               plan, system, count, raw + pair * plan.naux,
               plan.three_center + system * plan.stored_tensor_elements_per_system +
                   pair * plan.naux,
-              eigenvectors, scaled_eigenvectors, detail);
+              eigenvectors, scaled_eigenvectors, eigenvalues, detail);
           if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         }
         continue;
@@ -191,7 +208,7 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
         status = whiten_factor_panel(
             plan, system, pairs, plan.auxiliary_tile_values,
             plan.three_center + system * plan.tensor_elements_per_system + pair * plan.naux,
-            eigenvectors, scaled_eigenvectors, detail);
+            eigenvectors, scaled_eigenvectors, eigenvalues, detail);
         if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         runtime::cuda_trace::trace_tile(system, pair, pairs, 0, plan.naux, -1, true);
         continue;
@@ -744,6 +761,14 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     diagnostic.condition_number = largest / smallest_retained;
   }
 
+  // A plan-wide gauge avoids ambiguous mixed-rank batched leases. The other
+  // storage modes retain their existing public/borrowed raw representations.
+  candidate->resident_spectral_factors =
+      !candidate->streamed &&
+      candidate->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+      std::all_of(candidate->metric_full_rank.begin(), candidate->metric_full_rank.end(),
+                  [](auto full_rank) { return full_rank != 0; });
+
   cuda_error = cudaMemcpyAsync(setup.scales, scales.data(), scales.size() * sizeof(double),
                                cudaMemcpyHostToDevice, candidate->stream);
   if (cuda_error != cudaSuccess) {
@@ -781,7 +806,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   metric_progress.finish("stream_complete");
   if (!candidate->streamed && candidate->integral_source) {
     status = materialize_generated_tensor(*candidate, setup.inverse_square_roots, setup.metrics,
-                                          setup.scaled_eigenvectors, detail);
+                                          setup.scaled_eigenvectors, setup.eigenvalues, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, status);
   } else if (candidate->streamed) {
     if (!candidate->integral_source) {
@@ -809,11 +834,11 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                                                 {batch_size, nbf, naux, false, false});
       for (std::size_t system = 0; system < batch_size; ++system) {
         if (candidate->metric_full_rank[system]) {
-          status =
-              whiten_factor_panel(*candidate, system, matrix_elements,
-                                  setup.raw_three_center + system * tensor_elements_per_system,
-                                  candidate->three_center + system * tensor_elements_per_system,
-                                  setup.metrics, setup.scaled_eigenvectors, detail);
+          status = whiten_factor_panel(
+              *candidate, system, matrix_elements,
+              setup.raw_three_center + system * tensor_elements_per_system,
+              candidate->three_center + system * tensor_elements_per_system, setup.metrics,
+              setup.scaled_eigenvectors, setup.eigenvalues, detail);
           if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         } else {
           // Preserve the original truncated-space preparation and its response.

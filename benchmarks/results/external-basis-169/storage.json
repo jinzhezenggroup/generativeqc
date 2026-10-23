@@ -1,0 +1,70 @@
+{
+  "schema": "generativeqc.lossless-json-storage.v1",
+  "reason": "Lossless compression preserves the complete historical receipts within the unchanged 64 MiB evidence budget. Historical checksums.json retains its original uncompressed identities.",
+  "files": [
+    {
+      "original_path": "fe_h_ion_cartesian.json",
+      "original_bytes": 83927,
+      "original_sha256": "f2ff9ae403f7cf72b96b0f0cb1ac7b6625bb7bf8724049d56fcced06842122ca",
+      "stored_path": "fe_h_ion_cartesian.json.gz",
+      "stored_bytes": 5339,
+      "stored_sha256": "456f1556451dfa458a73c01a9388a76a1b73bb2d0ff413c0627da3234b3bba38"
+    },
+    {
+      "original_path": "fe_h_ion_spherical.json",
+      "original_bytes": 83599,
+      "original_sha256": "99c49053abf9624b4a38bf41e5432e0d516d0d9130a6f40e0a4d01f870810e65",
+      "stored_path": "fe_h_ion_spherical.json.gz",
+      "stored_bytes": 5414,
+      "stored_sha256": "51d77668f91b40398cd5eb9c07c4f2c75f579ae928bb73276dfeea72048df216"
+    },
+    {
+      "original_path": "fe_ion_cartesian.json",
+      "original_bytes": 74003,
+      "original_sha256": "2102be59ff0fe96e054328bff60848523de05ae2a097e3ccc0af27925b5e5792",
+      "stored_path": "fe_ion_cartesian.json.gz",
+      "stored_bytes": 4650,
+      "stored_sha256": "6c05e634d84b9f607016031663c28d6b5410588c4327ffba2299e41857b2789a"
+    },
+    {
+      "original_path": "fe_ion_spherical.json",
+      "original_bytes": 73498,
+      "original_sha256": "029641eb79a74f20875a44be56753286bb49d3e28f416a84dfeccd4b16b047b9",
+      "stored_path": "fe_ion_spherical.json.gz",
+      "stored_bytes": 4676,
+      "stored_sha256": "1c698c712bdada7e350e88c32d9244aee9f794007eff2aba49acb043b019b2ed"
+    },
+    {
+      "original_path": "ragged-cpu.json",
+      "original_bytes": 101070,
+      "original_sha256": "e75369869322af67f3990576c809c848593a0773f026f8083f6c980253de626a",
+      "stored_path": "ragged-cpu.json.gz",
+      "stored_bytes": 3235,
+      "stored_sha256": "8fd5a0a829dd1ad8d4b8d2f2d1dccf097bbfc31cefb45996d5586f14c0e6e2b3"
+    },
+    {
+      "original_path": "ragged-cuda.json",
+      "original_bytes": 99191,
+      "original_sha256": "859a68c292b5604cf50f575f664e4dc79f5d6b38d92a98a67066051f27cf20fe",
+      "stored_path": "ragged-cuda.json.gz",
+      "stored_bytes": 3456,
+      "stored_sha256": "3135eb8d42cebe049c4925d7159d301d7dc368fd1ba64e2fe76e453e2d3a9476"
+    },
+    {
+      "original_path": "water_cartesian.json",
+      "original_bytes": 89856,
+      "original_sha256": "bc504db92d343d3d849b57a8e45c41d100d9efec2b3af68d9c65efb143da4db7",
+      "stored_path": "water_cartesian.json.gz",
+      "stored_bytes": 7060,
+      "stored_sha256": "9807ab1e895951e454c5361e53a57cff6ef041990cca7337e935d29986f91552"
+    },
+    {
+      "original_path": "water_spherical.json",
+      "original_bytes": 89808,
+      "original_sha256": "02f12b62721d6cc55623cbef1fbf370246b0c81546e808ccda790b7ae5710b45",
+      "stored_path": "water_spherical.json.gz",
+      "stored_bytes": 7041,
+      "stored_sha256": "93a62d124df595f41ad8fd11bc1b418934fd7e65837447d533a4bad9ee9ed3f3"
+    }
+  ]
+}

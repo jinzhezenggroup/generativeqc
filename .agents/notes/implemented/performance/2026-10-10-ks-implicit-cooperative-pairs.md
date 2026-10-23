@@ -3,6 +3,10 @@
 Status: implemented as an explicitly selected composed path; Hcore alone is not promoted
 Date: 2026-10-10
 
+The default boundary below is superseded by the independently measured
+[2026-10-23 promotion](2026-10-23-dft-cold-density-factors.md). The failed
+historical populations and their original decisions remain unchanged here.
+
 ## Problem
 
 The prepared stationary KS bridge hard-codes component lanes because its

@@ -10,10 +10,12 @@
 #include "molecule/basis.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
 #include "scf/cuda_density_fitting_md.hpp"
+#include "scf/explicit_integral_backend.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
 namespace generativeqc::scf {
@@ -132,9 +134,43 @@ struct PreparedFockPlan::Impl {
   initial_guess::OverlapOrthogonalizer overlap_cache;
   unsigned retained_fitted_derivative_order{};
   FockOccupiedProjectionReservation projection_reservation;
+  bool external_integrals{};
+  std::unique_ptr<ExplicitIntegralBackend> explicit_backend;
 
   const integrals::IntegralData& one_electron() const {
     return fitted ? fitted->one_electron : exact;
+  }
+
+  Impl(const core::System& system, integrals::IntegralData values, FockSpin spin,
+       FockBackend backend, int device, std::size_t budget)
+      : orbital(system),
+        device_id(-1),
+        requested_budget(0),
+        exact(std::move(values)),
+        external_integrals(true) {
+    auto spec = make_hf_fock_spec(spin);
+    spec.derivative_order = 0;
+    diagnostic.strategy = resolve_fock_build(spec, backend, 0.0);
+    const auto n = molecule::ao_count(system);
+    if (!n || n != exact.nbf || n > 256 || exact.overlap.size() != n * n ||
+        exact.hcore.size() != n * n || exact.eri.size() != n * n * n * n || exact.ncoord != 0 ||
+        !exact.overlap_derivative.empty() || !exact.hcore_derivative.empty() ||
+        !exact.eri_derivative.empty())
+      throw std::invalid_argument("external HF integral layout is invalid");
+    const auto finite = [](const auto& array) {
+      return std::all_of(array.begin(), array.end(), [](double x) { return std::isfinite(x); });
+    };
+    if (!finite(exact.overlap) || !finite(exact.hcore) || !finite(exact.eri) ||
+        !std::isfinite(exact.nuclear_repulsion))
+      throw std::invalid_argument("external HF integrals must be finite");
+    if (backend == FockBackend::Cuda) {
+      explicit_backend = make_cuda_explicit_integrals(device, n, exact.eri, budget);
+      device_id = device;
+    } else {
+      const CpuFockProviderView provider(exact);
+      cpu_view.emplace(diagnostic.strategy, n, 0, provider, provider);
+    }
+    diagnostic.nbf = n;
   }
 
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
@@ -194,6 +230,13 @@ struct PreparedFockPlan::Impl {
     if (has_df) {
       auxiliary = aux ? *aux : system;
       fitted.emplace();
+      if (strategy.spec.exchange.present &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted &&
+          strategy.spec.exchange.op == FockOperator::LongRange) {
+        if (strategy.spec.coulomb.present)
+          throw std::invalid_argument("long-range DF exchange requires a separate metric owner");
+        fitted->range_omega = strategy.spec.exchange.omega;
+      }
     }
     if (strategy.backend == FockBackend::Cpu) {
       auto ints = integrals::build_integrals(system, derivatives, full_exact);
@@ -209,8 +252,8 @@ struct PreparedFockPlan::Impl {
         fitted->one_electron = std::move(ints);
         const bool materialize_df_derivatives =
             derivatives && cpu_materialized_df_derivatives_requested();
-        fitted->raw = integrals::build_density_fitting_integrals(system, *auxiliary,
-                                                                 materialize_df_derivatives);
+        fitted->raw = integrals::build_density_fitting_integrals(
+            system, *auxiliary, materialize_df_derivatives, fitted->range_omega);
         if (derivatives && !materialize_df_derivatives) {
           fitted->raw.ncoord = system.atoms.size() * 3U;
           fitted->df_gradient_orbital = system;
@@ -357,9 +400,15 @@ struct PreparedFockPlan::Impl {
       CudaDensityFittingIntegralSource* raw_source{};
       std::vector<double> metrics;
       std::size_t nbf{}, naux{};
-      checked(create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary},
-                                                          &raw_source, metrics, nbf, naux, detail),
-              detail);
+      cuda_execution::CudaDfSourcePolicy source_policy;
+      if (!cuda_execution::resolve_cuda_df_source_policy(source_policy, detail))
+        throw std::invalid_argument(detail);
+      source_policy.range_omega = data.range_omega;
+      if (data.range_omega > 0.0) source_policy.value_math = 0U;
+      checked(
+          create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary}, &raw_source,
+                                                      metrics, nbf, naux, detail, &source_policy),
+          detail);
       std::unique_ptr<CudaDensityFittingIntegralSource,
                       decltype(&destroy_cuda_density_fitting_integral_source)>
           source(raw_source, &destroy_cuda_density_fitting_integral_source);
@@ -367,6 +416,19 @@ struct PreparedFockPlan::Impl {
       const auto metadata_bytes = cuda_density_fitting_integral_source_device_bytes(source.get());
       auto tiles = plan_values(nbf, naux, metadata_bytes);
 #if GENERATIVEQC_HAS_CUDA
+      // Keep the selected B/U owners and panel sizes unchanged. Prepared E
+      // uses only the already unspent value allowance; a refusal falls back
+      // before any value generation or SCF state can borrow this source.
+      if (tiles.stores_full_three_center && df_packed_pairs(tiles.value_storage.pairs) &&
+          plan_budget > tiles.peak_workspace_bytes) {
+        const auto remaining = plan_budget - tiles.peak_workspace_bytes;
+        checked(try_prepare_cuda_df_md_raw_source(source.get(), system, *auxiliary, remaining,
+                                                  remaining, detail),
+                detail);
+        tiles.peak_workspace_bytes +=
+            cuda_density_fitting_integral_source_device_bytes(source.get()) - metadata_bytes;
+        diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
+      }
       if (coulomb_only_packing && diagnostic.variant.df_md_coulomb_requested &&
           !tiles.stores_full_three_center) {
         // The incumbent deliberately spends spare capacity on raw panels. An
@@ -459,6 +521,10 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
                                    retained_direct_derivative_order,
                                    retained_fitted_derivative_order, projection_reservation)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
+PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values,
+                                   FockSpin spin, FockBackend backend, int device,
+                                   std::size_t budget)
+    : impl_(std::make_unique<Impl>(system, std::move(values), spin, backend, device, budget)) {}
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
 }
@@ -495,6 +561,10 @@ void PreparedFockPlan::ensure_one_electron_derivatives() const {
   one.ncoord = coordinates;
 }
 initial_guess::EigenOperation PreparedFockPlan::eigen_operation(EigenUse use) const {
+  if (auto* explicit_owner = impl_->explicit_backend.get())
+    return [explicit_owner](const auto& matrix, const auto* overlap, const auto* x, std::size_t n) {
+      return explicit_owner->eigen(matrix, overlap, x, n);
+    };
   auto* plan = impl_->cuda_df.get();
   if (!plan) return {};
   const char* control = use == EigenUse::Setup          ? "GENERATIVEQC_DF_REFERENCE_SETUP_EIGEN"
@@ -554,10 +624,12 @@ CudaDirectJkPlan* PreparedFockPlan::cuda_direct_source() const noexcept {
   return impl_->cuda_exact.get();
 }
 bool PreparedFockPlan::matches_system(const core::System& system) const noexcept {
-  return same_system(impl_->orbital, system);
+  return !impl_->external_integrals && same_system(impl_->orbital, system);
 }
 DirectJkMatrices PreparedFockPlan::build(const std::vector<double>& density,
                                          const std::vector<double>& beta) const {
+  if (impl_->explicit_backend)
+    return impl_->explicit_backend->build(strategy().spec, density, beta);
   return impl_->cpu_view ? impl_->cpu_view->build(density, beta)
                          : impl_->cuda_view->build(density, beta);
 }
@@ -623,7 +695,7 @@ bool PreparedFockPlan::matches(
     int device, std::size_t budget, unsigned minimum_direct_derivative_order,
     unsigned minimum_fitted_derivative_order,
     FockOccupiedProjectionReservation projection_reservation) const noexcept {
-  if (projection_reservation != impl_->projection_reservation ||
+  if (impl_->external_integrals || projection_reservation != impl_->projection_reservation ||
       minimum_direct_derivative_order > 1 || minimum_fitted_derivative_order > 1 ||
       (minimum_direct_derivative_order &&
        (!impl_->cuda_exact ||
@@ -648,4 +720,5 @@ bool PreparedFockPlan::matches(
   }
   return !impl_->auxiliary || same_system(*impl_->auxiliary, auxiliary ? *auxiliary : orbital);
 }
+
 }  // namespace generativeqc::scf

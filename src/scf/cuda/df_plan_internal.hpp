@@ -77,6 +77,11 @@ struct CudaDensityFittingJkPlan {
   }
   ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
   double* three_center{};
+  // Single packed full-rank owners may keep E=A Q lambda^-1/2 instead of
+  // B=E Q^T. J/K contract the entire auxiliary axis in either gauge. Response
+  // views must carry this choice, including leases on the final E*C projection.
+  // Raw, dense, paired-raw and rank-truncated owners retain the symmetric gauge.
+  bool resident_spectral_factors{};
   double* primary_density{};
   double* secondary_density{};
   double* total_density{};

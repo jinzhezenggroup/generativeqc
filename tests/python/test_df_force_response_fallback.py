@@ -68,6 +68,7 @@ struct CudaDensityFittingJkPlan {
   void* stream=reinterpret_cast<void*>(1);
   void* blas=reinterpret_cast<void*>(1);
   bool streamed=false,occupied_scf_reserved=true,resident_exchange_enabled=true,resident_raw_valid=false;
+  bool resident_spectral_factors=true;
   DfValueStorageOptions value_storage{DfPairStorage::SymmetricLowerSingle,1};
   CudaDensityFittingIntegralSource* integral_source=reinterpret_cast<CudaDensityFittingIntegralSource*>(1);
   double values[64]{};
@@ -149,10 +150,13 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
     const std::vector<double>&,const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>,double,unsigned,std::size_t,std::size_t,
     std::vector<double>& output,std::string&,DfGradientResources* resources,const CudaDfMetricView*,void*,
-    const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView*,
+    const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView* fitted,
     const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell,
     const CudaDfRawChargeView* raw_charge) {
   assert(!raw_charge);
+  // A retry may drop the final projection, but its immutable forward values
+  // must retain the producing plan's auxiliary coordinates.
+  if(fitted) assert(fitted->spectral_basis==active->resident_spectral_factors);
   assert(!active->final_projection_token); // The lease is consumed before any response attempt.
   assert(!mixed_shell && precision_authentication_calls==0);
   assert(resources && !resources->precision_work_collected);

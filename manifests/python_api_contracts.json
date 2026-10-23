@@ -437,7 +437,12 @@
     "generativeqc.extensions.xc.NativeUserExpression": "generativeqc/_xc_user_expression.py:NativeUserExpression",
     "generativeqc.extensions.xc.UserExpressionProgram": "generativeqc_compiler/xc/user_expression_program.py:UserExpressionProgram",
     "generativeqc.extensions.xc.compile_expression": "generativeqc/extensions/xc.py:compile_expression",
-    "generativeqc.extensions.xc.expression_program": "generativeqc/extensions/xc.py:expression_program"
+    "generativeqc.extensions.xc.expression_program": "generativeqc/extensions/xc.py:expression_program",
+    "generativeqc.experimental.integral_autodiff.IntegralGradient": "generativeqc/experimental/integral_autodiff.py:IntegralGradient",
+    "generativeqc.experimental.integral_autodiff.IntegralRHF": "generativeqc/experimental/integral_autodiff.py:IntegralRHF",
+    "generativeqc.experimental.integral_autodiff.IntegralValues": "generativeqc/experimental/integral_autodiff.py:IntegralValues",
+    "generativeqc.experimental.integral_autodiff.IntegralHF": "generativeqc/experimental/integral_autodiff.py:IntegralHF",
+    "generativeqc.experimental.integral_autodiff.IntegralUHF": "generativeqc/experimental/integral_autodiff.py:IntegralUHF"
   },
   "declarations": {
     "generativeqc/_api_types.py:Atom": {
@@ -9286,6 +9291,183 @@
         "errors": "docs/developer/custom_xc_expressions.md#xc-expression-native",
         "ownership": "docs/developer/custom_xc_expressions.md#xc-expression-native",
         "values": "docs/developer/custom_xc_expressions.md#xc-expression-native"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralGradient": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralRHF": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralRHF.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralValues": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.close": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.diagnostics": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.energy": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.integral_vjp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.integrals": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.value_and_grad": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralUHF": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralUHF.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.hvp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.hessian": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
+      }
+    },
+    "generativeqc/experimental/integral_autodiff.py:IntegralHF.integral_jvp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/experimental_array_api.md#differentiate-through-gaussian-integrals",
+        "errors": "docs/user/experimental_array_api.md#integral-ad-admission-and-resource-limits",
+        "ownership": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership",
+        "values": "docs/user/experimental_array_api.md#integral-ad-values-and-ownership"
       }
     }
   }

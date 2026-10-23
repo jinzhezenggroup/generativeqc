@@ -321,8 +321,9 @@ def test_packed_global_ledger_and_raw_reuse_ablation(
 
 @pytest.mark.parametrize("spin", ["restricted", "unrestricted"])
 @pytest.mark.parametrize("storage", ["packed", "packed-single"])
+@pytest.mark.parametrize("cutoff", [1e-10, 0.2], ids=["full-rank", "truncated"])
 def test_packed_composed_fock_keeps_prepared_identity_and_dense_fallback(
-    monkeypatch: typing.Any, spin: typing.Any, storage: typing.Any
+    monkeypatch: typing.Any, spin: typing.Any, storage: typing.Any, cutoff: float
 ) -> None:
     """Unknown-rank Fock inputs retain exact bounded K and frozen provenance."""
     from generativeqc.fock import FockBuildSpec, FockPlan
@@ -337,12 +338,22 @@ def test_packed_composed_fock_keeps_prepared_identity_and_dense_fallback(
     monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "dense")
     with (
         NativeAO(atoms) as basis,
-        FockPlan(basis, spec, device="cpu") as oracle,
-        FockPlan(basis, spec, device="cuda", device_budget_bytes=16 << 20) as dense,
+        FockPlan(basis, spec, device="cpu", metric_relative_threshold=cutoff) as oracle,
+        FockPlan(
+            basis,
+            spec,
+            device="cuda",
+            device_budget_bytes=16 << 20,
+            metric_relative_threshold=cutoff,
+        ) as dense,
     ):
         monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage)
         with FockPlan(
-            basis, spec, device="cuda", device_budget_bytes=16 << 20
+            basis,
+            spec,
+            device="cuda",
+            device_budget_bytes=16 << 20,
+            metric_relative_threshold=cutoff,
         ) as packed:
             assert packed.identity == dense.identity
             assert packed.execution_identity != dense.execution_identity

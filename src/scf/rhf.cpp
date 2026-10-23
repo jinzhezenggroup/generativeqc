@@ -31,6 +31,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
+#include "scf/cuda_density_fitting_md.hpp"
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -1569,6 +1570,16 @@ CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(
       source_tile_plan = plan_cuda_rhf_source_tiles(
           {&data, 1}, options, source_nbf, source_naux, occupied,
           cuda_density_fitting_integral_source_device_bytes(source), automatic_rhf_rank);
+#if GENERATIVEQC_HAS_CUDA
+      if (source_tile_plan.stores_full_three_center &&
+          df_packed_pairs(source_tile_plan.value_storage.pairs) &&
+          planning_budget > source_tile_plan.peak_workspace_bytes) {
+        const auto remaining = planning_budget - source_tile_plan.peak_workspace_bytes;
+        const auto prepared = try_prepare_cuda_df_md_raw_source(
+            source, *orbital_system, *auxiliary_system, remaining, remaining, detail);
+        if (prepared != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(prepared, detail);
+      }
+#endif
     } catch (...) {
       destroy_cuda_density_fitting_integral_source(source);
       throw;
@@ -1678,6 +1689,20 @@ CudaDensityFittingPlanPtr make_cuda_density_fitting_batch_plan(
       tile_plan = plan_cuda_rhf_source_tiles(
           data, options, nbf, naux, occupied,
           cuda_density_fitting_integral_source_device_bytes(source), automatic_rhf_rank);
+#if GENERATIVEQC_HAS_CUDA
+      // Reuse is currently qualified for one physical system. Batched source
+      // layout/primitive offsets retain the existing independently tested path.
+      if (data.size() == 1 && tile_plan.stores_full_three_center &&
+          df_packed_pairs(tile_plan.value_storage.pairs) &&
+          planning_budget > tile_plan.peak_workspace_bytes) {
+        const auto remaining = planning_budget - tile_plan.peak_workspace_bytes;
+        const auto prepared = try_prepare_cuda_df_md_raw_source(
+            source, orbital_systems->front(), auxiliary_systems->front(), remaining, remaining,
+            source_detail);
+        if (prepared != GENERATIVEQC_STATUS_SUCCESS)
+          throw generativeqc::Error(prepared, source_detail);
+      }
+#endif
     } catch (...) {
       destroy_cuda_density_fitting_integral_source(source);
       throw;

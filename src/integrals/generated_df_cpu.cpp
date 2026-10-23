@@ -16,31 +16,43 @@ Response response(scf::generated_df_derivatives::Response value) {
 }
 }  // namespace
 
-double metric_value(double alpha, Vec3 a_center, Angular a, double gamma, Vec3 c_center,
-                    Angular c) {
+double metric_value(double alpha, Vec3 a_center, Angular a, double gamma, Vec3 c_center, Angular c,
+                    double omega) {
+  if (omega > 0.0)
+    return scf::generated_df_derivatives::evaluate(
+               true, alpha, derivative_vec(a_center), derivative_angular(a), 0.0,
+               derivative_vec(a_center), {0, 0, 0}, gamma, derivative_vec(c_center),
+               derivative_angular(c), omega, false)
+        .value;
   return scf::generated_df::metric(alpha, value_vec(a_center), value_angular(a), gamma,
                                    value_vec(c_center), value_angular(c));
 }
 
 double three_center_value(double alpha, Vec3 a_center, Angular a, double beta, Vec3 b_center,
-                          Angular b, double gamma, Vec3 c_center, Angular c) {
+                          Angular b, double gamma, Vec3 c_center, Angular c, double omega) {
+  if (omega > 0.0)
+    return scf::generated_df_derivatives::evaluate(
+               false, alpha, derivative_vec(a_center), derivative_angular(a), beta,
+               derivative_vec(b_center), derivative_angular(b), gamma, derivative_vec(c_center),
+               derivative_angular(c), omega, false)
+        .value;
   return scf::generated_df::three_center(alpha, value_vec(a_center), value_angular(a), beta,
                                          value_vec(b_center), value_angular(b), gamma,
                                          value_vec(c_center), value_angular(c));
 }
 
 Response metric_derivative(double alpha, Vec3 a_center, Angular a, double gamma, Vec3 c_center,
-                           Angular c) {
+                           Angular c, double omega) {
   return response(scf::generated_df_derivatives::metric(
       alpha, derivative_vec(a_center), derivative_angular(a), gamma, derivative_vec(c_center),
-      derivative_angular(c)));
+      derivative_angular(c), omega));
 }
 
 Response three_center_derivative(double alpha, Vec3 a_center, Angular a, double beta, Vec3 b_center,
-                                 Angular b, double gamma, Vec3 c_center, Angular c) {
+                                 Angular b, double gamma, Vec3 c_center, Angular c, double omega) {
   return response(scf::generated_df_derivatives::three_center(
       alpha, derivative_vec(a_center), derivative_angular(a), beta, derivative_vec(b_center),
-      derivative_angular(b), gamma, derivative_vec(c_center), derivative_angular(c)));
+      derivative_angular(b), gamma, derivative_vec(c_center), derivative_angular(c), omega));
 }
 
 }  // namespace generativeqc::integrals::generated_df_cpu

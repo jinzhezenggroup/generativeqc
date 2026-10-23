@@ -32,8 +32,9 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
   // whitened auxiliary axis. E=A Q diag(lambda^-1/2) and the symmetric
   // C=E Q^T therefore give exactly the same K. Keep E here: rotating back
   // would project every eigendirection again for each tiny output panel.
-  // Streamed plans publish no resident C view and cannot lend their final
-  // projection to response; resident/packed owners keep their symmetric C.
+  // Streamed plans publish no resident view and cannot lend their final
+  // projection to response. Single packed owners separately retain E together
+  // with its explicit response gauge; other resident owners keep symmetric C.
   const bool eigen_basis = plan.streamed && plan.metric_full_rank[system];
   // Only fuse when neither buffer can hold two auxiliary directions. Here
   // both routes evaluate each source integral once for this Q; fusion avoids

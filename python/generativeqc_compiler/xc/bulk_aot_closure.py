@@ -16,6 +16,7 @@ import shlex
 import shutil
 import stat
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +37,15 @@ SCHEMA = "generativeqc.libxc-cpu-closure/v1"
 # CPATH, GCC_EXEC_PREFIX, LD_PRELOAD, compiler-cache settings, etc. are not inherited.
 CPU_ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"}
 _SIMPLE_FLAGS = frozenset({"-std=c99", "-O0", "-O1", "-O2", "-O3", "-fPIC"})
+_CLANGXX_TOKEN_BYTES = 64 * 1024 * 1024
+# Clang dump records have tab-separated spelling/flags/location fields. Literal
+# newlines are representable; literal tabs in non-whitespace spellings are not.
+_CLANGXX_LITERAL = r"(?:wide_|utf8_|utf16_|utf32_)?string_literal"
+_CLANGXX_RECORD = (
+    rf"(?:{_CLANGXX_LITERAL} '[^\t]*'|unknown '[ \t\r\n\v\f]+'|"
+    rf"(?!(?:eof|unknown|{_CLANGXX_LITERAL})\b)[a-z_][a-z_0-9]* '[^\t\r\n]*')"
+    r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+)
 
 
 def _system_gcc() -> Path:
@@ -48,6 +58,10 @@ def _system_clang() -> Path:
 
 def _system_gxx() -> Path:
     return Path("/usr/bin/g++").resolve()
+
+
+def _system_clangxx() -> Path:
+    return Path("/usr/bin/clang++").resolve()
 
 
 @dataclass(frozen=True)
@@ -224,6 +238,119 @@ def _validate_flags(flags: tuple[str, ...], *, cxx: bool = False) -> None:
         raise ValueError("unsupported CPU compiler flag")
 
 
+def _clang_cxx_job_arguments(line: str) -> list[str]:
+    """Decode quoted Clang -### words using LLVM sys::printArg's protocol.
+
+    LLVM escapes quote, backslash and dollar once inside each quoted argument.
+    POSIX shlex leaves the dollar escape intact. Admit only the observed fully
+    quoted protocol; no shell expansion, concatenation or escape stripping.
+    """
+    words = []
+    index = 0
+    while index < len(line):
+        if line[index].isspace():
+            index += 1
+            continue
+        if line[index] != '"':
+            raise ValueError("unsupported-clang-job-model")
+        index += 1
+        word = []
+        while index < len(line) and line[index] != '"':
+            if line[index] == "\\":
+                index += 1
+                if index == len(line) or line[index] not in '\\"$':
+                    raise ValueError("unsupported-clang-job-model")
+            word.append(line[index])
+            index += 1
+        if index == len(line):
+            raise ValueError("unsupported-clang-job-model")
+        words.append("".join(word))
+        index += 1
+        if index < len(line) and not line[index].isspace():
+            raise ValueError("unsupported-clang-job-model")
+    return words
+
+
+def _validate_clang_cxx_tokens(text: str) -> None:
+    """Validate complete Clang token records as data.
+
+    Literal tabs in non-whitespace spellings have ambiguous dump framing and
+    remain unsupported. Ordinary/multiline raw strings are not identifiers.
+    """
+    # Validate every record, exactly one final EOF, and unambiguous field/line
+    # framing before interpreting a spelling. This is not a substring search
+    # through arbitrary diagnostics or source/literal text.
+    eof = r"eof ''\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n)*{eof}", text) is None:
+        raise ValueError("unsupported-clangxx-token-stream")
+    if re.search(r"^[a-z_][a-z_0-9]* '(?:module|import)'\t", text, re.MULTILINE):
+        raise ValueError("unsupported-clangxx-module-token")
+
+
+def _validate_clang_cxx_macro_records(text: str, sentinel: str) -> None:
+    """Read directive records only after Clang raw-lexes its -dD projection.
+
+    The compiler owns literal/comment classification. A fake #define inside a
+    multiline literal is one string token, never a directive event. This reads
+    compiler records, not C++ expressions or a second preprocessor.
+    """
+    if re.fullmatch(rf"(?:{_CLANGXX_RECORD}\n?)+", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    suffix = r"\t[^\t\r\n]*\tLoc=<[^\t\r\n]+>"
+    end = (
+        rf"raw_identifier '{re.escape(sentinel)}'{suffix}"
+        rf"(?:\nunknown '[ \t\r\n\v\f]+'{suffix})*"
+    )
+    if re.search(rf"(?:^|\n){end}$", text) is None:
+        raise ValueError("unsupported-clangxx-macro-stream")
+    directive: list[tuple[str, str]] | None = None
+
+    def check_definition() -> None:
+        if directive is None or len(directive) < 3:
+            return
+        if directive[0] != ("hash", "#"):
+            return
+        action = directive[1]
+        kind, name = directive[2]
+        if action == ("raw_identifier", "pragma") and name in {
+            "push_macro",
+            "pop_macro",
+        }:
+            raise ValueError("unsupported-clangxx-macro-stack")
+        if action == ("raw_identifier", "undef") and name == "_GLIBCXX_USE_CXX11_ABI":
+            raise ValueError("unsupported-clangxx-abi")
+        if action != ("raw_identifier", "define"):
+            return
+        if kind != "raw_identifier":
+            raise ValueError("unsupported-clangxx-macro-stream")
+        if name == "_GLIBCXX_USE_CXX11_ABI":
+            if directive[3:] != [("numeric_constant", "1")]:
+                raise ValueError("unsupported-clangxx-abi")
+        elif name in {
+            "_GLIBCXX_DEBUG",
+            "_GLIBCXX_PARALLEL",
+            "_GLIBCXX_PROFILE",
+            "_LIBCPP_VERSION",
+        }:
+            raise ValueError("unsupported-clangxx-abi")
+
+    for match in re.finditer(_CLANGXX_RECORD, text):
+        head, flags, _ = match[0].rsplit("\t", 2)
+        kind, spelling = head.split(" ", 1)
+        spelling = spelling[1:-1]
+        if kind == "unknown":
+            if "\n" in spelling or "\r" in spelling:
+                check_definition()
+                directive = None
+            continue
+        if kind == "hash" and "[StartOfLine]" in flags:
+            check_definition()
+            directive = []
+        if directive is not None:
+            directive.append((kind, spelling))
+    check_definition()
+
+
 def collect_cpu_closure(
     variant: SourceVariant,
     source_path: Path,
@@ -245,10 +372,12 @@ def collect_cpu_closure(
     closed. The recipe includes the physical source path: __FILE__ and quoted
     include resolution make it part of object identity. Time macros are errors.
 
-    ``language="c++"`` explicitly admits native system G++ with a ``.cpp``
-    source and exactly one ``-std=c++20`` flag. Pass ``compiler="g++"`` and
-    explicit flags; the C defaults do not select this domain. Actual cc1plus/as
-    jobs, C++ ABI macros and include search configuration are observed. PCH,
+    ``language="c++"`` explicitly admits native system G++ or, with
+    ``compiler_family="clang"``, Clang++ with a ``.cpp``
+    source and exactly one ``-std=c++20`` flag. Pass ``compiler="g++"`` or
+    ``compiler="clang++"`` respectively, with explicit flags; the C defaults do
+    not select this domain. Actual frontend/assembler jobs, C++ ABI macros and
+    include search configuration are observed. PCH,
     modules, alternate ABI flags and link closure remain unsupported.
 
     The caller must hold the asserted immutable snapshot through compilation and
@@ -267,7 +396,7 @@ def collect_cpu_closure(
         return CpuClosureResult(None, None, ("unsupported-cpu-platform-or-backend",))
     if compiler_family not in {"gcc", "clang"}:
         return CpuClosureResult(None, None, ("unsupported-compiler-family",))
-    if language not in {"c", "c++"} or (language == "c++" and compiler_family != "gcc"):
+    if language not in {"c", "c++"}:
         return CpuClosureResult(None, None, ("unsupported-source-language",))
     is_cxx = language == "c++"
     try:
@@ -281,7 +410,9 @@ def collect_cpu_closure(
     source = source_path.absolute()
     is_clang = compiler_family == "clang"
     system_driver = (
-        _system_clang if is_clang else (_system_gxx if is_cxx else _system_gcc)
+        (_system_clangxx if is_cxx else _system_clang)
+        if is_clang
+        else (_system_gxx if is_cxx else _system_gcc)
     )
     if path != system_driver():
         return CpuClosureResult(None, None, ("unsupported-compiler-wrapper",))
@@ -321,7 +452,14 @@ def collect_cpu_closure(
         ):
             raise ValueError("compiler-selection-changed")
 
-    def query(arguments: list[str], *, diagnostic: bool = False) -> str:
+    def query(
+        arguments: list[str],
+        *,
+        diagnostic: bool = False,
+        token_budget: int | None = None,
+        input_fds: tuple[int, ...] = (),
+        failure_reason: str = "compiler-command-failed",
+    ) -> str:
         check_working_directory()
         check_clang_selection()
         remaining = deadline - time.monotonic()
@@ -329,21 +467,62 @@ def collect_cpu_closure(
             raise TimeoutError
         if is_clang and "--no-default-config" not in arguments:
             arguments = ["--no-default-config", *arguments]
-        result = run_compiler(
-            [str(path), *arguments],
-            remaining,
-            label="CPU AOT closure",
-            environment=dict(CPU_ENVIRONMENT),
-        )
+        if is_clang and is_cxx and "--driver-mode=g++" not in arguments:
+            arguments = ["--driver-mode=g++", *arguments]
+        limited = False
+        if token_budget is None:
+            result = run_compiler(
+                [str(path), *arguments],
+                remaining,
+                label="CPU AOT closure",
+                environment=dict(CPU_ENVIRONMENT),
+            )
+            output = result.stderr if diagnostic else result.stdout
+        else:
+            # Keep the existing finite process-group owner. This helper execs
+            # the same verified driver in-place, with both outputs going to an
+            # anonymous bounded file; its fd/limit are observation provenance,
+            # not object compiler flags or a second compiler/cache owner.
+            helper = (
+                "import os,resource,sys; "
+                "fd=int(sys.argv[1]); limit=int(sys.argv[2]); "
+                "resource.setrlimit(resource.RLIMIT_CORE,(0,0)); "
+                "resource.setrlimit(resource.RLIMIT_FSIZE,(limit,limit)); "
+                "os.dup2(fd,1); os.dup2(fd,2); "
+                "os.execv(sys.argv[3],sys.argv[3:])"
+            )
+            with tempfile.TemporaryFile() as capture:
+                result = run_compiler(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-S",
+                        "-c",
+                        helper,
+                        str(capture.fileno()),
+                        str(token_budget),
+                        str(path),
+                        *arguments,
+                    ],
+                    remaining,
+                    label="CPU AOT token observation",
+                    environment=dict(CPU_ENVIRONMENT),
+                    pass_fds=(capture.fileno(), *input_fds),
+                )
+                limited = os.fstat(capture.fileno()).st_size >= token_budget
+                capture.seek(0)
+                output = "" if limited else capture.read(token_budget).decode("utf-8")
         check_working_directory()
         check_clang_selection()
         if result.timed_out:
             raise TimeoutError
+        if limited:
+            raise ValueError("clangxx-token-output-limit")
         if result.returncode:
-            raise ValueError("compiler-command-failed")
+            raise ValueError(failure_reason)
         # Remove record terminators only: GCC quotes a filename's terminal
         # space/tab, and trimming that whitespace destroys dependency identity.
-        return (result.stderr if diagnostic else result.stdout).rstrip("\r\n")
+        return output.rstrip("\r\n")
 
     def snapshot(files: tuple[CacheDependency, ...]) -> None:
         for item in files:
@@ -404,6 +583,10 @@ def collect_cpu_closure(
                 "-fintegrated-as",
                 *effective_flags,
             )
+            if is_cxx:
+                # Canonical clang++ commonly resolves to the clang executable.
+                # Preserve C++ driver semantics after resolving that symlink.
+                effective_flags = ("--driver-mode=g++", *effective_flags)
         if hash_input(source) != variant.source_sha256:
             return failure("source-mismatch")
         check_time_macros(source)
@@ -453,7 +636,9 @@ def collect_cpu_closure(
             ]
             if len(lines) != 1:
                 raise ValueError("unsupported-clang-job-model")
-            job = shlex.split(lines[0])
+            job = (
+                _clang_cxx_job_arguments(lines[0]) if is_cxx else shlex.split(lines[0])
+            )
 
             def selected(option: str) -> str | None:
                 if job.count(option) != 1:
@@ -471,18 +656,127 @@ def collect_cpu_closure(
                 or "-fno-integrated-as" in job
                 or selected("-triple") != target
                 or selected("-resource-dir") != resource
-                or selected("-x") != "c"
+                or selected("-x") != ("c++" if is_cxx else "c")
+                or (is_cxx and job.count("-std=c++20") != 1)
                 or any(
                     arg in job for arg in ("-load", "-plugin", "-isysroot", "-fmodules")
                 )
                 or job[-1] != str(source)
             ):
                 raise ValueError("unsupported-clang-job-model")
-            return {
+            context = {
                 "resource_directory": resource,
                 "object_job": job,
                 "driver_plan": plan,
             }
+            if is_cxx:
+                macros = query([*effective_flags, "-dM", "-E", str(source)])
+                if not re.search(
+                    r"^#define __cplusplus 202002L$", macros, re.MULTILINE
+                ) or not re.search(
+                    r"^#define __GXX_ABI_VERSION [0-9]+$", macros, re.MULTILINE
+                ):
+                    raise ValueError("unsupported-clangxx-abi")
+                # -dD omits consumed pragma stack events. Poison only their
+                # names before preprocessing so Clang also checks destringized
+                # and token-pasted _Pragma expansions, without banning the
+                # ordinary _Pragma macros used by system/C++ headers. The gate
+                # changes observation only, never the actual object flags.
+                with tempfile.TemporaryFile() as stack_guard:
+                    stack_guard.write(b"#pragma GCC poison push_macro pop_macro\n")
+                    stack_guard.flush()
+                    stack_guard.seek(0)
+                    query(
+                        [
+                            *effective_flags,
+                            "-E",
+                            "-include",
+                            f"/proc/self/fd/{stack_guard.fileno()}",
+                            str(source),
+                        ],
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(stack_guard.fileno(),),
+                        failure_reason="unsupported-clangxx-macro-stack",
+                    )
+                # -dD includes ordinary output, so its text is not itself a
+                # directive/event protocol. Let the same Clang raw lexer own
+                # literal boundaries before interpreting active definitions.
+                macro_history = query(
+                    [*effective_flags, "-E", "-dD", str(source)],
+                    token_budget=_CLANGXX_TOKEN_BYTES,
+                )
+                sentinel = "generativeqc_macro_end_" + canonical_hash(
+                    {"history": macro_history}
+                )
+                with tempfile.TemporaryFile() as projection:
+                    projection.write(
+                        (macro_history + "\n" + sentinel + "\n").encode("utf-8")
+                    )
+                    projection.flush()
+                    projection.seek(0)
+                    raw_tokens = query(
+                        [
+                            *effective_flags,
+                            "-fsyntax-only",
+                            "-Xclang",
+                            "-dump-raw-tokens",
+                            "-x",
+                            "c++",
+                            f"/proc/self/fd/{projection.fileno()}",
+                        ],
+                        diagnostic=True,
+                        token_budget=_CLANGXX_TOKEN_BYTES,
+                        input_fds=(projection.fileno(),),
+                    )
+                _validate_clang_cxx_macro_records(raw_tokens, sentinel)
+                # C++20 named modules can compile from .cpp without -fmodules;
+                # neither the driver job nor dependency headers expose that
+                # declaration. Reuse Clang's preprocessed lexer, not a second
+                # C++ parser. Conservatively exclude module/import spellings as
+                # tokens (including otherwise ordinary contextual identifiers).
+                tokens = query(
+                    [
+                        *effective_flags,
+                        "-fsyntax-only",
+                        "-Xclang",
+                        "-dump-tokens",
+                        str(source),
+                    ],
+                    diagnostic=True,
+                    token_budget=_CLANGXX_TOKEN_BYTES,
+                )
+                _validate_clang_cxx_tokens(tokens)
+                search = query(
+                    [*effective_flags, "-E", "-v", str(source)], diagnostic=True
+                )
+                include_search = re.search(
+                    r'(#include "\.\.\." search starts here:.*?End of search list\.)',
+                    search,
+                    re.DOTALL,
+                )
+                gcc_selection = re.findall(
+                    r"^Selected GCC installation: (.+)$", search, re.MULTILINE
+                )
+                if (
+                    include_search is None
+                    or len(gcc_selection) != 1
+                    or not Path(gcc_selection[0]).is_absolute()
+                    or not Path(gcc_selection[0]).is_dir()
+                ):
+                    raise ValueError("unsupported-clangxx-include-search")
+                context.update(
+                    macros=macros,
+                    macro_history_sha256=canonical_hash(
+                        {"macro_history": macro_history}
+                    ),
+                    token_stream_sha256=canonical_hash({"tokens": tokens}),
+                    include_search=include_search[1],
+                    gcc_installation=gcc_selection[0],
+                    # Includes multilib selection and ignored search paths;
+                    # changes must be observed even with identical headers.
+                    search_diagnostics=search,
+                )
+            return context
 
         def gcc_cxx_context() -> dict[str, Any]:
             plan = query(
@@ -647,7 +941,7 @@ def collect_cpu_closure(
             ),
             CacheDependency(
                 "cpu-build-context",
-                "clang-native"
+                ("clangxx-c++20-native" if is_cxx else "clang-native")
                 if is_clang
                 else ("gxx-c++20-native" if is_cxx else "gcc-native"),
                 canonical_hash(

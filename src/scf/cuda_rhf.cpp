@@ -2068,16 +2068,53 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
   const bool resident_value_requested =
       resident_value_selection != ReferenceResidentValuesSelection::disabled;
-  if (resident_value_requested && options.export_physical_reference && quartet_direct &&
+  // Finite public ledgers have no optional quartic reservation. Ordinary cold
+  // solves use a small source domain qualified against their fused Fock path;
+  // references retain their independent unscreened f-shell policy.
+  const auto source_policy = options.export_physical_reference
+                                 ? DirectJkSourceAutoPolicy::generic_f
+                                 : DirectJkSourceAutoPolicy::small_screened_cold;
+  const bool ordinary_resident_candidate = !options.export_physical_reference && !unrestricted &&
+                                           batch_size == 1 && first_setup && !any_system_warm &&
+                                           !runtime::active_device_resource_ledger;
+  bool ordinary_resident_requested = ordinary_resident_candidate && resident_value_requested;
+  if (ordinary_resident_requested &&
+      resident_value_selection == ReferenceResidentValuesSelection::automatic) {
+    ordinary_resident_requested = !direct_jk_source_auto_refusal(
+        nbf, direct_nbf, options.max_iterations,
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end()), true, false,
+        source_policy, options.screening_tolerance);
+  }
+  if (resident_value_requested &&
+      (options.export_physical_reference || ordinary_resident_requested) && quartet_direct &&
       !mixed_precision_fock && !incremental_direct_jk && !separate_fock_jk &&
       !shell_class_profiling && !bounded_fock_class_timing && !direct_tile_validation &&
       !bounded_direct_fock_only_diagnostic && !bounded_direct_count_diagnostic &&
       !bounded_direct_aot_only_diagnostic) {
+    auto required = resources.reference_peak_bytes_;
+    auto budget = options.reference_memory_budget_bytes;
+    if (!options.export_physical_reference) {
+      // Only unlimited ordinary consumers enter here. Still account for the
+      // mandatory arena, provider/solver workspace, simultaneous host staging,
+      // publication and initial-guess storage alongside the optional source.
+      budget = std::numeric_limits<std::size_t>::max();
+      required = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
+                                                 reference_provider_allowance, budget);
+      required = posthf::checked_add(required,
+                                     posthf::checked_add(resources.solver_workspace_bytes_,
+                                                         resources.solver_host_workspace_bytes_));
+      required = posthf::checked_add(
+          required, tensor::CudaMatrixProductBinding::kPreparationHostBytes +
+                        tensor::CudaStructuredProductBinding::kPreparationHostBytes);
+      if (options.preliminary_guess)
+        // The seed owner independently refuses work above this declared bound.
+        required = posthf::checked_add(required, options.preliminary_guess->maximum_numeric_bytes);
+    }
     resident_values = std::make_unique<RhfResidentValues>(resources.stream_);
     const auto resident_status = resident_values->prepare(
-        device_id, systems, options.max_iterations, direct_nbf, resources.reference_peak_bytes_,
-        options.reference_memory_budget_bytes, first_setup,
-        host_uncovered_fock_shell_class_mask != 0);
+        device_id, systems, options.max_iterations, direct_nbf, required, budget, first_setup,
+        host_uncovered_fock_shell_class_mask != 0,
+        options.export_physical_reference ? 0.0 : options.screening_tolerance, source_policy);
     if (resident_status != GENERATIVEQC_STATUS_SUCCESS) {
       fill_global_failure(outputs, resident_status);
       return outputs;
@@ -4284,6 +4321,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // Energy and every force term consume this same P/F(P). In particular, the
   // Pulay weight below cannot switch to another canonical determinant.
   if (options.compute_forces) {
+    // Resident values bypass the ordinary Fock metadata producer. Derivative
+    // consumers still need the selected final density in Cartesian AO space,
+    // its pair bounds, and the corresponding force-compaction inventory.
+    if (phase_resident_active) {
+      cuda_error = launch_direct_quartet_metadata(final_density, false, false);
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+    }
     cuda_error = launch_direct_force_compaction();
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
@@ -5497,6 +5544,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     if (ppps_profile.descriptor_slots != 0U) {
       plan.last_ppps_queue_profile = std::move(ppps_profile);
     }
+  }
+  if (phase_resident_active) {
+    const auto resident_status = resident_values->audit();
+    if (resident_status != GENERATIVEQC_STATUS_SUCCESS) {
+      fill_global_failure(outputs, resident_status);
+      return outputs;
+    }
+    runtime::df_progress::Scope trace("cuda_rhf_ordinary_resident_completed", "cuda_completed");
+    resident_values->observe_completed(host_executed_fock_builds[0]);
   }
   const bool no_system_failed = std::none_of(host_failed.begin(), host_failed.end(),
                                              [](std::uint8_t value) { return value != 0; });

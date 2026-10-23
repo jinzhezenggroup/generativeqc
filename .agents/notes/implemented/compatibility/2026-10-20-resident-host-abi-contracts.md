@@ -303,3 +303,9 @@ for the Linux evidence above.
 An ordinary-emission host compilation seam can retain actual ordinary exports
 without replacing their bodies, or a broader production-owner ABI gate is needed.
 Do not remove further source guards based on this bounded host fixture.
+
+The [2026-10-23 follow-up](2026-10-23-resident-abi-execution.md) adds unchanged
+ordinary-emitter compilation, extension execution and separate validation
+arithmetic tests. It supersedes the need for ordinary ABI, status, symmetry and
+hook spelling guards, while retaining the floating/computed span boundary and
+the device qualification limits documented here.

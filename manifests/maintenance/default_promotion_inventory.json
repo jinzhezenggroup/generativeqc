@@ -142,7 +142,7 @@
       "sources": [
         "src/dft/cuda_ks.cpp"
       ],
-      "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
+      "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied cold or warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
       "revisit_condition": "Keep numerical matrix validation separate from production replay and clean performance evidence; do not promote the diagnostic overhead as part of the execution policy.",
       "evidence": [
         "docs/developer/ks_df_warm_seed.md",
@@ -246,15 +246,18 @@
         "src/scf/cuda/rhf_resident_values.cpp",
         "src/scf/cuda_rhf.cpp"
       ],
-      "rationale": "Unset/auto conservatively selects a phase-local exact FP64 source only for fresh single restricted unscreened physical-reference buckets with uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs and an iteration limit of at least eight. The static domain heuristic is not an observed reuse count or a universal profitability model. Complete numeric admission, an 8-GiB value ceiling and a 256-MiB free-device reserve retain exact fallback. Local graphs and values retire before correlation; refused/warm calls reuse ordinary bucket graphs. Explicit 0 restores the original schedule and 1 requests values without bypassing scientific/resource gates.",
-      "revisit_condition": "Broaden the cold/domain heuristic only with new source-matched complete E+F comparisons and independent gates, including quickly converged fresh seeds and generated/lower-angular schedules. Preserve final physical Fock/census audits, compensated FP64 arithmetic and bounded lifetime; do not pool retained opt-in measurements with new default-auto qualification.",
+      "rationale": "Unset/auto retains the existing fresh single restricted unscreened physical-reference domain: uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs, iteration limit at least eight, 8-GiB value ceiling. Ordinary restricted FP64 cold solves additionally admit through-d screened domains with 64 or more public AOs and at most 128 Cartesian AOs, iteration limit at least eight and a 512-MiB value ceiling. These require a fresh single-system bucket, internal guess and no active public resource ledger. Other ordinary sizes refuse before provider cloning/sorting. Complete numeric admission and free-device reserve retain exact fallback. Phase graphs retire before values; warm/reused buckets retain ordinary graphs. Final derivative metadata is explicitly produced from the selected final density. Explicit 0 restores the streamed schedule and 1 remains subject to scientific/resource gates. The static domain guard is not a universal profitability model.",
+      "revisit_condition": "Broaden either cold/domain heuristic only with source-matched complete cold/warm/moved E+F comparisons and independent gates, including quickly converged fresh seeds, larger sizes and constrained resources. Forced larger ordinary domains currently regress despite fitting memory. Preserve final physical Fock/census audits, derivative density identity, compensated FP64 arithmetic and bounded lifetime; never pool forced exploratory populations with actual default-auto qualification.",
       "evidence": [
         "docs/developer/scf_module_boundaries.md",
         ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
         "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
         "tests/python/test_rhf_reference_cache_policy.py",
         "tests/python/test_rhf_resident_values_lifetime.py",
-        "tests/python/test_rhf_phase_resident_values_cuda.py"
+        "tests/python/test_rhf_phase_resident_values_cuda.py",
+        ".agents/notes/implemented/performance/2026-10-23-small-direct-cold-resident.md",
+        "benchmarks/results/direct-cold-resident-20261023/README.md",
+        "tests/python/test_rhf_ordinary_resident_cuda.py"
       ]
     },
     {
@@ -536,12 +539,15 @@
         1598
       ],
       "sources": [
-        "python/generativeqc/resources_hf.py"
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/one_electron_gradient_bridge.cu"
       ],
-      "rationale": "Generated one-electron execution is production-owned; these mapping variables preserve measured/reproduction schedule overrides rather than a second scientific implementation.",
+      "rationale": "Generated one-electron execution is production-owned; these mapping variables preserve measured/reproduction schedule overrides rather than a second scientific implementation. Prepared KS Hcore now honors the existing cooperative default with implicit triangular AO addressing after a new five-pair 48/96-atom warm/moved-warm qualification; overlap-only Pulay and explicit noncooperative schedules retain component lanes. Historical failed promotion populations remain retained.",
       "revisit_condition": "Retire overrides when retained evidence no longer requires forced mappings and the automatic compiler-owned path remains independently auditable.",
       "evidence": [
-        "issue:#1598"
+        "issue:#1598",
+        "note:.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md",
+        "benchmarks:benchmarks/results/dft-cold-stage1-20261023/README.md"
       ]
     },
     {
@@ -614,7 +620,6 @@
       "id": "df.value-candidates",
       "classification": "negative-evidence",
       "controls": [
-        "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING",
         "hf-runtime:GENERATIVEQC_DF_VALUE_RAW_MAPPING",
         "hf-runtime:GENERATIVEQC_DF_VALUE_MATH"
       ],
@@ -625,7 +630,7 @@
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "Alternative generated DF value mappings/math remain explicit candidates after retained cold complete-endpoint regressions; the established generic/scalar route remains the safe default.",
+      "rationale": "Alternative generated DF value scalar math and raw primitive-lane candidates remain explicit after retained cold complete-endpoint regressions. The separate prepared-Hermite entry covers automatic packed-source reuse; it does not promote these alternatives.",
       "revisit_condition": "Reopen only with new complete cold/warm/changed-geometry evidence that beats the current route without changing the scientific model or force gates.",
       "evidence": [
         "issue:#405",
@@ -833,8 +838,8 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_final_validation_policy.hpp"
       ],
-      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with exact-direct J/K at 384 or more AOs and exact-direct or density-fitted pure-J KS at 544 or more AOs. Stationary-density energy confirmation repairs the ordinary strict exact-direct pure-J SCF tail without changing any convergence gate, replacing the temporary 1088-AO admission hold. Source-bound Direct/48/96 complete cold/warm/moved/moved-warm control/default comparisons retain independent scientific gates and semantic work. The repair and integrated-head cohorts retain their own native image identities and per-call work counts separately. The original 192 r2SCAN-3c calls and candidate plots remain historical and the +15.985% Direct/96 moved failure is still rejected. Positive Direct/48 benefits below the descriptive 2%/MAD label remain enabled; DF and the prior PBE0 384/768-AO evidence retain their separate scope. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 fallback remain unchanged; explicit 1 remains experimental outside the default scope.",
-      "revisit_condition": "Require source-bound complete cold/warm/moved/moved-warm endpoint nonregression and independent scientific acceptance for further changes; changed SCF work, a verifier repair or a warm-only gain cannot waive a slower complete endpoint. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified for default admission. Preserve original source identities and negatives; do not infer other-functional timing gains. Separately qualify UKS, fitted exchange, RSH, nonlocal, incremental, ECP, lower precision and device-chunk stationary confirmation; retain the bounded fallback and unchanged true maximum-residual gate.",
+      "rationale": "Unset selects resident final-state matrix products for strict-FP64 all-electron full-range restricted global hybrids with matching exact-direct or density-fitted J/K at 384 or more AOs and exact-direct or density-fitted pure-J KS at 544 or more AOs. Stationary-density energy confirmation repairs the ordinary strict exact-direct pure-J SCF tail without changing any convergence gate, replacing the temporary 1088-AO admission hold. Source-bound Direct/48/96 complete cold/warm/moved/moved-warm control/default comparisons retain independent scientific gates and semantic work. The repair and integrated-head cohorts retain their own native image identities and per-call work counts separately. The original 192 r2SCAN-3c calls and candidate plots remain historical and the +15.985% Direct/96 moved failure is still rejected. Positive Direct/48 benefits below the descriptive 2%/MAD label remain enabled; DF and the prior PBE0 384/768-AO evidence retain their separate scope. Bounded packets, matrix handle, accepted generation, published scratch-lease gates and explicit 0 fallback remain unchanged; explicit 1 remains experimental outside the default scope. A Standard incremental owner may reuse the same final products only after two consecutive full-density energies and the complete canonical proof; provisional delta operators remain excluded. The 2026-10-23 fitted-hybrid extension shares the same final matrix proof and retains explicit rollback, independent CPU/dense references and complete moved endpoint qualification.",
+      "revisit_condition": "Require source-bound complete cold/warm/moved/moved-warm endpoint nonregression and independent scientific acceptance for further changes; changed SCF work, a verifier repair or a warm-only gain cannot waive a slower complete endpoint. Keep the separate 384-AO hybrid and 544-AO pure-J lower bounds until smaller shapes are qualified for default admission. Preserve original source identities and negatives; do not infer other-functional timing gains. Separately qualify UKS, mixed exact/fitted J/K, RSH, nonlocal, unclosed incremental, ECP, lower precision and device-chunk stationary confirmation; retain the bounded fallback and unchanged true maximum-residual gate.",
       "evidence": [
         "pr:#2220",
         "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
@@ -846,7 +851,10 @@
         "benchmarks:benchmarks/results/r2scan3c-stationary-confirmation-20261016/README.md",
         "benchmarks:benchmarks/results/r2scan3c-integrated-acceptance-20261016/README.md",
         "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
-        "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
+        "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz",
+        "note:.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md",
+        "benchmarks:benchmarks/results/dft-cold-stage1-20261023/README.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md"
       ]
     },
     {
@@ -1851,6 +1859,83 @@
         ".agents/notes/implemented/performance/2026-10-22-final-state-aware-ks-stopping.md",
         "tests/python/test_scf_review_contracts.py",
         ".agents/notes/implemented/numerics/2026-10-22-restrict-early-final-promotion.md"
+      ]
+    },
+    {
+      "id": "df.prepared-hermite-raw",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_VALUE_MAPPING"
+      ],
+      "owner_issues": [
+        2609
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/df_source.cpp",
+        "src/scf/cuda/df_md_raw.cu",
+        "src/scf/fock_prepared.cpp",
+        "src/scf/rhf.cpp"
+      ],
+      "rationale": "Automatic mapping prepares reusable normalized Hermite E only for a fresh single-system resident packed source within the unchanged planner remainder and a 256-MiB optional cap. Packed raw tiles retain strict FP64, every ordered primitive product, auxiliary g, public component conventions and factor-ordered whitening. Explicit mappings/math, batches and insufficient capacity retain the generic source. No grids, convergence thresholds, screening or force response change.",
+      "revisit_condition": "Preserve independent raw/energy/force gates, resource refusal and lifetime tests, and complete cold/warm endpoint work counts. Requalify other residency/batch domains. Do not trade fitted/occupied owners or larger panel work for E storage; retain the demonstrated host validation loop alignment across link changes.",
+      "evidence": [
+        "tests/python/test_df_md_raw_cuda.py",
+        "tests/python/test_df_md_raw_endpoint_cuda.py",
+        "docs/developer/df_packed_storage.md",
+        "note:.agents/notes/implemented/performance/2026-10-22-prepared-hermite-raw-df.md"
+      ]
+    },
+    {
+      "id": "ks.df-cold-density-factor",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_COLD_FACTOR"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_cold_factor_policy.hpp",
+        "src/scf/df_density_seed_policy.hpp"
+      ],
+      "rationale": "At 384 or more AOs, native strict-FP64 restricted fitted-exchange cold seeds may use an algebraic factor only after exact occupied rank, finite spectrum and full two-triangle density reconstruction proofs. Existing device scratch and optional accounted O(n) host spectrum keep bounded dense fallback. No canonical, warm-orbital or stationary projection provenance is granted. Explicit 0 disables; explicit 1 permits smaller experiments without relaxing work or scientific gates. Imported and full-rank ensemble seeds retain dense first K.",
+      "revisit_condition": "Require independent matrix and complete energy/force endpoint qualification for broader rank, spin, precision or provider domains. Preserve failure cleanup, resource accounting and dense fallback.",
+      "evidence": [
+        "note:.agents/notes/implemented/performance/2026-10-23-dft-cold-density-factors.md",
+        "benchmarks:benchmarks/results/dft-cold-stage1-20261023/README.md",
+        "tests/native/ks_cold_factor_cases.hpp",
+        "tests/python/test_df_density_seed_policy.py"
+      ]
+    },
+    {
+      "id": "ks.incremental-proposals",
+      "classification": "retained-opt-in",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_PROPOSALS",
+        "ks-runtime:GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/ks_incremental_policy.hpp",
+        "src/scf/cuda_fock_execution.cpp",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "The global incremental Direct-J/K selector remains opt-in. Within a selected strict-FP64 exact Direct owner, bounded screened proposals inherit existing Standard model, spin, resource and complete final-proof admission without an additional functional whitelist. Zero or unset interval cannot create an unbounded screened chain: the cap is eight deltas. Proposal energies never count toward the mandatory full-density closing pair. Internally retained eligible same-geometry warm states use ordinary full-density proof; explicit seeds, changed geometry and clear restore cold policy. Explicit proposals=0 restores the ordinary screened cadence. Public resource budgets remain unsupported. The first eight eligible delta actions per solve may use 1e-9 screening through an explicit provisional MD-J/generated-K facade; the immutable target cutoff remains in force for full/warm/final/force consumers. Unsupported producers and exhausted proposal budgets retain the original cutoff; coarse_screening=0 disables only this heuristic.",
+      "revisit_condition": "Broaden provider, spin or proof capabilities only with independent cold/warm/displaced E/F validation. Preserve the global opt-in, finite screened epoch, fresh full closure and truthful work counters; sampled PBE0 speedups do not establish a universal functional or geometry performance guarantee.",
+      "evidence": [
+        "docs:docs/user/ks_options.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md",
+        "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/README.md",
+        "tests/python/test_ks_incremental_controller.py",
+        "tests/python/test_ks_incremental_convergence_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-23-provisional-delta-screening.md",
+        "benchmarks:benchmarks/results/incremental-cold-proposals-20261023/coarse-screening.json"
       ]
     }
   ]

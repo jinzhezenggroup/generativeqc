@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -44,14 +45,20 @@ def test_complete_g_partition_matches_independent_forces(
     The complete default fit contains both f and g auxiliary functions. The
     small case explicitly selects the shell route to exercise its six-term
     metadata independently of the larger automatic profitability threshold.
-    Packed requests retain dense weights when the g remainder needs them.
+    Packed requests retain dense weights for the complete auxiliary-g domain.
+    AUTO must select the same CUDA auxiliary owner as explicit CUDA DF.
+    Intrusive shell diagnostics prove g work runs in the generated consumer;
+    shell-sp and generic retain the independently checked generic remainder.
     """
     trace = tmp_path / "progress.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(trace))
     monkeypatch.setenv("GENERATIVEQC_DF_WEIGHTED_EXECUTION", route)
     monkeypatch.setenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS", pairs)
     monkeypatch.setenv("GENERATIVEQC_DF_PRIMITIVE_BUCKETS", buckets)
-    check_endpoint(method, xc, False, "water-def2-svp-spherical")
+    monkeypatch.setenv("GENERATIVEQC_DF_SHELL_WORK", "1")
+    check_endpoint(
+        method, xc, False, "water-def2-svp-spherical", density_fitting="auto"
+    )
     values = [
         row
         for line in trace.read_text().splitlines()
@@ -62,7 +69,7 @@ def test_complete_g_partition_matches_independent_forces(
         for row in values
     )
     g_work = any(
-        row.get("key") == "three_center_auxiliary_g_remainder_panels"
+        re.fullmatch(r"shell_[0-3][0-3]4_work_active_shell_tasks", row.get("key", ""))
         and row["value"] > 0
         for row in values
     )

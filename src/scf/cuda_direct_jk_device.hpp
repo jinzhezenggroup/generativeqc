@@ -145,6 +145,16 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   int* numerical_error, std::string& detail,
                                                   std::uint64_t* census = nullptr);
 
+/** Enqueue an explicitly provisional, coarser screened full-range RKS J/K.
+ * Only existing MD-J and generated K owners are admitted. Unsupported consumers
+ * return NOT_IMPLEMENTED before submission, so the caller can use ordinary J/K.
+ * Screening may only be coarser than the immutable prepared source. This is not
+ * a physical Fock certificate: the solver must close with its original operator.
+ */
+generativeqc_status enqueue_cuda_direct_jk_proposal_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, int* numerical_error, double screening, std::string& detail);
+
 /** Whether an ordinary value action has complete canonical census coverage.
  * Generated/generic channels do not silently report zero as measured work. */
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,

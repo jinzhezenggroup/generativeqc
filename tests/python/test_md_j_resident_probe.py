@@ -113,6 +113,7 @@ def test_resident_bridge_artifact_hit_needs_no_compiler_cache(
             for name in (
                 "create",
                 "execute",
+                "propose",
                 "capture",
                 "replay",
                 "graph_nodes",
@@ -382,6 +383,7 @@ struct PreparedCudaFockBinding {
   explicit operator bool() const { return stream != nullptr; }
 };
 inline PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan&) { return {}; }
+template<class... Args> int enqueue_prepared_cuda_fock_proposal(Args&&...) { return 1; }
 inline int enqueue_prepared_cuda_fock(const PreparedFockPlan&, const double* density,
                                      const double* beta, std::size_t elements, double* coulomb,
                                      double* alpha_exchange, double* beta_exchange,
