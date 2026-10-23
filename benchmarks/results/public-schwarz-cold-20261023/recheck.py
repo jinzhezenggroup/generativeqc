@@ -32,6 +32,10 @@ def paired_difference(first: dict, second: dict) -> tuple[float, float]:
 
 def main() -> None:
     """Check artifact integrity and scientific gates, not current source hashes."""
+    if not __debug__:
+        raise RuntimeError(
+            "Requalification requires Python assertions; do not use -O or PYTHONOPTIMIZE."
+        )
     directory = Path(__file__).resolve().parent
     root = directory.parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -52,9 +56,10 @@ def main() -> None:
     records = {name: json.loads(value) for name, value in texts.items()}
     for variant in ("baseline", "candidate"):
         text = (raw / f"{variant}-source.json").read_text()
-        assert hashlib.sha256(text.encode()).hexdigest() == summary["sources"][
-            variant
-        ]["manifest_sha256"]
+        assert (
+            hashlib.sha256(text.encode()).hexdigest()
+            == summary["sources"][variant]["manifest_sha256"]
+        )
     for name, expected in summary["references"].items():
         assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
     reference = directory.parent / "readme-final-20261022"
@@ -87,9 +92,10 @@ def main() -> None:
 
     for population in summary["moved"]:
         name = f"moved/{population['variant']}-{population['case']}.json"
-        assert hashlib.sha256(texts[name].encode()).hexdigest() == population[
-            "receipt_sha256"
-        ]
+        assert (
+            hashlib.sha256(texts[name].encode()).hexdigest()
+            == population["receipt_sha256"]
+        )
         record = records[name]
         references = records[f"moved/candidate-{population['case']}.json"]["references"]
         assert record["status"] == "complete"
@@ -106,7 +112,9 @@ def main() -> None:
             count += 1
     assert count == summary["qualified_complete_calls"] == 170
     print(f"Independent scientific gates: {count} complete E/F calls passed.")
-    print(f"Stricter baseline/candidate paired diagnostic failures retained: {diagnostic_failures}.")
+    print(
+        f"Stricter baseline/candidate paired diagnostic failures retained: {diagnostic_failures}."
+    )
     print("Recorded same-binary Fast variation also reproduced from the receipts.")
 
 
