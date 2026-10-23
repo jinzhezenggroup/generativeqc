@@ -361,6 +361,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       incremental_energy_refinement{};
   bool incremental_proposals_requested{true}, incremental_proposals_active{};
   bool incremental_coarse_screening_requested{true};
+  bool mixed_source_coarse_screening_requested{};
   bool fast_anchor_eligible{}, fast_anchor_active{}, fast_anchor_ready{}, pending_fast_delta{};
   void* fast_anchor_arena{};
   double *fast_anchor_density{}, *fast_delta_density{}, *fast_anchor_j{}, *fast_anchor_exchange{},
@@ -440,6 +441,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
   std::uint64_t phase_submitted_begin{};
   std::size_t phase_device_bytes{}, phase_host_bytes{};
+  double phase_source_screening{};
 
   /** A successful SCF closes captured iteration borrowers, not immutable ERIs.
    * The final-state token still owns D/W/XC and the primary derivative source;
@@ -458,6 +460,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void retire_phase_source(bool audit) {
     range_warm_energy = std::numeric_limits<double>::infinity();
     phase_source_range = false;
+    phase_source_screening = 0.0;
     if (!phase_source) return;
     auto retired = std::move(phase_source);
     resource.provider_device_bytes -= phase_device_bytes;
@@ -587,6 +590,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         stream,
         has_range_correction ? source_strategy.spec.exchange.op : scf::FockOperator::FullRange,
         has_range_correction ? source_strategy.spec.exchange.omega : 0.0, mixed_source);
+    // Freeze the proposal predicate with its immutable source. It must also
+    // govern every consumer, including uncached buckets and the census audit.
+    // Precision handoff destroys this lease before any strict physical Fock.
+    phase_source_screening = mixed_source_proposal_screening(
+        mixed_source_coarse_screening_requested,
+        mixed_source && budget_stationarity && has_exchange && !has_range_correction &&
+            !nonlocal_correlation && standard_convergence_model && spins == 1 &&
+            maximum_angular <= 2 && configured_chunk_width() == 1,
+        source_strategy.screening_tolerance);
     check(phase_source->prepare(
               device, {system}, options.max_iterations, direct_nbf, required,
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
@@ -594,8 +606,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
               selection,
               has_range_correction ? "cuda_ks_range_resident_values_prepare"
                                    : "cuda_ks_resident_values_prepare",
-              source_cold_phase, generic_fock, source_strategy.screening_tolerance, buckets.ceiling,
-              false, auto_policy, buckets.mask, spins,
+              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
+              auto_policy, buckets.mask, spins,
               automatic_range && !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
@@ -643,9 +655,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // A resident F[D] executes FP64 products/scatter and no new recurrences.
       if (mixed)
         check(cudaMemsetAsync(mixed_coulomb_work_counter(), 0, sizeof(std::uint64_t), stream));
+      runtime::cuda_trace::trace_counter(
+          "mixed_source_coarse_screening",
+          mixed && phase_source_screening > provider.strategy().screening_tolerance);
       return phase_source->enqueue(provider.strategy().spec, alpha, j,
                                    has_exchange ? exchange : nullptr, jk_error,
-                                   provider.strategy().screening_tolerance, detail, beta,
+                                   phase_source_screening, detail, beta,
                                    has_exchange && spins == 2 ? exchange + matrix : nullptr);
     }
     // Intermediate delta operators only propose densities. Keep the prepared
@@ -1588,6 +1603,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
         throw std::invalid_argument("GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING requires 0 or 1");
       incremental_coarse_screening_requested = std::strcmp(setting, "1") == 0;
+    }
+    mixed_source_coarse_screening_requested =
+        default_mixed_source_proposal(n, provider.system().atoms.size());
+    if (const auto* setting = std::getenv("GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING")) {
+      if (std::strcmp(setting, "0") != 0 && std::strcmp(setting, "1") != 0)
+        throw std::invalid_argument(
+            "GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING requires 0 or 1");
+      mixed_source_coarse_screening_requested = std::strcmp(setting, "1") == 0;
     }
     fast_anchor_eligible = admit_fast_anchor_delta(
         budget_fock, budget_stationarity, functional,
