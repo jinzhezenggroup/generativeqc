@@ -1,6 +1,6 @@
 # Decision: observe fresh-process cache states without warming scientific plans
 
-Status: implemented for the benchmark driver; device campaign incomplete
+Status: implemented; sampled device campaign complete
 Date: 2026-10-23
 
 ## Problem
@@ -63,9 +63,11 @@ norm-reduction roundoff bound; source, geometry, scientific protocol, receipt
 hashes and original observable tolerances retain exact checks. This does not
 provide independent full-vector CBS force qualification.
 
-The separate pilot and all thirty formal processes still require the same
-frozen production SDK and physical GPU, per-sample independent accuracy, full
-raw recovery and publication verification. Host preparation is not completion.
+The separate pilot and all thirty formal processes passed on the same frozen
+production SDK and physical GPU, including per-sample independent numerical
+and cache checks. Raw recovery and independent CPU replay preserve their own
+provenance. These sampled results do not qualify a whole method domain or
+promote a default; host preparation alone remains insufficient.
 
 ## References
 

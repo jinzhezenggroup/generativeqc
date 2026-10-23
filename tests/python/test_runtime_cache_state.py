@@ -6,6 +6,7 @@ import copy
 import json
 import lzma
 import os
+import runpy
 import sys
 import tempfile
 import unittest
@@ -15,6 +16,51 @@ from benchmarks import runtime_cache_state as driver
 
 
 class CacheStateTests(unittest.TestCase):
+    def test_lossless_capsule_retains_config_order_signed_zero_and_text(self) -> None:
+        codec = runpy.run_path(
+            str(
+                driver.ROOT
+                / "benchmarks/results/runtime-cache-state-20261023/capsule.py"
+            )
+        )
+        config = {"second": 2, "first": 1, "independent_reference": {"energy": -1.25}}
+        value = {
+            "before": "α\r\n",
+            "config": {"first": 1, "second": 2},
+            "signed_zero": -0.0,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "request.json"
+            raw = codec["pretty"](value)
+            path.write_bytes(raw)
+            stored = codec["encode_member"](path, "process/request.json", config)
+            self.assertEqual(codec["decode_member"](stored, config), raw)
+            crlf = raw.replace(b"\n", b"\r\n")
+            path.write_bytes(crlf)
+            crlf_member = codec["encode_member"](path, "process/request.json", config)
+            self.assertEqual(codec["decode_member"](crlf_member, config), crlf)
+            stored["sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "raw recovery"):
+                codec["decode_member"](stored, config)
+
+    def test_capsule_rejects_host_independent_path_escapes(self) -> None:
+        codec = runpy.run_path(
+            str(
+                driver.ROOT
+                / "benchmarks/results/runtime-cache-state-20261023/capsule.py"
+            )
+        )
+        for name in (
+            "../escape",
+            "C:\\escape",
+            "a\\..\\escape",
+            "/absolute",
+            ".",
+            "a//b",
+        ):
+            with self.subTest(path=name), self.assertRaises(ValueError):
+                codec["relative_name"](name)
+
     def test_cache_gate_rejects_missing_stats_and_shared_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             campaign = Path(temporary)

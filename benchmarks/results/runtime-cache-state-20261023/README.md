@@ -1,134 +1,132 @@
-# Runtime cache-state E+F experiment
+# Fresh-process runtime cache-state E+F
 
-Status: **INCOMPLETE; no GPU measurement or new scientific acceptance yet.**
-This family implements the remaining timing slice of issue #2680. The earlier
-runtime inventory delivery is separate from these measurements.
+All **30 formal processes** pass the independent numerical and cache-state
+checks. Five full priming endpoints and a separate three-process WB97M-V pilot
+also pass. This is the five-case timing slice of #2680; the earlier module
+inventory is separate. Qualification covers these static geometries and SDK.
 
-## Frozen production and preparation
+## Observations
 
-The production source is Git revision
-`ececb48cd56a00a56fbb6223dc53bc61dfe6e11d`, exported with committed LF bytes.
-The 12,353-file inventory retains Git modes, blob identities and SHA-256 values.
-The source archive is 61,394,408 bytes, SHA-256
-`c6d6f674dd1955286cfc1f79d667062a9a308ddecd87f0b73e0eca5a417cb606`;
-the source inventory SHA-256 is
-`f2dd734bda6daa6eef4a517f6dfc27a8aa0183e3c12dc8eec4590515351cf769`.
-The driver has its own recorded identity and does not alter production source.
+Standard defaults, one Slurm RTX 5090, three fresh interpreters per case/state.
+Water-12/48 are **atom counts**. Full ranges, separate process-wall times and
+per-process driver spans/counts are in [timings.md](timings.md).
 
-The owned preparation root is
-`/data/srxu/projects/gqc-runtime-cache-state-20261023` on USTC node1.
-CPU-only Slurm job **13561** began at **2026-10-23 20:14:11 Asia/Shanghai**,
-with 8 CPU, 64 GiB and a 4h30 deadline of **2026-10-24 00:44:11**.
-That first attempt was cancelled at **20:35:39** after a measured PyPI download
-bottleneck; Slurm records `CANCELLED / 0:15`, while its original EXIT trap wrote
-`0`. Both are retained; the trap value is not a completed bootstrap.
-The public USTC mirror's bounded 1 MiB control returned HTTP 206 at 13.5 MB/s.
-One CPU-only continuation, **13562**, began at **20:36:22**, with the same
-8 CPU/64 GiB and a four-hour limit ending **2026-10-24 00:36:22**. No requeue
-or extension beyond the original deadline is enabled. It reuses the verified
-source and owned environment/cache, without clearing or re-extracting them.
-The environment has finished installation; native SDK compilation is running.
-This is not a completed SDK, GPU allocation or scientific result. The original batch
-script SHA-256 is
-`ebeb7be01139b2f80422dc1a20cee956008172fd26bb2c137d610fd6a2ee589c`.
-The continuation script SHA-256 is
-`6ae11a60d0cff3203b7845b96fe2f3200cc60ecf21ea5cb5158e8fb5cb3e8c30`.
-The build uses the public CUDA 12.9.86 toolkit and GCC 13.3, with verified
-sccache 0.16.0, private configuration/cache/socket, Release/sm120,
-FastCompile OFF, native stationary force execution and the complete default
-ordinary/SPD stationary AOT inventory. Build concurrency is bounded to
-one AOT compile, two native CUDA compiles and four total tasks.
-The native CLI and native tests are outside this Python E+F SDK build.
-Scientific Python was frozen separately within allocation 13562: Python 3.12.3,
-NumPy 2.4.6, PySCF 2.14.0/Libxc 7.0.0, CuPy 13.6.0 and GPU4PySCF 1.8.1.
-The 13,924-file environment manifest is 3,332,002 bytes, SHA-256
+| Case | Empty E+F median, s | Primed E+F median, s | Observed driver calls/process, empty / primed |
+| --- | ---: | ---: | --- |
+| water-12 Direct PBE0 | 3.080376 | 3.055188 | 0 / 0 |
+| water-12 Direct WB97M-V | 50.039351 | 12.283036 | 3 / 0 |
+| water-48 Direct PBE0 | 11.324743 | 11.423876 | 0 / 0 |
+| water-48 Direct WB97M-V | 125.983378 | 87.977974 | 3 / 0 |
+| QM7 C2 full-DF CBS | 10.591641 | 10.633802 | 0 / 0 |
+
+Counters cover original Python compiler/cache adapters. Actual GCC/NVCC CPU
+probes establish compile/link, artifact replay and private scoped misses/hits;
+formal traces retain original commands and results. **Native NVRTC, embedded
+AOT dispatch and internal NVCC passes remain UNAVAILABLE.** Zeros are scoped to
+observed adapters. Historical artifact `compile_seconds` is separate.
+
+WB97M-V has about 25 seconds of observed driver wall per empty process. Its
+E+F difference includes other first-use work; nested spans are never added to
+an endpoint or called compiler CPU time. PBE0/CBS show no general benefit from
+priming in this cohort. No default promotion or universal speedup is inferred.
+
+Work is identical across empty/primed repeats. PBE0/12 reports 10 iterations/10
+Fock builds; PBE0/48 reports 9/9. WB97M-V/12 reports 30 total iterations/31
+Fock builds, including 25 provisional and 5 target nonlocal Focks; WB97M-V/48
+reports 28/29, including 23 provisional and 5 target Focks. Both retain four
+pair-cache probes, one hit and four sweeps. These scopes are not added together.
+Original history/operator scopes and response/nonlocal diagnostics are retained.
+CBS retains two basis groups, five unique constituents and complete convergence,
+capacity, correlation and Lambda/operator work. Standard is not an oracle.
+
+## Independent accuracy
+
+Water uses spherical def2-SVP, zero charge/spin and unchanged public default
+XC/VV10 grids, convergence and complete moving-grid response. Every endpoint
+passes original E <=1e-5 Eh/atom, Fmax <=1e-4 and Frms <=3e-5 Eh/Bohr gates,
+plus independent grid-stability and CPU/GPU spot quarter gates. Maxima across
+pilot/priming/formal water calls are 4.856205e-7 Eh/atom, 2.248031e-5 and
+1.085801e-5 Eh/Bohr. Oracle producer
+`02337e0cf3d94915a352d5056f6d09d27fe353f2` and audited exact-input reuse
+contracts are preserved; every new sample is independently compared.
+
+CBS uses QM7 C2H6 index 1, all-electron cc-pVDZ/cc-pVTZ MP2 extrapolation plus
+the DZ DF-CCSD(T)-DF-MP2 correction, RI-JK/shared JKFIT, HF exponent 1.63,
+MP2 exponent 3 and a **32 GiB numerical capacity**, not measured VRAM. The
+complete scientific protocol exactly matches the reconverged PySCF reference.
+Constituent/composite E errors are <=3.964829e-12 Eh against 5e-8, two-step
+directional errors <=5.454e-9 against 5e-6 Eh/Bohr, with translation <=1e-6.
+**Directional checks are not full-vector or CBS-limit qualification.** Actual
+projections use the unchanged original seed-709 direction and 1e-4/3e-5 Bohr
+steps. Regeneration only checks identity with component-relative norm rounding
+bound `gamma_n+4u`, `gamma_n=n*u/(1-n*u)`, `n=24`, `u=eps/2`; source, geometry,
+protocol, receipt hashes and observable thresholds retain exact checks.
+
+## Frozen software and execution
+
+Git source `ececb48cd56a00a56fbb6223dc53bc61dfe6e11d`: all 12,353 committed
+LF files, Git blobs and executable modes are verified before/after build.
+Native source identity:
+`58eb35df7cd4cc871485b06b44a78096930b7ea811ceaee45acb557d28d975c8`.
+Core SHA-256:
+`688b0e152215809bf493d6388e08da52cbeebc22f1db34c938ca98df8c47e5db`.
+Layout: frozen source-tree Python plus CMake-installed native SDK. Release,
+sm_120/120-real, FastCompile OFF, default native/ordinary/SPD stationary AOT;
+all 24 AOT DSO/manifest pairs verified. CLI/tests are outside this build.
+All 597 Ninja translation-unit commands use verified sccache 0.16.0; original
+commands and private before/after stats remain recoverable.
+
+Python 3.12.3, NumPy 2.4.6, PySCF 2.14.0/Libxc 7.0.0, CuPy 13.6.0,
+GPU4PySCF 1.8.1; public CUDA 12.9.86/GCC 13.3. The 13,924-file non-bytecode
+environment is unchanged before SDK freeze and after measurement, manifest SHA
 `6da3a11b6ae0ace154745fd546895d13a8e7768f8a9f1193628d1d4d537680cd`.
-Its read-only handoff permits another owner to use a separate CPU Slurm
-allocation and output root; it conveys no native SDK or GPU qualification.
 
-The older 4a783a27 source archive is retained unchanged in this root as an
-unused handoff artifact. No sm90 binary or old source acceptance is assigned to
-the new sm120 build. Other owners' environments, builds and compiler caches
-are not used. The pinned public QM7 dataset was copied read-only into the owned
-root and independently rehashed before use.
+Each empty process gets a new no-clobber artifact/semantic, compiler/JIT-slot,
+profile/tensor, CuPy and CUDA-driver root. Primed processes reuse only their
+case's completed byte/mode-verified root. The explicit local compiler config
+and environment whitelist exclude credentials, remote caches and experimental
+flags. No shared cache is cleared/stopped. AOT is identical; OS caches are not
+flushed; no converged density survives across interpreters.
 
-## Measurement contract
+Process wall runs immediately before `Popen` through exit/wait; constructor E+F
+ends after host force return/synchronization. Verification, observation, import,
+cleanup/export remain in process wall. Nested spans are not added/subtracted.
+GPU clocks are unlocked, before/after samples retained. Fixed balanced order
+uses physical UUID `GPU-57db1e6a-5ff9-570d-67b0-6965fb3a77e6` throughout.
 
-Only Standard is measured. The five cases are Direct PBE0 and WB97M-V on
-water-12 and water-48, where 12/48 are **atom counts**, plus QM7 C2, zero-based
-index 1. CBS uses all-electron cc-pVDZ/cc-pVTZ MP2 extrapolation, the DZ
-DF-CCSD(T)-DF-MP2 correction, RI-JK/shared JKFIT auxiliaries, HF exponent 1.63,
-MP2 exponent 3 and the original 32 GiB numerical memory budget.
+Owned root `/data/srxu/projects/gqc-runtime-cache-state-20261023`, USTC node1.
+Build 13562 and SDK freeze 13569 completed 0:0. GPU **13581** completed 0:0
+at **2026-10-23 22:23:08 Asia/Shanghai**, after 24m31s, 4 CPU/64 GiB,
+`gres/gpu:5090:1`, actual visibility 2, driver 580.95.05, 32,607 MiB.
+Slurm released it naturally; no GPU lease remains.
 
-Each case has a full E+F priming process. The formal cohort then runs three
-fresh processes for each empty/primed state: **30 measured endpoints**, plus
-five priming endpoints. A separate water-12 WB97M-V pilot includes its own
-priming, empty and primed processes and must pass independent accuracy and
-cache checks before the formal cohort. Pilot results are not formal samples.
-The balanced empty/primed order is fixed by the driver. One physical GPU UUID
-and one complete frozen SDK must cover every formal process.
+Initial bootstrap 13561 was cancelled for an observed public-PyPI bottleneck;
+Slurm `CANCELLED/0:15` and inconsistent EXIT-trap `0` are preserved. One bounded
+continuation used the [documented USTC mirror](https://mirrors.ustc.edu.cn/help/pypi.html)
+with the same source/environment/cache and no global configuration change.
+The unused 4a archive remains immutable; no old sm90 binary acceptance is reused.
 
-Every empty replicate creates a unique task-owned root for artifact/semantic,
-tensor/profile, compiler/JIT-slot, CuPy and CUDA-driver caches. A primed process
-reuses only its case's private root, with exact cache-content verification
-against the previous completed endpoint. No shared cache is cleared, disabled
-or stopped. Explicit empty compiler configuration and an environment whitelist
-exclude inherited remote storage, credentials and experimental flags.
-Installed AOT assets remain prebuilt and identical in both states; operating
-system file caches are not flushed.
+## Raw recovery
 
-Two nested timers remain separate: process launch through exit, and calculator
-construction through returned host energy/forces. Process wall includes
-imports, SDK identity checks, observation, cleanup and receipt export; the
-provenance-verification span is separately recorded. Compiler driver and
-subprocess spans overlap with these endpoint timers and are not added to them.
-Scoped compiler-cache stats use the actual private live server and are retained
-before/after each compile/link call. Observation overhead stays in measured
-wall time. Driver invocations are not internal NVCC pass counts or CPU time.
-Unobserved native NVRTC compilation remains `UNAVAILABLE`. Historical artifact
-metadata `compile_seconds` is not included in this run's compiler wall.
+The self-contained capsule restores **343 files / 45,634,766 bytes**: selected
+original vectors, requests, exits, logs/failures, compiler/link output, scoped
+stats and source/reference/mode identities. Logical parts group manifest rows
+by source subsystem/Python package. Shared config keys/SHA values reference
+retained data here. Original ordering, floats, signed zeros, UTF-8, LF and CRLF
+are byte-checked. The Windows inventory's original CRLF is preserved; actual
+committed source is LF. No arbitrary byte chunks or rounded vectors are used.
+Installed/opaque cache binary bodies remain immutable in the owned root with
+full identities/census; complete consumed geometry and basis records are here.
 
-Full SCF histories, Fock counts, response diagnostics, VV10 work, returned
-forces, source/binary identities, commands and unsuccessful process logs are
-retained. Unavailable counters are not replaced with zero. A zero count applies
-only to the explicitly observed Python compiler-driver functions.
+Windows verifies all bytes and recomputes every original numerical/cache gate.
+CPU Slurm **13596** restores/checks original POSIX modes and repeats both
+replays, without executing GPU endpoints. Source/host preparation, sampled
+scientific acceptance and protected delivery remain separate scopes.
 
-## Independent numerical gates
+```bash
+PYTHONPATH=python:. python benchmarks/results/runtime-cache-state-20261023/reproduce.py \
+  --output .artifacts/runtime-cache-state-replay
+```
 
-The retained README oracle producer and raw reuse contracts are preserved.
-Each new water endpoint must pass energy error <=1e-5 Eh/atom, maximum force
-error <=1e-4 Eh/Bohr, RMS force error <=3e-5 Eh/Bohr, plus original reference-grid
-stability and CPU/GPU spot quarter gates. Scientific inputs, exact geometry and
-reference package versions must match before reuse.
-
-CBS reuses the original independently reconverged PySCF C2 receipt only after
-exact scientific-protocol and receipt identity checks. Every constituent and
-composite retains energy <=5e-8 Eh, translation <=1e-6 Eh/Bohr, and normalized
-seed-709 directional checks at 1e-4 and 3e-5 Bohr with error <=5e-6 Eh/Bohr.
-These are directional force checks, not independent full-vector qualification.
-The actual projection direction is always the unchanged original receipt.
-Regeneration is only an identity check with the floating-point norm-reduction
-bound `gamma_n + 4u`, `gamma_n = n*u/(1-n*u)`, `u = eps/2`, `n = 24`.
-This bound never applies to source hashes, geometry, protocol or observables.
-
-## Preparation and replay tools
-
-- `build-sdk.sh` performs the finite CPU Slurm bootstrap/build, preserving
-  source verification, compiler commands, cache statistics and exit status.
-- `resume-sdk.sh` retains the measured network repair using the
-  [documented public USTC PyPI mirror](https://mirrors.ustc.edu.cn/help/pypi.html).
-- `freeze_environment.py` inventories an already completed scientific Python
-  environment for a separate read-only handoff. It does not qualify native CUDA.
-- `freeze_sdk.py` requires a completed build, validates the full ordinary/SPD
-  AOT catalog, checks core source identity, freezes basis metadata and binds
-  independent reference receipts.
-- `python -m benchmarks.runtime_cache_state run --config CONFIG --output RAW
-  --pilot` runs the separate pilot within a real Slurm GPU allocation.
-- The formal command omits `--pilot` and requires `--pilot-receipt PILOT_RAW`.
-- `python -m benchmarks.runtime_cache_state qualify --campaign RAW --output
-  REPLAY.json` replays every numerical/cache gate without executing an endpoint.
-
-Raw execution output belongs outside `benchmarks/results`, under the owned
-experiment root or ignored `.artifacts`. Final publication remains dependent
-on actual measurements, lossless recovery checks, evidence budgets, required
-CI, exact-head formal approval and protected merge. None is claimed here.
+This refuses existing output, restores raw files and emits fresh quantitative
+gates, timing/work tables and the validation envelope. No GPU/network is needed.
