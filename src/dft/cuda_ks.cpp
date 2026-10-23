@@ -1575,6 +1575,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // may supply ScfOptions independently, so never let an options mismatch turn
     // a screened lower into an unbounded exact-linear delta chain.
     incremental_policy_options.screening_tolerance = strategy.screening_tolerance;
+    // Keep the automatically promoted domain narrower than explicit opt-in.
+    // In particular, public resource plans have no charged incremental arena
+    // and must retain their incumbent solver; full physical closure is unchanged.
+    const bool auto_through_d =
+        std::all_of(provider.system().shells.begin(), provider.system().shells.end(),
+                    [](const auto& shell) { return shell.angular_momentum <= 2U; });
+    const bool auto_all_electron =
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    const bool auto_incremental = admit_ks_incremental_cold_auto(
+        {options.incremental_direct_jk_auto, n, provider.system().atoms.size(),
+         static_cast<bool>(fock_binding) && !fitted_coulomb && !fitted_exchange && has_exchange &&
+             spins == 1 && !has_range_correction && !nonlocal_correlation &&
+             scf::direct_jk_incremental_exact_eligible(strategy) &&
+             !precision_schedule.any_lower_precision(),
+         standard_convergence_model && grid_spec == default_grid_spec() && !budget_fock &&
+             configured_chunk_width() == 1 &&
+             MatrixLibraryOwner::provider_allowance(static_cast<int>(n)),
+         auto_through_d, auto_all_electron, !runtime::active_device_resource_ledger});
+    incremental_policy_options.incremental_direct_jk |= auto_incremental;
     incremental_direct_jk_policy = scf::resolve_incremental_direct_jk_policy(
         incremental_policy_options,
         {static_cast<bool>(fock_binding) && !fitted_coulomb &&
@@ -2081,7 +2102,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
-    incremental_direct_jk = incremental_direct_jk_policy.active && !ordinary_incremental_warm;
+    // A native cold guess is still a cold solve even when represented by an
+    // explicit density buffer. Its existing provenance comes from the native
+    // initial-guess owner, never from external/imported/moved seeds.
+    // Retained warm states use the existing full-density one-Fock proof. Explicit
+    // opt-in callers retain their original external-seed eligibility.
+    incremental_direct_jk = ks_incremental_solve_active(
+        incremental_direct_jk_policy.active, options.incremental_direct_jk_auto,
+        ordinary_incremental_warm, input != nullptr,
+        seed_origin == CudaKsSeedOrigin::NativeColdGuess);
     // Only an owner with the complete Standard full-density closure may use a
     // bounded chain of screened proposals. J/K linearity is independent of
     // the XC family; inherit the ordinary Standard owner's existing model

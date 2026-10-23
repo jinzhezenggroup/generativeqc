@@ -1,5 +1,6 @@
 #include <cmath>
 
+#include "scf/cuda/direct_coarse_screening.cuh"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -131,6 +132,8 @@ __global__ void reduce_bounded_shell_pair_block_bounds_kernel(DeviceBatch batch,
   }
   if (threadIdx.x == 0) {
     shell_pair_block_bounds[block] = block_maxima[0];
+    if (batch.direct_fp32_block_bounds)
+      batch.direct_fp32_block_bounds[block] = direct_screening_upper_float(block_maxima[0]);
   }
 }
 
@@ -185,6 +188,8 @@ __global__ void reduce_bounded_system_density_bounds_kernel(
       overall_maximum = fmax(overall_maximum, maximum);
     }
     system_density_bounds[system] = overall_maximum;
+    if (batch.direct_fp32_density_bounds)
+      batch.direct_fp32_density_bounds[system] = direct_screening_upper_float(overall_maximum);
   }
 }
 

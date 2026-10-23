@@ -16,11 +16,12 @@ SCRIPT = (
 @pytest.mark.parametrize(
     "flag,optimize", [("-O", ""), ("-OO", ""), ("", "1"), ("", "2")]
 )
-def test_optimized_evidence_replay_is_rejected(flag, optimize):
+def test_optimized_evidence_replay_is_rejected(flag: str, optimize: str) -> None:
     env = {**os.environ, "PYTHONOPTIMIZE": optimize}
     result = subprocess.run(
         [sys.executable, *([flag] if flag else []), str(SCRIPT)],
         env=env,
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
