@@ -1,6 +1,6 @@
 # Decision: reuse raw pure-J values and bound response by live headroom
 
-Status: implemented as an opt-in raw-value experiment; response allocation fix
+Status: implemented with bounded raw-value default; response allocation fix
 Date: 2026-10-23
 
 ## Problem
@@ -19,8 +19,9 @@ reported free count, owing to allocator granularity or fragmentation.
 
 ## Decision
 
-Keep the raw experiment default off and capture its explicit `0`/`1` control
-in `FockExecutionVariant`. Only restricted pure-J, source-backed, resident
+Capture the raw-value request and its explicit `0`/`1` control in
+`FockExecutionVariant`. Unset requests raw storage; `0` retains whitening.
+Only restricted pure-J, source-backed, resident
 single-packed owners with zero occupied rank capacity may request it. The
 existing metric rank cutoff and available vector scratch decide actual
 admission. Rank truncation or insufficient capacity retains the fitted owner.
@@ -69,16 +70,34 @@ The headroom-only v4 WB97M-V diagnostic completed cold/warm in
 gates. The old image failed warm. This diagnoses resource correctness; the
 cold time remains behind GPU4PySCF and is not a speedup claim.
 
-The native `--raw-coulomb` fixture checks independent CPU J and derivatives,
+The native `--raw-coulomb` fixture checks unset/explicit/disabled selection,
+independent CPU J and derivatives,
 changed density/geometry, post-force replay, rank-truncation fallback and
 invalid controls. `--df-response-headroom` warms the complete force path,
 retains unrelated device memory, compares the constrained force with its
-unconstrained result and checks retained J afterward. Further clean-source
-repeated endpoint, sanitizer and moved-geometry qualification is ongoing.
+unconstrained result and checks retained J afterward.
+
+The clean opt-in source `8b68f626c82e7bf0f33bd6a993f91ec64b5c790b`
+completed five alternating fresh-process pairs per method. PBE DF96 median
+cold changed from 25.131312 to 20.703457 s (17.619%); r2SCAN from 27.171812
+to 22.442908 s (17.404%). Each process retained three warm repeats: neither
+warm difference passed the unchanged 2%/relative-MAD gain gate. Five additional
+48/96-atom moved pairs per method qualified all four phases. At 96 atoms,
+moved medians improved 20.421% and 19.229%; 48-atom and moved-warm differences
+were not significant. All 264 calls passed: stationary samples against dense
+independent references and moved samples against fresh same-geometry GPU4 DF
+references. The Standard/Fast matrix includes six functionals; WB97M-V headroom
+has separate diagnostic evidence and is outside raw-J admission.
+
+The same source passed raw-J independent native numerics, actual external-memory
+pressure, Compute Sanitizer (zero errors), full native Fock composition, 55 GPU
+Python cases and 82 host cases. Source-matched evidence for the subsequent unset
+default and reviewed stage-one integration is retained separately; historical
+opt-in receipts must not be relabeled as that integrated default.
 
 ## Revisit when
 
-Promote raw storage only after source-matched complete cold/warm/moved evidence
-and independent numerical gates qualify the admitted domain. More extensive
+Broaden raw storage only after source-matched complete cold/warm/moved evidence
+and independent numerical gates qualify the new domain. More extensive
 allocation recovery needs a different ownership plan if fixed response
 storage itself cannot fit; it must not silently switch numerical algorithms.

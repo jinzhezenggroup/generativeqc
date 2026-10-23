@@ -74,7 +74,10 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
     const char* raw_j = std::getenv("GENERATIVEQC_DF_RAW_COULOMB");
     if (raw_j && std::string_view(raw_j) != "0" && std::string_view(raw_j) != "1")
       throw std::invalid_argument("GENERATIVEQC_DF_RAW_COULOMB must be 0 or 1");
-    result.df_raw_coulomb_requested = raw_j && std::string_view(raw_j) == "1";
+    // Pure-J consumers need only a metric solve on the contracted charge.
+    // Preparation below proves resident layout, rank and scratch admission;
+    // explicit 0 retains whitening for ablation or rollback.
+    result.df_raw_coulomb_requested = !raw_j || std::string_view(raw_j) == "1";
     result.df_pair_storage_request = requested_df_pair_storage_request();
     result.df_pair_storage = requested_df_pair_storage();
     result.df_value_mapping = cuda_policy::df_value_mapping_requested();

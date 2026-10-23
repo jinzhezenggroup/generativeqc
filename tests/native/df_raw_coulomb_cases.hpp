@@ -41,12 +41,14 @@ void raw_coulomb_cases() {
       const PreparedFockPlan cpu(orbital, &auxiliary, cpu_strategy);
       const auto n = cpu.one_electron().nbf;
       std::vector<double> density(n * n);
-      for (const char* control : {"0", "1"}) {
-        require(::setenv("GENERATIVEQC_DF_RAW_COULOMB", control, 1) == 0,
+      for (const char* control : {static_cast<const char*>(nullptr), "0", "1"}) {
+        // Exercise the actual unset default independently of explicit opt-in.
+        require((control ? ::setenv("GENERATIVEQC_DF_RAW_COULOMB", control, 1)
+                         : ::unsetenv("GENERATIVEQC_DF_RAW_COULOMB")) == 0,
                 "cannot configure raw Coulomb test");
         const PreparedFockPlan gpu(orbital, &auxiliary, gpu_strategy, 0, 64U << 20);
         const auto& diagnostic = gpu.diagnostic().fitted.at(0);
-        const bool raw = control[0] == '1' && !redundant;
+        const bool raw = (!control || control[0] == '1') && !redundant;
         require((diagnostic.raw_factor_bytes != 0) == raw &&
                     (diagnostic.stored_factor_bytes == 0) == raw,
                 "raw Coulomb admission or rank fallback differs from its storage contract");

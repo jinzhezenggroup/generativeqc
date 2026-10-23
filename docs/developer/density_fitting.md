@@ -245,9 +245,9 @@ convergence and strict final-state checks are unchanged.
 
 ### Device force-response weights
 
-`GENERATIVEQC_DF_RAW_COULOMB=1` explicitly requests an experimental raw-value
-representation for restricted pure-J prepared CUDA owners. The control is
-captured at preparation; the default remains fitted storage. A resident
+Restricted pure-J prepared CUDA owners request raw-value storage by default.
+`GENERATIVEQC_DF_RAW_COULOMB=0` retains whitening; `1` selects the same bounded
+admission as the unset default. The control is captured at preparation. A resident
 single-packed owner without exchange/rank capacity may retain raw `A` in its
 existing tensor slot after the unchanged metric cutoff proves full rank.
 It computes `J = A M^-1 A^T D` through the existing spectral vector solve,
