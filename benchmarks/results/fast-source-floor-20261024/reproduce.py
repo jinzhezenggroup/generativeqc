@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import lzma
 import math
@@ -11,12 +12,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 GATES = {"energy_per_atom": 2.5e-6, "force_max": 2.5e-5, "force_rms": 7.5e-6}
 POLICIES = ("baseline", "candidate")
+COHORTS = ("qualification.json.xz", "integration.json.xz")
 
 
 def require(condition: bool, context: object) -> None:
     """Keep evidence validation active under -O and PYTHONOPTIMIZE."""
     if not condition:
         raise ValueError(context)
+
+
+def load_receipt(name: str) -> dict:
+    """Share authenticated references and input maps without pooling timings."""
+    require(name in COHORTS, ("unknown cohort", name))
+    with lzma.open(ROOT / name, "rt") as stream:
+        payload = json.load(stream)
+    if name == "integration.json.xz":
+        shared = (ROOT / "qualification.json.xz").read_bytes()
+        require(
+            hashlib.sha256(shared).hexdigest()
+            == payload["shared_qualification_sha256"],
+            "shared reference receipt identity",
+        )
+        original = json.loads(lzma.decompress(shared))
+        payload["references"] = original["references"]
+        payload["protocol"] = original["protocol"]
+        payload["source_manifest"] = {
+            "base": payload["base"],
+            "inputs": original["source_manifest"]["inputs"]
+            | payload["source_input_delta"],
+        }
+    return payload
 
 
 def expected_records() -> set[str]:
@@ -73,6 +98,17 @@ def observable_errors(sample: dict, target: dict, atoms: int) -> dict:
 
 def reproduce(payload: dict) -> dict:
     """Check exact populations, source/binary identity, observables and timing."""
+    manifest = payload["source_manifest"]
+    require(manifest["base"] == payload["base"], "source manifest base")
+    for policy in POLICIES:
+        inputs = manifest["inputs"] | payload["binary"][policy]["input_delta"]
+        digest = hashlib.sha256(
+            json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        require(
+            digest == payload["binary"][policy]["production_inputs_sha256"],
+            ("archived source identity", policy),
+        )
     records = payload["qualification"]
     require(
         set(records) == expected_records(),
@@ -246,6 +282,10 @@ def reproduce(payload: dict) -> dict:
 
 
 if __name__ == "__main__":
-    with lzma.open(ROOT / "qualification.json.xz", "rt") as stream:
-        retained = json.load(stream)
-    print(json.dumps(reproduce(retained), indent=2, allow_nan=False))
+    print(
+        json.dumps(
+            {name: reproduce(load_receipt(name)) for name in COHORTS},
+            indent=2,
+            allow_nan=False,
+        )
+    )

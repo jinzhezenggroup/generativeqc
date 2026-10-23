@@ -133,3 +133,34 @@ files remain byte-exact against the measured parent; all 2,797 qualified inputs
 remain unchanged. The compaction's existing corruption/restoration tests and
 original manifest gates remain active. No sample, scientific gate or budget is
 removed or relaxed.
+
+## Integrated master requalification
+
+After #2712 merged and #2700 added DF charge partitioning, rebuild both policies
+at master `937102f71218a7f50e19fd8bb4b2697d0df3dd08`. The only baseline production-input changes from the first
+cohort are `src/scf/cuda/df_md_j.cuh` and `src/scf/cuda/df_md_owner.cu`; the three
+force AOT binaries remain byte-identical. Repeat the entire protocol on the
+integrated source: five alternating pairs per size, all lifecycle/exclusion/
+capacity/rollback/diagnostic controls, three native suites and eight public GPU
+tests. This adds a separate 51-process / 183-endpoint cohort; the two cohorts
+are never pooled for timing. All 366 qualified endpoints pass their independent
+observable gates, in addition to the 69 separate pilot endpoints.
+
+| Atoms | Phase | 1e-8 median (s) | 1e-7 median (s) | Time reduction |
+| ---: | --- | ---: | ---: | ---: |
+| 12 | cold | 2.232567 | 2.223318 | 0.41% |
+| 12 | warm | 0.377756 | 0.378566 | -0.21% |
+| 48 | cold | 9.128436 | 8.764538 | 3.99% |
+| 48 | warm | 2.315570 | 2.311254 | 0.19% |
+| 96 | cold | 23.599389 | 22.378540 | 5.17% |
+| 96 | warm | 6.525197 | 6.526264 | -0.02% |
+
+The integrated cohort passes the same gain/nonregression floors. Its maximum
+errors are `1.84177e-10 Eh/atom`,
+`1.13915e-05 Eh/Bohr` maximum force and
+`3.38419e-06 Eh/Bohr` RMS force. The 96-atom diagnostic still
+records 1,035,084,412 versus 813,497,268 provisional values and seven mixed/two
+strict Focks. Both builds' compiler-cache snapshots and source verification
+receipts are retained.
+
+The linked receipt retains both complete cohorts and their separate binary/source identities.

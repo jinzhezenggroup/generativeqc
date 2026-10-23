@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import lzma
 import runpy
 import subprocess
 import sys
@@ -18,11 +16,12 @@ DIRECTORY = (
 
 
 @pytest.mark.parametrize("damage", ("population", "binary", "force", "time"))
-def test_floor_replay_rejects_damaged_evidence(damage: str) -> None:
+@pytest.mark.parametrize("cohort", ("qualification.json.xz", "integration.json.xz"))
+def test_floor_replay_rejects_damaged_evidence(damage: str, cohort: str) -> None:
     """Check the replay's scientific and population boundaries, not source text."""
-    replay = runpy.run_path(str(DIRECTORY / "reproduce.py"))["reproduce"]
-    with lzma.open(DIRECTORY / "qualification.json.xz", "rt") as stream:
-        payload = json.load(stream)
+    module = runpy.run_path(str(DIRECTORY / "reproduce.py"))
+    replay = module["reproduce"]
+    payload = module["load_receipt"](cohort)
     records = payload["qualification"]
     name = "fast-pbe0-12-candidate-r1.json"
     if damage == "population":
@@ -37,21 +36,22 @@ def test_floor_replay_rejects_damaged_evidence(damage: str) -> None:
         replay(payload)
 
 
-def test_floor_replay_optimized_numerical_gate() -> None:
+@pytest.mark.parametrize("cohort", ("qualification.json.xz", "integration.json.xz"))
+def test_floor_replay_optimized_numerical_gate(cohort: str) -> None:
     """Optimized Python must still reject an independently recomputed error."""
     script = """
-import json, lzma, runpy, sys
+import runpy, sys
 from pathlib import Path
 root = Path(sys.argv[1])
-replay = runpy.run_path(str(root / 'reproduce.py'))['reproduce']
-with lzma.open(root / 'qualification.json.xz', 'rt') as stream:
-    payload = json.load(stream)
+module = runpy.run_path(str(root / 'reproduce.py'))
+replay = module['reproduce']
+payload = module['load_receipt'](sys.argv[2])
 replay(payload)
 payload['qualification']['fast-pbe0-12-candidate-r1.json']['samples'][0]['energy'] += 1
 replay(payload)
 """
     result = subprocess.run(
-        [sys.executable, "-O", "-c", script, str(DIRECTORY)],
+        [sys.executable, "-O", "-c", script, str(DIRECTORY), cohort],
         capture_output=True,
         text=True,
         timeout=30,

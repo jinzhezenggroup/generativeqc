@@ -13,7 +13,7 @@ Only the temporary Fast full-range hybrid integral source uses the new floor.
 The primary provider, fresh FP64 closure and analytic forces retain their
 requested screening. DF and the automatic size/model domain are unchanged.
 
-## Complete endpoints
+## Complete endpoints (initial cohort)
 
 Five fresh alternating baseline/candidate pairs at each size include constructor,
 preparation, cold energy/analytic forces and two frozen warm calls. Warm timings
@@ -103,3 +103,50 @@ historical XC #161 family. Its 85 restored files match this branch's parent
 `46f0501a92c289675647d594fec14d04ca365639` byte for byte. All 2,797 qualified
 production/build/driver inputs remain unchanged. This reuses the existing
 compaction work; it adds no new scientific or performance claim for XC #161.
+
+## Integrated master requalification
+
+After #2712 merged and #2700 added DF charge partitioning, rebuild both policies
+at master `937102f71218a7f50e19fd8bb4b2697d0df3dd08`. The only baseline production-input changes from the first
+cohort are `src/scf/cuda/df_md_j.cuh` and `src/scf/cuda/df_md_owner.cu`; the three
+force AOT binaries remain byte-identical. Repeat the entire protocol on the
+integrated source: five alternating pairs per size, all lifecycle/exclusion/
+capacity/rollback/diagnostic controls, three native suites and eight public GPU
+tests. This adds a separate 51-process / 183-endpoint cohort; the two cohorts
+are never pooled for timing. All 366 qualified endpoints pass their independent
+observable gates, in addition to the 69 separate pilot endpoints.
+
+| Atoms | Phase | 1e-8 median (s) | 1e-7 median (s) | Time reduction |
+| ---: | --- | ---: | ---: | ---: |
+| 12 | cold | 2.232567 | 2.223318 | 0.41% |
+| 12 | warm | 0.377756 | 0.378566 | -0.21% |
+| 48 | cold | 9.128436 | 8.764538 | 3.99% |
+| 48 | warm | 2.315570 | 2.311254 | 0.19% |
+| 96 | cold | 23.599389 | 22.378540 | 5.17% |
+| 96 | warm | 6.525197 | 6.526264 | -0.02% |
+
+The integrated cohort passes the same gain/nonregression floors. Its maximum
+errors are `1.84177e-10 Eh/atom`,
+`1.13915e-05 Eh/Bohr` maximum force and
+`3.38419e-06 Eh/Bohr` RMS force. The 96-atom diagnostic still
+records 1,035,084,412 versus 813,497,268 provisional values and seven mixed/two
+strict Focks. Both builds' compiler-cache snapshots and source verification
+receipts are retained.
+
+Baseline core: `f6554472ba59f464f5a2f3192df28fb19f1a0f9ce0947cfe0dd34129072ea02d`.
+Candidate core: `6bdbeb44ad347ea7126c6576bd39321a718118dc1eda4915849eca46ae60da19`.
+Baseline source digest: `4482ccbc1c243a16920b79018a587be13f613c5f1c60109d445fba5c06e77014`.
+Candidate source digest: `3028c113b89f191c929792ba5653434278e0e0dadb5f100cbd0a00a62d38e257`.
+
+```text
+controls: job=13657 visible=1 host=node1
+tests: job=13658 visible=2 host=node1
+timing: job=1298 visible=0 host=node4
+```
+
+`integration.json.xz` stores every integrated endpoint and its provenance.
+It shares the original receipt's authenticated references and unchanged source
+map entries, retaining the exact source delta. The replay verifies the shared
+receipt digest, reconstructs and checks both source identities, and independently
+replays both populations under ordinary or optimized Python. The original
+receipt and original timing table above remain unchanged.
