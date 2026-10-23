@@ -102,6 +102,19 @@ probe tied to the next workspace variable's name. Their repair passes 46
 focused host cases, including raw-J rejection of occupied exchange without
 output writes. Production source is unchanged by these test repairs.
 
+`final-merge-bridge.json.xz` adds another separate 24-call matrix at
+`e837a0c5c03f3e6e2d340d7988780a4b2d37ac74`, after integrating upstream
+range-aware and rank-deficient DF response plus byte-safe generated-source
+caching. Every cold and warm call passes the same independent gates. Its core
+hash is `8a09d6490ca1e9cee85c822097a5ed3872b0beb2f5172edaeb2ed16acfc0118b`.
+All five stationary manifest targets were rebuilt. The authenticated inventory
+contains 6,000 source inputs; the bundle retains its exact reconstruction,
+runners, package hashes, cache statistics and validation logs. Native raw-J,
+rank fallback, current-memory force/replay and full Fock composition pass;
+Compute Sanitizer reports zero errors; all 55 GPU Python cases and 217 focused
+host integration cases pass. Earlier timing populations retain their original
+identities and are not pooled with either merge-source bridge.
+
 ## Offline reproduction
 
 ```bash
@@ -109,7 +122,7 @@ PYTHONPATH=python:. python benchmarks/results/df-raw-coulomb-20261023/reproduce.
   > .artifacts/df-raw-coulomb-reproduced.json
 ```
 
-The script rechecks all 552 native calls and computes every population median
+The script rechecks all 576 native calls and computes every population median
 and gain floor from full-precision samples. `provenance.json` binds measured
 sources, packages, source manifests, build controls and validation. Original
 GPU runners and the moved wrapper are retained in `runners.json.xz`; compiler

@@ -21,7 +21,7 @@
     "stage2-default-source-inputs.json.xz": "ebf5a80208937e6e33dc3aa3bd0a1b1d7c038b84d719f6b70ef74dafe215c79a"
   },
   "validation": {
-    "native_endpoints": 528,
+    "native_endpoints": 576,
     "default_gpu_python_cases": 55,
     "default_native": [
       "independent raw-J/response with unset/0/1, rank fallback, changed geometry and exchange rejection",
@@ -49,5 +49,19 @@
     "parallel": 8,
     "native_aot": "five stationary manifest targets explicitly rebuilt after core"
   },
-  "failure_retention": "The initial integrated assembly copied stale stationary artifacts and failed contract-identity validation. Failed receipts and logs are retained; the core hash is unchanged and final AOT identities are separate."
+  "failure_retention": "The initial integrated assembly copied stale stationary artifacts and failed contract-identity validation. Failed receipts and logs are retained; the core hash is unchanged and final AOT identities are separate.",
+  "merge_bridges": {
+    "merge-bridge": {
+      "source_revision": "b931f64bae5aa72a2b9c15f817715986f9e7205b",
+      "source_input_count": 5994,
+      "source_manifest_file_sha256": "15ccb826ec1deba0ea04d28d9cb1a29cc018d2f490115f5da803502294e699bd",
+      "native_endpoint_calls": 24
+    },
+    "final-merge-bridge": {
+      "source_revision": "e837a0c5c03f3e6e2d340d7988780a4b2d37ac74",
+      "source_input_count": 6000,
+      "source_manifest_file_sha256": "54ce17f5304edb9980207724e5e50b134dceb243e34940c7e57d5df74129bbee",
+      "native_endpoint_calls": 24
+    }
+  }
 }

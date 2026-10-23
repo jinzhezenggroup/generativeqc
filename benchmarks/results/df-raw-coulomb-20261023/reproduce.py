@@ -63,9 +63,9 @@ def main() -> None:
         (path.name.removesuffix(".json.xz"), None)
         for path in sorted(ROOT.glob("default-*.json.xz"))
     ]
-    bridge_path = ROOT / "merge-bridge.json.xz"
-    if bridge_path.is_file():
-        bridge = read("merge-bridge")
+    for bridge_path in sorted(ROOT.glob("*merge-bridge.json.xz")):
+        bridge_name = bridge_path.name.removesuffix(".json.xz")
+        bridge = read(bridge_name)
         inputs = read("stage2-default-source-inputs")["files"].copy()
         delta = bridge["source_input_delta"]
         inputs.update(delta["changed"])
@@ -80,7 +80,7 @@ def main() -> None:
             assert record["source_revision"] == bridge["source_revision"]
             qualified = qualify([record], oracles, reference_reuse=reuse)[0]
             assert qualified["status"] == "qualified", (name, qualified)
-            result["qualification"]["merge-matrix/" + name] = qualified
+            result["qualification"][bridge_name + "/" + name] = qualified
     for cohort, count in cohorts:
         records = read(cohort)
         if count is not None:
