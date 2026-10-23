@@ -299,8 +299,10 @@ inline constexpr const char* ordered_history_dot_identity = "{identity}";
 __host__ __device__
 #endif
 inline double ordered_history_dot(const double* left, const double* right,
-                                  std::size_t vector_size) {{
-  double value = 0.0;
+                                  std::size_t vector_size, double value = 0.0) {{
+  // A transport tile may continue the same scalar accumulator. Passing the
+  // prior value preserves element order; summing independent tile dots would
+  // instead change the reduction and is not this schedule's contract.
   for (std::size_t element = 0; element < vector_size; ++element)
     value += left[element] * right[element];
   return value;

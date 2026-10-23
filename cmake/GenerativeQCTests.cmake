@@ -615,6 +615,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
                        tests/native/test_cuda_diis_cached_gram.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    add_test(NAME generativeqc_cuda_diis_staged_gram_tests
+             COMMAND generativeqc_cuda_diis_cached_gram_tests --large-only)
+    set_tests_properties(generativeqc_cuda_diis_staged_gram_tests PROPERTIES
+                        SKIP_RETURN_CODE 77 TIMEOUT 180)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)

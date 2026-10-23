@@ -256,6 +256,9 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/matrix_index.",
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
+    # Operand transport uses the same generated ordered dot algebra; it does
+    # not import a method driver or change the shared DIIS solve owner.
+    "tensor/cuda_ring_gram_staging.cuh",
     "tensor/ring_gram.hpp",
     "scf/cuda/matrix_library.hpp",
     "scf/cuda/runtime_support.hpp",

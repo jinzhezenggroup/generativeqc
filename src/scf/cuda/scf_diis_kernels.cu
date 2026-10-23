@@ -11,6 +11,7 @@
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "tensor/cuda_history.cuh"
 #include "tensor/cuda_ring_gram.cuh"
+#include "tensor/cuda_ring_gram_staging.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -134,7 +135,33 @@ cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_siz
   return cudaGetLastError();
 }
 
-template <bool CooperativeDots, bool IncrementalGram, bool CachedGram = false>
+/** Broadcast immutable owner state to either the legacy warp or a full CTA.
+ * The second barrier prevents a faster warp from overwriting shared transport
+ * before every reader has copied it into its own register. */
+template <bool WideVectors>
+__device__ unsigned diis_owner_broadcast(unsigned value) {
+  if constexpr (WideVectors) {
+    __shared__ unsigned shared_value;
+    if (threadIdx.x == 0) shared_value = value;
+    __syncthreads();
+    value = shared_value;
+    __syncthreads();
+    return value;
+  } else {
+    return __shfl_sync(0xffffffffU, value, 0);
+  }
+}
+
+template <bool WideVectors>
+__device__ void diis_owner_barrier() {
+  if constexpr (WideVectors)
+    __syncthreads();
+  else
+    __syncwarp();
+}
+
+template <bool CooperativeDots, bool IncrementalGram, bool CachedGram = false,
+          bool WideVectors = false>
 __global__ void update_diis_kernel(
     std::int32_t batch_size, std::int32_t nbf, std::int32_t matrices_per_system,
     std::uint32_t history_capacity, const double* fock, const double* residual,
@@ -144,10 +171,11 @@ __global__ void update_diis_kernel(
     const double* dot_partials, std::size_t parts, const double* raw_gram,
     double* gram_cache = nullptr, tensor::RingGramWork* work = nullptr) {
   constexpr bool cooperative_dots = CooperativeDots;
-  // One warp owns one system.  History vectors and the O(N^2) residual-dot
-  // products are distributed across lanes, while the small dense DIIS solve
-  // remains in lane zero. The legacy instantiation preserves its dot order;
-  // DF can instead consume deterministic parallel partials from free scratch.
+  // One system retains one solve owner. The ordered pending-row route uses a
+  // full CTA for elementwise history copies and Fock extrapolation; every output
+  // still visits coefficients in the generated scalar order. Other routes keep
+  // their original warp, including collective dot reductions. Only lane zero
+  // mutates the small solve, so the wide route needs CTA-wide state/barriers.
   const std::int32_t system = static_cast<std::int32_t>(blockIdx.x);
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
@@ -158,7 +186,7 @@ __global__ void update_diis_kernel(
     if (threadIdx.x == 0)
       valid = (CachedGram && history_capacity < 2) || (history_count[system] <= history_capacity &&
                                                        history_head[system] < history_capacity);
-    valid = __shfl_sync(0xffffffffU, valid, 0);
+    valid = diis_owner_broadcast<WideVectors>(valid);
     if (!valid) {
       if (threadIdx.x == 0) {
         history_count[system] = 0;
@@ -179,14 +207,14 @@ __global__ void update_diis_kernel(
   const std::size_t history_stride = static_cast<std::size_t>(history_capacity) * vector_size;
   std::uint32_t slot = 0;
   if (threadIdx.x == 0) slot = history_head[system];
-  slot = __shfl_sync(0xffffffffU, slot, 0);
+  slot = diis_owner_broadcast<WideVectors>(slot);
   const std::size_t slot_offset = static_cast<std::size_t>(system) * history_stride +
                                   static_cast<std::size_t>(slot) * vector_size;
   for (std::size_t element = threadIdx.x; element < vector_size; element += blockDim.x) {
     fock_history[slot_offset + element] = fock[matrix_offset + element];
     residual_history[slot_offset + element] = residual[matrix_offset + element];
   }
-  __syncwarp();
+  diis_owner_barrier<WideVectors>();
   std::uint32_t count = 0;
   std::uint32_t previous_count = 0;
   if (threadIdx.x == 0) {
@@ -195,7 +223,7 @@ __global__ void update_diis_kernel(
     history_count[system] = count;
     history_head[system] = (slot + 1) % history_capacity;
   }
-  count = __shfl_sync(0xffffffffU, count, 0);
+  count = diis_owner_broadcast<WideVectors>(count);
   if (count < 2) {
     for (std::size_t element = threadIdx.x; element < vector_size; element += blockDim.x) {
       effective_fock[matrix_offset + element] = fock[matrix_offset + element];
@@ -204,7 +232,7 @@ __global__ void update_diis_kernel(
   }
 
   if constexpr (CachedGram) {
-    previous_count = __shfl_sync(0xffffffffU, previous_count, 0);
+    previous_count = diis_owner_broadcast<WideVectors>(previous_count);
     const auto first =
         normalize_metric ? (slot + 1 + history_capacity - count) % history_capacity : 0;
     tensor::refresh_ring_gram(
@@ -233,7 +261,7 @@ __global__ void update_diis_kernel(
     for (std::uint32_t row = threadIdx.x; row < dimension; row += blockDim.x) {
       rhs[row] = row == count ? -1.0 : 0.0;
     }
-    __syncwarp();
+    diis_owner_barrier<WideVectors>();
     const std::size_t dot_count = cooperative_dots
                                       ? static_cast<std::size_t>(count) * (count + 1U) / 2U
                                       : static_cast<std::size_t>(count) * count;
@@ -292,7 +320,7 @@ __global__ void update_diis_kernel(
           matrix[static_cast<std::size_t>(column) * dimension + row] = dot;
       }
     }
-    __syncwarp();
+    diis_owner_barrier<WideVectors>();
     if (threadIdx.x == 0) {
       // A single common scale preserves the augmented DIIS solution. KS uses
       // this to avoid treating every residual below 1e-7 as an absolute-pivot
@@ -311,7 +339,7 @@ __global__ void update_diis_kernel(
         matrix[static_cast<std::size_t>(count) * dimension + row] = -1.0;
       }
     }
-    __syncwarp();
+    diis_owner_barrier<WideVectors>();
 
     nonsingular = 1;
     if (threadIdx.x == 0) {
@@ -356,10 +384,10 @@ __global__ void update_diis_kernel(
         }
       }
     }
-    __syncwarp();
+    diis_owner_barrier<WideVectors>();
     // The solve is lane-zero-only; broadcast its success flag before any lane
     // decides whether it should form the extrapolated Fock matrix.
-    nonsingular = __shfl_sync(0xffffffffU, nonsingular, 0);
+    nonsingular = diis_owner_broadcast<WideVectors>(nonsingular);
 
     if (nonsingular || !normalize_metric || count <= 2) break;
     --count;
@@ -418,6 +446,20 @@ void launch_update_diis_cached_gram(
       grid, block, batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
       fock_history, residual_history, linear_system, coefficients, history_count, history_head,
       effective_fock, gram_cache);
+  if (nbf >= 512 && history_capacity >= 2) {
+    // Coalesce large residual loads without changing the generated scalar dot
+    // order. The same cache and update/retirement owner consume the staged row.
+    tensor::pending_ordered_ring_gram<<<dim3(batch_size, history_capacity + 1), 256, 0, stream>>>(
+        static_cast<std::size_t>(nbf) * nbf * matrices_per_system, history_capacity, residual,
+        residual_history, active, history_count, history_head, normalize_metric, gram_cache, work);
+    // Preserve a failed first launch for the caller's normal CUDA error gate.
+    if (cudaPeekAtLastError() != cudaSuccess) return;
+    update_diis_kernel<false, true, false, true><<<grid, 256, shared_bytes, stream>>>(
+        batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
+        fock_history, residual_history, linear_system, coefficients, history_count, history_head,
+        effective_fock, normalize_metric, nullptr, 0, gram_cache);
+    return;
+  }
   update_diis_kernel<false, false, true><<<grid, block, shared_bytes, stream>>>(
       batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active, fock_history,
       residual_history, linear_system, coefficients, history_count, history_head, effective_fock,

@@ -181,13 +181,22 @@ metric normalization, the augmented pivoted solve, dependent-history retirement,
 and fallback semantics remain native solver policy. The specialization preserves
 the historical FP64 reduction order.
 
-Ordinary CUDA HF/KS keeps its serial DIIS default. Setting
-`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=1` opts into a separate physical-slot
-cache. With `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
-`cooperative`, it retains the cooperative pending-row reducer. Setting that
+Ordinary CUDA HF keeps its serial DIIS default. CUDA KS automatically admits
+the separately charged physical-slot Gram cache for at least 512 AOs and a
+history capacity of at least two, using the ordered reducer. Smaller KS owners
+keep the serial schedule.
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=0` restores serial DIIS; `1` explicitly
+admits the cache for either HF or KS with a usable history. With
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
+`cooperative`, an explicit `1` retains the cooperative pending-row reducer. Setting that
 subordinate selector to `ordered` instead uses a generated scalar-order FP64 dot
-from the canonical `diis_gram_program` and refreshes the new ring row inside the
-update kernel. The ordered route performs no dot on insertion one and establishes
+from the canonical `diis_gram_program`. At 512 AOs or more, a separate pending-row
+grid loads contiguous operand tiles into shared memory while one lane continues
+the same scalar accumulator across tiles. The following update uses a full CTA
+for history copies and elementwise extrapolation, retaining each output's
+generated coefficient order and the lane-zero solve. CTA-wide broadcasts and
+barriers preserve history and solve ownership. Smaller ordered owners refresh the row
+inside the update kernel. The ordered route performs no dot on insertion one and establishes
 that prior diagonal on insertion two. It borrows the same charged cache as the
 cooperative route; neither selection adds a second cache. The reduction selector
 is ignored when incremental DIIS is disabled or history capacity is below two.
