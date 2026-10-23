@@ -478,6 +478,21 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
           "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
     if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
   }
+  // The absent-selector default is deliberately cold-only, not the broader
+  // experimental override. An explicit 0/off suppresses this automatic route,
+  // and an explicit 1/on keeps the original native capability checks.
+  if (!std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK") &&
+      !std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")) {
+    options.incremental_direct_jk_auto =
+        backend == GENERATIVEQC_BACKEND_CUDA && cuda_matched_global_hybrid &&
+        fock.spin == scf::FockSpin::Restricted && fock.exchange.present &&
+        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        options.precision_mode == GENERATIVEQC_PRECISION_FP64 && !execution_plan.range_exchange &&
+        !execution_plan.nonlocal_correlation && !execution_plan.d4_correction &&
+        options.energy_tolerance == 1e-9 && options.density_tolerance == 1e-5 &&
+        options.screening_tolerance == 1e-12 &&
+        scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
+  }
   if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,

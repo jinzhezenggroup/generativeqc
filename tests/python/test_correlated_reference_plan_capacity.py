@@ -63,6 +63,12 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "bool ordered_incremental_diis_gram_requested()",
         "cudaError_t launch_diis_pending_gram(",
     )
+    screening = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
+    selectors += between(
+        screening,
+        "bool direct_fp32_block_screening_requested()",
+        "void configure_direct_block_screening(",
+    )
     diis_policy = between(
         driver,
         "  const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);",
