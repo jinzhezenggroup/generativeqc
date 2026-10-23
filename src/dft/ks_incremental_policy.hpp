@@ -1,6 +1,30 @@
 #pragma once
 
+#include <cstddef>
+
 namespace generativeqc::dft {
+
+/** Bound a guarded automatic cold Direct hybrid default separately from the
+ * explicit incremental controller. The caller already owns default Standard
+ * FP64 controls; no public resource ledger can borrow uncounted anchor space. */
+struct KsIncrementalColdAutoDomain {
+  bool requested{};
+  std::size_t public_aos{};
+  std::size_t atoms{};
+  bool exact_fp64_direct_hybrid{};
+  bool standard_default_grid{};
+  bool through_d_shells{};
+  bool all_electron{};
+  bool no_resource_ledger{};
+};
+
+constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain) noexcept {
+  return domain.requested && domain.exact_fp64_direct_hybrid && domain.standard_default_grid &&
+         domain.through_d_shells && domain.all_electron && domain.no_resource_ledger &&
+         domain.public_aos >= 64 && domain.public_aos <= 768 && domain.atoms >= 2 &&
+         domain.atoms <= 96;
+}
+
 
 /** Bound an incremental proposal epoch whose consumer requires a fresh physical
  * full-density closure. These are provisional SCF operators, not a certificate
