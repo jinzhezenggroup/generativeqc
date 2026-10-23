@@ -1,8 +1,10 @@
 # Calculation-time compilation inventory
 
-This inventory describes the README energy plus analytic-force paths inspected
-at source commit `bbd41a42764e8d22d15c1348f70a633961d4dcf5`. It is a source
-inspection, not a compilation-count, first-use latency, GPU execution or
+This inventory describes the README energy plus analytic-force paths. Routing
+and module families were inspected at source commit
+`bbd41a42764e8d22d15c1348f70a633961d4dcf5`; the
+[canonical source publisher][source-publication] defines the byte contract below.
+This is source inspection, not a compilation-count, first-use latency, GPU execution or
 scientific qualification result. `NOT_OBSERVED` means no calculation-time
 compiler invocation was found in the traced route; it does not certify every
 build, optional backend or future route as JIT-free. Measured compile counts and
@@ -128,11 +130,17 @@ are `.so` libraries. CUDA identities query NVCC/PTXAS and a host compiler;
 the sccache private-worker implementation uses POSIX process/lease facilities.
 Source inspection and mocked Windows host tests do not establish that these
 JIT consumers execute on Windows or another unqualified platform.
-In particular, the semantic source cache's text-mode publication can write
-CRLF bytes while recording an LF source length on Windows; its fresh-process
-read then rejects the entry's byte length. This limitation and the bounded
-follow-up are recorded in the
-[source-cache diagnostic note](../../.agents/notes/proposed/2026-10-23-runtime-compilation-inventory.md).
+
+The canonical source publisher encodes the caller's string as UTF-8, compares
+existing raw bytes, and publishes through a binary stream without locale or
+newline conversion. Explicit CRLF, mixed newlines and Unicode remain part of
+the caller's source identity. The semantic cache validates the corresponding
+byte lengths and hashes on fresh-process replay. Pre-existing translated or
+otherwise malformed entries remain rejected and unchanged; the fix does not
+silently repair or clear them. The
+[byte-publication decision](../../.agents/notes/implemented/compatibility/2026-10-23-generated-source-byte-publication.md)
+records the historical Windows failure, its resolution and host-test limits.
+These source-byte contracts do not establish Windows native JIT support.
 
 ## Cache layers and toolchain requirements
 
@@ -234,6 +242,7 @@ none of those timing or scientific acceptance results.
 [cpu-xc]: ../../python/generativeqc_compiler/xc/native.py
 [cpu-grid]: ../../python/generativeqc_compiler/xc/grid_native.py
 [source-cache]: ../../python/generativeqc_compiler/common/semantic_source_cache.py
+[source-publication]: ../../python/generativeqc_compiler/common/source_cache.py
 [native-runtime]: ../../python/generativeqc_compiler/common/native_runtime.py
 [provenance]: ../../python/generativeqc_compiler/common/provenance.py
 [cuda-adapter]: ../../python/generativeqc_compiler/common/cuda_adapter.py

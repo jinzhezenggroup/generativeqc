@@ -25,6 +25,14 @@ struct CudaDensityFittingIntegralSource {
   void* implementation{};
 };
 
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return 0.0;
+  return static_cast<const cuda_execution::CudaDensityFittingIntegralSourceImpl*>(
+             source->implementation)
+      ->batch.df_range_omega;
+}
+
 CudaDfReadonlyBasis cuda_density_fitting_readonly_basis(
     const CudaDensityFittingIntegralSource* source) noexcept {
   if (!source || !source->implementation) return {};
@@ -357,6 +365,10 @@ generativeqc_status try_prepare_cuda_df_md_raw_source(CudaDensityFittingIntegral
     detail = "raw Hermite preparation requires a fresh integral source";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  // Prepared Hermite raw tiles implement the full-range operator. An LR source
+  // must keep its omega-aware generated values with the matching LR metric,
+  // even when packed storage and spare capacity would admit the faster owner.
+  if (state.batch.df_range_omega > 0.0) return GENERATIVEQC_STATUS_SUCCESS;
   if (state.batch_size != 1 || !state.automatic_value_mapping || state.value_math ||
       !additional_device_budget || !additional_host_budget)
     return GENERATIVEQC_STATUS_SUCCESS;

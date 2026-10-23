@@ -3,6 +3,11 @@
 Status: proposed
 Date: 2026-10-23
 
+Follow-up: the bounded source-byte publication proposal is implemented by
+[the UTF-8 byte-publication decision](../implemented/compatibility/2026-10-23-generated-source-byte-publication.md)
+in PR #2693. This proposal retains the original source-matched diagnosis and
+failed Windows evidence below; it no longer describes the current publisher.
+
 ## Problem
 
 While inspecting the bounded documentation slice for #2680 at
@@ -47,6 +52,16 @@ silently rewrite accepted artifacts or weaken hash/length checks.
 The inventory slice does not implement this proposal. It keeps the Windows
 failure visible and does not turn mocked cache tests into a platform JIT
 support claim. Existing packaged AOT routing is a different boundary.
+
+## Resolution of the source-byte follow-up
+
+The [implemented decision](../implemented/compatibility/2026-10-23-generated-source-byte-publication.md)
+supersedes the proposed publication repair only: the canonical owner compares
+and publishes exact caller UTF-8 bytes through binary I/O. Existing translated
+or malformed entries remain rejected without rewriting or weakening integrity
+checks. Its host source-publication tests do not qualify native compilation,
+GPU execution or Windows JIT support. The broader inventory measurements and
+scientific acceptance work for #2680 remain separate.
 
 ## Rejected alternatives
 

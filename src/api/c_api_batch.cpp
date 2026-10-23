@@ -66,9 +66,10 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     atom_counts.reserve(system_count);
     for (std::uint32_t i = 0; i < system_count; ++i) {
       if (systems[i] == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-      if (!generativeqc::api::valid_system_roles(*systems[i], *descriptor)) {
+      if (!generativeqc::api::valid_system_roles(*systems[i], *descriptor,
+                                                 context->state.executed_backend)) {
         context->last_detail =
-            "correlation auxiliary handles require a correlation-only DF consumer";
+            "auxiliary handle role requires its matching method and density-fitting backend";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       }
       native_systems.push_back(systems[i]->data);

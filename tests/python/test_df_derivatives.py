@@ -2,7 +2,6 @@
 
 import ctypes
 import shutil
-import subprocess
 import typing
 from itertools import product
 
@@ -149,8 +148,22 @@ extern "C" void derivative(unsigned count,const double* exponents,const double* 
   out[3]=r.second.x;out[4]=r.second.y;out[5]=r.second.z;
   out[6]=r.third.x;out[7]=r.third.y;out[8]=r.third.z;
 }
+extern "C" void range_derivative(unsigned count,const double* exponents,const double* centers,
+                                 const unsigned* angular,double omega,double* out) {
+  Vec3 first{centers[0],centers[1],centers[2]},second{centers[3],centers[4],centers[5]},third{centers[6],centers[7],centers[8]};
+  Angular first_angular{angular[0],angular[1],angular[2]},second_angular{angular[3],angular[4],angular[5]},third_angular{angular[6],angular[7],angular[8]};
+  auto result=count==2?metric(exponents[0],first,first_angular,exponents[2],third,third_angular,omega)
+      :three_center(exponents[0],first,first_angular,exponents[1],second,second_angular,exponents[2],third,third_angular,omega);
+  out[0]=result.value;
+  const Vec3 response[3]{result.first,result.second,result.third};
+  for(unsigned slot=0;slot<3;++slot) {
+    out[1+3*slot]=response[slot].x;out[2+3*slot]=response[slot].y;out[3+3*slot]=response[slot].z;
+  }
+}
 """)
-    subprocess.run(
+    from generativeqc_compiler.common.compiler_cache import run_cached_compiler
+
+    result = run_cached_compiler(
         [
             compiler,
             "-O2",
@@ -163,11 +176,10 @@ extern "C" void derivative(unsigned count,const double* exponents,const double* 
             "-o",
             str(directory / "fixture.so"),
         ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=240,
+        240,
+        label="DF derivative qualification fixture",
     )
+    assert result.returncode == 0, result.stderr
     library = ctypes.CDLL(str(directory / "fixture.so"))
     double = ctypes.POINTER(ctypes.c_double)
     library.derivative.argtypes = [
@@ -178,7 +190,56 @@ extern "C" void derivative(unsigned count,const double* exponents,const double* 
         double,
     ]
     library.derivative.restype = None
+    library.range_derivative.argtypes = [
+        ctypes.c_uint,
+        double,
+        double,
+        ctypes.POINTER(ctypes.c_uint),
+        ctypes.c_double,
+        double,
+    ]
+    library.range_derivative.restype = None
     return library
+
+
+@pytest.mark.parametrize("omega", (1e-3, 0.3, 1.2, 1e3))
+@pytest.mark.parametrize(
+    "angular", ((0, 0), (1, 2), (3, 3), (0, 0, 0), (1, 2, 3), (3, 3, 3))
+)
+def test_long_range_metric_and_three_center_response_match_libcint(
+    emitted_library: typing.Any, angular: tuple[int, ...], omega: float
+) -> None:
+    """Match independently normalized contracted values and every center response."""
+    from tools.generativeqc_validation.df_values import make_df_value_fixture
+
+    fixture = make_df_derivative_fixture(angular, omega=omega)
+    value_fixture = make_df_value_fixture(angular, omega=omega)
+    double = ctypes.POINTER(ctypes.c_double)
+    output = np.empty((len(fixture.records), 10))
+    for index, record in enumerate(fixture.records):
+        exponents = np.ascontiguousarray(record["exponents"])
+        centers = np.ascontiguousarray(record["centers"])
+        powers = np.ascontiguousarray(record["angular"])
+        emitted_library.range_derivative(
+            len(angular),
+            exponents.ctypes.data_as(double),
+            centers.ctypes.data_as(double),
+            powers.ctypes.data_as(ctypes.POINTER(ctypes.c_uint)),
+            omega,
+            output[index].ctypes.data_as(double),
+        )
+    output *= fixture.records["weight"][:, None]
+    values = value_fixture.contract(output[:, 0])
+    responses = output[:, 1:].reshape(-1, 3, 3)
+    if len(angular) == 2:
+        responses = responses[:, [0, 2]]
+    actual = fixture.contract(responses)
+    np.testing.assert_allclose(values, value_fixture.reference, atol=8e-11, rtol=8e-11)
+    np.testing.assert_allclose(actual, fixture.reference, atol=8e-11, rtol=8e-11)
+    np.testing.assert_allclose(
+        fixture.spherical(actual), fixture.spherical_reference, atol=8e-11, rtol=8e-11
+    )
+    np.testing.assert_allclose(actual.sum(axis=0), 0, atol=2e-12)
 
 
 @pytest.mark.parametrize("variant", ["asymmetric", "coincident"])

@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "695245124870bd30c60cf2a55210df360ef6e9fe",
+  "file_count": 1,
+  "total_bytes": 84679,
+  "retention": "Lossless xz plus the pinned existing Git original preserve the complete historical CPU range-ERI resource receipt. No measurements, exclusions or gates change.",
+  "files": [
+    {
+      "path": "benchmarks/results/range-eri/cpu/resources.json",
+      "bytes": 84679,
+      "sha256": "34b8418083b3035dede02532dd72c54bf732f5edaf8ec0ec40710e3d71ba1c9e",
+      "stored_path": "benchmarks/results/range-eri/cpu/resources.json.xz",
+      "encoding": "xz",
+      "stored_bytes": 2476,
+      "stored_sha256": "c6eb2f7331fd61b1fa4ed0916bf2c0ee2491286fa62448138dec45870319b035"
+    }
+  ]
+}
