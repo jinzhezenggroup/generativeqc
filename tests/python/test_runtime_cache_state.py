@@ -16,6 +16,29 @@ from benchmarks import runtime_cache_state as driver
 
 
 class CacheStateTests(unittest.TestCase):
+    def test_cli_rejects_retained_output_before_reading_inputs(self) -> None:
+        import subprocess
+
+        for action, option in (("run", "--config"), ("qualify", "--campaign")):
+            with self.subTest(action=action):
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(Path(driver.__file__)),
+                        action,
+                        option,
+                        "missing-input.json",
+                        "--output",
+                        str(driver.ROOT / "benchmarks/results/forbidden-output"),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("invalid raw_output_path value", result.stderr)
+
     def test_lossless_capsule_retains_config_order_signed_zero_and_text(self) -> None:
         codec = runpy.run_path(
             str(
