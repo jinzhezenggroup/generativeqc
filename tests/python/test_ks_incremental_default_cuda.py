@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
