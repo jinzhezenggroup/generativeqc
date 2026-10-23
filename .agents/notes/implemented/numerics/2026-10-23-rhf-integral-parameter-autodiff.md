@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-10-23
 
+The spin, backend and derivative-order restrictions in this historical decision
+are extended by [spin-resolved integral AD and coupled response](2026-10-23-spin-response-integral-autodiff.md).
+
 ## Problem
 
 The Array API molecular operator previously composed a native energy/force

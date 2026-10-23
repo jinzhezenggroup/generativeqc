@@ -140,18 +140,98 @@ def test_high_angular_compilation_obeys_symbolic_budget() -> None:
         parameter_kernel("eri", ("xxxx", "yyyy", "zzzz", "xxzz"))
 
 
+@pytest.mark.parametrize(
+    "family,components",
+    [
+        ("overlap", ("xx", "xyz")),
+        ("kinetic", ("xxxx", "zzzz")),
+        ("nuclear_attraction", ("xxxx", "xxzz")),
+        ("eri", ("xx", "y", "zz", "x")),
+        ("eri", ("xxxx", "yyyy", "zzzz", "xxzz")),
+    ],
+)
+def test_tape_second_derivative_matches_independent_integrals(
+    family: str, components: tuple[str, ...], tmp_path: Path, native_cxx: Any
+) -> None:
+    """Check mixed radial/center Hessians, including all-g ERIs and Boys F18."""
+    from generativeqc_compiler.common.paths import asset_path
+    from generativeqc_compiler.integral.parameter_ad import _directional_arithmetic
+    from generativeqc_compiler.integral.parameter_tape import (
+        emit_tape_kernel,
+        emit_tape_support,
+    )
+
+    with compiler_work_budget(5_000_000):
+        kernel = parameter_kernel(family, components, with_partials=False)
+        support, codes, _ = emit_tape_support((kernel,))
+        emitted = emit_tape_kernel("primitive", kernel, codes)
+    size = len(kernel.parameters)
+    source = tmp_path / "second.cpp"
+    target = tmp_path / "second.so"
+    source.write_text(
+        "#include <cmath>\n#define GQC_AD_FN static\n"
+        + _directional_arithmetic()
+        + _hostify(_emit_boys_support(18))
+        + support
+        + '\n#include "parameter_ad_tape.hpp"\n'
+        + emitted
+        + f'\nextern "C" void evaluate(const double* x, const double* v, double* y) {{\n'
+        f"Directional inputs[{size}], output[{size + 1}], scratch[2*parameter_tape_nodes];\n"
+        f"for (int i=0; i<{size}; ++i) inputs[i]={{x[i],v[i]}};\n"
+        "primitive(inputs, output, true, scratch);\n"
+        f"for (int i=0; i<{size + 1}; ++i) y[i]=output[i].tangent;\n}}\n"
+    )
+    native_cxx.build_shared(
+        (source,),
+        target,
+        compile_args=(
+            "-O1",
+            "-ffp-contract=off",
+            f"-I{asset_path('src/integrals').resolve()}",
+        ),
+        compile_timeout=180,
+    )
+    library = ct.CDLL(str(target))
+    evaluate = library.evaluate
+    pointer = ct.POINTER(ct.c_double)
+    evaluate.argtypes = [pointer, pointer, pointer]
+    evaluate.restype = None
+    count = len(components)
+    centers = 3 if family == "nuclear_attraction" else count
+    rng = np.random.default_rng(614)
+    inputs = np.concatenate(
+        (np.linspace(0.65, 1.25, count), rng.normal(scale=0.4, size=3 * centers))
+    )
+    u, v = rng.normal(size=(2, size))
+    u /= np.linalg.norm(u)
+    v /= np.linalg.norm(v)
+    actual = np.empty(size + 1)
+    evaluate(*(a.ctypes.data_as(pointer) for a in (inputs, v, actual)))
+    expected = u @ actual[1:]
+    errors = []
+    for step in (0.002, 0.0005):
+        numeric = sum(
+            a * b * _oracle(family, components, inputs + step * (a * u + b * v))
+            for a in (-1, 1)
+            for b in (-1, 1)
+        ) / (4 * step**2)
+        errors.append(abs(numeric - expected))
+    assert errors[-1] < 2e-6 * max(1, abs(expected)), errors
+    assert errors[-1] < max(errors[0] * 0.2, 2e-8), errors
+
+
 def test_extended_boys_orders_match_independent_hypergeometric(
     tmp_path: Path, native_cxx: Any
 ) -> None:
-    """Qualify every moment through F17 on both sides of the recurrence switch."""
+    """Qualify every moment through F18 on both sides of the recurrence switch."""
     from scipy.special import hyp1f1
 
     source = tmp_path / "boys.cpp"
     target = tmp_path / "boys.so"
     source.write_text(
         "#include <cmath>\n"
-        + _hostify(_emit_boys_support(17))
-        + '\nextern "C" void evaluate(double x, double* y) { boys_values<17>(x,y); }\n'
+        + _hostify(_emit_boys_support(18))
+        + '\nextern "C" void evaluate(double x, double* y) { boys_values<18>(x,y); }\n'
     )
     native_cxx.build_shared(
         (source,), target, compile_args=("-O2", "-ffp-contract=off")
@@ -161,8 +241,8 @@ def test_extended_boys_orders_match_independent_hypergeometric(
     pointer = ct.POINTER(ct.c_double)
     evaluate.argtypes = [ct.c_double, pointer]
     evaluate.restype = None
-    orders = np.arange(18)
-    actual = np.empty(18)
+    orders = np.arange(19)
+    actual = np.empty(19)
     for argument in (0.0, 1e-10, 0.3, 10.0, 19.999, 20.0, 20.001, 50.0, 500.0):
         evaluate(argument, actual.ctypes.data_as(pointer))
         expected = hyp1f1(orders + 0.5, orders + 1.5, -argument) / (2 * orders + 1)

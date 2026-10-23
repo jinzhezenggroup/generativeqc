@@ -72,11 +72,14 @@ class PreparedFockPlan {
                    unsigned retained_direct_derivative_order = 0,
                    unsigned retained_fitted_derivative_order = 0,
                    FockOccupiedProjectionReservation projection_reservation = {});
-  /** Own explicit differentiable integral values for an unscreened CPU RHF solve.
+  /** Own explicit differentiable integral values for an unscreened HF solve.
+   * CUDA uses a retained dense integral provider; CPU uses the exact source view.
    * No integral or force provider is evaluated during construction. Such a plan
    * cannot match a geometry-only cache lookup: its tensors are part of its
    * scientific identity, and its caller owns their differentiated provenance. */
-  PreparedFockPlan(const core::System& orbital, integrals::IntegralData values);
+  PreparedFockPlan(const core::System& orbital, integrals::IntegralData values,
+                   FockSpin spin = FockSpin::Restricted, FockBackend backend = FockBackend::Cpu,
+                   int device = 0, std::size_t device_budget = 0);
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
