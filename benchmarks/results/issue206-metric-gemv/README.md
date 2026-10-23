@@ -140,6 +140,12 @@ iteration-pair labels, complete timings and E/F vectors remain intact; the
 separate strict-gate failures and historical summary paths are unchanged.
 The stored member is below the unchanged 128 KiB large-record review threshold.
 
+The remaining tetramer direct-gate records and 192/384-AO batch-one energy records
+are retained in adjacent `.json.gz` files, with `.storage.json` original/stored
+hashes and Git blobs. Exact original bytes, including historical failed gates,
+are unchanged. Use `gzip -dc` or the shared `load_record` reader. This storage
+change makes room for native-grid-binding evidence under unchanged limits.
+
 The 2026-10-23 storage-only update compresses five additional historical records
 (two 96-AO direct/control batch-four records and the 192/96-AO batch-four energy
 and 19-AO batch-four force records) with deterministic gzip. Adjacent
