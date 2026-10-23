@@ -27,6 +27,7 @@ _SOURCE = r"""#pragma once
 #include "integrals/range_moments.hpp"
 #include "scf/cuda/cartesian_angular.cuh"
 #include "generated_direct_cartesian.cuh"
+#include "generated_direct_contraction.cuh"
 #include "generated_direct_order2_shell.cuh"
 #include "generated_direct_shell_class.cuh"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -39,6 +40,31 @@ _SOURCE = r"""#pragma once
 // python/generativeqc_compiler/integral/direct_source_contraction_cuda.py instead.
 // Arithmetic and reduction order are preserved; host plans and queue policy remain native.
 namespace generativeqc::scf::cuda_execution {
+
+/** Evaluate a public-AO Schwarz diagonal with proved shell-pair extents.
+ * Keep the generic owner's primitive/term summation, including signed spherical
+ * coefficients. Only the primitive recurrence workspace is specialized; no
+ * AO permutation, diagonal approximation or Cartesian bound is substituted. */
+template <unsigned FirstAngular, unsigned SecondAngular>
+__device__ inline double contracted_public_schwarz_shell_pair(
+    const DeviceBatch& batch, std::int32_t system, std::int32_t i, std::int32_t j) {
+  constexpr unsigned Order = 2U * (FirstAngular + SecondAngular);
+  const auto base = static_cast<std::int64_t>(system) * batch.nbf;
+  const auto shell_i = batch.ao_shells[base + i], shell_j = batch.ao_shells[base + j];
+  const auto primitive = [](double a, const Vec3<double>& first, const Angular& ai,
+                            double b, const Vec3<double>& second, const Angular& aj,
+                            double c, const Vec3<double>& third, const Angular& ak,
+                            double d, const Vec3<double>& fourth, const Angular& al,
+                            generativeqc::integrals::CoulombRange, double) {
+    return primitive_eri_cartesian_shell_class<FirstAngular, SecondAngular,
+                                               FirstAngular, SecondAngular>(
+        a, first, ai, b, second, aj, c, third, ak, d, fourth, al);
+  };
+  return contracted_eri_cartesian_with<Order, double>(
+      batch, base + i, base + j, base + i, base + j,
+      shell_i, shell_j, shell_i, shell_j, -1,
+      generativeqc::integrals::CoulombRange::Full, 0.0, primitive);
+}
 
 /**
  * Contract one quartet of normalized Cartesian source AOs.

@@ -2778,6 +2778,8 @@ void compensated_generated_coulomb() {
          "PASS\n";
 }
 
+#include "direct_public_schwarz_cases.hpp"
+
 void direct_providers(bool through_f_response, bool eri_tiles_only = false,
                       bool mixed_force_domains = false, unsigned force_domain_angular = 3U,
                       const char* spd_selector = "spatial-reuse",
@@ -3047,6 +3049,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--public-schwarz-only") {
+      public_schwarz_preparation();
+      return 0;
+    }
     if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
                       std::string(argv[1]) == "--canonical-materialized-screened-only")) {
       canonical_screened_values(true);

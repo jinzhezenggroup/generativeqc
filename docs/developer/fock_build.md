@@ -5,6 +5,16 @@ The internal C++ boundaries in `src/scf/fock_build.hpp` and
 resolved execution strategy and prepared integral sources. CPU and CUDA
 providers can be selected independently.
 
+CUDA Direct preparation evaluates public-AO Schwarz diagonals with specialized
+s/p/d shell-pair recurrences. The compiler shares the original contracted
+primitive and signed spherical-term summation with the generic evaluator;
+both oriented AO pairs are still evaluated, with unchanged FP64 storage,
+screening thresholds, capacity charges and nonfinite-value rejection. The
+scalar ssss shortcut and f-shell fallback remain available. Set
+`GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ=0` before preparation to use the
+generic recurrence for all public AO pairs. This selector affects preparation,
+not the prepared owner's later Fock or force contraction policy.
+
 `GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING=1` enables an experimental NVCC
 block prefilter for bounded Direct task compaction and its native force/fallback
 consumers. Set it before preparing an owner; unset, `0`, and other values keep
