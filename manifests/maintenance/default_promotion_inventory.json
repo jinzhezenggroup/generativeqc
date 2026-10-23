@@ -310,6 +310,36 @@
       ]
     },
     {
+      "id": "dft.incremental-direct-jk-cold-auto",
+      "classification": "already-default",
+      "controls": [
+        "scf-option:incremental_direct_jk_auto"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/types.hpp",
+        "src/methods/dft_method_preparation.cpp",
+        "src/dft/ks_incremental_policy.hpp",
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Guarded auto-on cold-only incremental J/K for default-grid all-electron restricted FP64 exact Direct global hybrids (64-768 public AOs, 2-96 atoms, orbital shells through d), only without a resource ledger. Native cold guess provenance admits the public Huckel seed. Source-matched unset/off RTX 5090 qualification covers 12/48/96-atom PBE0 plus B3LYP/M06-2X lifecycle cases, with independent complete E/F gates and no meaningful frozen-warm regression. The original two-full-Fock final acceptance and warm single-Fock path remain. Explicit 0/off opts out; explicit on preserves the broader experimental selector. HF, DF, UKS, Fast, custom/strict/grid, imported/moved seed, unsupported angular/source and ledger-bound owners retain their existing route; Fast/DF compatibility is qualified without incremental acceleration.",
+      "revisit_condition": "Requalify independent complete E/F, actual Fock work and cold/warm latency when changing admission, initial-guess provenance, screening, closure or storage ownership. Fast requires an audited precision-epoch/strict-anchor composition; DF requires its own signed-delta producer and measured endpoint benefit. Sampled stock-grid water qualification does not establish quadrature convergence, universal performance, or public-resource-plan promotion.",
+      "evidence": [
+        ".agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md",
+        "benchmarks/results/incremental-cold-proposals-20261023/README.md",
+        "tests/python/test_ks_incremental_default_policy.py",
+        "tests/python/test_ks_incremental_default_cuda.py",
+        "pr:#2691",
+        ".agents/notes/implemented/performance/2026-10-23-cold-default-seed-provenance.md",
+        "benchmarks/results/ks-incremental-default-20261023/README.md",
+        "benchmarks/results/ks-incremental-default-20261023/qualification.json.gz",
+        "benchmarks/ks_incremental_default.py",
+        "pr:#2696"
+      ]
+    },
+    {
       "id": "scf.incremental-xc",
       "classification": "needs-qualification",
       "controls": [
