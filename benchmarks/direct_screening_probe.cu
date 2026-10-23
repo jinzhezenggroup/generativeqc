@@ -3,7 +3,8 @@
  * This synthetic sorted-bound workload is NOT molecular endpoint evidence.
  * INT8 uses tile-local power-of-two upper quantization. WMMA forms an outer
  * product with only one nonzero K lane, exposing its utilization/packing cost.
- * Every mode applies the same FP64 predicate to the remaining candidates.
+ * Prepared FP32 intervals resolve either outcome and refine only uncertain
+ * candidates. Other coarse modes refine every survivor with the FP64 predicate.
  */
 #include <cuda_runtime.h>
 #include <mma.h>
@@ -78,11 +79,26 @@ __global__ void pack_float(const double* bounds, int n, float* upper) {
   if (i < n) upper[i] = direct_screening_upper_float(bounds[i]);
 }
 
+template <bool Interval>
 __global__ void prepared_float(const double* bounds, const float* upper, int n, double density,
                                double tolerance, bool force, unsigned char* output) {
   const int slot = blockIdx.x * blockDim.x + threadIdx.x;
   if (slot >= n * n) return;
   const int i = slot / n, j = slot % n;
+  if constexpr (Interval) {
+    const float d = direct_screening_upper_float(density);
+    const auto decision =
+        force ? direct_fp32_block_decision<true>(upper[i], upper[j], d, tolerance,
+                                                 fmin(tolerance, 1e-14))
+              : direct_fp32_block_decision<false>(upper[i], upper[j], d, tolerance, 0);
+    // Bit zero is admission; the other values distinguish proven outcomes
+    // from exact refinement without adding a second counter kernel.
+    output[slot] = decision == DirectBlockDecision::Accept ? 5
+                   : decision == DirectBlockDecision::Reject
+                       ? 2
+                       : unsigned(exact_survives(bounds[i], bounds[j], density, tolerance, force));
+    return;
+  }
   const float q = direct_screening_upper_product(upper[i], upper[j]);
   const float d = direct_screening_upper_float(density);
   const float f = direct_screening_upper_product(q, d);
@@ -198,18 +214,24 @@ int main(int argc, char** argv) try {
   const float packing_ms = timed([&] { pack<<<n / 16, 32>>>(bounds, n, codes, exponents); });
   const float float_packing_ms =
       timed([&] { pack_float<<<(n + 255) / 256, 256>>>(bounds, n, upper); });
-  const char* names[]{"fp64", "fp32", "int8", "int8_tensorcore", "fp32_prepared", "int8_tiled"};
+  const char* names[]{"fp64",          "fp32",       "int8",         "int8_tensorcore",
+                      "fp32_prepared", "int8_tiled", "fp32_interval"};
   for (bool force : {false, true}) {
     // A small force density makes the quadratic gate stricter than the linear gate.
     const double density = force ? 1e-4 : 0.125;
     std::vector<unsigned char> expected(std::size_t(n) * n);
-    for (int mode = 0; mode < 6; ++mode) {
+    for (int mode = 0; mode < 7; ++mode) {
       auto launch = [&] {
         if (mode == 2 || mode == 3 || mode == 5) pack<<<n / 16, 32>>>(bounds, n, codes, exponents);
         const int grid = (n * n + 255) / 256;
-        if (mode == 4) {
+        if (mode == 4 || mode == 6) {
           pack_float<<<(n + 255) / 256, 256>>>(bounds, n, upper);
-          prepared_float<<<grid, 256>>>(bounds, upper, n, density, tolerance, force, output);
+          if (mode == 4)
+            prepared_float<false>
+                <<<grid, 256>>>(bounds, upper, n, density, tolerance, force, output);
+          else
+            prepared_float<true>
+                <<<grid, 256>>>(bounds, upper, n, density, tolerance, force, output);
         }
         if (mode == 0)
           scalar<0><<<grid, 256>>>(bounds, n, codes, exponents, density, tolerance, force, output);
@@ -227,7 +249,7 @@ int main(int argc, char** argv) try {
       const float elapsed = timed(launch);
       std::vector<unsigned char> actual(expected.size());
       check(cudaMemcpy(actual.data(), output, actual.size(), cudaMemcpyDeviceToHost));
-      std::size_t survivors = 0, rejected = 0;
+      std::size_t survivors = 0, rejected = 0, accepted = 0;
       for (std::size_t i = 0; i < actual.size(); ++i) {
         const bool survives = (actual[i] & 1) != 0;
         if (mode == 0) {
@@ -241,16 +263,17 @@ int main(int argc, char** argv) try {
           throw std::runtime_error("task set changed");
         survivors += survives;
         rejected += actual[i] == 2;
+        accepted += actual[i] == 5;
       }
       std::printf(
           "{\"mode\":\"%s\",\"force\":%s,\"bounds\":%d,\"candidates\":%zu,\"survivors\":%zu,"
           "\"coarse_rejections\":%zu,\"total_ms\":%.6f,\"packing_ms\":%.6f,\"tolerance\":%.17g,"
-          "\"density\":%.17g,\"mismatches\":0}\n",
+          "\"density\":%.17g,\"coarse_acceptances\":%zu,\"refinements\":%zu,\"mismatches\":0}\n",
           names[mode], force ? "true" : "false", n, actual.size(), survivors, rejected, elapsed,
-          mode == 4   ? float_packing_ms
-          : mode >= 2 ? packing_ms
-                      : 0,
-          tolerance, density);
+          (mode == 4 || mode == 6) ? float_packing_ms
+          : mode >= 2              ? packing_ms
+                                   : 0,
+          tolerance, density, accepted, actual.size() - accepted - rejected);
     }
   }
   check(cudaFree(bounds));

@@ -50,9 +50,13 @@ void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept {
       select_direct_weighted_force_response(selector ? selector : "");
 }
 
-void configure_direct_block_screening(DeviceBatch& batch) noexcept {
+bool direct_fp32_block_screening_requested() noexcept {
   const auto* selection = std::getenv("GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING");
-  batch.direct_fp32_block_screening = selection && std::string_view(selection) == "1";
+  return selection && std::string_view(selection) == "1";
+}
+
+void configure_direct_block_screening(DeviceBatch& batch) noexcept {
+  batch.direct_fp32_block_screening = direct_fp32_block_screening_requested();
 }
 
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
@@ -169,6 +173,10 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     return {};
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
+  // This geometry owner must not write another owner's optional metadata.
+  // The exchange layer installs its own charged caches when it needs them.
+  plan->batch.direct_fp32_block_bounds = nullptr;
+  plan->batch.direct_fp32_density_bounds = nullptr;
   configure_direct_coulomb_recurrence(plan->batch);
   if (!host.shell_angular.empty())
     plan->batch.direct_maximum_shell_angular =
@@ -338,6 +346,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (!shared) return {};
   const bool bounded_value_capability = allow_bounded_shell_fallback && !shared->value_capability;
   const bool bounded_resources = force_capability || bounded_value_capability;
+  const bool fp32_block_screening = bounded_resources && shared->batch.direct_fp32_block_screening;
   const bool angular_force = force_capability && cuda_policy::bounded_angular_force_requested();
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
@@ -369,6 +378,10 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (bounded_resources) {
     charge(pairs, sizeof(std::uint32_t));
     charge(pair_blocks, sizeof(double));
+    if (fp32_block_screening) {
+      charge(pair_blocks, sizeof(float));
+      charge(batch, sizeof(float));
+    }
     charge(4, sizeof(unsigned long long));
     charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
     charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
@@ -471,6 +484,14 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
                                     pair_blocks, bounded_schedule.block_prefix.back()};
     }
     plan->shell_pair_block_bounds = doubles(pair_blocks);
+    if (fp32_block_screening) {
+      // The shared batch is private to this exchange owner. Its allocations
+      // carry both caches; existing reductions refresh them before consumption.
+      plan->shared->batch.direct_fp32_block_bounds =
+          static_cast<float*>(allocate(pair_blocks, sizeof(float)));
+      plan->shared->batch.direct_fp32_density_bounds =
+          static_cast<float*>(allocate(batch, sizeof(float)));
+    }
     plan->force_cursor = static_cast<unsigned long long*>(allocate(4, sizeof(unsigned long long)));
     plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
@@ -1088,6 +1109,10 @@ namespace {
 cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
                                              const double* beta) {
   auto b = p.batch;
+  // J reduces the summed density into its own FP64 metadata. The optional
+  // cache belongs to K's spin-aware reduction: overwriting it here would mix
+  // bounds during combined J/K and range-separated prepared execution.
+  b.direct_fp32_density_bounds = nullptr;
   const auto output = generated_coulomb_output(p);
   // Native DDDD and materialized value consumers use this existing scatter
   // contract. Keep the binding local so shared K/derivative launches cannot
