@@ -68,7 +68,7 @@ __global__ void df_md_project(DfMdView view, double* output) {
 template <unsigned PairAngular, unsigned AuxiliaryAngular, bool Charge, bool Response = false>
 __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size_t pair_count,
                                DfMdView auxiliary, std::size_t auxiliary_begin,
-                               std::size_t auxiliary_count) {
+                               std::size_t auxiliary_count, double* charge_partials = nullptr) {
   constexpr unsigned pair_order = PairAngular + (Response && !Charge);
   constexpr unsigned auxiliary_order = AuxiliaryAngular + (Response && Charge);
   constexpr unsigned target_count = df_md_count(Charge ? auxiliary_order : pair_order);
@@ -88,8 +88,16 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
   const auto target = target_view.primitives[(Charge ? auxiliary_begin : pair_begin) + blockIdx.x];
   const auto begin = Charge ? pair_begin : auxiliary_begin;
   const auto count = Charge ? pair_count : auxiliary_count;
+  // A charge class can have few auxiliary targets but many orbital primitives.
+  // Independent CTAs traverse contiguous source groups; the caller reduces
+  // their partials in split order before launching the next angular class.
+  // Padding groups participate normally and overwrite their partial with zero.
+  const std::size_t groups = count ? 1 + (count - 1) / sources : 0;
+  const std::size_t split_groups = groups ? 1 + (groups - 1) / gridDim.y : 0;
+  const std::size_t first = charge_partials ? blockIdx.y * split_groups * sources : 0;
+  const std::size_t last = charge_partials ? min(count, first + split_groups * sources) : count;
   double values[rows]{};
-  for (std::size_t offset = 0; offset < count; offset += sources) {
+  for (std::size_t offset = first; offset < last; offset += sources) {
     bool active = offset + lane < count;
     DfMdPrimitive source{};
     if (active) {
@@ -128,11 +136,35 @@ __global__ void df_md_contract(DfMdView pairs, std::size_t pair_begin, std::size
       value += __shfl_down_sync(0xffffffffU, value, stride, sources);
     const auto c = component_lane + row * components;
     if (!lane && c < target_count) {
-      auto* output = Response ? target_view.response_potential : target_view.potential;
-      output[(Response ? target.response_offset : target.hermite_offset) + c] += value;
+      if (charge_partials) {
+        charge_partials[(std::size_t(blockIdx.y) * auxiliary_count + blockIdx.x) * target_count +
+                        c] = value;
+      } else {
+        auto* output = Response ? target_view.response_potential : target_view.potential;
+        output[(Response ? target.response_offset : target.hermite_offset) + c] += value;
+      }
     }
   }
   static_assert(threads == 128);  // Launch contract: four complete warps.
+}
+
+/** One writer per target component, with an explicit deterministic split sum.
+ * The partials alias only the dead orbital primal-potential buffer. Density
+ * and raised response potentials stay live and disjoint throughout this pass. */
+template <unsigned AuxiliaryAngular, bool Response>
+__global__ void df_md_reduce_charge(DfMdView auxiliary, std::size_t begin, std::size_t count,
+                                    const double* partials, unsigned splits) {
+  constexpr unsigned components = df_md_count(AuxiliaryAngular + Response);
+  const auto item = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (item >= count * components) return;
+  const auto target = auxiliary.primitives[begin + item / components];
+  auto* output = Response ? auxiliary.response_potential : auxiliary.potential;
+  const auto offset =
+      (Response ? target.response_offset : target.hermite_offset) + item % components;
+  double value = output[offset];
+  for (unsigned split = 0; split < splits; ++split)
+    value += partials[std::size_t(split) * count * components + item];
+  output[offset] = value;
 }
 
 /** Contract a raised Hermite potential directly into atom derivatives. The

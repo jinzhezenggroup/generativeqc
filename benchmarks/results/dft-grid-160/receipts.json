@@ -1,0 +1,35 @@
+{
+  "schema": "generativeqc.historical-json-text-bundle.v1",
+  "bundle": "receipts.json.xz",
+  "bundle_sha256": "91718539ffdf5030873cf08b230b95372b91da878237270d3960eec6afe386ce",
+  "files": {
+    "batch.json": {
+      "bytes": 72816,
+      "sha256": "ba4a5f21d1656e3fa4f93fe7f3d9012a9f63b174c326bdbfe3039d3e9308766d"
+    },
+    "diffuse.json": {
+      "bytes": 92017,
+      "sha256": "9c3bbdbc6371f3bdb004c7debee58a326b715b693452c551960b5749e2530bd4"
+    },
+    "f_cartesian.json": {
+      "bytes": 91938,
+      "sha256": "39fb6d0c1453eb2be5933b4d1eb01df82649a6977004198bd00ecfdaa1aeb468"
+    },
+    "f_spherical.json": {
+      "bytes": 91870,
+      "sha256": "366659bfb1733f455e03a47240b376494f340353f18bfd7260aff646d04cbb4f"
+    },
+    "h2.json": {
+      "bytes": 91752,
+      "sha256": "cf7059a09c87192ee66f5d4dbff7a6bbb45cb45587c0a5700aa3cc86493f3e5d"
+    },
+    "tight.json": {
+      "bytes": 91931,
+      "sha256": "f3aac8a72efcd94a674219d29adcd70aabb626f61858c93b7346bbb8557d4654"
+    },
+    "water.json": {
+      "bytes": 91777,
+      "sha256": "280c4c06965be1e797e4271989eea778d99f111eade0d6515fb7290af9465381"
+    }
+  }
+}
