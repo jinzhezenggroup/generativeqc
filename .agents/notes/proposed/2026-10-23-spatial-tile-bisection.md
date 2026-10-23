@@ -46,3 +46,14 @@ canonical force view ownership. Qualify current-source Standard/Fast complete
 cold/warm/moved endpoints independently before any promotion. Retain initial
 compile failure (a diagnostic pointer cast), all screen observations, provenance
 and semantic work separately from clean repeated endpoints.
+
+## Completed standalone qualification
+
+The source-frozen five-pair water96 experiment and 272 independently gated
+native calls are retained in
+`benchmarks/results/xc-spatial-bisection-20261023/`. Cold gains pass the unchanged
+median/MAD floor: PBE 3.904% DF / 4.050% Direct and r2SCAN-3c 7.561% DF /
+6.637% Direct. PBE warm changes fail the floor; retain them without a warm claim.
+The selector remains explicit. Independent CPU E/V, moved endpoints, permutation
+and ownership/resource tests plus all three CUDA sanitizers pass. Combined
+occupied-XC/WB/schedule qualification is a separate source population.

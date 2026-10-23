@@ -316,6 +316,11 @@
       "owner": "bounded DF Hermite charge-partition endpoint qualification",
       "reason": "Retains every independent complete energy/force receipt, separate historical and integrated source cohorts, exact source inventories and reconstruction patch, sanitizer and cache provenance. Lossless compression preserves full vectors and work counts without relaxing any storage or numerical gate.",
       "review_document": "benchmarks/results/df-md-charge-splits-20261023/README.md"
+    },
+    "xc-spatial-bisection-20261023": {
+      "owner": "Explicit spatial bisection complete energy and force endpoints",
+      "reason": "Lossless all-repeat numerical vectors, paired and moved endpoints, authenticated source delta and compiler/cache/device validation. Historical endpoint receipts compact losslessly; caps unchanged.",
+      "review_document": "benchmarks/results/xc-spatial-bisection-20261023/README.md"
     }
   },
   "files": [
@@ -686,6 +691,14 @@
       "role": "source-input-identity-manifest",
       "bytes": 242120,
       "sha256": "e2c3f4a7d368283d73c5b49837a551eeb94373bb4cabb3ae8d135cdf0de5a39d"
+    },
+    {
+      "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",
+      "family": "xc-spatial-bisection-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 501368,
+      "sha256": "b9a165ea339ae5a3cfe7af3836a6ec6651b7c1eabd2d6ce68454c4dec6983750"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
