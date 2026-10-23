@@ -106,9 +106,8 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
     if (!plan.packed_raw)
       runtime::cuda_trace::trace_counter("resident_single_staging_pair_capacity", pair_capacity);
     for (std::size_t system = 0; system < plan.batch_size; ++system) {
-      auto* raw = plan.packed_raw
-                      ? plan.packed_raw + system * plan.stored_tensor_elements_per_system
-                      : nullptr;
+      auto* raw_owner = plan.resident_raw_coulomb ? plan.three_center : plan.packed_raw;
+      auto* raw = raw_owner ? raw_owner + system * plan.stored_tensor_elements_per_system : nullptr;
       const auto source_tile = raw ? std::max(plan.nbf, pair_capacity) : pair_capacity;
       for (std::size_t pair = 0; pair < plan.stored_pair_count; pair += source_tile) {
         const auto count = std::min(source_tile, plan.stored_pair_count - pair);
@@ -137,7 +136,7 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
           if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
         }
       }
-      if (!raw) continue;
+      if (!raw || plan.resident_raw_coulomb) continue;
       if (plan.metric_full_rank[system] && plan.panel_capacity >= plan.naux) {
         const auto tile = plan.panel_capacity / plan.naux;
         for (std::size_t pair = 0; pair < plan.stored_pair_count; pair += tile) {
@@ -161,16 +160,19 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
           });
       if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
     }
-    plan.resident_raw_valid = plan.packed_raw != nullptr;
+    plan.resident_raw_valid = plan.packed_raw != nullptr || plan.resident_raw_coulomb;
     runtime::cuda_trace::trace_counter("value_packed_pairs", plan.stored_pair_count);
     runtime::cuda_trace::trace_counter("packed_raw_generation_calls", generated_panels);
     runtime::cuda_trace::trace_counter(
         "resident_raw_bytes",
-        plan.packed_raw ? plan.batch_size * plan.stored_tensor_elements_per_system * sizeof(double)
-                        : 0);
+        plan.resident_raw_valid
+            ? plan.batch_size * plan.stored_tensor_elements_per_system * sizeof(double)
+            : 0);
     runtime::cuda_trace::trace_counter(
         "resident_transformed_bytes",
-        plan.batch_size * plan.stored_tensor_elements_per_system * sizeof(double));
+        plan.resident_raw_coulomb
+            ? 0
+            : plan.batch_size * plan.stored_tensor_elements_per_system * sizeof(double));
     return GENERATIVEQC_STATUS_SUCCESS;
   }
   const auto capacity = plan.row_tile * plan.nbf * plan.auxiliary_tile;
@@ -339,6 +341,13 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
 
+  if (storage.coulomb_only_raw &&
+      (!integral_source || !retain_three_center || automatic_rhf_rank || storage.rank_capacity ||
+       storage.pairs != DfPairStorage::SymmetricLowerSingle)) {
+    detail = "raw Coulomb storage requires a method-owned single packed source without K";
+    return fail_before_plan(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  }
+
   std::size_t matrix_bytes = 0;
   std::size_t metric_bytes = 0;
   std::size_t tensor_bytes = 0;
@@ -478,7 +487,8 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                 ? coulomb_lowering::packed_coulomb(1, nbf, naux, candidate->blas, candidate->stream)
                 : coulomb_lowering::dense_coulomb(batch_size, nbf, naux, candidate->blas,
                                                   candidate->stream);
-      } else {
+      }
+      if (candidate->streamed || storage.coulomb_only_raw) {
         candidate->metric_project =
             coulomb_lowering::metric_project(naux, naux, candidate->blas, candidate->stream);
         candidate->metric_rotate =
@@ -761,10 +771,18 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     diagnostic.condition_number = largest / smallest_retained;
   }
 
+  // Keep raw A only after the unchanged metric cutoff has proved full rank.
+  // The factor-first vector solve borrows existing K panel scratch. A rank or
+  // capacity refusal keeps the ordinary fitted representation in the same slot.
+  candidate->resident_raw_coulomb =
+      storage.coulomb_only_raw && tile_elements >= naux &&
+      std::all_of(candidate->metric_full_rank.begin(), candidate->metric_full_rank.end(),
+                  [](auto full_rank) { return full_rank != 0; });
+
   // A plan-wide gauge avoids ambiguous mixed-rank batched leases. The other
   // storage modes retain their existing public/borrowed raw representations.
   candidate->resident_spectral_factors =
-      !candidate->streamed &&
+      !candidate->streamed && !candidate->resident_raw_coulomb &&
       candidate->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
       std::all_of(candidate->metric_full_rank.begin(), candidate->metric_full_rank.end(),
                   [](auto full_rank) { return full_rank != 0; });
@@ -955,8 +973,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     diagnostic.auxiliary_tile = auxiliary_tile;
     diagnostic.streamed = candidate->streamed;
     diagnostic.pair_storage = storage.pairs;
-    diagnostic.stored_factor_bytes = candidate->streamed ? 0 : tensor_bytes;
-    diagnostic.raw_factor_bytes = candidate->packed_raw           ? tensor_bytes
+    diagnostic.stored_factor_bytes =
+        candidate->streamed || candidate->resident_raw_coulomb ? 0 : tensor_bytes;
+    diagnostic.raw_factor_bytes = candidate->packed_raw || candidate->resident_raw_coulomb
+                                      ? tensor_bytes
                                   : candidate->resident_raw_valid ? tile_bytes
                                                                   : 0;
     diagnostic.contraction_scratch_bytes =

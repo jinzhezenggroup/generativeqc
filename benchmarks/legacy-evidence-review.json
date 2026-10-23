@@ -311,6 +311,11 @@
       "owner": "Fast hybrid proposal source screening",
       "reason": "All 180 complete endpoint observables, independent references, paired timing and semantic work, source/binary identities and bounded fallback qualification. Exploratory, invalid-build and untouched-baseline records remain separate; full profiler/build streams remain in ignored storage.",
       "review_document": "benchmarks/results/fast-source-screening-20261023/README.md"
+    },
+    "df-raw-coulomb-20261023": {
+      "owner": "bounded raw Coulomb complete cold endpoint qualification",
+      "reason": "Two separately authenticated cohorts retain all 528 complete E/F calls, moved controls, independent references and failed AOT assembly receipts. Lossless compression retains original work, timing and numerical arrays; no scientific or storage budget is relaxed.",
+      "review_document": "benchmarks/results/df-raw-coulomb-20261023/README.md"
     }
   },
   "files": [
@@ -641,6 +646,22 @@
       "role": "source-bound-endpoint-observables-and-paired-qualification",
       "bytes": 284472,
       "sha256": "d58ebd738bc48dc50d7d5dfd7174832c7664c03957190c56d062420ba97c6e25"
+    },
+    {
+      "path": "benchmarks/results/df-raw-coulomb-20261023/stage2-default-source-inputs.json.xz",
+      "family": "df-raw-coulomb-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-input-identity-manifest",
+      "bytes": 214068,
+      "sha256": "83de463aaedb1c0925bd8b3c18c8c6d69e9b300018a5f6231c3bf09571ab3540"
+    },
+    {
+      "path": "benchmarks/results/df-raw-coulomb-20261023/receipt-populations.json.xz",
+      "family": "df-raw-coulomb-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "exact-original-receipt-text-with-authenticated-restoration",
+      "bytes": 485212,
+      "sha256": "7499b9bbc47f0b824f8bb27a76436322edd0ac4cff1239cfd906e37afeb214f7"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

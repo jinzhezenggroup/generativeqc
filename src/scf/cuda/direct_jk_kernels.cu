@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
+#include <string_view>
 #include <type_traits>
 
 #include "generated_direct_contraction.cuh"
@@ -456,7 +458,7 @@ __global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_
 }
 
 /** Schwarz bounds in public AO order, including sparse spherical expansions. */
-template <bool Cartesian, unsigned Order>
+template <bool Cartesian, unsigned Order, bool Specialized = false>
 __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure) {
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -465,7 +467,11 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
   const auto i = static_cast<std::int32_t>((item % matrix) / n);
   const auto j = static_cast<std::int32_t>(item % n);
   if (!schwarz_order_matches<Order, Cartesian>(batch, system, i, j)) return;
-  const double value = schwarz_diagonal<Order, Cartesian>(batch, system, i, j);
+  double value;
+  if constexpr (Specialized)
+    value = public_schwarz_diagonal<Order>(batch, system, i, j);
+  else
+    value = schwarz_diagonal<Order, Cartesian>(batch, system, i, j);
   // NaN bounds must never masquerade as screened-out quartets.
   if (!isfinite(value)) atomicExch(failure, 1);
   bounds[item] = sqrt(fabs(value));
@@ -1031,9 +1037,16 @@ void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, 
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
                                          int* failure, bool cartesian) {
+  // Capture this preparation-only rollback before launching. Both schedules
+  // retain the same dense public bounds and existing allocation/failure ABI.
+  const auto* selection = std::getenv("GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ");
+  const bool specialized = !selection || std::string_view(selection) != "0";
   for_each_schwarz_order(batch, [&]<unsigned Order>() {
     if (cartesian)
       independent_jk_bounds_kernel<true, Order>
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+    else if (specialized)
+      independent_jk_bounds_kernel<false, Order, true>
           <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
     else
       independent_jk_bounds_kernel<false, Order>

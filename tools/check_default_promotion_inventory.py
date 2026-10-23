@@ -798,7 +798,7 @@ def _discover_prepared_df_controls(root: Path) -> dict[str, str]:
     source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", _read(root / relative), flags=re.DOTALL)
     return {
         f"hf-runtime:{name}": relative.as_posix()
-        for name in re.findall(r'"(GENERATIVEQC_DF_MD_COULOMB)"', source)
+        for name in re.findall(r'"(GENERATIVEQC_DF_(?:MD|RAW)_COULOMB)"', source)
     }
 
 

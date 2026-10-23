@@ -379,15 +379,18 @@ core_hotspots_b=(
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
   # and its original enumeration slot; all cases stay selected.
   tests/python/test_uccsd_response.py
-  tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
   tests/python/test_df_lambda_matrix_audit.py
   tests/python/test_df_lambda_mixed_precision.py
-  tests/python/test_direct_exchange_queue.py
   tests/python/test_df_occupied_triples.py
 )
 core_hotspots_c=(
+  # Run 39908441593 exhausted core-b at 99% while core-c finished in
+  # 15m48s. Move the complete 296-worker-second Lambda reuse module and
+  # the queue census that only started at minute 29; retain modulo slots.
+  tests/python/test_df_lambda_core_reuse.py
+  tests/python/test_direct_exchange_queue.py
   # Keep the complete order-five probe independent of corrected Lambda.
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py

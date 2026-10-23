@@ -68,7 +68,7 @@ struct CudaDensityFittingJkPlan {
   void* stream=reinterpret_cast<void*>(1);
   void* blas=reinterpret_cast<void*>(1);
   bool streamed=false,occupied_scf_reserved=true,resident_exchange_enabled=true,resident_raw_valid=false;
-  bool resident_spectral_factors=true;
+  bool resident_spectral_factors=true,resident_raw_coulomb=false;
   DfValueStorageOptions value_storage{DfPairStorage::SymmetricLowerSingle,1};
   CudaDensityFittingIntegralSource* integral_source=reinterpret_cast<CudaDensityFittingIntegralSource*>(1);
   double values[64]{};
