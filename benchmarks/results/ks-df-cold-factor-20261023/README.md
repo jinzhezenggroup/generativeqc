@@ -1,5 +1,21 @@
 # Native DF cold-factor endpoint qualification
 
+## Integration status
+
+This is a retained alternative implementation and qualification branch, **not a
+merge-ready change against the latest upstream**. During qualification, PR #2692
+merged algebraic native-cold density-factor recovery and other endpoint changes.
+PR #2696 incorporated that work at
+`9f008cff0631834d10c4520d33a9b86cfc162fa6`. Its existing default already avoids the
+large-system dense first K. The timings below compare the earlier dense-first
+baseline and do not establish an additional gain over that new default.
+
+No duplicate production PR was opened. Reconsider the producer-coefficient
+handoff only after measuring against the current algebraic recovery path and
+reconciling its admission, rollback and noncanonical-factor lifetime contract.
+The tested implementation and every historical population remain available on
+`codex/fast-df-endpoint-perf`; do not apply it over the new policy unchanged.
+
 The native Hückel factor replaces one dense first K with occupied K in eligible
 restricted FP64 DF cold starts. Standard and Fast share the implementation.
 This receipt qualifies default-grid solver behavior on the sampled workloads;

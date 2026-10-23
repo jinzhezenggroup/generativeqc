@@ -90,3 +90,20 @@ Qualify a reserved resource-plan extension before admitting bounded owners.
 Qualify mixed SCF or unrestricted factors independently. Revisit admission cost
 for additional basis/size domains using complete cold and warm endpoints; this
 change does not reduce DF source setup, metric projection or force-response work.
+
+## Integration outcome
+
+While this independent implementation was being qualified on `bfb1584b3`,
+[PR #2692](https://github.com/jinzhezenggroup/generativeqc/pull/2692) merged a
+separate native-cold algebraic density-factor recovery, resident DF validation
+and prepared-force improvements. PR #2696 subsequently incorporated that master
+at `9f008cff0631834d10c4520d33a9b86cfc162fa6`.
+
+The current upstream already removes the same dense first K in its qualified
+large-system domain. Our earlier comparison therefore cannot establish an
+additional current-upstream gain. The tested branch and evidence are retained;
+no duplicate production PR was opened. A future handoff experiment must compare
+against that new default, reuse its shared admission policy and preserve its
+explicit noncanonical lifetime (no warm frame or stationary projection lease).
+The historical evidence above remains unchanged and must not be presented as a
+new 10% improvement on top of #2692.
