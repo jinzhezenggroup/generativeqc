@@ -123,6 +123,8 @@ struct DeviceBatch {
   bool direct_dddd_force_class_major{}, direct_force_split_low{};
   bool direct_force_relative_response{true};
   bool direct_fp32_block_screening{};
+  float* direct_fp32_block_bounds{};
+  float* direct_fp32_density_bounds{};
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -226,6 +228,9 @@ int main(int argc,char** argv) {
   const unsigned reachable=static_cast<unsigned>(std::atoi(argv[3]));
   cuda_policy::reachable_policy=reachable;
   HostBatch host; DeviceBatch borrowed;
+  float borrowed_block_bound=2.0F, borrowed_density_bound=3.0F;
+  borrowed.direct_fp32_block_bounds=&borrowed_block_bound;
+  borrowed.direct_fp32_density_bounds=&borrowed_density_bound;
   borrowed.direct_coulomb_reachable=reachable ^ 3U;
   borrowed.direct_hermite_convolution=hermite ^ 3U;
   borrowed.direct_pair_materialized_values=!pair_materialized;
@@ -237,6 +242,11 @@ int main(int argc,char** argv) {
     auto plan=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
     if(injected_stage==0) {
       assert(plan && live_allocations>0);
+      assert(plan->batch.direct_fp32_block_bounds==nullptr);
+      assert(plan->batch.direct_fp32_density_bounds==nullptr);
+      assert(borrowed.direct_fp32_block_bounds==&borrowed_block_bound);
+      assert(borrowed.direct_fp32_density_bounds==&borrowed_density_bound);
+      assert(borrowed_block_bound==2.0F && borrowed_density_bound==3.0F);
       assert(plan->batch.direct_coulomb_reachable==reachable);
       assert(plan->batch.direct_hermite_convolution==hermite);
       assert(plan->batch.direct_pair_materialized_values==pair_materialized);

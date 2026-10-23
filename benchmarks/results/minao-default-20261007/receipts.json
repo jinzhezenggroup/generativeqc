@@ -1,0 +1,100 @@
+{
+  "schema": "generativeqc.lossless-text-receipts.v1",
+  "bundle": "receipts.json.xz",
+  "bundle_sha256": "d102ebec2c6e86c175b5edfda3ea99463a22312bf7d600c31e7ee76aef582ae9",
+  "source_revision": "1b6a97ead",
+  "files": {
+    "default-smoke/default-48.json": {
+      "bytes": 68498,
+      "sha256": "8056dd9608919a2366b42c83f35522bf2b17623913e448316bf0136195484474"
+    },
+    "default-smoke/default-peroxide.json": {
+      "bytes": 37448,
+      "sha256": "6b29f428669792f7c462bea528a9cbe238d7aaaaa1b79e53431355e04a62996d"
+    },
+    "samples/core0-48.json": {
+      "bytes": 34993,
+      "sha256": "f3fbeff163cb30bf2bda011b1271567f96030873f2d050a478a0f41c47aab174"
+    },
+    "samples/core0-96.json": {
+      "bytes": 44765,
+      "sha256": "bf57a38c1cbe6b5fce9d3b0f60bfed73cbb9773973460a44270e2cf77969e21b"
+    },
+    "samples/core0-peroxide.json": {
+      "bytes": 39763,
+      "sha256": "06652bdde2c576e40b7fd01f6ad647393b383845fe0265c4e82858f1ae690ffb"
+    },
+    "samples/core1-48.json": {
+      "bytes": 35055,
+      "sha256": "9b80afea35e13e28ae652f7da48b5341f4f9a1e760c86cd554830437402adf8e"
+    },
+    "samples/core1-96.json": {
+      "bytes": 45553,
+      "sha256": "91b338ae6683a4131e9aa63ab09fdce46cf8d2401368d14df8120c58d9c69959"
+    },
+    "samples/core1-peroxide.json": {
+      "bytes": 39841,
+      "sha256": "1ff87cb03eeb235b24b5be61865b2bfb464d07288c72011287170c6038f00740"
+    },
+    "samples/core2-48.json": {
+      "bytes": 35026,
+      "sha256": "c824967abdea93439ae6cc7653c3f8f9ef7d2da502f3beac47d3323d5d060969"
+    },
+    "samples/core2-96.json": {
+      "bytes": 46227,
+      "sha256": "d42c85c12727ab3ca81c48b16cbd46d2c5e21a13269b7f1cb2c1be7e5ccb89c1"
+    },
+    "samples/core2-peroxide.json": {
+      "bytes": 39808,
+      "sha256": "c06f94e50423e0bf780cdb948428d3c8e29722b5a5cb44cc62ab0260f73ad332"
+    },
+    "samples/minao0-48.json": {
+      "bytes": 52624,
+      "sha256": "26ef2436ca5900d5cb5b111dccfc8a1a7fdb882a53f15ed2d657945c2956b2cf"
+    },
+    "samples/minao0-96.json": {
+      "bytes": 44074,
+      "sha256": "0b1bdc5423ab5645004755128e9eea013f0f5a090d5ae16b943b2ac934bbb14f"
+    },
+    "samples/minao0-peroxide.json": {
+      "bytes": 37440,
+      "sha256": "e6f1289e64cf8f4f3a00040c9d6d675ce202f6a8c4e04c03532bacc08772088f"
+    },
+    "samples/minao1-48.json": {
+      "bytes": 52599,
+      "sha256": "7da1bc4a10be0149779cb85c0a1793f18a804f560a1b960bd1d823b416cd6488"
+    },
+    "samples/minao1-96.json": {
+      "bytes": 72627,
+      "sha256": "45ad61fb5c7bfd45668c70b8991e8fd398645eaec52f36ec61c3e20e4cda7c6a"
+    },
+    "samples/minao1-peroxide.json": {
+      "bytes": 37450,
+      "sha256": "61965691387fccd940831cdd2434fec54877de5adb79c30318df8ae99602215b"
+    },
+    "samples/minao2-48.json": {
+      "bytes": 52606,
+      "sha256": "99e7474a461881eb7ac143fc72ce836ca0e1d63ba257a1bcdb870dab2ce6a6c4"
+    },
+    "samples/minao2-96.json": {
+      "bytes": 73216,
+      "sha256": "5280938ad5cf36708d0b89f66f937c7db915d89a9efc47cbabd705c6401f0a8c"
+    },
+    "samples/minao2-peroxide.json": {
+      "bytes": 53498,
+      "sha256": "ea85b93f68db598b6a26030132a81472e901f330afdf6f17da4582f2e8556936"
+    },
+    "samples/reference-48.json": {
+      "bytes": 23239,
+      "sha256": "9e83561bf44361aabd283c7b220131121adbe7a9df52759612c38cdf0cdf0212"
+    },
+    "samples/reference-96.json": {
+      "bytes": 42764,
+      "sha256": "a0e24232d975e7ceae64e7a48b948a5fbac151c79e292fa15c6c0961c153f1c8"
+    },
+    "samples/reference-peroxide.json": {
+      "bytes": 7192,
+      "sha256": "ab7695fa201418d7788afca41bc53e77c01361cdf4a61e062db1405e644698b8"
+    }
+  }
+}

@@ -27,6 +27,9 @@ __global__ void evaluate(const Case* cases, unsigned count, unsigned* results) {
   const auto c = cases[i];
   const double bounds[]{c.first, c.second};
   const double density[]{c.density};
+  const float prepared_bounds[]{direct_screening_upper_float(c.first),
+                                direct_screening_upper_float(c.second)};
+  const float prepared_density[]{direct_screening_upper_float(c.density)};
   const auto force_tolerance = fmin(c.tolerance, kForceDensityProductScreeningTolerance);
   unsigned result =
       direct_fp32_block_rejects<false>(c.first, c.second, c.density, c.tolerance, force_tolerance);
@@ -34,11 +37,19 @@ __global__ void evaluate(const Case* cases, unsigned count, unsigned* results) {
                                                      force_tolerance))
             << 1U;
   result |= unsigned(bounded_direct_block_pair_survives_screening<DirectScreeningPurpose::Fock>(
-                0, 1, 0, c.tolerance, bounds, density, true))
+                0, 1, 0, c.tolerance, bounds, density, prepared_bounds, prepared_density))
             << 2U;
   result |= unsigned(bounded_direct_block_pair_survives_screening<DirectScreeningPurpose::Force>(
-                0, 1, 0, c.tolerance, bounds, density, true))
+                0, 1, 0, c.tolerance, bounds, density, prepared_bounds, prepared_density))
             << 3U;
+  result |=
+      unsigned(direct_fp32_block_decision<false>(prepared_bounds[0], prepared_bounds[1],
+                                                 prepared_density[0], c.tolerance, force_tolerance))
+      << 4U;
+  result |=
+      unsigned(direct_fp32_block_decision<true>(prepared_bounds[0], prepared_bounds[1],
+                                                prepared_density[0], c.tolerance, force_tolerance))
+      << 6U;
   results[i] = result;
 }
 
@@ -60,6 +71,7 @@ void validate(const std::vector<Case>& cases) {
   check(cudaFree(input));
   check(cudaFree(output));
   std::array<std::size_t, 2> rejects{};
+  std::array<std::size_t, 3> decisions{};
   for (std::size_t i = 0; i < cases.size(); ++i) {
     const auto c = cases[i];
     volatile double q = c.first * c.second;
@@ -76,6 +88,14 @@ void validate(const std::vector<Case>& cases) {
     const bool fast_force = (results[i] & 2U) != 0;
     const bool actual_fock = (results[i] & 4U) != 0;
     const bool actual_force = (results[i] & 8U) != 0;
+    const auto fock_decision = static_cast<DirectBlockDecision>((results[i] >> 4U) & 3U);
+    const auto force_decision = static_cast<DirectBlockDecision>((results[i] >> 6U) & 3U);
+    for (auto decision : {fock_decision, force_decision}) ++decisions[unsigned(decision)];
+    if ((fock_decision == DirectBlockDecision::Accept && !expected_fock) ||
+        (force_decision == DirectBlockDecision::Accept && !expected_force) ||
+        (fock_decision == DirectBlockDecision::Reject && expected_fock) ||
+        (force_decision == DirectBlockDecision::Reject && expected_force))
+      throw std::runtime_error("prepared interval changed the FP64 task set");
     if (actual_fock != expected_fock || actual_force != expected_force ||
         (fast_fock && expected_fock) || (fast_force && expected_force)) {
       std::fprintf(stderr, "admission mismatch at %zu: %a %a %a %a result=%u\n", i, c.first,
@@ -89,7 +109,8 @@ void validate(const std::vector<Case>& cases) {
       const long double exact_force = exact_fock * c.density;
       const bool real_fock = exact_q < c.tolerance || exact_fock < c.tolerance;
       const bool real_force = real_fock || exact_force < ft;
-      if ((fast_fock && !real_fock) || (fast_force && !real_force))
+      if (((fast_fock || fock_decision == DirectBlockDecision::Reject) && !real_fock) ||
+          ((fast_force || force_decision == DirectBlockDecision::Reject) && !real_force))
         throw std::runtime_error("coarse bound violated extended-precision oracle");
     }
     rejects[0] += fast_fock;
@@ -98,15 +119,18 @@ void validate(const std::vector<Case>& cases) {
 #if defined(__NVCC__)
   if (rejects[0] < 1000 || rejects[1] < 1000)
     throw std::runtime_error("vacuous coarse rejection coverage");
+  for (auto count : decisions)
+    if (count < 1000) throw std::runtime_error("vacuous prepared interval coverage");
 #else
   // Unqualified compatibility compilers must exercise only the FP64 fallback.
-  if (rejects[0] != 0 || rejects[1] != 0)
+  if (rejects[0] != 0 || rejects[1] != 0 || decisions[1] != 0 || decisions[2] != 0)
     throw std::runtime_error("unqualified compiler enabled coarse rejection");
 #endif
   std::printf(
       "{\"cases\":%zu,\"fock_rejections\":%zu,\"force_rejections\":%zu,"
-      "\"task_set_mismatches\":0}\n",
-      cases.size(), rejects[0], rejects[1]);
+      "\"task_set_mismatches\":0,\"prepared_refine\":%zu,\"prepared_reject\":%zu,"
+      "\"prepared_accept\":%zu}\n",
+      cases.size(), rejects[0], rejects[1], decisions[0], decisions[1], decisions[2]);
 }
 }  // namespace
 

@@ -310,6 +310,36 @@
       ]
     },
     {
+      "id": "dft.incremental-direct-jk-cold-auto",
+      "classification": "already-default",
+      "controls": [
+        "scf-option:incremental_direct_jk_auto"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/types.hpp",
+        "src/methods/dft_method_preparation.cpp",
+        "src/dft/ks_incremental_policy.hpp",
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Guarded auto-on cold-only incremental J/K for default-grid all-electron restricted FP64 exact Direct global hybrids (64-768 public AOs, 2-96 atoms, orbital shells through d), only without a resource ledger. Native cold guess provenance admits the public Huckel seed. Source-matched unset/off RTX 5090 qualification covers 12/48/96-atom PBE0 plus B3LYP/M06-2X lifecycle cases, with independent complete E/F gates and no meaningful frozen-warm regression. The original two-full-Fock final acceptance and warm single-Fock path remain. Explicit 0/off opts out; explicit on preserves the broader experimental selector. HF, DF, UKS, Fast, custom/strict/grid, imported/moved seed, unsupported angular/source and ledger-bound owners retain their existing route; Fast/DF compatibility is qualified without incremental acceleration.",
+      "revisit_condition": "Requalify independent complete E/F, actual Fock work and cold/warm latency when changing admission, initial-guess provenance, screening, closure or storage ownership. Fast requires an audited precision-epoch/strict-anchor composition; DF requires its own signed-delta producer and measured endpoint benefit. Sampled stock-grid water qualification does not establish quadrature convergence, universal performance, or public-resource-plan promotion.",
+      "evidence": [
+        ".agents/notes/implemented/performance/2026-10-23-bounded-incremental-cold-proposals.md",
+        "benchmarks/results/incremental-cold-proposals-20261023/README.md",
+        "tests/python/test_ks_incremental_default_policy.py",
+        "tests/python/test_ks_incremental_default_cuda.py",
+        "pr:#2691",
+        ".agents/notes/implemented/performance/2026-10-23-cold-default-seed-provenance.md",
+        "benchmarks/results/ks-incremental-default-20261023/README.md",
+        "benchmarks/results/ks-incremental-default-20261023/qualification.json.gz",
+        "benchmarks/ks_incremental_default.py",
+        "pr:#2696"
+      ]
+    },
+    {
       "id": "scf.incremental-xc",
       "classification": "needs-qualification",
       "controls": [
@@ -1813,6 +1843,30 @@
       ]
     },
     {
+      "id": "scf.df-raw-coulomb",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_RAW_COULOMB"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_plan_setup.cpp",
+        "src/scf/cuda/df_coulomb.cpp",
+        "src/scf/cuda/df_gradient_bridge.cu"
+      ],
+      "rationale": "Unset or 1 requests raw A only for restricted pure-J resident single-packed owners with zero occupied rank capacity, unchanged full-rank metric acceptance and sufficient existing vector scratch. J contracts A M^-1 A^T D; the authenticated force bridge borrows the same raw A. Explicit 0 restores whitening. Unsupported representation, rank, capacity and streamed plans retain their existing owners; both exchange routes reject raw storage. No second tensor, enlarged budget or numerical gate relaxation is introduced. Repeated 48/96-atom cold/warm/moved evidence and independent numerical checks qualify the bounded representation; gains are specific to the measured 96-atom cold and moved cases.",
+      "revisit_condition": "Require source-matched endpoint, independent numerical and lifecycle qualification before admitting exchange, truncated metric, other layouts or additional retained storage. Preserve explicit rollback and exact source authentication; warm and 48-atom measurements do not establish a significant speedup.",
+      "evidence": [
+        "tests/native/df_raw_coulomb_cases.hpp",
+        "tests/python/test_df_raw_coulomb_response_cuda.py",
+        "docs/developer/density_fitting.md",
+        ".agents/notes/implemented/performance/2026-10-23-df-raw-coulomb-headroom.md"
+      ]
+    },
+    {
       "id": "scf.df-md-coulomb",
       "classification": "already-default",
       "controls": [
@@ -1952,13 +2006,37 @@
         "src/scf/cuda/direct_coarse_screening.cuh",
         "src/scf/cuda/direct_coulomb.cpp"
       ],
-      "rationale": "Default-off coarse block rejection uses directed FP32 enclosures, followed by the incumbent FP64 predicate for every survivor. Shell density storage, exact screening, ERI and contractions remain FP64. Scalar INT8 and integer Tensor Core outer-product experiments are standalone benchmarks, not production modes; microbenchmark wins do not qualify molecular endpoints.",
-      "revisit_condition": "Promote only with source-matched complete cold/warm/moved endpoint gains and independent numerical and task-set gates. Consider prepared FP32 bound storage only after charging preparation, memory and invalidation costs.",
+      "rationale": "Default-off prepared FP32 intervals certify either outcome; only uncertain candidates read original FP64 block metadata. Existing reductions populate charged owner-local caches. Shell density storage, exact screening, ERI and contractions remain FP64. Scalar INT8 and integer Tensor Core outer-product experiments are standalone benchmarks, not production modes; microbenchmark wins do not qualify molecular endpoints.",
+      "revisit_condition": "Promote only with source-matched complete cold/warm/moved endpoint gains and independent numerical and task-set gates. Preserve preparation, memory, replay identity and geometry/spin-density cache ownership qualification. A compact shell-density ABI or production integer scheduler needs separate endpoint evidence.",
       "evidence": [
-        "note:.agents/notes/implemented/performance/2026-10-23-conservative-block-screening.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-prepared-block-screening.md",
         "tests:tests/native/test_direct_coarse_screening_cuda.cu",
         "tests:tests/python/test_hf_resources.py",
         "docs:docs/developer/fock_build.md"
+      ]
+    },
+    {
+      "id": "ks.mixed-source-coarse-screening",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING"
+      ],
+      "owner_issues": [
+        2474
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/application_precision.hpp"
+      ],
+      "rationale": "The qualified automatic policy selects a 1e-8 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64\u2013768 AOs and 2\u201396 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; 180 independent E/F endpoint checks pass.",
+      "revisit_condition": "Extend the automatic model, size or resource domain only with repeated complete cold/warm/moved/reset endpoints, independent energy/force gates, semantic source-work and precision counts, and bounded-resource fallbacks. Preserve fresh strict closure, opt-out and the measured gain/nonregression floors.",
+      "evidence": [
+        "tests/python/test_ks_mixed_source_policy.py",
+        "docs:docs/developer/ks_diagnostics.md",
+        "note:.agents/notes/implemented/performance/2026-10-23-fast-provisional-source-screening.md",
+        "tests/python/test_ks_mixed_source_cuda.py",
+        "tests/python/test_ks_fast_strict_tail_cuda.py",
+        "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
       ]
     }
   ]

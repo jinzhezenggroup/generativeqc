@@ -107,7 +107,8 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
     }
     if (!bounded_direct_block_pair_survives_screening<DirectScreeningPurpose::Force>(
             page.first_block, page.second_block, page.system, screening_tolerance,
-            shell_pair_block_bounds, system_density_bounds, batch.direct_fp32_block_screening)) {
+            shell_pair_block_bounds, system_density_bounds, batch.direct_fp32_block_bounds,
+            batch.direct_fp32_density_bounds)) {
       if (traversal && threadIdx.x == 0U) atomicAdd(&traversal->block_rejected_pages, 1ULL);
       continue;
     }

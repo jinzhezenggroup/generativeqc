@@ -95,6 +95,18 @@ if (retain_resident /* guarded lease */) {
         cpp_if_block("if (ready) {} if (ready) {}", "ready")
 
 
+def test_if_block_can_keep_owned_and_borrowed_routes() -> None:
+    source = 'if (borrowed) { use(); } /* } */ else { own("}"); }\nnext();'
+    assert cpp_if_block(source, "borrowed", include_else=True) == source.split("\n")[0]
+    assert cpp_if_block(source, "borrowed") == "if (borrowed) { use(); }"
+    assert (
+        cpp_if_block("if (ready) {} next();", "ready", include_else=True)
+        == "if (ready) {}"
+    )
+    with pytest.raises(ValueError, match="braced"):
+        cpp_if_block("if (ready) {} else if (other) {}", "ready", include_else=True)
+
+
 @pytest.mark.parametrize(
     "call",
     [

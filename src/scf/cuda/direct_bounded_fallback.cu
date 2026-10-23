@@ -185,7 +185,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const auto second_block_local = second_block - system_block_begin;
     if (!bounded_direct_block_pair_survives_screening<Purpose>(
             first_block, second_block, system, screening_tolerance, shell_pair_block_bounds,
-            system_density_bounds, batch.direct_fp32_block_screening)) {
+            system_density_bounds, batch.direct_fp32_block_bounds,
+            batch.direct_fp32_density_bounds)) {
       if (traversal && threadIdx.x == 0U) atomicAdd(&traversal->block_rejected_pages, 1ULL);
       continue;
     }

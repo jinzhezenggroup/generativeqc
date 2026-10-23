@@ -776,6 +776,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       diis_history >= 2 && incremental_diis_gram_requested();
   const bool requested_ordered_diis_gram =
       requested_incremental_diis_gram && ordered_incremental_diis_gram_requested();
+  const bool requested_fp32_block_screening = direct_fp32_block_screening_requested();
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
@@ -785,6 +786,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
        !same_hf_bucket_options(plan.options, options) ||
        !compatible_hf_bucket_options(plan, host, options) || plan.unrestricted != unrestricted ||
        plan.bounded_direct_streaming != requested_bounded_direct_streaming ||
+       plan.fp32_block_screening != requested_fp32_block_screening ||
        plan.shell_class_profiling != shell_class_profiling ||
        plan.inactive_eigensolver_profiling != inactive_eigensolver_profiling ||
        plan.bounded_fock_class_timing != bounded_fock_class_timing ||
@@ -901,20 +903,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     return outputs;
   }
   if (first_setup) {
-    if (!make_layout(
-            batch_size, nbf, direct_nbf, total_atoms, total_shells, total_shell_pairs,
-            total_shell_pair_blocks, bounded_generated_task_capacity, total_shell_pair_primitives,
-            requested_quartet_direct ? host.psss_resident_tasks.size() : 0,
-            requested_quartet_direct ? host.psss_resident_ket_pairs.size() : 0,
-            total_shell_quartet_tiles, fp32_shell_quartet_tile_capacity,
-            generated_shell_task_capacity, resident_ppps_ket_task_capacity,
-            generic_order5_tile_capacity, host.primitive_exponents.size(), diis_history,
-            options.max_iterations, host.spin_count, requested_persistent_eri,
-            requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
-            bounded_fock_class_timing, requested_bounded_direct_streaming,
-            requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
-            requested_incremental_diis_gram, use_cublas,
-            tensor::CudaStructuredProductBinding::production_library_qualified)) {
+    if (!make_layout(batch_size, nbf, direct_nbf, total_atoms, total_shells, total_shell_pairs,
+                     total_shell_pair_blocks, bounded_generated_task_capacity,
+                     total_shell_pair_primitives,
+                     requested_quartet_direct ? host.psss_resident_tasks.size() : 0,
+                     requested_quartet_direct ? host.psss_resident_ket_pairs.size() : 0,
+                     total_shell_quartet_tiles, fp32_shell_quartet_tile_capacity,
+                     generated_shell_task_capacity, resident_ppps_ket_task_capacity,
+                     generic_order5_tile_capacity, host.primitive_exponents.size(), diis_history,
+                     options.max_iterations, host.spin_count, requested_persistent_eri,
+                     requested_transformed_direct, shell_class_profiling,
+                     inactive_eigensolver_profiling, bounded_fock_class_timing,
+                     requested_bounded_direct_streaming, requested_mixed_precision_fock,
+                     requested_incremental_direct_jk, plan.layout, requested_incremental_diis_gram,
+                     use_cublas, tensor::CudaStructuredProductBinding::production_library_qualified,
+                     requested_fp32_block_screening)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -994,6 +997,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     plan.quartet_direct = requested_quartet_direct;
     plan.transformed_direct = requested_transformed_direct;
     plan.bounded_direct_streaming = requested_bounded_direct_streaming;
+    plan.fp32_block_screening = requested_fp32_block_screening;
     plan.unrestricted = unrestricted;
     plan.shell_class_profiling = shell_class_profiling;
     plan.inactive_eigensolver_profiling = inactive_eigensolver_profiling;
@@ -1920,7 +1924,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_coefficients,
                            occupied};
   configure_direct_weighted_force_response(device_batch);
-  configure_direct_block_screening(device_batch);
+  device_batch.direct_fp32_block_screening = plan.fp32_block_screening;
+  if (bounded_direct_streaming && plan.fp32_block_screening) {
+    device_batch.direct_fp32_block_bounds =
+        arena_pointer<float>(resources.arena_, layout.bounded_direct_fp32_block_bounds);
+    device_batch.direct_fp32_density_bounds =
+        arena_pointer<float>(resources.arena_, layout.bounded_direct_fp32_density_bounds);
+  }
   if (!host.shell_angular.empty())
     device_batch.direct_maximum_shell_angular =
         *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
