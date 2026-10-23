@@ -52,7 +52,7 @@ its address shifted by 16 bytes modulo 32. Interposing the same source with
 32-/64-byte alignment restored 81–82 microseconds; 16-byte alignment retained
 107–110 microseconds. The final source applies a local optional 32-byte
 alignment hint. Arithmetic and reduction order are unchanged.
-[Layout measurements](cpu/layout-diagnosis.json) retain all timing samples and
+[Layout measurements](cpu/layout-diagnosis.json.xz) retain all timing samples and
 matrix identities from these controlled experiments.
 
 The initial small H2 UHF DF warm-batch outlier did not persist in six
@@ -79,3 +79,14 @@ identities, toolchain/hardware provenance, compact summaries and complete
 paired timing/numerical samples. Transient logs, build products and retry
 worker directories remain outside Git. No external archive is needed to
 reproduce the decision.
+
+Additional historical JSON receipts are losslessly stored as `.json.xz`.
+Their original and stored identities are in
+[`merge-storage.json`](../native-grid-binding-20261024/merge-storage.json).
+Restore the exact original filenames for historical publication readers with:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/native-grid-binding-20261024/merge-storage.json \
+  --output .artifacts/native-grid-binding-history
+```

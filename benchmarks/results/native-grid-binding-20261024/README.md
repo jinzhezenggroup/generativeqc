@@ -66,3 +66,8 @@ pass, as do prepared/unprepared hybrid E/F, reuse/displacement and memcheck.
 Its 117,196 bytes have SHA256
 `e73692bf8ac70390746db96edb6b23166a296af050536ddaac2e7e3dc44122b2`. Both older source identities
 and their original evidence remain intact; timings are not pooled.
+
+The CI merge snapshot includes concurrent evidence additions. `merge-storage.json`
+retains five older receipts as byte-exact XZ companions, with original Git and
+stored identities, to fit that snapshot within the unchanged aggregate cap.
+No historical observations or acceptance verdicts are removed.

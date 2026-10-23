@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 27716,
+      "bytes": 27719,
       "path": "evidence.json",
       "role": "evidence",
-      "sha256": "c39bd15f7ba415c9f35442a13f3d5d6411aa8d835b6c5448d600e73e5c0eee4c"
+      "sha256": "e95b4034488415ab09d68fca1b62dc3c3fffac3c7d756942acf77ecb44dd88eb"
     },
     {
       "bytes": 17090,
@@ -25,10 +25,10 @@
       "sha256": "dde4f87fe4b775c6090662e062cfe127ef51e272b9d4e9a5711dafca19b43cde"
     },
     {
-      "bytes": 36294,
-      "path": "provenance.json",
+      "bytes": 1620,
+      "path": "provenance.json.xz",
       "role": "input",
-      "sha256": "33bd815e7eabdcbb137ce8465a387dc5f6cc81998c4704ea19775ebaa58a5b72"
+      "sha256": "2ca40cb421367f511b7bed49c1b1c4c89c9fb434148c7c1453504ffabfe0b129"
     },
     {
       "bytes": 3837,
@@ -43,10 +43,10 @@
       "sha256": "d65910baec70c712f003ab487dbfc4df1eff5a4d586cd3f8b153f4198215dfdd"
     },
     {
-      "bytes": 85335,
-      "path": "layout-diagnosis.json",
+      "bytes": 5728,
+      "path": "layout-diagnosis.json.xz",
       "role": "summary",
-      "sha256": "7dbbf9e2e53f81a0211ab2bbc1583e92e115c18acc565c6b2806e9c92d27a4c9"
+      "sha256": "65288aecf9813c19978f796333086d361fa722ead7f75331697f12709b137422"
     },
     {
       "bytes": 27995,
