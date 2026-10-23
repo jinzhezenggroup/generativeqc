@@ -83,7 +83,7 @@ the underlying per-process calls rather than trusting the summary.
   a process-namespace scan alone cannot prove exclusive access to this shared host
 
 The first nine-round, **432-endpoint** campaign is retained in
-`pilot-campaign.json.gz` under `matched-endpoints-attempt-01`. Its baseline source
+`pilot-campaign.json.xz` under `matched-endpoints-attempt-01`. Its baseline source
 snapshot had 57 Python bytecode files while the candidate had 289. The apparently
 large cold improvement was confounded and is **not a causal cold-speedup result**.
 No baseline scientific source or native library was changed to remedy this.

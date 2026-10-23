@@ -18,8 +18,9 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("functional", ("pbe0", "b3lyp"))
+@pytest.mark.parametrize("coarse_source", ("0", "1"))
 def test_fast_strict_tail_preserves_complete_endpoints(
-    functional: str, monkeypatch: pytest.MonkeyPatch
+    functional: str, coarse_source: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Compare automatic, forced and streamed sources to an independent solve.
 
@@ -28,6 +29,9 @@ def test_fast_strict_tail_preserves_complete_endpoints(
     lease and any forced strict lease. Each warm replay keeps its own frozen
     post-cold/post-move density; no reference density enters the native owner.
     """
+    # Proposal-only screening must retire with the mixed lease. The disabled
+    # residency arm also checks the original streamed fallback.
+    monkeypatch.setenv("GENERATIVEQC_KS_MIXED_SOURCE_COARSE_SCREENING", coarse_source)
     pyscf = pytest.importorskip("pyscf")
     dft = pytest.importorskip("pyscf.dft")
     pyscf.lib.num_threads(1)

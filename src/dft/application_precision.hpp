@@ -137,6 +137,24 @@ inline bool admit_application_fock(const std::array<double, 3>& allowances, std:
          (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
 
+/** Keep automatic source screening within the independently exercised size
+ * domain. Explicit experiments may request other sizes without bypassing the
+ * owner's model, precision, resource or final-state guards. */
+inline bool default_mixed_source_proposal(std::size_t aos, std::size_t atoms) noexcept {
+  return aos >= 64 && aos <= 768 && atoms >= 2 && atoms <= 96;
+}
+
+/** Coarser immutable integral rows may propose a Fast density, but never
+ * certify it. The caller admits only relaxed, full-range hybrid mixed stages
+ * with a fresh FP64 closing pair. The primary provider's screening is unchanged;
+ * its strict tail and derivatives cannot borrow this proposal-only lease.
+ * Unscreened inputs and unsupported owners retain their prepared predicate.
+ */
+inline double mixed_source_proposal_screening(bool requested, bool eligible,
+                                              double prepared) noexcept {
+  return requested && eligible && prepared > 0.0 && prepared < 1e-8 ? 1e-8 : prepared;
+}
+
 /** Separate proposal allowance for local pure-J DF. This authorizes shared
  * XC matrix products, never a mixed DF integral/metric provider. Preparation
  * authenticates the complete model; the CUDA owner also validates its shape. */
