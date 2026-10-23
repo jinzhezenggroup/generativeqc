@@ -1,6 +1,6 @@
 # Candidate: integrate the existing occupied-XC proposal with current cold SCF
 
-Status: candidate integration; no default promotion or current-source GPU claim
+Status: current integration qualified; retained opt-in, no default promotion
 Date: 2026-10-23
 
 ## Source and scope
@@ -41,3 +41,20 @@ resource, sanitizer and complete energy/force checks precede promotion claims.
 Cold/warm/moved results and executed occupied-frame counts must retain this
 integration's own source and package identities. PBE's cheaper one-jet density
 product is outside this four-jet candidate and must retain its current path.
+
+## Current-source qualification
+
+At 66a8a98bf5e81d17a71225f9fcd091022d64e4bf, five alternating fresh-process
+r2SCAN-3c pairs improve complete cold median 43.990828 to 41.718511 seconds
+for DF (5.165%) and 49.427546 to 47.710711 seconds for Direct (3.473%). Both
+exceed the 2% variability floor. Warm remains on the matrix fallback and has
+no qualified gain. All 168 pilot, paired, diagnostic and moved calls pass
+independent gates. The largest moved force difference is 1.316e-5 Eh/Bohr
+(Fast Direct). These gains do not yet reach GPU4's complete cold endpoint.
+
+1260 host tests, 18 independent GPU cases and eight owner cases under each
+of memcheck/synccheck/racecheck pass. Trace receipts prove eight/nine occupied
+frames in r2SCAN/3c and no occupied frame in held warm confirmation. The exact
+source inventory, original failed integration assertions, full numerical
+receipts and executable replay are retained under
+`benchmarks/results/occupied-xc-cold-20261023/`.
