@@ -6,7 +6,13 @@ import json
 import lzma
 import math
 import statistics
+import sys
 from pathlib import Path
+
+if sys.flags.optimize:
+    raise RuntimeError(
+        "Evidence validation requires assertions; rerun without -O/-OO or PYTHONOPTIMIZE"
+    )
 
 ROOT = Path(__file__).resolve().parent
 

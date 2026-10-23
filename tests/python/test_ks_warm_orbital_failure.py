@@ -89,6 +89,7 @@ struct Owner {
   std::unique_ptr<Source> phase_source;
   bool phase_source_range{};
   double range_warm_energy{}, range_warm_energy_correction{};
+  double phase_source_screening = 1e-8;
   bool range_source_active() const { return phase_source_range && bool(phase_source); }
   struct Region {
     bool bound = true;
@@ -343,7 +344,9 @@ int main(int argc, char** argv) {
   assert(owner.movement.warm_orbital_frame_invalidations == before_clear + was_ready);
   if (resident) {
     owner.retire_phase_source(false);
+    assert(owner.phase_source_screening == 0.0);
     owner.retire_phase_source(false);
+    assert(owner.phase_source_screening == 0.0);
     assert(!owner.phase_source);
     assert(owner.resource.provider_device_bytes == 256);
     assert(owner.resource.retained_host_numeric_bytes == 64);
