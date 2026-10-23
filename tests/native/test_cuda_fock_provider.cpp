@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -913,6 +914,28 @@ void spd_optional_allocation_fallback() {
  * density orientation. Count actual source work separately from endpoint time.
  */
 void spd_canonical_range_values() {
+  // This census observes the generated J/K channels, not the separately
+  // qualified MD-J producer. Select that contract explicitly so an automatic
+  // MD-J choice cannot look like lost J work; restore the default for all
+  // other provider tests, including their MD-J numerical coverage.
+  struct GeneratedJScope {
+    bool present{};
+    std::string previous;
+    GeneratedJScope() {
+      if (const auto* value = std::getenv("GENERATIVEQC_DISABLE_MD_J")) {
+        present = true;
+        previous = value;
+      }
+      require(setenv("GENERATIVEQC_DISABLE_MD_J", "1", 1) == 0,
+              "could not select generated J for its channel census");
+    }
+    ~GeneratedJScope() {
+      if (present)
+        setenv("GENERATIVEQC_DISABLE_MD_J", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_DISABLE_MD_J");
+    }
+  } generated_j_scope;
   for (unsigned angular : {0U, 1U, 2U}) {
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       generativeqc::core::System first;
@@ -2778,6 +2801,8 @@ void compensated_generated_coulomb() {
          "PASS\n";
 }
 
+#include "direct_public_schwarz_cases.hpp"
+
 void direct_providers(bool through_f_response, bool eri_tiles_only = false,
                       bool mixed_force_domains = false, unsigned force_domain_angular = 3U,
                       const char* spd_selector = "spatial-reuse",
@@ -3047,6 +3072,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--public-schwarz-only") {
+      public_schwarz_preparation();
+      return 0;
+    }
     if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
                       std::string(argv[1]) == "--canonical-materialized-screened-only")) {
       canonical_screened_values(true);
