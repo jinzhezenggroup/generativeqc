@@ -648,14 +648,6 @@
       "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
     },
     {
-      "path": "benchmarks/results/df-raw-coulomb-20261023/default-moved.json.xz",
-      "family": "df-raw-coulomb-20261023",
-      "classification": "required-compact-accepted-evidence",
-      "role": "complete-endpoint-receipts",
-      "bytes": 140940,
-      "sha256": "77dc8038d93165546c05fc2d03a4f58974c5fd6fd59e0138f191d552e8035090"
-    },
-    {
       "path": "benchmarks/results/df-raw-coulomb-20261023/stage2-default-source-inputs.json.xz",
       "family": "df-raw-coulomb-20261023",
       "classification": "required-compact-accepted-evidence",
@@ -664,12 +656,12 @@
       "sha256": "83de463aaedb1c0925bd8b3c18c8c6d69e9b300018a5f6231c3bf09571ab3540"
     },
     {
-      "path": "benchmarks/results/df-raw-coulomb-20261023/stage2-moved.json.xz",
+      "path": "benchmarks/results/df-raw-coulomb-20261023/receipt-populations.json.xz",
       "family": "df-raw-coulomb-20261023",
       "classification": "required-compact-accepted-evidence",
-      "role": "complete-endpoint-receipts",
-      "bytes": 141708,
-      "sha256": "2ae9438cf175a1265b43eb05fcb3564693d8ca2b17aa900a83307732552db102"
+      "role": "exact-original-receipt-text-with-authenticated-restoration",
+      "bytes": 485212,
+      "sha256": "7499b9bbc47f0b824f8bb27a76436322edd0ac4cff1239cfd906e37afeb214f7"
     },
     {
       "path": "benchmarks/results/df-md-charge-splits-20261023/receipts.json.xz",

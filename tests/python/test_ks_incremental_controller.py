@@ -41,12 +41,16 @@ def controller_probe(
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include "scf/types.hpp"
 #include "scf/convergence_limits.hpp"
 #include "dft/ks_incremental_policy.hpp"
 #include "dft/ks_stopping_policy.hpp"
 namespace scf = generativeqc::scf;
 using generativeqc::dft::ks_incremental_proposal_interval;
+using generativeqc::dft::admit_ks_incremental_cold_auto;
+namespace runtime { void* active_device_resource_ledger = nullptr; }
+struct MatrixLibraryOwner { static bool provider_allowance(int) { return true; } };
 int cudaGetLastError() { return 0; }
 void check(int) {}
 // Host copies execute the same linear provider-buffer operations. No CUDA
@@ -91,8 +95,9 @@ struct Consumer {
       *incremental_max_abs_delta_density=&maximum,*j=&jv,*incremental_anchor_j=&ja,
       *exchange=&kv,*incremental_anchor_exchange=&ka,*range_exchange=&rv,
       *incremental_anchor_range_exchange=&ra;
-  Consumer() {
-    options.incremental_direct_jk=true;
+  Consumer(bool automatic=false, bool eligible=true) {
+    options.incremental_direct_jk=!automatic;
+    options.incremental_direct_jk_auto=automatic;
     options.screening_tolerance=0.0;
     options.incremental_direct_jk_rebuild_interval=0;
     scf::ResolvedFockBuild strategy;
@@ -100,7 +105,21 @@ struct Consumer {
     strategy.screening_tolerance=1e-12;
     strategy.spec.coulomb.present=true;
     strategy.spec.coulomb.approximation=scf::FockApproximation::Exact;
-    const bool fock_binding=true,fitted_coulomb=false;
+    const bool fock_binding=true,fitted_coulomb=false,fitted_exchange=false;
+    // Host capability stand-ins for the actual constructor admission slice.
+    // Explicit-controller tests retain their original domain; auto cases below
+    // also execute the production integration rather than copying its predicate.
+    struct Shell { unsigned angular_momentum=0; };
+    struct Atom { unsigned ecp_core=0; };
+    struct System { std::vector<Shell> shells{1}; std::vector<Atom> atoms{2};
+                    std::vector<int> ecp_terms; };
+    struct Provider { System value; const System& system() const { return value; } } provider;
+    const std::size_t n=eligible ? 64 : 63;
+    const unsigned spins=1;
+    const bool nonlocal_correlation=false,standard_convergence_model=true,budget_fock=false;
+    const int grid_spec=0;
+    const auto default_grid_spec=[] { return 0; };
+    const auto configured_chunk_width=[] { return 1U; };
     std::optional<scf::ResolvedFockBuild> range_correction;
     struct {bool any_lower_precision()const{return false;}} precision_schedule;
 """
@@ -145,6 +164,21 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="auto-admission") {
+      Consumer admitted(true);
+      require(admitted.incremental_direct_jk_policy.requested && admitted.incremental_direct_jk,
+              "eligible automatic constructor did not activate the controller");
+      Consumer outside(true, false);
+      require(!outside.incremental_direct_jk_policy.requested && !outside.incremental_direct_jk,
+              "out-of-domain automatic constructor activated the controller");
+      int ledger=0;
+      runtime::active_device_resource_ledger=&ledger;
+      Consumer budgeted(true);
+      runtime::active_device_resource_ledger=nullptr;
+      require(!budgeted.incremental_direct_jk_policy.requested && !budgeted.incremental_direct_jk,
+              "ledger-bound automatic constructor activated uncharged storage");
+      return 0;
+    }
     if(std::string(argv[1])=="bounded-proposals") {
       using generativeqc::dft::ks_incremental_proposal_screening;
       for(unsigned count:{0U,1U,8U,9U,100U}) {
@@ -390,3 +424,16 @@ def test_bounded_proposals_preserve_full_density_closure(
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_constructor_auto_admission_preserves_domain_and_ledger_fallback(
+    controller_probe: Path,
+) -> None:
+    result = subprocess.run(
+        [controller_probe, "auto-admission"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

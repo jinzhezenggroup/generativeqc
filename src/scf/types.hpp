@@ -120,6 +120,11 @@ struct ScfOptions {
    * default. It is admitted only when every requested J/K term is Exact.
    * The final physical state still uses ordinary full provider builds. */
   bool incremental_direct_jk{};
+  /** Method-owned request for a guarded automatic cold-only CUDA KS Direct-J/K
+   * path. The actual owner checks numeric/provider/resource admission; public
+   * resource ledgers must retain the ordinary fully inventoried execution.
+   * Explicit incremental_direct_jk requests retain their existing domain. */
+  bool incremental_direct_jk_auto{};
   /** Accepted delta updates before refreshing the full anchor. Zero disables
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};

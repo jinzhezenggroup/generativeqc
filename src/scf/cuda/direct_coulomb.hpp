@@ -31,6 +31,12 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
 /** Capture only exact weighted-force arithmetic, without changing Fock policy. */
 void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept;
 
+/** Capture the experimental coarse gate without changing integral precision. */
+void configure_direct_block_screening(DeviceBatch& batch) noexcept;
+
+/** Read before arena sizing; retained owners freeze this storage choice. */
+bool direct_fp32_block_screening_requested() noexcept;
+
 /** Query the opt-in at preparation only; optional retained storage freezes it.
  * This adapter keeps canonical providers independent of HF policy headers.
  */
