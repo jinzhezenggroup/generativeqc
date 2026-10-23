@@ -747,3 +747,53 @@ def test_cbs_rejects_retained_output_before_native_work(
     assert error.value.code == 2
     assert existing.read_text(encoding="utf-8") == "original evidence"
     assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("alias", [False, True])
+def test_incremental_default_rejects_retained_output_before_gpu_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    alias: bool,
+) -> None:
+    from benchmarks import _retention, ks_incremental_default
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence")
+    target = retained
+    if alias:
+        target = tmp_path / "alias"
+        target.symlink_to(retained, target_is_directory=True)
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("invalid output reached GPU/oracle imports")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "ks_incremental_default",
+            "--arm",
+            "standard",
+            "--inputs",
+            str(tmp_path),
+            "--source-revision",
+            "test",
+            "--output",
+            str(target / "existing.json"),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        ks_incremental_default.main()
+    assert error.value.code == 2
+    assert original.read_text() == "original evidence"

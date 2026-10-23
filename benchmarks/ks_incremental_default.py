@@ -16,6 +16,7 @@ from time import perf_counter
 
 import numpy as np
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_defaults import METHODS, native_calculator, native_settings
 from benchmarks.readme_hf_scaling import scaling_cases
 
@@ -37,7 +38,7 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, choices=(12, 48, 96), default=12)
     parser.add_argument("--selector", choices=("unset", "off"), default="unset")
     parser.add_argument("--inputs", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--lifecycle", action="store_true")
