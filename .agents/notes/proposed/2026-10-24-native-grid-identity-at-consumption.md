@@ -34,3 +34,17 @@ must pass. Compare complete cold endpoints before claiming a gain; profile time
 is a diagnosis, not an endpoint speedup. Compiler provenance must be rebuilt for
 the changed Python source closure even though scientific CUDA formulas do not
 change.
+
+## Independent stock-default qualification
+
+The standalone source `bdd14167ec9edd4c8813029fabfda3e03fbe0aaa` passes 442 host
+checks, actual prepared/unprepared hybrid E/F, displaced geometry and memcheck.
+Five fresh-process pairs on one authenticated binary reproduce prior caller
+binding plus consumer SHA validation as the baseline. PBE DF/Direct cold gains
+are 2.964%/2.586%, and PBE0 Direct is 2.255%; PBE0 DF's 1.598% remains below the
+2% gate. Warm changes are at most 0.20%, with identical paired iteration/Fock
+counts. All 160 calls pass independent full-vector numerical gates.
+`benchmarks/results/native-grid-binding-20261024/` retains exact original
+receipts, source/cache/device provenance and an executable gate reproducer.
+This controlled comparison uses stock defaults and is separate from the
+combined-stack Stage15/16 experiments; neither establishes GPU4PySCF parity.

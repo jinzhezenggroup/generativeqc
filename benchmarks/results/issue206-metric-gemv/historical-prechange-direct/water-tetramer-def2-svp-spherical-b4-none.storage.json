@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/issue206-metric-gemv/historical-prechange-direct/water-tetramer-def2-svp-spherical-b4-none.json",
+  "stored_path": "benchmarks/results/issue206-metric-gemv/historical-prechange-direct/water-tetramer-def2-svp-spherical-b4-none.json.gz",
+  "original_bytes": 94609,
+  "stored_bytes": 17005,
+  "original_sha256": "cebcb412587854ca16114770de5f22b59c7ef16484f40c2988d98dd7a846c650",
+  "stored_sha256": "78d7fc42fcb2027f61137e479e70464872862b17a50b5afef36000dff9dedfb5",
+  "original_git_blob": "b6b397bed070b43f70528d5a16857c9ca3bab178",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage only; all historical numerical values, samples, settings and gates are retained."
+}

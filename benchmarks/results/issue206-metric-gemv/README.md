@@ -139,3 +139,9 @@ identities. Use `gzip -dc` or the shared `load_record` reader. All five unmatche
 iteration-pair labels, complete timings and E/F vectors remain intact; the
 separate strict-gate failures and historical summary paths are unchanged.
 The stored member is below the unchanged 128 KiB large-record review threshold.
+
+The remaining tetramer direct-gate records and 192/384-AO batch-one energy records
+are retained in adjacent `.json.gz` files, with `.storage.json` original/stored
+hashes and Git blobs. Exact original bytes, including historical failed gates,
+are unchanged. Use `gzip -dc` or the shared `load_record` reader. This storage
+change makes room for native-grid-binding evidence under unchanged limits.
