@@ -316,6 +316,11 @@
       "owner": "bounded DF Hermite charge-partition endpoint qualification",
       "reason": "Retains every independent complete energy/force receipt, separate historical and integrated source cohorts, exact source inventories and reconstruction patch, sanitizer and cache provenance. Lossless compression preserves full vectors and work counts without relaxing any storage or numerical gate.",
       "review_document": "benchmarks/results/df-md-charge-splits-20261023/README.md"
+    },
+    "df-one-electron-schedule-20261023": {
+      "owner": "DF one-electron schedule endpoint qualification",
+      "reason": "Lossless bundle retains all 128 complete calls in separate controlled-pair, pilot, profile and moved cohorts, including negative timing evidence, numerical vectors, source delta, package/cache/build/test provenance and exact runners. All storage limits remain unchanged.",
+      "review_document": "benchmarks/results/df-one-electron-schedule-20261023/README.md"
     }
   },
   "files": [
@@ -686,6 +691,14 @@
       "role": "source-input-identity-manifest",
       "bytes": 242120,
       "sha256": "e2c3f4a7d368283d73c5b49837a551eeb94373bb4cabb3ae8d135cdf0de5a39d"
+    },
+    {
+      "path": "benchmarks/results/df-one-electron-schedule-20261023/receipts.json.xz",
+      "family": "df-one-electron-schedule-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoint-receipts",
+      "bytes": 233924,
+      "sha256": "be54fa76b30095bbe60be3c5e44079b7a04b7c5ca54d41a38006cfdac78b9542"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
