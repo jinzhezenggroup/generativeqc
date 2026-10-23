@@ -78,6 +78,30 @@ errors, full Fock composition passes, and all 55 final GPU Python cases pass.
 Focused host, documentation, pre-commit, Sphinx warnings-as-errors and the
 native materialization review pass; the latter remains nine unchanged sites.
 
+## Merge-source integration bridge
+
+`merge-bridge.json.xz` retains a separate compatibility run at
+`b931f64bae5aa72a2b9c15f817715986f9e7205b`: Standard/Fast × six functionals,
+each with cold and warm energy/forces, all 24 calls independently qualified.
+These are integration checks, not replacements for the repeated e8af timing
+population. The core hash is
+`ba836a79daf1d4ac0eb6e3f9cfa4efd6688a50a4fd1ec9110ef2f7d0f26f6afe`;
+all five standalone packages and manifests were rebuilt through sccache.
+The bundle losslessly reconstructs the verified 5,994-input source inventory
+as a delta from `stage2-default-source-inputs.json.xz` and retains package
+hashes, runners and compiler-cache statistics.
+
+Independent raw-J/response, external memory pressure/replay, full Fock
+composition and Compute Sanitizer pass (zero errors). The first Python run
+passed 48 cases and failed seven because the isolated checkout lacked the
+retained auxiliary-basis JSON. After copying and authenticating those inputs,
+all seven passed; both logs and test-input hashes remain in the bridge.
+The complete post-merge integral-parameter AD file passed 12 independent-oracle
+cases. CI additionally exposed outdated host test doubles and a response
+probe tied to the next workspace variable's name. Their repair passes 46
+focused host cases, including raw-J rejection of occupied exchange without
+output writes. Production source is unchanged by these test repairs.
+
 ## Offline reproduction
 
 ```bash
@@ -85,7 +109,7 @@ PYTHONPATH=python:. python benchmarks/results/df-raw-coulomb-20261023/reproduce.
   > .artifacts/df-raw-coulomb-reproduced.json
 ```
 
-The script rechecks all 528 native calls and computes every population median
+The script rechecks all 552 native calls and computes every population median
 and gain floor from full-precision samples. `provenance.json` binds measured
 sources, packages, source manifests, build controls and validation. Original
 GPU runners and the moved wrapper are retained in `runners.json.xz`; compiler

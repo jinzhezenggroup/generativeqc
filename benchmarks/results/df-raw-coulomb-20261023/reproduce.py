@@ -8,6 +8,7 @@ not a moved dense-grid convergence claim. No original receipt is rewritten.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import lzma
 from pathlib import Path
@@ -62,6 +63,24 @@ def main() -> None:
         (path.name.removesuffix(".json.xz"), None)
         for path in sorted(ROOT.glob("default-*.json.xz"))
     ]
+    bridge_path = ROOT / "merge-bridge.json.xz"
+    if bridge_path.is_file():
+        bridge = read("merge-bridge")
+        inputs = read("stage2-default-source-inputs")["files"].copy()
+        delta = bridge["source_input_delta"]
+        inputs.update(delta["changed"])
+        for name in delta["removed"]:
+            del inputs[name]
+        assert len(inputs) == bridge["source_input_count"]
+        manifest = {"source_revision": bridge["source_revision"], "files": dict(sorted(inputs.items()))}
+        original_bytes = (json.dumps(manifest, indent=2) + "\n").encode()
+        assert hashlib.sha256(original_bytes).hexdigest() == bridge["source_manifest_file_sha256"]
+        assert len(bridge["records"]) == 12
+        for name, record in bridge["records"].items():
+            assert record["source_revision"] == bridge["source_revision"]
+            qualified = qualify([record], oracles, reference_reuse=reuse)[0]
+            assert qualified["status"] == "qualified", (name, qualified)
+            result["qualification"]["merge-matrix/" + name] = qualified
     for cohort, count in cohorts:
         records = read(cohort)
         if count is not None:

@@ -52,7 +52,7 @@ struct CudaDensityFittingJkPlan : BorrowedBlasPlan {
   std::size_t row_tile{}, auxiliary_tile{}, ao_pair_tile{}, stored_pair_count{};
   std::size_t stored_tensor_elements_per_system{}, tensor_elements_per_system{};
   std::size_t completed_occupied_projection_rank{};
-  bool streamed{}, resident_exchange_enabled{}, triangular_exchange{};
+  bool streamed{}, resident_exchange_enabled{}, triangular_exchange{}, resident_raw_coulomb{};
   void* integral_source{};
   std::vector<bool> metric_full_rank;
   struct {
@@ -173,6 +173,7 @@ int main(int argc, char** argv) {
       plan.auxiliary_tile = mode == "resident" ? a : 1;
       plan.resident_exchange_enabled = mode == "resident";
       plan.streamed = mode == "streamed" || is_projected;
+      plan.resident_raw_coulomb = mode == "raw";
       if (is_projected) {
         plan.integral_source = &plan;
         plan.metric_full_rank = {true};
@@ -201,11 +202,18 @@ int main(int argc, char** argv) {
       projected = {&plan,          coefficients, output.data() + 1,
                    requested_rank, column_major, mode == "projected_failure",
                    false};
-      const auto expected_status =
-          projected.fail ? GENERATIVEQC_STATUS_CUDA_ERROR : GENERATIVEQC_STATUS_SUCCESS;
+      const auto expected_status = plan.resident_raw_coulomb ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+                                   : projected.fail          ? GENERATIVEQC_STATUS_CUDA_ERROR
+                                                             : GENERATIVEQC_STATUS_SUCCESS;
       assert(build_occupied_exchange(plan, 0, coefficients, requested_rank, column_major, 1.25,
                                      output.data() + 1, detail) == expected_status);
       assert(output.front() == sentinel && output.back() == sentinel);
+      if (plan.resident_raw_coulomb) {
+        // Rejection must precede writes or provider submission: A is not B.
+        assert(cleared_bytes == 0 && !projected.submitted && !detail.empty());
+        for (std::size_t i = 1; i <= n * n; ++i) assert(std::isnan(output[i]));
+        continue;
+      }
       assert(cleared_bytes == (mode == "resident" || is_projected ? 0 : n * n * sizeof(double)));
       if (is_projected) {
         assert(projected.submitted);
