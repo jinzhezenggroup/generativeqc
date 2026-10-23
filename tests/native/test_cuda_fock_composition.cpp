@@ -22,7 +22,8 @@ using generativeqc::core::System;
 // callback type exposed by the public transport contract.
 using ResidentDerivativeEntry = cudaError_t (*)(cuda_execution::GeneratedExchangePlan&, bool,
                                                 const double*, const double*, double, double,
-                                                const CudaDerivativeSourceConsumer&, bool);
+                                                const CudaDerivativeSourceConsumer&, bool,
+                                                DirectForcePrecisionRequest*);
 static_assert(
     std::is_same_v<decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
                    ResidentDerivativeEntry>);
