@@ -139,3 +139,12 @@ identities. Use `gzip -dc` or the shared `load_record` reader. All five unmatche
 iteration-pair labels, complete timings and E/F vectors remain intact; the
 separate strict-gate failures and historical summary paths are unchanged.
 The stored member is below the unchanged 128 KiB large-record review threshold.
+
+The 2026-10-23 storage-only update compresses five additional historical records
+(two 96-AO direct/control batch-four records and the 192/96-AO batch-four energy
+and 19-AO batch-four force records) with deterministic gzip. Adjacent
+`*.storage.json` files pin every original byte count, SHA-256 and Git blob, plus
+the compressed identity. Use `gzip -dc <original-path>.gz` to restore the exact
+original JSON, or the existing `load_record` reader with the `.gz` path. The
+original logical paths and hashes in historical summaries remain provenance;
+no timings, failures, numerical gates or storage caps change.
