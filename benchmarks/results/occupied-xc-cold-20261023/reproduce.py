@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import lzma
+import math
 from pathlib import Path
 from statistics import median
 
@@ -27,6 +28,19 @@ def timing(before: list[float], after: list[float]) -> dict:
     return dict(before=before, after=after, before_median=b, after_median=a,
                 before_mad=bm, after_mad=am, gain=1 - a / b,
                 gain_floor=floor, passes_gain_gate=1 - a / b > floor)
+
+
+def verify_profile(actual: dict, expected: dict) -> None:
+    """Keep identity exact while allowing summation roundoff across Python versions."""
+    actual = actual.copy()
+    expected = expected.copy()
+    actual_ms = actual.pop('gpu_ms')
+    expected_ms = expected.pop('gpu_ms')
+    assert actual == expected
+    assert math.isfinite(actual_ms) and math.isfinite(expected_ms)
+    # Python 3.12 changed float sum() accuracy. This is below one nanosecond
+    # in the diagnostic millisecond total, not a scientific acceptance gate.
+    assert math.isclose(actual_ms, expected_ms, rel_tol=0.0, abs_tol=1e-10)
 
 
 def main() -> None:
@@ -56,7 +70,7 @@ def main() -> None:
             'gpu_ms': sum(row['regions'][0]['gpu_ms'] for row in rows),
         }
         assert all(row['valid'] and not row['cuda_error'] for row in rows)
-        assert actual == data['profiles'][name]
+        verify_profile(actual, data['profiles'][name])
     for cohort, records in data['cohorts'].items():
         for name, record in records.items():
             assert record['status'] == 'complete'
