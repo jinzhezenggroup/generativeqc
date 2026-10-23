@@ -41,3 +41,15 @@ scientific oracle. Before promotion, qualify the compiled candidate itself on
 clean repeated cold/warm/moved endpoints and Fast compatibility. Do not relabel
 explicit-cache pilot measurements as unset-default results. No hand-selected
 bucket mask or enlarged resource allowance enters this candidate.
+
+## Completed integration qualification
+
+The combined source `c7eec7ed780e2a72b449edf995c8041ec30806f7` and its separate
+five-pair native/GPU4 populations are retained in
+`benchmarks/results/wb-range-reuse-20261023/`. All 56 native and 40 paired GPU4
+calls pass stationary independent references or exact moved-geometry controls.
+Water96 WB cold medians are 342.944186 s DF and 281.252087 s Direct, versus
+389.601134 s and 379.687684 s GPU4. Both pass the unchanged variability floor.
+These integrated numbers supersede neither the original pilot receipts nor
+their source identities. Full vectors, work, bounded-resource tests and the
+source-verification timing caveat are retained with an offline reproducer.
