@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -859,9 +860,21 @@ void independent_reference_export() {
     if (seed.empty()) seed = actual.density;
   }
 }
+#include "df_raw_coulomb_cases.hpp"
+#include "df_response_headroom_cases.hpp"
 }  // namespace
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string_view(argv[1]) == "--df-response-headroom") {
+      response_headroom_cases();
+      std::cout << "CUDA DF response current-headroom force/replay gates PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--raw-coulomb") {
+      raw_coulomb_cases();
+      std::cout << "CUDA raw Coulomb independent J/response and rank fallback PASS\n";
+      return 0;
+    }
     composed_items();
     molecular_endpoints();
     ragged_replay();

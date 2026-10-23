@@ -1843,6 +1843,30 @@
       ]
     },
     {
+      "id": "scf.df-raw-coulomb",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_RAW_COULOMB"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/fock_prepared.cpp",
+        "src/scf/cuda/df_plan_setup.cpp",
+        "src/scf/cuda/df_coulomb.cpp",
+        "src/scf/cuda/df_gradient_bridge.cu"
+      ],
+      "rationale": "Unset or 1 requests raw A only for restricted pure-J resident single-packed owners with zero occupied rank capacity, unchanged full-rank metric acceptance and sufficient existing vector scratch. J contracts A M^-1 A^T D; the authenticated force bridge borrows the same raw A. Explicit 0 restores whitening. Unsupported representation, rank, capacity and streamed plans retain their existing owners; both exchange routes reject raw storage. No second tensor, enlarged budget or numerical gate relaxation is introduced. Repeated 48/96-atom cold/warm/moved evidence and independent numerical checks qualify the bounded representation; gains are specific to the measured 96-atom cold and moved cases.",
+      "revisit_condition": "Require source-matched endpoint, independent numerical and lifecycle qualification before admitting exchange, truncated metric, other layouts or additional retained storage. Preserve explicit rollback and exact source authentication; warm and 48-atom measurements do not establish a significant speedup.",
+      "evidence": [
+        "tests/native/df_raw_coulomb_cases.hpp",
+        "tests/python/test_df_raw_coulomb_response_cuda.py",
+        "docs/developer/density_fitting.md",
+        ".agents/notes/implemented/performance/2026-10-23-df-raw-coulomb-headroom.md"
+      ]
+    },
+    {
       "id": "scf.df-md-coulomb",
       "classification": "already-default",
       "controls": [
