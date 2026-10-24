@@ -24,6 +24,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -2068,9 +2069,28 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   options.precision_mode = precision_mode;
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const bool mixed = precision_mode == GENERATIVEQC_PRECISION_AUTO;
-  const auto result = plan.run(nullptr, false, restricted && mixed);
+  // AUTO may choose the faster strict generated J provider. Dense AO still
+  // executes mixed density products; local AO keeps those products strict.
+  // Verify the arithmetic actually supported by this prepared provider, while
+  // the PBE0 control below continues to require mixed J and strict refinement.
+  const bool automatic = precision_mode == GENERATIVEQC_PRECISION_AUTO;
+  const bool mixed_j = automatic && !scf::cuda_direct_jk_generated_coulomb_available(
+                                        gpu.cuda_direct_source(), gpu.strategy().spec);
+  const bool mixed_density = automatic && !expect_local;
+  const bool mixed = mixed_j || mixed_density;
+  const auto result = plan.run(nullptr, false, true);
   require(result.converged && !plan.failed(), "CUDA PBE precision-work solve did not converge");
+  const scf::PreparedFockPlan cpu(system, nullptr, strategy(restricted, scf::FockBackend::Cpu));
+  auto reference_options = options;
+  reference_options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  const auto reference = restricted ? scf::run_pbe_rks(cpu, basis, grid, reference_options)
+                                    : scf::run_pbe_uks(cpu, basis, grid, reference_options);
+  require(reference.converged && std::abs(reference.energy - result.energy) < 1e-8 &&
+              reference.density.size() == result.density.size(),
+          "CUDA precision census changed the independent CPU endpoint");
+  for (std::size_t i = 0; i < result.density.size(); ++i)
+    require(std::abs(reference.density[i] - result.density[i]) < 1e-7,
+            "CUDA precision census changed the independent CPU density");
   require(
       (mixed || result.precision.mixed_stage_fock_builds == 0) &&
           result.precision.strict_stage_fock_builds > 0 &&
@@ -2139,11 +2159,11 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
   require(result.dft_diagnostic.cuda_ao_selection.selected == expect_local,
           "precision-census solve did not execute the requested AO layout");
-  const auto expected_mixed_density = expect_local ? 0U : result.precision.mixed_stage_fock_builds;
-  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) ==
-                  result.precision.mixed_stage_fock_builds &&
+  const auto expected_mixed_density = mixed_density ? result.precision.mixed_stage_fock_builds : 0U;
+  const auto expected_mixed_j = mixed_j ? result.precision.mixed_stage_fock_builds : 0U;
+  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) == expected_mixed_j &&
               operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
-                  result.precision.strict_stage_fock_builds &&
+                  result.fock_builds - expected_mixed_j &&
               operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
               operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
@@ -2166,7 +2186,7 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
   const auto recurrence = std::find_if(
       work.operators.begin(), work.operators.end(),
       [](const auto& item) { return item.kind == scf::PrecisionOperatorKind::CoulombRecurrence; });
-  if (mixed) {
+  if (mixed_j) {
     require(recurrence != work.operators.end() && recurrence->count > 0 &&
                 recurrence->storage == scf::PrecisionDtype::Fp64 &&
                 recurrence->compute == scf::PrecisionDtype::Fp32 &&
@@ -2203,7 +2223,7 @@ void precision_work_census_case(bool restricted, int precision_mode, const char*
           audit.state_generation == work.returned_state_generation,
       "CUDA-KS precision work/final audit does not identify the returned final state");
 
-  if (restricted && mixed) {
+  if (restricted && automatic) {
     const auto previous_epoch = work.returned_solve_epoch;
     ks_cuda_fail_next_runtime_for_test_v1();
     bool injected_failure = false;
@@ -2672,6 +2692,20 @@ int main(int argc, char** argv) {
     run();
   };
   try {
+    if (argc == 2 && std::string(argv[1]) == "--precision-census") {
+      for (const auto* selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
+        run_control(
+            std::string("precision census [AO=") + (selection ? selection : "default") + "]", [&] {
+              precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, selection);
+              precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, selection);
+              precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, selection);
+            });
+      }
+      run_control("pbe0_auto_local_ao_composition_case()",
+                  [&] { pbe0_auto_local_ao_composition_case(); });
+      std::cout << "Native CUDA precision census and independent CPU gates passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--minao") {
       run_control("minao_gpu_case()", [&] { minao_gpu_case(); });
       return 0;
@@ -2689,6 +2723,16 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
       run_control("ks_cold_factor_cases()", [&] { ks_cold_factor_cases(); });
       std::cout << "Native CUDA DF cold-factor proof, fallback and physical-state gates passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--df-range-exchange") {
+      // Isolate the matched DF primary/exact LR contract and its CPU oracle.
+      for (const bool restricted : {true, false}) {
+        run_control(
+            "run_density_fitted_range_exchange_case(restricted=" + std::to_string(restricted) + ")",
+            [&] { run_density_fitted_range_exchange_case(restricted); });
+      }
+      std::cout << "Native CUDA DF range-exchange final-state and CPU gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
