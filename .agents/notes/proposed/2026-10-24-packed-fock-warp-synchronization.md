@@ -32,12 +32,32 @@ This matches synchronization scope to the fixed participant set. The observation
 alone does not establish a particular compiler or driver defect, and the failed
 checks are not classified as false positives.
 
+The selected generic-worker candidate explicitly reconverges each full warp before the CTA
+barriers at the component-lane queue's publication and completion boundaries.
+The failing `ddpp` PC maps to the publication `BAR.SYNC.DEFER_BLOCKING` in the
+retained CUDA 12.9.1 binary. CTA barriers remain necessary for inter-warp shared
+claims; a warp barrier alone cannot replace them.
+
+An intermediate Rys-emitter edit did not cover the failing default `ddpp`
+consumer: its generated generic queue was unchanged and synccheck still failed.
+That edit was reverted. Verify the exact architecture-namespaced generated
+consumer before compiling; a shell manifest's recurrence label alone does not
+identify its selected value emitter. The retained failed cohort is
+`2bfb223cbd84ab4557d5d6ddd5b7b72cbad34ab5`; the corrected candidate is
+`f8edc52a6d7fe331be55eb7b35e106f9ea72f5fb`.
+
+The complete provider regression also exposed a pre-existing assertion on the
+overall schedule label (`l=2`, Cartesian, `md-j-primitive/retained-k`): automatic
+MD-J replaces that label while generated K
+remains selected. The test now checks the actual K selection gate and retains
+all independent ERI/J/K comparisons, spin populations and AO representations.
+
 ## Validation and limits
 
 Eighteen focused generator, launch-metadata and streaming-screening tests pass.
 The source-matched repair passes the original complete-HF synccheck (including
-the GEMM-disabled control), but public water3 now reaches a wider `ddpp` packed
-queue and reports 7,584 synchronization errors. This is a partial repair; wider
+the GEMM-disabled control), but public water3 now reaches a `ddpp` component-lane
+queue and reports 7,584 synchronization errors. This is a partial repair; component-lane
 queue reconvergence and independent DF/range/force regressions remain required. The first AOT compatibility test selected the newer small-system
 native force owner; its explicit packaged-consumer rerun is retained separately.
 The measured repair source is `c62e9d7dce87477738311f145f1838d4ad99d538`.
