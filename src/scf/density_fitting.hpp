@@ -329,8 +329,11 @@ class DensityFittingBudgetError : public std::invalid_argument {
  * capacity; explicit caps and probe-failure budgets retain their original split.
  * The caller must validate the restricted occupation and automatic selector;
  * a restricted, physical J-only owner may explicitly admit rank zero without
- * acquiring an occupied projection. Preserve a bounded response workspace and
- * at least 20% for response; leave the original split if packing cannot fit. */
+ * acquiring an occupied projection. Prefer the existing 20% response margin.
+ * If that loses B or the requested complete U, spend only the minimum extra
+ * fractional slack within observed free bytes minus reserved headroom, while
+ * retaining the complete shape-derived response floor. Explicit caps and
+ * unavailable complete storage retain their bounded fallback. */
 [[nodiscard]] DfResolvedBudget resolve_method_owned_df_resident_budget(
     const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
     std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);

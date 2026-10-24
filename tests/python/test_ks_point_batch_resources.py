@@ -98,6 +98,7 @@ def native_probe(
 #include <utility>
 #include <vector>
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
@@ -624,6 +625,60 @@ def test_incremental_gram_charges_only_optional_physical_cache(
             2, 2, 2, 6, 49152, 8, spins, 0, 256, output, 3
         )
         != 0
+    )
+
+
+@pytest.mark.parametrize("aos", [16, 511, 512, 768])
+@pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_large_ks_automatic_gram_capacity_and_rollback(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    aos: int,
+    history: int,
+    spins: int,
+) -> None:
+    """Public reservations include the admitted cache exactly once for either spin."""
+    selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
+    reducer = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+    monkeypatch.delenv(reducer, raising=False)
+    inventories = []
+    for mode in (None, "0", "1"):
+        if mode is None:
+            monkeypatch.delenv(selection, raising=False)
+        else:
+            monkeypatch.setenv(selection, mode)
+        output = (ctypes.c_uint64 * 3)()
+        assert (
+            native_probe.generativeqc_resource_ks_cuda_v1(
+                aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+            )
+            == 0
+        )
+        inventories.append(tuple(output))
+    automatic, serial, incremental = inventories
+    assert automatic == (incremental if aos >= 512 else serial)
+    expected = 8 * history * history if history >= 2 else 0
+    assert incremental[0] - serial[0] == expected
+    assert incremental[1:] == serial[1:]
+
+    # Automatic admission activates reducer validation at the public boundary;
+    # explicit serial rollback and one-vector histories still ignore it.
+    monkeypatch.delenv(selection, raising=False)
+    monkeypatch.setenv(reducer, "invalid")
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    status = native_probe.generativeqc_resource_ks_cuda_v1(
+        aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+    )
+    assert (status != 0) == (aos >= 512 and history >= 2)
+    if status:
+        assert tuple(output) == (17, 19, 23)
+    monkeypatch.setenv(selection, "0")
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            aos, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+        )
+        == 0
     )
 
 

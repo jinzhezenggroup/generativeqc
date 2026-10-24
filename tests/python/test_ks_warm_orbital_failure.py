@@ -34,6 +34,7 @@ def orbital_probe(
         _method(source, signature)
         for signature in (
             "  void invalidate_warm_orbitals()",
+            "  void restore_held_fitted_factor()",
             "  void clear_warm_state()",
             "  void publish_warm_seed()",
             "  void audit_phase_source()",
@@ -77,6 +78,7 @@ void check(int status, const char* detail = "injected copy failure") {
   if (status) throw std::runtime_error(detail);
 }
 namespace scf { struct PreparedCudaOccupiedFockBinding {}; }
+namespace runtime::cuda_trace { void trace_counter(const char*, int) {} }
 struct Owner {
   bool is_pending = false;
   struct Source {
@@ -106,6 +108,7 @@ struct Owner {
   bool warm_orbitals_are_ao = false;
   bool warm_energy_baseline = false, final_state_ready = false;
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
+  bool occupied_xc_frame_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
   bool warm_factor_storage = false;
@@ -125,7 +128,7 @@ struct Owner {
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
   } physical;
-  std::size_t elements = 8;
+  std::size_t elements = 8, matrix = 4;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
   struct {
     bool converged = false;
@@ -209,9 +212,11 @@ int main(int argc, char** argv) {
   if (scenario == "stationary-confirmation") {
     owner.confirm_direct_stationary_density = true;
     owner.occupied_fitted_factor_ready = true;
+    owner.occupied_xc_frame_ready = true;
   }
   if (scenario == "early-final-rejection") {
     owner.early_final_probe_ran = true;
+    owner.occupied_xc_frame_ready = true;
     std::fill_n(owner.tmp1, 8, -99.0);
     std::fill_n(owner.tmp2, 8, -99.0);
   }
@@ -303,6 +308,7 @@ int main(int argc, char** argv) {
   } else if (scenario == "stationary-confirmation") {
     assert(owner.is_active && !owner.output.converged && !owner.final_state_ready);
     assert(!owner.occupied_fitted_factor_ready && !owner.warm_orbitals_ready);
+    assert(!owner.occupied_xc_frame_ready);
     assert(copies == 0 && owner.density[0] == 10.0);
     assert(owner.warm_ready && owner.warm[0] == 42.0);
     assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
@@ -311,6 +317,7 @@ int main(int argc, char** argv) {
     // preserve the next density and the independent last-good warm seed.
     assert(owner.is_active && !owner.output.converged && !owner.final_state_ready);
     assert(!owner.occupied_fitted_factor_ready && !owner.warm_orbitals_ready);
+    assert(!owner.occupied_xc_frame_ready);
     assert(owner.density[0] == 20.0 && owner.warm_orbitals[0] == 10.0);
     assert(owner.warm_ready && owner.warm[0] == 42.0 && owner.warm_energy == -41.0);
     owner.early_final_probe_ran = false;
@@ -318,6 +325,7 @@ int main(int argc, char** argv) {
     std::fill_n(owner.tmp2, 8, 20.0);
     owner.enqueue();
     assert(owner.finish() && owner.warm_orbitals_ready);
+    assert(owner.occupied_xc_frame_ready);
     assert(owner.warm_orbitals[0] == 20.0);
   } else if (scenario == "converged") {
     assert(owner.warm_ready && owner.warm[0] == 10.0);

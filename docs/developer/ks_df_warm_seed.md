@@ -62,6 +62,23 @@ overlap orthogonalizer or final-Fock canonicalization cannot substitute a nearby
 density. A frame storage tag preserves the incumbent orthonormal-frame/force
 handoff unchanged when factor replay is disabled, including across switch changes.
 
+When physical energy confirmation deliberately holds the density unchanged, the
+latest eigensolver proposal is not its factor. If the preceding restricted K
+consumed a valid occupied AO frame, the owner restores that retained frame before
+the next K. Dense K, missing frames, UKS and orthonormal-only frames retain their
+ordinary invalidation path. Restoration clears readiness before the asynchronous
+copy, so a failed copy cannot publish a factor. No convergence gate changes.
+
+An explicit `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=1` may separately request an
+optional strict range-integral cache for a fitted full-range primary. Automatic
+admission follows the bounded strict-FP64 restricted VV10 cold-reuse policy
+described in [native XC](xc_native_cuda.md). The cache has its own exact Direct provider,
+complete resource accounting and exact fallback. Warm-energy rebasing preserves
+the unchanged fitted primary when its final factor/projection proof is live;
+only the independent range contribution needs rebasing. Optional range values
+may be retired before a memory-constrained force handoff without retiring the
+authenticated fitted projection.
+
 A same-owner replay reconstructs D with the same kernel and occupations, then
 borrows C for its first occupied RI-K call through the shared prepared provider.
 It does **not** reuse the old mutable fitted projection U. A provider scratch write

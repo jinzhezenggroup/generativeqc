@@ -144,10 +144,10 @@ void one_case(unsigned basis, unsigned spins, unsigned history, bool normalized)
 }
 }  // namespace
 
-void invalid_history_state() {
+void invalid_history_state(unsigned basis = 3) {
   using namespace generativeqc::scf::cuda_execution;
   constexpr unsigned history = 4;
-  constexpr std::size_t vector_size = 9;
+  const std::size_t vector_size = static_cast<std::size_t>(basis) * basis;
   for (bool invalid_head : {false, true}) {
     State state(history, vector_size);
     Device<double> fock(2 * vector_size, 2.5), residual(2 * vector_size, 1.0);
@@ -157,8 +157,8 @@ void invalid_history_state() {
     const auto prior_fock = state.fock_history.read();
     const auto prior_residual = state.residual_history.read();
     const auto prior_cache = state.cache.read();
-    launch_update_diis_cached_gram(2, 32, 0, nullptr, 2, 3, 1, history, fock.data, residual.data,
-                                   active.data, state.fock_history.data,
+    launch_update_diis_cached_gram(2, 32, 0, nullptr, 2, basis, 1, history, fock.data,
+                                   residual.data, active.data, state.fock_history.data,
                                    state.residual_history.data, state.matrix.data,
                                    state.coefficients.data, state.count.data, state.head.data,
                                    state.effective.data, state.cache.data, true, state.work.data);
@@ -204,7 +204,7 @@ void disabled_history(unsigned history) {
       throw std::runtime_error("disabled DIIS performed dot work");
 }
 
-int main() {
+int main(int argc, char** argv) {
   try {
     // Exercise the public production launcher, not only its host helper. Each
     // required binding must throw before submitting work, even without a GPU.
@@ -227,6 +227,15 @@ int main() {
       if (!rejected) throw std::runtime_error("ordered launcher bypassed host admission");
     }
     if (!std::getenv("SLURM_JOB_ID")) return 77;
+    if (argc == 2 && std::strcmp(argv[1], "--large-only") == 0) {
+      invalid_history_state(512);
+      for (unsigned spins : {1U, 2U})
+        for (bool normalized : {false, true}) one_case(512, spins, 3, normalized);
+      one_case(513, 2, 3, true);
+      one_case(512, 1, 8, true);
+      std::cout << "large staged ordered DIIS Gram contracts passed\n";
+      return 0;
+    }
     invalid_history_state();
     disabled_history(0);
     disabled_history(1);

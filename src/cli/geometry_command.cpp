@@ -183,8 +183,9 @@ generativeqc_method_descriptor descriptor(const RunOptions& o, const System* aux
   d.method = o.method;
   d.max_iterations = o.max_iterations.value_or(100);
   d.diis_history = o.diis_history;
-  d.energy_tolerance = o.energy_tolerance.value_or(is_xtb(o) ? 1e-10 : 1e-12);
-  d.density_tolerance = o.density_tolerance.value_or(is_xtb(o) ? 1e-8 : 1e-10);
+  const auto convergence = resolve_scf_convergence(o, is_correlated(o));
+  d.energy_tolerance = convergence.energy_tolerance;
+  d.density_tolerance = convergence.density_tolerance;
   d.screening_tolerance = o.screening_tolerance.value_or(is_xtb(o) || is_correlated(o) ? 0 : 1e-14);
   d.density_fitting_mode = o.density_fitting;
   d.density_fitting_auxiliary_basis = auxiliary ? auxiliary->get() : nullptr;

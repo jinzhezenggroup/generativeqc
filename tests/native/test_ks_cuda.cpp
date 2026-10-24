@@ -2677,6 +2677,13 @@ int main(int argc, char** argv) {
       std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--df-wb-composition") {
+      for (const bool restricted : {true, false}) {
+        run_wb97mv_nonlocal_composition_case(restricted, true);
+      }
+      std::cout << "Native CUDA fitted WB97M-V composition independent CPU gates passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--fast-anchor-delta") {
       run_fast_anchor_delta_case();
       std::cout

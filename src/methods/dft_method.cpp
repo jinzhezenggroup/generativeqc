@@ -46,6 +46,7 @@
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -1002,8 +1003,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
           detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
+        // The standalone paired bridge supports the same generated schedules
+        // as the prepared Direct owner. Honor its existing execution policy;
+        // forcing thread-per-AO here serializes every attraction-center sum.
         const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
-            resident_weights.device_id, system_, {}, {}, 0,
+            resident_weights.device_id, system_, {}, {},
+            scf::cuda_policy::one_electron_derivative_mapping_requested(),
             one_electron_device_maximum_bytes.value_or(maximum_bytes), hcore, pulay, detail,
             &one_electron, resident_weights.density, resident_weights.weighted_density);
         if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
@@ -1710,7 +1715,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
     if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
       status = scf::execute_cuda_stationary_one_electron_pair(
-          device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
+          device, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+          bytes, hcore, pulay, detail, &one, resident_weights.density,
           resident_weights.weighted_density);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       const bool retry_without_cache =

@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_ring_gram_staging.cuh",
+  "subsystem": "runtime",
+  "regions": [],
+  "role": "runtime",
+  "reason": "Coalesced shared-memory transport for independent pending physical-slot Gram entries. The compiler-owned ordered_history_dot continues one scalar accumulator across tiles, preserving element order. Ring admission, cache indices, lazy initialization and integer work counters are runtime policy; no second dot algebra or parallel partial-sum reduction is introduced."
+}

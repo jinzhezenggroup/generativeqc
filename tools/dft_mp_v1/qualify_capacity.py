@@ -516,22 +516,6 @@ NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
-# The JIT side defers integral source reuse. Prepared admission charges both
-# native CSR and exact-bitmask caches; packaged selection remains unchanged.
-# Closed/running checks precede admission without changing AOT selection.
-# Force-memory admission requests the full cold envelope and only the unretained
-# remainder on replay. Keep this existing compatibility binding until #2296;
-# no new whole-function fingerprint or production-source gate is introduced.
-# Precision selection is forwarded to source construction and replay identity;
-# AOT selection, cold/replay reservations and lease admission remain unchanged.
-PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "dbc6ee7cf50d25349b5cf345919a5e6741d4dfc3c4c9d8dacddffc83df4c9504"
-)
-# Prepared schedule identity retains the read-only grid capability and precision
-# mode; every topology, MethodIR, AO-policy and resource dimension is preserved.
-PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "1c71cf4b076b5c16d992bf84a66efd4f9ebe824da24f2f738a3f2ff8f7c3d7ad"
-)
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
     "zip(aos, expansions, strict=True)))"
@@ -3481,20 +3465,31 @@ def _prepared_aot_route_contract(repository: Path) -> str:
     )
     if len(methods) != 1:
         raise RuntimeError("prepared stationary AOT owner is missing or ambiguous")
+    # The digest records provenance only. Execute the current source with inert
+    # native/compiler boundaries so equivalent owner refactors remain valid.
+    from tools.dft_mp_v1.prepared_contracts import check_prepared_selection
+
     digest = _source_node_sha256(source, methods[0])
-    if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
-        raise RuntimeError("prepared stationary AOT selection contract changed")
-    requests = [
-        node
-        for node in classes[0].body
-        if isinstance(node, ast.FunctionDef) and node.name == "_request"
-    ]
-    if (
-        len(requests) != 1
-        or _source_node_sha256(source, requests[0])
-        != PREPARED_AO_REQUEST_CONTRACT_SHA256
-    ):
-        raise RuntimeError("prepared stationary AO request contract changed")
+    module = ModuleType("generativeqc._capacity_stationary_contract")
+    module.__package__ = "generativeqc"
+    previous = sys.modules.get(module.__name__)
+    sys.modules[module.__name__] = module
+    try:
+        _DftMpSourceOnlyLoader(
+            module.__name__, str(repository / "python/generativeqc/_stationary_cuda.py")
+        ).exec_module(module)
+        check_prepared_selection(module)
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(
+            f"prepared stationary AOT selection contract changed: {error}"
+        ) from error
+    finally:
+        if previous is None:
+            sys.modules.pop(module.__name__, None)
+        else:
+            sys.modules[module.__name__] = previous
     _resident_ao_policy_contract(tree)
     return digest
 

@@ -80,6 +80,16 @@ request by its actual available-memory envelope, without applying that fallback
 ceiling. Explicit positive budgets are never enlarged. Full-rank resident
 forward tensors feed both partial and full-width response panels; sufficient
 scratch must not switch a resident reader back to raw integral regeneration.
+A method-owned restricted occupation reservation distinguishes packed B from
+complete occupied U. The automatic resolver prefers the existing response
+margin, but a rank-zero optional-U fallback does not establish complete-U
+admission. When the shape-derived response floor and observed free memory
+minus reserved headroom permit it, the resolver charges the minimum complete
+B/U allowance through the native planner. Explicit total/response caps are
+unchanged, and a refused complete projection keeps the bounded rank-zero path.
+See the [complete-projection decision](../../.agents/notes/implemented/performance/2026-10-23-df-complete-occupied-budget.md)
+for the work and capacity rationale.
+
 The prepared owner records the resolved value/response allowances,
 headroom, observed memory and policy version for replay/cache identity and
 progress diagnostics. UHF continues to charge its host total density against

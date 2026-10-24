@@ -165,15 +165,16 @@
         "src/scf/cuda/direct_jk_source_lease.cpp",
         "src/scf/cuda/direct_jk.cpp"
       ],
-      "rationale": "Automatic only for screened SPD strict-FP64 restricted VV10 native initialization with at least 65536 points, the existing reuse threshold and a 4 GiB optional value ceiling. Cold and moved initialization amortize one immutable geometry/radial source; warm calls never construct a new quartic source. Complete host/device admission, original screening, matching operator/omega and explicit off/capacity fallback remain mandatory. Larger and partial-source policies remain explicit experiments; #2426 remains open.",
-      "revisit_condition": "Require complete source-matched endpoints, independent energy/force gates and capacity/lifetime evidence before expanding the 4 GiB automatic domain; retain all failed 96-atom populations.",
+      "rationale": "Automatic screened SPD strict range sources serve restricted VV10 cold initialization with at least 65536 points, the existing reuse threshold and a 16 GiB optional ceiling. The independent Direct range correction may accompany a Direct or fitted full-range primary. Both providers host inventory and actual device headroom remain charged; omitted buckets stream exactly. Warm calls never construct a quartic source. Explicit zero, unsupported precision and public-ledger fallbacks remain. Fitted-default candidate endpoint qualification is tracked separately from earlier explicit-cache pilots.",
+      "revisit_condition": "Require source-matched complete cold/warm/moved endpoints, independent energy/force gates and capacity/lifetime evidence for any broader automatic domain; retain failed populations and do not relabel explicit-cache pilots as default evidence.",
       "evidence": [
         "docs/developer/xc_native_cuda.md",
         ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
         "tests/python/test_range_resident_values_cuda.py",
         "tests/python/test_range_resident_ks_cuda.py",
         "issue:#2426",
-        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md"
+        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
+        ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md"
       ]
     },
     {
@@ -962,7 +963,7 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32\u20131024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
+      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32–1024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
       "revisit_condition": "Refine the bounded scatter and residency domain with additional devices, methods and complete endpoints rather than molecule/device whitelists. Do not infer large-system or universal profitability from the small-domain positive population; retain zero opt-out, original selected work, numerical gates and resource fallback.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-08-xc-compact-contraction-batches.md",
@@ -987,7 +988,7 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
       "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
@@ -2028,7 +2029,7 @@
         "src/dft/cuda_ks.cpp",
         "src/dft/application_precision.hpp"
       ],
-      "rationale": "The qualified automatic policy selects a 1e-7 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64\u2013768 AOs and 2\u201396 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; Two independently source-bound cohorts totaling 366 E/F endpoints pass against the 1e-8 parent policy, including repeated qualification after integrating master; source values fall further without increasing sampled cold strict work.",
+      "rationale": "The qualified automatic policy selects a 1e-7 source/consumer predicate only during admitted relaxed Fast full-range hybrid mixed proposals at 64–768 AOs and 2–96 atoms. Explicit 0 restores the incumbent predicate; 1 permits other sizes without bypassing remaining guards. The primary provider, fresh strict closing pair and forces retain requested screening; the mixed lease is retired before strict work. DF, pure J, range/nonlocal, strict controls, unscreened inputs and unavailable optional residency retain their original path. Five alternating pairs per size pass the complete-endpoint gain/nonregression gates, including cold gains at 48/96 atoms; Two independently source-bound cohorts totaling 366 E/F endpoints pass against the 1e-8 parent policy, including repeated qualification after integrating master; source values fall further without increasing sampled cold strict work.",
       "revisit_condition": "Extend the automatic model, size or resource domain only with repeated complete cold/warm/moved/reset endpoints, independent energy/force gates, semantic source-work and precision counts, and bounded-resource fallbacks. Preserve fresh strict closure, opt-out and the measured gain/nonregression floors.",
       "evidence": [
         "tests/python/test_ks_mixed_source_policy.py",
@@ -2038,6 +2039,34 @@
         "tests/python/test_ks_fast_strict_tail_cuda.py",
         "benchmarks:benchmarks/results/fast-source-floor-20261024/README.md",
         "tests/python/test_fast_source_floor_replay.py"
+      ]
+    },
+    {
+      "id": "ks.occupied-xc-density-features",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+      ],
+      "owner_issues": [
+        2577,
+        2703
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+      ],
+      "rationale": "Unset or 1 requests the existing token-bound canonical frame that formed the accepted density for strict-FP64 meta-GGA density features. Each tile chooses occupied projection only below its active AO rank. Completion retires the lease; held confirmations, rejected probes, imported densities, mixed/nonlocal/response and unsupported domains retain matrix contraction. Explicit 0 disables the request. No additional storage, screening or convergence relaxation is introduced. Current-source rotating Direct96 endpoints qualify a 3.89% r2SCAN-3c cold gain; all static and displaced observables pass. No broad small-system or warm speedup is claimed; separate noisy small-system cohorts remain visible.",
+      "revisit_condition": "Broaden frame lifetimes or eligible precision/method domains only with independent feature and complete cold/warm/moved force checks, actual frame/work counts and endpoint gain/nonregression gates. Preserve the explicit rollback and bounded matrix fallback.",
+      "evidence": [
+        "tests/python/test_xc_occupied_features.py",
+        "tests/python/test_xc_occupied_features_cuda.py",
+        "tests/python/test_xc_occupied_plan_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        "docs:docs/developer/xc_contractions.md",
+        "tests/python/test_xc_occupied_default_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-24-automatic-occupied-xc.md",
+        "benchmarks:benchmarks/results/occupied-xc-default-20261024/README.md"
       ]
     }
   ]
