@@ -17,6 +17,7 @@ from generativeqc_compiler.common.timing import interleaved_selection_order
 from benchmarks.df_policy_endpoint import read_reference_bytes
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
+from tools.inspect_retained_benchmarks import load_measurements
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = ROOT / "benchmarks/results/pbe0-spd-spatial-reuse-20261011"
@@ -152,6 +153,20 @@ def test_safety_covers_both_layouts_without_relabeling_failed_wrappers() -> None
         assert "clean_timing_ld_preload=unset" in preload
 
 
+def compacted_reference_bytes(path: Path) -> bytes:
+    """Recover these previously compacted JSON bytes across collection storage.
+
+    The six collected inputs were already compact JSON plus one final newline.
+    Restore that newline, then require their original byte hashes below; do not
+    serialize parsed values or weaken the original canonical measurement gate.
+    """
+    if path.exists() or path.with_suffix(".json.gz").exists():
+        return read_reference_bytes(path)
+    records = load_measurements(path.parent)
+    name = path.name if path.name in records else path.name + ".gz"
+    return records[name] + b"\n"
+
+
 def test_storage_compaction_preserves_canonical_measurements() -> None:
     """Storage savings cannot alter old measurements or discard failed records."""
     metadata = json.loads((BUNDLE / "storage-compaction.json").read_text())
@@ -159,7 +174,7 @@ def test_storage_compaction_preserves_canonical_measurements() -> None:
     assert len(metadata["files"]) == 7
     assert metadata["saved_bytes"] == 668780
     for row in metadata["files"]:
-        data = read_reference_bytes(ROOT / row["path"])
+        data = compacted_reference_bytes(ROOT / row["path"])
         assert hashlib.sha256(data).hexdigest() == row["stored_sha256"]
         assert len(data) == row["stored_bytes"]
         assert canonical_hash(json.loads(data)) == row["canonical_sha256"]
@@ -172,7 +187,7 @@ def test_storage_compaction_rejects_changed_expanded_evidence(
     """Gzip integrity alone cannot admit changed historical measurements."""
     metadata = json.loads((BUNDLE / "storage-compaction.json").read_text())
     for index, row in enumerate(metadata["files"]):
-        data = read_reference_bytes(ROOT / row["path"])
+        data = compacted_reference_bytes(ROOT / row["path"])
         path = tmp_path / row["path"]
         path.parent.mkdir(parents=True, exist_ok=True)
         if index == len(metadata["files"]) - 1:
@@ -181,4 +196,43 @@ def test_storage_compaction_rejects_changed_expanded_evidence(
         path.write_bytes(data)
     monkeypatch.setattr(f"{__name__}.ROOT", tmp_path)
     with pytest.raises(AssertionError):
+        test_storage_compaction_preserves_canonical_measurements()
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_storage_compaction_authenticates_rehashed_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corrupt: bool
+) -> None:
+    """A valid collection checksum cannot replace the pinned historical values."""
+    metadata = json.loads((BUNDLE / "storage-compaction.json").read_text())
+    for row in metadata["files"]:
+        path = tmp_path / row["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(compacted_reference_bytes(ROOT / row["path"]))
+    path = tmp_path / metadata["files"][0]["path"]
+    record = path.read_bytes()[:-1]  # Preserve original tokens, dropping only LF.
+    if corrupt:
+        record = record[:-1] + b',"corrupted_for_test":true}'
+    key = json.dumps(path.name + ".gz").encode()
+    stored = lzma.compress(b"{" + key + b":" + record + b"}")
+    (path.parent / "measurements.json.xz").write_bytes(stored)
+    (path.parent / "measurements.storage.json").write_text(
+        json.dumps(
+            {
+                "schema": "generativeqc.historical-measurements.v1",
+                "record_count": 1,
+                "storage": {
+                    "path": "measurements.json.xz",
+                    "bytes": len(stored),
+                    "sha256": hashlib.sha256(stored).hexdigest(),
+                },
+            }
+        )
+    )
+    path.unlink()  # Exercise the authenticated collection, not the direct file.
+    monkeypatch.setattr(f"{__name__}.ROOT", tmp_path)
+    if corrupt:
+        with pytest.raises(AssertionError):
+            test_storage_compaction_preserves_canonical_measurements()
+    else:
         test_storage_compaction_preserves_canonical_measurements()

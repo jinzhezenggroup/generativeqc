@@ -1,5 +1,14 @@
 # Resident DF dataflow, derivative algebra and DIIS (#388–#391)
 
+> **Historical campaign storage:** inspect all consolidated JSON records with
+> `python tools/inspect_retained_benchmarks.py benchmarks/results/issues388-391-df`.
+> Every original numerical value, timing sample, failure and array order is
+> retained in `measurements.json.xz`; small decisions remain readable below.
+> Old drivers, patches and execution files are in the
+> [verified recovery snapshot](../retention-granularity-20261024/README.md).
+> Restore that snapshot before following the historical paths/commands below;
+> their original manifests describe that snapshot, not the current checkout.
+
 > **Historical supporting data:** bulky reports from this campaign remain in
 > existing Git history, with [checksum-verified snapshot recovery](../retention-checkout/README.md).
 > The summary below and compact records remain here. Restore the complete
@@ -54,9 +63,9 @@ was loosened.
   regions, including all 13 derivative panels; nested regions are not additive.
 - `profiles/`: reduced Nsight activities, host wait attribution, transfer bytes,
   sampled memory, environment and unavailable-counter evidence.
-- [generated-work.json](generated-work.json): symbolic derivative loop counts
+- [generated-work.json](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/results/issues388-391-df/generated-work.json): symbolic derivative loop counts
   tied to the final diagnostic trace hash.
-- [builds.json](builds.json): measured binary/object sizes and hashes.
+- [builds.json](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/results/issues388-391-df/builds.json): measured binary/object sizes and hashes.
 - [validation.json](validation.json): validation counts and original log hashes.
 - [ownership.json](ownership.json): physical CUDA additions/removals and
   unchanged lines reclassified by the reviewed semantic inventory.
@@ -170,7 +179,7 @@ axis-cache boundary. All variants visit 28,385,280 shell triples,
 count remains 234. The final normal derivative consumer is 1281.658 ms.
 
 GPU4PySCF's corresponding fused Rys kernel is about 665 ms in the retained
-[reference profile](../issue382-packed-df/reference/768-profile-summary.json).
+[reference profile](https://github.com/jinzhezenggroup/generativeqc/blob/8e74c66de97e2bfacd655976888c0e0abb252ace/benchmarks/results/issue382-packed-df/reference/768-profile-summary.json).
 Its root-wise products differ from VibeQC's general Hermite/Boys coefficient
 convolution. Both share primitive preparation, other-axis products and a
 horizontal center identity. This change removes measured duplicate work but
