@@ -2146,10 +2146,11 @@ int main() {
       }
 
       // #2411: J-only must not replay the P/Q exchange Gram. Exercise the
-      // exact generated-source GPU reader with a partial auxiliary panel;
-      // the source visit count is one complete A per requested P block,
-      // rather than one per ordered P/Q pair. Resident and packed paths
-      // must retain the same independently calculated force.
+      // exact generated-source GPU reader with a partial auxiliary panel.
+      // Charge-first contraction needs at most one complete raw source pass;
+      // a fused charge provider may avoid materializing those values entirely.
+      // Bound semantic regeneration bytes rather than pinning the old fitted
+      // panel call count. Resident/packed paths retain the same oracle force.
       const auto j_only_oracle = generativeqc::scf::build_density_fitting_rhf_gradient(
           integrals, generated_rhf_density, 1e-12, {1.0, 0.0});
       const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
@@ -2170,13 +2171,9 @@ int main() {
           if (response_plan == source_plan.get()) {
             const auto width = work.auxiliary_weight_tile;
             require(width < integrals.naux, "streamed J-only test did not exercise bounded panels");
-            const auto panels = (integrals.naux + width - 1) / width;
-            const auto pair_tiles =
-                (integrals.nbf * integrals.nbf + integrals.naux - 1) / integrals.naux;
-            require(work.value_slices == panels * pair_tiles &&
-                        work.recomputed_value_bytes == panels * integrals.naux * integrals.nbf *
-                                                           integrals.nbf * sizeof(double),
-                    "streamed J-only response regenerated a quadratic number of raw panels");
+            const auto raw_bytes = integrals.naux * integrals.nbf * integrals.nbf * sizeof(double);
+            require(work.recomputed_value_bytes <= raw_bytes,
+                    "streamed J-only response regenerated more than one complete raw source");
           } else {
             require(work.recomputed_value_bytes == 0,
                     "resident J-only response unexpectedly regenerated raw integrals");

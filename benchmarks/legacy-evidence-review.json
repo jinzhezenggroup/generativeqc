@@ -224,6 +224,11 @@
       "owner": "VV10 same-binary reuse ablation (#2677)",
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
       "review_document": "benchmarks/results/vv10-reuse-ablation-20261023/README.md"
+    },
+    "hf-cold-work-20261025": {
+      "owner": "HF cold final-state work and resident DF source qualification",
+      "reason": "Lossless full-precision receipts retain all 75 populations and 300 complete cold/warm calls across baseline, candidate and fresh GPU4, including failed independent fitting gates and every exposed precision solve. Shared compression avoids repeating provenance; source-matched ablations, independent references and executable replay remain in the compact publication. No numerical acceptance or storage cap is changed.",
+      "review_document": "benchmarks/results/hf-cold-work-20261025/README.md"
     }
   },
   "files": [
@@ -770,6 +775,14 @@
       "role": "Original complete Git-LF source blob, mode and SHA inventory for the frozen measured SDK.",
       "bytes": 768632,
       "sha256": "13b566837d8d91d14c16c7fe23137e4a3c847ebb7ec64c5a19daee5538331dc8"
+    },
+    {
+      "path": "benchmarks/results/hf-cold-work-20261025/receipts.json.xz",
+      "family": "hf-cold-work-20261025",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete E/F samples, work counts and execution identities; accuracy failures retained separately",
+      "bytes": 219828,
+      "sha256": "68c52e1fd3274226a72e5b0cb29504d43eca83e64a2bcd3a72aa52c5982ef388"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
