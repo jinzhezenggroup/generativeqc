@@ -31,3 +31,19 @@ Evidence: family `test_protocol.py` behavioral tests and opt-in `protocol.py
 verify`; original archive `7522994e`, measured HF `cbd4d807`, CBS base
 `976f756b` plus patch `5a1a974b`, independent energy `334e7f48` and directions
 `59434367`. Refs #2725, #2724. No GPU/scientific calculation is performed here.
+
+## Addendum: explicit CBS portable schedule cohort (2026-10-24)
+
+The root-authorized PR #2742 handoff permits task-owned `portable_cuda/sm90`
+build configuration, using the frozen resolver's existing generic fallback.
+Its `auto/sm90` rejection remains evidence; source/parser/default/runtime edits
+remain excluded. V2 adds an execution cohort and hash-bound profile decision,
+preflight, build configuration, generated inventory and new DSO provenance.
+Prepared v1 at `df5c44a8` and all scientific cells/sources/references/schedule/
+caps remain unchanged. An execution schedule-port is not identical tuned
+schedule or strict hardware causality; runtime/science changes would still
+require a separately approved paired-version cohort. HF/DFT and GPU4PySCF do
+not inherit CBS profile resolution. Per-engine Python/NumPy differences also
+remain explicit confounders. Host validation exercises wrong profile, stale
+binary/source/environment/preflight hashes and missing generated provenance;
+independent raw authentication and all device science remain separate gates.

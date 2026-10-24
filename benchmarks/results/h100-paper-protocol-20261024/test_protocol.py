@@ -70,7 +70,82 @@ class ProtocolTests(unittest.TestCase):
             }
             for i, phase in enumerate(cell["calls_per_process"])
         ]
+        preflight = {
+            "status": "PASS",
+            "target": "sm90",
+            "source_sha256": p.digest(p.canonical(source)),
+            "library_sha256": attempt["runtime"]["library_sha256"],
+            "environment_sha256": attempt["runtime"]["environment_sha256"],
+            "native_profile": "not applicable"
+            if attempt["arm"] == "gpu4pyscf"
+            else "portable_cuda",
+            "profile_match": "portable",
+            "tuned": False,
+            "auto_sm90_outcome": "ValueError",
+            "profile_decision_sha256": attempt["profile_decision_sha256"],
+            "build_config_sha256": "1" * 64,
+            "generated_artifacts_sha256": "2" * 64,
+            "profile_resolution_receipt_sha256": "3" * 64,
+        }
+        attempt["runtime"]["build_preflight"] = preflight
+        attempt["runtime"]["build_preflight_sha256"] = p.digest(p.canonical(preflight))
         return attempt
+
+    def test_portable_schedule_and_preflight_bindings(self) -> None:
+        good = self.completed()
+        p.validate_attempt(self.manifest, good)
+        for field, value in (
+            ("native_profile", "auto"),
+            ("profile_match", "exact"),
+            ("tuned", True),
+            ("auto_sm90_outcome", "PASS"),
+            ("source_sha256", "0" * 64),
+            ("library_sha256", "0" * 64),
+            ("environment_sha256", "0" * 64),
+            ("target", "sm120"),
+            ("profile_decision_sha256", "0" * 64),
+            ("generated_artifacts_sha256", None),
+            ("build_config_sha256", None),
+            ("profile_resolution_receipt_sha256", None),
+        ):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                a = copy.deepcopy(good)
+                a["runtime"]["build_preflight"][field] = value
+                a["runtime"]["build_preflight_sha256"] = p.digest(
+                    p.canonical(a["runtime"]["build_preflight"])
+                )
+                p.validate_attempt(self.manifest, a)
+        for field in ("execution_contract_sha256", "profile_decision_sha256"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                a = copy.deepcopy(good)
+                a[field] = "0" * 64
+                p.validate_attempt(self.manifest, a)
+        a = copy.deepcopy(good)
+        a["runtime"]["build_preflight_sha256"] = "0" * 64
+        with self.assertRaises(ValueError):
+            p.validate_attempt(self.manifest, a)
+
+    def test_prepared_v1_science_is_preserved(self) -> None:
+        original = json.loads(
+            p.blob(p.PREPARED, p.PREFIX + "h100-paper-protocol-20261024/manifest.json")
+        )
+        for field in ("cells", "sources", "references", "schedule", "execution"):
+            self.assertEqual(self.manifest[field], original[field])
+        self.assertEqual(
+            self.manifest["prepared_v1"]["sha256"],
+            p.digest(p.canonical(original) + b"\n"),
+        )
+
+    def test_external_and_hf_profiles_do_not_inherit_cbs(self) -> None:
+        for index in (18, 20):
+            a = self.completed(index)
+            p.validate_attempt(self.manifest, a)
+            a["runtime"]["build_preflight"]["native_profile"] = None
+            a["runtime"]["build_preflight_sha256"] = p.digest(
+                p.canonical(a["runtime"]["build_preflight"])
+            )
+            with self.assertRaises(ValueError):
+                p.validate_attempt(self.manifest, a)
 
     def test_core_cardinality_and_repetition_hierarchy(self) -> None:
         self.assertEqual(len(self.manifest["cells"]), 11)

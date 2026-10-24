@@ -23,6 +23,35 @@ DIRECTION = "594343670cfdea574e5b1c6821b51165ce004f97"
 PREFIX = "benchmarks/results/"
 HF_DIR = PREFIX + "readme-repaired-20261021/"
 CBS_DIR = PREFIX + "cbs-fast-memory-20261021/"
+PREPARED = "df5c44a81c5d73210a8d2f7f09ba4930d7f67210"
+PROFILE_PATH = "python/generativeqc_compiler/integral/production_profile.py"
+
+
+def execution_contract(family: str, arm: str) -> dict:
+    """Separate unchanged scientific identity from target-specific generation."""
+    if arm == "gpu4pyscf":
+        return {
+            "cohort": "gpu4pyscf-h100-environment-port.v1",
+            "target": "sm90",
+            "native_profile": "not applicable",
+            "hardware_only": False,
+        }
+    return {
+        "cohort": "cbs-frozen-science-portable-cuda-sm90.v1"
+        if family == "cbs"
+        else "hf-dft-frozen-science-sm90.v1",
+        "target": "sm90",
+        "native_profile": "portable_cuda" if family == "cbs" else None,
+        "profile_status": "EXPLICIT_ROOT_DECISION"
+        if family == "cbs"
+        else "UNAVAILABLE_UNTIL_PREFLIGHT",
+        "profile_match": "portable" if family == "cbs" else None,
+        "tuned": False if family == "cbs" else None,
+        "hardware_only": False,
+        "identical_tuned_schedule": False,
+        "codegen": "target/profile-specific artifacts and new DSO hashes required",
+        "science_changes": "forbidden; report to root for separately approved paired-version cohort",
+    }
 
 
 def require(condition: bool, message: str) -> None:
@@ -237,7 +266,29 @@ def build_manifest() -> dict:
             for arm in arms[repeat % len(arms) :] + arms[: repeat % len(arms)]:
                 schedule.append({"cell": cell["id"], "arm": arm, "repeat": repeat})
     return {
-        "schema": "generativeqc.h100-paper-protocol.v1",
+        "schema": "generativeqc.h100-paper-protocol.v2",
+        "prepared_v1": binding(
+            PREPARED, PREFIX + "h100-paper-protocol-20261024/manifest.json"
+        ),
+        "profile_decision": {
+            "authority": "root coordinator 01a10e8f-7b0a-7b52-a330-b2de34309210; explicit PR #2742 handoff 2026-10-24",
+            "scope": "CBS task-owned build configuration only: portable_cuda/sm90; no source/parser/default/runtime edits",
+            "reason": "frozen auto/sm90 rejects without tuned/compatible profile; explicit portable_cuda uses existing generic fallback",
+            "resolver": binding(CBS, PROFILE_PATH),
+            "preflight": "retain auto failure and explicit portable resolution receipt, source/patch, actual build config, generated inventory and new DSO hashes",
+            "acceptance": "CPU build permission is separate from SDK, device/science acceptance and GPU launch authorization",
+        },
+        "execution_contracts": {
+            family: {
+                arm: execution_contract(family, arm)
+                for arm in (
+                    ("standard", "fast")
+                    if family == "cbs"
+                    else ("standard", "fast", "gpu4pyscf")
+                )
+            }
+            for family in ("cbs", "hf_dft")
+        },
         "issue": 2725,
         "archive_revision": ARCHIVE,
         "sources": sources,
@@ -269,6 +320,8 @@ def build_manifest() -> dict:
             "host RAM vs numeric budget vs measured peak VRAM",
             "GPU UUID/driver/CUDA/power/clocks/temperature",
             "Python/native/AOT/compiler-cache identities and cache state",
+            "original GPU4PySCF Python3.13.9/NumPy2.4.6 vs prepared qz Python3.11.16/NumPy2.2.6; record per-engine versions",
+            "CBS sm120 historical tuned schedule vs explicit portable_cuda/sm90 target/profile/codegen delta",
             "clean E+F vs instrumented diagnostic timing",
             "precision/refinement/fallback and iteration/Fock/action counts",
         ],
@@ -276,10 +329,10 @@ def build_manifest() -> dict:
 
 
 def validate_manifest(manifest: dict) -> None:
-    """Scientific protocol is immutable within v1; authenticate against retained Git blobs."""
+    """Authenticate v2 while retaining the immutable prepared v1 binding."""
     require(
         canonical(manifest) == canonical(build_manifest()),
-        "manifest differs from frozen v1 source/input/model/gate/schedule contract",
+        "manifest differs from frozen v2 scientific/execution contract",
     )
 
 
@@ -434,13 +487,16 @@ def finite_number(value: object, *, positive: bool = False) -> bool:
 
 def attempt_template(manifest: dict, slot: dict, attempt_id: str) -> dict:
     cell = next(c for c in manifest["cells"] if c["id"] == slot["cell"])
+    contract = manifest["execution_contracts"][cell["family"]][slot["arm"]]
     return {
-        "schema": "generativeqc.h100-paper-attempt.v1",
+        "schema": "generativeqc.h100-paper-attempt.v2",
         **slot,
         "attempt_id": attempt_id,
         "input_sha256": cell["input_sha256"],
         "source": manifest["sources"][cell["source"]],
-        "cohort": "source-reconstruction",
+        "cohort": contract["cohort"],
+        "execution_contract_sha256": digest(canonical(contract)),
+        "profile_decision_sha256": digest(canonical(manifest["profile_decision"])),
         "outcome": "INCOMPLETE",
         "exit_code": None,
         "preflight": "INCOMPLETE",
@@ -455,10 +511,68 @@ def attempt_template(manifest: dict, slot: dict, attempt_id: str) -> dict:
     }
 
 
+def validate_build_provenance(
+    manifest: dict, cell: dict, arm: str, runtime: dict
+) -> None:
+    """Bind a preflight receipt to this source, profile, environment and binary.
+
+    Hash consistency admits a receipt contract; independent raw replay still
+    has to authenticate the referenced build/resolve observations.
+    """
+    preflight = runtime.get("build_preflight")
+    require(isinstance(preflight, dict), "build preflight required")
+    require(
+        runtime.get("build_preflight_sha256") == digest(canonical(preflight)),
+        "build preflight hash",
+    )
+    require(
+        preflight.get("source_sha256")
+        == digest(canonical(manifest["sources"][cell["source"]]))
+        and preflight.get("library_sha256") == runtime["library_sha256"]
+        and preflight.get("environment_sha256") == runtime["environment_sha256"]
+        and preflight.get("target") == "sm90"
+        and preflight.get("status") == "PASS",
+        "preflight source/binary/environment/target binding",
+    )
+    if arm == "gpu4pyscf":
+        require(preflight.get("native_profile") == "not applicable", "external engine")
+        return
+    for field in (
+        "build_config_sha256",
+        "generated_artifacts_sha256",
+        "profile_resolution_receipt_sha256",
+    ):
+        value = preflight.get(field)
+        require(
+            isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value)), field
+        )
+    require(
+        preflight.get("profile_decision_sha256")
+        == digest(canonical(manifest["profile_decision"])),
+        "preflight root decision binding",
+    )
+    if cell["family"] == "cbs":
+        require(
+            preflight.get("native_profile") == "portable_cuda"
+            and preflight.get("profile_match") == "portable"
+            and preflight.get("tuned") is False
+            and preflight.get("auto_sm90_outcome") == "ValueError",
+            "explicit CBS portable schedule; retain auto/sm90 rejection",
+        )
+    else:
+        require(
+            isinstance(preflight.get("native_profile"), str)
+            and bool(preflight["native_profile"])
+            and preflight.get("profile_match") in {"exact", "compatible", "portable"}
+            and type(preflight.get("tuned")) is bool,
+            "HF/DFT resolved profile must be observed, not inferred from CBS",
+        )
+
+
 def validate_attempt(manifest: dict, attempt: dict) -> None:
     canonical(attempt)  # Reject NaN/Inf even in optional telemetry and failed receipts.
     require(
-        attempt.get("schema") == "generativeqc.h100-paper-attempt.v1", "attempt schema"
+        attempt.get("schema") == "generativeqc.h100-paper-attempt.v2", "attempt schema"
     )
     slot = {k: attempt.get(k) for k in ("cell", "arm", "repeat")}
     require(
@@ -474,9 +588,16 @@ def validate_attempt(manifest: dict, attempt: dict) -> None:
     require(
         attempt.get("source") == manifest["sources"][cell["source"]], "source identity"
     )
+    contract = manifest["execution_contracts"][cell["family"]][slot["arm"]]
+    require(attempt.get("cohort") == contract["cohort"], "execution cohort")
     require(
-        attempt.get("cohort") == "source-reconstruction",
-        "versioned cohort requires new protocol",
+        attempt.get("execution_contract_sha256") == digest(canonical(contract)),
+        "execution contract hash",
+    )
+    require(
+        attempt.get("profile_decision_sha256")
+        == digest(canonical(manifest["profile_decision"])),
+        "root profile decision hash",
     )
     outcome = attempt.get("outcome")
     require(
@@ -537,6 +658,7 @@ def validate_attempt(manifest: dict, attempt: dict) -> None:
     ):
         require(bool(re.fullmatch(r"[0-9a-f]{64}", runtime.get(field, ""))), field)
     require(runtime.get("cuda_architecture") == "sm90", "H100 target")
+    validate_build_provenance(manifest, cell, slot["arm"], runtime)
     wall = runtime.get("process_wall_seconds")
     require(
         finite_number(wall, positive=True)

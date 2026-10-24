@@ -1,7 +1,7 @@
 # H100 paper protocol (issue #2725)
 
 This family owns the offline protocol, not device execution. `manifest.json`
-uses `generativeqc.h100-paper-protocol.v1`. Consumers identify an input by
+uses `generativeqc.h100-paper-protocol.v2`. Consumers identify an input by
 `cells[].id`, an arm by `cells[].arms[]`, and a process by `(cell, arm, repeat)`
 with repeat 0, 1, 2. `schedule` is the normative rotated/interleaved order.
 `input_sha256` is SHA-256 of UTF-8 sorted-key compact JSON (`allow_nan=False`)
@@ -9,7 +9,7 @@ of `input`; it is not a working-copy file hash. `sources` and `references`
 bind immutable Git OIDs, paths, decoded selectors and raw blob hashes.
 
 Each future attempt is an append-only receipt with schema
-`generativeqc.h100-paper-attempt.v1`; `protocol.py` supplies validation and
+`generativeqc.h100-paper-attempt.v2`; `protocol.py` supplies validation and
 `attempt_template`. A retry uses a new attempt ID and retains every failure.
 No receipt is a launch request. Empty attempts mean no observation in this
 family; they do not establish global NOT_RUN. Unobserved quantities are null
@@ -23,8 +23,12 @@ Three independent processes per arm give 90 processes: 18 CBS cold calls
 and 72 HF/DFT processes each with one cold and three warm calls (288 calls).
 Within-process warm calls are not three independent process repetitions.
 
-This interface is frozen at v1; protocol changes require an explicit new
-version/cohort and coordination with the protocol owner.
+The prepared v1 snapshot remains immutable at `df5c44a81c5d73210a8d2f7f09ba4930d7f67210`:
+69,646 Git-LF bytes, SHA-256 `dd96c17e702101d21352deb4f867ab0fbb7bce66700222d49fc67bbdef23185e`.
+V2 adds the root-authorized CBS schedule-port cohort and its build/preflight
+bindings; `cells`, `sources`, `references`, `schedule` and execution caps remain
+identical to prepared v1. Existing consumers keep their prepared bindings;
+adopting v2 is an explicit addendum, not an overwrite of historical contracts.
 
 ## Reproduce offline
 
@@ -69,6 +73,40 @@ from its single historical CBS observation.
 | CBS | Base `976f756b391bc65edb79f76df1a8c3fe807518a7` + qualified patch | Decoded SHA `5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad`; all six retained candidate file hashes match | Rebuild sm90; old DSO `65a401ed…` is provenance only |
 | Later version | Current master `72e0a7e5…` contains later WB changes | Separately versioned paired cohort, only after root review | Cannot replace frozen HF/DFT and retain hardware-only label |
 | Optional Lambda | Separate source family | Authenticate only when its trigger is met | Never inherit the CBS core identity automatically |
+
+The frozen CBS resolver at `976f756b` rejects `auto/sm90` when there is no
+tuned/compatible profile. Its existing explicit `portable_cuda` path resolves
+the generic fallback. Root's 2026-10-24 PR #2742 handoff authorizes only the
+task-owned build configuration `portable_cuda/sm90` for the same frozen
+scientific implementation. This is cohort
+`cbs-frozen-science-portable-cuda-sm90.v1`: **target, profile and generated
+schedule/artifacts differ** from historical sm120 tuned execution. It is not
+an identical-tuned-schedule or strict hardware-only comparison. No source,
+parser, default or runtime edit is authorized by this decision. If the legal
+portable path fails or needs runtime/scientific changes, stop the affected
+cohort and report to root/production owner for a separately approved paired
+version; other source families can continue independently.
+
+`execution_contracts[family][arm]` identifies each execution cohort separately
+from the scientific source. Each v2 attempt binds its canonical SHA-256 plus
+the canonical `profile_decision` SHA-256. A successful receipt additionally
+contains `runtime.build_preflight` and its canonical SHA-256. This preflight
+binds the source-object SHA-256, target, environment and new library SHA-256,
+actual build-config and generated-artifact inventory SHA-256, and profile
+resolution receipt SHA-256. CBS requires observed `native_profile: portable_cuda`,
+`profile_match: portable`, `tuned: false` and the retained `auto_sm90_outcome:
+ValueError`. Preserve the original failure log and explicit portable resolution
+as raw evidence. HF/DFT profile resolution remains UNAVAILABLE until its own
+preflight; GPU4PySCF's native profile is `not applicable`. Neither inherits CBS
+qualification. These fields admit a receipt contract, not authenticate raw
+observations or authorize launch. Independent replay must verify the referenced
+configuration, generated inventory, resolution log and DSO bytes.
+
+Historical GPU4PySCF reports Python 3.13.9 / NumPy 2.4.6; the prepared qz layer
+uses Python 3.11.16 / NumPy 2.2.6. Record versions per engine, including the
+actual contraction dependencies. Host, package and schedule differences remain
+confounders. CPU configure/build permission is distinct from SDK acceptance,
+device/scientific PASS and root's GPU scheduling authority.
 
 `7522994e…` is an evidence archive, not the measured implementation. The
 HF/DFT patch/commit comparison permits only the additional Agent Note delta.
