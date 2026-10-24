@@ -34,6 +34,7 @@
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/host_cache_budget.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -419,6 +420,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   double range_warm_energy{std::numeric_limits<double>::infinity()};
   double range_warm_energy_correction{};
   std::string range_bucket_policy, range_capacity_policy, range_selection_policy;
+  std::string range_host_policy, range_host_mask_policy, range_host_tile_policy;
 
   static std::string range_policy_value(const char* key) {
     const auto* value = std::getenv(key);
@@ -441,6 +443,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
            range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == range_selection_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES") == range_host_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK") == range_host_mask_policy &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES") == range_host_tile_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
            !runtime::active_device_resource_ledger;
   }
@@ -563,6 +568,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
                         : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
+    // Default host backing is restricted to the admitted cold strict LR
+    // source. Preserve GPU priority and leave most available job RAM unused.
+    // Explicit zero disables it; the complete numeric budget also charges VRAM.
+    const auto automatic_host = has_range_correction && source_cold_phase && !mixed_source &&
+                                        !std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES")
+                                    ? runtime::automatic_host_cache_bytes()
+                                    : 0;
+    const auto host = direct_jk_resident_bucket_policy(
+        std::getenv("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK"),
+        std::getenv("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES"), automatic_host);
+    const auto host_tile = direct_jk_resident_bucket_policy(
+        nullptr, std::getenv("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES"), 256ULL << 20);
+    if (has_range_correction &&
+        (!host.valid || !host_tile.valid ||
+         (host.ceiling && (!host_tile.ceiling || host_tile.ceiling > (512ULL << 20) ||
+                           host_tile.ceiling % sizeof(double)))))
+      throw std::invalid_argument("invalid KS host ERI cache capacity, bucket mask or tile size");
     const auto generic_fock =
         maximum_angular == 3 && scf::cuda_direct_jk_value_census_available(
                                     provider.cuda_direct_source(), source_strategy.spec);
@@ -632,7 +654,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 source_cold_phase, generic_fock, phase_source_screening,
                                 buckets.ceiling, false, auto_policy, buckets.mask, spins,
                                 (automatic_range || fitted_range_source) &&
-                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
+                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+                                has_range_correction && !mixed_source ? host.ceiling : 0, host.mask,
+                                host_tile.ceiling),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -654,6 +678,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       range_selection_policy = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES");
       range_bucket_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK");
       range_capacity_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES");
+      range_host_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES");
+      range_host_mask_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK");
+      range_host_tile_policy = range_policy_value("GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES");
     }
     phase_device_bytes = phase_source->device_bytes();
     phase_host_bytes = phase_source->capacity_bytes() - phase_device_bytes;

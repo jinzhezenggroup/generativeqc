@@ -71,8 +71,9 @@ class Scope {
   using Clock = std::chrono::steady_clock;
   struct State {
     std::string path;
-    const char* name{};
-    const char* execution{};
+    // Dynamic bucket names may be temporary caller strings. Every journal
+    // event must retain the identity emitted at BEGIN until END is written.
+    std::string name, execution;
     std::uint64_t id{};
     std::int64_t parent{-1};
     int exceptions{};
@@ -110,7 +111,8 @@ class Scope {
                    "\"parent\":%lld,\"time_ns\":%lld,\"elapsed_ms\":%.17g,"
                    "\"event\":\"%s\",\"status\":\"%s\",\"execution\":\"%s\",\"name\":",
                    static_cast<unsigned long long>(state.id), static_cast<long long>(state.parent),
-                   static_cast<long long>(ns.count()), elapsed, event, status, state.execution);
+                   static_cast<long long>(ns.count()), elapsed, event, status,
+                   state.execution.c_str());
       quoted(file, state.name);
       if (key) {
         std::fputs(",\"key\":", file);

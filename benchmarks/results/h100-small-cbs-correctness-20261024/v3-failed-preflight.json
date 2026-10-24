@@ -1,0 +1,41 @@
+{
+  "scope": "actual failed V3 admission, not numerical/CUDA SDK failure",
+  "job_name": "h100-small-cbs-20261024-e7f7-v1",
+  "created_at_raw": "1792861634000",
+  "terminal": "FAILED",
+  "root_release_published": false,
+  "science_output_exists": false,
+  "science_attempt_files": [],
+  "actual_scientific_calls": 0,
+  "cause": "strict env nameset mismatch: one additional independently source-derived pyc",
+  "added": [
+    {
+      "path": "env/lib/python3.11/site-packages/_distutils_hack/__pycache__/__init__.cpython-311.pyc",
+      "bytes": 12035,
+      "mode": "0o644",
+      "mtime_ns": 1792857548274673000,
+      "sha256": "b3ce65a9a3fd88d965dc760bbfc7d555cfb8e51cf3f2e84990efef2a51c4b97f"
+    }
+  ],
+  "old_expected_env_files": 16376,
+  "observed_env_files": 16377,
+  "source_evidence": {
+    "job-terminal-status.json": {
+      "bytes": 939,
+      "sha256": "d03d929bbfc1c7b0a5395efd5695ffe92ab78eafe70291a09484fe0dc456b427"
+    },
+    "job-terminal-logs.json": {
+      "bytes": 5414,
+      "sha256": "c4c3984e3069aa5a7429cd06e4af1a4e349be5df41f289d2aea71cedaa960d39"
+    },
+    "env-name-delta.json": {
+      "bytes": 1892,
+      "sha256": "c1580f748d7f8de63f2adf6c2769338f7fb84ed9cac0ea1c4e01b632d6a5cb9c"
+    },
+    "pyc-proof.json": {
+      "bytes": 1429,
+      "sha256": "325cbf4cd832f8fd60d70c7352bcdde51a5c7e4a8b35841b8dc4be1b73ddd858"
+    }
+  },
+  "next_attempt_authority": "ABSENT; new candidate is HOST-only, no automatic resource/science retry"
+}

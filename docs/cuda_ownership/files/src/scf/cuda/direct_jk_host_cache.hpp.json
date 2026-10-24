@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_jk_host_cache.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Bounded pageable/pinned/device ERI storage and stream lifetime; no integral equations.",
+  "regions": []
+}
