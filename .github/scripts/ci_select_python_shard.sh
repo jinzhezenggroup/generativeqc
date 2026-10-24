@@ -361,6 +361,12 @@ core_hotspots_a=(
   # completed in 20m49s in the latter. Keep the intact ~305-worker-second
   # Lambda reuse module on core-a without removing its ordinary slot.
   tests/python/test_df_lambda_core_reuse.py
+  # Run 40127914199 completed core-c tests at 1798.9s, leaving no
+  # reporting margin, while core-a finished in 16m. Move these intact
+  # ~477-worker-second modules, preserving all ordinary modulo slots
+  # and the distinct existing fresh-priority owners.
+  tests/python/test_correlation_convergence.py
+  tests/python/test_cpu_semilocal_force_contract.py
   # Run 39378471974 timed out core-c with no recorded failures while core-a
   # finished in 17m45s. Transfer the complete corrected-Lambda family
   # (965 observed worker-seconds), preserving its priority and ordinary slots.
