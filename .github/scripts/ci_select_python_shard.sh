@@ -353,6 +353,10 @@ core_fresh_frontier_a=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
+  # Run 40085506217 exhausted core-c at 99%; core-a finished in 15m13s.
+  # Move the intact C++ closure audit (~460 observed worker-seconds),
+  # retaining its ordinary modulo slot and every test/acceptance gate.
+  tests/python/test_bulk_aot_clangxx_closure.py
   # Run 39378471974 timed out core-c with no recorded failures while core-a
   # finished in 17m45s. Transfer the complete corrected-Lambda family
   # (965 observed worker-seconds), preserving its priority and ordinary slots.

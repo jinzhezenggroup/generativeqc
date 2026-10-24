@@ -1,0 +1,7 @@
+{
+  "path": "src/solver/diis_affine.hpp",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Shared CPU/CUDA normalized-KS Pulay solve: partial-pivot forward elimination and back substitution, followed by a finite FP64 affine residual check with a cancellation-aware summation bound. The caller owns chronological retirement, current-Fock fallback and history transport.",
+  "regions": []
+}
