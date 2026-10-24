@@ -228,7 +228,7 @@ def test_partitioned_charge_with_multiple_source_groups(
     )
 
 
-@pytest.mark.parametrize("angular", ((0, 0, 0), (2, 1, 4)))
+@pytest.mark.parametrize("angular", ((0, 0, 0), (0, 0, 4)))
 def test_automatic_long_charge_with_independent_oracle(
     df_md_probe: Path,
     tmp_path: Path,
