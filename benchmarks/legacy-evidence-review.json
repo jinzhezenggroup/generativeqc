@@ -22,7 +22,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue308-device-diis": {
@@ -66,7 +66,7 @@
       "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -162,7 +162,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "df-md-charge-splits-20261023": {
@@ -391,6 +391,11 @@
       "owner": "Fast hybrid proposal-source floor refinement",
       "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
       "review_document": "benchmarks/results/fast-source-floor-20261024/README.md"
+    },
+    "readme-final-20261024": {
+      "owner": "README complete HF/DFT endpoint comparison",
+      "reason": "Complete 192-population receipts retain all 768 timed E/F calls, including numerical failures, full forces, work counts and source/binary/Slurm identity. Accuracy does not filter the performance figures. Compact records remain within unchanged retention limits.",
+      "review_document": "benchmarks/results/readme-final-20261024/README.md"
     }
   },
   "files": [
@@ -921,6 +926,30 @@
       "role": "integrated-source-endpoints-with-authenticated-reference-reuse",
       "bytes": 145788,
       "sha256": "003b9fbf7fe750c6585b90349bd40c02a2b2a40da40e310e5a5ff35c7101b081"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/fast.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 240568,
+      "sha256": "1adbb7c58871bc48c0a3e9b4a6595432bcab2c8cc155d46d01cd4fdff49a468e"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/gpu4pyscf.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 188308,
+      "sha256": "eb73f614ddd36160ff5274f939488bf9997892925b2b6972c59c28519ebdc13a"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261024/standard.json.xz",
+      "family": "readme-final-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless complete endpoint receipts or source-matched qualification provenance, including failures and full observable vectors",
+      "bytes": 212060,
+      "sha256": "afa9bbe6670e1dcc335dfdc9ccaf1bda37bb1951dff0bdc66e824f04125d0491"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

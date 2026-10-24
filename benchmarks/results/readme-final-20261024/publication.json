@@ -1,0 +1,125 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "92674610bac506d76b762bc30594e72aae0a1baa",
+    "dirty": false
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "All complete latency observations are visible; independent accuracy failures and slower cases remain retained. This campaign does not establish universal superiority."
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/readme-final-20261024/reproduce.py",
+      "--output",
+      ".artifacts/readme-final-replay"
+    ]
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 4243,
+      "sha256": "517add9da8afbf889325e835ee4a955afb5ced9a905a9392d805cefec269f682"
+    },
+    {
+      "path": "auxiliary-inputs.json.xz",
+      "role": "input",
+      "bytes": 3072,
+      "sha256": "707aaace01581e42ca9b1ba9bc924a9e739e73cc0ae337807012449589780862"
+    },
+    {
+      "path": "comparisons.json.xz",
+      "role": "summary",
+      "bytes": 7824,
+      "sha256": "53a24962313f074356143f3c090a5bd8b6f55bf2a1a5d58be55e32b406dea621"
+    },
+    {
+      "path": "conditions.md",
+      "role": "summary",
+      "bytes": 7333,
+      "sha256": "da6476fc61986749e0537feb6a3a9fea5a2b63d1673680dca7468c24434e70de"
+    },
+    {
+      "path": "fast.json.xz",
+      "role": "samples",
+      "bytes": 240568,
+      "sha256": "1adbb7c58871bc48c0a3e9b4a6595432bcab2c8cc155d46d01cd4fdff49a468e"
+    },
+    {
+      "path": "gpu4pyscf.json.xz",
+      "role": "samples",
+      "bytes": 188308,
+      "sha256": "eb73f614ddd36160ff5274f939488bf9997892925b2b6972c59c28519ebdc13a"
+    },
+    {
+      "path": "jobs.json.xz",
+      "role": "summary",
+      "bytes": 8504,
+      "sha256": "e037b97317e27878b827c7e7d403f2aeb75831788a01fba5d67c018aea97e99b"
+    },
+    {
+      "path": "oracles.json.xz",
+      "role": "input",
+      "bytes": 56528,
+      "sha256": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4"
+    },
+    {
+      "path": "provenance.json.xz",
+      "role": "summary",
+      "bytes": 26880,
+      "sha256": "4e2cc0c1393688778d8627cfe29beba3ec741839d5cd3be242ddca8d97a96b36"
+    },
+    {
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "bytes": 31348,
+      "sha256": "9d546258ea79f6e8a69800133e27ae2e06b51ed24d12c34f7c43327f19a7ab8d"
+    },
+    {
+      "path": "reference-reuse.json",
+      "role": "input",
+      "bytes": 17138,
+      "sha256": "819d7b4223c8f843ab7765d9835c79fd26d06e46572c1133d70c7cf62129b0ac"
+    },
+    {
+      "path": "regressions.json.xz",
+      "role": "summary",
+      "bytes": 83484,
+      "sha256": "d7e69b44685c616735cea177cae91ee2d1790b3c931f059c53aeadfbd1a8ca1f"
+    },
+    {
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "bytes": 3825,
+      "sha256": "551cc19b379306e97837ece568306850fafd3b0b132b01a4025c6d559d95aea6"
+    },
+    {
+      "path": "standard.json.xz",
+      "role": "samples",
+      "bytes": 212060,
+      "sha256": "afa9bbe6670e1dcc335dfdc9ccaf1bda37bb1951dff0bdc66e824f04125d0491"
+    },
+    {
+      "path": "timings.md",
+      "role": "summary",
+      "bytes": 20865,
+      "sha256": "4edef5ba0fa2d5fbf3a534b351cc4d86ecaab03f4cf97ba7bed445bf418adc3f"
+    },
+    {
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "bytes": 5132,
+      "sha256": "894050103077fd4c2e1d177d2bef4d7ff9853c2819475623a8b7c009528a6ee8"
+    },
+    {
+      "path": "work.md",
+      "role": "summary",
+      "bytes": 15930,
+      "sha256": "36457db5402686f7eb14a8501c9a18405d74025567e8076010f4eb541042086e"
+    }
+  ]
+}

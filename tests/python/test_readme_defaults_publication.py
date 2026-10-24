@@ -6,6 +6,8 @@ import json
 import lzma
 from pathlib import Path
 
+import pytest
+
 from benchmarks.readme_defaults import ARMS, MEASUREMENT_ARMS, METHODS, SIZES
 from benchmarks.readme_defaults_qualification import qualify
 from benchmarks.readme_defaults_report import load_records, reduce_record
@@ -71,11 +73,12 @@ def test_default_campaign_retains_complete_inventory_and_actual_work() -> None:
     assert reduce_record(failed)["warm"] is None
 
 
-def test_current_campaign_recomputes_independent_gates_and_complete_inventory() -> None:
+@pytest.mark.parametrize("campaign", ("readme-final-20261022", "readme-final-20261024"))
+def test_current_campaign_recomputes_independent_gates_and_complete_inventory(
+    campaign: str,
+) -> None:
     """An edited pass flag or receipt cannot silently change the README evidence."""
-    directory = (
-        Path(__file__).resolve().parents[2] / "benchmarks/results/readme-final-20261022"
-    )
+    directory = Path(__file__).resolve().parents[2] / "benchmarks/results" / campaign
     manifest = json.loads((directory / "publication.json").read_bytes())
     files = {
         entry["path"]: (directory / entry["path"]).read_bytes()
@@ -105,7 +108,14 @@ def test_current_campaign_recomputes_independent_gates_and_complete_inventory() 
         == 1
     )
     for record in records:
+        assert record["status"] == "complete"
         assert record["warm_repeats"] == 3
+        assert [sample["phase"] for sample in record["samples"]] == [
+            "cold",
+            "warm",
+            "warm",
+            "warm",
+        ]
         assert record["protocol"]["grid_overrides"] is False
         assert record["protocol"]["force_response_overrides"] is True
         assert record["protocol"]["moved_geometry"] is False
