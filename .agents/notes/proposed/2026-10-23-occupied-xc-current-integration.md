@@ -3,6 +3,8 @@
 Status: current integration qualified; retained opt-in, no default promotion
 Date: 2026-10-23
 
+The later [automatic-policy decision](../implemented/performance/2026-10-24-automatic-occupied-xc.md) qualifies a new source population and supersedes the opt-in policy below. The original measurements and decision remain historical.
+
 ## Source and scope
 
 Reuse the compiler/native implementation and executable tests from PR #2577,

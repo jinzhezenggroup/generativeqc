@@ -340,7 +340,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool occupied_xc_frame_ready{};
   const bool occupied_xc_requested = [] {
     const auto* value = std::getenv("GENERATIVEQC_CUDA_KS_OCCUPIED_XC");
-    return value && value[0] == '1' && value[1] == '\0';
+    // Request the existing exact-frame route automatically. Admission still
+    // requires the canonical frame that formed this D, strict FP64 meta-GGA
+    // work, and a smaller occupied domain; explicit 0 restores matrix products.
+    return !value || (value[0] == '1' && value[1] == '\0');
   }();
   // Only this immutable owner can create a factor-backed warm seed. A separate
   // storage tag survives frozen replays and provider scratch/force writes.

@@ -84,6 +84,20 @@ arithmetic contract.
 
 ## Explicit native execution
 
+The CUDA KS owner automatically requests occupied-orbital density features for
+eligible strict-FP64 meta-GGA proposals. Only the token-bound canonical frame
+that actually formed the accepted density can supply the four orbital jets,
+and a tile uses it only when its occupied rank is smaller than its active AO
+count. Existing density scratch holds the projection; potential assembly still
+uses the original AO jets. No extra allocation or screening change is required.
+
+Every completion retires that frame lease. Held confirmations, rejected probes,
+imported densities, mixed precision, nonlocal and response work, and missing or
+stale frames retain matrix contraction. LDA/GGA's one-jet route is unchanged.
+`GENERATIVEQC_CUDA_KS_OCCUPIED_XC=0` disables the request for comparison or
+rollback; unset or `1` requests it without bypassing any admission check.
+Other explicit values also retain matrix contraction.
+
 The CUDA density-feature reduction uses one warp per spin/grid point for
 32 or more AOs. Lanes traverse adjacent AO components and reduce the existing
 generated rho/gradient/tau contributions in FP64; smaller AO spaces retain
