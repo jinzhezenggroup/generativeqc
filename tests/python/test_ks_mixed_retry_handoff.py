@@ -120,6 +120,8 @@ struct CudaXcView {};
 const double* expected_density = nullptr;
 struct Xc {
   int semilocal = 0, features = 0, potentials = 0;
+  struct PointBatch { std::size_t tiles = 1, device_bytes = 0; };
+  PointBatch point_batch_plan() const { return {}; }
   template<class... T> void enqueue(const double* density, T...) {
     require(density == expected_density, "XC received a delta density"); ++semilocal;
   }
@@ -180,6 +182,7 @@ struct Owner {
   int *nonlocal_domain_error{};
   std::size_t elements = 1;
   struct { std::size_t npoint = 24; } xc_layout;
+  struct { std::size_t point_ao_visits = 24, point_ao_square_sum = 24; } prepared_ao_work;
   struct { std::size_t point_count() const { return 12; } } nonlocal_grid;
   std::unique_ptr<Xc> nonlocal_xc;
   unsigned merges = 0;

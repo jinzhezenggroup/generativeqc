@@ -1887,16 +1887,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // The optional semilocal execution copy changes only point order and
         // is excluded under a public ledger until a fleet planner reserves it.
         const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
-        // Unset selects the qualified spatial schedule; explicit 0 keeps the
-        // canonical execution order for diagnostics and paired comparisons.
-        if ((!spatial_choice || std::string_view(spatial_choice) == "1") && admit_ao &&
+        // Unset/1 keeps qualified center grouping; 2 is the explicit tile-aligned
+        // bisection candidate. Explicit 0 keeps canonical execution order.
+        const bool bisected = spatial_choice && std::string_view(spatial_choice) == "2";
+        if ((!spatial_choice || std::string_view(spatial_choice) == "1" || bisected) && admit_ao &&
             borrow_resident_grid && !nonlocal_correlation &&
             !runtime::active_device_resource_ledger) {
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
                                          sizeof(std::size_t)));
-          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes);
+          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes, bisected);
           resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
         }
         if (admit_ao) {
@@ -1944,8 +1945,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         const auto point_batch_tiles = point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 32);
         if (point_batch_tiles > 1) {
           constexpr std::size_t incumbent_point_batch_budget = 32 * 1024 * 1024;
+          // GGA keeps four AO jets even though its density product needs only
+          // one. Charge the optional capacity by the larger live panel width
+          // so AO storage does not collapse otherwise eligible point batches.
+          // Explicit caps and the bounded allocation retry below stay exact.
           const auto automatic_point_batch_budget =
-              product(incumbent_point_batch_budget, xc_layout.work_jets);
+              product(incumbent_point_batch_budget, std::max(xc_layout.jets, xc_layout.work_jets));
           const auto point_batch_budget =
               point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", automatic_point_batch_budget);
           const bool explicit_point_batch_budget =
@@ -2911,6 +2916,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::TraceOperation trace("cuda_ks_xc_shared", stream, {1, n, 0, false, false});
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
+      // Report retained capacity separately from semantic AO work. These
+      // host-side plan facts add no device counter, launch or synchronization.
+      const auto& point_batch = xc->point_batch_plan();
+      runtime::cuda_trace::trace_counter("xc_point_batch_tiles", point_batch.tiles);
+      runtime::cuda_trace::trace_counter("xc_point_batch_bytes", point_batch.device_bytes);
+      runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
+      runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
+                                         prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
       if (occupied_xc_requested && occupied_xc_frame_ready && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision()) {
