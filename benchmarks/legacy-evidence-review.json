@@ -367,6 +367,11 @@
       "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
       "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md"
     },
+    "xc-bounded-cross-20261024": {
+      "owner": "bounded FP64 XC cross-product overflow proof",
+      "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
+      "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
+    },
     "vv10-reuse-ablation-20261023": {
       "owner": "VV10 same-binary reuse ablation (#2677)",
       "reason": "Lossless complete activated generated source, original Git-LF SDK source/runtime identities and the original failed intrusive journal are required audit/replay inputs. Original bytes, modes and SHA identities remain recoverable; old failure and mixed protocol/hardware limits remain explicit. Storage review does not promote performance/defaults or re-accept the failed original protocol.",
@@ -829,6 +834,22 @@
       "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
       "bytes": 472836,
       "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-and-independent-moved-references",
+      "bytes": 534772,
+      "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-build-test-and-execution-provenance",
+      "bytes": 597596,
+      "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
       "path": "benchmarks/results/vv10-reuse-ablation-20261023/control-activated-code-provenance.json.xz",
