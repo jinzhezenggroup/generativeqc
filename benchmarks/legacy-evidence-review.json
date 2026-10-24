@@ -362,6 +362,16 @@
       "review_document": "benchmarks/results/occupied-xc-default-20261024/README.md",
       "reason": "Lossless complete observables, all noisy and failed-control cohorts, independent qualification inputs, frozen source/binary bindings and exact protocols are needed to recheck the guarded occupied-XC default. A 730016-byte XZ bundle avoids copying full source tarballs, binaries and Nsight databases into Git; those stay in the existing ignored qualification archive. No acceptance samples or numerical gates are removed."
     },
+    "scf-convergence-probes-20261024": {
+      "owner": "SCF/DFT convergence and complete-endpoint diagnosis",
+      "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
+      "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md"
+    },
+    "xc-bounded-cross-20261024": {
+      "owner": "bounded FP64 XC cross-product overflow proof",
+      "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
+      "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
+    },
     "fast-source-floor-20261024": {
       "owner": "Fast hybrid proposal-source floor refinement",
       "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
@@ -816,6 +826,30 @@
       "role": "Complete E/F receipts, source manifests, tests, protocols and selected trace evidence for default promotion; includes original noisy cohorts and initial failed policy assertion.",
       "bytes": 730016,
       "sha256": "485742900892278eee58d927c699711ba336d1fb5d14da352648fda98482546d"
+    },
+    {
+      "path": "benchmarks/results/scf-convergence-probes-20261024/evidence.json.xz",
+      "family": "scf-convergence-probes-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
+      "bytes": 472836,
+      "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-and-independent-moved-references",
+      "bytes": 534772,
+      "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-build-test-and-execution-provenance",
+      "bytes": 597596,
+      "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
       "path": "benchmarks/results/fast-source-floor-20261024/qualification.json.xz",

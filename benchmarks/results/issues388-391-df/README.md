@@ -291,3 +291,10 @@ run script and build hashes retain that distinction.
 Raw logs, temporary restart checkpoints, libraries, objects and profiler
 databases remain outside Git. The reviewed records preserve numerical samples
 and hashes; every retained file stays below the 1 MiB limit.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/xc-bounded-cross-20261024/history-storage.json --output
+.artifacts/xc-bounded-cross-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.
