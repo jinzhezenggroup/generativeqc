@@ -532,6 +532,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     unsigned maximum_angular = 0;
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+    // The fitted composition qualifies generated SPD consumers only. Higher
+    // angular sources require their own primary-provider census/consumer proof.
+    if ((fitted_coulomb || fitted_exchange) && fitted_range_source && maximum_angular > 2) return;
     // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
@@ -598,6 +601,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     required = sum(required, provider.cpu_observation_capacity());
     required = sum(required, provider.diagnostic().direct.host_preparation_bytes);
     if (fitted_range_source) {
+      // Device bytes already include both prepared providers. Their separate
+      // host observations/preparation must also precede optional admission.
       required = sum(required, range_provider->cpu_observation_capacity());
       required = sum(required, range_provider->diagnostic().direct.host_preparation_bytes);
     }

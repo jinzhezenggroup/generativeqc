@@ -139,11 +139,15 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
     // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
     // The primary provider needs its established allowance even when it also
     // owns derivatives; tightening that cap can silently evict its MD-J source.
+    // A lazy exchange-only derivative lease never consumes MD-J values.
+    // Reserving that optional Coulomb engine here can reject the complete
+    // force before allocation, even though the bounded derivative fits. Its
+    // core capacity remains charged; only SCF retains the optional J margin.
     const auto cartesian_nao =
         purpose == KsProviderPurpose::derivative_only ? molecule::cartesian_ao_count(system) : 0U;
-    return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
-                                                 system.shells.size(), primitives,
-                                                 direct_derivative_order, true, cartesian_nao);
+    return scf::cuda_direct_coulomb_device_bytes(
+        1, molecule::ao_count(system), system.atoms.size(), system.shells.size(), primitives,
+        direct_derivative_order, purpose == KsProviderPurpose::scf, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;

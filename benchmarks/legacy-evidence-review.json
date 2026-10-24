@@ -391,6 +391,11 @@
       "owner": "bounded automatic SM 12.0 DF charge-source partitions",
       "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
       "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
+    },
+    "fitted-range-cold-20261024": {
+      "owner": "bounded fitted-primary exact range cold endpoint qualification",
+      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
+      "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md"
     }
   },
   "files": [
@@ -905,6 +910,22 @@
       "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
       "bytes": 392256,
       "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
+      "family": "fitted-range-cold-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
+      "bytes": 587736,
+      "sha256": "46b5560fe1a50cc40c50f4d45788ffe19475a6f747387ae439333bb03598067b"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
+      "family": "fitted-range-cold-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "current-parent-complete-observables-and-source-build-test-receipts",
+      "bytes": 717272,
+      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
