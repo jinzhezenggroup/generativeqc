@@ -171,6 +171,10 @@ def _emit_packed_fock_consumer_cuda(
     )
     component_names = _emitted_component_names(spec)
     task_width = plan.schedule.tasks_per_block
+    # A single-warp queue needs warp-scoped publication and reconvergence, even
+    # when only some lanes own a tail task. All lanes reach both barriers; wider
+    # queues still need a CTA barrier before the next shared claim is published.
+    queue_barrier = "__syncwarp();" if task_width == 32 else "__syncthreads();"
     lane_storage_declaration = (
         "GeneratedDpppPackedFockLaneStorage lane_storage;"
         if lane_private
@@ -343,7 +347,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_persistent(
   {lane_storage_declaration}
   while (true) {{
     if (threadIdx.x == 0U) task_base = atomicAdd(task_head, {task_width}U);
-    __syncthreads();
+    {queue_barrier}
     if (task_base >= *task_count) return;
     const std::uint32_t task_index = task_base + threadIdx.x;
     if (task_index < *task_count) {{
@@ -353,7 +357,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_persistent(
           static_cast<std::size_t>(*task_offset + task_index),
           {lane_storage_reference});
     }}
-    __syncthreads();
+    {queue_barrier}
   }}
 }}
 
