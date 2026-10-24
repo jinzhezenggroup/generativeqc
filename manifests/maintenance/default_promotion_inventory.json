@@ -2117,7 +2117,8 @@
         ".agents/notes/implemented/performance/2026-10-25-default-host-eri-capacity.md",
         "benchmarks/results/host-lr-eri-20261025/README.md",
         "tests/python/test_host_cache_budget.py",
-        "tests/python/test_range_resident_ks_cuda.py"
+        "tests/python/test_range_resident_ks_cuda.py",
+        "benchmarks/results/host-lr-eri-20261025/DEFAULT.md"
       ]
     },
     {
