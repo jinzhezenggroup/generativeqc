@@ -1,0 +1,188 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "4a783a27e104e9392a7227b7efca79abcfba60ae",
+    "dirty": true
+  },
+  "decision": {
+    "scope": "numerical",
+    "status": "accepted",
+    "reason": "Six-molecule independent energy slice PASS; force qualification and parent #2679 remain open"
+  },
+  "files": [
+    {
+      "path": "comparison.json",
+      "role": "summary",
+      "bytes": 12618,
+      "sha256": "29ae23f00db0693d20173290e7d4ecf4576f30014ffb8b491303c18f86b138df"
+    },
+    {
+      "path": "environment.json",
+      "role": "summary",
+      "bytes": 8767,
+      "sha256": "dd5cfa16e43b99329f160fcecc01a3263dba42387d63f15011d1605a77d618f3"
+    },
+    {
+      "path": "environment.py",
+      "role": "reproduction",
+      "bytes": 1564,
+      "sha256": "f23cf035b8f7be7ffef4de890a8e862a71992a69a3d4a2db2e2ab81d3b9263c1"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 17312,
+      "sha256": "ec0ab3dd0eb5696cf21f64f70b8a27b523f796e37627d25b891aaaa19a060ef0"
+    },
+    {
+      "path": "failures/C1-2-log.txt.xz",
+      "role": "samples",
+      "bytes": 4900,
+      "sha256": "8ac9199737d126dbdb57ee1cf49d683eec4fed6d7bc4a0b118b81bb4ddc3fc8b"
+    },
+    {
+      "path": "failures/C1.json.xz",
+      "role": "samples",
+      "bytes": 2836,
+      "sha256": "f7b0aeee9ca0ec9bbf61e3f7159599670603358b67e46a1b2e349cf5012f075a"
+    },
+    {
+      "path": "failures/C1.outcome.json.xz",
+      "role": "samples",
+      "bytes": 100,
+      "sha256": "be0ddd92f0944c88bdbfd2bda3171c0cc4ef3b06e632fd4f8982bb7617d6b3d3"
+    },
+    {
+      "path": "failures/C1.stdout-log.txt.xz",
+      "role": "samples",
+      "bytes": 376,
+      "sha256": "e79c31d59ed645b4531ef621c7aad410281effb4333078d3af231c4ea19228d2"
+    },
+    {
+      "path": "inputs-measured.json.xz",
+      "role": "input",
+      "bytes": 4492,
+      "sha256": "73c55b4050f98e7659841e984222b8265a1ce343e530406e84956138706e96c0"
+    },
+    {
+      "path": "inputs.json",
+      "role": "input",
+      "bytes": 25487,
+      "sha256": "1428293b6f07dfe5399c293bf7c6b8ec208e8fd885f7b2500a738b2b24f693cb"
+    },
+    {
+      "path": "oracle-attempt1.py.xz",
+      "role": "reproduction",
+      "bytes": 3128,
+      "sha256": "b894c8615da1848dd95d41bbbb1599b038fa1ee418c3f91027ffaf59a32dcac3"
+    },
+    {
+      "path": "oracle-source.patch.xz",
+      "role": "source-patch",
+      "bytes": 8600,
+      "sha256": "c6c7b3c692af1654929349d1f5e95f147800238929db7152b9562da078f666b4"
+    },
+    {
+      "path": "oracle.py",
+      "role": "reproduction",
+      "bytes": 10182,
+      "sha256": "640e26e07c8c9271b12cb50eb159c829e987bd75b349b021cf9b0d70335a17d0"
+    },
+    {
+      "path": "package.py",
+      "role": "reproduction",
+      "bytes": 9390,
+      "sha256": "fe0fb4e355b2654aa2b6e0392976ddb36f826d9bc97903facacad04dda0c1fd5"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 8385,
+      "sha256": "009dcecb34407ca261bffa92a4ea7bd0b3282aef48049d0fd500f335ba5f251a"
+    },
+    {
+      "path": "receipts/C1.json.xz",
+      "role": "samples",
+      "bytes": 9728,
+      "sha256": "1777837e90e05ca8c14a7ae11207cfe4dea43b01ad89003668f1840a2575314e"
+    },
+    {
+      "path": "receipts/C3.json.xz",
+      "role": "samples",
+      "bytes": 10672,
+      "sha256": "59d9d7f829e23261252e2f3faa873f07b15c36eb6f5b3134aba465db03159840"
+    },
+    {
+      "path": "receipts/C4.json.xz",
+      "role": "samples",
+      "bytes": 10840,
+      "sha256": "0b227bd0db008499ed68cbc3dbd93b7fc717e69c95946ced38d3a290bd5bb089"
+    },
+    {
+      "path": "receipts/C5.json.xz",
+      "role": "samples",
+      "bytes": 11228,
+      "sha256": "dc6dbf6c72bdc64ae6c7862f0b0888ef2b3f7952cac137da8290126b6cfe4c62"
+    },
+    {
+      "path": "receipts/C6.json.xz",
+      "role": "samples",
+      "bytes": 11768,
+      "sha256": "91fcc1845b4e2524f918300cf13eb06a5902e26fac761a70667b0bb3cfdcc993"
+    },
+    {
+      "path": "receipts/C7.json.xz",
+      "role": "samples",
+      "bytes": 11704,
+      "sha256": "281dce25dbabc8f623383f16d2e72c69ea57ff3eac6e0e439fbfb56b39924617"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 11340,
+      "sha256": "23752a7ae244e43df34391aa210ed121a22b41455246cc3a5e82c23365d1cfed"
+    },
+    {
+      "path": "run-oracle-measured.sh.xz",
+      "role": "reproduction",
+      "bytes": 708,
+      "sha256": "e4c3fbcfbac78fe9b86df82f4d31a89ac9c222a75c04ebb63ea1f7e9cb2b2d56"
+    },
+    {
+      "path": "run-oracle.sh",
+      "role": "reproduction",
+      "bytes": 1489,
+      "sha256": "464f184b71452f82b1497452512b878342377531085380555dda61194c060fdf"
+    },
+    {
+      "path": "run-suite.sh",
+      "role": "reproduction",
+      "bytes": 519,
+      "sha256": "10494286a1f94f63920803291a0f19b47178f319d07e2adb751d205d67e10cfa"
+    },
+    {
+      "path": "runner-retry-check.json.xz",
+      "role": "samples",
+      "bytes": 1600,
+      "sha256": "7a44a65dd660a876c6d165b5843c70f6cd002dd473966fcd50041fadc43ca5fa"
+    },
+    {
+      "path": "test_run_oracle.py",
+      "role": "reproduction",
+      "bytes": 6310,
+      "sha256": "ea2056bd215401e0bd3c18dfe2eafb117a60aedb1e300c828d7b422ffa2822ba"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-independent-energy-20261023/replay.py",
+      "--receipts",
+      "benchmarks/results/cbs-independent-energy-20261023/receipts",
+      "--output",
+      "comparison-replay.json",
+      "--require-pass"
+    ]
+  }
+}

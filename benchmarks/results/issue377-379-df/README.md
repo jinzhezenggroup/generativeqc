@@ -156,3 +156,23 @@ bytes. Their expanded SHA-256 values remain
 `08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569`
 and `33164661464fc63b15e277d97755053cec3188f7063e0219624a41676b955aa6`,
 respectively. No measured values, scientific decisions or source identities change.
+
+The 2026-10-23 storage-only update retains nine original endpoint records,
+including both rejected schedules, in `endpoint-receipts.json.xz`. The adjacent
+manifest authenticates every original byte, size and SHA-256. Restore the exact
+original filenames before using historical scripts:
+
+```bash
+python benchmarks/results/issue377-379-df/restore-endpoints.py \
+  --output .artifacts/issue377-379-df
+```
+
+No observation, failed gate, numerical array, source identity or storage cap
+changes. Other source/profile/reference records remain at their existing paths.
+
+Historical JSON payloads are retained byte-exact in compressed storage. For
+original-name readers, restore the authenticated Git snapshot with
+`python tools/restore_retained_evidence.py --all --manifest
+benchmarks/results/scf-validation-gemm-20261024/history-storage.json --output
+.artifacts/scf-validation-gemm-history` from the repository root; the destination
+must not exist. This storage change does not alter numerical evidence.

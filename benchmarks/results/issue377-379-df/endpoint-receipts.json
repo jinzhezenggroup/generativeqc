@@ -1,0 +1,43 @@
+{
+  "schema": "generativeqc.historical-json-text-bundle.v1",
+  "bundle": "endpoint-receipts.json.xz",
+  "bundle_sha256": "a51fd40fbad422140195feb591a8cc03de1b63e1d7e90e09eebb494afcc265ee",
+  "files": {
+    "96-exchange.json": {
+      "bytes": 28256,
+      "sha256": "973e0fc5487f2d0eaf06ac4b2d4fe22f661ab233bcffcbf125aadd0d323dff1e"
+    },
+    "192-exchange.json": {
+      "bytes": 37114,
+      "sha256": "e4ca0845a9a838c6c106656f0686d40e3fa967ac21fa40e7b13bcb174168cbc3"
+    },
+    "192-response.json": {
+      "bytes": 37141,
+      "sha256": "75adcf293fcc66c30badcc5e9125cc7614224b7ee7f17b6cddcd27b3a95cedc3"
+    },
+    "384-exchange.json": {
+      "bytes": 55040,
+      "sha256": "52ddc3ed9195307a4ff24cbdd90d1f0bbb7bad6143908811b2f45fba19645637"
+    },
+    "384-response.json": {
+      "bytes": 55358,
+      "sha256": "eab6ba72ae0d639bdaded8eee057153c5180dd7063f38eed14a4c188299ec27c"
+    },
+    "master-768-exchange.json": {
+      "bytes": 84220,
+      "sha256": "911028eef49ae4ba5330a8f5f97f82f7c0fe6999b1348f17712288569bf8eaba"
+    },
+    "qualified-768-response.json": {
+      "bytes": 91231,
+      "sha256": "6d469e43c6dea3178dd52a40fc36d70093c417c8e6c35fef68e89f0710621e43"
+    },
+    "rejected-small-panel-768.json": {
+      "bytes": 91271,
+      "sha256": "48467a239c09e2a964e4c1afb76fbd7fe2f71a6957a473fb8cbbccdf69fc6b3b"
+    },
+    "rejected-resident-export-768.json": {
+      "bytes": 90874,
+      "sha256": "4c3b6e20dbb885652587bd3e9a764e374e37c78f20fdb514c1cb86d2e76433fb"
+    }
+  }
+}

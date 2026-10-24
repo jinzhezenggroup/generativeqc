@@ -443,6 +443,26 @@ void retained_direct_derivative_reuse() {
           detail.c_str());
   matrix(prepared_hcore, expected_hcore, "resident prepared hcore derivative");
   matrix(prepared_pulay, expected_pulay, "resident prepared Pulay derivative");
+  // Fitted stationary owners use the standalone paired bridge with borrowed
+  // final D/W. Its policy-selected schedules must preserve both independent
+  // source channels and must never upload the resident weights again.
+  for (const unsigned schedule : {0U, 1U, 2U, 3U}) {
+    std::vector<double> scheduled_hcore, scheduled_pulay;
+    OneElectronGradientResources scheduled_resources;
+    require(execute_cuda_stationary_one_electron_pair(
+                derivative.device_id, system, {}, {}, schedule, 8U << 20, scheduled_hcore,
+                scheduled_pulay, detail, &scheduled_resources, device_density,
+                device_weighted_density) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    matrix(scheduled_hcore, expected_hcore, "resident scheduled hcore derivative");
+    matrix(scheduled_pulay, expected_pulay, "resident scheduled Pulay derivative");
+    require(
+        scheduled_resources.device_bytes <= (8U << 20) &&
+            scheduled_resources.host_numeric_bytes <= (8U << 20) &&
+            scheduled_resources.stream_synchronizations == 1 &&
+            scheduled_resources.device_to_host_bytes == 6 * system.atoms.size() * sizeof(double),
+        "paired scheduled one-electron source exceeded its resource contract");
+  }
   require(prepared_resources.device_bytes == 0 && prepared_resources.host_to_device_bytes == 0 &&
               prepared_resources.device_to_host_bytes == 6 * system.atoms.size() * sizeof(double) &&
               prepared_resources.stream_synchronizations == 1,
