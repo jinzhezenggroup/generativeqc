@@ -10,8 +10,9 @@ import pytest
 @pytest.mark.parametrize(
     "policy", ["full", "partial", "refused", "auto", "auto-refused"]
 )
+@pytest.mark.parametrize("fitted", (False, True))
 def test_range_source_preserves_complete_geometry_and_warm_results(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, fitted: bool
 ) -> None:
     """Exercise real source consumption, derivatives, retirement and new geometry.
 
@@ -67,6 +68,8 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             basis_representation="spherical",
             device="cuda",
             precision="fp64",
+            density_fitting="cuda" if fitted else None,
+            auxiliary_basis="cc-pvdz-jkfit" if fitted else None,
             max_iterations=100,
             energy_tolerance=1e-12,
             density_tolerance=1e-10,
@@ -95,7 +98,10 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         consumed = [
             r["value"] for r in rows if r.get("key") == "phase_resident_fock_actions"
         ]
-        if enabled and policy not in {"refused", "auto-refused"}:
+        admitted = enabled and policy not in {"refused", "auto-refused"}
+        # Fitted primary plus exact LR is an explicit composition candidate;
+        # automatic selection must retain its existing fallback.
+        if admitted and not (fitted and policy == "auto"):
             assert any(built) and any(consumed), "optional source was never consumed"
         else:
             assert not any(built) and not any(consumed)
@@ -118,10 +124,23 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         np.testing.assert_allclose(ordinary.forces, cached.forces, atol=1e-7, rtol=0)
 
 
-@pytest.mark.parametrize("policy", ["full", "partial", "auto"])
+@pytest.mark.parametrize(
+    ("policy", "fitted"),
+    [
+        ("full", False),
+        ("partial", False),
+        ("auto", False),
+        ("full", True),
+        ("partial", True),
+    ],
+)
 @pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])
 def test_range_replay_reuses_values_and_falls_back_after_policy_change(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, invalidate: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    policy: str,
+    fitted: bool,
+    invalidate: str,
 ) -> None:
     """Retained and retired sources must both certify the same warm density.
 
@@ -170,6 +189,8 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         basis_representation="spherical",
         device="cuda",
         precision="fp64",
+        density_fitting="cuda" if fitted else None,
+        auxiliary_basis="cc-pvdz-jkfit" if fitted else None,
         max_iterations=100,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,

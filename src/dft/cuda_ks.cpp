@@ -510,9 +510,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     const auto& strategy = provider.strategy();
     const auto& source_strategy = has_range_correction ? *range_correction : strategy;
+    // A fitted primary may explicitly cache only its separate exact LR term.
+    // The lease owns immutable ERIs on the KS stream; it never represents the
+    // fitted J/K tensor, changes the Hamiltonian, or lends derivative storage.
+    // Keep this new composition opt-in and strict until endpoint qualification
+    // establishes a bounded automatic domain. Fully fitted LR is distinct.
+    const bool fitted_range_source =
+        requested == DirectJkSourceSelection::forced && fitted_coulomb && fitted_exchange &&
+        has_range_correction && range_provider && spins == 1 &&
+        !precision_schedule.any_lower_precision() &&
+        source_strategy.spec.exchange.approximation == scf::FockApproximation::Exact;
     // Public ledgers have no reserved quartic allowance yet. A forced request
     // must not bypass their complete resource plan or alter precision/ranges.
-    if (fitted_coulomb || fitted_exchange || incremental_direct_jk ||
+    if (((fitted_coulomb || fitted_exchange) && !fitted_range_source) || incremental_direct_jk ||
         (precision_schedule.any_lower_precision() && !strict_refinement &&
          !experimental_mixed_point && !mixed_source) ||
         runtime::active_device_resource_ledger ||
@@ -524,6 +534,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     unsigned maximum_angular = 0;
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+    // The fitted composition qualifies generated SPD consumers only. Higher
+    // angular sources require their own primary-provider census/consumer proof.
+    if (fitted_range_source && maximum_angular > 2) return;
     // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
@@ -589,6 +602,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     required = sum(required, resource.retained_host_numeric_bytes);
     required = sum(required, provider.cpu_observation_capacity());
     required = sum(required, provider.diagnostic().direct.host_preparation_bytes);
+    if (fitted_range_source) {
+      // Device bytes already include both prepared providers. Their separate
+      // host observations/preparation must also precede optional admission.
+      required = sum(required, range_provider->cpu_observation_capacity());
+      required = sum(required, range_provider->diagnostic().direct.host_preparation_bytes);
+    }
     required = sum(required, runtime::vector_capacities(basis.packed, grid.points(), grid.weights(),
                                                         grid.owners()));
     phase_source = std::make_unique<DirectJkSourceLease>(
@@ -604,16 +623,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
-    check(phase_source->prepare(
-              device, {system}, options.max_iterations, direct_nbf, required,
-              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
-                                                    : std::numeric_limits<std::size_t>::max(),
-              selection,
-              has_range_correction ? "cuda_ks_range_resident_values_prepare"
-                                   : "cuda_ks_resident_values_prepare",
-              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
-              auto_policy, buckets.mask, spins,
-              automatic_range && !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
+    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
+                                options.reference_memory_budget_bytes
+                                    ? options.reference_memory_budget_bytes
+                                    : std::numeric_limits<std::size_t>::max(),
+                                selection,
+                                has_range_correction ? "cuda_ks_range_resident_values_prepare"
+                                                     : "cuda_ks_resident_values_prepare",
+                                source_cold_phase, generic_fock, phase_source_screening,
+                                buckets.ceiling, false, auto_policy, buckets.mask, spins,
+                                (automatic_range || fitted_range_source) &&
+                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
