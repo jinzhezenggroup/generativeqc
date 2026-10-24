@@ -36,6 +36,7 @@ def orbital_probe(
             "  void invalidate_warm_orbitals()",
             "  void clear_warm_state()",
             "  void publish_warm_seed()",
+            "  void restore_held_fitted_factor()",
             "  void audit_phase_source()",
             "  void retire_phase_source(bool audit)",
             "  void enqueue()",
@@ -77,6 +78,7 @@ void check(int status, const char* detail = "injected copy failure") {
   if (status) throw std::runtime_error(detail);
 }
 namespace scf { struct PreparedCudaOccupiedFockBinding {}; }
+namespace runtime::cuda_trace { void trace_counter(const char*, std::uint64_t) {} }
 struct Owner {
   bool is_pending = false;
   struct Source {
@@ -126,7 +128,7 @@ struct Owner {
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
   } physical;
-  std::size_t elements = 8;
+  std::size_t elements = 8, matrix = 4;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
   struct {
     bool converged = false;
