@@ -2931,8 +2931,8 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false,
       // below still exercise this plan for both spin populations and AO orders.
       auto generated_value_spec = make_hf_fock_spec(FockSpin::Restricted);
       generated_value_spec.derivative_order = 0;
-      require(direct_jk_generated_exchange_value_available(
-                  *generated_value_plan, generated_value_spec) == (angular <= 2),
+      require(direct_jk_generated_exchange_value_available(*generated_value_plan,
+                                                           generated_value_spec) == (angular <= 2),
               ("automatic generated exchange admission/class fallback mismatch: l=" +
                std::to_string(angular) + " representation=" + std::to_string(representation) +
                " schedule=" + generated_value_diagnostic.schedule)
