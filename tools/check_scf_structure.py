@@ -681,6 +681,8 @@ CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
     "molecule/basis.hpp",
     "posthf/capacity.hpp",
     "runtime/df_progress_trace.hpp",
+    # Optional staging admission reads host/job capacity without owning math.
+    "runtime/host_cache_budget.hpp",
     "runtime/resource_cuda.cuh",
     "scf/cuda/direct_jk_source_lease.",
     "scf/cuda/direct_jk_source_policy.hpp",

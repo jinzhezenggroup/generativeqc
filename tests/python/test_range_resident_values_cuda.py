@@ -22,6 +22,12 @@ ROOT = Path(__file__).resolve().parents[2]
         ("range-host-oracle", 4),
         ("full-host-oracle", 1),
         ("full-host-oracle", 4),
+        ("full-disk-oracle", 1),
+        ("full-disk-oracle", 4),
+        ("range-disk-oracle", 1),
+        ("range-disk-oracle", 4),
+        ("full-tiered-oracle", 1),
+        ("range-tiered-oracle", 1),
     ],
 )
 def test_resident_range_sources_match_independent_matrices(
@@ -106,7 +112,7 @@ def test_resident_range_sources_match_independent_matrices(
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
         "full host oracle checks passed"
-        if mode == "full-host-oracle"
+        if mode.startswith("full-")
         else "mixed range oracle checks 24"
         if mode == "range-mixed-oracle"
         else "range oracle checks 16"

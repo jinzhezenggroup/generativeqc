@@ -22,12 +22,18 @@ if TYPE_CHECKING:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tier", choices=("direct", "gpu", "host", "auto"))
+    parser.add_argument(
+        "tier", choices=("direct", "gpu", "host", "auto", "disk", "tiered")
+    )
     parser.add_argument("--source-operator", choices=("long", "full"), default="long")
     parser.add_argument(
         "--gpu-mask", help="explicit common GPU mask for controlled partial-cache arms"
     )
     parser.add_argument("--gpu-bytes", type=int, default=16 << 30)
+    parser.add_argument("--disk-bytes", type=int, default=64 << 30)
+    parser.add_argument(
+        "--tmp-dir", help="local directory; unset uses the native temporary directory"
+    )
     parser.add_argument("--host-bytes", type=int, default=32 << 30)
     parser.add_argument("--tile-bytes", type=int, default=256 << 20)
     parser.add_argument("--host-mask", default="0xfffffff")
@@ -38,6 +44,7 @@ def main() -> None:
     if (
         args.gpu_bytes < 0
         or args.host_bytes < 0
+        or args.disk_bytes < 0
         or not 0 < args.tile_bytes <= 512 << 20
     ):
         parser.error("invalid cache or staging capacity")
@@ -51,9 +58,14 @@ def main() -> None:
     controls = {
         f"{prefix}RESIDENT_VALUES": "0" if args.tier == "direct" else "1",
         "GENERATIVEQC_KS_RESIDENT_MAX_BYTES": str(args.gpu_bytes),
-        f"{prefix}HOST_MAX_BYTES": str(args.host_bytes if args.tier == "host" else 0),
+        f"{prefix}HOST_MAX_BYTES": str(
+            args.host_bytes if args.tier in {"host", "tiered"} else 0
+        ),
         f"{prefix}HOST_TILE_BYTES": str(args.tile_bytes),
         f"{prefix}HOST_BUCKET_MASK": args.host_mask,
+        f"{prefix}DISK_MAX_BYTES": str(
+            args.disk_bytes if args.tier in {"disk", "tiered"} else 0
+        ),
         "GENERATIVEQC_CUDA_KS_CHUNK": "1",
     }
     # Freeze automatic GPU bucket fitting identically in B and C. An inherited
@@ -65,9 +77,14 @@ def main() -> None:
         for name in (
             f"{prefix}RESIDENT_VALUES",
             f"{prefix}HOST_MAX_BYTES",
+            f"{prefix}DISK_MAX_BYTES",
         ):
             controls.pop(name)
             os.environ.pop(name, None)
+    if args.tmp_dir is not None:
+        controls["GENERATIVEQC_ERI_TMPDIR"] = args.tmp_dir
+    else:
+        os.environ.pop("GENERATIVEQC_ERI_TMPDIR", None)
     os.environ.update(controls)
     from benchmarks import readme_defaults as driver
     from benchmarks import readme_hf_scaling
@@ -112,7 +129,25 @@ def main() -> None:
             "trace": os.environ.get("GENERATIVEQC_DF_PROGRESS_TRACE"),
             "timing_qualification": "single complete observation; compare only source-matched populations",
         }
-        return original(native_args, atoms, record, retain)
+
+        def io_counts() -> dict[str, int]:
+            # Process-wide physical I/O includes library/input traffic. Logical
+            # ERI read bytes are recorded separately by source-action counters.
+            path = Path("/proc/self/io")
+            return {
+                key.rstrip(":"): int(value)
+                for key, value in (
+                    line.split() for line in path.read_text().splitlines()
+                )
+            }
+
+        before = io_counts()
+        result = original(native_args, atoms, record, retain)
+        record["host_eri_experiment"]["process_io"] = {
+            "before": before,
+            "after": io_counts(),
+        }
+        return result
 
     driver.run_native = run
     sys.argv = [sys.argv[0], "standard", *remaining]

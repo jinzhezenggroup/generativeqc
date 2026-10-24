@@ -43,7 +43,15 @@ def test_full_host_cache_complete_endpoints(
         solver.xc = functional
         solver.conv_tol, solver.conv_tol_grad = 1e-12, 1e-9
         solver.direct_scf = False
+        solver.max_cycle = 150
         solver.kernel()
+        if not solver.converged:
+            # The water cation can stall in DIIS at this tight reference gate.
+            # Newton resolves the same independent UKS equations; no native
+            # density or result enters this fallback.
+            solver = solver.newton()
+            solver.max_cycle = 150
+            solver.kernel()
         assert solver.converged
         gradient = solver.nuc_grad_method()
         gradient.grid_response = True
@@ -54,9 +62,12 @@ def test_full_host_cache_complete_endpoints(
     monkeypatch.setenv("GENERATIVEQC_KS_HOST_TILE_BYTES", "4096")
     observations = {}
     receipts = {}
-    for tier in ("direct", "gpu", "host", "default", "refused", "full", "fit"):
+    for tier in ("direct", "gpu", "host", "default", "refused", "full", "fit", "disk"):
         trace = tmp_path / f"{tier}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(trace))
+        monkeypatch.setenv(
+            "GENERATIVEQC_KS_DISK_MAX_BYTES", str(2 << 30) if tier == "disk" else "0"
+        )
         monkeypatch.setenv(
             "GENERATIVEQC_KS_RESIDENT_VALUES", "0" if tier == "direct" else "1"
         )
@@ -119,6 +130,12 @@ def test_full_host_cache_complete_endpoints(
                 if row.get("key") == "host_source_value_bytes"
             ]
             assert any(host) == (tier in {"host", "default", "fit"})
+            disk_bytes = [
+                row["value"]
+                for row in rows
+                if row.get("key") == "disk_source_value_bytes"
+            ]
+            assert any(disk_bytes) == (tier == "disk")
             receipts[tier] = {
                 "host_bytes": host,
                 "energies": [r.energy for r in observations[tier]],
