@@ -231,7 +231,9 @@ def test_migrated_unpack_recipes_name_the_recovered_archive() -> None:
 def test_20261024_trimmed_archives_are_hash_bound() -> None:
     """Archived ZIPs are optional Git history, with local metadata intact."""
     root = Path(__file__).resolve().parents[2]
-    index = root / "benchmarks/results/retention-archives-20261024/snapshot.manifest.json"
+    index = (
+        root / "benchmarks/results/retention-archives-20261024/snapshot.manifest.json"
+    )
     records = history._records(index)
     assert records
     for record in records:
@@ -241,6 +243,7 @@ def test_20261024_trimmed_archives_are_hash_bound() -> None:
         assert member["archive_sha256"] == record["sha256"]
         if "archive_bytes" in member:
             assert member["archive_bytes"] == record["bytes"]
-        assert "--archive .artifacts/retention-archives-20261024/" in (
-            path.parent / "README.md"
-        ).read_text()
+        assert (
+            "--archive .artifacts/retention-archives-20261024/"
+            in (path.parent / "README.md").read_text()
+        )
