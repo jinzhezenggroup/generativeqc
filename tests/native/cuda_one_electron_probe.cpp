@@ -123,7 +123,7 @@ void host_admission() {
 
 void run(const char* input_path, const char* output_path) {
   std::ifstream input(input_path, std::ios::binary);
-  const auto header = read<std::uint64_t>(input, 5);
+  const auto header = read<std::uint64_t>(input, 6);
   require(header[0] > 0 && header[0] <= 16 && header[1] > 0 && header[1] <= 32 && header[2] <= 1 &&
               header[4] <= 6,
           "invalid fixture shape");
@@ -165,6 +165,10 @@ void run(const char* input_path, const char* output_path) {
   const auto weights = read<double>(input, 4 * matrix);
   CudaOneElectronOptions options;
   options.radial_tile = header[3];
+  if (header[5] == 1) options.parallel_streams = 0;
+  if (header[5] == 2) options.max_parallel_workspace_bytes = 1;
+  if (header[5] == 3) options.max_parallel_tasks = 1;
+  if (header[5] == 4) options.parallel_streams = 2;
   std::size_t bytes{};
   check(cuda_one_electron_workspace(shape, shells, options, bytes));
   std::vector<double> charges;
@@ -315,7 +319,10 @@ void run(const char* input_path, const char* output_path) {
             << ",\"records\":" << receipt.primitive_records_per_action
             << ",\"components\":" << receipt.component_evaluations_per_action
             << ",\"projections\":" << receipt.projection_terms_per_action
-            << ",\"workspace_bytes\":" << receipt.workspace_bytes << "}\n";
+            << ",\"workspace_bytes\":" << receipt.workspace_bytes
+            << ",\"parallel_workspace_bytes\":" << receipt.parallel_workspace_bytes
+            << ",\"parallel_tasks\":" << receipt.parallel_tasks
+            << ",\"parallel_actions\":" << receipt.parallel_actions << "}\n";
 }
 }  // namespace
 

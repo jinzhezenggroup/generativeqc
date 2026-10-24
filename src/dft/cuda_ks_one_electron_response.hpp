@@ -9,10 +9,21 @@
 #include "dft/cuda_ks_final_state.hpp"
 #include "integrals/cuda_one_electron_response.hpp"
 
+namespace generativeqc::core {
+struct System;
+}
 namespace generativeqc::methods {
 class PreparedBatch;
 }
 namespace generativeqc::dft {
+
+/** Host-only sizing from normalized native topology, including effective charges.
+ * Throws on malformed topology or mandatory admission failure, just as prepare.
+ * Aggregate owners can disable parallel_streams to reserve the scalar baseline
+ * before allowing optional schedules to consume any remaining capacity. */
+std::size_t cuda_ks_one_electron_workspace(const core::System& system,
+                                           const integrals::CudaOneElectronShape& shape,
+                                           const integrals::CudaOneElectronOptions& options);
 
 struct CudaKsOneElectronWork {
   std::size_t device_bytes{};

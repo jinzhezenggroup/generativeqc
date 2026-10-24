@@ -18,10 +18,25 @@ import numpy as np
 import pytest
 
 from benchmarks.compare_wb97mv_hessian_gpu4pyscf import (
+    CASES,
     _measure,
     _run_child,
     _summarize,
 )
+
+
+def test_larger_water_cluster_is_available_to_reference_workers() -> None:
+    """Controllers and fresh worker processes must share the scale fixture."""
+    assert len(CASES["water-tetramer"]["atoms"]) == 12
+    assert CASES["water-tetramer"]["spin"] == 0
+    help_result = subprocess.run(
+        [sys.executable, "-m", "benchmarks.compare_wb97mv_hessian_gpu4pyscf", "--help"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=20,
+    )
+    assert "water-tetramer" in help_result.stdout
 
 
 def _default_package_evidence() -> dict:
@@ -279,6 +294,78 @@ def test_retained_native_molecular_attempts_do_not_qualify_speed() -> None:
     assert oh.get("summary") is None
     for attempt in attempts.values():
         assert attempt["workload"]["visible_gpu_count"] == 1
+
+
+def test_capacity_full_matrix_replays_independent_cpu_gradient_stencils() -> None:
+    """Reconstruct all columns from converged gradients, not a claimed pass flag."""
+    from generativeqc_compiler.common.evidence import block_error
+
+    from tools.generativeqc_validation.record import load_publication_record
+
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/wb97mv-hessian-capacity-20261017"
+    )
+    payload = load_publication_record(directory, role="samples")
+    files = payload["raw_files"]
+    prefix = ".artifacts/wb97mv-capacity-fix-20261017/"
+    oracle = json.loads(files[prefix + "cpu-oracle-full.log"]["text"])
+    journal = json.loads(files[prefix + "raw-9977/capacity.json"]["text"])
+    native = journal["cases"]["water-dimer"]["samples"][0]["result"]
+    assert len(oracle["samples"]) == 73
+    assert all(row["converged"] for row in oracle["samples"])
+    gradients = {
+        tuple(np.asarray(row["displacement"]).ravel()): np.asarray(
+            row["gradient"]
+        ).ravel()
+        for row in oracle["samples"]
+    }
+    columns = []
+    for column in range(18):
+        estimates = []
+        for step in oracle["steps"]:
+            motion = np.zeros(18)
+            motion[column] = step
+            estimates.append(
+                (gradients[tuple(motion)] - gradients[tuple(-motion)]) / (2 * step)
+            )
+        columns.append((4 * estimates[1] - estimates[0]) / 3)
+    expected = np.column_stack(columns)
+    np.testing.assert_array_equal(expected, oracle["matrix"])
+    error = block_error(native["matrix"], expected, atol=3e-6, rtol=0)
+    assert error["passed"]
+    assert error["max_absolute_error"] == oracle["native_maximum_error"]
+
+
+def test_capacity_acceptance_preserves_failed_comparator_and_speed_target() -> None:
+    """Capacity/numerical acceptance must not rewrite a failed paired journal."""
+    from tools.generativeqc_validation.record import load_publication_record
+
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/wb97mv-hessian-capacity-20261017"
+    )
+    evidence = load_publication_record(directory)
+    payload = load_publication_record(directory, role="samples")
+    assert evidence["stages"]["numerical"]["status"] == "pass"
+    assert evidence["stages"]["endpoint"]["status"] == "pass"
+    assert evidence["performance"]["status"] == "fail"
+    dimer = payload["observations"]["water-dimer"]
+    assert dimer["stock_gpu4pyscf_error"]["passed"] is False
+    assert dimer["stock_gpu4pyscf_error"]["atol"] == 3e-6
+    assert dimer["stock_gpu4pyscf_error"]["rtol"] == 0
+    paired = json.loads(
+        payload["raw_files"][
+            ".artifacts/wb97mv-capacity-fix-20261017/raw-9977/capacity.json"
+        ]["text"]
+    )
+    assert paired["status"] == "failed"
+    assert paired["provenance"]["source_commit"] == evidence["revision"]
+    for case in payload["observations"].values():
+        assert max(case["native_endpoint_seconds"]) < 180
+        for key, memory in case["gpu_memory_observations"].items():
+            if key.endswith("generativeqc"):
+                assert memory["sampled_peak_bytes"] < 24 << 30
 
 
 def test_inaccurate_repeat_prevents_a_qualified_speed_ratio() -> None:

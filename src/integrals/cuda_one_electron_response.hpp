@@ -25,6 +25,12 @@ struct CudaOneElectronOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
   std::size_t max_jobs{100'000};
   std::size_t radial_tile{64};  ///< Bounded streaming tile, in [1,64].
+  /** Optional independent primitive chains with an ordered publication fold.
+   * These limits are subordinate to max_workspace_bytes; zero streams or zero
+   * extra bytes retains the original scalar CUDA schedule. No runtime codegen. */
+  unsigned parallel_streams{32};
+  std::size_t max_parallel_tasks{2048};
+  std::size_t max_parallel_workspace_bytes{64ULL << 20};
   std::uint64_t max_primitive_component_evaluations{67'108'864};
   std::uint64_t max_projection_terms{268'435'456};
   double symmetry_absolute_tolerance{1e-12};
@@ -62,6 +68,8 @@ struct CudaOneElectronWork {
   std::uint64_t component_evaluations_per_action{}, projection_terms_per_action{};
   std::uint64_t attempted_actions{}, completed_actions{}, component_evaluations{},
       projection_terms{};
+  std::size_t parallel_workspace_bytes{}, parallel_tasks{};
+  std::uint64_t parallel_actions{};
 };
 
 /** Checked host-only closure/work/arena admission; does not initialize CUDA.
