@@ -515,6 +515,7 @@ if(GENERATIVEQC_BUILD_TESTS)
     add_library(generativeqc_cli_profile_probe SHARED tests/native/cli_profile_probe.cpp)
     target_include_directories(generativeqc_cli_profile_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(generativeqc_cli_profile_probe PRIVATE cxx_std_20)
+    target_link_libraries(generativeqc_cli_profile_probe PRIVATE ${CMAKE_DL_LIBS})
     target_include_directories(generativeqc_cli_json_probe PRIVATE
                                "${CMAKE_CURRENT_SOURCE_DIR}/src"
                                "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -524,6 +525,8 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_runtime.py"
                      $<TARGET_FILE:generativeqc_cli> $<TARGET_FILE:generativeqc_cli_json_probe>
                      $<TARGET_FILE:generativeqc_cli_profile_probe>)
+    set_tests_properties(generativeqc_cli_runtime_contract PROPERTIES
+                         ENVIRONMENT "GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>")
     add_test(NAME generativeqc_cli_methodir_codegen
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_cli_method_catalog_codegen.py")
