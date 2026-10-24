@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+    "-m",
+    "pip",
+    "install",
+    "--no-index",
+    "--find-links",
+    "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/env-assets/generativeqc-science-py311-cuda129-20261015/wheels",
+    "-r",
+    "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/env-assets/generativeqc-science-py311-cuda129-20261015/requirements.lock.txt",
+    "--disable-pip-version-check"
+  ],
+  "returncode": 0,
+  "log": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/output/base-offline-install.log",
+  "log_sha256": "98fbc9b5209f0e9867018c7bf256619434015b5fafc404b01994aa360350c214",
+  "tail": "-20261015/wheels/wheel-0.48.0-py3-none-any.whl (from -r /inspire/qb-ilm/project/chemicalreaction/czxs25220150/env-assets/generativeqc-science-py311-cuda129-20261015/requirements.lock.txt (line 64))\nInstalling collected packages: sortedcontainers, sccache, mpmath, distlib, clang-format, typing_extensions, tomli, threadpoolctl, sympy, six, setuptools, scipy-openblas32, ruff, PyYAML, pyparsing, Pygments, pluggy, platformdirs, pip, pillow, pathspec, packaging, nvidia-nvjitlink-cu12, nvidia-cuda-runtime-cu12, nvidia-cublas-cu12, numpy, nodeenv, ninja, ndindex, kiwisolver, iniconfig, importlib_resources, identify, hypothesis, fonttools, filelock, execnet, defusedxml, cycler, coverage, cmake, cfgv, array-api-compat, wheel, scipy, scikit_build_core, python-discovery, python-dateutil, pytest, nvidia-cusparse-cu12, nlohmann-json, h5py, exceptiongroup, contourpy, array_api_strict, virtualenv, pytest-xdist, pytest-metadata, pytest-cov, pyscf, nvidia-cusolver-cu12, matplotlib, pytest-json-report, pre_commit\n  Attempting uninstall: setuptools\n    Found existing installation: setuptools 79.0.1\n    Uninstalling setuptools-79.0.1:\n      Successfully uninstalled setuptools-79.0.1\n  Attempting uninstall: pip\n    Found existing installation: pip 24.0\n    Uninstalling pip-24.0:\n      Successfully uninstalled pip-24.0\nSuccessfully installed PyYAML-6.0.3 Pygments-2.21.0 array-api-compat-1.15.0 array_api_strict-2.6.1 cfgv-3.5.0 clang-format-22.1.8 cmake-3.31.10 contourpy-1.3.3 coverage-7.16.0 cycler-0.12.1 defusedxml-0.7.1 distlib-0.4.3 exceptiongroup-1.3.1 execnet-2.1.2 filelock-3.32.5 fonttools-4.67.0 h5py-3.16.0 hypothesis-6.169.3 identify-2.6.19 importlib_resources-7.1.0 iniconfig-2.3.0 kiwisolver-1.5.1 matplotlib-3.11.2 mpmath-1.3.0 ndindex-1.10.1 ninja-1.13.2 nlohmann-json-3.11.3 nodeenv-1.10.0 numpy-2.2.6 nvidia-cublas-cu12-12.9.1.4 nvidia-cuda-runtime-cu12-12.9.79 nvidia-cusolver-cu12-11.7.5.82 nvidia-cusparse-cu12-12.5.10.65 nvidia-nvjitlink-cu12-12.9.86 packaging-26.3 pathspec-1.1.1 pillow-12.3.0 pip-26.2.1 platformdirs-4.11.7 pluggy-1.6.0 pre_commit-4.6.2 pyparsing-3.3.3 pyscf-2.14.0 pytest-9.1.1 pytest-cov-7.1.0 pytest-json-report-1.5.0 pytest-metadata-3.1.1 pytest-xdist-3.8.0 python-dateutil-2.9.0.post0 python-discovery-1.6.0 ruff-0.16.2 sccache-0.16.0 scikit_build_core-1.1.1 scipy-1.15.3 scipy-openblas32-0.3.34.0.0 setuptools-84.0.0 six-1.17.0 sortedcontainers-2.4.0 sympy-1.14.0 threadpoolctl-3.6.0 tomli-2.4.1 typing_extensions-4.16.0 virtualenv-21.7.8 wheel-0.48.0\n"
+}

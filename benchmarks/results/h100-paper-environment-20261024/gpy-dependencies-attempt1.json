@@ -1,0 +1,41 @@
+[
+  {
+    "wheel_requirements": {
+      "gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": [
+        "pyscf>=2.8.0",
+        "pyscf-dispersion",
+        "cupy-cuda12x!=13.4.0,>=13.0",
+        "geometric",
+        "gpu4pyscf-libxc-cuda12x==0.8.1",
+        "packaging"
+      ],
+      "cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl": [
+        "numpy<2.6,>=1.22",
+        "fastrlock>=0.5",
+        "scipy<1.17,>=1.7; extra == \"all\"",
+        "Cython>=3; extra == \"all\"",
+        "optuna>=2.0; extra == \"all\"",
+        "packaging; extra == \"test\"",
+        "pytest>=7.2; extra == \"test\"",
+        "hypothesis<6.55.0,>=6.37.2; extra == \"test\"",
+        "mpmath; extra == \"test\""
+      ]
+    }
+  },
+  {
+    "returncode": 1,
+    "output": "Collecting gpu4pyscf-cuda12x==1.8.1\n  File was already downloaded /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl\nCollecting cupy-cuda12x==13.6.0\n  File was already downloaded /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl\nCollecting numpy==2.2.6\n  Downloading numpy-2.2.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (62 kB)\nCollecting scipy==1.15.3\n  Downloading scipy-1.15.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)\nCollecting pyscf==2.14.0\n  Downloading pyscf-2.14.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)\nCollecting h5py==3.16.0\n  Downloading h5py-3.16.0-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (3.0 kB)\nCollecting pyscf-dispersion (from gpu4pyscf-cuda12x==1.8.1)\n  Downloading pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.7 kB)\nINFO: pip is looking at multiple versions of gpu4pyscf-cuda12x to determine which version is compatible with other requirements. This could take a while.\nERROR: Could not find a version that satisfies the requirement geometric (from gpu4pyscf-cuda12x) (from versions: none)\nERROR: No matching distribution found for geometric\n",
+    "assets": [
+      {
+        "name": "gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "bytes": 151734684,
+        "sha256": "42dd9c619ff587dd393232d39c8894950956bace29d83765ce630bf7ad5d686c"
+      },
+      {
+        "name": "cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl",
+        "bytes": 113039337,
+        "sha256": "77ba6745a130d880c962e687e4e146ebbb9014f290b0a80dbc4e4634eb5c3b48"
+      }
+    ]
+  }
+]

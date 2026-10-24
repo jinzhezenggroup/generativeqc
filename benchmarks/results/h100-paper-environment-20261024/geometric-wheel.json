@@ -1,0 +1,36 @@
+{
+  "returncode": 0,
+  "output": "Processing ./h100-paper-environment-20261024/assets/geometric-1.1.1.tar.gz\n  File was already downloaded /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/geometric-1.1.1.tar.gz\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nBuilding wheels for collected packages: geometric\n  Building wheel for geometric (pyproject.toml): started\n  Building wheel for geometric (pyproject.toml): finished with status 'done'\n  Created wheel for geometric: filename=geometric-1.1.1-py3-none-any.whl size=408349 sha256=f7696c93759201471db47dbec099a0395e5e70c6d7c02408c8531a77608b8e2b\n  Stored in directory: /root/.cache/pip/wheels/5f/09/d3/6a52034e49eb4f8f75266cde5536d798bf7a442d8115222ed9\nSuccessfully built geometric\n",
+  "wheel_requirements": {
+    "gpu4pyscf_libxc_cuda12x-0.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": null,
+    "gpu4pyscf_cuda12x-1.8.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl": [
+      "pyscf>=2.8.0",
+      "pyscf-dispersion",
+      "cupy-cuda12x!=13.4.0,>=13.0",
+      "geometric",
+      "gpu4pyscf-libxc-cuda12x==0.8.1",
+      "packaging"
+    ],
+    "geometric-1.1.1-py3-none-any.whl": [
+      "numpy>=1.11",
+      "networkx",
+      "six",
+      "scipy"
+    ],
+    "cupy_cuda12x-13.6.0-cp311-cp311-manylinux2014_x86_64.whl": [
+      "numpy<2.6,>=1.22",
+      "fastrlock>=0.5",
+      "scipy<1.17,>=1.7; extra == \"all\"",
+      "Cython>=3; extra == \"all\"",
+      "optuna>=2.0; extra == \"all\"",
+      "packaging; extra == \"test\"",
+      "pytest>=7.2; extra == \"test\"",
+      "hypothesis<6.55.0,>=6.37.2; extra == \"test\"",
+      "mpmath; extra == \"test\""
+    ],
+    "pyscf_dispersion-1.5.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl": [
+      "pyscf"
+    ],
+    "fastrlock-0.8.4-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl": null
+  }
+}

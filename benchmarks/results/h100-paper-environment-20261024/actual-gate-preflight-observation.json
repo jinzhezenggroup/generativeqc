@@ -1,0 +1,57 @@
+{
+  "scope": "read-only output observation; no resource or endpoint action",
+  "output_exists": true,
+  "files": [
+    "preflight.json"
+  ],
+  "preflight.json": {
+    "sha256": "02429c0e41e6fdadf6d70f5f9dece3d1f611c0df96868532af1b61a7f82c98a2",
+    "data": {
+      "schema": "generativeqc.h100-environment-gate-preflight.v1",
+      "scope": "device/host only; no endpoint before root release",
+      "observed_utc": "2026-10-24T08:34:27.697207+00:00",
+      "pid": 33,
+      "device": {
+        "hostname": "job-90134ae4-997d-4b16-9bb1-1b509ef8d9a0-worker-0",
+        "visible_device_count": 1,
+        "name": "NVIDIA H100 80GB HBM3",
+        "compute_capability": [
+          9,
+          0
+        ],
+        "memory_bytes": 85019590656,
+        "cuda_visible_devices": null,
+        "nvidia_smi": "NVIDIA H100 80GB HBM3, GPU-59631974-b808-1205-0f08-d3de20bb7ca7, 00000000:5D:00.0, 81559 MiB, 595.58.03, 700.00 W",
+        "cgroup": {
+          "cpu.max": "2000000 100000",
+          "memory.max": "214748364800"
+        }
+      },
+      "environment": {
+        "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+        "executable": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+        "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+        "packages": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "pyscf": "2.14.0",
+          "gpu4pyscf-cuda12x": "1.8.1",
+          "cupy-cuda12x": "13.6.0",
+          "gpu4pyscf-libxc-cuda12x": "0.8.1",
+          "pyscf-dispersion": "1.5.0",
+          "cutensor-cu12": null,
+          "sccache": "0.16.0"
+        },
+        "thread_controls": {
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1"
+        }
+      },
+      "adapter_sha256": "a540bc5a6da30f3b605a9a56c91668ac8a896b44126972c733e111420f46400b",
+      "prepared_plan_sha256": "51fc2d6c071aa4209aa639174f3198a0cd53308ab203b155b04cbfd8dc0fe682",
+      "wait_cap_seconds": 300,
+      "endpoints_started": 0
+    }
+  }
+}
