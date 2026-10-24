@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "solver/dense_linear.hpp"
+#include "solver/diis_affine.hpp"
 
 namespace generativeqc::solver::detail {
 
@@ -28,6 +29,8 @@ struct DiisCoefficientPolicy {
   std::size_t failure_retirement_floor{std::numeric_limits<std::size_t>::max()};
   /** Infinite preserves callers that historically accepted every finite coefficient. */
   double maximum_abs_coefficient{std::numeric_limits<double>::infinity()};
+  /** Normalized KS uses forward/back substitution and validates the affine constraint. */
+  bool require_affine_constraint{false};
 };
 
 inline DiisCoefficientAction solve_diis_coefficients(const std::vector<double>& gram,
@@ -67,7 +70,14 @@ inline DiisCoefficientAction solve_diis_coefficients(const std::vector<double>& 
   }
   rhs[history_size] = -1.0;
 
-  if (solve_dense_linear(std::move(system), std::move(rhs), coefficients)) {
+  bool solved;
+  if (policy.require_affine_constraint) {
+    coefficients = std::move(rhs);
+    solved = solve_affine_diis_system(system.data(), coefficients.data(), history_size);
+  } else {
+    solved = solve_dense_linear(std::move(system), std::move(rhs), coefficients);
+  }
+  if (solved) {
     const bool accepted = std::all_of(coefficients.begin(), coefficients.end(), [&](double value) {
       return std::isfinite(value) && std::abs(value) <= policy.maximum_abs_coefficient;
     });

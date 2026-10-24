@@ -9,6 +9,7 @@
 #include "generated_scf_array_native.hpp"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_diis_kernels.hpp"
+#include "solver/diis_affine.hpp"
 #include "tensor/cuda_history.cuh"
 #include "tensor/cuda_ring_gram.cuh"
 #include "tensor/cuda_ring_gram_staging.cuh"
@@ -343,44 +344,50 @@ __global__ void update_diis_kernel(
 
     nonsingular = 1;
     if (threadIdx.x == 0) {
-      for (std::uint32_t column = 0; column < dimension; ++column) {
-        std::uint32_t pivot = column;
-        for (std::uint32_t row = column + 1; row < dimension; ++row) {
-          if (fabs(matrix[static_cast<std::size_t>(row) * dimension + column]) >
-              fabs(matrix[static_cast<std::size_t>(pivot) * dimension + column])) {
-            pivot = row;
+      if (normalize_metric) {
+        // Preserve the affine row through forward elimination/back substitution.
+        // Invalid solves still use chronological retry/current-Fock fallback.
+        nonsingular = ::generativeqc::solver::detail::solve_affine_diis_system(matrix, rhs, count);
+      } else {
+        for (std::uint32_t column = 0; column < dimension; ++column) {
+          std::uint32_t pivot = column;
+          for (std::uint32_t row = column + 1; row < dimension; ++row) {
+            if (fabs(matrix[static_cast<std::size_t>(row) * dimension + column]) >
+                fabs(matrix[static_cast<std::size_t>(pivot) * dimension + column])) {
+              pivot = row;
+            }
           }
-        }
-        const double diagonal = matrix[static_cast<std::size_t>(pivot) * dimension + column];
-        if (fabs(diagonal) < 1.0e-14) {
-          nonsingular = 0;
-          break;
-        }
-        if (pivot != column) {
-          for (std::uint32_t item = 0; item < dimension; ++item) {
-            const std::size_t first = static_cast<std::size_t>(column) * dimension + item;
-            const std::size_t second = static_cast<std::size_t>(pivot) * dimension + item;
-            const double swap = matrix[first];
-            matrix[first] = matrix[second];
-            matrix[second] = swap;
+          const double diagonal = matrix[static_cast<std::size_t>(pivot) * dimension + column];
+          if (fabs(diagonal) < 1.0e-14) {
+            nonsingular = 0;
+            break;
           }
-          const double swap = rhs[column];
-          rhs[column] = rhs[pivot];
-          rhs[pivot] = swap;
-        }
-        const double scale = matrix[static_cast<std::size_t>(column) * dimension + column];
-        for (std::uint32_t item = column; item < dimension; ++item) {
-          matrix[static_cast<std::size_t>(column) * dimension + item] /= scale;
-        }
-        rhs[column] /= scale;
-        for (std::uint32_t row = 0; row < dimension; ++row) {
-          if (row == column) continue;
-          const double factor = matrix[static_cast<std::size_t>(row) * dimension + column];
+          if (pivot != column) {
+            for (std::uint32_t item = 0; item < dimension; ++item) {
+              const std::size_t first = static_cast<std::size_t>(column) * dimension + item;
+              const std::size_t second = static_cast<std::size_t>(pivot) * dimension + item;
+              const double swap = matrix[first];
+              matrix[first] = matrix[second];
+              matrix[second] = swap;
+            }
+            const double swap = rhs[column];
+            rhs[column] = rhs[pivot];
+            rhs[pivot] = swap;
+          }
+          const double scale = matrix[static_cast<std::size_t>(column) * dimension + column];
           for (std::uint32_t item = column; item < dimension; ++item) {
-            matrix[static_cast<std::size_t>(row) * dimension + item] -=
-                factor * matrix[static_cast<std::size_t>(column) * dimension + item];
+            matrix[static_cast<std::size_t>(column) * dimension + item] /= scale;
           }
-          rhs[row] -= factor * rhs[column];
+          rhs[column] /= scale;
+          for (std::uint32_t row = 0; row < dimension; ++row) {
+            if (row == column) continue;
+            const double factor = matrix[static_cast<std::size_t>(row) * dimension + column];
+            for (std::uint32_t item = column; item < dimension; ++item) {
+              matrix[static_cast<std::size_t>(row) * dimension + item] -=
+                  factor * matrix[static_cast<std::size_t>(column) * dimension + item];
+            }
+            rhs[row] -= factor * rhs[column];
+          }
         }
       }
     }
