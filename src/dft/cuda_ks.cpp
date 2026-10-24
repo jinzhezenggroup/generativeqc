@@ -613,17 +613,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
             !nonlocal_correlation && standard_convergence_model && spins == 1 &&
             maximum_angular <= 2 && configured_chunk_width() == 1,
         source_strategy.screening_tolerance);
-    check(phase_source->prepare(
-              device, {system}, options.max_iterations, direct_nbf, required,
-              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
-                                                    : std::numeric_limits<std::size_t>::max(),
-              selection,
-              has_range_correction ? "cuda_ks_range_resident_values_prepare"
-                                   : "cuda_ks_resident_values_prepare",
-              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
-              auto_policy, buckets.mask, spins,
-              (automatic_range || fitted_range_source) &&
-                  !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
+    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
+                                options.reference_memory_budget_bytes
+                                    ? options.reference_memory_budget_bytes
+                                    : std::numeric_limits<std::size_t>::max(),
+                                selection,
+                                has_range_correction ? "cuda_ks_range_resident_values_prepare"
+                                                     : "cuda_ks_resident_values_prepare",
+                                source_cold_phase, generic_fock, phase_source_screening,
+                                buckets.ceiling, false, auto_policy, buckets.mask, spins,
+                                (automatic_range || fitted_range_source) &&
+                                    !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
