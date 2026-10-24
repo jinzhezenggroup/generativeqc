@@ -241,6 +241,7 @@ CUDA_ALLOWED["cuda_df_kernels"] = tuple(
 ) + ("scf/df_value_storage.hpp", "scf/cuda/scf_convergence_policy.")
 CUDA_MODULES["cuda_scf_kernels"] = (
     "scf_constants",
+    "scf_incremental_policy",
     "scf_state_kernels",
     "scf_matrix_kernels",
     "scf_density_kernels",

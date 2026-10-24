@@ -66,10 +66,17 @@ __global__ void reduce_shell_pair_density_bounds_kernel(
     }
   }
 
+  // The production captured HF owner launches one complete warp. Use its
+  // warp-scoped memory handoff after the ragged AO walk; an unnecessary CTA
+  // barrier here trips sm120 synccheck in device-tail graph replay. Wider
+  // standalone/KS consumers still require the full CTA barrier.
   coulomb_maxima[threadIdx.x] = local_coulomb;
   exchange_alpha_maxima[threadIdx.x] = local_exchange_alpha;
   exchange_beta_maxima[threadIdx.x] = local_exchange_beta;
-  __syncthreads();
+  if (blockDim.x == warpSize)
+    __syncwarp();
+  else
+    __syncthreads();
   for (unsigned stride = blockDim.x / 2; stride != 0; stride /= 2) {
     if (threadIdx.x < stride) {
       coulomb_maxima[threadIdx.x] =
@@ -79,7 +86,10 @@ __global__ void reduce_shell_pair_density_bounds_kernel(
       exchange_beta_maxima[threadIdx.x] =
           fmax(exchange_beta_maxima[threadIdx.x], exchange_beta_maxima[threadIdx.x + stride]);
     }
-    __syncthreads();
+    if (blockDim.x == warpSize)
+      __syncwarp();
+    else
+      __syncthreads();
   }
   if (threadIdx.x == 0) {
     shell_pair_density_bounds[shell_pair] = {coulomb_maxima[0], exchange_alpha_maxima[0],
