@@ -17,7 +17,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue308-device-diis": {
@@ -66,7 +66,7 @@
       "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "owner": "bounded DFT scheduling qualification for #2475–#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -162,7 +162,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "df-md-charge-splits-20261023": {
@@ -386,6 +386,11 @@
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
+    },
+    "fast-source-floor-20261024": {
+      "owner": "Fast hybrid proposal-source floor refinement",
+      "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
+      "review_document": "benchmarks/results/fast-source-floor-20261024/README.md"
     }
   },
   "files": [
@@ -892,6 +897,22 @@
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
       "bytes": 865196,
       "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
+    },
+    {
+      "path": "benchmarks/results/fast-source-floor-20261024/qualification.json.xz",
+      "family": "fast-source-floor-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-bound-endpoints-pilots-failures-and-paired-qualification",
+      "bytes": 331896,
+      "sha256": "4c4417db1ef655032ce4a0eebb455944c59883aaa5ca3bf0618545abafa0d789"
+    },
+    {
+      "path": "benchmarks/results/fast-source-floor-20261024/integration.json.xz",
+      "family": "fast-source-floor-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "integrated-source-endpoints-with-authenticated-reference-reuse",
+      "bytes": 145788,
+      "sha256": "003b9fbf7fe750c6585b90349bd40c02a2b2a40da40e310e5a5ff35c7101b081"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
