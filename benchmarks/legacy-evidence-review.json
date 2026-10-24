@@ -160,6 +160,11 @@
       "reason": "Retains every independent complete energy/force receipt, separate historical and integrated source cohorts, exact source inventories and reconstruction patch, sanitizer and cache provenance. Lossless compression preserves full vectors and work counts without relaxing any storage or numerical gate.",
       "review_document": "benchmarks/results/df-md-charge-splits-20261023/README.md"
     },
+    "df-charge-partitions-20261024": {
+      "owner": "bounded automatic SM 12.0 DF charge-source partitions",
+      "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
+      "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
+    },
     "issue206-metric-gemv": {
       "owner": "issue206-metric-gemv",
       "reason": "Reviewed retained large evidence for FP64 cuBLAS metric response dots (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -372,10 +377,10 @@
       "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
       "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
     },
-    "df-charge-partitions-20261024": {
-      "owner": "bounded automatic SM 12.0 DF charge-source partitions",
-      "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
-      "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
+    "pbe0-ao-batch-capacity-20261024": {
+      "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
+      "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
+      "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
     }
   },
   "files": [
@@ -522,6 +527,14 @@
       "role": "source-input-identity-manifest",
       "bytes": 242120,
       "sha256": "e2c3f4a7d368283d73c5b49837a551eeb94373bb4cabb3ae8d135cdf0de5a39d"
+    },
+    {
+      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "family": "df-charge-partitions-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
+      "bytes": 392256,
+      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
     },
     {
       "path": "benchmarks/results/df-one-electron-schedule-20261023/receipts.json.xz",
@@ -852,12 +865,12 @@
       "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
-      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
-      "family": "df-charge-partitions-20261024",
+      "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
+      "family": "pbe0-ao-batch-capacity-20261024",
       "classification": "required-compact-accepted-evidence",
-      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
-      "bytes": 392256,
-      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
+      "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
+      "bytes": 865196,
+      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

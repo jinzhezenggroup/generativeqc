@@ -939,9 +939,22 @@ def independent_global_hybrid_gradient(
             )
         mf = mf.density_fit(auxbasis=auxiliary)
     mf.xc = xc
+    # Configure the partition before installing the exact native quadrature:
+    # PySCF's radii_adjust setter invalidates previously assigned grid arrays.
+    # Full moving-grid response must also use the native Treutler radii.
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for z, radius in spec.element_radii:
+            radii[z] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -955,9 +968,13 @@ def independent_global_hybrid_gradient(
     mf.conv_tol, mf.conv_tol_grad, mf.max_cycle = 1e-13, 1e-10, 200
     energy = mf.kernel(dm0=initial_density)
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
     derivative = gradient.kernel()
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     return (energy, derivative, mf) if return_mean_field else (energy, derivative)
 
 
