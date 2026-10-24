@@ -15,6 +15,7 @@
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
@@ -22,6 +23,7 @@
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
+#include "scf/cuda/direct_jk_source_policy.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -34,9 +36,22 @@ namespace {
 using namespace cuda_execution;
 }
 
+DirectJkHostCache::~DirectJkHostCache() {
+  if (consumer_stream) (void)cudaStreamSynchronize(consumer_stream);
+  if (copy_stream) (void)cudaStreamSynchronize(copy_stream);
+  for (unsigned slot = 0; slot < 2; ++slot) {
+    if (ready[slot]) (void)cudaEventDestroy(ready[slot]);
+    if (consumed[slot]) (void)cudaEventDestroy(consumed[slot]);
+    if (device[slot]) (void)runtime::resource_cuda_free(device[slot]);
+    if (pinned[slot]) (void)cudaFreeHost(pinned[slot]);
+  }
+  if (copy_stream) (void)cudaStreamDestroy(copy_stream);
+}
+
 CudaDirectJkPlan::~CudaDirectJkPlan() {
   if (device_id >= 0) (void)cudaSetDevice(device_id);
   if (stream) (void)cudaStreamSynchronize(stream);
+  host_cache.reset();
   if (std::getenv("GENERATIVEQC_MD_J_COUNTS"))
     std::fprintf(stderr, "MD_J_NORMAL_COUNTS=%zu\nMD_J_RESIDUAL_CANDIDATES=%zu\n", md_j_calls,
                  md_j.residual_candidate_count);
@@ -1572,6 +1587,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     double proposal_screening = -1.0) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
+    if (allow_resident && plan->host_cache) {
+      cudaStreamCaptureStatus capture{};
+      direct_jk_check(cudaStreamIsCapturing(plan->stream, &capture));
+      direct_jk_require(capture == cudaStreamCaptureStatusNone,
+                        "host ERI cache requires eager stream execution");
+    }
     const bool fixed = fixed_threshold >= 0;
     const double screening =
         proposal_screening >= 0.0 ? proposal_screening : plan->screening_tolerance;
@@ -1583,6 +1604,39 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     direct_jk_require(spec.derivative_order == 0 && elements == plan->matrix_elements,
                       "device direct J/K requires full-plan value dimensions");
     const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+    // Diagnostic-only CUDA event/NVTX regions distinguish recurrence time from
+    // GPU replay and host-staged replay for each physical LR action. Ordinary
+    // endpoint runs keep DF_TRACE unset, preserving asynchronous execution.
+    std::unique_ptr<runtime::cuda_trace::TraceOperation> lr_profile;
+    if (std::getenv("GENERATIVEQC_DF_TRACE") && spec.exchange.present &&
+        spec.exchange.op == FockOperator::LongRange && !spec.coulomb.present)
+      lr_profile = std::make_unique<runtime::cuda_trace::TraceOperation>(
+          "cuda_lr_eri_action", plan->stream,
+          runtime::cuda_trace::TraceShape{plan->diagnostic.batch_size, plan->diagnostic.nbf, 0,
+                                          plan->resident_values != nullptr,
+                                          plan->host_cache != nullptr});
+    if (lr_profile && plan->host_cache)
+      runtime::cuda_trace::trace_counter("host_device_staging_bytes",
+                                         plan->host_cache->staging_bytes());
+    struct ProfileCensus {
+      cudaStream_t stream;
+      std::uint64_t* values{};
+      ~ProfileCensus() {
+        if (values) {
+          (void)cudaStreamSynchronize(stream);
+          (void)runtime::resource_cuda_free(values);
+        }
+      }
+    } profile_census{plan->stream};
+    if (lr_profile && !census) {
+      cudaStreamCaptureStatus capture{};
+      direct_jk_check(cudaStreamIsCapturing(plan->stream, &capture));
+      if (capture == cudaStreamCaptureStatusNone) {
+        direct_jk_check(runtime::resource_cuda_malloc(
+            reinterpret_cast<void**>(&profile_census.values), 2 * sizeof(std::uint64_t)));
+        census = profile_census.values;
+      }
+    }
     direct_jk_require(!mixed_resident || (allow_resident && !mixed_j && !unrestricted &&
                                           correction && plan->resident_mixed_values &&
                                           !plan->resident_values && plan->resident_bucket_mask &&
@@ -1856,6 +1910,27 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
             const auto cached_offset = !resident || plan->resident_bucket_offsets.empty()
                                            ? value_offset
                                            : plan->resident_bucket_offsets[item][bucket];
+            const bool gpu_bucket =
+                resident && cached_offset != std::numeric_limits<std::size_t>::max();
+            const bool host_bucket =
+                resident && plan->host_cache &&
+                plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max();
+            std::unique_ptr<runtime::cuda_trace::TraceRegion> bucket_profile;
+            if (lr_profile) {
+              const auto label = std::string(gpu_bucket    ? "lr_gpu_replay/"
+                                             : host_bucket ? "lr_host_replay/"
+                                                           : "lr_direct_recompute/") +
+                                 std::to_string(bucket);
+              bucket_profile =
+                  std::make_unique<runtime::cuda_trace::TraceRegion>(label.c_str(), plan->stream);
+              const auto values = direct_jk_resident_bucket_count(plan, item, first, second);
+              runtime::cuda_trace::trace_counter(gpu_bucket    ? "gpu_cached_values"
+                                                 : host_bucket ? "host_cached_values"
+                                                               : "direct_candidate_upper_bound",
+                                                 values);
+              if (host_bucket)
+                runtime::cuda_trace::trace_counter("host_h2d_bytes", values * sizeof(double));
+            }
             if (mixed_resident && cached_offset != std::numeric_limits<std::size_t>::max())
               launch_mixed_resident_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
@@ -1891,11 +1966,47 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
-            else if (plan->materialized_pair_order &&
-                     ((fixed && allow_materialized_fixed) ||
-                      (!fixed && !correction && first + second >= 3 && first + second <= 9)) &&
-                     (!canonical_strict_j || !dispatch.canonical_exchange ||
-                      spec.exchange.op == FockOperator::FullRange)) {
+            else if (resident && plan->host_cache &&
+                     plan->host_cache->offsets[bucket] != std::numeric_limits<std::size_t>::max()) {
+              auto& host = *plan->host_cache;
+              const auto count = direct_jk_resident_bucket_count(plan, item, first, second);
+              // Never overwrite pinned memory until its H2D finishes, nor a
+              // device tile until its previous scatter completes. Separate
+              // events allow CPU staging and next-tile H2D to overlap compute.
+              for (std::size_t begin = 0; begin < count;) {
+                const auto tile = std::min(host.tile_elements, count - begin);
+                const auto slot = host.next_slot++ % 2;
+                if (host.used[slot]) {
+                  direct_jk_check(cudaEventSynchronize(host.ready[slot]));
+                  direct_jk_check(cudaStreamWaitEvent(host.copy_stream, host.consumed[slot], 0));
+                }
+                std::memcpy(host.pinned[slot], host.values.get() + host.offsets[bucket] + begin,
+                            tile * sizeof(double));
+                direct_jk_check(cudaMemcpyAsync(host.device[slot], host.pinned[slot],
+                                                tile * sizeof(double), cudaMemcpyHostToDevice,
+                                                host.copy_stream));
+                direct_jk_check(cudaEventRecord(host.ready[slot], host.copy_stream));
+                direct_jk_check(cudaStreamWaitEvent(plan->stream, host.ready[slot], 0));
+                launch_resident_canonical_jk_kernel(
+                    plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
+                    plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
+                    offsets[first], offsets[first + 1U] - offsets[first], offsets[second],
+                    offsets[second + 1U] - offsets[second], first == second, canonical_strict_j,
+                    dispatch.canonical_exchange, unrestricted, host.device[slot],
+                    plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,
+                    census ? census : plan->canonical_work_count, correction, exchange_correction,
+                    fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
+                    tile, begin);
+                direct_jk_check(cudaGetLastError());
+                direct_jk_check(cudaEventRecord(host.consumed[slot], plan->stream));
+                host.used[slot] = true;
+                begin += tile;
+              }
+            } else if (plan->materialized_pair_order &&
+                       ((fixed && allow_materialized_fixed) ||
+                        (!fixed && !correction && first + second >= 3 && first + second <= 9)) &&
+                       (!canonical_strict_j || !dispatch.canonical_exchange ||
+                        spec.exchange.op == FockOperator::FullRange)) {
               // The prepared shell rows only prune candidates. Each AO still
               // applies the canonical geometry-only predicate, preserving a
               // linear signed-density operator at a fixed threshold. Every
@@ -1960,6 +2071,15 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           plan->screening_tolerance, plan->bounds, density, beta, coulomb, alpha_exchange,
           beta_exchange, mixed_coulomb_work_count);
       direct_jk_check(cudaGetLastError());
+    }
+    if (lr_profile && census && dispatch.canonical_exchange) {
+      std::uint64_t work[2]{};
+      DirectJkDownloadFence fence{plan->stream};
+      direct_jk_check(
+          cudaMemcpyAsync(work, census, sizeof(work), cudaMemcpyDeviceToHost, plan->stream));
+      fence.complete();
+      runtime::cuda_trace::trace_counter("canonical_values_visited", work[0]);
+      runtime::cuda_trace::trace_counter("recurrence_evaluations", work[1]);
     }
     for (const auto* output : outputs)
       if (output) {
@@ -2558,6 +2678,115 @@ generativeqc_status prepare_cuda_direct_jk_range_resident_values(
                              runtime::vector_capacities(plan->resident_bucket_offsets);
     plan->diagnostic.host_bytes += host_growth;
     plan->diagnostic.host_preparation_bytes += host_growth;
+  });
+}
+
+std::size_t cuda_direct_jk_host_value_bytes(const CudaDirectJkPlan* plan) noexcept {
+  return plan && plan->host_cache ? plan->host_cache->count * sizeof(double) : 0;
+}
+
+std::size_t cuda_direct_jk_host_capacity_bytes(const CudaDirectJkPlan* plan) noexcept {
+  return plan && plan->host_cache
+             ? cuda_direct_jk_host_value_bytes(plan) + 2 * plan->host_cache->staging_bytes() +
+                   sizeof(DirectJkHostCache)
+             : 0;
+}
+
+generativeqc_status prepare_cuda_direct_jk_host_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::size_t device_budget,
+    std::size_t tile_bytes, std::uint32_t bucket_mask, std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan && plan->resident_values && !plan->resident_mixed_values &&
+                          plan->resident_operator == FockOperator::LongRange &&
+                          plan->diagnostic.batch_size == 1 && !plan->host_cache &&
+                          bucket_mask < (1U << 28),
+                      "host values require an immutable single-system strict LR source");
+    int current = -1;
+    direct_jk_check(cudaGetDevice(&current));
+    direct_jk_require(current == plan->device_id, "host source device mismatch");
+    if (!maximum_bytes || !bucket_mask) return;
+    if (sizeof(DirectJkHostCache) > maximum_bytes) throw std::bad_alloc();
+    // GPU buckets have already won admission. Treat the configured tile size
+    // as a ceiling so a small residual VRAM allowance still supports streaming
+    // without evicting those values. The hard byte ceilings remain unchanged.
+    tile_bytes =
+        std::min({tile_bytes, device_budget / 2, (maximum_bytes - sizeof(DirectJkHostCache)) / 2});
+    tile_bytes -= tile_bytes % sizeof(double);
+    if (!tile_bytes) throw std::bad_alloc();
+    std::array<std::size_t, 28> bytes{};
+    for (unsigned bucket = 0; bucket < 28; ++bucket)
+      bytes[bucket] = cuda_direct_jk_selected_resident_value_bytes(plan, 1U << bucket);
+    // GPU selection is already published and cannot be displaced by staging.
+    const auto mask = direct_jk_fit_resident_buckets(
+        bytes, maximum_bytes - sizeof(DirectJkHostCache) - 2 * tile_bytes,
+        bucket_mask & ~plan->resident_bucket_mask);
+    std::size_t count = 0;
+    for (unsigned bucket = 0; bucket < 28; ++bucket)
+      if (mask & (1U << bucket)) count = direct_jk_sum(count, bytes[bucket] / sizeof(double));
+    if (!count) return;
+    auto host = std::make_unique<DirectJkHostCache>();
+    host->consumer_stream = plan->stream;
+    host->count = count;
+    host->tile_elements = std::min(count, tile_bytes / sizeof(double));
+    host->offsets.fill(std::numeric_limits<std::size_t>::max());
+    host->values = std::make_unique<double[]>(count);
+    direct_jk_check(cudaStreamCreateWithFlags(&host->copy_stream, cudaStreamNonBlocking));
+    const auto actual_tile_bytes = host->tile_elements * sizeof(double);
+    for (unsigned slot = 0; slot < 2; ++slot) {
+      direct_jk_check(
+          cudaMallocHost(reinterpret_cast<void**>(&host->pinned[slot]), actual_tile_bytes));
+      direct_jk_check(runtime::resource_cuda_malloc(reinterpret_cast<void**>(&host->device[slot]),
+                                                    actual_tile_bytes));
+      direct_jk_check(cudaEventCreateWithFlags(&host->ready[slot], cudaEventDisableTiming));
+      direct_jk_check(cudaEventCreateWithFlags(&host->consumed[slot], cudaEventDisableTiming));
+    }
+    direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    std::size_t offset = 0;
+    const auto& pairs = plan->canonical_pair_offsets[0];
+    for (unsigned first = 0; first < 7; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        const auto bucket = first * (first + 1U) / 2U + second;
+        if (!(mask & (1U << bucket)) || !bytes[bucket]) continue;
+        host->offsets[bucket] = offset;
+        const auto bucket_count = bytes[bucket] / sizeof(double);
+        for (std::size_t begin = 0; begin < bucket_count;) {
+          const auto tile = std::min(host->tile_elements, bucket_count - begin);
+          launch_canonical_jk_kernel(
+              plan->stream, plan->canonical_batch, plan->canonical_cartesian, 0, first + second,
+              plan->canonical_pairs, direct_jk_pair_rows(plan, second, pairs[first]), pairs[first],
+              pairs[first + 1U] - pairs[first], pairs[second], pairs[second + 1U] - pairs[second],
+              first == second, false, true, false, DirectCoulombRange::Long, plan->resident_omega,
+              plan->screening_tolerance, plan->canonical_bounds, nullptr, nullptr, nullptr, nullptr,
+              host->device[0], nullptr, nullptr, tile, begin);
+          direct_jk_check(cudaGetLastError());
+          plan->diagnostic.resident_values_submitted += tile;
+          launch_independent_jk_finite_kernel(plan->stream, host->device[0], tile,
+                                              plan->numerical_failure);
+          direct_jk_check(cudaGetLastError());
+          direct_jk_check(cudaMemcpyAsync(host->pinned[0], host->device[0], tile * sizeof(double),
+                                          cudaMemcpyDeviceToHost, plan->stream));
+          direct_jk_check(cudaStreamSynchronize(plan->stream));
+          plan->diagnostic.resident_values_completed += tile;
+          std::memcpy(host->values.get() + offset + begin, host->pinned[0], tile * sizeof(double));
+          begin += tile;
+        }
+        offset += bucket_count;
+      }
+    int failure = 0;
+    DirectJkDownloadFence fence{plan->stream};
+    direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    fence.complete();
+    if (failure)
+      throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "nonfinite host LR source"};
+    direct_jk_require(offset == count, "host LR inventory drift");
+    plan->device_bytes = direct_jk_sum(plan->device_bytes, host->staging_bytes());
+    plan->diagnostic.device_bytes =
+        direct_jk_sum(plan->diagnostic.device_bytes, host->staging_bytes());
+    plan->diagnostic.host_bytes =
+        direct_jk_sum(plan->diagnostic.host_bytes,
+                      count * sizeof(double) + host->staging_bytes() + sizeof(*host));
+    plan->host_cache = std::move(host);
   });
 }
 

@@ -514,6 +514,57 @@ primary retains its current J/K and final occupied projection during a range-onl
 rebase. This preserves the physical replay gates and counts the operators
 actually executed.
 
+### Experimental pageable LR ERI backing
+
+`GENERATIVEQC_KS_RANGE_HOST_MAX_BYTES` bounds the additional pageable FP64
+cache for admitted cold strict long-range sources. Unset selects the smaller of
+32 GiB and one quarter of available host memory, respecting Linux cgroup/job
+limits and usage at every ancestor. Unknown capacity disables automatic host
+storage. Set `0` to disable it or a byte count for an explicit ceiling. The
+ceiling includes pageable values, two pinned staging tiles and host descriptors;
+`GENERATIVEQC_KS_RANGE_HOST_TILE_BYTES` caps each tile (default 256 MiB, maximum
+512 MiB, divisible by eight). Tiles shrink to fit remaining device capacity
+without evicting GPU buckets; diagnostic traces report the actual staging bytes.
+Two equally sized device tiles are also charged to the complete consumer budget.
+The host tier requires an admitted GPU source; a refused source retains Direct.
+
+`GENERATIVEQC_KS_RANGE_HOST_BUCKET_MASK` optionally restricts eligible omitted
+buckets (default all 28). Whole buckets fit in descending angular order. This
+is a cost proxy, not a measured transfer-versus-recompute model. Unselected or
+unaffordable buckets retain exact Direct. Allocation refusal discards only the
+host tier; driver and numerical failures propagate. Values retain the owner's
+geometry, basis, radial operator, omega, screening and precision identity.
+Changing any host control retires the lease before warm reuse. Mixed sources,
+CUDA graph capture, persistent storage and CPU integral production are excluded.
+
+Eager replay copies sequential pageable tiles to pinned storage, then uses a
+separate stream for H2D. Events protect both pinned and device buffer reuse;
+contraction and FP64 compensation remain on the consumer stream. Destruction
+drains both streams before releasing metadata. Setup builds and finite-audits
+only the selected missing values through the same canonical CUDA recurrence.
+
+With `GENERATIVEQC_DF_PROGRESS_TRACE`, preparation reports host value/capacity
+and D2H bytes. Each `cuda_eri_source_action` reports GPU/host coverage, H2D
+bytes and Direct values at the preparation threshold. These are submitted work
+observations; a successful final census audit establishes completion. A tighter
+consumer threshold can reduce Direct evaluations. Enqueue journal durations
+include host scheduling and are **not** GPU integral timings. Use a separate
+Nsight Systems run to measure recurrence kernels, transfers and overlap; keep
+profiled wall times separate from unprofiled complete E+F observations.
+`GENERATIVEQC_DF_TRACE` also records each `cuda_lr_eri_action` with CUDA-event
+regions `lr_direct_recompute/<bucket>`, `lr_gpu_replay/<bucket>` and
+`lr_host_replay/<bucket>`, plus actual
+canonical visits and recurrence evaluations. The host region includes tile
+staging/waits and contraction; Nsight separates DMA from compute. Both trace
+environment variables must be unset for unprofiled endpoint timing.
+
+`benchmarks/host_eri_cache.py` wraps the ordinary endpoint driver for fresh-process
+Direct/GPU/GPU+RAM comparisons, including the 96/108-atom fixtures. Run all tiers
+from one binary on the same Slurm GPU, interleave repeats, retain source/patch
+and binary hashes, compiler-cache receipts, input identity, raw forces, SCF/Fock
+counts and journals. Independent observable gates and unchanged-work endpoint
+measurements are required before claiming a benefit or changing defaults.
+
 ## Prepared ragged execution
 
 `KsPreparedBatch` owns one compatible KS plan per input item. CUDA execution
