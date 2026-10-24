@@ -1,0 +1,207 @@
+{
+  "scope": "fullRIJK actual internal policy parity and raw dependent execution timings; independent numerical acceptance remains in numerical-replay.json",
+  "internal_parity": [
+    {
+      "slot": 22,
+      "geometry_id": 0,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 0.0,
+      "force_max_Eh_Bohr": 0.0,
+      "force_rms_Eh_Bohr": 0.0
+    },
+    {
+      "slot": 23,
+      "geometry_id": 0,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "repeat": 1,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 0.0,
+      "force_max_Eh_Bohr": 1.673314264927228e-14,
+      "force_rms_Eh_Bohr": 7.509066604981605e-15
+    },
+    {
+      "slot": 24,
+      "geometry_id": 0,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 5.866098717888235e-09,
+      "force_max_Eh_Bohr": 6.557321113181969e-09,
+      "force_rms_Eh_Bohr": 3.129706211870212e-09
+    },
+    {
+      "slot": 25,
+      "geometry_id": 0,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "repeat": 1,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 5.866098717888235e-09,
+      "force_max_Eh_Bohr": 6.557336524465329e-09,
+      "force_rms_Eh_Bohr": 3.1297078856335045e-09
+    },
+    {
+      "slot": 26,
+      "geometry_id": 0,
+      "policy": "fast",
+      "budget_bytes": 268435456,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 5.866098717888235e-09,
+      "force_max_Eh_Bohr": 6.55733531709779e-09,
+      "force_rms_Eh_Bohr": 3.129707366257263e-09
+    },
+    {
+      "slot": 27,
+      "geometry_id": 1,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 0.0,
+      "force_max_Eh_Bohr": 0.0,
+      "force_rms_Eh_Bohr": 0.0
+    },
+    {
+      "slot": 28,
+      "geometry_id": 1,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "repeat": 1,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 0.0,
+      "force_max_Eh_Bohr": 1.280572869966079e-14,
+      "force_rms_Eh_Bohr": 5.459453812288394e-15
+    },
+    {
+      "slot": 29,
+      "geometry_id": 1,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 6.289667453529546e-09,
+      "force_max_Eh_Bohr": 7.116950050123361e-09,
+      "force_rms_Eh_Bohr": 3.3813520890475525e-09
+    },
+    {
+      "slot": 30,
+      "geometry_id": 1,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "repeat": 1,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 6.289667453529546e-09,
+      "force_max_Eh_Bohr": 7.11694221958159e-09,
+      "force_rms_Eh_Bohr": 3.381352996756663e-09
+    },
+    {
+      "slot": 31,
+      "geometry_id": 1,
+      "policy": "fast",
+      "budget_bytes": 268435456,
+      "repeat": 0,
+      "comparison": "internal parity to same-geometry Standard2048MiB repeat0; NOT an independent oracle",
+      "energy_abs_Eh": 6.289667453529546e-09,
+      "force_max_Eh_Bohr": 7.116908406351596e-09,
+      "force_rms_Eh_Bohr": 3.3813468678546658e-09
+    }
+  ],
+  "timing_descriptions": [
+    {
+      "geometry_id": 0,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "raw_seconds": [
+        1.3551521850167774,
+        0.4832915820297785
+      ],
+      "median_seconds": 0.9192218835232779,
+      "range_seconds": [
+        0.4832915820297785,
+        1.3551521850167774
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    },
+    {
+      "geometry_id": 0,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "raw_seconds": [
+        0.6435449119890109,
+        0.48760265397140756
+      ],
+      "median_seconds": 0.5655737829802092,
+      "range_seconds": [
+        0.48760265397140756,
+        0.6435449119890109
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    },
+    {
+      "geometry_id": 0,
+      "policy": "fast",
+      "budget_bytes": 268435456,
+      "raw_seconds": [
+        0.46805529901757836
+      ],
+      "median_seconds": 0.46805529901757836,
+      "range_seconds": [
+        0.46805529901757836,
+        0.46805529901757836
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    },
+    {
+      "geometry_id": 1,
+      "policy": "standard",
+      "budget_bytes": 2147483648,
+      "raw_seconds": [
+        0.506822583032772,
+        0.4908954070415348
+      ],
+      "median_seconds": 0.49885899503715336,
+      "range_seconds": [
+        0.4908954070415348,
+        0.506822583032772
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    },
+    {
+      "geometry_id": 1,
+      "policy": "fast",
+      "budget_bytes": 2147483648,
+      "raw_seconds": [
+        0.5075400429777801,
+        0.4729899480007589
+      ],
+      "median_seconds": 0.4902649954892695,
+      "range_seconds": [
+        0.4729899480007589,
+        0.5075400429777801
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    },
+    {
+      "geometry_id": 1,
+      "policy": "fast",
+      "budget_bytes": 268435456,
+      "raw_seconds": [
+        0.5248063909821212
+      ],
+      "median_seconds": 0.5248063909821212,
+      "range_seconds": [
+        0.5248063909821212,
+        0.5248063909821212
+      ],
+      "interpretation": "dependent cold/warm execution provenance only; not independent repeats or performance qualification"
+    }
+  ],
+  "cross_machine_ratios": "NOT_COMPUTED",
+  "performance_acceptance": "NOT_QUALIFIED"
+}
