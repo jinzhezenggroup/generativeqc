@@ -86,12 +86,6 @@ def _emit_shell_class_fock_cuda(
         (384 + block_threads - 1) // block_threads
     )
     barrier = "__syncwarp();" if block_threads == 32 else "__syncthreads();"
-    # A persistent queue must reconverge lane-dependent worker returns before
-    # publishing another shared claim. Wider queues also require the CTA barrier
-    # for inter-warp visibility; the full-warp barrier alone is insufficient.
-    queue_barrier = (
-        barrier if block_threads == 32 else "__syncwarp();\n    __syncthreads();"
-    )
     component_setup = _generic_component_value_setup(spec)
     task_component_setup = _generic_task_component_setup(spec)
     component_names = _emitted_component_names(spec)
@@ -501,14 +495,14 @@ generated_dppp_shell_class_fock_persistent(
   __shared__ std::uint32_t shared_task_index;
   while (true) {{
     if (lane == 0U) shared_task_index = atomicAdd(task_head, 1U);
-    {queue_barrier}
+    {barrier}
     const std::uint32_t task_index = shared_task_index;
     if (task_index >= *task_count) return;
     generated_dppp_shell_class_fock_task<Unrestricted>(
         tasks, primitive_pairs, primitive_pair_offsets, ao_coefficients,
         atom_positions, screening_tolerance, schwarz_bounds, density, fock,
         static_cast<std::size_t>(*task_offset + task_index));
-    {queue_barrier}
+    {barrier}
   }}
 }}
 
