@@ -1,0 +1,9 @@
+[
+  {
+    "source": "/inspire/ssd/project/chemicalreaction/czxs25220150/i2679-cbs-energy-20261023-a1/qm7.mat",
+    "task_copy": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/assets/qm7.mat",
+    "bytes": 17884280,
+    "sha256": "fd6c26c1086887310518e6a6da778253bc5d3ceb8166007a679a740fff9ee6ea",
+    "scope": "read-only reuse of existing QM7; no new oracle or scientific calculation"
+  }
+]

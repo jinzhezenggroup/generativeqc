@@ -1,0 +1,27 @@
+{
+  "prepared_v1": {
+    "revision": "df5c44a81c5d73210a8d2f7f09ba4930d7f67210",
+    "sha256": "dd96c17e702101d21352deb4f867ab0fbb7bce66700222d49fc67bbdef23185e"
+  },
+  "profile_addendum_v2": {
+    "revision": "cdd48852466de23061de59704768cca4c58118a3",
+    "sha256": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761"
+  },
+  "cohort": {
+    "codegen": "target/profile-specific artifacts and new DSO hashes required",
+    "cohort": "cbs-frozen-science-portable-cuda-sm90.v1",
+    "hardware_only": false,
+    "identical_tuned_schedule": false,
+    "native_profile": "portable_cuda",
+    "profile_match": "portable",
+    "profile_status": "EXPLICIT_ROOT_DECISION",
+    "science_changes": "forbidden; report to root for separately approved paired-version cohort",
+    "target": "sm90",
+    "tuned": false
+  },
+  "source_environment_running_build": "UNCHANGED; no restart for documentation addendum",
+  "gpu_execution": "NOT_RUN",
+  "delivered_protocol_merge": "c64742431a5472c610e9c4f92698e239c775febd",
+  "delivered_manifest_git_lf_sha256": "a86940aed582f16f438b13c4ce3bf563bd4db8b896c8c290249e7653181f8761",
+  "delivered_manifest_matches_prepared_addendum": true
+}

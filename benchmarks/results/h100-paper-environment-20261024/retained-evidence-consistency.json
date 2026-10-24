@@ -1,0 +1,23 @@
+{
+  "scope": "CPU retained-evidence consistency replay only; does not authenticate live binary/device or accept science",
+  "families": {
+    "cbs": {
+      "terminal_files_checked": 10,
+      "static_records_checked": 6,
+      "build_preflight_canonical_sha256": "ab8bf4143e581563132a99ffbfd817112ea604c1abe3974e7ead9dd55d10a3c7",
+      "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+      "library_bytes": 1013114992,
+      "status": "RETAINED_RECEIPT_CONSISTENCY_PASS",
+      "H100_execution": "NOT_RUN"
+    },
+    "hf": {
+      "terminal_files_checked": 10,
+      "static_records_checked": 6,
+      "build_preflight_canonical_sha256": "839adc6f2fe7a55c0d2b947a21070f8aadc8672311130ab3c86d637a8967fa89",
+      "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+      "library_bytes": 1013114968,
+      "status": "RETAINED_RECEIPT_CONSISTENCY_PASS",
+      "H100_execution": "NOT_RUN"
+    }
+  }
+}

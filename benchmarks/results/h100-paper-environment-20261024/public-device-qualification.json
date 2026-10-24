@@ -1,0 +1,605 @@
+{
+  "schema": "generativeqc.h100-environment-qualification.v1",
+  "scope": "bounded #2726 environment and three setup endpoints; not the #2727 matrix or parent scientific acceptance",
+  "job_name": "h100-paper-smoke-public-20261024-9dcc-r1",
+  "created_at": 1792845081000,
+  "project": "\u516c\u5171\u79d1\u7814\u9879\u76ee",
+  "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+  "node": "qb-prod-gpu075",
+  "gpu_uuid_sha256": "bb271e4219db96c0b35934e4e4700d6354d59140b27f1f9e0426f0cb04146661",
+  "preflight_sha256": "d44073dd840385fb14a2988367fa264fd9eb1fb52373e4e8c267aefc2906d04f",
+  "root_marker_sha256": "fcabb3a87d38ad063a52c0dabc63b6f55998368dd9fe4853afcac6905ede1a94",
+  "final_plan_sha256": "6056b1e7d93ac92d0c5cc397134bb03f0be30e3016665e16dfc19e2f0a062c70",
+  "actual_setup_calls": 3,
+  "job_elapsed_seconds": 107.80235310702119,
+  "arms": {
+    "native-hf": {
+      "process_returncode": 0,
+      "timed_out": false,
+      "process_elapsed_seconds": 22.00683064199984,
+      "samples": 1,
+      "outcome": "FINITE_ENDPOINT_RETURNED",
+      "source": {
+        "revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+        "root": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/source/hf-dft-cbd4",
+        "driver": "benchmarks/readme_defaults.py",
+        "driver_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+        "library": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/hf-sm90-portable-attempt1/libgenerativeqc.so",
+        "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+        "inventory": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/output/hf-source-inventory.json",
+        "inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+        "build_preflight": {
+          "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+          "status": "PASS",
+          "source_sha256": "927745c665c018a9d0b97e8ca9b29b1c3a09339375074d4c8f8b7bdf4f305aa5",
+          "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+          "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+          "target": "sm90",
+          "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+          "generated_artifacts_sha256": "618d880d7d5215b916007436c602ea7f3b21a9472c6510721995fcc824c83856",
+          "profile_resolution_receipt_sha256": "fe536e269fd98665ebfdf847e8bdd1cff8e5fe2673abb7222917a98b0662ccb6",
+          "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+          "native_profile": "portable_cuda",
+          "profile_match": "portable",
+          "tuned": false,
+          "auto_sm90_outcome": "ValueError"
+        },
+        "build_preflight_sha256": "839adc6f2fe7a55c0d2b947a21070f8aadc8672311130ab3c86d637a8967fa89",
+        "cohort": "hf-dft-frozen-science-sm90.v1",
+        "native_profile": "portable_cuda",
+        "target": "sm90",
+        "tuned": false,
+        "hardware_only": false,
+        "provenance_patch_sha256": "3ebd93ce481b47058e20990f99f11a1c9d349d6780cc5a63286583bbd3316041"
+      },
+      "source_tree": {
+        "inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+        "verified_files": 12130
+      },
+      "source_driver_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+      "adapter_sha256": "36a14e43c1a0dd01f34b4ef076e2c9abe9250c7f49a6722616bdeca346f3bdb4",
+      "device": {
+        "hostname": "job-2ed4e8f9-3efb-425e-9663-02bb69c678e2-worker-0",
+        "visible_device_count": 1,
+        "name": "NVIDIA H100 80GB HBM3",
+        "compute_capability": [
+          9,
+          0
+        ],
+        "memory_bytes": 85019590656,
+        "cuda_visible_devices": null,
+        "nvidia_smi": "NVIDIA H100 80GB HBM3, GPU-7c9f7fcf-a830-d861-356c-499f2be3e6ef, 00000000:91:00.0, 81559 MiB, 595.58.03, 700.00 W",
+        "cgroup": {
+          "cpu.max": "2000000 100000",
+          "memory.max": "214748364800"
+        }
+      },
+      "environment": {
+        "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+        "executable": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/env/bin/python",
+        "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+        "packages": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "pyscf": "2.14.0",
+          "gpu4pyscf-cuda12x": "1.8.1",
+          "cupy-cuda12x": "13.6.0",
+          "gpu4pyscf-libxc-cuda12x": "0.8.1",
+          "pyscf-dispersion": "1.5.0",
+          "cutensor-cu12": null,
+          "sccache": "0.16.0"
+        },
+        "thread_controls": {
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1"
+        }
+      },
+      "numeric_originals": [
+        {
+          "values_file": "values-000.bin",
+          "values_sha256": "021b4d494d989ec847c1c5945fc84e15b943452b26b8b170b40a05af2eeabbe4",
+          "index_file": "values-000.index.json",
+          "index_sha256": "e78d9d586cb2dd3d79c10de73746935e3c37f020d458824fcb1ee151525eb2ce"
+        }
+      ],
+      "requested_timing_use": "setup qualification only; excluded from performance cohorts",
+      "performance_qualified": false,
+      "endpoint_seconds": 1.459631677949801,
+      "converged": true,
+      "iterations": 12,
+      "primary_fock_builds": "UNAVAILABLE: returned null",
+      "reported_stage_counters": {
+        "strict_stage_fock_builds": 12,
+        "post_scf_fock_builds": 1,
+        "final_residual_audits": 1,
+        "skipped_final_fock_builds": 1,
+        "operator_work_counters_valid": true
+      },
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 17238744,
+        "preparation_seconds": 0.002963117
+      },
+      "precision": {
+        "policy_version": 1,
+        "requested_mode": "fp64",
+        "effective_bits": 64,
+        "mixed_precision_fock_threshold": 0.0,
+        "strict_refinement_applied": false,
+        "mixed_precision_reserved_error": 0.0,
+        "refinement_iterations": 0,
+        "mixed_stage_fock_builds": 0,
+        "strict_stage_fock_builds": 12,
+        "post_scf_fock_builds": 1,
+        "execution_retries": 0,
+        "mixed_admission_census": 0,
+        "final_residual_audits": 1,
+        "skipped_final_fock_builds": 1,
+        "operator_work_counters_valid": true,
+        "detail_version": 1,
+        "complete": false,
+        "operator_inventory_complete": false,
+        "conversion_count": 0,
+        "fallback_count": 0,
+        "returned_state_identity": null,
+        "scf_fock_timeline": [],
+        "operators": [],
+        "native_provenance": {
+          "policy_version": 1,
+          "requested_mode": "fp64",
+          "effective_bits": 64,
+          "mixed_precision_fock_threshold": 0.0,
+          "strict_refinement_applied": false,
+          "mixed_precision_reserved_error": 0.0,
+          "refinement_iterations": 0,
+          "mixed_stage_fock_builds": 0,
+          "strict_stage_fock_builds": 12,
+          "post_scf_fock_builds": 1,
+          "execution_retries": 0,
+          "mixed_admission_census": 0,
+          "final_residual_audits": 1,
+          "skipped_final_fock_builds": 1,
+          "operator_work_counters_valid": true
+        }
+      },
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "complete_precision_inventory": "INCOMPLETE: complete=false and operator_inventory_complete=false",
+      "native_build": {
+        "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+        "library_path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/hf-sm90-portable-attempt1/libgenerativeqc.so.0.1.0",
+        "source_identity": "a2d27f9ecfd07025b0b7fc27212fab8cf1a447ef155168006c2e0bb66efd5c69"
+      }
+    },
+    "gpu4pyscf-hf": {
+      "process_returncode": 0,
+      "timed_out": false,
+      "process_elapsed_seconds": 26.11407044000225,
+      "samples": 1,
+      "outcome": "FINITE_ENDPOINT_RETURNED",
+      "source": {
+        "revision": "cbd4d8074de35105717c8aac7cd1f86babbe90ec",
+        "root": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/source/hf-dft-cbd4",
+        "driver": "benchmarks/readme_defaults.py",
+        "driver_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+        "library": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/hf-sm90-portable-attempt1/libgenerativeqc.so",
+        "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+        "inventory": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/output/hf-source-inventory.json",
+        "inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+        "build_preflight": {
+          "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+          "status": "PASS",
+          "source_sha256": "927745c665c018a9d0b97e8ca9b29b1c3a09339375074d4c8f8b7bdf4f305aa5",
+          "library_sha256": "5645dacffe534cff08bd5cc042eefc9ab1f5335cced0f16220387eefd61a38df",
+          "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+          "target": "sm90",
+          "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+          "generated_artifacts_sha256": "618d880d7d5215b916007436c602ea7f3b21a9472c6510721995fcc824c83856",
+          "profile_resolution_receipt_sha256": "fe536e269fd98665ebfdf847e8bdd1cff8e5fe2673abb7222917a98b0662ccb6",
+          "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+          "native_profile": "portable_cuda",
+          "profile_match": "portable",
+          "tuned": false,
+          "auto_sm90_outcome": "ValueError"
+        },
+        "build_preflight_sha256": "839adc6f2fe7a55c0d2b947a21070f8aadc8672311130ab3c86d637a8967fa89",
+        "cohort": "hf-dft-frozen-science-sm90.v1",
+        "native_profile": "portable_cuda",
+        "target": "sm90",
+        "tuned": false,
+        "hardware_only": false,
+        "provenance_patch_sha256": "3ebd93ce481b47058e20990f99f11a1c9d349d6780cc5a63286583bbd3316041"
+      },
+      "source_tree": {
+        "inventory_sha256": "9cd7117da928ff96eaf6524a10c588567934b6b7e90cd2b3c78328558e7c211b",
+        "verified_files": 12130
+      },
+      "source_driver_sha256": "74f61cc0eb9d1afb54e210eefb2620bbf01e91c2e02d55e5fbe65fbfc88c9055",
+      "adapter_sha256": "36a14e43c1a0dd01f34b4ef076e2c9abe9250c7f49a6722616bdeca346f3bdb4",
+      "device": {
+        "hostname": "job-2ed4e8f9-3efb-425e-9663-02bb69c678e2-worker-0",
+        "visible_device_count": 1,
+        "name": "NVIDIA H100 80GB HBM3",
+        "compute_capability": [
+          9,
+          0
+        ],
+        "memory_bytes": 85019590656,
+        "cuda_visible_devices": null,
+        "nvidia_smi": "NVIDIA H100 80GB HBM3, GPU-7c9f7fcf-a830-d861-356c-499f2be3e6ef, 00000000:91:00.0, 81559 MiB, 595.58.03, 700.00 W",
+        "cgroup": {
+          "cpu.max": "2000000 100000",
+          "memory.max": "214748364800"
+        }
+      },
+      "environment": {
+        "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+        "executable": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/env/bin/python",
+        "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+        "packages": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "pyscf": "2.14.0",
+          "gpu4pyscf-cuda12x": "1.8.1",
+          "cupy-cuda12x": "13.6.0",
+          "gpu4pyscf-libxc-cuda12x": "0.8.1",
+          "pyscf-dispersion": "1.5.0",
+          "cutensor-cu12": null,
+          "sccache": "0.16.0"
+        },
+        "thread_controls": {
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1"
+        }
+      },
+      "numeric_originals": [
+        {
+          "values_file": "values-000.bin",
+          "values_sha256": "40a0c2e358a60db2a23d593f729881c1d2c9b9414267f0be0bcfa03d5ff08271",
+          "index_file": "values-000.index.json",
+          "index_sha256": "c8dcc8b334a6eb9ad98612594fae28ce6fa3a5dda42e41d7b7fa6bb3f805c368"
+        }
+      ],
+      "requested_timing_use": "setup qualification only; excluded from performance cohorts",
+      "performance_qualified": false,
+      "endpoint_seconds": 14.091164940036833,
+      "converged": true,
+      "iterations": 8,
+      "effective_potential_builds": 9,
+      "warm_start_used": false,
+      "settings": {
+        "energy_tolerance": 1e-09,
+        "orbital_gradient_tolerance": null,
+        "orbital_gradient_tolerance_resolved": 3.1622776601683795e-05,
+        "max_iterations": 50,
+        "diis_history": 8,
+        "initial_guess": "minao",
+        "direct_scf": true,
+        "direct_scf_tolerance": 1e-13,
+        "xc_grid": null,
+        "nonlocal_grid": null,
+        "force_grid_response": null,
+        "auxbasis_response": null
+      },
+      "contraction_backend": {
+        "status": "OBSERVED",
+        "engine": "cupy",
+        "selector": "cupy",
+        "module_path": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/env/lib/python3.11/site-packages/gpu4pyscf/lib/cutensor.py",
+        "module_sha256": "6cefb4e6fbeb636153f7be786dc5e112ad3fb77335df1da955a999a73691b8ce",
+        "backend_override_applied_by_adapter": false
+      },
+      "internal_operator_precision_inventory": "UNAVAILABLE: not supplied by this frozen reference driver"
+    },
+    "cbs-c2": {
+      "process_returncode": 0,
+      "timed_out": false,
+      "process_elapsed_seconds": 26.766645152994897,
+      "samples": 1,
+      "outcome": "FINITE_ENDPOINT_RETURNED",
+      "source": {
+        "revision": "976f756b391bc65edb79f76df1a8c3fe807518a7",
+        "root": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/source/cbs-qualified",
+        "driver": "benchmarks/readme_cbs.py",
+        "driver_sha256": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+        "library": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/build/cbs-sm90-portable-attempt2/libgenerativeqc.so",
+        "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+        "inventory": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/output/cbs-source-inventory.json",
+        "inventory_sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924",
+        "build_preflight": {
+          "scope": "CPU static SDK/build preflight only; no GPU execution or scientific acceptance",
+          "status": "PASS",
+          "source_sha256": "5fbd9791c6c645fffc02d07af7c5335899a9a30a3e31526c903da5b6b0227b6a",
+          "library_sha256": "fea001df0f1a7c8bd6cbf5188fa0decb818e349da7e64d38465adb0b5aad57b6",
+          "environment_sha256": "4b9a3fd754f6ef19d4db3c87ebcadf132ba84f22cb7dcb135d99be7be77b8ed7",
+          "target": "sm90",
+          "build_config_sha256": "970908cc95f7f286c5b17bdee08421f310ea0999dc06e4dc76e04d6776a0c3d8",
+          "generated_artifacts_sha256": "c10a415add1edf31495d078807a3b00f3cefe9f195d6db632784bb07c1e45852",
+          "profile_resolution_receipt_sha256": "39204957f2fc5e50e2526684eba1b8df521bcdd05a9cfa23b43d75a0bf7995a5",
+          "profile_decision_sha256": "d4e79d66c5515a779abd04f74f2af7d1548f625acb717e5dcd0a13a34aec5d06",
+          "native_profile": "portable_cuda",
+          "profile_match": "portable",
+          "tuned": false,
+          "auto_sm90_outcome": "ValueError"
+        },
+        "build_preflight_sha256": "ab8bf4143e581563132a99ffbfd817112ea604c1abe3974e7ead9dd55d10a3c7",
+        "cohort": "cbs-frozen-science-portable-cuda-sm90.v1",
+        "native_profile": "portable_cuda",
+        "target": "sm90",
+        "tuned": false,
+        "hardware_only": false,
+        "qualified_patch_sha256": "5a1a974bab09e0fe31e6186e6ec2129abf26961113aafcd3d9c81616eb2d7cad"
+      },
+      "source_tree": {
+        "inventory_sha256": "60d33b96de2f2f607e526a87e190396fc1cb3dc19afbe492deddded51b60d924",
+        "verified_files": 12145
+      },
+      "source_driver_sha256": "f2019f67a596dbee1e97fa2217278fff76b554faf4a932ebaaeb9bdcab763ed9",
+      "adapter_sha256": "36a14e43c1a0dd01f34b4ef076e2c9abe9250c7f49a6722616bdeca346f3bdb4",
+      "device": {
+        "hostname": "job-2ed4e8f9-3efb-425e-9663-02bb69c678e2-worker-0",
+        "visible_device_count": 1,
+        "name": "NVIDIA H100 80GB HBM3",
+        "compute_capability": [
+          9,
+          0
+        ],
+        "memory_bytes": 85019590656,
+        "cuda_visible_devices": null,
+        "nvidia_smi": "NVIDIA H100 80GB HBM3, GPU-7c9f7fcf-a830-d861-356c-499f2be3e6ef, 00000000:91:00.0, 81559 MiB, 595.58.03, 700.00 W",
+        "cgroup": {
+          "cpu.max": "2000000 100000",
+          "memory.max": "214748364800"
+        }
+      },
+      "environment": {
+        "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+        "executable": "/inspire/ssd/project/project-public/czxs25220150/h100-paper-environment-public-20261024-9dcc/runtime-v1/env/bin/python",
+        "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+        "packages": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "pyscf": "2.14.0",
+          "gpu4pyscf-cuda12x": "1.8.1",
+          "cupy-cuda12x": "13.6.0",
+          "gpu4pyscf-libxc-cuda12x": "0.8.1",
+          "pyscf-dispersion": "1.5.0",
+          "cutensor-cu12": null,
+          "sccache": "0.16.0"
+        },
+        "thread_controls": {
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1",
+          "MKL_NUM_THREADS": "1"
+        }
+      },
+      "numeric_originals": [
+        {
+          "values_file": "values-000.bin",
+          "values_sha256": "95cff589effc5882ddcf1d08350da3931fe09cf250827f4d375344f4d966a37e",
+          "index_file": "values-000.index.json",
+          "index_sha256": "713d7525790837ffa9b38ff9e1096026808f486bdb9df0ba84ffe9f07d00929b"
+        }
+      ],
+      "requested_timing_use": "setup qualification only; excluded from performance cohorts",
+      "performance_qualified": false,
+      "endpoint_seconds": 6.252849305048585,
+      "complete_seconds": 6.253496221033856,
+      "converged": true,
+      "executed_backend": "cuda",
+      "protocol": {
+        "carbon": 2,
+        "formula": "C2H6",
+        "qm7_index_zero_based": 1,
+        "dataset_sha256": "fd6c26c1086887310518e6a6da778253bc5d3ceb8166007a679a740fff9ee6ea",
+        "atoms_bohr": [
+          [
+            6,
+            [
+              1.8973606824874878,
+              -0.005574692040681839,
+              -0.012094247154891491
+            ]
+          ],
+          [
+            6,
+            [
+              4.7544755935668945,
+              -0.013265877030789852,
+              0.0011149384081363678
+            ]
+          ],
+          [
+            1,
+            [
+              1.176071047782898,
+              1.932055950164795,
+              -0.0030991509556770325
+            ]
+          ],
+          [
+            1,
+            [
+              1.1604996919631958,
+              -0.9821662902832031,
+              1.6546630859375
+            ]
+          ],
+          [
+            1,
+            [
+              1.1761088371276855,
+              -0.9607745409011841,
+              -1.6980512142181396
+            ]
+          ],
+          [
+            1,
+            [
+              5.475764751434326,
+              0.9488314986228943,
+              1.6830278635025024
+            ]
+          ],
+          [
+            1,
+            [
+              5.491336345672607,
+              0.9563714861869812,
+              -1.6697052717208862
+            ]
+          ],
+          [
+            1,
+            [
+              5.475727081298828,
+              -1.95100998878479,
+              0.00011338356853229925
+            ]
+          ]
+        ],
+        "orbital_bases": [
+          "cc-pvdz",
+          "cc-pvtz"
+        ],
+        "auxiliary_bases": [
+          "cc-pvdz-jkfit",
+          "cc-pvtz-jkfit"
+        ],
+        "orbital_identities": [
+          "474f0c80e593ed599c749a0d646b3dce82c18b93162309b33a470ce731d71c0c",
+          "75196412ffc36c720467be05603ee95df55f15dd02544658842613dcbadf3757"
+        ],
+        "auxiliary_identities": [
+          "edfd57aed468f61c9760c8aad632c1ba0c804af501bee5c5264213b955e61031",
+          "132253ec2c082bbc9d3fab73a947616391cc55a38558d52c869f8e5d3c002dd7"
+        ],
+        "nao": [
+          58,
+          144
+        ],
+        "naux": [
+          278,
+          338
+        ],
+        "electrons": 18,
+        "reference": "RI-JK RHF; shared JK/correlation auxiliary",
+        "endpoint": "energy+analytic_forces_host",
+        "precision": "fp64",
+        "frozen_core": false,
+        "correlation_memory_budget_bytes": 34359738368,
+        "hf_weights": [
+          -0.24367215584898733,
+          1.2436721558489874
+        ],
+        "mp2_weights": [
+          -0.42105263157894735,
+          1.4210526315789473
+        ],
+        "correction_basis": "cc-pvdz",
+        "timing": "calculator construction through returned host E+F; no retained state",
+        "hf_reference": "df"
+      },
+      "convergence": {
+        "requested_policy": "standard",
+        "selected": "strict_fp64",
+        "arithmetic_request": "fp64",
+        "reason": "standard_convergence",
+        "budget": null,
+        "component_budget": null,
+        "coefficient_l1": 4.196866214617815,
+        "scale": 0.0,
+        "limits": {
+          "energy_tolerance": 1e-12,
+          "density_tolerance": 1e-11,
+          "ccsd_energy_tolerance": 1e-12,
+          "ccsd_residual_tolerance": 1e-10,
+          "lambda_residual_tolerance": 1e-09,
+          "response_absolute_tolerance": 1e-12,
+          "orbital_residual_tolerance": 1e-10,
+          "stationarity_tolerance": 1e-08
+        },
+        "arithmetic": "fp64",
+        "lambda_arithmetic_request": "fp64",
+        "lambda_arithmetic": "fp64"
+      },
+      "execution_groups": [
+        {
+          "basis_identity": "474f0c80e593ed599c749a0d646b3dce82c18b93162309b33a470ce731d71c0c",
+          "primary": "df-ccsd(t)",
+          "methods": [
+            "df-ccsd(t)",
+            "mp2",
+            "rhf"
+          ],
+          "elapsed_seconds": 4.029778592986986
+        },
+        {
+          "basis_identity": "75196412ffc36c720467be05603ee95df55f15dd02544658842613dcbadf3757",
+          "primary": "mp2",
+          "methods": [
+            "mp2",
+            "rhf"
+          ],
+          "elapsed_seconds": 2.222261150018312
+        }
+      ],
+      "logical_component_records": 5,
+      "independent_comparison_terms": 6,
+      "component_timings": "Aliased within basis groups; never sum repeated component elapsed_seconds",
+      "detailed_inventory": "INCOMPLETE: primary precision complete/operator_inventory_complete=false and operator_work_counters_valid=false",
+      "opaque_zero_metrics": "Raw zero timer/peak/work fields are retained, not interpreted as measured zero or proof of absence",
+      "host_staging": {
+        "df-ccsd(t)/474f0c80e593ed599c749a0d646b3dce82c18b93162309b33a470ce731d71c0c": {
+          "mo_host_staging": true,
+          "mo_transfer_bytes": 11533464
+        },
+        "mp2/474f0c80e593ed599c749a0d646b3dce82c18b93162309b33a470ce731d71c0c": {
+          "mo_host_staging": true,
+          "mo_transfer_bytes": 0
+        },
+        "mp2/75196412ffc36c720467be05603ee95df55f15dd02544658842613dcbadf3757": {
+          "mo_host_staging": true,
+          "mo_transfer_bytes": 52950672
+        }
+      }
+    }
+  },
+  "qualification_axes": {
+    "environment_setup": "PASS",
+    "three_finite_complete_EF_returns": "PASS",
+    "IEEE_originals_and_index_replay": "PASS",
+    "HF_independent_complete_EF_and_quarter_spot": "PASS",
+    "C2_independent_energy_retained_direction_translation": "PASS",
+    "C2_original_displaced_energies": "UNAVAILABLE; #2705",
+    "C2_independent_full_force_vector": "UNAVAILABLE",
+    "complete_operator_precision_and_work_inventory": "INCOMPLETE",
+    "performance_or_full_matrix": "NOT_QUALIFIED",
+    "parent_scientific_acceptance": "INCOMPLETE",
+    "publication_review_merge": "verified separately through live GitHub and delivered Git blobs"
+  },
+  "post_device_actual_input_readback": {
+    "path": "public outer/incoming-v1/target-independent-readback-after-device-v1.json",
+    "sha256": "07b07209ea8fb999b2258d000cf10ce388e0d9b28c15a1ccdf0ee1db712bdf41",
+    "files": 40661,
+    "bytes": 5717381795,
+    "symlinks": 8,
+    "status": "PASS"
+  },
+  "actual_original_capsule": {
+    "path": "public-device-originals-v1.json.xz",
+    "sha256": "a42b1ad8e5f5752a7b446dd81ff65921a549b0f2e7f5b7459211a5a7a7746db5",
+    "bytes": 30844
+  },
+  "new_science_during_collection_or_replay": 0,
+  "record_kind": "frozen qualification snapshot before publication"
+}

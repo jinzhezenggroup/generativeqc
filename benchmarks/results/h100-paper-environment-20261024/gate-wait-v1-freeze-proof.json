@@ -1,0 +1,127 @@
+{
+  "scope": "frozen gate files read-only stability proof; no Job/GPU/endpoint execution",
+  "gate_directory": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1",
+  "two_sample_sha_inode_mtime_equal": true,
+  "samples": [
+    {
+      "gate_wait.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/gate_wait.py",
+        "sha256": "6fe47489440dbc3975032eb75d9825cd25a3b6c017f44b1433afceeb7405f0f5",
+        "bytes": 11390,
+        "inode": 41222958828,
+        "mtime_ns": 1792830067313183784,
+        "mode": "0o644",
+        "line_count": 313,
+        "regular_file": true,
+        "symlink": false
+      },
+      "build_support.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/build_support.py",
+        "sha256": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+        "bytes": 1168,
+        "inode": 41222958832,
+        "mtime_ns": 1792823550295809268,
+        "mode": "0o644",
+        "line_count": 40,
+        "regular_file": true,
+        "symlink": false
+      },
+      "job-entry.sh": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh",
+        "sha256": "dd9ced61e6eb8ec60cc6da39bf248b2d3c94041f519944180ba8a4883ae559fe",
+        "bytes": 1066,
+        "inode": 41222958802,
+        "mtime_ns": 1792830152889072553,
+        "mode": "0o644",
+        "line_count": 19,
+        "regular_file": true,
+        "symlink": false
+      },
+      "test_gate_wait.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/test_gate_wait.py",
+        "sha256": "8b8cd17320e3339f8f330f70293685daa55e778ae0afff7404040a91949a0981",
+        "bytes": 8112,
+        "inode": 41222958829,
+        "mtime_ns": 1792830011935728788,
+        "mode": "0o644",
+        "line_count": 206,
+        "regular_file": true,
+        "symlink": false
+      }
+    },
+    {
+      "gate_wait.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/gate_wait.py",
+        "sha256": "6fe47489440dbc3975032eb75d9825cd25a3b6c017f44b1433afceeb7405f0f5",
+        "bytes": 11390,
+        "inode": 41222958828,
+        "mtime_ns": 1792830067313183784,
+        "mode": "0o644",
+        "line_count": 313,
+        "regular_file": true,
+        "symlink": false,
+        "sed_returncode": 0,
+        "sed_read_bytes": 154,
+        "sed_stderr": ""
+      },
+      "build_support.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/build_support.py",
+        "sha256": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+        "bytes": 1168,
+        "inode": 41222958832,
+        "mtime_ns": 1792823550295809268,
+        "mode": "0o644",
+        "line_count": 40,
+        "regular_file": true,
+        "symlink": false,
+        "sed_returncode": 0,
+        "sed_read_bytes": 114,
+        "sed_stderr": ""
+      },
+      "job-entry.sh": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh",
+        "sha256": "dd9ced61e6eb8ec60cc6da39bf248b2d3c94041f519944180ba8a4883ae559fe",
+        "bytes": 1066,
+        "inode": 41222958802,
+        "mtime_ns": 1792830152889072553,
+        "mode": "0o644",
+        "line_count": 19,
+        "regular_file": true,
+        "symlink": false,
+        "sed_returncode": 0,
+        "sed_read_bytes": 113,
+        "sed_stderr": ""
+      },
+      "test_gate_wait.py": {
+        "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/test_gate_wait.py",
+        "sha256": "8b8cd17320e3339f8f330f70293685daa55e778ae0afff7404040a91949a0981",
+        "bytes": 8112,
+        "inode": 41222958829,
+        "mtime_ns": 1792830011935728788,
+        "mode": "0o644",
+        "line_count": 206,
+        "regular_file": true,
+        "symlink": false,
+        "sed_returncode": 0,
+        "sed_read_bytes": 114,
+        "sed_stderr": ""
+      }
+    }
+  ],
+  "sha256sum_command": [
+    "/usr/bin/sha256sum",
+    "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/gate_wait.py",
+    "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/build_support.py",
+    "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh",
+    "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/test_gate_wait.py"
+  ],
+  "sha256sum_returncode": 0,
+  "sha256sum_stdout": "6fe47489440dbc3975032eb75d9825cd25a3b6c017f44b1433afceeb7405f0f5  /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/gate_wait.py\n8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad  /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/build_support.py\ndd9ced61e6eb8ec60cc6da39bf248b2d3c94041f519944180ba8a4883ae559fe  /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh\n8b8cd17320e3339f8f330f70293685daa55e778ae0afff7404040a91949a0981  /inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/test_gate_wait.py\n",
+  "sha256sum_stderr": "",
+  "host_test_receipt": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/output/gate-wait-v1-host-validation.json",
+  "host_test_receipt_sha256": "b5d83f9e35c1c5ecd7d73960f2ac427bd63fa8ae2323efb324f2df88e0dec176",
+  "output_root": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/output/h100-smoke-gate-20261024-9dcc-r1",
+  "output_root_exists": false,
+  "prepared_plan_sha256": "51fc2d6c071aa4209aa639174f3198a0cd53308ab203b155b04cbfd8dc0fe682",
+  "freeze_commitment": "This environment owner performs no further gate directory/caller/source/DSO writes until root re-read and explicit review; source/runtime artifacts remain unchanged."
+}
