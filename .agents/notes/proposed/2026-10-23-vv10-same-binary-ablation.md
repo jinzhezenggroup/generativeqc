@@ -92,3 +92,9 @@ matched-protocol/hardware measurements and explicit complete-endpoint/work
 qualification would be required for any performance/default promotion. Refs
 #2677; the issue and broader DFT-MP acceptance remain open. Review, CI, protected
 merge and delivered blob/raw verification are distinct delivery requirements.
+
+PR delivery audit found unbounded XZ decoding. Host RED cases accepted oversized
+expansion/dictionaries and extra streams. The public reader now enforces96MiB
+decoder memory/64MiB expanded bytes per stream, rejects truncation/trailing data,
+and retains the frozen scientific replay unchanged. JSON layout and explanatory
+prose were compacted to count the whole shared ledger in the43-path2MiB budget.

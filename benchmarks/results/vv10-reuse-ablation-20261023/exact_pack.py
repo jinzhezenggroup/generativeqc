@@ -62,8 +62,17 @@ def member_bytes(row):
     return row['utf8'].encode('utf-8') if 'utf8' in row else base64.b64decode(row['binary_base64'],validate=True)
 
 
+def bounded_xz(data):
+    """Refuse oversized dictionaries, expansion and incomplete/extra streams."""
+    decoder = lzma.LZMADecompressor(format=lzma.FORMAT_XZ, memlimit=96 * 1024 * 1024)
+    raw = decoder.decompress(data, max_length=64 * 1024 * 1024 + 1)
+    require(len(raw) <= 64 * 1024 * 1024, 'XZ expansion exceeds 64 MiB')
+    require(decoder.eof and not decoder.unused_data, 'incomplete or trailing XZ stream')
+    return raw
+
+
 def decode(data):
-    value = json.loads(lzma.decompress(data))
+    value = json.loads(bounded_xz(data))
     require(value['schema'] in (SCHEMA,BINARY_SCHEMA) and isinstance(value['members'],list) and value['members'],'invalid exact pack schema/members')
     seen = set()
     for row in value["members"]:

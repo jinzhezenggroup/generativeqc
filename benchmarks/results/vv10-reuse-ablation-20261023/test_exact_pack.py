@@ -37,6 +37,26 @@ class ExactPackTests(unittest.TestCase):
         transform(value)
         return lzma.compress(json.dumps(value).encode())
 
+    def test_xz_resource_bounds_fail_before_restore(self):
+        from reproduce_recovery import logical_bytes
+        self.write('receipt', b'x')
+        valid = pack.encode(self.source, ['receipt'])
+        expanded = lzma.decompress(valid)
+        cases = [lzma.compress(expanded + b' ' * (64 * 1024 * 1024), preset=0),
+                 lzma.compress(expanded, filters=[{'id': lzma.FILTER_LZMA2, 'dict_size': 128 * 1024 * 1024}]),
+                 valid + valid,
+                 valid[:-1]]
+        for index, raw in enumerate(cases):
+            with self.subTest(case=index):
+                target = self.root / ('out-' + str(index))
+                with self.assertRaises((ValueError, lzma.LZMAError)):
+                    pack.restore(raw, target)
+                self.assertFalse(target.exists())
+                metadata = self.root / ('meta-' + str(index) + '.xz')
+                metadata.write_bytes(raw)
+                with self.assertRaises((ValueError, lzma.LZMAError)):
+                    logical_bytes(metadata)
+
     def test_legacy_text_exact_lf_crlf_unicode_empty_and_mode(self):
         values = {'lf.txt': b'line\n', 'crlf.txt': b'line\r\n',
                   'unicode.txt': '\u5316\u5b66\n'.encode(), 'empty.txt': b''}

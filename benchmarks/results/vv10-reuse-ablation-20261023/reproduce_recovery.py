@@ -1,10 +1,9 @@
 """Restore complete receipts and independently replay the selected mixed dataset."""
-from exact_pack import checked_path, relative, require, restore
+from exact_pack import bounded_xz, checked_path, relative, require, restore
 
 import argparse
 import hashlib
 import json
-import lzma
 import os
 from pathlib import Path, PurePosixPath
 import stat
@@ -20,7 +19,7 @@ def logical_bytes(path):
     selected = candidates[0]
     require(not selected.is_symlink(), 'symlink metadata member')
     raw = selected.read_bytes()
-    return lzma.decompress(raw) if selected.name.endswith('.xz') else raw
+    return bounded_xz(raw) if selected.name.endswith('.xz') else raw
 
 
 def load(path):
@@ -209,15 +208,15 @@ def main():
                             check=True, capture_output=True, text=True)
     require(result.stdout.strip() == collection['numerical'], 'frozen source replay differs')
     summary = summarize(args.output / 'recovery', load(args.output / 'sdk/receipts/input-audit.json'))
-    require(summary['samples'] == json.loads(lzma.decompress((publication / 'samples.json.xz').read_bytes())), 'sample/work index differs from full raw')
-    evidence = json.loads(lzma.decompress((publication / 'validation.json.xz').read_bytes()))
+    require(summary['samples'] == json.loads(bounded_xz((publication / 'samples.json.xz').read_bytes())), 'sample/work index differs from full raw')
+    evidence = json.loads(bounded_xz((publication / 'validation.json.xz').read_bytes()))
     require('timings' not in evidence and set(evidence['record_parts']) == {'timings'}, 'invalid timing companion layout')
     parts = evidence.pop('record_parts')['timings']
     require(len(parts) == 1, 'one complete timing-list companion required')
     timing_part = parts[0]
     raw = (publication / relative(timing_part['path'])).read_bytes()
     require(len(raw) == timing_part['bytes'] and hashlib.sha256(raw).hexdigest() == timing_part['sha256'], 'timing companion changed')
-    evidence['timings'] = json.loads(lzma.decompress(raw))
+    evidence['timings'] = json.loads(bounded_xz(raw))
     for key in ('inputs_hash', 'block_errors', 'timings'):
         require(summary[key] == evidence[key], 'numerical/timing summary differs: ' + key)
     require(timing_table(summary).encode() == (publication / 'timings.md').read_bytes(), 'separate timing tables differ')
