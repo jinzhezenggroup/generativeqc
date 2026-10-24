@@ -81,7 +81,8 @@ function(generativeqc_add_ordered_gram_host_admission_test)
                              "${CMAKE_CURRENT_SOURCE_DIR}/src")
   target_compile_features(generativeqc_ordered_gram_host_admission_tests PRIVATE cxx_std_20)
   target_link_options(generativeqc_ordered_gram_host_admission_tests PRIVATE
-                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel")
+                      "LINKER:--export-dynamic-symbol=cudaLaunchKernel"
+                      "LINKER:--export-dynamic-symbol=cudaPeekAtLastError")
   add_test(NAME generativeqc_ordered_gram_host_admission_tests
            COMMAND "${Python3_EXECUTABLE}"
                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/ordered_gram_host_admission.py"
@@ -615,6 +616,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
                        tests/native/test_cuda_diis_cached_gram.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    add_test(NAME generativeqc_cuda_diis_staged_gram_tests
+             COMMAND generativeqc_cuda_diis_cached_gram_tests --large-only)
+    set_tests_properties(generativeqc_cuda_diis_staged_gram_tests PROPERTIES
+                        SKIP_RETURN_CODE 77 TIMEOUT 180)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)

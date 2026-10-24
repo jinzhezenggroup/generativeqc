@@ -28,6 +28,7 @@ Matrix Diis::update(const Matrix& fock, const Matrix& residual) {
     if (normalize_metric_) {
       policy.metric_scaling = ::generativeqc::solver::detail::DiisMetricScaling::MaximumDiagonal;
       policy.failure_retirement_floor = 2;
+      policy.require_affine_constraint = true;
     }
     std::vector<double> coefficients;
     const auto action =

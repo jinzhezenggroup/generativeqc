@@ -18,6 +18,7 @@
 
 #include "dft/application_precision.hpp"
 #include "dft/cuda_ks_cold_factor_policy.hpp"
+#include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
@@ -274,11 +275,10 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
-  return sum(
-      layout.partition(
-          n, spins, std::max(1U, history), exact_exchange, range_correction, incremental_direct_jk,
-          history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr),
-      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
+                              incremental_direct_jk,
+                              cuda_ks_incremental_diis_gram_requested(n, history), nullptr),
+             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
 struct CudaKsPlan::Impl : KsStateStorage {
@@ -1417,9 +1417,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !std::all_of(integrals.hcore.begin(), integrals.hcore.end(), finite))
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
-    incremental_diis_gram = history >= 2 && scf::cuda_execution::incremental_diis_gram_requested();
-    ordered_diis_gram =
-        incremental_diis_gram && scf::cuda_execution::ordered_incremental_diis_gram_requested();
+    incremental_diis_gram = cuda_ks_incremental_diis_gram_requested(n, history);
+    // Automatic promotion preserves the original scalar dot order. Explicit
+    // enable/reducer selections retain their established diagnostic semantics.
+    ordered_diis_gram = incremental_diis_gram &&
+                        ((!std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM") &&
+                          !std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION")) ||
+                         scf::cuda_execution::ordered_incremental_diis_gram_requested());
     device = fock_binding.device_id;
     stream = fock_binding.stream;
     if (range_provider) {
