@@ -2039,6 +2039,34 @@
         "tests/python/test_ks_fast_strict_tail_cuda.py",
         "benchmarks:benchmarks/results/fast-source-screening-20261023/README.md"
       ]
+    },
+    {
+      "id": "ks.occupied-xc-density-features",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_CUDA_KS_OCCUPIED_XC"
+      ],
+      "owner_issues": [
+        2577,
+        2703
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+      ],
+      "rationale": "Unset or 1 requests the existing token-bound canonical frame that formed the accepted density for strict-FP64 meta-GGA density features. Each tile chooses occupied projection only below its active AO rank. Completion retires the lease; held confirmations, rejected probes, imported densities, mixed/nonlocal/response and unsupported domains retain matrix contraction. Explicit 0 disables the request. No additional storage, screening or convergence relaxation is introduced. Current-source rotating Direct96 endpoints qualify a 3.89% r2SCAN-3c cold gain; all static and displaced observables pass. No broad small-system or warm speedup is claimed; separate noisy small-system cohorts remain visible.",
+      "revisit_condition": "Broaden frame lifetimes or eligible precision/method domains only with independent feature and complete cold/warm/moved force checks, actual frame/work counts and endpoint gain/nonregression gates. Preserve the explicit rollback and bounded matrix fallback.",
+      "evidence": [
+        "tests/python/test_xc_occupied_features.py",
+        "tests/python/test_xc_occupied_features_cuda.py",
+        "tests/python/test_xc_occupied_plan_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        "docs:docs/developer/xc_contractions.md",
+        "tests/python/test_xc_occupied_default_cuda.py",
+        "note:.agents/notes/implemented/performance/2026-10-24-automatic-occupied-xc.md",
+        "benchmarks:benchmarks/results/occupied-xc-default-20261024/README.md"
+      ]
     }
   ]
 }

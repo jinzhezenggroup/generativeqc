@@ -351,6 +351,11 @@
       "owner": "Bounded WB full cold energy and force endpoint qualification",
       "reason": "Lossless full native/GPU4 paired and moved trajectories, exact source inventory delta and cache/build/validation provenance. Historical receipts are compacted with byte-exact restoration; no storage cap changes.",
       "review_document": "benchmarks/results/wb-range-reuse-20261023/README.md"
+    },
+    "occupied-xc-default-20261024": {
+      "owner": "CUDA KS / occupied-XC maintainers (#2703)",
+      "review_document": "benchmarks/results/occupied-xc-default-20261024/README.md",
+      "reason": "Lossless complete observables, all noisy and failed-control cohorts, independent qualification inputs, frozen source/binary bindings and exact protocols are needed to recheck the guarded occupied-XC default. A 730016-byte XZ bundle avoids copying full source tarballs, binaries and Nsight databases into Git; those stay in the existing ignored qualification archive. No acceptance samples or numerical gates are removed."
     }
   },
   "files": [
@@ -777,6 +782,14 @@
       "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
       "bytes": 246592,
       "sha256": "c5dec36131a0344ff6aa61e1e1e76bbf34b23955c31515c7efa24d7c7f1bd79a"
+    },
+    {
+      "path": "benchmarks/results/occupied-xc-default-20261024/receipts.json.xz",
+      "family": "occupied-xc-default-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete E/F receipts, source manifests, tests, protocols and selected trace evidence for default promotion; includes original noisy cohorts and initial failed policy assertion.",
+      "bytes": 730016,
+      "sha256": "485742900892278eee58d927c699711ba336d1fb5d14da352648fda98482546d"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
