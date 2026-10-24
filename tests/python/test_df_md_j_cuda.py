@@ -228,6 +228,27 @@ def test_partitioned_charge_with_multiple_source_groups(
     )
 
 
+@pytest.mark.parametrize("angular", ((0, 0, 0), (0, 0, 4)))
+def test_automatic_long_charge_with_independent_oracle(
+    df_md_probe: Path,
+    tmp_path: Path,
+    angular: tuple[int, int, int],
+    monkeypatch: Any,
+    record_property: Any,
+) -> None:
+    """Qualify default partitioning on long signed primitive contractions.
+
+    Same-shell primitive products exceed the automatic work boundary. The
+    independent libcint oracle covers charge, projection, changed/zero graph
+    replay and, with the existing opt-in, displaced three-center derivatives.
+    """
+    monkeypatch.delenv("GENERATIVEQC_DF_MD_CHARGE_SPLITS", raising=False)
+    record_property(
+        "qualification",
+        _evaluate(df_md_probe, tmp_path, angular, True, primitive_lengths=(96, 97, 5)),
+    )
+
+
 @pytest.mark.parametrize("angular", tuple(product(range(4), range(4), range(5))))
 @pytest.mark.parametrize("spherical", (False, True), ids=("cartesian", "spherical"))
 def test_charge_and_projection_all_orbital_f_auxiliary_g(
