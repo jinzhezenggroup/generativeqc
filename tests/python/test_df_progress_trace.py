@@ -8,6 +8,7 @@ import typing
 from pathlib import Path
 
 import pytest
+from conftest import NativeCxx
 
 from benchmarks.df_progress_ledger import read_progress, summarize_progress
 
@@ -141,3 +142,41 @@ def test_completed_cuda_observations_keep_their_timing_boundary(tmp_path: Path) 
     assert phase["inclusive_ms"] == pytest.approx(20 / 1e6)
     path.write_text(json.dumps(begin) + "\n")
     assert not read_progress(path)["complete"]
+
+
+def test_progress_owns_dynamic_scope_names(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Mutating caller strings cannot change a live scope's journal identity."""
+    source = tmp_path / "scope.cpp"
+    source.write_text(r"""
+#include "runtime/df_progress_trace.hpp"
+#include <string>
+int main() {
+  std::string name(200, 'n'), execution(200, 'e');
+  {
+    generativeqc::runtime::df_progress::Scope scope(name.c_str(), execution.c_str());
+    name.assign(200, 'x'); execution.assign(200, 'y');
+    generativeqc::runtime::df_progress::Scope::number("values", 42);
+  }
+}
+""")
+    executable = tmp_path / "scope"
+    root = Path(__file__).resolve().parents[2]
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=("-std=c++20", "-pthread", f"-I{root / 'src'}"),
+    )
+    journal = tmp_path / "scope.jsonl"
+    subprocess.run(
+        [str(executable)],
+        env={**os.environ, "GENERATIVEQC_DF_PROGRESS_TRACE": str(journal)},
+        check=True,
+    )
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["event"] for row in rows] == ["BEGIN", "VALUE", "END"]
+    assert all(
+        row["name"] == "n" * 200 and row["execution"] == "e" * 200 for row in rows
+    )
+    assert rows[1]["value"] == 42
