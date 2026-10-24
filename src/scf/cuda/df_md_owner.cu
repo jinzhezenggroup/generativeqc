@@ -10,6 +10,7 @@
 #include "scf/cuda/df_md_j.cuh"
 #include "scf/cuda/df_md_layout.hpp"
 #include "scf/cuda/df_md_owner.hpp"
+#include "scf/df_md_schedule_policy.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -19,7 +20,7 @@ struct CudaDfMdOwner {
   DfMdView pair{}, auxiliary{};
   std::array<std::size_t, 8> pair_offsets{}, auxiliary_offsets{};
   std::size_t pair_hermites{}, auxiliary_hermites{}, pair_responses{}, auxiliary_responses{};
-  unsigned charge_splits{1};
+  unsigned charge_splits{}, architecture{};
   std::array<void*, 14> allocations{};
   std::size_t allocation_count{};
   CudaDfMdResources resources{};
@@ -54,12 +55,11 @@ struct CudaDfMdOwner {
 };
 
 namespace {
-/** Freeze this diagnostic schedule at owner creation, including graph replay.
- * The default remains the qualified single-CTA reduction until full endpoint
- * and independent derivative qualification establishes a useful crossover. */
+/** Freeze the override at owner creation, including graph replay. An absent
+ * override permits the bounded per-class work/capacity policy below. */
 unsigned requested_charge_splits() {
   const char* control = std::getenv("GENERATIVEQC_DF_MD_CHARGE_SPLITS");
-  if (!control) return 1;
+  if (!control) return 0;
   const std::string_view value(control);
   unsigned splits{};
   const auto parsed = std::from_chars(value.data(), value.data() + value.size(), splits);
@@ -130,7 +130,7 @@ cudaError_t contract_class(const CudaDfMdOwner& owner) {
     // Reuse this existing allocation only when complete partials fit; there
     // is no added arena, capacity overcommit or allocation during replay.
     const auto capacity = owner.pair_hermites / na / components;
-    const auto splits = static_cast<unsigned>(std::min<std::size_t>(owner.charge_splits, capacity));
+    const auto splits = df_md_charge_splits(owner.charge_splits, owner.architecture, np, capacity);
     if (splits > 1) {
       df_md_contract<P, A, true, Response><<<dim3(na, splits), 128, 0, owner.stream>>>(
           owner.pair, p, np, owner.auxiliary, a, na, owner.pair.potential);
@@ -233,6 +233,14 @@ generativeqc_status create_cuda_df_md_owner(int device, cudaStream_t stream,
     candidate->charge_splits = requested_charge_splits();
     candidate->device = device;
     candidate->stream = stream;
+    // Device policy is immutable for this owner's lifetime. Never query the
+    // environment or device properties while capturing/replaying its graph.
+    int major = 0, minor = 0;
+    error = cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device);
+    if (error == cudaSuccess)
+      error = cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device);
+    if (error != cudaSuccess) return fail(error, detail);
+    candidate->architecture = static_cast<unsigned>(10 * major + minor);
     candidate->pair_offsets = pair_layout.offsets;
     candidate->auxiliary_offsets = aux_layout.offsets;
     candidate->pair_hermites = pair_layout.hermite_elements;

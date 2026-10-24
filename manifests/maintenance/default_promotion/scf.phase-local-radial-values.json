@@ -21,6 +21,7 @@
     "tests/python/test_range_resident_ks_cuda.py",
     "issue:#2426",
     ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md",
-    ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md"
+    ".agents/notes/implemented/performance/2026-10-23-automatic-fitted-range-candidate.md",
+    ".agents/notes/proposed/2026-10-24-fitted-primary-exact-range-cache.md"
   ]
 }

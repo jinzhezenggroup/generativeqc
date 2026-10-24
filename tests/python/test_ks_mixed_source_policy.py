@@ -31,11 +31,11 @@ int main() {
     for (const std::size_t atoms : {0U, 1U, 97U})
       assert(!default_mixed_source_proposal(aos, atoms));
   }
-  for (const double threshold : {0., 1e-14, 1e-12, 1e-10, 1e-8, 1e-6}) {
+  for (const double threshold : {0., 1e-14, 1e-12, 1e-10, 1e-8, 1e-7, 1e-6}) {
     assert(mixed_source_proposal_screening(false, true, threshold) == threshold);
     assert(mixed_source_proposal_screening(true, false, threshold) == threshold);
     assert(mixed_source_proposal_screening(false, false, threshold) == threshold);
-    const auto expected = threshold > 0. && threshold < 1e-8 ? 1e-8 : threshold;
+    const auto expected = threshold > 0. && threshold < 1e-7 ? 1e-7 : threshold;
     assert(mixed_source_proposal_screening(true, true, threshold) == expected);
   }
   // Invalid input is not repaired by the proposal policy: its original

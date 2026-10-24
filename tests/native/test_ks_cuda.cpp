@@ -277,6 +277,11 @@ void registered_functional_code_seam() {
 }
 
 void run_exact_exchange_case(bool restricted) {
+  const char* previous_chunk = std::getenv("GENERATIVEQC_CUDA_KS_CHUNK");
+  const bool had_chunk = previous_chunk != nullptr;
+  const std::string saved_chunk = had_chunk ? previous_chunk : "";
+  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "1", 1) == 0,
+          "could not select the incremental KS reference iteration owner");
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
@@ -293,6 +298,9 @@ void run_exact_exchange_case(bool restricted) {
   options.energy_tolerance = 1e-12;
   options.density_tolerance = 1e-10;
   options.max_iterations = 200;
+  // Match the provider's 25% exact exchange with the admitted PBE0 composition;
+  // full PBE exchange plus 25% HF is not a valid exported PBE0 final state.
+  options.semilocal_exchange_scale = 0.75;
 
   const unsigned spins = restricted ? 1U : 2U;
   const auto plain_bytes = dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history);
@@ -372,8 +380,7 @@ void run_exact_exchange_case(bool restricted) {
   require(incremental.converged && !incremental_plan.failed() &&
               std::abs(incremental.energy - result.energy) < 1e-10 && incremental_work.requested &&
               incremental_work.active && incremental_work.anchor_full_builds > 0 &&
-              incremental_work.delta_builds > 0 &&
-              incremental_work.anchor_updates == incremental_work.delta_builds &&
+              incremental_work.delta_builds > 0 && incremental_work.anchor_updates == 0 &&
               incremental_work.post_scf_full_builds > 0 &&
               incremental_work.anchor_full_builds + incremental_work.delta_builds +
                       incremental_work.post_scf_full_builds ==
@@ -422,15 +429,17 @@ void run_exact_exchange_case(bool restricted) {
                                     257);
     const auto mismatched = mismatched_plan.run(incremental_input, false);
     const auto& mismatched_work = mismatched.incremental_direct_jk;
-    // The prepared provider's screened cadence still applies when the caller
-    // requests unscreened SCF options; refinement adds only full-density work.
+    // The prepared provider still requires a fixed full anchor even when the
+    // caller requests unscreened SCF options and no periodic refresh.
     require(mismatched.converged && !mismatched_plan.failed() &&
                 std::abs(mismatched.energy - result.energy) < 1e-10 &&
-                mismatched_work.delta_builds > 0 &&
-                mismatched_work.delta_builds <= mismatched_work.anchor_full_builds &&
+                mismatched_work.delta_builds > 0 && mismatched_work.anchor_updates == 0 &&
                 mismatched_work.periodic_rebuilds + 1 == mismatched_work.anchor_full_builds,
             "native CUDA KS options bypassed the prepared provider screening cadence");
   }
+  require((had_chunk ? ::setenv("GENERATIVEQC_CUDA_KS_CHUNK", saved_chunk.c_str(), 1)
+                     : ::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK")) == 0,
+          "could not restore the CUDA KS iteration owner");
 }
 
 void check_fitted_warm_seed_matrices(const scf::PreparedFockPlan& cpu,

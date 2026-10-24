@@ -183,7 +183,7 @@ without generated-build inventory, since this change emits no new math.
 ## Evidence retention
 
 The existing 64-MiB tracked-results cap had only 45 bytes free. Losslessly compact
-whitespace in `rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json`, saving
+whitespace in `rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b4.json.gz`, saving
 60,933 bytes (130,067 → 69,134). Parsed JSON is identical, its public README link
 is unchanged, and no checksum/publication manifest binds the old file bytes.
 The original bytes remain in parent Git history. Old/new SHA256 and the equality

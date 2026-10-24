@@ -532,6 +532,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     unsigned maximum_angular = 0;
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+    // The fitted composition qualifies generated SPD consumers only. Higher
+    // angular sources require their own primary-provider census/consumer proof.
+    if ((fitted_coulomb || fitted_exchange) && fitted_range_source && maximum_angular > 2) return;
     // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
@@ -598,6 +601,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     required = sum(required, provider.cpu_observation_capacity());
     required = sum(required, provider.diagnostic().direct.host_preparation_bytes);
     if (fitted_range_source) {
+      // Device bytes already include both prepared providers. Their separate
+      // host observations/preparation must also precede optional admission.
       required = sum(required, range_provider->cpu_observation_capacity());
       required = sum(required, range_provider->diagnostic().direct.host_preparation_bytes);
     }
@@ -1628,6 +1633,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
         {static_cast<bool>(fock_binding) && !fitted_coulomb &&
              scf::direct_jk_incremental_exact_eligible(strategy) && range_incremental_eligible,
          true, precision_schedule.any_lower_precision()});
+    // The promoted automatic KS owner was qualified with rolling, bounded
+    // proposals and its own full-density closure. Keep that policy separate
+    // from the explicit fixed-anchor controller (including its zero cadence).
+    if (auto_incremental && !options.incremental_direct_jk &&
+        incremental_direct_jk_policy.fixed_full_density_anchor) {
+      incremental_direct_jk_policy.fixed_full_density_anchor = false;
+      incremental_direct_jk_policy.effective_rebuild_interval = 1;
+    }
     incremental_direct_jk = incremental_direct_jk_policy.active;
     if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
       throw std::invalid_argument(
@@ -1887,16 +1900,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // The optional semilocal execution copy changes only point order and
         // is excluded under a public ledger until a fleet planner reserves it.
         const auto* spatial_choice = std::getenv("GENERATIVEQC_CUDA_XC_SPATIAL_ORDER");
-        // Unset selects the qualified spatial schedule; explicit 0 keeps the
-        // canonical execution order for diagnostics and paired comparisons.
-        if ((!spatial_choice || std::string_view(spatial_choice) == "1") && admit_ao &&
+        // Unset/1 keeps qualified center grouping; 2 is the explicit tile-aligned
+        // bisection candidate. Explicit 0 keeps canonical execution order.
+        const bool bisected = spatial_choice && std::string_view(spatial_choice) == "2";
+        if ((!spatial_choice || std::string_view(spatial_choice) == "1" || bisected) && admit_ao &&
             borrow_resident_grid && !nonlocal_correlation &&
             !runtime::active_device_resource_ledger) {
           const auto spatial_bytes = product(xc_layout.npoint, 4 * sizeof(double));
           const auto host_bytes =
               sum(spatial_bytes, product(sum(product(2, xc_layout.npoint), product(4, basis.natom)),
                                          sizeof(std::size_t)));
-          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes);
+          xc->prepare_spatial_grid(grid, host_bytes, spatial_bytes, bisected);
           resource.xc_device_bytes = sum(resource.xc_device_bytes, xc->spatial_grid_device_bytes());
         }
         if (admit_ao) {
@@ -2157,7 +2171,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // and proof admission without adding an incremental functional whitelist.
     // A chain never supplies the final
     // energy history or physical proof. Strict requests and unsupported owners
-    // retain the ordinary one-delta refresh policy; warm performs no proposals.
+    // retain their explicit fixed-anchor or automatic one-delta refresh policy;
+    // warm performs no proposals.
     incremental_proposals_active = incremental_direct_jk && incremental_proposals_requested &&
                                    provider.strategy().screening_tolerance > 0.0 &&
                                    standard_convergence_active();
@@ -3231,6 +3246,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else {
       incremental_delta_updates = 0;
     }
+    // Retaining a screened delta as the next anchor accumulates omissions and
+    // previously forced full/delta alternation. Keep the full anchor instead.
+    if (pending_incremental_delta && incremental_direct_jk_policy.fixed_full_density_anchor &&
+        !incremental_proposals_active)
+      return;
     launch_copy_matrix_kernel(element_blocks, 128, 0, stream, elements, density,
                               incremental_anchor_density);
     launch_copy_matrix_kernel(matrix_blocks, 128, 0, stream, matrix, j, incremental_anchor_j);
@@ -3582,7 +3602,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (unsigned s = 0; s < 2; ++s)
       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
     finish_fast_anchor_iteration();
-    if (!is_failed && incremental_direct_jk && pending_incremental_delta)
+    if (!is_failed && incremental_direct_jk && pending_incremental_delta &&
+        (!incremental_direct_jk_policy.fixed_full_density_anchor || incremental_proposals_active))
       ++output.incremental_direct_jk.anchor_updates;
     if (is_failed) {
       pending_incremental_delta = false;
