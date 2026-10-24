@@ -569,32 +569,24 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       map(maps::workspace_nuclear_second, maps::work_nuclear_second);
       map(maps::workspace_nuclear_atom, maps::work_nuclear_atom, shape.atoms);
     }
+    // First reserve the complete mandatory baseline. Optional grid replay and
+    // parallel one-electron schedules may spend only the surplus after every
+    // mandatory consumer, including the geometry AO output and exact sources.
     owner->options.grid.nuclear_response = true;
-    owner->options.grid.max_workspace_bytes =
-        std::min(options.grid.max_workspace_bytes, owner->remaining);
+    owner->options.grid.replay_nuclear_maps = false;
     check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes),
           "stationary Hessian XC/VV10 workspace admission");
-    owner->charge(owner->grid_bytes);
     owner->options.geometry.partition_iterations =
         owner->grid_reference.geometry_options().partition_iterations;
     owner->options.geometry.coincident_tolerance =
         owner->grid_reference.geometry_options().coincident_tolerance;
-    owner->options.geometry.max_workspace_bytes =
-        std::min(options.geometry.max_workspace_bytes, owner->remaining);
     check(cuda_grid_geometry_workspace(geometry_shape, owner->options.geometry,
                                        owner->geometry_bytes),
           "stationary Hessian moving-grid workspace admission");
-    owner->charge(owner->geometry_bytes);
-    owner->options.cpks.max_workspace_bytes =
-        std::min(options.cpks.max_workspace_bytes, owner->remaining);
     check(response::cuda_cpks_workspace(owner->cpks_reference.shape(), owner->options.cpks,
                                         owner->cpks_bytes),
           "stationary Hessian CPKS workspace admission");
-    owner->charge(owner->cpks_bytes);
     Layout layout;
-    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
-    owner->geometry_offset = layout.reserve(owner->geometry_bytes, 1);
-    owner->cpks_offset = layout.reserve(owner->cpks_bytes, 1);
     owner->map_offset = layout.reserve(owner->map_bytes, 1);
     owner->status_offset = layout.reserve(1, sizeof(int));
     const auto matrix = owner->matrix, panels = owner->panels, coordinates = owner->coordinates;
@@ -626,34 +618,18 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->pair_first = layout.reserve(product(3, owner->pairs));
     owner->pair_second = layout.reserve(product(3, owner->pairs));
     owner->incidences = layout.reserve(product(3, shape.atoms - 1));
+    owner->geometry_offset = layout.reserve(owner->geometry_bytes, 1);
+    owner->cpks_offset = layout.reserve(owner->cpks_bytes, 1);
+    // Keep the optional grid tail last so its aligned reservation can grow
+    // without moving any mandatory output or response workspace.
+    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
     owner->bytes = layout.bytes;
-    owner->charge(owner->bytes - owner->grid_bytes - owner->geometry_bytes - owner->cpks_bytes);
-    check(cudaMalloc(&owner->arena, owner->bytes));
-    std::vector<double> charges;
-    for (const auto& atom : owner->fock.primary->system().atoms)
-      charges.push_back(atom.ionic_charge());
-    std::vector<std::size_t> pair_atoms(product(2, owner->pairs));
-    std::size_t pair{};
-    for (std::size_t first = 0; first < shape.atoms; ++first)
-      for (std::size_t second = first + 1; second < shape.atoms; ++second, ++pair) {
-        pair_atoms[pair] = first;
-        pair_atoms[owner->pairs + pair] = second;
-      }
-    DrainOnFailure upload_drain{owner->stream};
-    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
-    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
-                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
-    if (owner->pairs)
-      check(cudaMemcpyAsync(owner->at<std::size_t>(owner->pair_atoms), pair_atoms.data(),
-                            pair_atoms.size() * sizeof(std::size_t), cudaMemcpyHostToDevice,
-                            owner->stream));
-    check(cudaStreamSynchronize(owner->stream));
-    upload_drain.active = false;
-    check(owner->geometry.prepare(geometry_shape, owner->options.geometry,
-                                  owner->grid_reference.geometry_reference(),
-                                  owner->at(owner->geometry_offset), owner->geometry_bytes));
-    check(owner->grid.prepare(shape, owner->options.grid, lease, owner->at(owner->grid_offset),
-                              owner->grid_bytes));
+    owner->charge(owner->bytes);
+    auto core_options = options.one_electron;
+    core_options.parallel_streams = 0;
+    const auto core_bytes = cuda_ks_one_electron_workspace(
+        owner->fock.primary->system(), {shape.atoms, shape.primitives, shape.nao}, core_options);
+    owner->charge(core_bytes);
     auto induced_options = options.induced;
     induced_options.defer_resident_integrals = true;
     induced_options.max_device_bytes = std::min(induced_options.max_device_bytes, owner->remaining);
@@ -663,11 +639,6 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       return status;
     }
     owner->charge(owner->induced.work().device_bytes);
-    auto core_options = options.one_electron;
-    core_options.max_workspace_bytes = std::min(core_options.max_workspace_bytes, owner->remaining);
-    status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    owner->charge(owner->one_electron.work().device_bytes);
     if (owner->has_df) {
       auto raw_options = options.raw_df;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
@@ -699,6 +670,52 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       return status;
     }
     owner->charge(owner->exact.work().workspace_bytes);
+    const auto grid_reserved = owner->bytes - owner->grid_offset;
+    owner->options.grid.replay_nuclear_maps = options.grid.replay_nuclear_maps;
+    // All arena slots are 256-byte aligned. Do not let an optional payload
+    // consume the alignment bytes needed by its enclosing reservation.
+    owner->options.grid.max_workspace_bytes =
+        std::min(options.grid.max_workspace_bytes, (grid_reserved + owner->remaining) / 256 * 256);
+    check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes),
+          "stationary Hessian optional XC/VV10 workspace admission");
+    layout.bytes = owner->grid_offset;
+    owner->grid_offset = layout.reserve(owner->grid_bytes, 1);
+    owner->charge(layout.bytes - owner->bytes);
+    owner->bytes = layout.bytes;
+    core_options = options.one_electron;
+    core_options.max_workspace_bytes =
+        std::min(core_options.max_workspace_bytes, core_bytes + owner->remaining);
+    status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    require(owner->one_electron.work().device_bytes >= core_bytes,
+            "one-electron preparation differs from its mandatory reservation");
+    owner->charge(owner->one_electron.work().device_bytes - core_bytes);
+    check(cudaMalloc(&owner->arena, owner->bytes));
+    std::vector<double> charges;
+    for (const auto& atom : owner->fock.primary->system().atoms)
+      charges.push_back(atom.ionic_charge());
+    std::vector<std::size_t> pair_atoms(product(2, owner->pairs));
+    std::size_t pair{};
+    for (std::size_t first = 0; first < shape.atoms; ++first)
+      for (std::size_t second = first + 1; second < shape.atoms; ++second, ++pair) {
+        pair_atoms[pair] = first;
+        pair_atoms[owner->pairs + pair] = second;
+      }
+    DrainOnFailure upload_drain{owner->stream};
+    check(cudaMemsetAsync(owner->arena, 0, owner->bytes, owner->stream));
+    check(cudaMemcpyAsync(owner->at(owner->charges), charges.data(),
+                          charges.size() * sizeof(double), cudaMemcpyHostToDevice, owner->stream));
+    if (owner->pairs)
+      check(cudaMemcpyAsync(owner->at<std::size_t>(owner->pair_atoms), pair_atoms.data(),
+                            pair_atoms.size() * sizeof(std::size_t), cudaMemcpyHostToDevice,
+                            owner->stream));
+    check(cudaStreamSynchronize(owner->stream));
+    upload_drain.active = false;
+    check(owner->geometry.prepare(geometry_shape, owner->options.geometry,
+                                  owner->grid_reference.geometry_reference(),
+                                  owner->at(owner->geometry_offset), owner->geometry_bytes));
+    check(owner->grid.prepare(shape, owner->options.grid, lease, owner->at(owner->grid_offset),
+                              owner->grid_bytes));
     std::size_t operator_bytes{};
     check(response::cuda_cpks_operator_workspace(owner->cpks_reference.shape(), owner->options.cpks,
                                                  operator_bytes));

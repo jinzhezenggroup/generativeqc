@@ -179,43 +179,49 @@ cudaError_t schedule(const CudaOneElectronShape& shape,
   if (!options.parallel_streams || !options.max_parallel_workspace_bytes ||
       !options.max_parallel_tasks)
     return cudaSuccess;
-  Layout parallel = plan;
-  parallel.parallel_begin = plan.bytes;
-  for (std::size_t index = 0; index < jobs.size(); ++index) {
-    const auto& job = jobs[index];
-    for (std::size_t begin = 0; begin < job.radials;) {
-      if (parallel.tasks.size() == options.max_parallel_tasks) return cudaSuccess;
-      ParallelTask task{index, begin, std::min(options.radial_tile, job.radials - begin)};
-      if (!append(parallel, task.count * job.program->record_stride, sizeof(double),
-                  task.records) ||
-          !append(parallel, job.program->components.size() * job.program->outputs, sizeof(double),
-                  task.raw) ||
-          !append(
-              parallel,
-              2 * job.device.first.ao_count * job.device.second.ao_count * 3 * job.device.centers,
-              sizeof(double), task.projected))
-        return cudaSuccess;
-      parallel.tasks.push_back(task);
-      begin += task.count;
-      if (parallel.bytes - plan.bytes > options.max_parallel_workspace_bytes ||
-          parallel.bytes > options.max_workspace_bytes)
-        return cudaSuccess;
+  // Host metadata is optional too: allocation failure must retain the already
+  // validated scalar schedule, not change an admitted request into OOM.
+  try {
+    Layout parallel = plan;
+    parallel.parallel_begin = plan.bytes;
+    for (std::size_t index = 0; index < jobs.size(); ++index) {
+      const auto& job = jobs[index];
+      for (std::size_t begin = 0; begin < job.radials;) {
+        if (parallel.tasks.size() == options.max_parallel_tasks) return cudaSuccess;
+        ParallelTask task{index, begin, std::min(options.radial_tile, job.radials - begin)};
+        if (!append(parallel, task.count * job.program->record_stride, sizeof(double),
+                    task.records) ||
+            !append(parallel, job.program->components.size() * job.program->outputs, sizeof(double),
+                    task.raw) ||
+            !append(
+                parallel,
+                2 * job.device.first.ao_count * job.device.second.ao_count * 3 * job.device.centers,
+                sizeof(double), task.projected))
+          return cudaSuccess;
+        parallel.tasks.push_back(task);
+        begin += task.count;
+        if (parallel.bytes - plan.bytes > options.max_parallel_workspace_bytes ||
+            parallel.bytes > options.max_workspace_bytes)
+          return cudaSuccess;
+      }
     }
-  }
-  if (!multiply(parallel.tasks.size(), 4 * plan.matrix, count) ||
-      !multiply(count, sizeof(double), parallel.parallel_candidate_bytes) ||
-      !append(parallel, count, sizeof(double), parallel.parallel_candidates) ||
-      !append(parallel, parallel.tasks.size(), sizeof(ParallelTask),
-              parallel.parallel_descriptors) ||
-      !append(parallel, 3 * shape.atoms, sizeof(double), parallel.parallel_direction) ||
-      !append(parallel, 4 * plan.matrix, sizeof(double), parallel.parallel_weights) ||
-      parallel.bytes - plan.bytes > options.max_parallel_workspace_bytes ||
-      parallel.bytes > options.max_workspace_bytes)
+    if (!multiply(parallel.tasks.size(), 4 * plan.matrix, count) ||
+        !multiply(count, sizeof(double), parallel.parallel_candidate_bytes) ||
+        !append(parallel, count, sizeof(double), parallel.parallel_candidates) ||
+        !append(parallel, parallel.tasks.size(), sizeof(ParallelTask),
+                parallel.parallel_descriptors) ||
+        !append(parallel, 3 * shape.atoms, sizeof(double), parallel.parallel_direction) ||
+        !append(parallel, 4 * plan.matrix, sizeof(double), parallel.parallel_weights) ||
+        parallel.bytes - plan.bytes > options.max_parallel_workspace_bytes ||
+        parallel.bytes > options.max_workspace_bytes)
+      return cudaSuccess;
+    for (std::size_t index = 0; index < parallel.tasks.size(); ++index)
+      parallel.tasks[index].candidate =
+          parallel.parallel_candidates + index * 4 * plan.matrix * sizeof(double);
+    plan = std::move(parallel);
+  } catch (const std::bad_alloc&) {
     return cudaSuccess;
-  for (std::size_t index = 0; index < parallel.tasks.size(); ++index)
-    parallel.tasks[index].candidate =
-        parallel.parallel_candidates + index * 4 * plan.matrix * sizeof(double);
-  plan = std::move(parallel);
+  }
   return cudaSuccess;
 }
 
@@ -560,15 +566,18 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
   impl_->ready = false;
   impl_->work = {};
   try {
-    Layout plan;
+    Layout candidate;
+    auto admitted = options;
+    admitted.max_workspace_bytes = std::min(options.max_workspace_bytes, workspace_bytes);
     std::vector<Job> jobs;
-    auto error = schedule(shape, shells, options, plan, jobs);
+    auto error = schedule(shape, shells, admitted, candidate, jobs);
     if (error != cudaSuccess) return error;
-    if (workspace_bytes < plan.bytes || !reference.stream || !reference.authenticate ||
+    if (workspace_bytes < candidate.bytes || !reference.stream || !reference.authenticate ||
         !reference.owner ||
-        !disjoint(workspace, plan.bytes, reference.basis, plan.basis_elements * sizeof(double)) ||
-        !disjoint(workspace, plan.bytes, reference.charges, shape.atoms * sizeof(double)) ||
-        !disjoint(reference.basis, plan.basis_elements * sizeof(double), reference.charges,
+        !disjoint(workspace, candidate.bytes, reference.basis,
+                  candidate.basis_elements * sizeof(double)) ||
+        !disjoint(workspace, candidate.bytes, reference.charges, shape.atoms * sizeof(double)) ||
+        !disjoint(reference.basis, candidate.basis_elements * sizeof(double), reference.charges,
                   shape.atoms * sizeof(double)))
       return cudaErrorInvalidValue;
     for (const auto* pointer :
@@ -578,9 +587,10 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
     }
     auto& state = *impl_;
     state.shape = shape;
-    state.options = options;
+    state.options = admitted;
     state.reference = reference;
-    state.plan = plan;
+    state.plan = std::move(candidate);
+    const auto& plan = state.plan;
     state.jobs = std::move(jobs);
     state.workspace = workspace;
     state.ready = true;
@@ -622,7 +632,12 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
     }
     error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
     if (error == cudaSuccess) {
-      error = state.prepare_graph();
+      try {
+        error = state.prepare_graph();
+      } catch (const std::bad_alloc&) {
+        // Worker/event metadata is optional, just like CUDA graph resources.
+        error = cudaErrorMemoryAllocation;
+      }
       if (error == cudaErrorMemoryAllocation || error == cudaErrorNotSupported ||
           error == cudaErrorStreamCaptureUnsupported) {
         state.release_graph();

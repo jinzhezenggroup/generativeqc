@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 6030,
+      "bytes": 6390,
       "path": "README.md",
       "role": "summary",
-      "sha256": "54c8cf58ad5aefe488bc2fbfc4a14cdf7240d1c34d3faade981f7ebab5760004"
+      "sha256": "0fa54fd7cc3bfeb7a312e9a3d8628889cee06f57bd6759544fd57ca4cf6f79d8"
     },
     {
       "bytes": 48360,
@@ -25,10 +25,10 @@
       "sha256": "032c78f2f307c8364e1aa452f9cecae960d764cb4a3aa80f240280530fd0c8c0"
     },
     {
-      "bytes": 1478,
+      "bytes": 3123,
       "path": "reproduce.sh",
       "role": "reproduction",
-      "sha256": "536a724b3e184b2056de7c5433a43cb80abc52c4b0f939769dc642b4eebddd3a"
+      "sha256": "c7cc838c9eb9ece5a9289cc52e5ff68cc96a98e684ed8779f4ef301af9b71a4f"
     },
     {
       "bytes": 106368,
@@ -42,7 +42,7 @@
       "bash",
       "reproduce.sh"
     ],
-    "notes": "Finite Slurm requests and verified compiler cache; native C++ child is Python/JIT-free. External Python benchmark/reference/oracle only. Source-618 AOT binaries plus shared tetramer worker fixture; oracle staging paths documented in README."
+    "notes": "Finite Slurm requests and verified compiler cache; exact recorded CLI/library hashes bind native source 618f7e3. Archive fixture driver 9abfe3b independently of cwd/HEAD, including fresh-worker tetramer support. Failed comparators remain failed; oracle staging paths are documented in README."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

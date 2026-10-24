@@ -90,8 +90,13 @@ molecule-size guarantee. No time, memory, screening or numerical guard is raised
   status. Numerical acceptance does not promote performance.
 - `provenance.json.xz`: exact build/cache/qualification/sanitizer/diagnostic
   logs, source scripts, fallback receipts and the publisher.
-- `reproduce.sh`: finite-Slurm benchmark instructions. The newly shared
-  `water-tetramer` fixture must also be visible to fresh comparator workers.
+- `reproduce.sh`: runnable from any directory. Set the reference interpreter,
+  compiler-cache launcher, and both `GENERATIVEQC_CLI`/`GENERATIVEQC_LIBRARY` to
+  the exact recorded source-618 artifacts; mismatched hashes fail before Slurm.
+  The checkout must contain fixture driver revision `9abfe3b`; it is archived
+  so fresh workers see the shared tetramer case. The verified native pair is
+  staged and journals go under the checkout's `.artifacts/`. Native source
+  identity remains `618f7e3`, not HEAD.
 
 Raw reproduction scripts embedded in provenance preserve the measured host
 paths/job ids. For a new oracle run, stage the new native comparison journal as
