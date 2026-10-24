@@ -512,7 +512,13 @@ def initial_guess_for_systems(
 def _huckel_numeric_capacity(
     dimension: int, atomic_aos: int, atoms: int, primitives: int, diis_history: int
 ) -> int:
-    """Mirror native Huckel assembly/admission plus one serialized atomic owner."""
+    """Mirror native Huckel lifetimes, including the retained output density.
+
+    Molecular assembly and strict seed admission are serialized. Sixteen FP64
+    target matrices cover the larger fourteen-matrix admission peak, including
+    eigenframe validation and both nested product temporaries. Atomic cache and
+    serialized atomic integral/DIIS storage retain their separate allowances.
+    """
     from generativeqc_compiler.common.resources import byte_product, checked_bytes
 
     if (
@@ -526,7 +532,7 @@ def _huckel_numeric_capacity(
         raise ValueError("invalid Huckel target/atomic topology")
     return checked_bytes(
         (16 << 20)
-        + byte_product(256, dimension, dimension)
+        + byte_product(16 * 8, dimension, dimension)
         + byte_product(24, atomic_aos, atomic_aos, atomic_aos, atomic_aos)
         + byte_product(8, atomic_aos, atomic_aos, 200 + 2 * diis_history)
         + byte_product(512, dimension + atoms)

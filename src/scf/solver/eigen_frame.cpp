@@ -6,7 +6,7 @@
 #include <numeric>
 #include <sstream>
 
-#include "scf/reference/linalg.hpp"
+#include "scf/solver/validation_products.hpp"
 
 namespace generativeqc::scf::solver {
 bool order_eigenpairs(std::vector<double>& eigenvalues, std::vector<double>& coefficients,
@@ -74,14 +74,13 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
     detail = message.str();
     return false;
   }
-  // These host matrix checks share elementary products with the oracle,
-  // never its eigensolver. They compare against the original F/S inputs.
-  const auto sc = overlap ? reference::multiply(*overlap, coefficients, n) : coefficients;
-  const auto gram = reference::multiply(reference::transpose(coefficients, n), sc, n);
-  // Allocate FC only after the Gram expression's transpose temporary dies.
-  // This removes one live matrix without changing any product reduction,
-  // scalar reduction, diagnostic assignment or rejection priority below.
-  const auto fc = reference::multiply(matrix, coefficients, n);
+  // Validate the original F/S inputs on the host. Only the dense product
+  // schedule is optional; every finiteness, norm and physical gate below stays.
+  const ValidationProducts multiply;
+  const auto sc = overlap ? multiply(*overlap, coefficients, n) : coefficients;
+  const auto gram = multiply(coefficients, sc, n, true);
+  // Allocate FC after any fallback transpose temporary has been released.
+  const auto fc = multiply(matrix, coefficients, n);
   // Finite inputs may still overflow a product. Do not let NaNs disappear
   // through std::max or an infinite scale hide an invalid residual.
   if (!finite(fc) || !finite(sc) || !finite(gram)) {

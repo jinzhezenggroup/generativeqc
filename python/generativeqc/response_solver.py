@@ -273,6 +273,21 @@ class DiagonalPreconditioner:
         return self.inverse * value
 
 
+def _native_host_eligible(
+    operator: typing.Any, preconditioner: typing.Any, *, has_consumer: bool = False
+) -> bool:
+    """Keep single and sequential native CPU admission on the same residency policy."""
+    return (
+        getattr(operator, "_krylov_engine", None) is None
+        and operator.dimension > 0
+        and getattr(operator, "device_workspace_bytes", 0) == 0
+        and (
+            preconditioner is None or isinstance(preconditioner, DiagonalPreconditioner)
+        )
+        and not has_consumer
+    )
+
+
 @dataclass(frozen=True)
 class SolveResult:
     """One response solve with the actual residual and failure reason.
@@ -1198,23 +1213,26 @@ def solve(
             # retained owner's mode before whole-solve admission succeeds.
             reservation += 2 * operator.dimension * 8
     native_library = None
-    if (
-        engine is None
-        and operator.dimension > 0
-        and getattr(operator, "device_workspace_bytes", 0) == 0
-        and (
-            preconditioner is None or isinstance(preconditioner, DiagonalPreconditioner)
-        )
-        and solution_consumer is None
+    if _native_host_eligible(
+        operator, preconditioner, has_consumer=solution_consumer is not None
     ):
         from . import _native
 
         native_library = _native.optional_response_library()
+    # Admission includes the same diagnostic publications as execution. Host
+    # recycling needs an internal basis even when the caller does not retain it.
+    basis_requested = collect_basis or (recycle is not None and not resident_recycle)
     if native_library is not None:
         from ._response_native import workspace_bytes
 
         required = (
-            workspace_bytes(native_library, operator.dimension, options) + reservation
+            workspace_bytes(
+                native_library,
+                operator.dimension,
+                options,
+                collect_basis=basis_requested,
+            )
+            + reservation
         )
     else:
         required = _single_workspace_bytes(operator.dimension, options) + reservation
@@ -1251,9 +1269,6 @@ def solve(
         with workspace():
             solve_options = replace(
                 options, max_workspace_bytes=options.max_workspace_bytes - reservation
-            )
-            basis_requested = collect_basis or (
-                recycle is not None and not resident_recycle
             )
             if native_library is not None:
                 from ._response_native import solve_host
@@ -1709,42 +1724,70 @@ def _solve_many_impl(
                 answer.require_converged()
             return answer
         rank = int(np.linalg.matrix_rank(values, tol=1e-12)) if nrhs else 0
-        results = []
-        actions = 0
         peak = input_bytes + rank_workspace
-        retained_results = 0
-        for column in range(values.shape[1]):
-            # solve owns all recycle reservations. Only earlier results and the
-            # shared RHS copy remain outside it; the current result is already
-            # included in solve's bound and must not be counted a second time.
-            retained = input_bytes + retained_results
-            remaining = options.max_workspace_bytes - retained
-            if remaining <= 0:
-                results.extend(
-                    _workspace_failure(
-                        values.shape[0], values.shape[1] - column, retained
-                    )
-                )
-                peak = max(peak, retained)
-                break
-            result = solve(
+        native_sequence = None
+        if (
+            strategy == "sequential"
+            and _native_host_eligible(
                 operator,
-                values[:, column],
-                options=replace(options, max_workspace_bytes=remaining),
-                recycle=recycle if use_recycle else None,
+                preconditioner,
+                has_consumer=any(consumer is not None for consumer in consumers),
+            )
+            and values.dtype == np.float64
+            and values.flags.aligned
+            and values.strides[0] > 0
+            and values.strides[1] >= 0
+            and all(stride % values.itemsize == 0 for stride in values.strides)
+        ):
+            from . import _native
+
+            native_sequence = _native.optional_response_sequence_library()
+        if native_sequence is not None:
+            from ._response_native import solve_sequence
+
+            results, actions, sequence_peak = solve_sequence(
+                native_sequence,
+                operator,
+                values,
+                replace(options, max_workspace_bytes=available),
                 preconditioner=preconditioner,
                 collect_basis=collect_basis,
-                solution_consumer=consumers[column],
             )
-            peak = max(peak, retained + result.workspace_bytes)
-            results.append(result)
-            actions += result.operator_actions
-            if result.reason == "workspace_limit":
-                # No later column can gain capacity. Share the immutable failure
-                # result rather than allocating a zero solution for every RHS.
-                results.extend([result] * (values.shape[1] - column - 1))
-                break
-            retained_results += result.solution.nbytes + result.basis.nbytes
+            peak = max(peak, input_bytes + sequence_peak)
+        else:
+            results = []
+            actions = 0
+            retained_results = 0
+            for column in range(values.shape[1]):
+                # Compatibility/resident schedules keep their current per-solve
+                # reservations; native sequential requests do not enter this loop.
+                retained = input_bytes + retained_results
+                remaining = options.max_workspace_bytes - retained
+                if remaining <= 0:
+                    results.extend(
+                        _workspace_failure(
+                            values.shape[0], values.shape[1] - column, retained
+                        )
+                    )
+                    peak = max(peak, retained)
+                    break
+                result = solve(
+                    operator,
+                    values[:, column],
+                    options=replace(options, max_workspace_bytes=remaining),
+                    recycle=recycle if use_recycle else None,
+                    preconditioner=preconditioner,
+                    collect_basis=collect_basis,
+                    solution_consumer=consumers[column],
+                )
+                peak = max(peak, retained + result.workspace_bytes)
+                results.append(result)
+                actions += result.operator_actions
+                if result.reason == "workspace_limit":
+                    # A refused tail shares one immutable diagnostic vector.
+                    results.extend([result] * (values.shape[1] - column - 1))
+                    break
+                retained_results += result.solution.nbytes + result.basis.nbytes
         answer = MultiRHSResult(
             tuple(results),
             strategy,

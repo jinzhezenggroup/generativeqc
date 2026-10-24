@@ -310,14 +310,18 @@ def _admit_work(
         type(primitive) is RangeSeparatedExchangePrimitive
         for primitive in getattr(method_ir, "primitives", ())
     )
-    # Direct sources each traverse the ordered primitive quartet domain. DF
-    # elides those primary loops, but mixed DF still executes one exact LR pass.
+    fitted_range = bool(range_exchange) and bool(
+        getattr(state._source, "range_density_fitted", False)
+    )
+    # Full RI-K elides every quartet traversal; legacy mixed DF retains one LR pass.
     # These counts exclude the native fitted response's independently owned work.
     quartet_passes = (
         int(bool(range_exchange))
         if native_fitted_integrals
         else 1 + int(exact_exchange) + range_exchange
     )
+    if fitted_range:
+        quartet_passes = 0
     component_costs = [int(row[2]) * int(row[3]) for row in aos]
     # Two symmetric pair sums count the canonical primitive domain exactly,
     # without materializing AO pairs while rejecting oversized diagnostics.
@@ -330,6 +334,8 @@ def _admit_work(
     range_passes = (
         int(bool(range_exchange)) if native_fitted_integrals else range_exchange
     )
+    if fitted_range:
+        range_passes = 0
     records = pairs + range_passes * canonical_records
     if not native_fitted_integrals:
         records += (1 + int(exact_exchange)) * primitive_sum**4
@@ -737,7 +743,10 @@ def complete_rks_gradient_diagnostic(
         )
 
     range_native = None
-    if plan.range_exchange_primitives:
+    fitted_range = bool(plan.range_exchange_primitives) and bool(
+        getattr(state._source, "range_density_fitted", False)
+    )
+    if plan.range_exchange_primitives and not fitted_range:
         range_native = RangeExchangeExecutor(
             basis,
             cache,
@@ -800,12 +809,12 @@ def complete_rks_gradient_diagnostic(
             )
             range_native.close()
     if native_mixed_integrals:
-        # LR currently holds the weighted correction, not the physical LR row.
-        # The same native composer as CUDA recovers SR/LR from fitted full K.
+        # The native owner fits LR itself, or consumes the explicit legacy
+        # Direct correction. Both recover physical SR/LR from the same primary.
         native_integral = integral_provider(
             natom,
             publication_budget,
-            lr_correction=components["exchange_long_range"],
+            lr_correction=None if fitted_range else components["exchange_long_range"],
         )
         if native_integral is None:
             raise NotImplementedError(
@@ -832,12 +841,20 @@ def complete_rks_gradient_diagnostic(
         ):
             components[source] = np.ascontiguousarray(values)
         work.update(
-            stationary_integral_derivative_route="prepared-mixed-density-fitted",
+            stationary_integral_derivative_route=(
+                "prepared-full-ri-jk"
+                if fitted_range
+                else "prepared-mixed-density-fitted"
+            ),
             stationary_native_integral_sources=source_names,
             native_integral_resources=dict(native_integral_resources),
             density_fitted_response_resources_included=False,
             native_integral_resource_scope="compact-publication-and-host-one-electron-only",
         )
+        if fitted_range:
+            work["range_density_fitted_provider"] = 1
+            work["range_exchange_primitive_records"] = 0
+            work["range_exchange_recurrence_evaluations"] = 0
     for a in range(natom):
         for b in range(a):
             np.add.at(components["nuclear"], [a, b], native.nuclear(a, b, charges))
@@ -927,6 +944,7 @@ def complete_rks_gradient_diagnostic(
                 atoms.astype(np.int64),
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
             continue
         # One coordinate at a time bounds storage; this interpreter boundary
@@ -942,6 +960,7 @@ def complete_rks_gradient_diagnostic(
                     center_motion=fallback_motion,
                     iterations=spec.partition_iterations,
                     coincident_tolerance=spec.coincident_tolerance,
+                    atomic_radii=spec.partition_radii(basis.atoms),
                 )
                 selected = (np.arange(end - begin), atoms)
                 derivative = response.directional[selected]
@@ -999,6 +1018,7 @@ def complete_rks_gradient_diagnostic(
                 owners,
                 seeds,
                 coincident_tolerance=spec.coincident_tolerance,
+                atomic_radii=spec.partition_radii(basis.atoms),
             )
         else:
             assert fallback_motion is not None
@@ -1015,6 +1035,7 @@ def complete_rks_gradient_diagnostic(
                             center_motion=fallback_motion,
                             iterations=spec.partition_iterations,
                             coincident_tolerance=spec.coincident_tolerance,
+                            atomic_radii=spec.partition_radii(basis.atoms),
                         )
                         selected = (np.arange(end - begin), atoms)
                         components["nonlocal_weight"][a, axis] += np.dot(

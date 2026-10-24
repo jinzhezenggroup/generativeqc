@@ -1,0 +1,253 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "6478a8fd82a5fa4605e29e1f9f5cf88485fa4ed2",
+    "dirty": false
+  },
+  "decision": {
+    "scope": "numerical",
+    "status": "accepted",
+    "reason": "Independent C4+C7 directional-force cohort PASS; parent #2679 remains OPEN for coordinating audit"
+  },
+  "files": [
+    {
+      "path": "comparison.json.xz",
+      "role": "summary",
+      "bytes": 3328,
+      "sha256": "4a3526a7f1582c851ad6881ac9746a740ab460f2d576fbd20a62e9dfccc529e4",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "controller-check-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1212,
+      "sha256": "f74222789a59297b59abd0319bc03a7a6ba7aa102df2ed0f9abea74191d2ea49",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "controller-stage-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1204,
+      "sha256": "d2566172e08b35d29411361b04bac0af349bcf0f5c0eebb8f75711f15dbbc944",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "environment.py",
+      "role": "reproduction",
+      "bytes": 1682,
+      "sha256": "52f5ff7c274b06f0df9a5a8ad6059f4ae7a7bc2f40251a128eee26708645e73e",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "bytes": 5040,
+      "sha256": "6924f0cc81480ae4f2e0bb6bb30b18df11d5f25801139dec2410d98f3440236c",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "execution-final.json.xz",
+      "role": "samples",
+      "bytes": 3348,
+      "sha256": "d01c8513a27f4e97aaaad6422679dda012809b540b3286cb711f6a902847e1f5",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "execution-initial.json.xz",
+      "role": "samples",
+      "bytes": 8568,
+      "sha256": "10d3bc48298be4be754e731148d6225f496b9260f9fe10aee6e9b152769565ab",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "initial-comparison.json.xz",
+      "role": "summary",
+      "bytes": 1540,
+      "sha256": "5c01d535cee89bca77d6cda66265e070282e4968d642d0ca7076550354d74972",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "inputs.json.xz",
+      "role": "input",
+      "bytes": 6980,
+      "sha256": "ada2dbc8db426967683f14e15fe107cc5cfad08d9628549d3b3b1b36d3f1de0a",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "launch.sh",
+      "role": "reproduction",
+      "bytes": 685,
+      "sha256": "9a2fe0db4fa9a4236263072d6fb42924e73deb07bbdc1b406528c646dbb3084f",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "oracle.py",
+      "role": "reproduction",
+      "bytes": 10538,
+      "sha256": "8d2529768e388fdec512bc55e4e57981e3ffc2cedce05bedfafdca8e5eb922ba",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "pack.py",
+      "role": "reproduction",
+      "bytes": 4770,
+      "sha256": "82eae53f55ead86a268a247501c593c292d4308406b005c1c1899c250d1c2d33",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "postflight-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 2040,
+      "sha256": "b806b224c7d0feb00528733db7776e19b760ba79b806468a7d8c3fbf85c3cf7a",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "preflight-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1304,
+      "sha256": "07d462a1f9b21b9c0b347bdfb8dc26134c7e84515bede7cba14bc79c79c10614",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "prepare.py",
+      "role": "reproduction",
+      "bytes": 2084,
+      "sha256": "699191ebb699bd655e721b5ee53dd22d5243382f4714f9e146ba0a210852c7ee",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "publish.py",
+      "role": "reproduction",
+      "bytes": 9166,
+      "sha256": "e13568a449c67211f086f66bb259e7e2c7e970abd1d3ad29bb7ce17cd2707435",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "reader-integrity-check.json",
+      "role": "summary",
+      "bytes": 1601,
+      "sha256": "a521fd2f9becff548484d56c3fb793e98fd6bd7b4626b42141fce73b01731957",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 6985,
+      "sha256": "157239d70ba41018a36be9eadcf793740079ae1602d199915e7a9e0b248c148c",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "receipts.json.xz",
+      "role": "samples",
+      "bytes": 39616,
+      "sha256": "73865a61cb972912f1f83db01770e3c0bb1d6558bd0d6285cc592194bc09812b",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "receive-create-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1276,
+      "sha256": "d52157eca0eaa0d3ece84b9af43afe7913dd9dc3d572ded1284ad7141c8f5713",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "receive-probe-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 736,
+      "sha256": "aeba7aac8fa3bd797dc6d027211a665a9f652018d8c800fc052a4549f2811782",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 17447,
+      "sha256": "1ca4ef436a0866e909681ff9d07063537ab4058cb3a84620ac7727cdd45c9a0e",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "run-suite.sh",
+      "role": "reproduction",
+      "bytes": 1020,
+      "sha256": "79da2de2e474bb0db112cb8bb428e013b33a23bb14bf93897355318e3805c11b",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "run-task.sh",
+      "role": "reproduction",
+      "bytes": 1617,
+      "sha256": "7d6349843a105c14891fb515763387b43aab09c22968cca95c068b5ee3fc12fb",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "runner-check-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1996,
+      "sha256": "4bb35592218391bd96f6405a4f4d5081c9f8f645f7999ca3c2820b65d9e3aa44",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "start-command.sh.xz",
+      "role": "reproduction",
+      "bytes": 1296,
+      "sha256": "2e9ac691c91e76f79ae0cb23cd2627a42b726596851dfb887aea12fa556ec297",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "test_pack.py",
+      "role": "reproduction",
+      "bytes": 3815,
+      "sha256": "bc8957a6d618e03e9887fdbf15a9d888c32af109df20abb57096d1f7009444e4",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "test_replay.py",
+      "role": "reproduction",
+      "bytes": 11225,
+      "sha256": "0378a5a3c05ac4df93f76198590b289a62a36aabc47aced9c64f3ecb0055e3b6",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    },
+    {
+      "path": "verify.py",
+      "role": "reproduction",
+      "bytes": 4305,
+      "sha256": "b956eed1f3afa7cec3c5516581270c87e4d46f4076e68f0448a15abc6a10c3ac",
+      "original_mode": "UNAVAILABLE",
+      "git_mode": "100644"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/cbs-independent-forces-20261024/verify.py"
+    ]
+  }
+}

@@ -286,6 +286,9 @@ void run_exact_exchange_case(bool restricted) {
   const scf::PreparedFockPlan gpu(system, nullptr,
                                   exact_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
   scf::ScfOptions options;
+  // The quarter-exchange provider must carry the matching PBE0 semilocal
+  // scale, including in the independent CPU reconstruction below.
+  options.semilocal_exchange_scale = 0.75;
   options.compute_forces = false;
   options.energy_tolerance = 1e-12;
   options.density_tolerance = 1e-10;
@@ -330,7 +333,7 @@ void run_exact_exchange_case(bool restricted) {
   require(movement.iteration_synchronizations == movement.iterations &&
               movement.execution_region_bindings == 0,
           "unqualified exact-exchange KS entered the device-chunk fast path");
-  physical_check(cpu, basis, grid, 1U, result);
+  physical_check(cpu, basis, grid, 1U, result, options.semilocal_exchange_scale);
 
   // The converged exact-K endpoint must also survive the real device-to-host
   // final-state validator; the host predicate probe alone cannot establish it.
@@ -379,7 +382,7 @@ void run_exact_exchange_case(bool restricted) {
   require(incremental_plan.transfers().execution_region_bindings == 0 &&
               incremental_plan.transfers().iteration_synchronizations == incremental.iterations,
           "CUDA KS incremental Direct-J/K entered an unqualified chunk/replay path");
-  physical_check(cpu, basis, grid, 1U, incremental);
+  physical_check(cpu, basis, grid, 1U, incremental, options.semilocal_exchange_scale);
 
   // Full-energy refinement must retain a state accepted by the independent
   // unshifted F[D] export validator, not only by the iterative DIIS gates.
@@ -397,7 +400,7 @@ void run_exact_exchange_case(bool restricted) {
               restarted.incremental_direct_jk.post_scf_full_builds > 0 &&
               std::abs(restarted.energy - result.energy) < 1e-10,
           "fresh CUDA KS solve retained the previous solve's full-energy refinement state");
-  physical_check(cpu, basis, grid, 1U, restarted);
+  physical_check(cpu, basis, grid, 1U, restarted, options.semilocal_exchange_scale);
 
   auto gated_options = incremental_options;
   gated_options.incremental_direct_jk_density_rms_threshold = 1e-30;
@@ -2639,6 +2642,7 @@ void minao_gpu_case() {
   std::cout << "CUDA MINAO GPU preparation and strict seed gates passed\n";
 }
 
+#include "ks_cold_factor_cases.hpp"
 #include "ks_density_provider_cases.hpp"
 }  // namespace
 
@@ -2660,12 +2664,24 @@ int main(int argc, char** argv) {
       ks_density_provider_cases();
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--df-cold-factor") {
+      ks_cold_factor_cases();
+      std::cout << "Native CUDA DF cold-factor proof, fallback and physical-state gates passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--df-warm-factor") {
       for (const char* selection : {"0", "1", static_cast<const char*>(nullptr)}) {
         run_density_fitted_exchange_case(true, true, selection);
         run_density_fitted_exchange_case(false, true, selection);
       }
       std::cout << "Native CUDA DF warm-factor physical-state and fallback gates passed\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--df-wb-composition") {
+      for (const bool restricted : {true, false}) {
+        run_wb97mv_nonlocal_composition_case(restricted, true);
+      }
+      std::cout << "Native CUDA fitted WB97M-V composition independent CPU gates passed\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--fast-anchor-delta") {
@@ -2707,6 +2723,7 @@ int main(int argc, char** argv) {
     rejected_api_requests_revoke_tokens();
     run_exact_exchange_case(true);
     run_exact_exchange_case(false);
+    ks_cold_factor_cases();
     run_density_fitted_exchange_case(true);
     run_density_fitted_exchange_case(true, false);
     run_density_fitted_exchange_case(false);

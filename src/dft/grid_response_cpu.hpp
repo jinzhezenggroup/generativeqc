@@ -14,12 +14,13 @@ template <class Norm, class Ratio, class Log, class Pair, class PrepareRatio, cl
 int contract(const double* points, size_t np, const double* centers, size_t na,
              const int64_t* owners, const double* seeds, double* output, size_t output_count,
              size_t budget, size_t max_pairs, double tolerance, Norm norm, Ratio ratio,
-             Log logarithm, Pair pair, PrepareRatio prepare_ratio,
-             PreparedRatio prepared_ratio) noexcept {
+             Log logarithm, Pair pair, PrepareRatio prepare_ratio, PreparedRatio prepared_ratio,
+             const double* radii = nullptr) noexcept {
   // Admission precedes pointer dereference and all shape-dependent storage.
   constexpr size_t limit = std::numeric_limits<size_t>::max() / sizeof(double);
-  if (!na || na > limit / 30 || np > (limit - 30 * na) / 10 || output_count != 3 * na ||
-      budget / 8 < 10 * np + 30 * na || !centers || !output ||
+  const size_t atom_words = radii ? 31 : 30;
+  if (!na || na > limit / atom_words || np > (limit - atom_words * na) / 10 ||
+      output_count != 3 * na || budget / 8 < 10 * np + atom_words * na || !centers || !output ||
       (np && (!points || !owners || !seeds)) || !std::isfinite(tolerance) || tolerance < 0)
     return -1;
   // Count both pair passes and center validation without overflowing size_t.
@@ -27,6 +28,10 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
   const size_t pairs = na * (na - 1) / 2;
   if (pairs && (pairs > max_pairs || np > (max_pairs / pairs - 1) / 2)) return -1;
   try {
+    if (radii) {
+      for (size_t atom = 0; atom < na; ++atom)
+        if (!std::isfinite(radii[atom]) || radii[atom] <= 0) return -2;
+    }
     for (size_t i = 0; i < 3 * na; ++i)
       if (!std::isfinite(centers[i])) return -2;
     for (size_t i = 0; i < np; ++i) {
@@ -36,7 +41,7 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
     }
     // Optional O(natom^2) geometry is charged in addition to the established
     // staging/scratch bound. Tight budgets retain the direct O(natom) route.
-    const bool cache_geometry = pairs <= (budget / 8 - (10 * np + 30 * na)) / 6;
+    const bool cache_geometry = pairs <= (budget / 8 - (10 * np + atom_words * na)) / 6;
     std::vector<generativeqc_grid_adjoint::CenterPair> center_pairs;
     if (cache_geometry) {
       try {
@@ -60,7 +65,7 @@ int contract(const double* points, size_t np, const double* centers, size_t na,
       if (!generativeqc_grid_adjoint::contract_point_prepared(
               points + 3 * p, centers, na, owners[p], seeds[p], gradient.data(), logs.data(),
               products.data(), bar_product.data(), bar_distance.data(), zeros.data(),
-              distances.data(), norm, ratio, logarithm, pair, geometry, prepared_ratio))
+              distances.data(), norm, ratio, logarithm, pair, geometry, prepared_ratio, radii))
         return -2;
     for (double v : gradient)
       if (!std::isfinite(v)) return -2;

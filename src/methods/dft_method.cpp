@@ -46,6 +46,7 @@
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -120,21 +121,48 @@ unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
+enum class KsProviderPurpose { scf, derivative_only };
+
+/** Keep SCF's established optional J allowance separate from a lazy force lease.
+ * Derivative order alone cannot distinguish these owners: the primary SCF
+ * provider also retains first-order resources for the eventual force. */
 std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
-                              unsigned direct_derivative_order = 0) {
+                              unsigned direct_derivative_order = 0,
+                              KsProviderPurpose purpose = KsProviderPurpose::scf) {
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA) {
     std::size_t primitives = 0;
     for (const auto& shell : system.shells)
       primitives = runtime::add_capacity(primitives, shell.primitives.size());
+    // The lazy first-order LR owner competes with composite grid response
+    // under one capacity cap. Use its known Cartesian size rather than the
+    // shape-only 2*nao envelope, which can otherwise starve grid concurrency.
+    // The primary provider needs its established allowance even when it also
+    // owns derivatives; tightening that cap can silently evict its MD-J source.
+    const auto cartesian_nao =
+        purpose == KsProviderPurpose::derivative_only ? molecule::cartesian_ao_count(system) : 0U;
     return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
                                                  system.shells.size(), primitives,
-                                                 direct_derivative_order, true);
+                                                 direct_derivative_order, true, cartesian_nao);
   }
 #else
   (void)direct_derivative_order;
+  (void)purpose;
 #endif
   return 0;
+}
+
+/** An explicit DF envelope covers both independent radial owners. Zero keeps
+ * automatic admission; never turn a small explicit half into that sentinel. */
+std::size_t ks_fitted_provider_budget(const scf::ScfOptions& options,
+                                      const NativeKsExecutionPlan& plan, bool long_range) {
+  const auto bytes = options.density_fitting_memory_budget_bytes;
+  if (!plan.density_fitted_range_exchange || !bytes ||
+      options.resolved_fock_build->backend != scf::FockBackend::Cuda)
+    return bytes;
+  if (bytes < 2U) throw std::bad_alloc();
+  const auto primary = bytes / 2U;
+  return long_range ? bytes - primary : primary;
 }
 
 #if GENERATIVEQC_HAS_CUDA
@@ -232,7 +260,7 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
   // A range-separated composition may still reserve the ordinary full-range
-  // fitted primary. Its independent long-range Direct correction neither consumes
+  // fitted primary. Its independent long-range correction neither consumes
   // nor mutates this occupied projection, so range_exchange is not itself a veto.
   if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
       spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
@@ -260,7 +288,10 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
       correction.backend == scf::FockBackend::Cuda && correction_spec.spin == primary_spec.spin &&
       correction_spec.derivative_order == 0 && !correction_spec.coulomb.present &&
       correction_spec.exchange.present &&
-      correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+      (correction_spec.exchange.approximation == scf::FockApproximation::Exact ||
+       (correction_spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+        primary_spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        correction.metric_relative_threshold == primary.metric_relative_threshold)) &&
       correction_spec.exchange.op == scf::FockOperator::LongRange &&
       std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
       std::isfinite(correction_spec.exchange.coefficient) &&
@@ -398,7 +429,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   ? ks_provider_bytes(
                         system_, backend,
                         ks_direct_derivative_order(*options_.resolved_fock_build, backend))
-                  : options_.density_fitting_memory_budget_bytes,
+                  : ks_fitted_provider_budget(options_, execution_plan_, false),
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U,
@@ -972,8 +1003,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
           detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
+        // The standalone paired bridge supports the same generated schedules
+        // as the prepared Direct owner. Honor its existing execution policy;
+        // forcing thread-per-AO here serializes every attraction-center sum.
         const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
-            resident_weights.device_id, system_, {}, {}, 0,
+            resident_weights.device_id, system_, {}, {},
+            scf::cuda_policy::one_electron_derivative_mapping_requested(),
             one_electron_device_maximum_bytes.value_or(maximum_bytes), hcore, pulay, detail,
             &one_electron, resident_weights.density, resident_weights.weighted_density);
         if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
@@ -1171,7 +1206,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
   /** Authenticate the restricted exact full-range derivative source. Pure J
    * uses the same spatial recurrence, including when a separate D4/gCP owner
    * contributes geometry corrections. Their forces do not change this source. */
-  bool qualified_spatial_force_default() const {
+  bool qualified_spatial_force_default(
+      const scf::DirectForcePrecisionRequest* precision = nullptr) const {
     const auto& strategy = fock_.strategy();
     const auto& spec = strategy.spec;
     const bool pure_coulomb = !spec.exchange.present;
@@ -1190,10 +1226,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
         !execution_plan_.nonlocal_correlation && system_.ecp_terms.empty() &&
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
+    // This schedule contracts the authenticated final density. Its arithmetic
+    // follows the force invocation, not the earlier SCF proposal precision or
+    // availability of a fused stationary binding. Python's strict fallback and
+    // a mixed-force retry therefore retain the same FP64 source optimization.
+    const bool strict_force = !precision || (!precision->mixed_weighted &&
+                                             !precision->mixed_geometry && !precision->mixed_grid);
     return dft::spatial_spd_force_default_eligible(
-        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range,
-        options_.precision_mode == GENERATIVEQC_PRECISION_FP64 ||
-            (admitted_cuda_stationary_binding() && application_gradient_qualification() == 0));
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range, strict_force);
   }
 
   generativeqc_status cuda_full_range_integral_derivatives(
@@ -1283,7 +1323,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
       // Keep cold and warm admission identical: this is the same conservative
       // capacity used before constructing the separate first-order LR owner.
-      bytes = ks_provider_bytes(system_, backend_, 1U);
+      bytes = execution_plan_.density_fitted_range_exchange
+                  ? 0U
+                  : ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     }
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1294,12 +1336,12 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   }
 
-  /** Stationary bridge for a mixed full-range DF primary and an independent
-   * exact LR correction. Public admission separately qualifies the complete
-   * semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
+  /** Stationary bridge for a full-range DF primary and an independent LR
+   * owner (exact by default, fitted only by explicit opt-in). Admission separately qualifies the
+   * complete semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
    *
-   * The first-derivative LR source is prepared on demand: energy-only solves
-   * never pay its angular workspace or compilation costs. */
+   * Only legacy Direct LR needs a separate lazy derivative owner. Fitted LR
+   * retains its own bounded response capability with its forward metric. */
   generativeqc_status mixed_rsh_df_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
@@ -1337,7 +1379,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
          (p.exchange.op == scf::FockOperator::FullRange &&
           p.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
         !c.coulomb.present && c.exchange.present &&
-        c.exchange.approximation == scf::FockApproximation::Exact &&
+        (c.exchange.approximation == scf::FockApproximation::Exact ||
+         (execution_plan_.density_fitted_range_exchange &&
+          c.exchange.approximation == scf::FockApproximation::DensityFitted &&
+          correction.metric_relative_threshold == primary.metric_relative_threshold)) &&
         c.exchange.op == scf::FockOperator::LongRange &&
         c.exchange.omega == execution_plan_.range_omega && c.exchange.omega > 0.0 &&
         full_coefficient == spin_factor * execution_plan_.short_range_exchange &&
@@ -1366,6 +1411,33 @@ class KsPreparedState final : public KsSingleOwnerPort {
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       cached_density = &exported.density;
       cached_weighted_density = &exported.weighted_density;
+    }
+    if (execution_plan_.density_fitted_range_exchange) {
+      if (!cpu_lr_correction.empty()) {
+        detail = "full RI-K response must not consume a Direct LR correction";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      std::vector<double> fitted_four;
+      auto status =
+          density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
+                                           fitted_four, maximum_bytes, work, detail, true);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      const auto& alpha = cached_density->at(0);
+      const scf::reference::Matrix beta =
+          cached_density->size() == 2 ? cached_density->at(1) : scf::reference::Matrix{};
+      const auto fitted_lr = range_correction_->retained_energy_derivative(alpha, beta);
+      status = dft::compose_mixed_rsh_df_integral_sources(
+          fitted_four, fitted_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      work[3] = std::max<std::uint64_t>(work[3], 10U * nc * sizeof(double));
+      dft::CudaKsFinalStateToken current;
+      status = final_state_token(current, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS || current != expected) {
+        output.clear();
+        detail = "RI-K source token changed during response";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      return GENERATIVEQC_STATUS_SUCCESS;
     }
     if (backend_ == GENERATIVEQC_BACKEND_CPU_REFERENCE) {
       // CPU executes the compiler-owned ordered LR contraction in bounded
@@ -1418,8 +1490,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // Charge it on every call, including reuse, before creating any storage;
     // maximum_bytes independently bounds compact host and additional device use.
     const auto derivative_device_bytes =
-        range_derivative_correction_ ? range_derivative_correction_->diagnostic().device_bytes
-                                     : ks_provider_bytes(system_, backend_, 1U);
+        range_derivative_correction_
+            ? range_derivative_correction_->diagnostic().device_bytes
+            : ks_provider_bytes(system_, backend_, 1U, KsProviderPurpose::derivative_only);
     std::size_t primary_device_bytes{};
     status = dft::mixed_rsh_df_primary_device_allowance(maximum_bytes, derivative_device_bytes,
                                                         primary_device_bytes, detail);
@@ -1642,7 +1715,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
           resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
     if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
       status = scf::execute_cuda_stationary_one_electron_pair(
-          device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
+          device, system_, {}, {}, scf::cuda_policy::one_electron_derivative_mapping_requested(),
+          bytes, hcore, pulay, detail, &one, resident_weights.density,
           resident_weights.weighted_density);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       const bool retry_without_cache =
@@ -1782,8 +1856,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       status =
           cuda_->prepare_resident_final_stationary_weights(expected, weights, diagnostic, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-      status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
-                                                qualified_spatial_force_default(), precision);
+      status =
+          stationary_controller_->gradient(density, weights, fock_, current, output, detail,
+                                           qualified_spatial_force_default(precision), precision);
       if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
           (precision->mixed_geometry || precision->mixed_grid)) {
         // Failed geometry never publishes a partial result. Reset every source
@@ -2147,17 +2222,25 @@ class KsPreparedState final : public KsSingleOwnerPort {
     const auto fock_backend =
         backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     range_strategy_ = scf::resolve_fock_build(
-        scf::make_rsh_correction_fock_spec(spin, execution_plan_.short_range_exchange,
-                                           execution_plan_.long_range_exchange,
-                                           execution_plan_.range_omega),
-        fock_backend, options_.screening_tolerance);
+        scf::make_rsh_correction_fock_spec(
+            spin, execution_plan_.short_range_exchange, execution_plan_.long_range_exchange,
+            execution_plan_.range_omega,
+            execution_plan_.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                          : scf::FockApproximation::Exact),
+        fock_backend, options_.screening_tolerance, options_.density_fitting_relative_threshold);
     const bool fitted_primary =
         fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
-      const auto budget =
-          fock_backend == scf::FockBackend::Cuda ? ks_provider_bytes(system_, backend_, 0U) : 0U;
-      range_correction_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr,
-                                                                  *range_strategy_, device, budget);
+      const auto budget = execution_plan_.density_fitted_range_exchange
+                              ? ks_fitted_provider_budget(options_, execution_plan_, true)
+                          : fock_backend == scf::FockBackend::Cuda
+                              ? ks_provider_bytes(system_, backend_, 0U)
+                              : 0U;
+      const auto* auxiliary =
+          execution_plan_.density_fitted_range_exchange ? fock_.auxiliary_system() : nullptr;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
+          system_, auxiliary, *range_strategy_, device, budget, 0U,
+          execution_plan_.density_fitted_range_exchange ? 1U : 0U);
     }
   }
 
@@ -2949,8 +3032,11 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
                                                          shape[5] == 0 && shape[6] == 0, shape[4],
                                                          shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    const auto points = runtime::size_mul(shape[0], dft::grid_points_per_atom(grid));
-    if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // This shape-only query has no element inventory. V4's exact count is
+    // checked by the prepared grid/controller; never invent a uniform count.
+    if (grid.version != 4 &&
+        runtime::size_mul(shape[0], dft::grid_points_per_atom(grid)) != shape[3])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
         dft::admit_stationary_force_controls(options.energy_tolerance, options.density_tolerance,

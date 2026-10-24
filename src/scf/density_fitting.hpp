@@ -39,8 +39,8 @@ struct DensityFittingThreeCenter {
   // plans can preserve their indexing after dependent directions are removed.
   std::vector<double> values;
   // Optional provider-oriented cache: Q-major [Q][mu][nu]. Production CPU
-  // preparation materializes it only when the external dense-LA provider will
-  // use it, so repeated SCF exchange builds do not repack the immutable tensor.
+  // preparation retains it for the external dense-LA provider or within the
+  // bounded scalar-cache envelope. Absence retains the strided scalar fallback.
   std::vector<double> auxiliary_major_values;
 };
 
@@ -52,6 +52,9 @@ struct DensityFittingScfData {
   // The metric cutoff selects the retained Hamiltonian as well as its response.
   // Cached plans must be rebuilt when callers change this numerical control.
   double metric_relative_threshold{};
+  /** Zero is Coulomb; positive omega binds this owner to erf(omega*r)/r.
+   * Values, metric rank and response must retain the same radial operator. */
+  double range_omega{};
   // Resolved execution-resource identity for this prepared owner. A zero public
   // request is resolved once and replayed from this owner rather than probing
   // again during cache reuse.
@@ -168,14 +171,15 @@ struct DensityFittingUhfGradient {
 [[nodiscard]] DensityFittingRhfGradient build_density_fitting_rhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals, const std::vector<double>& density,
-    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {});
+    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {}, double omega = 0.0);
 
 /** UHF analogue of build_density_fitting_rhf_weighted_gradient. */
 [[nodiscard]] DensityFittingUhfGradient build_density_fitting_uhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals,
     const std::vector<double>& alpha_density, const std::vector<double>& beta_density,
-    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {1.0, -1.0});
+    double relative_threshold = 1.0e-10, JkCoefficients coefficients = {1.0, -1.0},
+    double omega = 0.0);
 
 /**
  * Construct the thresholded Moore--Penrose inverse of a Coulomb metric.
@@ -325,8 +329,11 @@ class DensityFittingBudgetError : public std::invalid_argument {
  * capacity; explicit caps and probe-failure budgets retain their original split.
  * The caller must validate the restricted occupation and automatic selector;
  * a restricted, physical J-only owner may explicitly admit rank zero without
- * acquiring an occupied projection. Preserve a bounded response workspace and
- * at least 20% for response; leave the original split if packing cannot fit. */
+ * acquiring an occupied projection. Prefer the existing 20% response margin.
+ * If that loses B or the requested complete U, spend only the minimum extra
+ * fractional slack within observed free bytes minus reserved headroom, while
+ * retaining the complete shape-derived response floor. Explicit caps and
+ * unavailable complete storage retain their bounded fallback. */
 [[nodiscard]] DfResolvedBudget resolve_method_owned_df_resident_budget(
     const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
     std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);

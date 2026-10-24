@@ -43,6 +43,99 @@ Set `properties=("energy",)` to omit all analytic forces. The default requests
 both energy and forces. Ionic charge is passed identically to every component;
 only a closed-shell singlet is currently admitted.
 
+## Fast convergence
+
+Pass `policy="fast"` to `CCSDTCBSCalculator` to relax SCF, CCSD, Lambda and
+orbital-response convergence. `policy="standard"` (the default) and `"fp64"`
+retain the original strict controls. Fast also enables bounded FP32 auxiliary
+preconvergence for CUDA DF-CCSD and Lambda by default. Final CCSD/Lambda
+solves and independent checks, triples and analytic force response use FP64.
+The selected Hamiltonian, basis groups and complete analytic-force work are preserved. Relaxed convergence
+applies to conventional CPU/CUDA CBS and both CUDA DF reference models;
+CPU and conventional CCSD keep FP64 arithmetic.
+
+```python
+from generativeqc import PrecisionPolicy, TargetErrorBudget
+
+workflow = CCSDTCBSCalculator(
+    (CBSBasis(load_basis("cc-pvdz.json"), 2),
+     CBSBasis(load_basis("cc-pvtz.json"), 3)),
+    auxiliary_bases=(load_basis("cc-pvdz-jkfit.json"),
+                     load_basis("cc-pvtz-jkfit.json")),
+    hf_reference="df",
+    device="cuda",
+    policy="fast",
+    calculator_options={"correlation_memory_budget_bytes": 32 << 30},
+)
+result = workflow.singlepoint(atoms)
+print(result.convergence)
+```
+
+For a smaller allowance, replace `policy="fast"` with
+`policy=PrecisionPolicy("fast", budget=TargetErrorBudget(5e-6, 5e-5, 1.5e-5))`.
+
+The default composite allowance is `1e-5 Eh` energy, `1e-4 Eh/Bohr` maximum
+force error and `3e-5 Eh/Bohr` RMS force error. The workflow first combines
+coefficients of repeated method/basis components, then divides each allowance
+by the sum of absolute combined coefficients. This accounts for extrapolation
+amplification without assuming cancellation. For default DZ/TZ extrapolation
+with a DZ correction that sum is approximately `4.196866`.
+
+The component allowance selects a scale `s`: the minimum of one and its
+energy/max-force/RMS ratios to `1e-5`, `1e-4`, `3e-5`, respectively (omit the RMS
+ratio when unspecified). The following ceilings apply:
+
+| Control | Standard CBS default | Fast ceiling |
+| --- | ---: | ---: |
+| Reference SCF energy change | `1e-12` | `max(1e-11, s * 1e-8)` |
+| Reference SCF density change | `1e-11` | `max(1e-11, s * 1e-9)` |
+| CCSD energy change | `1e-12` | `1e-8` |
+| CCSD residual maximum | `1e-10` | `max(1e-9, s * 1e-6)` |
+| Lambda residual | `1e-9` | `max(1e-9, s * 1e-7)` |
+| Response absolute solve tolerance | `1e-12` | `max(1e-12, s * 1e-8)` |
+| Independent CC orbital residual | `1e-10` | `max(1e-10, s * 1e-7)` |
+| Complete CC orbital stationarity | `1e-8` | `max(1e-8, s * 1e-6)` |
+
+Explicit tighter SCF/CC values in `calculator_options` take precedence. Below
+`s=1e-3`, Fast retains standard convergence and reports
+`component_budget_requires_strict`. An older native library without correlated
+convergence support rejects an admitted Fast request before execution. DF Fast
+also requires native precision telemetry so the executed arithmetic is observable.
+
+Fresh physical residual replays still gate publication using the selected
+limits. Reference canonical-frame checks, denominator/gap safeguards,
+nonfinite rejection, iteration limits and resource checks remain active.
+The more conservative SCF density ceiling compared with DFT Fast preserves
+the post-HF canonical-reference contract. Integral screening remains unchanged.
+DF-CCSD warmup switches to FP64 at a residual of at least 100 times the selected
+CC residual ceiling, or after at most 24 warmup evaluations. It clears the mixed
+DIIS history before FP64 iterations. Resource or provider refusal retains the
+bounded FP64 path; numerical failures remain visible.
+Lambda uses at most 16 FP32 warmup iterations with a `1e-6` handoff tolerance,
+then starts a fresh FP64 GMRES solve with empty Krylov history. Its independent
+transpose audit and parameter/factor derivatives remain FP64. The bounded
+auxiliary batch retains the ordinary Q32 ceiling; memory admission may reduce it.
+
+`result.convergence` records the requested policy, selected route, composite
+and component allowances, coefficient sum and configured limits. Its
+`arithmetic_request` records the FP32 preconvergence request; `arithmetic`
+reports `"mixed"` only when CCSD or Lambda FP32 GEMMs actually executed,
+otherwise `"fp64"`. `lambda_arithmetic_request` and `lambda_arithmetic` record
+Lambda separately; energy-only calls report `"not_requested"`.
+Component `cc_performance` records admission/refusal, evaluations or iterations,
+GEMMs and casts. DF force endpoints also expose Lambda, source-response and
+orbital phase times, actual auxiliary batch and numeric/device capacities.
+Lambda action counts cover the shared transpose operator, excluding its separate
+independent audit. Capacities are not measured peak VRAM. Unavailable telemetry
+is `None`, distinct from measured zero. Native diagnostics retain measured
+residuals and iteration counts. The allowance-to-tolerance mapping is a stopping policy: it is not a per-call
+observable certificate, a mathematical error bound, or a basis-set error
+estimate. No strict duplicate endpoint is run to estimate the error. Validate
+representative molecules against Standard or an independent reference when
+choosing a budget. Explicit `PrecisionPolicy.target` audits and other precision
+presets are not implemented for CBS; private correlated-budget transport also
+rejects prepared batches and legacy RI-MP2.
+
 ## Correlation-only DF-CBS on CUDA
 
 Supply `auxiliary_bases=(low_fit, high_fit)` to select **DF-MP2 correlation**
@@ -173,7 +266,8 @@ see Helgaker et al., *J. Chem. Phys.* **106**, 9639 (1997), and the
 Every component uses the same geometry, charge, spin, nonrelativistic
 all-electron reference and full correlated occupied space. The default uses
 exact correlation integrals; explicit auxiliaries select correlation DF, while
-`hf_reference` selects exact or RI-JK reference response. The workflow is FP64.
+`hf_reference` selects exact or RI-JK reference response. Final physical checks
+and response use FP64; [Fast](#fast-convergence) can use FP32 DF-CCSD warmup.
 Frozen-core, ECP and unrestricted
 variants are not admitted. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO

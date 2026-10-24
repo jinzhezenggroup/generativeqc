@@ -12,7 +12,7 @@
 // evaluators with the existing precision and small-argument branches.
 namespace generativeqc::scf::cuda_execution {
 
-template <unsigned MaximumOrder, typename Scalar>
+template <unsigned MaximumOrder, typename Scalar, bool ReuseReciprocal = false>
 GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values) {
   static_assert(MaximumOrder <= kMaximumCoulombResponseOrder);
   if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
@@ -41,8 +41,8 @@ GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values)
     }
     // Low Boys orders tolerate upward recurrence much earlier than the generic
     // high-order path. Avoid a long alternating series for the dominant direct
-    // s/p/d quartets once cancellation is bounded; the thresholds keep the
-    // worst relative error below 4e-15 against a high-precision oracle.
+    // s/p/d quartets once cancellation is bounded. These retained thresholds
+    // require independent seed and Cartesian-derivative accuracy qualification.
     constexpr double series_threshold = MaximumOrder == 0   ? 1.0e-8
                                         : MaximumOrder == 1 ? 0.25
                                         : MaximumOrder == 2 ? 0.75
@@ -69,11 +69,26 @@ GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values)
       return;
     }
 
-    values[0] = 0.5 * qsqrt(scalar<Scalar>(kPi) / argument) * qerf(qsqrt(argument));
-    const Scalar exponential = qexp(-1.0 * argument);
-    for (unsigned order = 1; order <= MaximumOrder; ++order) {
-      values[order] = ((2.0 * static_cast<double>(order) - 1.0) * values[order - 1] - exponential) /
-                      (2.0 * argument);
+    if constexpr (ReuseReciprocal) {
+      // Opt-in arithmetic for compact MD J: one square root and reciprocal
+      // serve all orders. The retained branch preserves other consumers'
+      // established rounding while this FP64 variant is qualified separately.
+      static_assert(std::is_same_v<Scalar, double>);
+      const double root = sqrt(argument);
+      values[0] = 0x1.c5bf891b4ef6bp-1 / root * erf(root);
+      const double exponential = exp(-argument);
+      const double inverse_twice_argument = 0.5 / argument;
+      for (unsigned order = 1; order <= MaximumOrder; ++order)
+        values[order] =
+            ((2.0 * order - 1.0) * values[order - 1] - exponential) * inverse_twice_argument;
+    } else {
+      values[0] = 0.5 * qsqrt(scalar<Scalar>(kPi) / argument) * qerf(qsqrt(argument));
+      const Scalar exponential = qexp(-1.0 * argument);
+      for (unsigned order = 1; order <= MaximumOrder; ++order) {
+        values[order] =
+            ((2.0 * static_cast<double>(order) - 1.0) * values[order - 1] - exponential) /
+            (2.0 * argument);
+      }
     }
   }
 }

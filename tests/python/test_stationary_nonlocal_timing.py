@@ -120,13 +120,14 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
             points=np.zeros((1, 3)), owners=np.zeros(1), weights=np.ones(1)
         ),
         _source=SimpleNamespace(
+            grid_spec=SimpleNamespace(version=1, points_per_atom=1),
             cuda_resident_grid=lambda: SimpleNamespace(
                 device=0,
                 point_count=1,
                 points=8192,
                 weights=16384,
                 atomic_weights=24576,
-            )
+            ),
         ),
     )
     components, seconds, work = MODULE.resident_nonlocal_geometry(

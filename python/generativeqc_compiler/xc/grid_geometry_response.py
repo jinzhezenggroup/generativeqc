@@ -43,6 +43,9 @@ def _mixed(graph: Graph, root: Expr, names: tuple[str, ...]) -> tuple[Expr, ...]
 @cache
 def local_program(kind: str) -> tuple[Graph, tuple[Expr, ...], tuple[str, ...]]:
     """Scalar jet arithmetic; binary rescaling remains native scheduling only."""
+    if kind == "treutler_adjust":
+        program = grid_mixed_response_program(kind)
+        return program.graph, program.roots, ("mu", "adjustment")
     if kind in ("norm", "ratio") or kind.startswith("becke_"):
         primitive = kind.split("_")[0]
         iterations = int(kind.split("_")[1]) if primitive == "becke" else 3

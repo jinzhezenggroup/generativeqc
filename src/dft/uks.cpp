@@ -227,8 +227,6 @@ ScfResult run_uks_impl(
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
-    // DF changes only the full-range primary. The separate LR provider must
-    // still satisfy the exact Direct contract below.
     const bool primary_exchange =
         strategy.spec.exchange.present &&
         (strategy.spec.exchange.approximation == FockApproximation::Exact ||
@@ -238,10 +236,12 @@ ScfResult run_uks_impl(
         correction.backend == FockBackend::Cpu && correction.spec.spin == FockSpin::Unrestricted &&
         correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
         correction.spec.exchange.present &&
-        correction.spec.exchange.approximation == FockApproximation::Exact &&
+        (correction.spec.exchange.approximation == FockApproximation::Exact ||
+         (correction.spec.exchange.approximation == FockApproximation::DensityFitted &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted)) &&
         correction.spec.exchange.op == FockOperator::LongRange;
     if (!primary_exchange || !correction_exchange)
-      throw std::invalid_argument("RSH UKS requires full-range primary K plus direct long-range K");
+      throw std::invalid_argument("RSH UKS requires full-range primary K plus a matched LR owner");
   }
   if (options.xc_density_route != dft::XcDensityRoute::DensityMatrix)
     throw std::invalid_argument("UKS occupied-factor XC has not been implemented");
@@ -254,9 +254,8 @@ ScfResult run_uks_impl(
   // auxiliary request would incorrectly replace it with the orbital basis.
   if (!plan.matches_system(grid.system()) || basis.packed != dft::AoBasis(system).packed)
     throw std::invalid_argument("UKS refuses a stale geometry, basis, charge or spin binding");
-  if (long_range_correction &&
-      (!long_range_correction->matches(system, nullptr, long_range_correction->strategy(), -1, 0) ||
-       long_range_correction->one_electron().nbf != ints.nbf))
+  if (long_range_correction && (!long_range_correction->matches_system(system) ||
+                                long_range_correction->one_electron().nbf != ints.nbf))
     throw std::invalid_argument("RSH correction refuses a stale or incompatible source binding");
   const auto [na, nb] = initial_guess::spin_occupations(system);
   if (na > n || nb > n || system.electron_count <= 0)

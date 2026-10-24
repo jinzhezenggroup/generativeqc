@@ -125,7 +125,7 @@
     },
     "libxc-bulk-graph-catalog": {
       "canonical_inputs": {
-        "python/generativeqc_compiler/integral/expr.py": "8f85892494e5642d8eab3cd2c42ae54a5e1527db13a1db148cbdb980f4eef90f",
+        "python/generativeqc_compiler/integral/expr.py": "3c5efc4ffcd4492573e4ac1b8cca7b043e31e34dcc654bfe0a64d37c07a3047a",
         "python/generativeqc_compiler/xc/libxc_bulk.py": "1469c75ef2d22bca13474fea805c885a97fbfe4ec44bc28cd0ab1e034c85a290",
         "python/generativeqc_compiler/xc/libxc_maple.py": "07e95db2a208a0101baa0e07d06ff2e02d74c9c4f780d07792492384d874e676",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b"
@@ -330,6 +330,57 @@
       "license": "LGPL-3.0-or-later",
       "repository": "https://github.com/dftd4/dftd4",
       "revision": "6e1f59c3f39d919a2dbef0601d2576727c8b30e8"
+    },
+    "gpu4pyscf-md-j": {
+      "consumers": [
+        "python/generativeqc_compiler/integral/md_j_engine_cuda.py"
+      ],
+      "files": {
+        "LICENSE": {
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "upstream_path": "LICENSE",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/LICENSE"
+        },
+        "gpu4pyscf/lib/gvhf-md/contract_Et.cu": {
+          "sha256": "86c5ed4ad5cebf3c6cd13ffc6d2ce60e65f29fa8bef7872f84a80d43b368c9ee",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/contract_Et.cu",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/contract_Et.cu"
+        },
+        "gpu4pyscf/lib/gvhf-md/md_contract_j.cu": {
+          "sha256": "a8a36a753316029e490c375f302d90173db4dcf1b51b71d303bef9a8afec6dbd",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/md_contract_j.cu",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/md_contract_j.cu"
+        },
+        "gpu4pyscf/lib/gvhf-md/md_indices.cu": {
+          "sha256": "e13453844227b79928866eb3fd27c2049c1106d77eca68d5c4c281c3d70392a8",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/md_indices.cu",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/md_indices.cu"
+        },
+        "gpu4pyscf/lib/gvhf-md/md_j.cuh": {
+          "sha256": "4c2503b3d20f25eadc6003fd74a7f0b4db9681e48edb051288203cd6f1261872",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/md_j.cuh",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/md_j.cuh"
+        },
+        "gpu4pyscf/lib/gvhf-md/md_j_driver.cu": {
+          "sha256": "7512b28d8051fed814306ff532181bc0c05eea6b3a23e6b76de794887fbd769d",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/md_j_driver.cu",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/md_j_driver.cu"
+        },
+        "gpu4pyscf/lib/gvhf-md/md_pairdata.c": {
+          "sha256": "bbffcf5bd48e5250647f716122c7bdedc9a0e16d97d3ec122d7eba1e673b94b2",
+          "upstream_path": "gpu4pyscf/lib/gvhf-md/md_pairdata.c",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/lib/gvhf-md/md_pairdata.c"
+        },
+        "gpu4pyscf/scf/j_engine.py": {
+          "sha256": "a554315c46048960f2ac915e3603a3e11c0dee18240410b51d2bcc163cc66104",
+          "upstream_path": "gpu4pyscf/scf/j_engine.py",
+          "url": "https://raw.githubusercontent.com/pyscf/gpu4pyscf/9af748a71ca8f4881c604332c2f0cc1632e033ac/gpu4pyscf/scf/j_engine.py"
+        }
+      },
+      "kind": "remote-file-set",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/pyscf/gpu4pyscf",
+      "revision": "9af748a71ca8f4881c604332c2f0cc1632e033ac"
     },
     "gpu4pyscf-rys": {
       "consumers": [

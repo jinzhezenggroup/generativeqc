@@ -1,0 +1,135 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Corrected GMRES capacity covers measured tracked ownership and retains independent/Standard accuracy and failure gates; C7 gains reproduced within two same-GPU pairs, with resource-dependent scope and no universal speedup claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 9322,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "643fba294238ba0c94ecef59acd0377c2cbeae211f4eef8f500003012d237210"
+    },
+    {
+      "bytes": 387,
+      "path": "ablation-job.sh",
+      "role": "reproduction",
+      "sha256": "d348b4c229c9d9b8744a2467b541ec5799b7f4a55ff8e29a3c596ddeb66f2429"
+    },
+    {
+      "bytes": 907,
+      "path": "baseline-environment.sh",
+      "role": "reproduction",
+      "sha256": "3294a49158330051c757dd7ea0e39319c3cb5a2bc1da3ce0d95d515c796905b3"
+    },
+    {
+      "bytes": 216,
+      "path": "c7-job.sh",
+      "role": "reproduction",
+      "sha256": "c7c08fa5655d4ca7ec08d9684a2eb10c139a6c11074a3c68d106e7b6a2fa5eee"
+    },
+    {
+      "bytes": 170,
+      "path": "c7-repeat-job.sh",
+      "role": "reproduction",
+      "sha256": "94d5374d6e118ef1170fc6afd91b8cdf4434af83396c7acc8306d3ca8666db94"
+    },
+    {
+      "bytes": 908,
+      "path": "candidate-environment.sh",
+      "role": "reproduction",
+      "sha256": "3760202f5037a7ed2f8bf4626b5855d70b02815d8566b02d877b69c748608b3f"
+    },
+    {
+      "bytes": 307,
+      "path": "curve-job.sh",
+      "role": "reproduction",
+      "sha256": "f7c6971e69006f4288789200e8dd56433a7fc13b66510dbc8b28012ccaf3b1d3"
+    },
+    {
+      "bytes": 11952,
+      "path": "evidence.json.xz",
+      "role": "evidence",
+      "sha256": "d5b28e6e9eeb4d94579cd03fcc350862d7f1239b044c5ffff05d5aec4c451161"
+    },
+    {
+      "bytes": 622,
+      "path": "lambda-job.sh",
+      "role": "reproduction",
+      "sha256": "5078dba178cda68618a53dff1b135ff5384e239da3f79df6e660056000e3b002"
+    },
+    {
+      "bytes": 397,
+      "path": "memcheck-job.sh",
+      "role": "reproduction",
+      "sha256": "71881e6850b08ebfb1958935bb2dc2e54f6b262a0ec97d57e1265e2ccfe73f63"
+    },
+    {
+      "bytes": 627,
+      "path": "python-preload.sh",
+      "role": "reproduction",
+      "sha256": "a32546650aa72486d940d6cf1065e64fce5bd8d53b76e22cde130f59873f10b4"
+    },
+    {
+      "bytes": 956,
+      "path": "qualification-job.sh",
+      "role": "reproduction",
+      "sha256": "73a07431a7de934a7e898481fdbb90477a02f21847a03932d45b8849caab3754"
+    },
+    {
+      "bytes": 2336,
+      "path": "qualified-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "08e59f8ea36c87ac49a3356f9fb8dd5501401161c0b757e0c2d8cc5407db0ea9"
+    },
+    {
+      "bytes": 782,
+      "path": "run-one.sh",
+      "role": "reproduction",
+      "sha256": "470a42d33d92149a76e7a67ac9b0606c0ea8a3e16571e5bcc798fa4fbc0595a1"
+    },
+    {
+      "bytes": 140240,
+      "path": "summary.json.xz",
+      "role": "samples",
+      "sha256": "4e10edc12aff77c0587058b66560e80a63a082c7597634cdc3e63869cebac414"
+    },
+    {
+      "bytes": 6593,
+      "path": "timings.md",
+      "role": "summary",
+      "sha256": "88c2f61a8f9409d1a9e060f048d524622f6adb263bf31dc5cdb9fe1209847bf5"
+    },
+    {
+      "bytes": 10030,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "074bd17ac20345399feaec0ae1d780a17029984aadd30d24948f656482d1b5aa"
+    },
+    {
+      "bytes": 375,
+      "path": "work-job.sh",
+      "role": "reproduction",
+      "sha256": "4103cd80148e86105e522d33ec825811dd0008ae5ecc854489427f4708dd96a0"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=01:10:00",
+      "bash",
+      "c7-job.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "976f756b391bc65edb79f76df1a8c3fe807518a7"
+  }
+}

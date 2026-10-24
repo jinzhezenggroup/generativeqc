@@ -224,6 +224,37 @@ def _resource_check(
     return extra
 
 
+def _restore_states(batch: typing.Any, states: typing.Any) -> int:
+    """Keep validation allocations on the prepared owner's device ledger.
+
+    CUDA HF admission owns temporary eigensolver buffers even before the first
+    SCF. A rejected allocation must fail before the transactional seed commit;
+    it must not bypass the limits enforced for ordinary execution.
+    """
+
+    def restore() -> int:
+        return batch._library.generativeqc_batch_restore_hf_warm_states(
+            batch._batch, states, batch.system_count
+        )
+
+    if batch.resource_plan is None:
+        return restore()
+    from .resources_native import check_resource_status, observe_method_call
+
+    status, batch.resource_diagnostics = observe_method_call(
+        batch._library,
+        batch.resource_plan,
+        batch._resource_ledger,
+        restore,
+        owner="ks" if batch._calculator._ks_options is not None else "hf",
+        phase="warm_restore",
+        previous=batch.resource_diagnostics,
+    )
+    if status == _native.STATUS_OUT_OF_MEMORY:
+        check_resource_status(batch._library, status, batch.resource_diagnostics)
+    return status
+
+
 def _parse_manifest(
     raw: typing.Any, payload_bytes: typing.Any, max_bytes: typing.Any
 ) -> typing.Any:
@@ -725,9 +756,7 @@ def load_checkpoint(
         "validation_backend": "cpu_source_overlap",
     }
     if accepted_indices:
-        status = batch._library.generativeqc_batch_restore_hf_warm_states(
-            batch._batch, candidates, len(candidates)
-        )
+        status = _restore_states(batch, candidates)
         if status != _native.STATUS_SUCCESS:
             detail = batch._library.generativeqc_context_get_last_detail(
                 batch._context

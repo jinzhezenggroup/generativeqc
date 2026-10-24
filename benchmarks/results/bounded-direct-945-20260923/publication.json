@@ -13,16 +13,16 @@
       "sha256": "e213b367979224ec3c7062223aa9f9c2796ef62f085f211d1b87116d2969f0ce"
     },
     {
-      "bytes": 35268,
-      "path": "automatic-rhf.json",
+      "bytes": 4472,
+      "path": "automatic-rhf.json.gz",
       "role": "samples",
-      "sha256": "5fd607fe8c2e7fad1de87b69cc82ac00f7236cf2f3a7a40a209532aef264043f"
+      "sha256": "bc1ae88cbbea7bc6c6c9950cb6e34eb530a313adc4cfd4f36f341d56381bdadf"
     },
     {
-      "bytes": 35298,
-      "path": "automatic-uhf.json",
+      "bytes": 4839,
+      "path": "automatic-uhf.json.gz",
       "role": "samples",
-      "sha256": "7bf3b45fc8c779c59f71645e6bd67f6656ecee919cbc00f9460763bf25037f3d"
+      "sha256": "57d795192a388d88f8acd16602bc7c37283b2bcc8c766b020212b869f976c519"
     },
     {
       "bytes": 9248,
@@ -37,10 +37,10 @@
       "sha256": "85095bc7dc6ee2892f207f558abc0837d661a9f4e0cc7348d8e7aea7e4528849"
     },
     {
-      "bytes": 32603,
-      "path": "regressions.json",
+      "bytes": 1396,
+      "path": "regressions.json.gz",
       "role": "samples",
-      "sha256": "fb0df51f5cc3ccedc17f336b6a9ca43700916ebeb5cad5944f7c3375b293ec5d"
+      "sha256": "921a67f3f95c4b48041d0470011437d78c2ab49710ff44ebc957b1cdc1d337e1"
     },
     {
       "bytes": 6307,
@@ -55,10 +55,10 @@
       "sha256": "f7306c4ce8cc7901cf1a928917b85449ae7c1449f301cac9005d064af62fff7b"
     },
     {
-      "bytes": 49024,
-      "path": "resource-baseline.json",
+      "bytes": 4573,
+      "path": "resource-baseline.json.gz",
       "role": "samples",
-      "sha256": "96d455e5431c56307c4a91a47bfb2a75e71f9ff2cadf671334962e62ff093701"
+      "sha256": "a378874e64826f2bcc21f60f83f7aefbb4ac00166c2e9f05f93daa613fed89c7"
     },
     {
       "bytes": 37921,

@@ -5,15 +5,15 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _cc_owner_test_support import compile_owner
+from _cc_owner_test_support import compile_owner, write_df_cpu_headers
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_jacobi_refusal_continues_after_the_first_drained_trial(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
-    if not compiler or not shutil.which("ccache"):
-        pytest.skip("requires C++ compiler and ccache")
+    if not compiler or not (shutil.which("sccache") or shutil.which("ccache")):
+        pytest.skip("requires C++ compiler and sccache/ccache")
     source = (ROOT / "src/cc/cuda_solver.cu").read_text()
     # Retain the entire live solve loop, including convergence/replay, event
     # timing, carried outputs, error handling and publication. Numerical kernels
@@ -29,6 +29,7 @@ def test_jacobi_refusal_continues_after_the_first_drained_trial(tmp_path: Path) 
         "  // Appending to a full ring", 1
     )[0]
     diis = "bool run_diis(" + diis
+    write_df_cpu_headers(tmp_path)
     cpp = tmp_path / "jacobi.cpp"
     cpp.write_text(PREFIX + diis + DIIS_BODY + solve + MAIN)
     executable = tmp_path / "jacobi"
@@ -42,6 +43,9 @@ def test_jacobi_refusal_continues_after_the_first_drained_trial(tmp_path: Path) 
 PREFIX = r"""
 #include "cc/solver.hpp"
 #include "cc/iteration_driver.hpp"
+#include "cc/df_plan.hpp"
+#include "cc/phase_observation.hpp"
+#include "cc/replay_tiles.hpp"
 #include "solver/diis_ring.hpp"
 #include <algorithm>
 #include <array>
@@ -79,6 +83,11 @@ void validate_options(const SolverOptions&) {}
 struct Owner {
   // This harness covers strict Jacobi/event control, not mixed numerical actions.
   bool mixed_active{};
+  // Metadata needed to type-check the real, disabled observation branch;
+  // this fixture still executes the complete original delayed-control loop.
+  DFIterationPlan plan{};
+  std::size_t naux{}, replay_batch{};
+  bool replay_matrix{}, pairs_enabled{}, conventional_prepared{};
   void finish_mixed_warmup() {
     throw std::logic_error("Jacobi control fixture must not execute mixed warmup");
   }

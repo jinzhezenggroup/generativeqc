@@ -11,15 +11,17 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "method,legacy_grid,expected_energy",
+    "method,legacy_pruning,expected_energy",
     (
-        ("rhf", False, -1.11671432506255),
-        ("pbe-rks", False, -1.1520643723572155),
-        ("pbe-rks", True, -1.1520643753396715),
+        ("rhf", None, -1.11671432506255),
+        # Independent PySCF 2.14.0, exact native basis, Treutler level 3.
+        ("pbe-rks", None, -1.1520643724196136),
+        ("pbe-rks", "none", -1.1520643753396715),
+        ("pbe-rks", "radial-v1", -1.1520643723572155),
     ),
 )
 def test_builtin_method_runs_without_toolchain_activation(
-    tmp_path: Path, method: str, legacy_grid: bool, expected_energy: float
+    tmp_path: Path, method: str, legacy_pruning: str | None, expected_energy: float
 ) -> None:
     """Default and legacy-grid built-ins need no compiler and retain oracle energies."""
 
@@ -82,7 +84,7 @@ subprocess.Popen = _forbid_subprocess
 from generativeqc import Calculator, GridPolicy, KsOptions
 
 atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-options = KsOptions(grid=GridPolicy(pruning="none").resolve("pbe-rks")) if {legacy_grid!r} else None
+options = KsOptions(grid=GridPolicy(pruning={legacy_pruning!r}).resolve("pbe-rks")) if {legacy_pruning!r} is not None else None
 result = Calculator(method={method!r}, basis="sto-3g", device="cpu", ks_options=options).singlepoint(atoms, properties={properties!r})
 assert result.converged
 assert result.executed_backend == "cpu_reference"

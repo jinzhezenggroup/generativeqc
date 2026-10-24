@@ -68,6 +68,20 @@ only the authoritative triangle writes and mirrors the final potential.
 Quadrature, point-domain rules, precision, screening and convergence gates do
 not change. See the [schedule decision](../../.agents/notes/implemented/performance/2026-09-23-cuda-xc-matrix-tiles.md).
 
+Strict FP64 tiled density and potential inner products use explicit FP64
+`fma`, even when the surrounding CUDA build disables implicit contraction.
+Storage and accumulation remain FP64, with the same reduction index order and
+one accumulator. Fusion changes rounding; cross potential products also add
+their two legs sequentially. Cross products check the accumulator after each
+shared-memory point tile. A finite result proves that no earlier FMA accumulator
+in that tile became nonfinite. Otherwise the tile replays from its saved initial
+accumulator, checking each step and retrying the original grouped two-product
+expression when needed. A cancelling leg therefore retains the original finite
+domain without a range check on every ordinary term. Independent E/V and
+complete energy/force gates qualify the arithmetic on their recorded source. The range-sensitive diagonal fallback retains its
+original two-product expression, and FP32/mixed products keep their separate
+arithmetic contract.
+
 ## Explicit native execution
 
 The CUDA density-feature reduction uses one warp per spin/grid point for

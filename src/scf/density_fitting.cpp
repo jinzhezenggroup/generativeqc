@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <new>
 #include <numeric>
 #include <stdexcept>
 #include <vector>
@@ -83,8 +84,8 @@ void validate_three_center(const DensityFittingThreeCenter& three_center) {
     // This cache is a layout copy, not a second scientific input. Both vectors
     // are publicly mutable; finite same-sized stale caches must not change J/K.
     const auto pairs = three_center.nbf * three_center.nbf;
-    for (std::size_t auxiliary = 0; auxiliary < three_center.naux; ++auxiliary)
-      for (std::size_t pair = 0; pair < pairs; ++pair)
+    for (std::size_t pair = 0; pair < pairs; ++pair)
+      for (std::size_t auxiliary = 0; auxiliary < three_center.naux; ++auxiliary)
         if (three_center.auxiliary_major_values[auxiliary * pairs + pair] !=
             three_center.values[pair * three_center.naux + auxiliary])
           throw std::invalid_argument("orthonormalized DF provider cache is stale");
@@ -169,6 +170,19 @@ std::vector<double> build_exchange(const DensityFittingThreeCenter& three_center
   // create a bounded temporary without changing the public tensor contract.
   constexpr std::size_t kDenseExchangeMinimum = 16;
   const bool use_dense_provider = nbf >= kDenseExchangeMinimum && tensor::cpu_openblas_built();
+  std::vector<double> scalar_transpose;
+  std::vector<double> auxiliary_exchange_row;
+  if (!use_dense_provider && !three_center.auxiliary_major_values.empty()) {
+    // One AO matrix and one row enable both products' contiguous output lanes.
+    // Optional scratch refusal retains the cached dot-product schedule below.
+    try {
+      scalar_transpose.resize(nbf * nbf);
+      auxiliary_exchange_row.resize(nbf);
+    } catch (const std::bad_alloc&) {
+      std::vector<double>().swap(scalar_transpose);
+      std::vector<double>().swap(auxiliary_exchange_row);
+    }
+  }
   std::vector<double> temporary_auxiliary_major;
   const double* auxiliary_major = nullptr;
   tensor::CpuLinalgPlan dense_plan;
@@ -195,6 +209,51 @@ std::vector<double> build_exchange(const DensityFittingThreeCenter& three_center
                        0.0, dense_plan);
       tensor::cpu_gemm('N', 'T', nbf, nbf, nbf, transformed_density.data(), bq, exchange.data(),
                        1.0, 1.0, dense_plan);
+      continue;
+    }
+
+    if (!three_center.auxiliary_major_values.empty()) {
+      const double* auxiliary_matrix =
+          three_center.auxiliary_major_values.data() + auxiliary * nbf * nbf;
+      if (!scalar_transpose.empty())
+        for (std::size_t row = 0; row < nbf; ++row)
+          for (std::size_t column = 0; column < nbf; ++column)
+            scalar_transpose[row * nbf + column] = auxiliary_matrix[column * nbf + row];
+      std::fill(transformed_density.begin(), transformed_density.end(), 0.0);
+      for (std::size_t mu = 0; mu < nbf; ++mu) {
+        double* transformed_row = transformed_density.data() + mu * nbf;
+        for (std::size_t kappa = 0; kappa < nbf; ++kappa) {
+          const double factor = auxiliary_matrix[mu * nbf + kappa];
+          const double* density_row = density.data() + kappa * nbf;
+          // Contiguous output lanes preserve each element's kappa sum order.
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda)
+            transformed_row[lambda] += factor * density_row[lambda];
+        }
+      }
+      for (std::size_t mu = 0; mu < nbf; ++mu) {
+        const double* transformed_row = transformed_density.data() + mu * nbf;
+        if (!scalar_transpose.empty()) {
+          // A transposed panel handles nonsymmetric public tensors too; each
+          // element retains the original lambda and outer auxiliary sum order.
+          std::fill(auxiliary_exchange_row.begin(), auxiliary_exchange_row.end(), 0.0);
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda) {
+            const double factor = transformed_row[lambda];
+            const double* auxiliary_row = scalar_transpose.data() + lambda * nbf;
+            for (std::size_t nu = 0; nu < nbf; ++nu)
+              auxiliary_exchange_row[nu] += factor * auxiliary_row[nu];
+          }
+          for (std::size_t nu = 0; nu < nbf; ++nu)
+            exchange[index(mu, nu, nbf)] += auxiliary_exchange_row[nu];
+          continue;
+        }
+        for (std::size_t nu = 0; nu < nbf; ++nu) {
+          const double* auxiliary_row = auxiliary_matrix + nu * nbf;
+          double value = 0.0;
+          for (std::size_t lambda = 0; lambda < nbf; ++lambda)
+            value += transformed_row[lambda] * auxiliary_row[lambda];
+          exchange[index(mu, nu, nbf)] += value;
+        }
+      }
       continue;
     }
 
@@ -284,162 +343,6 @@ void validate_gradient_density(const std::vector<double>& density, std::size_t n
     throw std::invalid_argument(description);
   }
   require_finite(density, description);
-}
-
-double coulomb_quadratic_derivative(const integrals::DensityFittingIntegralData& data,
-                                    const std::vector<double>& density,
-                                    const std::vector<double>& inverse,
-                                    const std::vector<double>& inverse_derivative,
-                                    const double* three_center_derivative) {
-  const std::size_t nbf = data.nbf;
-  const std::size_t naux = data.naux;
-  std::vector<double> charge(naux, 0.0);
-  std::vector<double> derivative_charge(naux, 0.0);
-  for (std::size_t mu = 0; mu < nbf; ++mu) {
-    for (std::size_t nu = 0; nu < nbf; ++nu) {
-      const double density_value = density[index(mu, nu, nbf)];
-      for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
-        const std::size_t item = three_center_index(mu, nu, auxiliary, nbf, naux);
-        charge[auxiliary] += density_value * data.three_center[item];
-        derivative_charge[auxiliary] += density_value * three_center_derivative[item];
-      }
-    }
-  }
-
-  std::vector<double> metric_potential(naux, 0.0);
-  for (std::size_t row = 0; row < naux; ++row) {
-    for (std::size_t column = 0; column < naux; ++column) {
-      metric_potential[row] += inverse[index(row, column, naux)] * charge[column];
-    }
-  }
-  double derivative = 0.0;
-  for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
-    derivative += derivative_charge[auxiliary] * metric_potential[auxiliary];
-  }
-
-  double metric_response = 0.0;
-  for (std::size_t row = 0; row < naux; ++row) {
-    for (std::size_t column = 0; column < naux; ++column) {
-      metric_response +=
-          charge[row] * inverse_derivative[index(row, column, naux)] * charge[column];
-    }
-  }
-  // E_J = 1/2 rho^T M+ rho, hence the metric response enters as
-  // +1/2 rho^T (dM+) rho.  (The sign is already carried by dM+.)
-  return derivative + 0.5 * metric_response;
-}
-
-double exchange_quadratic_derivative(const integrals::DensityFittingIntegralData& data,
-                                     const std::vector<double>& density,
-                                     const std::vector<double>& inverse,
-                                     const std::vector<double>& inverse_derivative,
-                                     const double* three_center_derivative) {
-  const std::size_t nbf = data.nbf;
-  const std::size_t naux = data.naux;
-  const std::size_t matrix_elements = nbf * nbf;
-
-  // The force contraction has an exact dense formulation:
-  //   R_Q  = D^T B_Q D
-  //   dR_Q = D^T dB_Q D
-  // followed by auxiliary-space Gram contractions against B and dB.
-  // Keep the historical scalar loop as the no-provider oracle, but use the
-  // common dense-LA boundary when an external provider is available.
-  constexpr std::size_t kDenseDerivativeMinimum = 16;
-  if (nbf >= kDenseDerivativeMinimum && tensor::cpu_openblas_built()) {
-    const tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::automatic,
-                                     tensor::CpuLinalgThreadOwnership::provider_parallel, 1};
-    std::vector<double> b_aux(naux * matrix_elements);
-    std::vector<double> db_aux(naux * matrix_elements);
-    for (std::size_t row = 0; row < nbf; ++row) {
-      for (std::size_t column = 0; column < nbf; ++column) {
-        const std::size_t pair = index(row, column, nbf);
-        for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
-          const std::size_t source = three_center_index(row, column, auxiliary, nbf, naux);
-          b_aux[auxiliary * matrix_elements + pair] = data.three_center[source];
-          db_aux[auxiliary * matrix_elements + pair] = three_center_derivative[source];
-        }
-      }
-    }
-
-    std::vector<double> response(naux * matrix_elements);
-    std::vector<double> derivative_response(naux * matrix_elements);
-    std::vector<double> transformed(matrix_elements);
-    std::vector<double> derivative_transformed(matrix_elements);
-    for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
-      const double* bq = b_aux.data() + auxiliary * matrix_elements;
-      const double* dbq = db_aux.data() + auxiliary * matrix_elements;
-      double* rq = response.data() + auxiliary * matrix_elements;
-      double* drq = derivative_response.data() + auxiliary * matrix_elements;
-      tensor::cpu_gemm('N', 'N', nbf, nbf, nbf, bq, density.data(), transformed.data(), 1.0, 0.0,
-                       plan);
-      tensor::cpu_gemm('T', 'N', nbf, nbf, nbf, density.data(), transformed.data(), rq, 1.0, 0.0,
-                       plan);
-      tensor::cpu_gemm('N', 'N', nbf, nbf, nbf, dbq, density.data(), derivative_transformed.data(),
-                       1.0, 0.0, plan);
-      tensor::cpu_gemm('T', 'N', nbf, nbf, nbf, density.data(), derivative_transformed.data(), drq,
-                       1.0, 0.0, plan);
-    }
-
-    std::vector<double> quadratic(naux * naux);
-    std::vector<double> derivative_quadratic(naux * naux);
-    tensor::cpu_gemm('N', 'T', naux, naux, matrix_elements, response.data(), b_aux.data(),
-                     quadratic.data(), 1.0, 0.0, plan);
-    tensor::cpu_gemm('N', 'T', naux, naux, matrix_elements, derivative_response.data(),
-                     b_aux.data(), derivative_quadratic.data(), 1.0, 0.0, plan);
-    tensor::cpu_gemm('N', 'T', naux, naux, matrix_elements, response.data(), db_aux.data(),
-                     derivative_quadratic.data(), 1.0, 1.0, plan);
-
-    double derivative = 0.0;
-    for (std::size_t item = 0; item < naux * naux; ++item)
-      derivative +=
-          derivative_quadratic[item] * inverse[item] + quadratic[item] * inverse_derivative[item];
-    return derivative;
-  }
-
-  // Scalar/no-provider oracle: preserve the established reduction order.
-  std::vector<std::vector<double>> response(naux, std::vector<double>(matrix_elements));
-  std::vector<std::vector<double>> derivative_response(naux, std::vector<double>(matrix_elements));
-  for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
-    for (std::size_t i = 0; i < nbf; ++i) {
-      for (std::size_t column = 0; column < nbf; ++column) {
-        double transformed = 0.0;
-        double derivative_transformed = 0.0;
-        for (std::size_t k = 0; k < nbf; ++k) {
-          const std::size_t tensor_item = three_center_index(i, k, auxiliary, nbf, naux);
-          transformed += data.three_center[tensor_item] * density[index(k, column, nbf)];
-          derivative_transformed +=
-              three_center_derivative[tensor_item] * density[index(k, column, nbf)];
-        }
-        for (std::size_t row = 0; row < nbf; ++row) {
-          response[auxiliary][index(row, column, nbf)] += density[index(i, row, nbf)] * transformed;
-          derivative_response[auxiliary][index(row, column, nbf)] +=
-              density[index(i, row, nbf)] * derivative_transformed;
-        }
-      }
-    }
-  }
-
-  double derivative = 0.0;
-  for (std::size_t first_auxiliary = 0; first_auxiliary < naux; ++first_auxiliary) {
-    for (std::size_t second_auxiliary = 0; second_auxiliary < naux; ++second_auxiliary) {
-      double quadratic = 0.0;
-      double derivative_quadratic = 0.0;
-      for (std::size_t row = 0; row < nbf; ++row) {
-        for (std::size_t column = 0; column < nbf; ++column) {
-          const std::size_t pair = index(row, column, nbf);
-          const std::size_t tensor_item =
-              three_center_index(row, column, second_auxiliary, nbf, naux);
-          quadratic += response[first_auxiliary][pair] * data.three_center[tensor_item];
-          derivative_quadratic +=
-              derivative_response[first_auxiliary][pair] * data.three_center[tensor_item] +
-              response[first_auxiliary][pair] * three_center_derivative[tensor_item];
-        }
-      }
-      derivative += derivative_quadratic * inverse[index(first_auxiliary, second_auxiliary, naux)] +
-                    quadratic * inverse_derivative[index(first_auxiliary, second_auxiliary, naux)];
-    }
-  }
-  return derivative;
 }
 
 struct DensityFittingReverseWeights {
@@ -576,21 +479,48 @@ DensityFittingReverseWeights density_fitting_reverse_weights(
     const std::vector<std::pair<const std::vector<double>*, JkCoefficients>>& terms,
     double relative_threshold) {
   validate_density_fitting_value_data(data);
-  const std::vector<double> inverse = metric_pseudoinverse(data, relative_threshold);
+  const auto factor = factor_density_fitting_metric(data.metric, data.naux, relative_threshold);
+  const auto& root = factor.inverse_square_root;
+  const auto naux = data.naux;
+  const auto pairs = data.nbf * data.nbf;
+  const tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::automatic,
+                                   tensor::CpuLinalgThreadOwnership::provider_parallel, 1};
+  // Differentiate A M^{-1/2}, not an AO-space Gram followed by d(M+).
+  // LR metrics can retain eigenvalues ten orders below their largest mode;
+  // forming the raw Gram first loses its small spectral seeds, which d(M+)
+  // then amplifies by two inverse powers of the metric eigenvalue.
+  integrals::DensityFittingIntegralData fitted;
+  fitted.nbf = data.nbf;
+  fitted.naux = naux;
+  fitted.three_center.resize(pairs * naux);
+  tensor::cpu_gemm('N', 'N', pairs, naux, naux, data.three_center.data(), root.data(),
+                   fitted.three_center.data(), 1.0, 0.0, plan);
+  std::vector<double> identity(naux * naux, 0.0);
+  for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary)
+    identity[auxiliary * naux + auxiliary] = 1.0;
   DensityFittingReverseWeights weights;
-  std::vector<double> inverse_weights(data.naux * data.naux, 0.0);
-  weights.three_center.assign(data.nbf * data.nbf * data.naux, 0.0);
+  // Reuse the J/K quadratic algebra; the identity metric is constant, so its
+  // adjoint is deliberately discarded. Only the whitened-factor adjoint flows
+  // through the original metric's inverse-square-root Frechet derivative.
+  std::vector<double> unused_inverse_weights(naux * naux, 0.0);
+  std::vector<double> fitted_weights(pairs * naux, 0.0);
   for (const auto& [density, coefficients] : terms) {
     if (!density || !std::isfinite(coefficients.coulomb) || !std::isfinite(coefficients.exchange))
       throw std::invalid_argument("DF weighted gradient coefficients are invalid");
     validate_gradient_density(*density, data.nbf, "DF weighted gradient density is inconsistent");
-    accumulate_coulomb_reverse_weights(data, *density, inverse, coefficients.coulomb,
-                                       inverse_weights, weights.three_center);
-    accumulate_exchange_reverse_weights(data, *density, inverse, 0.5 * coefficients.exchange,
-                                        inverse_weights, weights.three_center);
+    accumulate_coulomb_reverse_weights(fitted, *density, identity, coefficients.coulomb,
+                                       unused_inverse_weights, fitted_weights);
+    accumulate_exchange_reverse_weights(fitted, *density, identity, 0.5 * coefficients.exchange,
+                                        unused_inverse_weights, fitted_weights);
   }
-  weights.metric = density_fitting_metric_inverse_response(data.metric, inverse, inverse_weights,
-                                                           data.naux, relative_threshold);
+  weights.three_center.resize(pairs * naux);
+  tensor::cpu_gemm('N', 'T', pairs, naux, naux, fitted_weights.data(), root.data(),
+                   weights.three_center.data(), 1.0, 0.0, plan);
+  std::vector<double> root_weights(naux * naux);
+  tensor::cpu_gemm('T', 'N', naux, naux, pairs, data.three_center.data(), fitted_weights.data(),
+                   root_weights.data(), 1.0, 0.0, plan);
+  weights.metric = density_fitting_metric_inverse_square_root_response(
+      data.metric, root, root_weights, naux, relative_threshold);
   return weights;
 }
 std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile,
@@ -646,7 +576,7 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
       (16 * sizeof(double) + 2 * sizeof(std::int32_t) + 2 * sizeof(std::uint8_t) +
        sizeof(std::uint32_t) + (occupied_exchange ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0));
   const long double scf_bytes =
-      control_bytes + df_scf_workspace_allowance(nbf, batch_size) +
+      control_bytes + sizeof(std::uint64_t) + df_scf_workspace_allowance(nbf, batch_size) +
       static_cast<long double>(df_eigen_device_reservation(nbf)) +
       static_cast<long double>(df_final_snapshot_device_reservation(nbf, batch_size) +
                                df_final_validation_device_reservation(nbf)) +
@@ -760,8 +690,18 @@ DensityFittingThreeCenter orthonormalize_density_fitting_three_center(
   }
 
   constexpr std::size_t kPersistentDenseExchangeMinimum = 16;
-  if (nbf >= kPersistentDenseExchangeMinimum && tensor::cpu_openblas_built()) {
-    result.auxiliary_major_values.resize(tensor_elements);
+  constexpr std::size_t kScalarExchangeCacheMaximumBytes = 16U << 20;
+  const bool external_provider = tensor::cpu_openblas_built();
+  if (nbf >= kPersistentDenseExchangeMinimum &&
+      (external_provider || tensor_elements <= kScalarExchangeCacheMaximumBytes / sizeof(double))) {
+    // The scalar schedule borrows the same immutable layout as BLAS. Keep its
+    // optional retained copy bounded; absent capacity retains the strided path.
+    try {
+      result.auxiliary_major_values.resize(tensor_elements);
+    } catch (const std::bad_alloc&) {
+      if (external_provider) throw;
+      return result;
+    }
     for (std::size_t mu = 0; mu < nbf; ++mu)
       for (std::size_t nu = 0; nu < nbf; ++nu)
         for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary)
@@ -830,7 +770,8 @@ DensityFittingRhfGradient build_density_fitting_rhf_gradient(
     throw std::invalid_argument("DF gradient coefficients must be finite");
   validate_density_fitting_derivative_data(integrals);
   validate_gradient_density(density, integrals.nbf, "DF RHF gradient density is inconsistent");
-  const std::vector<double> inverse = metric_pseudoinverse(integrals, relative_threshold);
+  const auto weights =
+      density_fitting_reverse_weights(integrals, {{&density, coefficients}}, relative_threshold);
   DensityFittingRhfGradient result;
   result.ncoord = integrals.ncoord;
   result.derivative.assign(integrals.ncoord, 0.0);
@@ -842,23 +783,10 @@ DensityFittingRhfGradient build_density_fitting_rhf_gradient(
         integrals.metric_derivative.data() + coordinate * metric_elements;
     const double* three_center_derivative =
         integrals.three_center_derivative.data() + coordinate * three_center_elements;
-    const std::vector<double> inverse_derivative =
-        metric_pseudoinverse_derivative(integrals, inverse, metric_derivative, relative_threshold);
-    const double coulomb =
-        coefficients.coulomb == 0.0
-            ? 0.0
-            : coulomb_quadratic_derivative(integrals, density, inverse, inverse_derivative,
-                                           three_center_derivative);
-    const double exchange =
-        coefficients.exchange == 0.0
-            ? 0.0
-            : exchange_quadratic_derivative(integrals, density, inverse, inverse_derivative,
-                                            three_center_derivative);
-    // `coulomb` already differentiates 1/2 (P|P)DF, while `exchange`
-    // differentiates the unweighted exchange quadratic. The signed Fock
-    // exchange coefficient therefore needs the extra energy factor 1/2.
     result.derivative[coordinate] =
-        coefficients.coulomb * coulomb + 0.5 * coefficients.exchange * exchange;
+        std::inner_product(weights.metric.begin(), weights.metric.end(), metric_derivative, 0.0) +
+        std::inner_product(weights.three_center.begin(), weights.three_center.end(),
+                           three_center_derivative, 0.0);
     result.forces[coordinate] = -result.derivative[coordinate];
   }
   return result;
@@ -875,11 +803,16 @@ DensityFittingUhfGradient build_density_fitting_uhf_gradient(
                             "DF UHF alpha gradient density is inconsistent");
   validate_gradient_density(beta_density, integrals.nbf,
                             "DF UHF beta gradient density is inconsistent");
-  const std::vector<double> inverse = metric_pseudoinverse(integrals, relative_threshold);
   std::vector<double> total_density(alpha_density.size(), 0.0);
   for (std::size_t item = 0; item < total_density.size(); ++item) {
     total_density[item] = alpha_density[item] + beta_density[item];
   }
+  const auto weights =
+      density_fitting_reverse_weights(integrals,
+                                      {{&total_density, {coefficients.coulomb, 0.0}},
+                                       {&alpha_density, {0.0, coefficients.exchange}},
+                                       {&beta_density, {0.0, coefficients.exchange}}},
+                                      relative_threshold);
 
   DensityFittingUhfGradient result;
   result.ncoord = integrals.ncoord;
@@ -892,27 +825,10 @@ DensityFittingUhfGradient build_density_fitting_uhf_gradient(
         integrals.metric_derivative.data() + coordinate * metric_elements;
     const double* three_center_derivative =
         integrals.three_center_derivative.data() + coordinate * three_center_elements;
-    const std::vector<double> inverse_derivative =
-        metric_pseudoinverse_derivative(integrals, inverse, metric_derivative, relative_threshold);
-    const double coulomb =
-        coefficients.coulomb == 0.0
-            ? 0.0
-            : coulomb_quadratic_derivative(integrals, total_density, inverse, inverse_derivative,
-                                           three_center_derivative);
-    const double alpha_exchange =
-        coefficients.exchange == 0.0
-            ? 0.0
-            : exchange_quadratic_derivative(integrals, alpha_density, inverse, inverse_derivative,
-                                            three_center_derivative);
-    const double beta_exchange =
-        coefficients.exchange == 0.0
-            ? 0.0
-            : exchange_quadratic_derivative(integrals, beta_density, inverse, inverse_derivative,
-                                            three_center_derivative);
-    // Keep the established spin-by-spin summation order for standard UHF.
-    result.derivative[coordinate] = coefficients.coulomb * coulomb +
-                                    0.5 * coefficients.exchange * alpha_exchange +
-                                    0.5 * coefficients.exchange * beta_exchange;
+    result.derivative[coordinate] =
+        std::inner_product(weights.metric.begin(), weights.metric.end(), metric_derivative, 0.0) +
+        std::inner_product(weights.three_center.begin(), weights.three_center.end(),
+                           three_center_derivative, 0.0);
     result.forces[coordinate] = -result.derivative[coordinate];
   }
   return result;
@@ -921,7 +837,7 @@ DensityFittingUhfGradient build_density_fitting_uhf_gradient(
 DensityFittingRhfGradient build_density_fitting_rhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals, const std::vector<double>& density,
-    double relative_threshold, JkCoefficients coefficients) {
+    double relative_threshold, JkCoefficients coefficients, double omega) {
   if (integrals.ncoord != orbital_system.atoms.size() * 3 ||
       integrals.nbf != molecule::ao_count(orbital_system) ||
       integrals.naux != molecule::ao_count(auxiliary_system)) {
@@ -931,8 +847,8 @@ DensityFittingRhfGradient build_density_fitting_rhf_weighted_gradient(
       density_fitting_reverse_weights(integrals, {{&density, coefficients}}, relative_threshold);
   DensityFittingRhfGradient result;
   result.ncoord = integrals.ncoord;
-  result.derivative = integrals::contract_weighted_density_fitting_derivative(
-      orbital_system, auxiliary_system, weights.metric, weights.three_center);
+  result.derivative = integrals::contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, weights.metric, weights.three_center, omega);
   result.forces.resize(result.derivative.size());
   for (std::size_t coordinate = 0; coordinate < result.derivative.size(); ++coordinate)
     result.forces[coordinate] = -result.derivative[coordinate];
@@ -943,7 +859,7 @@ DensityFittingUhfGradient build_density_fitting_uhf_weighted_gradient(
     const core::System& orbital_system, const core::System& auxiliary_system,
     const integrals::DensityFittingIntegralData& integrals,
     const std::vector<double>& alpha_density, const std::vector<double>& beta_density,
-    double relative_threshold, JkCoefficients coefficients) {
+    double relative_threshold, JkCoefficients coefficients, double omega) {
   if (integrals.ncoord != orbital_system.atoms.size() * 3 ||
       integrals.nbf != molecule::ao_count(orbital_system) ||
       integrals.naux != molecule::ao_count(auxiliary_system)) {
@@ -964,8 +880,8 @@ DensityFittingUhfGradient build_density_fitting_uhf_weighted_gradient(
                                       relative_threshold);
   DensityFittingUhfGradient result;
   result.ncoord = integrals.ncoord;
-  result.derivative = integrals::contract_weighted_density_fitting_derivative(
-      orbital_system, auxiliary_system, weights.metric, weights.three_center);
+  result.derivative = integrals::contract_weighted_range_density_fitting_derivative(
+      orbital_system, auxiliary_system, weights.metric, weights.three_center, omega);
   result.forces.resize(result.derivative.size());
   for (std::size_t coordinate = 0; coordinate < result.derivative.size(); ++coordinate)
     result.forces[coordinate] = -result.derivative[coordinate];
@@ -1348,36 +1264,40 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
   // instead use its complete shape-derived response floor if that is what
   // admits a resident value owner within this unchanged total envelope.
   const auto preferred = std::max(response_floor, budget.total_bytes / 5);
+  auto fallback = budget;
   for (const auto response : {preferred, response_floor}) {
     if (response != preferred && (restricted_rank || !allow_zero_rank_coulomb)) break;
     if (response >= budget.response_bytes || response >= budget.total_bytes) continue;
     const auto value = budget.total_bytes - response;
     try {
-      (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
-                                              source_device_bytes, 0, false);
+      const auto plan = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                                          source_device_bytes, 0, false);
+      auto result = budget;
+      result.value_bytes = value;
+      result.response_bytes = response;
+      if (plan.value_storage.rank_capacity >= restricted_rank) return result;
+      // The optional-U planner can return packed B with rank zero. Keep that
+      // valid bounded fallback, but do not mistake it for the requested final
+      // occupied projection: losing U multiplies downstream force work.
+      fallback = result;
     } catch (const DensityFittingBudgetError&) {
       continue;
     }
-    auto result = budget;
-    result.value_bytes = value;
-    result.response_bytes = response;
-    return result;
   }
   // A geometry rebuild observes persistent CUDA modules and force arenas that
   // were absent from the first preparation. The generic fractional margin can
-  // then drop an otherwise feasible packed B and multiply every subsequent J
-  // build's work. For this method-authenticated pure-J owner only, borrow just
-  // the minimum resident allowance from that extra margin. The absolute live
-  // headroom, explicit limits and complete response floor remain hard bounds.
-  if (!restricted_rank && allow_zero_rank_coulomb &&
-      budget.observed_free_bytes > budget.reserved_headroom_bytes) {
+  // then drop packed B or its complete method-owned U and multiply later
+  // value/force work. Borrow only the minimum authenticated resident allowance
+  // from that fractional margin. The observed free bytes, absolute reserved
+  // headroom, explicit caps and complete response floor remain hard bounds.
+  if (budget.observed_free_bytes > budget.reserved_headroom_bytes) {
     const auto available = budget.observed_free_bytes - budget.reserved_headroom_bytes;
     if (available > response_floor && available > budget.total_bytes) {
       const auto fits = [&](std::size_t value) {
         try {
-          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value, source_device_bytes, 0,
-                                                  false);
-          return true;
+          const auto plan = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                                              source_device_bytes, 0, false);
+          return plan.value_storage.rank_capacity >= restricted_rank;
         } catch (const DensityFittingBudgetError&) {
           return false;
         }
@@ -1385,8 +1305,9 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       auto upper = available - response_floor;
       if (fits(upper)) {
         // Reuse the actual planner rather than duplicating its allocation
-        // formula. Rank zero has monotone resident admission; byte bisection
-        // spends no GPU work and preserves the smallest sufficient allowance.
+        // formula. Complete B/U admission is monotone even when the planner
+        // can drop optional U. Bisection charges the smallest sufficient value
+        // allowance and performs no device work or allocation probes.
         std::size_t lower = 1;
         while (lower < upper) {
           const auto middle = lower + (upper - lower) / 2;
@@ -1403,7 +1324,7 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       }
     }
   }
-  return budget;
+  return fallback;
 }
 
 DensityFittingTilePlan plan_requested_density_fitting_tiles(

@@ -23,6 +23,7 @@ int allocations=0, executions=0;
 bool retained_response=false;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 namespace core {
+using CorrelationConvergence = generativeqc::core::CorrelationConvergence;
 struct System { bool df_supported=true; int electron_count=2; std::size_t nbf=2; };
 }
 namespace molecule {
@@ -81,13 +82,20 @@ void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::
 }
 std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return d.budget; }
 using SolverOptions = generativeqc::cc::SolverOptions;
-SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
+SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t,
+                         core::CorrelationConvergence convergence) {
+  SolverOptions result; result.convergence=convergence; return result;
+}
 std::size_t admitted_q_batch=0;
 bool admitted_derived_denominators=false, admitted_mixed=false;
 double admitted_switch=0;
 bool admitted_df_mp2_mode=false, admitted_df_reference=false;
 scf::CudaRhfBucketPlan** admitted_reference_plan=nullptr;
-Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
+double admitted_reference_scale=0, admitted_solver_scale=0;
+Reference reference_options(const generativeqc_method_descriptor&,std::size_t,
+                            core::CorrelationConvergence convergence) {
+  admitted_reference_scale=convergence.scale; return {};
+}
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,SolverOptions options,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
@@ -95,6 +103,7 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::S
                                       bool retain_df_response,
                                       const scf::cuda_execution::CudaDfSourcePolicy*,
                                       scf::CudaRhfBucketPlan** reference_plan, bool df_mp2_mode, bool df_reference) {
+  admitted_solver_scale=options.convergence.scale;
   admitted_q_batch=options.df_auxiliary_batch_limit;
   admitted_derived_denominators=options.derived_denominators;
   admitted_mixed=options.df_mixed_precision;
@@ -127,7 +136,8 @@ int main(int argc,char** argv) {
          {std::optional<bool>{},std::optional<bool>{false},std::optional<bool>{true}})
     for (double switch_residual : {100.0 * 1e-9,1e-4})
     for (bool mp2_mode : {false,true})
-    for (bool fitted : {false,true}) {
+    for (bool fitted : {false,true})
+    for (double scale : {0.,.25,1.}) {
       if (fitted && (!cuda || !with_auxiliary)) continue;
       if (with_auxiliary && !cuda) continue;
       execution.cuda=cuda;
@@ -136,10 +146,11 @@ int main(int argc,char** argv) {
       (void)run_rccsd_native_state(
           execution,system,descriptor,nullptr,nullptr,nullptr,0,
           with_auxiliary ? &auxiliary : nullptr,false,true,nullptr,8,true,false,
-          requested,switch_residual,mp2_mode,fitted);
+          requested,switch_residual,mp2_mode,fitted,core::CorrelationConvergence{scale});
       const bool expected=cuda && with_auxiliary && requested.value_or(shape.automatic);
       if (admitted_mixed!=expected || admitted_switch!=switch_residual ||
-          admitted_df_mp2_mode!=mp2_mode || admitted_df_reference!=fitted || allocations)
+          admitted_df_mp2_mode!=mp2_mode || admitted_df_reference!=fitted || allocations ||
+          admitted_reference_scale!=scale || admitted_solver_scale!=scale)
         return 16;
     }
     return 0;

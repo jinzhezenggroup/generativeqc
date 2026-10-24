@@ -208,6 +208,25 @@ __global__ void pruned_points_kernel(size_t begin, size_t count, size_t nr, Prun
     weights[point] = wr * pz[2] * pp[2];
   }
 }
+// Element-local rules are immutable input tables. This kernel owns molecular
+// translation and explicit atom provenance for nonuniform atomic quadratures.
+__global__ void atomic_points_kernel(size_t begin, size_t count, size_t atoms,
+    const uint64_t* offsets, const uint64_t* rule_offsets, const double* rules,
+    const double* centers, double* xyz, double* weights) {
+  for (size_t p = size_t(blockIdx.x) * blockDim.x + threadIdx.x; p < count;
+       p += size_t(blockDim.x) * gridDim.x) {
+    const size_t index = begin + p;
+    size_t low = 0, high = atoms;
+    while (low + 1 < high) {
+      const size_t middle = (low + high) / 2;
+      if (index < offsets[middle]) high = middle; else low = middle;
+    }
+    const size_t rule = rule_offsets[low] + index - offsets[low];
+    for (size_t axis = 0; axis < 3; ++axis)
+      xyz[3 * p + axis] = centers[3 * low + axis] + rules[4 * rule + axis];
+    weights[p] = rules[4 * rule + 3];
+  }
+}
 // Atom-major 2-D launch keeps adjacent point lanes coalesced without runtime
 // quotient/remainder recovery for every point-center visit.
 __global__ void distances_kernel(size_t count, size_t na, const double* xyz,
@@ -219,7 +238,8 @@ __global__ void distances_kernel(size_t count, size_t na, const double* xyz,
 }
 template <unsigned Iterations>
 __global__ void partition_kernel(size_t count, size_t na, const double* distances,
-                                 const double* inverse_separation, double* logs) {
+                                 const double* inverse_separation, double* logs,
+                                 const double* adjustments) {
   for (size_t a = blockIdx.y; a < na; a += gridDim.y) {
     for (size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < count;
          point += size_t(blockDim.x) * gridDim.x) {
@@ -238,7 +258,9 @@ __global__ void partition_kernel(size_t count, size_t na, const double* distance
           // Do not turn 0*infinity into a clipped endpoint for equidistant points.
           coordinate = (distances[hi * count + point] - distances[lo * count + point]) / (-inverse);
         }
-        const double mu = fmin(1.0, fmax(-1.0, coordinate));
+        double mu = fmin(1.0, fmax(-1.0, coordinate));
+        if (adjustments && inverse != 0.0)
+          mu += adjustments[hi * na + lo] * (1.0 - mu * mu);
         const double pair = fmin(1.0, fmax(0.0, becke<Iterations>(mu)));
         value += a > b ? log(pair) : log1p(-pair);
       }
@@ -247,10 +269,18 @@ __global__ void partition_kernel(size_t count, size_t na, const double* distance
   }
 }
 __global__ void normalize_kernel(size_t begin, size_t count, size_t per_atom, size_t na,
-                                 const double* logs, double* weights, int* invalid) {
+                                 const double* logs, double* weights, int* invalid,
+                                 const uint64_t* atom_offsets = nullptr) {
   for (size_t p = size_t(blockIdx.x) * blockDim.x + threadIdx.x; p < count;
        p += size_t(blockDim.x) * gridDim.x) {
-    const size_t owner = (begin + p) / per_atom;
+    size_t owner = 0;
+    if (atom_offsets) {
+      size_t high = na;
+      while (owner + 1 < high) {
+        const size_t middle = (owner + high) / 2;
+        if (begin + p < atom_offsets[middle]) high = middle; else owner = middle;
+      }
+    } else owner = (begin + p) / per_atom;
     double maximum = -INFINITY;
     for (size_t a = 0; a < na; ++a) maximum = fmax(maximum, logs[a * count + p]);
     double total = 0.0, owner_term = 0.0;
@@ -266,7 +296,7 @@ __global__ void normalize_kernel(size_t begin, size_t count, size_t per_atom, si
 }
 inline void launch_partition(unsigned iterations, size_t count, size_t na,
                              const double* distances, const double* inverse_separation,
-                             double* logs, cudaStream_t stream) {
+                             double* logs, cudaStream_t stream, const double* adjustments = nullptr) {
   switch (iterations) {
 @PARTITION_CASES@
     default: throw std::invalid_argument("unsupported Becke iteration count");
@@ -299,7 +329,7 @@ def emit_quadrature_cuda() -> str:
         )
         cases.append(
             f"    case {iterations}: partition_kernel<{iterations}><<<atom_point_grid(count, na), 128, 0, stream>>>"
-            "(count, na, distances, inverse_separation, logs); break;"
+            "(count, na, distances, inverse_separation, logs, adjustments); break;"
         )
     lines.append(_KERNELS.replace("@PARTITION_CASES@", "\n".join(cases)))
     return "\n".join(lines)

@@ -200,7 +200,7 @@ def qualify(*, include_pruning: bool = False) -> dict[str, typing.Any]:
     if include_pruning:
         for name in ("lda-standard", "lda-tight", "pbe-standard", "pbe-tight"):
             production_specs[f"{name}-pruned"] = GridPolicy(
-                "tight" if name.endswith("tight") else "standard"
+                "tight" if name.endswith("tight") else "standard", pruning="radial-v1"
             ).resolve("lda-rks" if name.startswith("lda-") else "pbe-rks")
     for name, spec in production_specs.items():
         family = name.split("-", 1)[0]

@@ -686,6 +686,8 @@ class PreparedCompositeStationaryCudaGradient:
             # Integral derivatives already come from the token-bound native prepared
             # owner above. These retained CUDA accumulators execute only nuclear and
             # grid-geometry sources, so uploading detached host D/W here is redundant.
+            self.sources.configure_grid(source.grid_spec, basis.atoms)
+            self.nonlocal_sources.configure_grid(nonlocal_spec, basis.atoms)
             self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
             self.nonlocal_sources.reset_geometry(nonlocal_spec.coincident_tolerance)
             charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
@@ -831,6 +833,9 @@ class PreparedCompositeStationaryCudaGradient:
                 _integral_source_resources(
                     native_usage,
                     mixed_rsh_df=bool(getattr(source, "density_fitted", False)),
+                    lazy_lr_device_owner=not bool(
+                        getattr(source, "range_density_fitted", False)
+                    ),
                 )
             ),
             **(

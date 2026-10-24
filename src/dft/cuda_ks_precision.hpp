@@ -40,24 +40,30 @@ inline constexpr std::string_view kFinalAudit = "dft.final_audit";
  * J/K strict and instead admits PBE correlation points, AO production and tiled
  * density/potential products with FP32 inner accumulation. Its strict phase
  * restores the entire schedule; it does not narrow analytic gradients.
+ * A separately admitted local DF budget keeps J and the metric strict while
+ * permitting the shared XC matrix products, followed by the same FP64 closure.
  */
 inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
     std::optional<generativeqc_precision_mode> mode,
     const CudaXcFastPathCapabilities& xc_fast_paths, bool fitted_coulomb, bool nonlocal_correlation,
     bool experimental_point = false, bool experimental_contractions = false,
     scf::CudaFockPrecisionCapabilities budget_fock = {}, bool range_exchange = false,
-    bool mixed_range_exchange = false) {
+    bool mixed_range_exchange = false, bool fitted_xc_budget = false) {
   const bool automatic = mode && *mode == GENERATIVEQC_PRECISION_AUTO;
   if (mode && *mode != GENERATIVEQC_PRECISION_FP64 && !automatic)
     throw std::invalid_argument("CUDA KS received an unknown precision mode");
-  if (automatic && fitted_coulomb)
+  if (automatic && fitted_coulomb && !fitted_xc_budget)
     throw std::invalid_argument("CUDA fitted KS requires strict FP64");
+  if (fitted_xc_budget &&
+      (!automatic || !fitted_coulomb || nonlocal_correlation || range_exchange ||
+       experimental_point || budget_fock.any_lower_precision()))
+    throw std::invalid_argument("fitted XC budget requires strict local DF Coulomb");
   if (experimental_point && (!automatic || nonlocal_correlation))
     throw std::invalid_argument("experimental point precision requires local CUDA AUTO KS");
   if (experimental_contractions && !experimental_point)
     throw std::invalid_argument("mixed XC contractions require the admitted point warmup");
-  const bool budget_requested = budget_fock.any_lower_precision();
-  if (budget_requested &&
+  const bool budget_requested = budget_fock.any_lower_precision() || fitted_xc_budget;
+  if (budget_fock.any_lower_precision() &&
       (!automatic || fitted_coulomb || experimental_point || !budget_fock.coulomb))
     throw std::invalid_argument("budget Fock requires a supported CUDA AUTO Direct consumer");
   const bool mixed_density = automatic && !budget_requested && !experimental_point &&
@@ -66,7 +72,7 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
 
   runtime::ExecutionPrecisionSchedule schedule;
   schedule.add_region(cuda_ks_precision_region::kCoulombJ,
-                      automatic && !experimental_point
+                      automatic && !experimental_point && !fitted_coulomb
                           ? runtime::fp32_compute_fp64_accumulation("dft.cuda.auto/coulomb-j-v1")
                           : runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kDensityContraction,

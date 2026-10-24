@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -22,7 +23,8 @@ using generativeqc::core::System;
 // callback type exposed by the public transport contract.
 using ResidentDerivativeEntry = cudaError_t (*)(cuda_execution::GeneratedExchangePlan&, bool,
                                                 const double*, const double*, double, double,
-                                                const CudaDerivativeSourceConsumer&, bool);
+                                                const CudaDerivativeSourceConsumer&, bool,
+                                                DirectForcePrecisionRequest*);
 static_assert(
     std::is_same_v<decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
                    ResidentDerivativeEntry>);
@@ -441,6 +443,26 @@ void retained_direct_derivative_reuse() {
           detail.c_str());
   matrix(prepared_hcore, expected_hcore, "resident prepared hcore derivative");
   matrix(prepared_pulay, expected_pulay, "resident prepared Pulay derivative");
+  // Fitted stationary owners use the standalone paired bridge with borrowed
+  // final D/W. Its policy-selected schedules must preserve both independent
+  // source channels and must never upload the resident weights again.
+  for (const unsigned schedule : {0U, 1U, 2U, 3U}) {
+    std::vector<double> scheduled_hcore, scheduled_pulay;
+    OneElectronGradientResources scheduled_resources;
+    require(execute_cuda_stationary_one_electron_pair(
+                derivative.device_id, system, {}, {}, schedule, 8U << 20, scheduled_hcore,
+                scheduled_pulay, detail, &scheduled_resources, device_density,
+                device_weighted_density) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    matrix(scheduled_hcore, expected_hcore, "resident scheduled hcore derivative");
+    matrix(scheduled_pulay, expected_pulay, "resident scheduled Pulay derivative");
+    require(
+        scheduled_resources.device_bytes <= (8U << 20) &&
+            scheduled_resources.host_numeric_bytes <= (8U << 20) &&
+            scheduled_resources.stream_synchronizations == 1 &&
+            scheduled_resources.device_to_host_bytes == 6 * system.atoms.size() * sizeof(double),
+        "paired scheduled one-electron source exceeded its resource contract");
+  }
   require(prepared_resources.device_bytes == 0 && prepared_resources.host_to_device_bytes == 0 &&
               prepared_resources.device_to_host_bytes == 6 * system.atoms.size() * sizeof(double) &&
               prepared_resources.stream_synchronizations == 1,
@@ -858,9 +880,21 @@ void independent_reference_export() {
     if (seed.empty()) seed = actual.density;
   }
 }
+#include "df_raw_coulomb_cases.hpp"
+#include "df_response_headroom_cases.hpp"
 }  // namespace
-int main() {
+int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string_view(argv[1]) == "--df-response-headroom") {
+      response_headroom_cases();
+      std::cout << "CUDA DF response current-headroom force/replay gates PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string_view(argv[1]) == "--raw-coulomb") {
+      raw_coulomb_cases();
+      std::cout << "CUDA raw Coulomb independent J/response and rank fallback PASS\n";
+      return 0;
+    }
     composed_items();
     molecular_endpoints();
     ragged_replay();

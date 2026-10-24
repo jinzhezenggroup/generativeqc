@@ -142,3 +142,18 @@ overrides the visibility assigned by Slurm.
 Routine log/XML files named in this historical account are now represented in
 [the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
+
+## Lossless historical storage
+
+The seven original endpoint JSON files are retained as exact text in
+`receipts.json.xz`; `receipts.json` authenticates the bundle and every original
+byte string. The original `manifest.json` is unchanged. All 240 executions,
+fields, errors, timings and numerical arrays remain available. Restore them
+into an explicit scratch directory before using the historical records:
+
+```bash
+python benchmarks/results/dft-grid-160/restore.py --output .artifacts/dft-grid-160
+```
+
+This storage change preserves the repository evidence cap and does not rerun,
+relabel or remove any historical scientific qualification.

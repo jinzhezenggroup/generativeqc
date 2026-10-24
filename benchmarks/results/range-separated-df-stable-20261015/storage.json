@@ -1,0 +1,9 @@
+{
+  "path": "evidence.json.xz",
+  "encoding": "xz-json-utf8-members",
+  "stored_sha256": "f3489ef1b1a7db1f3de0684de8d4130fc570b8209ba18c376e9c2a2fc7a91b13",
+  "stored_bytes": 79948,
+  "decoded_sha256": "1188f6f17598d13e40ccc2f803baf74d46c5f624ce7945f3ee5f8810ddbd509f",
+  "decoded_bytes": 2180641,
+  "file_count": 84
+}

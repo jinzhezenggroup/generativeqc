@@ -34,6 +34,7 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   destroy_persistent_scf_state(plan.persistent_scf_state);
   destroy_ordinary_eigensystem(plan.ordinary_eigensystem);
   destroy_final_validation(plan.final_validation);
+  cuda_execution::destroy_cuda_df_md_owner(plan.md_coulomb);
   plan.charge_contraction.reset();
   plan.coulomb_contraction.reset();
   plan.metric_project.reset();

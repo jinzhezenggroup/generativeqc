@@ -20,6 +20,7 @@ struct CudaRhfBucketPlan;
 }  // namespace generativeqc::scf
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
+  core::CorrelationConvergence convergence;
   std::shared_ptr<const hf::PhysicalReference> reference;
   /** Present only for the explicitly requested full RI-JK reference model. */
   std::shared_ptr<hf::DFReference> df_reference;
@@ -68,7 +69,8 @@ RccsdNativeState run_rccsd_native_state(
     bool packed_diis = false, std::optional<bool> df_mixed_precision = std::nullopt,
     double df_mixed_precision_switch_residual =
         cc::SolverOptions{}.df_mixed_precision_switch_residual,
-    bool df_mp2_mode = false, bool df_reference = false);
+    bool df_mp2_mode = false, bool df_reference = false,
+    core::CorrelationConvergence convergence = {});
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

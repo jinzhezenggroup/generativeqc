@@ -119,6 +119,9 @@ def test_response_route_and_host_ablation(
     from pyscf import gto, scf
 
     assert os.environ.get("SLURM_JOB_ID")
+    # Dot-ablation counters describe the dense response route. Automatic
+    # occupied factor-first work has its own complete endpoint qualification.
+    monkeypatch.setenv("GENERATIVEQC_DF_RESPONSE_SPACE", "dense")
     monkeypatch.setenv(
         "GENERATIVEQC_DF_SERIAL_RESPONSE_DOT", "1" if metric_dot == "serial" else "0"
     )

@@ -423,7 +423,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+    // AUTO DF has a separate pure-J proposal capability. The fitted provider
+    // stays strict; actual grid/shape admission and final FP64 closure belong
+    // to CudaKsPlan, which alone chooses the executed XC schedule.
+    const bool df_xc_budget = dft::admit_application_df_xc_budget(
+        options.application_precision_budget,
+        backend == GENERATIVEQC_BACKEND_CUDA && execution_plan.spin_channels == 1 &&
+            !fock.exchange.present && !execution_plan.range_exchange &&
+            !execution_plan.nonlocal_correlation && !scaled_or_hybrid &&
+            (functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe) ||
+             functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan)));
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && !df_xc_budget)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
@@ -468,17 +478,49 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
           "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
     if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
   }
+  // The absent-selector default is deliberately cold-only, not the broader
+  // experimental override. An explicit 0/off suppresses this automatic route,
+  // and an explicit 1/on keeps the original native capability checks.
+  if (!std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK") &&
+      !std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")) {
+    options.incremental_direct_jk_auto =
+        backend == GENERATIVEQC_BACKEND_CUDA && cuda_matched_global_hybrid &&
+        fock.spin == scf::FockSpin::Restricted && fock.exchange.present &&
+        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        options.precision_mode == GENERATIVEQC_PRECISION_FP64 && !execution_plan.range_exchange &&
+        !execution_plan.nonlocal_correlation && !execution_plan.d4_correction &&
+        options.energy_tolerance == 1e-9 && options.density_tolerance == 1e-5 &&
+        options.screening_tolerance == 1e-12 &&
+        scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
+  }
   if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
     const auto correction_backend =
         backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    const auto correction =
-        scf::resolve_fock_build(scf::make_rsh_correction_fock_spec(
-                                    fock.spin, execution_plan.short_range_exchange,
-                                    execution_plan.long_range_exchange, execution_plan.range_omega),
-                                correction_backend, options.screening_tolerance);
+    const char* range_mode = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
+    if (range_mode && std::string_view(range_mode) != "df" &&
+        std::string_view(range_mode) != "direct")
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "GENERATIVEQC_DF_RANGE_EXCHANGE must be df or direct");
+    if (range_mode && std::string_view(range_mode) == "df" &&
+        fock.coulomb.approximation != scf::FockApproximation::DensityFitted)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "GENERATIVEQC_DF_RANGE_EXCHANGE=df requires density fitting");
+    // LR fitting changes the Hamiltonian and remains opt-in until complete
+    // endpoint promotion gates pass. Freeze this choice for energy and forces.
+    execution_plan.density_fitted_range_exchange =
+        fock.coulomb.approximation == scf::FockApproximation::DensityFitted && range_mode &&
+        std::string_view(range_mode) == "df";
+    const auto correction = scf::resolve_fock_build(
+        scf::make_rsh_correction_fock_spec(
+            fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,
+            execution_plan.range_omega,
+            execution_plan.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                         : scf::FockApproximation::Exact),
+        correction_backend, options.screening_tolerance,
+        options.density_fitting_relative_threshold);
     scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
                                     execution_plan.nonlocal_parameters);
   }
@@ -493,8 +535,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
 dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
                               scf::ScfOptions& options,
                               const NativeKsExecutionPlan& execution_plan) {
-  dft::GridSpec grid;
+  dft::GridSpec grid = dft::default_grid_spec();
   if (!descriptor.ks_options) return grid;
+  // Explicit legacy descriptors must not inherit the default's Bragg radii.
+  if (descriptor.ks_options->grid_version != 4) grid = dft::GridSpec{};
   const auto& input = *descriptor.ks_options;
   if (input.struct_size < sizeof(generativeqc_ks_options) ||
       input.abi_version != GENERATIVEQC_ABI_VERSION)

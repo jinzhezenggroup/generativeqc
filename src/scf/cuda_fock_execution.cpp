@@ -46,8 +46,12 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
     return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
   }
 
-  const bool fitted =
-      fitted_full_range(strategy.spec.coulomb) && fitted_full_range(strategy.spec.exchange);
+  const bool fitted = fitted_full_range(strategy.spec.coulomb) &&
+                      (fitted_full_range(strategy.spec.exchange) ||
+                       (!strategy.spec.coulomb.present &&
+                        strategy.spec.exchange.approximation == FockApproximation::DensityFitted &&
+                        strategy.spec.exchange.op == FockOperator::LongRange &&
+                        strategy.spec.exchange.omega > 0.0));
   if (!fitted) return {};
   auto* source = plan.cuda_fitted_source();
   if (!source || !plan.diagnostic().nbf) return {};
@@ -365,6 +369,23 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                           FockMatrixLayout::RowMajor);
 }
 
+generativeqc_status enqueue_prepared_cuda_fock_proposal(const PreparedFockPlan& plan,
+                                                        const double* density,
+                                                        std::size_t matrix_elements,
+                                                        double* coulomb, double* exchange,
+                                                        int* numerical_error, double screening,
+                                                        std::string& detail) {
+  if (!prepared_cuda_fock_binding(plan) || !plan.cuda_direct_source() ||
+      plan.cuda_fitted_source() || !exact_full_range(plan.strategy().spec.coulomb) ||
+      !exact_full_range(plan.strategy().spec.exchange)) {
+    detail = "provisional screening requires one exact Direct CUDA provider";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return enqueue_cuda_direct_jk_proposal_device(plan.cuda_direct_source(), plan.strategy().spec,
+                                                density, matrix_elements, coulomb, exchange,
+                                                numerical_error, screening, detail);
+}
+
 generativeqc_status enqueue_prepared_cuda_occupied_fock(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, const PreparedCudaOccupiedFockInput& occupied, double* coulomb,
@@ -460,6 +481,19 @@ generativeqc_status enqueue_prepared_cuda_exchange_correction(
   auto* source = plan.cuda_direct_source();
   const auto& primary = plan.strategy();
   const auto& spec = correction.spec;
+  if (spec.exchange.approximation == FockApproximation::DensityFitted) {
+    // A fitted correction owns its omega-specific metric and three-center
+    // source. Dispatch that complete owner through the shared DF executor;
+    // the Direct-only correction adapter cannot reproduce its Hamiltonian.
+    if (!binding || !plan.cuda_fitted_source() || primary != correction || spec.coulomb.present ||
+        !spec.exchange.present || spec.exchange.op != FockOperator::LongRange ||
+        spec.exchange.omega <= 0.0 || mixed_exchange) {
+      detail = "CUDA fitted range correction requires its matching FP64 LR owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    return enqueue_prepared_cuda_fock(plan, density, beta, matrix_elements, nullptr, alpha_exchange,
+                                      beta_exchange, numerical_error, false, detail);
+  }
   if (!binding || !source || correction.backend != FockBackend::Cuda ||
       spec.derivative_order != 0 || spec.spin != primary.spec.spin || spec.coulomb.present ||
       !spec.exchange.present || spec.exchange.approximation != FockApproximation::Exact ||

@@ -485,14 +485,11 @@ generativeqc_status consume_prepared_cuda_stationary_one_electron_pair(
     OneElectronWeightView pulay_weights{resident_weighted_density, nullptr, nullptr};
     pulay_weights.overlap_scale = -1.0;
     // The resident owner has shell metadata but no triangular AO-pair list.
-    // Explicit cooperative selection uses implicit AO addresses; its joint
-    // force endpoint is qualified, but Hcore alone has not passed promotion.
-    // Preserve the old prepared default and overlap-only Pulay component lanes.
+    // Qualified Hcore scheduling uses implicit lower-triangle AO addresses;
+    // explicit shell/serial controls retain the prepared component-lane path.
+    // Overlap-only Pulay remains on its separately qualified component lanes.
     const unsigned hcore_schedule =
-        std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr &&
-                cuda_policy::one_electron_derivative_mapping_requested() == 3
-            ? 3U
-            : 1U;
+        cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U;
     const auto output_bytes = 3 * atoms * sizeof(double);
 
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));

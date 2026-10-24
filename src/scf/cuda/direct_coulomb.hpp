@@ -31,6 +31,12 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
 /** Capture only exact weighted-force arithmetic, without changing Fock policy. */
 void configure_direct_weighted_force_response(DeviceBatch& batch) noexcept;
 
+/** Capture the experimental coarse gate without changing integral precision. */
+void configure_direct_block_screening(DeviceBatch& batch) noexcept;
+
+/** Read before arena sizing; retained owners freeze this storage choice. */
+bool direct_fp32_block_screening_requested() noexcept;
+
 /** Query the opt-in at preparation only; optional retained storage freezes it.
  * This adapter keeps canonical providers independent of HF policy headers.
  */
@@ -143,12 +149,15 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestri
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
+ * A nonnegative proposal_screening explicitly selects a coarser full-range
+ * value action, without mutating the prepared source or its derivative cutoff.
+ * The default -1 preserves the prepared physical screening contract.
  */
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
                                        DirectCoulombRange range = DirectCoulombRange::Full,
-                                       double omega = 0.0);
+                                       double omega = 0.0, double proposal_screening = -1.0);
 
 /** Enqueue primary full-range J/K plus one SR/LR correction after a
  * single public-to-Cartesian spin-density transform and shell-density-bound

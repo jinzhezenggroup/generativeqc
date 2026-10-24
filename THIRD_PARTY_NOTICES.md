@@ -183,3 +183,49 @@ not an end-user Python runtime dependency.
 This is a transitional scientific owner: compiler-generated GFN2 pieces from
 #504/#505 are intended to replace duplicated handwritten equations after
 independent qualification, while the GenerativeQC-owned SCC/runtime boundary remains.
+
+## GPU4PySCF-aligned MD Coulomb engine
+
+The compact MD radial lowering in
+`python/generativeqc_compiler/integral/md_j_engine_cuda.py` and its generated
+CUDA header adapts the Apache-2.0 GPU4PySCF MD engine, Copyright 2021-2025
+The PySCF Developers. All Rights Reserved. The pinned source is
+`pyscf/gpu4pyscf@9af748a71ca8f4881c604332c2f0cc1632e033ac`; source paths and
+hashes are in the `gpu4pyscf-md-j` entry of `upstream/manifest.json`.
+
+The modification notice in both generator and emitted header identifies the
+compact dependency-ordered lowering, retained GenerativeQC Boys implementation,
+and explicit density/symmetry compatibility adapter. Native scheduling follows
+the upstream decontracted pair/Hermite/hierarchy dataflow while retaining
+GenerativeQC's exact public-AO screening and bounded native ownership. No
+GPU4PySCF or PySCF runtime dependency is introduced into production.
+
+The complete Apache-2.0 license is retained in
+`LICENSES/gpu4pyscf-Apache-2.0.txt`, distributed in wheels and native SDK/CLI
+installs. The pinned upstream tree has no NOTICE file; this attribution is
+GenerativeQC's notice, not an invented upstream NOTICE. The overall project
+continues to be distributed under GPL-3.0-or-later.
+
+## Treutler/Lebedev/NWChem quadrature tables
+
+`python/generativeqc_compiler/dft/data/treutler-lebedev.json` retains numeric
+Lebedev symmetry-orbit coefficients, Treutler element factors, Bragg radii and
+radial/angular level tables extracted from PySCF 2.14.0. The input file SHA-256s
+and upstream version accompany the tables; `tools/import_pyscf_grid_tables.py`
+is the explicit maintenance importer. Production uses local tables and native
+or generated arithmetic, without a PySCF/GPU4PySCF runtime dependency.
+
+PySCF: Copyright 2014–2024 The PySCF Developers. Apache License 2.0;
+see [license](LICENSES/pyscf-Apache-2.0.txt) and
+[upstream notice](LICENSES/pyscf-NOTICE.txt). The numerical coefficients have
+been reorganized into symmetry orbits and independently expanded by this
+project; upstream implementation source is not executed in production.
+
+The Lebedev data originate with Dmitri Laikov, translated by Christoph van
+Wuellen and subsequently by Gerald Knizia, as credited in PySCF's
+`dft/LebedevGrid.py`. The original distribution was made publicly available
+with Laikov's permission. Please cite V. I. Lebedev and D. N. Laikov,
+“A quadrature formula for the sphere of the 131st algebraic order of accuracy,”
+*Doklady Mathematics* **59**(3), 477–481 (1999), when using these grids.
+Treutler radial quadrature: O. Treutler and R. Ahlrichs,
+*Journal of Chemical Physics* **102**, 346–354 (1995).

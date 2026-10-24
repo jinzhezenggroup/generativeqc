@@ -153,9 +153,11 @@ class KsOptions:
     CUDA hybrids and unsupported primitive families fail closed. A different
     model requires a new prepared owner.
 
-    nonlocal_grid independently prescribes VV10/rVV10 quadrature. None or the
-    same complete GridSpec retains the shared-grid execution path. Matching
-    total point counts alone never authorize sharing points or weights.
+    nonlocal_grid independently prescribes VV10/rVV10 quadrature. When omitted,
+    Treutler XC grids keep VV10 at level 3 even if XC is tighter; an explicit
+    legacy XC grid retains the shared-grid path. Supplying the same complete
+    GridSpec explicitly also retains sharing. Matching point counts alone
+    never authorize sharing points or weights.
     """
 
     functional: FunctionalSpec | None = None
@@ -1028,45 +1030,30 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     grid = options.grid
     if grid is None:
-        if (
-            "tau" in expected.ingredients
-            and not compile_ks_execution_plan(native_named_ir).exchange
-        ):
-            # The v2 policy has no qualified pure meta-GGA profile. Preserve
-            # the existing explicit v1 default rather than assigning a GGA grid.
-            if options.grid_accuracy != "standard":
-                raise NotImplementedError(
-                    "r2SCAN grid accuracy profiles require an explicit GridSpec"
-                )
-            grid = GridSpec()
-        elif _is_pbe_d4_composition(named_ir):
-            grid = GridPolicy(options.grid_accuracy).resolve(
-                "pbe-rks", derivative_order=0
-            )
-        elif ks_coefficients(method_ir)[2] != 0.0:
-            raise NotImplementedError(
-                "global-hybrid grid policy requires an explicit GridSpec"
-            )
-        else:
-            grid_method = method
-            if parse_automatic_libxc_selector(method) is not None:
-                family = "lda" if expected.ingredients == ("rho",) else "pbe"
-                grid_method = (
-                    f"{family}-{'uks' if method_ir.spin == 'polarized' else 'rks'}"
-                )
-            grid = GridPolicy(
-                options.grid_accuracy,
-                pruning="none"
-                if parse_automatic_libxc_selector(method) is not None
-                else "radial-v1",
-            ).resolve(grid_method, derivative_order=0)
+        grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
+    nonlocal_grid = options.nonlocal_grid
+    if (
+        nonlocal_grid is None
+        and grid.version == 4
+        and grid.level != 3
+        and compile_ks_execution_plan(method_ir).nonlocal_correlation is not None
+    ):
+        # GPU4PySCF configures XC and nonlocal grids independently. Retain the
+        # level-3 VV10 default when XC selects a different Treutler level.
+        # Explicit legacy tensor grids preserve their established shared path.
+        nonlocal_grid = GridSpec.treutler(3)
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(
             "KS tail/spin domain does not match the selected method"
         )
     result = replace(
-        options, functional=resolved, composition=None, grid=grid, scf_domain=domain
+        options,
+        functional=resolved,
+        composition=None,
+        grid=grid,
+        nonlocal_grid=nonlocal_grid,
+        scf_domain=domain,
     )
     object.__setattr__(result, "_method_ir", method_ir)
     return result

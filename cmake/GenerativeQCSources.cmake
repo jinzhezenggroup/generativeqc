@@ -8,6 +8,7 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_integral_ad.cpp
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
     src/api/c_api_ks_hessian.cpp
@@ -138,6 +139,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/fleet.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
+    src/scf/explicit_integral_backend.cpp
     src/scf/rhf.cpp
     src/scf/cuda/df_source_domain.cpp
     src/scf/cuda/rhf_policy.cpp)
@@ -180,6 +182,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
       src/scf/cuda/hf_initial_guess.cpp
+      src/scf/cuda/warm_density.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/rhf_resident_values.cpp
@@ -215,6 +218,9 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/scf_convergence_kernels.cu
       src/scf/cuda/basis_transform_kernels.cu
       src/scf/cuda/df_source_setup.cpp
+      src/scf/cuda/df_md_owner.cu
+      src/scf/cuda/df_md_raw.cu
+      src/scf/cuda/df_md_plan.cpp
       src/scf/cuda/df_source.cpp
       src/scf/cuda/df_source_kernels.cu
       src/scf/cuda/df_integral_export.cpp
@@ -229,6 +235,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/solver/cuda/symmetric_eigen_handles.cpp
       src/solver/cuda/symmetric_eigen_workspace.cpp
       src/scf/cuda/eigensolver_kernels.cu
+      src/scf/cuda/explicit_integral_backend.cu
       src/scf/cuda_hf_entry.cpp)
   else()
     target_sources(${target} PRIVATE

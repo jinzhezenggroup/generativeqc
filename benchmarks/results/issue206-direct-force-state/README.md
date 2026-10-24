@@ -127,3 +127,11 @@ profiling or correctness instrumentation. The runners preserve nonzero gate
 exits. DF accuracy, stock reference convergence, cold/changed/energy-only and
 small/UHF external coverage, unprofiled memory/transfer accounting, unequal
 auxiliary bases and constrained-memory comparisons remain #206 work.
+
+The candidate, preliminary and historical Pulay matrix `retained-samples.json`
+records are now
+stored losslessly as `retained-samples.json.gz`. Adjacent `.storage.json` receipts
+pin the original merged Git blobs and both byte identities. `gzip -dc` restores
+every original byte, including failed verdicts and all seven paired samples;
+the shared `load_record` reader also accepts the compressed paths. This storage
+change makes room for CBS Lambda qualification within the unchanged 64 MiB cap.

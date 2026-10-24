@@ -4,7 +4,7 @@
     {
       "path": "README.md",
       "bytes": 17925,
-      "sha256": "45092bd68aefce39e5e6ae9aff5110e9e0cb8086cbf318befc28b4e1fbbf0a46"
+      "sha256": "8ce988d08730f9dea7e4cadaa889f01d3503baac71348602cedd0cee6452e5ec"
     },
     {
       "path": "auxiliary-validation.json.xz",
@@ -56,14 +56,16 @@
       "sha256": "7740865630b4a7d9bac7620d4dd86a6ededd4f102ed74b68cec350e290808427"
     },
     {
-      "path": "pilot-campaign.json.gz",
-      "bytes": 343092,
-      "sha256": "75854daee5495f7346cc4c8f2c110ea3ea6145caf2d73435cc371fe23f8f636c"
+      "path": "pilot-campaign.json.xz",
+      "bytes": 141068,
+      "sha256": "45f32b74c895322b951bb3c58ed1056247745273739f50f2009dcd3ff288892e",
+      "decoded_bytes": 6022366,
+      "decoded_sha256": "87b600377291255bf59c2ae76a0e8744090d05a9be22abd3e7b14b1e1cd5cde4"
     },
     {
       "path": "retention-review.json",
-      "bytes": 3163,
-      "sha256": "0576b82379521ac44d52084aef07a235efb8cfe52ffd326a3d40cfbaaa59f843"
+      "bytes": 3287,
+      "sha256": "01b77c42cc2c42697c480f703d2dc2949c3faee96d8014f2d6a391f5650d332e"
     },
     {
       "path": "summary.json",

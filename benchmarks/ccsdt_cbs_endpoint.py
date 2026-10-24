@@ -32,19 +32,39 @@ def qualify(result: CBSResult, reference: dict) -> dict[str, float]:
     """Gate composite and every native constituent, not just cancellation."""
     energy_error = abs(result.energy - reference["energy"])
     force_error = float(np.max(np.abs(result.forces - reference["forces"])))
-    if energy_error > 1e-9 or force_error > 2e-6:
+    budget = result.convergence.get("budget")
+    component_budget = result.convergence.get("component_budget")
+    energy_limit = budget["energy_abs"] if budget else 1e-9
+    force_limit = budget["force_max_abs"] if budget else 2e-6
+    rms_error = float(np.sqrt(np.mean((result.forces - reference["forces"]) ** 2)))
+    if budget and budget["force_rms"] is not None and rms_error > budget["force_rms"]:
+        raise RuntimeError(f"composite RMS force oracle failure: {rms_error}")
+    if energy_error > energy_limit or force_error > force_limit:
         raise RuntimeError(
             f"composite oracle failure: E={energy_error}, F={force_error}"
         )
     for component in result.components:
         oracle = reference["components"][component.roles[0]]
-        if abs(component.result.energy - oracle["energy"]) > 1e-9:
+        if abs(component.result.energy - oracle["energy"]) > (
+            component_budget["energy_abs"] if component_budget else 1e-9
+        ):
             raise RuntimeError(f"component energy oracle failure: {component.roles}")
-        if np.max(np.abs(component.result.forces - oracle["forces"])) > 2e-6:
+        if np.max(np.abs(component.result.forces - oracle["forces"])) > (
+            component_budget["force_max_abs"] if component_budget else 2e-6
+        ):
             raise RuntimeError(f"component force oracle failure: {component.roles}")
+        if component_budget and component_budget["force_rms"] is not None:
+            rms = float(
+                np.sqrt(np.mean((component.result.forces - oracle["forces"]) ** 2))
+            )
+            if rms > component_budget["force_rms"]:
+                raise RuntimeError(
+                    f"component RMS force oracle failure: {component.roles}"
+                )
     return {
         "energy_error_hartree": energy_error,
         "max_force_error_hartree_per_bohr": force_error,
+        "rms_force_error_hartree_per_bohr": rms_error,
     }
 
 
@@ -62,6 +82,7 @@ def result_record(result: CBSResult) -> dict[str, Any]:
         "endpoint_seconds": result.endpoint_seconds,
         "execution_groups": result.execution_groups,
         "basis_metadata": result.basis_metadata,
+        "convergence": result.convergence,
         "components": [
             {
                 "roles": component.roles,
@@ -93,6 +114,7 @@ def main() -> None:
         "--case", choices=("h2-dz-tz", "water-algebra"), default="h2-dz-tz"
     )
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    parser.add_argument("--policy", choices=("standard", "fast"), default="standard")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--budget", type=int, default=256 << 20)
     parser.add_argument("--oracle", action="store_true")
@@ -110,6 +132,7 @@ def main() -> None:
     workflow = CCSDTCBSCalculator(
         (CBSBasis(low, 2), CBSBasis(high, 3)),
         device=arguments.device,
+        policy=arguments.policy,
         calculator_options={"correlation_memory_budget_bytes": arguments.budget},
     )
     results = []

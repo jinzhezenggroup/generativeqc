@@ -404,7 +404,7 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
     // A nonborrowed XC arena owns only the first four arrays and cannot stand
     // in for this five-array lifetime, even when XC reads only points/weights.
     const auto xc_and_grid = generativeqc::runtime::size_add(
-        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
+        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
     // Prepared exact KS owners retain first-order J/K source leases even when
     // the current replay requests energy only. Charge that simultaneous live
     // storage instead of relying on a serialized force-staging allowance.

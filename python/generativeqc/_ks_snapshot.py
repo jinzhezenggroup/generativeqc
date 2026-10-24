@@ -464,6 +464,28 @@ class NativeKsSnapshot:
         """Bind derivative fallback policy to the live native provider proof."""
         return "density-fitted" in self.fock_provider_proof()[:2]
 
+    @property
+    def range_density_fitted(self) -> bool:
+        """Read the LR owner's approximation, never the process environment."""
+        self.check_current()
+        read = getattr(
+            self._library, "generativeqc_ks_snapshot_range_provider_v1", None
+        )
+        if read is None:
+            raise NotImplementedError("native LR approximation proof is unavailable")
+        read.argtypes = [ct.c_void_p, ct.c_void_p, ct.POINTER(ct.c_uint32)]
+        read.restype = ct.c_int
+        approximation = ct.c_uint32()
+        _native.check(
+            self._library,
+            read(self._batch._batch, self._handle, ct.byref(approximation)),
+            context=self._batch._context,
+        )
+        self.check_current()
+        if approximation.value not in (0, 1, 2**32 - 1):
+            raise ValueError("unknown native LR approximation")
+        return approximation.value == 1
+
     def cuda_resident_grid(
         self, *, nonlocal_grid: bool = False
     ) -> CudaResidentGrid | None:
@@ -831,11 +853,12 @@ class NativeKsSnapshot:
         *,
         lr_correction: typing.Any = None,
     ) -> typing.Any:
-        """Publish common mixed sources from one live, token-checked DF owner.
+        """Publish common RSH sources from live, token-checked radial owners.
 
-        CPU binds the compiler-generated (a_long-a_short) weighted LR gradient.
-        CUDA leaves it absent and executes the native resident derivative owner.
-        Neither backend substitutes exact full-range exchange for fitted K.
+        Full RI-K differentiates its own LR metric on either backend. Legacy
+        mixed CPU binds a compiler-generated weighted Direct LR gradient;
+        legacy mixed CUDA owns its resident Direct correction. No source may
+        substitute an exact derivative for a fitted Hamiltonian.
         """
         if not self.density_fitted:
             return None
@@ -844,14 +867,14 @@ class NativeKsSnapshot:
         if type(maximum_bytes) is not int or maximum_bytes < 1:
             raise ValueError("stationary derivative budget must be positive")
         correction = np.empty(0, dtype=np.float64)
-        if self.backend == "cpu":
+        if self.backend == "cpu" and not self.range_density_fitted:
             correction = np.ascontiguousarray(lr_correction, dtype=np.float64)
             if correction.shape != (atom_count, 3) or not np.isfinite(correction).all():
                 raise ValueError(
                     "mixed CPU source requires a finite compact LR correction"
                 )
         elif lr_correction is not None:
-            raise ValueError("CUDA mixed source owns its resident LR correction")
+            raise ValueError("native LR source owns its fitted or resident correction")
         self.check_current()
         evaluate = getattr(
             self._library,
@@ -894,7 +917,10 @@ class NativeKsSnapshot:
         _native.check(self._library, status, context=self._batch._context)
         self.check_current()
         return immutable(output), _integral_source_resources(
-            usage, mixed_rsh_df=True, lazy_lr_device_owner=self.backend == "cuda"
+            usage,
+            mixed_rsh_df=True,
+            lazy_lr_device_owner=self.backend == "cuda"
+            and not self.range_density_fitted,
         )
 
     def cuda_integral_derivatives(
@@ -972,6 +998,7 @@ class NativeKsSnapshot:
             usage,
             mixed_rsh_df=range_exchange
             and bool(getattr(self, "density_fitted", False)),
+            lazy_lr_device_owner=range_exchange and not self.range_density_fitted,
         )
 
     def _decode_nonlocal_grid(self, options: typing.Any) -> None:
@@ -1028,7 +1055,19 @@ class NativeKsSnapshot:
             raise ValueError("native nonlocal grid point count mismatch")
         actual_spec = GridSpec(
             version=int(version),
-            pruning="radial-v1" if int(version) == 3 else "none",
+            **(
+                {
+                    "radial_rule": "treutler-ahlrichs",
+                    "angular_rule": "lebedev",
+                    "partition": "becke-treutler",
+                    "pruning": "nwchem",
+                    "ordering": "atom-radial-lebedev",
+                }
+                if int(version) == 4
+                else {
+                    "pruning": "radial-v1" if int(version) == 3 else "none",
+                }
+            ),
             radial_points=int(radial),
             angular_polar=int(polar),
             angular_azimuth=int(azimuth),
@@ -1128,7 +1167,19 @@ class NativeKsSnapshot:
             radii = take((119,))
             self.grid_spec = GridSpec(
                 version=int(version),
-                pruning="radial-v1" if int(version) == 3 else "none",
+                **(
+                    {
+                        "radial_rule": "treutler-ahlrichs",
+                        "angular_rule": "lebedev",
+                        "partition": "becke-treutler",
+                        "pruning": "nwchem",
+                        "ordering": "atom-radial-lebedev",
+                    }
+                    if int(version) == 4
+                    else {
+                        "pruning": "radial-v1" if int(version) == 3 else "none",
+                    }
+                ),
                 radial_points=int(radial),
                 angular_polar=int(polar),
                 angular_azimuth=int(azimuth),
@@ -1330,6 +1381,10 @@ class NativeKsSnapshot:
             if self.coefficients != (1.0, 1.0, 0.0) or self.nonlocal_grid is not grid
             else {}
         )
+        if options.has_range_exchange:
+            composition_identity["range_exchange_approximation"] = (
+                "density-fitted" if self.range_density_fitted else "exact"
+            )
         basis_identity = basis.identity
         coulomb_approximation, exchange_approximation, metric_threshold = (
             self.fock_provider_proof()

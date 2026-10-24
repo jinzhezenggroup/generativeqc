@@ -20,7 +20,16 @@ are prepared on the owning stream; replay contracts the total density into
 Hermite coefficients and projects the Coulomb potential back to public AOs.
 Normal generated/canonical K, XC, SCF and finalization owners are unchanged.
 
-Uniform primitive pairs with both pair-angular totals at most two use a
+The default `primitive` recipe contracts every admitted Coulomb contribution in
+Hermite form. Independent primitive Coulomb bounds and current density envelopes
+share a cumulative per-J-entry omission allowance of
+`min(screening_tolerance, 1e-12)` across the complete primitive inventory. It does
+not apply the old per-AO integral mask or reconstruct partially masked AO
+integrals. Current-density active prefixes drive the work inventory, including
+captured replay. Zero tolerance retains every nonzero contribution.
+
+With `GENERATIVEQC_MD_J_ENGINE=incumbent`, uniform primitive pairs with both
+pair-angular totals at most two use a
 compiler-owned reciprocal source tile. One canonical `fill_coulomb` evaluation
 feeds both independently admitted density consumers; higher angular classes
 and the partially screened source retain their original routes. The tile has
@@ -31,7 +40,8 @@ primitive product. The persistent worker inventory is capped at 4096 blocks
 and borrows the existing stream-owned source cursor without another retained
 queue or tensor.
 
-The public-AO Schwarz mask remains authoritative. Uniformly accepted shell
+For `incumbent` and `reference`, the public-AO Schwarz mask remains authoritative.
+Uniformly accepted shell
 quartets use the Hermite contraction, while partially screened quartets retain
 per-orientation AO eligibility in bounded source pages. Nonsymmetric and UKS
 densities include both input orientations. Additional density screening shares
@@ -39,27 +49,40 @@ densities include both input orientations. Additional density screening shares
 output element; K never consumes these density envelopes. Screening zero retains
 the unscreened contraction except for exactly zero density work.
 
-Optional descriptors, transforms and scratch are charged within a 128-MiB cap
-after retained normal owners. Unsupported angular momentum, small systems,
-insufficient optional capacity or optional allocation failure retain normal J.
+Optional descriptors, transforms and scratch are charged to the direct plan's
+remaining device capacity after retained normal owners. Private KS's shape-only
+estimate requests 128 MiB of additional capacity by default; this reservation
+is not a second hard cap on an owner with a larger available budget. Public
+ledger-bound owners remain ineligible for optional MD storage. Unsupported
+angular momentum, small systems, insufficient base capacity or optional
+allocation failure retain normal J.
 Mixed J, fixed-mask response and derivative requests bypass MD execution.
 Derivative-capable owners may retain the metadata for their zero-order requests.
-`direct_schedule` reports admission as `md-j-hermite/retained-k`, not a claim
-that every request uses that route.
+`direct_schedule` reports default admission as `md-j-primitive/retained-k`.
+If only the base MD storage fits, it reports `md-j-hermite/retained-k`; if base
+storage fails too, the normal provider remains. Admission is not a claim that
+every request uses that route.
 
 `GENERATIVEQC_DISABLE_MD_J=1` restores normal J at plan creation for diagnostics;
 no enable flag is needed for the default. `GENERATIVEQC_MD_J_COUNTS=1` reports
 native execution and geometry-candidate censuses when the owner is released.
 Candidate counts are upper bounds on probes, not executed primitive products.
 
-`GENERATIVEQC_MD_J_RECIPROCAL=0` selects the incumbent oriented contraction at
+The default and explicit rollback recipes are documented in
+[MD Coulomb engines](md_j_engine.md). `GENERATIVEQC_MD_J_ENGINE=primitive`
+explicitly requests the default; `reference` preserves the public-AO mask with
+hierarchical scheduling, and `incumbent` restores the earlier source consumer.
+Neither selector changes K or derivative ownership.
+
+For the `incumbent` recipe, `GENERATIVEQC_MD_J_RECIPROCAL=0` selects the oriented
+contraction at
 plan creation; unset/1 selects reciprocal tiles. Other values reject an active
 MD request. The selector is frozen with the resident owner, not polled during
 replay. The same optional-storage admission and normal-J fallback still apply.
 
 `GENERATIVEQC_MD_J_WORK_COUNTS=1` requests a per-replay diagnostic census at
-plan creation. Its 1200-byte owner-local buffer is charged within the same
-128-MiB allowance. It reports actual uniform radial evaluations, independent
+plan creation. Its owner-local buffer is charged to the same remaining plan
+budget. It reports actual uniform radial evaluations, independent
 density directions and Hermite summands, plus tested/admitted residual shell
 tasks and contracted primitive products. Counters aggregate locally rather
 than adding per-product global atomics. The diagnostic download/fence is

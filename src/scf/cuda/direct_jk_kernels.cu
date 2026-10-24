@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_segmented_radix_sort.cuh>
+#include <string_view>
 #include <type_traits>
 
 #include "generated_direct_contraction.cuh"
@@ -13,6 +15,7 @@
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
+#include "scf/cuda/direct_schwarz_order.cuh"
 #include "scf/cuda/direct_screening.cuh"
 
 namespace generativeqc::scf {
@@ -455,7 +458,7 @@ __global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_
 }
 
 /** Schwarz bounds in public AO order, including sparse spherical expansions. */
-template <bool Cartesian>
+template <bool Cartesian, unsigned Order, bool Specialized = false>
 __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure) {
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t item = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -463,9 +466,12 @@ __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, 
   const auto system = static_cast<std::int32_t>(item / matrix);
   const auto i = static_cast<std::int32_t>((item % matrix) / n);
   const auto j = static_cast<std::int32_t>(item % n);
-  const double value = Cartesian
-                           ? contracted_eri_cartesian_source<double>(batch, system, i, j, i, j, -1)
-                           : contracted_eri<double>(batch, system, i, j, i, j, -1);
+  if (!schwarz_order_matches<Order, Cartesian>(batch, system, i, j)) return;
+  double value;
+  if constexpr (Specialized)
+    value = public_schwarz_diagonal<Order>(batch, system, i, j);
+  else
+    value = schwarz_diagonal<Order, Cartesian>(batch, system, i, j);
   // NaN bounds must never masquerade as screened-out quartets.
   if (!isfinite(value)) atomicExch(failure, 1);
   bounds[item] = sqrt(fabs(value));
@@ -1031,12 +1037,21 @@ void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, 
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
                                          int* failure, bool cartesian) {
-  if (cartesian)
-    independent_jk_bounds_kernel<true>
-        <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
-  else
-    independent_jk_bounds_kernel<false>
-        <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+  // Capture this preparation-only rollback before launching. Both schedules
+  // retain the same dense public bounds and existing allocation/failure ABI.
+  const auto* selection = std::getenv("GENERATIVEQC_DIRECT_SPECIALIZED_SCHWARZ");
+  const bool specialized = !selection || std::string_view(selection) != "0";
+  for_each_schwarz_order(batch, [&]<unsigned Order>() {
+    if (cartesian)
+      independent_jk_bounds_kernel<true, Order>
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+    else if (specialized)
+      independent_jk_bounds_kernel<false, Order, true>
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+    else
+      independent_jk_bounds_kernel<false, Order>
+          <<<grid, block, shared_bytes, stream>>>(batch, bounds, failure);
+  });
 }
 
 void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

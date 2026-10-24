@@ -310,13 +310,20 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     assert changed.identity == baseline.identity
 
 
-def test_ks_final_validation_selection_changes_resource_identity(
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
+        "GENERATIVEQC_DIRECT_FP32_BLOCK_SCREENING",
+    ],
+)
+def test_direct_execution_selection_changes_resource_identity(
     monkeypatch: typing.Any,
+    variable: str,
 ) -> None:
     """Prepared/restarted owners must retain the actual proof-execution policy."""
     from types import SimpleNamespace
 
-    variable = "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"
     library = SimpleNamespace()
     monkeypatch.delenv(variable, raising=False)
     automatic = estimate_hf_resources([H2], backend="cuda", library=library)
@@ -325,3 +332,22 @@ def test_ks_final_validation_selection_changes_resource_identity(
     monkeypatch.setenv(variable, "1")
     resident = estimate_hf_resources([H2], backend="cuda", library=library)
     assert len({automatic.identity, reference.identity, resident.identity}) == 3
+
+
+def test_df_coulomb_response_selection_changes_resource_identity(
+    monkeypatch: typing.Any,
+) -> None:
+    """A prepared owner cannot silently switch raw-source execution policy."""
+    from types import SimpleNamespace
+
+    variable = "GENERATIVEQC_DF_COULOMB_RESPONSE"
+    identities = set()
+    for policy in (None, "auto", "slices", "panels"):
+        if policy is None:
+            monkeypatch.delenv(variable, raising=False)
+        else:
+            monkeypatch.setenv(variable, policy)
+        # Identity construction needs no CUDA context or device allocation.
+        plan = estimate_hf_resources([H2], backend="cuda", library=SimpleNamespace())
+        identities.add(plan.identity)
+    assert len(identities) == 4

@@ -46,6 +46,10 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> Iterator[NS]:
         def __exit__(self, *a: object) -> None:
             h.events.append("release")
 
+        def configure_grid(self, spec: Any, atoms: Any) -> None:
+            assert spec in (source.grid_spec, source.nonlocal_grid_spec)
+            assert tuple(atoms) == tuple(basis.atoms)
+
         def reset_geometry(self, *a: Any) -> None:
             h.events.append("reset")
 

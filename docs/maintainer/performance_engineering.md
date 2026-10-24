@@ -6,7 +6,16 @@ rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
 ## README production comparisons
 
-The README's headline HF/DFT comparison measures the cost of reaching a common
+The README can report **default-grid endpoint latency** when that is the
+requested experiment. Keep stock XC/VV10 quadratures and disclose force-response
+or solver overrides. Engines may retain their native convergence criteria while
+being checked against common observable error gates; unlike residual definitions
+must not be equated numerically. Retain complete endpoints, warm populations,
+executed controls, work and provenance. Qualification limited to sampled static
+geometries must say so. Default timings alone do not establish the broader
+accuracy-qualified production ranking or fastest-configuration claim below.
+
+An accuracy-qualified HF/DFT headline comparison measures the cost of reaching a common
 scientific accuracy target with each engine's best qualified production
 configuration, not the cost of executing an artificially identical amount of
 work. Here, "best" means the fastest configuration among the documented,
@@ -55,6 +64,16 @@ timeouts stay visible in retained evidence, not as ranked performance results.
 If selected production configurations have not yet been qualified and measured
 for both engines, mark the README comparison pending rather than relabelling
 historical timings or publishing estimated speedups.
+
+An independent numerical reference may outlive a native implementation revision
+when its scientific inputs and reference software remain applicable. The README
+qualifier keeps same-revision checks by default. Its explicit `--reference-reuse`
+manifest binds each complete original oracle receipt to the audited producer,
+driver, method, orbital basis/representation, charge and spin. Geometry, package
+versions, reference controls, grid stability, CPU/GPU agreement and every sample's
+observable errors are still checked. Keep original producer identities and the
+input review; never relabel old receipts. This numerical-reference reuse does
+not permit mixing native timing revisions in one figure.
 
 The LDA/PBE pruning qualification entry point is
 `python -m benchmarks.grid_pruning_gpu --atoms 96 --output .artifacts/pruning96.json`

@@ -12,8 +12,9 @@
 namespace generativeqc::dft {
 
 /** Force arithmetic and SCF arithmetic have separate admission contracts.
- * Budget-converged densities may feed the existing FP64 force consumer; only
- * strict SCF controls may authorize independently qualified mixed gradients. */
+ * Budget-converged densities may feed the existing FP64 force consumer.
+ * Mixed gradients need their own complete-model qualification, including an
+ * authenticated stationarity allowance for the combined DF XC route. */
 inline bool admit_stationary_force_controls(double energy, double density, double screening,
                                             bool budget_stationarity) noexcept {
   const std::array<double, 3> controls{energy, density, screening};
@@ -133,6 +134,35 @@ inline bool admit_application_fock(const std::array<double, 3>& allowances, std:
     if (!std::isfinite(allowance) || allowance < 0.0) return false;
   return restricted && all_electron && mixed_fock_available && aos >= 24 && atoms >= 2 &&
          maximum_angular <= 2 && allowances[0] >= 1e-5 && allowances[1] >= 1e-4 &&
+         (allowances[2] == 0.0 || allowances[2] >= 3e-5);
+}
+
+/** Keep automatic source screening within the independently exercised size
+ * domain. Explicit experiments may request other sizes without bypassing the
+ * owner's model, precision, resource or final-state guards. */
+inline bool default_mixed_source_proposal(std::size_t aos, std::size_t atoms) noexcept {
+  return aos >= 64 && aos <= 768 && atoms >= 2 && atoms <= 96;
+}
+
+/** Coarser immutable integral rows may propose a Fast density, but never
+ * certify it. The caller admits only relaxed, full-range hybrid mixed stages
+ * with a fresh FP64 closing pair. The primary provider's screening is unchanged;
+ * its strict tail and derivatives cannot borrow this proposal-only lease.
+ * Unscreened inputs and unsupported owners retain their prepared predicate.
+ */
+inline double mixed_source_proposal_screening(bool requested, bool eligible,
+                                              double prepared) noexcept {
+  return requested && eligible && prepared > 0.0 && prepared < 1e-8 ? 1e-8 : prepared;
+}
+
+/** Separate proposal allowance for local pure-J DF. This authorizes shared
+ * XC matrix products, never a mixed DF integral/metric provider. Preparation
+ * authenticates the complete model; the CUDA owner also validates its shape. */
+inline bool admit_application_df_xc_budget(const std::array<double, 3>& allowances,
+                                           bool local_restricted_model) noexcept {
+  for (const auto allowance : allowances)
+    if (!std::isfinite(allowance) || allowance < 0.0) return false;
+  return local_restricted_model && allowances[0] >= 1e-5 && allowances[1] >= 1e-4 &&
          (allowances[2] == 0.0 || allowances[2] >= 3e-5);
 }
 

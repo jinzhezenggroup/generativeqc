@@ -61,6 +61,12 @@ struct GridSpec {
  std::array<double,119> element_radii{};
  bool operator==(const GridSpec&) const = default;
 };
+// Distinct sentinels exercise default propagation and legacy reset without
+// copying the native grid-construction implementation into this fixture.
+GridSpec default_grid_spec() {
+ GridSpec grid; grid.version=4; grid.radial_points=3;
+ grid.angular_polar=grid.angular_azimuth=0; grid.element_radii.fill(2.0); return grid;
+}
 void validate_grid_spec(const GridSpec& g) {if(!g.radial_points)throw std::invalid_argument("radial");}
 }
 namespace scf {struct ScfOptions {
@@ -92,10 +98,14 @@ struct generativeqc_method_descriptor {
 int main() {
  generativeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
  auto defaults=ks_grid_options(d,options,plan);
- assert(defaults.version==1 && options.xc_tile_points==256);
+ assert(defaults==dft::default_grid_spec() && options.xc_tile_points==256);
  generativeqc_ks_options input; d.ks_options=&input;
  auto copied=ks_grid_options(d,options,plan);
  assert(copied.version==2 && copied.radial_points==7 && options.xc_tile_points==37);
+ assert(copied.element_radii==dft::GridSpec{}.element_radii);
+ auto explicit_default=input; explicit_default.grid_version=4; d.ks_options=&explicit_default;
+ assert(ks_grid_options(d,options,plan).element_radii==defaults.element_radii);
+ d.ks_options=&input;
  assert(options.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
  unsigned rejected=0;
  for(int mode=0;mode<6;++mode) {

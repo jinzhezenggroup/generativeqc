@@ -287,6 +287,39 @@ explicitly. Generated-source identities distinguish the two variants. The
 Python compiler/JIT API still defaults to the scalar schedule; its explicit
 `ao_radial_reuse=True` selector opts into the same reusable kernel family.
 
+## Default spatial XC execution order
+
+Device-fused semilocal KS with resident quadrature and admitted local AO maps
+defaults to a private spatial permutation. `GENERATIVEQC_CUDA_XC_SPATIAL_ORDER=1`
+explicitly selects the same schedule; `0` restores canonical atom/radial/angular
+execution order. Nonlocal and
+public resource-ledger owners retain their existing order; their additional
+consumer/reservation contracts are not qualified by this option.
+
+The execution copy groups points by nearest center along a deterministic
+neighbor walk. It permutes the exact generated coordinates and weights together,
+before discovering AO maps; the quadrature, AO threshold and FP64 policy do not
+change. The original resident grid remains alive. Moving-grid force bindings
+authenticate that canonical view, including its atomic measures and point-owner
+indexing, rather than interpreting sorted indices as atom/radial indices.
+
+Preparation requires explicit host staging and device allowances. The device
+copy occupies four doubles per point; its actual bytes join the XC owner's
+resource count. The host bound covers reordered staging, two point-index arrays
+and four atom-index arrays. Insufficient capacity or device allocation failure
+retains canonical execution. Publication is transactional and setup drains
+before host staging dies. Replays/captured graphs allocate nothing and keep the
+same permutation; geometry changes construct a new owner.
+
+The opt-in native test `generativeqc_dft_cuda_tests --spatial-grid` compares
+PBE/r2SCAN, RKS/UKS, tails and changed-density captured replay with an independent
+CPU E/V calculation and checks canonical views and exact resource refusal.
+Run real-device tests through finite Slurm allocations. The
+[spatial-order decision](../../.agents/notes/implemented/performance/2026-10-19-xc-spatial-grid-order.md)
+records endpoint qualification and rejected alternatives; the
+[default-promotion decision](../../.agents/notes/implemented/performance/2026-10-19-md-j-spatial-defaults.md)
+records validation with both enabling selectors unset.
+
 ## Density features
 
 
@@ -362,7 +395,15 @@ runner `python -m benchmarks.readme_pbe0_indexed_becke` with
 
 ### Generated Becke atom adjoints
 
-Ordinary phased CUDA first derivatives use binary-scaled Becke products by
+Treutler radius-adjusted partitions use the same bounded phased CUDA
+first-derivative schedule as equal-radius partitions. Both pair phases borrow
+the immutable elemental radii and evaluate the common coordinate-adjustment
+graph, including its chain rule. Ragged atom extents supply point owners;
+geometry rebinding refreshes center geometry without changing topology. Phase
+storage remains optional, with the bounded cooperative traversal as fallback.
+Adjusted partitions retain logarithmic products.
+
+Equal-radius phased CUDA first derivatives use binary-scaled Becke products by
 default for 96–128-atom owners with center geometry, already-admitted phase
 storage, and no primitive-adjoint selection. The lowering retains
 ordered switch products as a mantissa and integer exponent instead of sums
@@ -384,7 +425,7 @@ lowering, not a Hessian/response representation change. See the
 [binary-scaled product decision](../../.agents/notes/implemented/performance/2026-10-12-becke-binary-scaled-products.md).
 
 `GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE=normalized-adjoints` selects an
-experimental lowering of the authenticated equal-radius normalized-product AD
+experimental lowering of the authenticated normalized-product AD
 composition. The canonical scalar graph emits the exp pullback with its primal
 product already bound and the log pullback without an unused primal logarithm.
 Atom adjoints are produced at the normalization boundary and reused by incident
@@ -392,6 +433,8 @@ pairs. Exact single-zero and multiple-zero semantics, ordered four-word reverse
 and atom gather, moving points and geometry rebinding remain intact. The dead
 distance-adjoint field is reused until gather; no additional scratch or launch
 is required. Overflow/premature-underflow cuts use the original pair reverse.
+For Treutler partitions, pair reverse composes these product adjoints with the
+same adjusted-coordinate derivatives as the ordinary phased route.
 
 The default remains `off`. The older `coefficients` experiment and ordinary
 phased/generic AD routes remain available; old artifacts lacking the normalized

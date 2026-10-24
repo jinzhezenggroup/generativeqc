@@ -72,8 +72,8 @@ class CudaKsGridReference {
   /** Native quadrature capability only: no division by partition weights and
    * no host atomic-measure reconstruction. Host-only grids return no shape. */
   CudaGridGeometryShape geometry_shape() const noexcept {
-    if (!ready_ || !binding_.atomic_weights || !binding_.points_per_atom ||
-        !binding_.quadrature_owner)
+    if (!ready_ || !binding_.atomic_weights ||
+        (!binding_.points_per_atom && !binding_.atom_offsets) || !binding_.quadrature_owner)
       return {};
     return {binding_.atoms, binding_.primitives, binding_.nao, binding_.point_count,
             binding_.points_per_atom};
@@ -90,10 +90,11 @@ class CudaKsGridReference {
 
   CudaGridGeometryReference geometry_reference() noexcept {
     if (!geometry_shape().atoms) return {};
-    return {binding_.basis,     binding_.points,
-            binding_.weights,   binding_.atomic_weights,
-            binding_.device_id, reinterpret_cast<cudaStream_t>(binding_.stream),
-            authenticate,       this};
+    return {binding_.basis,        binding_.points,
+            binding_.weights,      binding_.atomic_weights,
+            binding_.device_id,    reinterpret_cast<cudaStream_t>(binding_.stream),
+            authenticate,          this,
+            binding_.atom_offsets, binding_.atomic_radii};
   }
 
  private:

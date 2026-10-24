@@ -23,8 +23,9 @@ struct RysShell;
 }  // namespace generated_df_fp32_shell
 namespace {
 namespace generated = generated_df_shell;
-namespace scalar = generated_df_derivatives;
-constexpr unsigned term_capacity = molecule::kMaximumAoExpansionTerms;
+// Each generated unit selects the scalar geometry/Boys capacity it needs.
+// Auxiliary g requires F_11; through-f units keep their original domain.
+namespace scalar = generated_df_shell::scalar;
 
 /** Publish one aggregated owner count; normal kernels receive a null sink. */
 __device__ __forceinline__ void record_work(unsigned long long* work, DfShellWork kind,
@@ -128,8 +129,9 @@ __device__ __forceinline__ void contract_shell_task(
     for (unsigned at = 0; at < o.term_counts[ai]; ++at)
       for (unsigned bt = 0; bt < o.term_counts[bi]; ++bt)
         for (unsigned ct = 0; ct < x.term_counts[ci]; ++ct) {
-          const auto ia = ai * term_capacity + at, ib = bi * term_capacity + bt;
-          const auto ic = ci * term_capacity + ct;
+          const auto ia = ai * first.expansion_terms + at;
+          const auto ib = bi * second.expansion_terms + bt;
+          const auto ic = ci * auxiliary.expansion_terms + ct;
           const auto ac = generated::cartesian_index(A, o.term_angular + 3 * ia);
           const auto bc = generated::cartesian_index(B, o.term_angular + 3 * ib);
           const auto cc = generated::cartesian_index(C, x.term_angular + 3 * ic);
@@ -263,8 +265,9 @@ __device__ __forceinline__ void contract_shell_task(
             if (lane == 0) {
               const double weight =
                   cart_weights[0] * o.coefficients[pa] * o.coefficients[pb] * x.coefficients[pc];
-              const double bound =
-                  scalar::sss_force_bound(alpha, center_a, beta, center_b, gamma, center_c, weight);
+              const double bound = generated_df_derivatives::sss_force_bound(
+                  alpha, {ra[0], ra[1], ra[2]}, beta, {rb[0], rb[1], rb[2]}, gamma,
+                  {rc[0], rc[1], rc[2]}, weight);
               skip = isfinite(bound) && bound <= first.force_screen_budget;
               skipped_work += skip;
               if (first.force_screen_counts) {

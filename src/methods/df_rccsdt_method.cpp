@@ -7,6 +7,8 @@
 #include <string>
 #include <utility>
 
+#include "methods/correlation_convergence.hpp"
+
 #if GENERATIVEQC_HAS_CUDA
 #include "methods/df_ccsdt_force.hpp"
 #endif
@@ -69,6 +71,8 @@ class DfRccsdtPrepared final : public PreparedCalculation {
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
         descriptor_(descriptor) {
+    convergence_ = correlation_convergence(descriptor);
+    descriptor_.struct_size = sizeof(descriptor_);
     full_df_reference_ = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA;
     // Preserve the legacy descriptor contract of the CC solver. The explicit
     // demand carries the RI-JK model through reference, companions and response.
@@ -116,12 +120,36 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
 #if GENERATIVEQC_HAS_CUDA
     auto native =
-        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2 || full_df_reference_
+        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2 || full_df_reference_ ||
+                convergence_.relaxed()
             ? run_df_correlation_group_native(
                   execution_, system_, auxiliary_, descriptor_, compute_forces,
-                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions, full_df_reference_})
+                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions, full_df_reference_},
+                  convergence_)
             : run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
     native.primal.triples_seconds = native.triples_seconds;
+    // Publish detached response work only after the entire endpoint succeeds.
+    // Action counters cover the shared transpose operator, not the separate
+    // independent audit. Phase times include their nested preparation/replay.
+    if (compute_forces) {
+      auto& performance = native.primal;
+      const auto& lambda = native.lambda;
+      performance.df_response_available = true;
+      performance.lambda_seconds = native.lambda_seconds;
+      performance.source_response_seconds = native.source_response_seconds;
+      performance.orbital_seconds = native.orbital_seconds;
+      performance.lambda_fp32_executed = lambda.df_fp32_gemm_calls > 0;
+      performance.lambda_fp32_refused = lambda.df_mixed_precision_refused;
+      performance.lambda_fp32_iterations = lambda.df_mixed_iterations;
+      performance.lambda_fp64_iterations = lambda.df_strict_iterations;
+      performance.lambda_fp32_actions = lambda.df_mixed_actions;
+      performance.lambda_fp64_actions = lambda.df_strict_actions;
+      performance.lambda_fp32_gemm_calls = lambda.df_fp32_gemm_calls;
+      performance.lambda_fp32_cast_elements = lambda.df_precision_cast_elements;
+      performance.lambda_auxiliary_batch_size = lambda.df_auxiliary_batch_size;
+      performance.lambda_numeric_capacity_bytes = lambda.numeric_capacity_bytes;
+      performance.lambda_owned_device_bytes = lambda.owned_device_bytes;
+    }
     last_correlation_ = native.correlation;
     last_performance_ = native.primal;
     return std::move(native.method_result);
@@ -138,6 +166,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
   core::System auxiliary_;
   bool full_df_reference_{};
   generativeqc_method_descriptor descriptor_{};
+  core::CorrelationConvergence convergence_;
   std::optional<generativeqc_correlation_diagnostic> last_correlation_;
   std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;

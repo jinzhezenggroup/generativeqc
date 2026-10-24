@@ -157,11 +157,25 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
-    event: str, presence: str, tmp_path: Path
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_shell_units.py", "ecp-forces"),
+        ("tests/python/test_treutler_endpoints.py", "posthf"),
+    ),
+)
+def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
+    event: str, presence: str, module: str, owner: str, tmp_path: Path
 ) -> None:
-    module = "tests/python/test_df_shell_units.py"
-    ordinary = [f"tests/python/test_probe_{index}.py" for index in range(9)]
+    ordinary = [
+        "tests/python/test_aaa.py",
+        "tests/python/test_df_aaa.py",
+        "tests/python/test_df_zzz.py",
+        *[f"tests/python/test_probe_{index}.py" for index in range(3)],
+        "tests/python/test_treutler_aaa.py",
+        "tests/python/test_treutler_zzz.py",
+        "tests/python/test_zzz.py",
+    ]
     tracked = presence in {"tracked", "missing"}
     inventory = sorted([*ordinary, *([module] if tracked else [])])
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
@@ -178,8 +192,8 @@ def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
     owners = [
         shard for shard, (_, targets, _) in selections.items() if module in targets
     ]
-    assert owners == (["ecp-forces"] if tracked else [])
-    assert selections["ecp-forces"][0] == "loadfile"
+    assert owners == ([owner] if tracked else [])
+    assert selections[owner][0] == "loadfile"
     for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         assert selections[shard][1] == [
             path for path in inventory[bucket::3] if path != module
@@ -192,12 +206,18 @@ def test_df_shell_units_keep_one_loadfile_owner_and_original_core_slots(
 
 
 @pytest.mark.parametrize("event", ("pull_request", "schedule"))
-def test_df_shell_units_execute_once_with_one_shared_fixture_owner(
-    event: str, tmp_path: Path
+@pytest.mark.parametrize(
+    ("module", "owner"),
+    (
+        ("tests/python/test_df_shell_units.py", "ecp-forces"),
+        ("tests/python/test_treutler_endpoints.py", "posthf"),
+    ),
+)
+def test_measured_module_executes_once_with_one_shared_fixture_owner(
+    event: str, module: str, owner: str, tmp_path: Path
 ) -> None:
     """Qualify the selected scheduler with fast competing files and a slow fixture."""
-    module = "tests/python/test_df_shell_units.py"
-    distribution, targets, arguments = _selection(event, "ecp-forces")
+    distribution, targets, arguments = _selection(event, owner)
     assert module in targets
     assert not any(module in argument for argument in arguments)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
@@ -331,19 +351,18 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_solver.py",
             "test_wb97mv_ecp_hessian.py",
         ),
-        "core-a": ("test_cc_triples_tiles.py",),
+        "core-a": ("test_cc_triples_tiles.py", "test_uccsd_t_lambda.py"),
         "core-b": (
             "test_wb97mv_uks_hessian.py",
             "test_uccsd_response.py",
-            "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
             "test_df_lambda_matrix_audit.py",
             "test_df_lambda_mixed_precision.py",
-            "test_direct_exchange_queue.py",
             "test_df_occupied_triples.py",
         ),
         "core-c": (
-            "test_uccsd_t_lambda.py",
+            "test_df_lambda_core_reuse.py",
+            "test_direct_exchange_queue.py",
             "test_cc_canonical_denominators.py",
             "test_direct_order5_sources.py",
         ),
@@ -391,7 +410,8 @@ def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
         "tests/python/test_wb97mv_ecp_hessian.py": "runtime-heavy",
         "tests/python/test_cc_triples_tiles.py": "core-a",
         "tests/python/test_df_lambda_mixed_precision.py": "core-b",
-        "tests/python/test_direct_exchange_queue.py": "core-b",
+        "tests/python/test_df_lambda_core_reuse.py": "core-c",
+        "tests/python/test_direct_exchange_queue.py": "core-c",
         "tests/python/test_df_occupied_triples.py": "core-b",
     }
     probes = [
@@ -554,7 +574,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_uccsd_t_lambda.py": "core-c",
+        "tests/python/test_uccsd_t_lambda.py": "core-a",
     }
     owners = {
         **parallel,
@@ -618,7 +638,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         priority = {
             "tests/python/test_uccsd_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
-            "tests/python/test_uccsd_t_lambda.py": "core-c",
+            "tests/python/test_uccsd_t_lambda.py": "core-a",
         }
         for shard, (_, _, arguments) in selections.items():
             selected_priority = [
@@ -699,7 +719,7 @@ def test_fresh_frontier_files_keep_distinct_owners_and_ordinary_slots(
     frontiers = {
         "rks": ("tests/python/test_wb97mv_hessian.py", "uccsd-forces"),
         "uks": ("tests/python/test_wb97mv_uks_hessian.py", "core-b"),
-        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-c"),
+        "lambda": ("tests/python/test_uccsd_t_lambda.py", "core-a"),
         "order5": ("tests/python/test_direct_order5_sources.py", "core-c"),
     }
     owners = dict(value for name, value in frontiers.items() if family in {name, "all"})
@@ -1150,18 +1170,19 @@ def _prioritized_posthf_targets(targets: list[str], root: Path) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "event", ("pull_request", "merge_group", "schedule", "workflow_dispatch")
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("shard", SHARDS)
 def test_measured_file_priority_only_changes_routine_posthf_scheduling(
     event: str, shard: str
 ) -> None:
     distribution, selected, extra = _selection(event, shard)
-    prioritized = shard == "posthf" and event in {"pull_request", "merge_group"}
+    prioritized = shard == "posthf" and event in {"pull_request", "push", "merge_group"}
     assert ("--no-loadscope-reorder" in extra) == prioritized
     if prioritized:
         assert distribution == "loadfile"
-        assert selected[:4] == [
+        assert selected[:5] == [
+            "tests/python/test_treutler_endpoints.py",
             "tests/python/test_uccsd_lambda.py",
             "tests/python/test_uccsd_t_owner.py",
             "tests/python/test_uccsd_physical_response.py",
@@ -1235,10 +1256,10 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         encoding="utf-8",
     )
     priority = [
+        "test_treutler_endpoints.py",
         "test_uccsd_lambda.py",
         "test_uccsd_t_owner.py",
         "test_uccsd_physical_response.py",
-        "test_dft_complete_cpu.py",
     ]
     ordinary = [f"test_future_{index}.py" for index in range(4)]
     for name in [*priority, *ordinary]:

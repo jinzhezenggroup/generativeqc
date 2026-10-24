@@ -85,11 +85,11 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
 void launch_prepare_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
     std::int32_t spin_count, std::int32_t nbf, std::uint32_t rebuild_interval,
-    double density_rms_threshold, const double* density_rms, const double* density,
-    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
-    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
-    unsigned long long* full_build_count, unsigned long long* delta_build_count,
-    double* max_abs_delta_density);
+    double density_rms_threshold, double final_density_tolerance, const double* density_rms,
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
+    std::uint8_t* full_build, unsigned long long* full_build_count,
+    unsigned long long* delta_build_count, double* max_abs_delta_density);
 
 /** Combine h+G(ΔD) with the retained full-Fock anchor, then advance the exact anchor. */
 void launch_finalize_incremental_direct_jk_kernel(

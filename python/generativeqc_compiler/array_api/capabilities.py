@@ -12,6 +12,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-selection": ("where",),
     "real-elementwise": (
         "clip",
+        "minimum",
+        "maximum",
         "add",
         "subtract",
         "multiply",
@@ -45,6 +47,10 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     "real-reduction": (
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
     ),
     "shape-transform": (
         "reshape_explicit_indices",
@@ -82,6 +88,8 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 SUPPORTED_FUNCTIONS = frozenset(
     {
         "clip",
+        "minimum",
+        "maximum",
         "where",
         "add",
         "equal",
@@ -110,6 +118,10 @@ SUPPORTED_FUNCTIONS = frozenset(
         "reciprocal",
         "sum",
         "mean",
+        "var",
+        "prod",
+        "max",
+        "min",
         "reshape_explicit_indices",
         "permute_dims",
         "reshape",
@@ -162,6 +174,33 @@ _AD_STATUS: dict[str, str] = {
 
 # Only reviewed keyword constraints are enumerated; empty means not audited.
 _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "var": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-zero",
+        "keepdims": "bool; generic-arrays-only",
+        "correction": "finite-static-int|float; nonempty-reduction; positive-divisor; finite-nonzero-coefficient",
+        "capture": "finite-generic-real-only; centered-two-pass; all-intermediates-finite; static-graph-budget",
+    },
+    "prod": {
+        "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+        "keepdims": "bool; generic-arrays-only",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
+        "capture": "finite-generic-real-only; empty-product-one; static-graph-budget",
+    },
+    **{
+        name: {
+            "axis": "static-int|tuple|None; signed; unique; empty-tuple-identity",
+            "keepdims": "bool; generic-arrays-only",
+            "capture": "finite-generic-real-only; empty-reduction-error; earliest-C-order-tie; static-graph-budget",
+        }
+        for name in ("max", "min")
+    },
+    **{
+        name: {
+            "capture": "finite-generic-real-only; at-least-one-array; first-operand-selected-on-ties",
+            "operands": "broadcast-arrays; float32/float64-promotion; weak-exact-static-scalars",
+        }
+        for name in ("minimum", "maximum")
+    },
     "clip": {
         "min": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
         "max": "None|finite-static-scalar|same-dtype-generic-broadcast-array",
@@ -170,7 +209,7 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     "sum": {
         "axis": "static-int|tuple|None",
         "keepdims": "generic-arrays-only",
-        "dtype": "conversion-unsupported",
+        "dtype": "None|float32|float64; explicit-generic-cast-before-reduction; bounded-target-buffer",
     },
     "mean": {
         "axis": "static-int|tuple|None",
@@ -239,6 +278,25 @@ _OPERATION_FUNCTIONS: dict[str, str] = {
 }
 
 _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "var": {
+        "ad": "centered-polynomial-first-order; rounding-not-classical-derivative",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+    },
+    "sum": {
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; explicit-dtype-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    "prod": {
+        "ad": "polynomial-multiply-first-order; zero-safe; no-selector-opt-in",
+        "dtype_backend": "reference-f32-f64; opt-in-cpu-f64-input-output-only; public-cuda-rejected",
+        "dtype_ad": "canonical-cast-first-order-convention; rounding-not-classical-derivative",
+    },
+    **{
+        name: {
+            "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
+        }
+        for name in ("minimum", "maximum", "min", "max")
+    },
     "clip": {
         "ad": "comparison-selector-opt-in; selected-branch-only; nondifferentiable-at-ties",
     },

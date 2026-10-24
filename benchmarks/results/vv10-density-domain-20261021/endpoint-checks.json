@@ -1,0 +1,237 @@
+{
+  "gates": {
+    "energy_abs_per_atom": 1e-05,
+    "force_max_abs": 0.0001,
+    "force_rms": 3e-05
+  },
+  "results": {
+    "fast-wb97m-v-direct-12.json": {
+      "passed": true,
+      "source_revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 46.04557301849127,
+      "warm_median_seconds": 3.451430305838585,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 2.3817309132330897e-07,
+          "force_max_abs": 4.257201814983347e-05,
+          "force_rms": 1.4262259803598462e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3796840290894275e-07,
+          "force_max_abs": 6.8784204860783404e-06,
+          "force_rms": 3.130245033812238e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.379683981719912e-07,
+          "force_max_abs": 6.878420521161388e-06,
+          "force_rms": 3.130245030354884e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3796840290894275e-07,
+          "force_max_abs": 6.878420530931351e-06,
+          "force_rms": 3.130245028801278e-06,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.998820830020122e-09,
+          "force_max_abs": 2.338095414167185e-06,
+          "force_rms": 1.0054104530748115e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-direct-12.json": {
+      "passed": true,
+      "source_revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 49.34988180920482,
+      "warm_median_seconds": 0.8753664828836918,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 2.3793448159873756e-07,
+          "force_max_abs": 6.1341797794600694e-06,
+          "force_rms": 1.917302477713555e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3793448159873756e-07,
+          "force_max_abs": 6.134179775907356e-06,
+          "force_rms": 1.9173024757094774e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3793448159873756e-07,
+          "force_max_abs": 6.13417978190256e-06,
+          "force_rms": 1.9173024770380617e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 2.3793448159873756e-07,
+          "force_max_abs": 6.13417977368691e-06,
+          "force_rms": 1.9173024746179365e-06,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.998820830020122e-09,
+          "force_max_abs": 2.338095414167185e-06,
+          "force_rms": 1.0054104530748115e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-direct-3.json": {
+      "passed": true,
+      "source_revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 5.164504665881395,
+      "warm_median_seconds": 0.3595135137438774,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 1.009791551117208e-07,
+          "force_max_abs": 2.1747339282729428e-06,
+          "force_rms": 1.2093162371609622e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 1.009791551117208e-07,
+          "force_max_abs": 2.174733925830452e-06,
+          "force_rms": 1.2093162379736675e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 1.009791551117208e-07,
+          "force_max_abs": 2.1747339282729428e-06,
+          "force_rms": 1.2093162371525825e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 1.009791551117208e-07,
+          "force_max_abs": 2.1747339307154334e-06,
+          "force_rms": 1.2093162387419048e-06,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    },
+    "standard-wb97m-v-direct-48.json": {
+      "passed": true,
+      "source_revision": "bb25db89e098aee3a6bd3ae37b570b33aab98e61",
+      "reference_sources": [
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2",
+        "02337e0cf3d94915a352d5056f6d09d27fe353f2"
+      ],
+      "cold_seconds": 87.29022150486708,
+      "warm_median_seconds": 7.0351722203195095,
+      "sample_errors": [
+        {
+          "energy_abs_per_atom": 4.856204517030468e-07,
+          "force_max_abs": 2.2154786540606874e-05,
+          "force_rms": 1.0469244614629682e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.856204517030468e-07,
+          "force_max_abs": 2.2154786523287395e-05,
+          "force_rms": 1.0469244608038901e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.856204517030468e-07,
+          "force_max_abs": 2.215478657588421e-05,
+          "force_rms": 1.0469244618001208e-05,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 4.856204517030468e-07,
+          "force_max_abs": 2.215478653805336e-05,
+          "force_rms": 1.046924461153842e-05,
+          "passed": true
+        }
+      ],
+      "reference_stability_and_cpu_spot": [
+        {
+          "energy_abs_per_atom": 4.056450582841838e-08,
+          "force_max_abs": 4.25790584657193e-06,
+          "force_rms": 1.5998410218883425e-06,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.633919239594737e-09,
+          "force_max_abs": 2.6725602458865794e-07,
+          "force_rms": 1.4622152304324425e-07,
+          "passed": true
+        },
+        {
+          "energy_abs_per_atom": 3.532321102284186e-09,
+          "force_max_abs": 5.510964573574029e-09,
+          "force_rms": 2.84573437120305e-09,
+          "passed": true
+        }
+      ]
+    }
+  }
+}

@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "diis_affine_fixture.hpp"
 #include "solver/diis.hpp"
 #include "solver/diis_coefficients.hpp"
 #include "solver/self_consistent.hpp"
@@ -182,6 +183,7 @@ void verify_shared_diis_coefficient_policy() {
   DiisCoefficientPolicy ks;
   ks.metric_scaling = DiisMetricScaling::MaximumDiagonal;
   ks.failure_retirement_floor = 2;
+  ks.require_affine_constraint = true;
   action = solve_diis_coefficients({1.0, 1.0, 1.0, 1.0}, 2, ks, coefficients);
   require(action == DiisCoefficientAction::RetainCurrent,
           "two-state KS-style singular DIIS unexpectedly retired history");
@@ -189,6 +191,51 @@ void verify_shared_diis_coefficient_policy() {
       solve_diis_coefficients({1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0}, 3, ks, coefficients);
   require(action == DiisCoefficientAction::RetireOldest,
           "KS-style singular DIIS stopped retiring older history");
+
+  // A well-conditioned diagonal metric has independently known inverse-
+  // diagonal weights. The affine guard must preserve this ordinary solve.
+  action = solve_diis_coefficients({1., 0., 0., 0., 4., 0., 0., 0., 16.}, 3, ks, coefficients);
+  require(action == DiisCoefficientAction::Extrapolate &&
+              std::abs(coefficients[0] - 16. / 21.) < 1e-14 &&
+              std::abs(coefficients[1] - 4. / 21.) < 1e-14 &&
+              std::abs(coefficients[2] - 1. / 21.) < 1e-14,
+          "affine guard changed the analytic diagonal-metric solution");
+  for (double scale : {1e-100, 1.0, 1e100}) {
+    std::vector<double> gram(ill_conditioned_diis_gram.begin(), ill_conditioned_diis_gram.end());
+    for (double& value : gram) value *= scale;
+    action = solve_diis_coefficients(gram, 3, ks, coefficients);
+    require(action == DiisCoefficientAction::Extrapolate && coefficients.size() == 3,
+            "stable KS solve unnecessarily discarded the captured live history");
+    long double sum = 0;
+    for (double value : coefficients) sum += value;
+    require(std::abs(sum - 1) < 1e-10L,
+            "KS extrapolation changed a Fock common to the captured history");
+  }
+
+  std::vector<double> poisoned(9, std::numeric_limits<double>::quiet_NaN());
+  for (std::size_t i = 0; i < 3; ++i) poisoned[i * 3 + i] = 1.0;
+  require(solve_diis_coefficients(poisoned, 3, ks, coefficients) ==
+                  DiisCoefficientAction::RetireOldest &&
+              coefficients.empty(),
+          "invalid affine system bypassed chronological retirement");
+  auto floor = ks;
+  floor.failure_retirement_floor = 3;
+  require(solve_diis_coefficients(poisoned, 3, floor, coefficients) ==
+                  DiisCoefficientAction::RetainCurrent &&
+              coefficients.empty(),
+          "invalid affine system bypassed the bounded current-Fock fallback");
+
+  using generativeqc::solver::detail::diis_affine_constraint;
+  const double cancelled[]{0x1p30, -0x1p30, 1.0};
+  const double invalid[]{0.5, 0.500001};
+  const double unresolvable[]{1e100, -1e100, 1.0};
+  const double overflow[]{std::numeric_limits<double>::max(), std::numeric_limits<double>::max()};
+  const double nonfinite[]{std::numeric_limits<double>::quiet_NaN(), 1.0};
+  require(diis_affine_constraint(cancelled, 3), "affine guard became a coefficient-magnitude cap");
+  require(!diis_affine_constraint(invalid, 2) && !diis_affine_constraint(unresolvable, 3) &&
+              !diis_affine_constraint(overflow, 2) && !diis_affine_constraint(nonfinite, 2) &&
+              !diis_affine_constraint(nullptr, 0),
+          "affine guard accepted an invalid or unresolvable constraint");
 }
 
 void verify_method_neutral_diis() {

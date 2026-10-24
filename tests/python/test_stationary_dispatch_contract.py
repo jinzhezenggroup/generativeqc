@@ -206,6 +206,11 @@ constexpr bool stationary_restricted_point_capable=true;
 bool stationary_fp32_point_capable=true, restricted_capable=true;
 bool stationary_restricted_point_selected(bool requested) { return requested && restricted_capable; }
 struct Owner {
+  bool adjusted_partition{};
+  size_t molecular_points{};
+  size_t* atom_offsets{};
+  double* atomic_radii{};
+  int64_t* point_atoms{};
   bool phased_storage{}, becke_primitive{}, becke_normalize_cooperative{}, profile{}, scaled{};
   int becke_primitive_mode{}, becke_threads_per_point=32, geometry_threads=128;
   size_t becke_shared_bytes=256, launches{}, restricted_point_batches{}, restricted_point_count{};
@@ -216,7 +221,7 @@ struct Owner {
 };
 struct PhasedBeckeInput {
   bool normalized_adjoints{}, binary_scaled_products{};
-  const double *points{}, *centers{}; const int64_t* owners{};
+  const double *points{}, *centers{}, *atomic_radii{}; const int64_t* owners{};
   size_t owner_offset{}, points_per_atom{};
   const generativeqc_grid_adjoint::CenterPair* center_pairs{};
   double *partial{}, *seeds{}; int* error{};
@@ -228,23 +233,29 @@ PhasedBeckeInput phased_input(Owner& owner,size_t) {
 int sticky{}, producer_error{}, consumers{}, producers{}, normalizations{};
 bool selected_float{}, selected_cooperative{}, selected_precomputed{}, selected_bound{};
 double* expected_scratch{};
+const double* expected_radii{};
 int cudaPeekAtLastError() { return sticky; }
 void cuda_check(int status) { if(status) throw std::runtime_error("launch failure"); }
 int cudaEventSynchronize(int) { return 0; }
 template<class... Args> void profile_record(Args...) {}
 template<class... Args> void profile_elapsed(Args...) {}
+void stationary_grid_owners(const size_t*,size_t,size_t,size_t,int64_t*) {
+  assert(false);  // This matrix does not bind a molecular-grid descriptor.
+}
 template<class Arithmetic,class... Args> void geometry_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=false;
   selected_precomputed=false;
   if constexpr(std::is_same_v<Arithmetic,double>)
-    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
+    selected_bound=std::get<sizeof...(Args)-2>(std::tuple(args...));
+  assert(std::get<sizeof...(Args)-1>(std::tuple(args...))==expected_radii);
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Precomputed,class Arithmetic,class... Args> void geometry_cooperative_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=true;
   selected_precomputed=Precomputed;
   if constexpr(!Precomputed && std::is_same_v<Arithmetic,double>)
-    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
+    selected_bound=std::get<sizeof...(Args)-2>(std::tuple(args...));
+  assert(std::get<sizeof...(Args)-1>(std::tuple(args...))==expected_radii);
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Bound,class... Args> void geometry_point_kernel(Args... args) {
@@ -252,8 +263,12 @@ template<bool Bound,class... Args> void geometry_point_kernel(Args... args) {
   assert(std::get<10>(std::tuple(args...))==expected_scratch);
   assert(std::get<11>(std::tuple(args...))==seed_storage);
 }
-template<int Phase,bool... Modes> void phased_becke_atom(PhasedBeckeInput) {}
-template<bool... Modes> void phased_becke_pair(PhasedBeckeInput) {}
+template<int Phase,bool... Modes> void phased_becke_atom(PhasedBeckeInput input) {
+  assert(input.atomic_radii==expected_radii);
+}
+template<bool... Modes> void phased_becke_pair(PhasedBeckeInput input) {
+  assert(input.atomic_radii==expected_radii);
+}
 template<bool Scaled> void launch_phased_becke_normalize(PhasedBeckeInput input,bool,cudaStream_t) {
   ++normalizations; assert(Scaled==input.binary_scaled_products);
 }
@@ -261,7 +276,7 @@ template<bool Scaled> void launch_phased_becke_normalize(PhasedBeckeInput input,
 
 DISPATCH_DRIVER = r"""
 int main() {
-  double scratch[32]{}, partial[32]{}, external_value=0;
+  double scratch[32]{}, partial[32]{}, external_value=0, radii[128]{};
   expected_scratch=scratch;
   generativeqc_grid_adjoint::CenterPair pair;
   const generativeqc::dft::GridTaskView view{7,nullptr};
@@ -269,8 +284,10 @@ int main() {
   for(int threads:{1,32}) for(size_t atoms:{size_t(1),size_t(3),size_t(4),size_t(48)})
   for(bool seeded:{false,true}) for(bool lanes_match:{false,true})
   for(bool pairs:{false,true}) for(bool requested:{false,true})
-  for(bool capable:{false,true}) for(bool scaled:{false,true}) {
+  for(bool capable:{false,true}) for(bool scaled:{false,true}) for(bool adjusted:{false,true}) {
     Owner owner; owner.phased_storage=phased; owner.becke_threads_per_point=threads; owner.scaled=scaled;
+    owner.adjusted_partition=adjusted; owner.atomic_radii=radii;
+    expected_radii=adjusted?radii:nullptr;
     restricted_capable=capable; stationary_fp32_point_capable=capable;
     sticky=producer_error=consumers=producers=normalizations=0;
     selected_float=selected_cooperative=selected_precomputed=selected_bound=false;

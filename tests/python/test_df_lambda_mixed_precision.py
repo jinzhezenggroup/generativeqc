@@ -200,3 +200,20 @@ def test_nonfinite_mixed_action_cannot_publish_or_retry_strict(
     )
     assert status != 0 and "nonfinite" in error
     assert all(np.isnan(values).all() for values in result)
+
+
+def test_constrained_memory_refuses_only_optional_mixed_work(probe: typing.Any) -> None:
+    """A budget admitting the scalar owner keeps its exact output after FP32 refusal."""
+    _, _, arrays = case(2, 3, q=5)
+    status, expected, _, strict, error = run(probe, arrays, matrix=False)
+    assert status == 0, error
+    status, actual, values, counts, error = run(
+        probe, arrays, mixed_precision=True, budget=int(strict[2])
+    )
+    assert status == 0, error
+    assert counts[29] == 0 and counts[30] == 1
+    assert counts[36] == counts[38] == 0
+    assert counts[2] <= strict[2]
+    assert max(values[1:]) < 1e-9
+    for candidate, reference in zip(actual, expected, strict=True):
+        np.testing.assert_array_equal(candidate, reference)

@@ -120,6 +120,11 @@ struct ScfOptions {
    * default. It is admitted only when every requested J/K term is Exact.
    * The final physical state still uses ordinary full provider builds. */
   bool incremental_direct_jk{};
+  /** Method-owned request for a guarded automatic cold-only CUDA KS Direct-J/K
+   * path. The actual owner checks numeric/provider/resource admission; public
+   * resource ledgers must retain the ordinary fully inventoried execution.
+   * Explicit incremental_direct_jk requests retain their existing domain. */
+  bool incremental_direct_jk_auto{};
   /** Accepted delta updates before refreshing the full anchor. Zero disables
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};
@@ -274,6 +279,9 @@ struct ScfResult {
   bool initial_density_used{};
   /** CPU physical operator evaluations, counting a joint UHF J/K as one build. */
   std::size_t fock_builds{};
+  /** Independently counted completed CUDA Direct Fock applications. Missing
+   * means this execution did not publish a complete physical census. */
+  std::optional<std::uint64_t> executed_fock_builds;
   /** Exact incremental Direct-J/K execution provenance, when requested. */
   IncrementalDirectJkDiagnostic incremental_direct_jk{};
   /**

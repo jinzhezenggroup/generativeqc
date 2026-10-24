@@ -55,6 +55,7 @@ class _CudaGrid(_CompositeGrid):
             center_motion=vector,
             iterations=self.grid_spec.partition_iterations,
             coincident_tolerance=self.grid_spec.coincident_tolerance,
+            atomic_radii=self.partition_radii,
         )
         selected = (self.execution.cp.arange(len(self.owners)), self.owners)
         _validate_partition_provenance(

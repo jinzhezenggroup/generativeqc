@@ -14,7 +14,9 @@ CAMPAIGN = ROOT / "benchmarks/results/generated-df-values-142"
 def test_lossless_records_keep_stored_and_original_identities() -> None:
     """Authenticate both transport and decoded bytes, not only parsed flags."""
     storage = json.loads((CAMPAIGN / "storage.json").read_text())
-    promotion = json.loads((CAMPAIGN / "promotion.json").read_text())
+    promotion = json.loads(
+        gzip.decompress((CAMPAIGN / "promotion.json.gz").read_bytes())
+    )
     for entry in storage["files"]:
         packed = (ROOT / entry["stored_path"]).read_bytes()
         raw = gzip.decompress(packed)
@@ -23,7 +25,8 @@ def test_lossless_records_keep_stored_and_original_identities() -> None:
         assert len(raw) == entry["original_bytes"]
         assert hashlib.sha256(raw).hexdigest() == entry["original_sha256"]
         name = Path(entry["original_path"]).stem
-        assert entry["original_sha256"] == promotion["input_hashes"][name]
+        if name != "promotion":
+            assert entry["original_sha256"] == promotion["input_hashes"][name]
 
 
 def test_complete_promotion_is_identical_for_plain_and_gzip(tmp_path: Path) -> None:
@@ -38,7 +41,9 @@ def test_complete_promotion_is_identical_for_plain_and_gzip(tmp_path: Path) -> N
         (tmp_path / plain.name).write_bytes(raw)
     packed_result = summarize(CAMPAIGN)
     assert packed_result == summarize(tmp_path)
-    promotion = json.loads((CAMPAIGN / "promotion.json").read_text())
+    promotion = json.loads(
+        gzip.decompress((CAMPAIGN / "promotion.json.gz").read_bytes())
+    )
     assert packed_result["input_hashes"] == promotion["input_hashes"]
     assert packed_result["passed"]
     assert packed_result["isolated_count"] == 162

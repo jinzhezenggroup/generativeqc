@@ -1,7 +1,7 @@
 {
   "current_default": "Generated Rys values only; bounded transformed outputs use compiler-directed four-lane primitive groups across eight source terms per warp.",
   "evidence": [
-    "benchmarks/results/generated-df-values-142/promotion.json",
+    "benchmarks/results/generated-df-values-142/promotion.json.gz",
     "benchmarks/results/generated-df-values-142/README.md",
     "benchmarks/results/cuda-ownership/df/publication.json",
     "docs/developer/df_tuning.md"

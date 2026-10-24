@@ -110,6 +110,11 @@ std::size_t cuda_density_fitting_integral_source_coordinate_count(
   return 0U;
 }
 
+double cuda_density_fitting_integral_source_range_omega(
+    const CudaDensityFittingIntegralSource*) noexcept {
+  return 0.0;
+}
+
 CudaDensityFittingSourceCounters cuda_density_fitting_integral_source_counters(
     const CudaDensityFittingIntegralSource*) noexcept {
   return {};
@@ -307,6 +312,14 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     const std::vector<double>&, const std::vector<std::int32_t>&, const std::vector<double>&,
     unsigned, double, double, std::vector<double>&, std::vector<CudaDensityFittingDeviceScfItem>&,
     std::string& detail, const std::vector<double>&, unsigned) {
+  return unavailable(nullptr, detail);
+}
+
+generativeqc_status run_cuda_density_fitting_rhf_device_scf(
+    CudaDensityFittingJkPlan*, const std::vector<double>&, const std::vector<double>&,
+    const std::vector<double>&, const std::vector<std::int32_t>&, const std::vector<double>&,
+    unsigned, double, double, std::vector<double>&, std::vector<CudaDensityFittingDeviceScfItem>&,
+    std::string& detail, const std::vector<double>&, unsigned, bool) {
   return unavailable(nullptr, detail);
 }
 
