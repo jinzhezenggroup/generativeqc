@@ -160,6 +160,9 @@ python benchmarks/results/direct-phase-moved-20261023/reproduce.py --output .art
 ```
 
 The output must not already exist. This performs no SCI or GPU operation. It
+requires Python assertions: `-O`, `-OO` and active `PYTHONOPTIMIZE` are rejected
+before restoration or module import, since the immutable retained audit uses
+assertions for acceptance gates. Run the public replay entry point above. It
 checks publication hashes, restores every logical-record member with its
 original bytes/SHA-256, restores the full environment manifest, and recomputes
 all selected admission/numerical gates. `selected`, `diagnostics`, `cpu`, `sdk`,

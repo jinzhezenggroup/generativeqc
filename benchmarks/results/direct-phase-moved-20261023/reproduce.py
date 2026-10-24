@@ -11,6 +11,11 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
+# The immutable audit script uses assertions for its acceptance gates. Refuse
+# optimized execution at import as well as at the CLI, before restoring bytes.
+if sys.flags.optimize:
+    raise RuntimeError("replay requires Python assertions; disable optimization")
+
 
 def digest(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
@@ -125,6 +130,7 @@ def main() -> None:
     subprocess.run(
         [
             sys.executable,
+            "-E",  # Keep assertions enabled even if the parent ignored PYTHONOPTIMIZE.
             str(args.output / "audit-selected.py"),
             "--records",
             str(args.output),

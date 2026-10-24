@@ -2,6 +2,9 @@
 
 import copy
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import types
 import unittest
@@ -12,6 +15,79 @@ from unittest import mock
 import numpy as np
 
 from benchmarks import direct_phase_moved as campaign
+
+
+class RetainedReplayTests(unittest.TestCase):
+    def test_replay_child_keeps_assertions_with_ignored_parent_environment(
+        self,
+    ) -> None:
+        replay = (
+            Path(campaign.__file__).resolve().parent
+            / "results/direct-phase-moved-20261023/reproduce.py"
+        )
+        code = f"""
+import runpy
+module = runpy.run_path({str(replay)!r})
+def restore(bundle, output):
+    output.mkdir()
+    (output / 'audit-selected.py').write_text(
+        'import sys\\nif sys.flags.optimize: raise RuntimeError("optimized child")\\n'
+        'print("child assertions enabled")\\n')
+module['main'].__globals__['restore'] = restore
+module['main']()
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-E",
+                    "-c",
+                    code,
+                    "--output",
+                    str(Path(directory) / "out"),
+                ],
+                env=dict(os.environ, PYTHONOPTIMIZE="1"),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("child assertions enabled", result.stdout)
+
+    def test_optimized_replay_rejects_before_restore_or_import(self) -> None:
+        replay = (
+            Path(campaign.__file__).resolve().parent
+            / "results/direct-phase-moved-20261023/reproduce.py"
+        )
+        imported = "import runpy; runpy.run_path(" + repr(str(replay)) + ")"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "restored"
+            for flag, optimize in (("-O", ""), ("-OO", ""), (None, "1")):
+                for mode in ("cli", "import"):
+                    with self.subTest(flag=flag, optimize=optimize, mode=mode):
+                        command = [sys.executable]
+                        if flag:
+                            command.append(flag)
+                        command += (
+                            [str(replay), "--output", str(output)]
+                            if mode == "cli"
+                            else ["-c", imported]
+                        )
+                        environment = dict(os.environ, PYTHONOPTIMIZE=optimize)
+                        result = subprocess.run(
+                            command,
+                            check=False,
+                            env=environment,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                        )
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(
+                            "replay requires Python assertions", result.stderr
+                        )
+                        self.assertFalse(output.exists())
 
 
 class ProtocolTests(unittest.TestCase):
