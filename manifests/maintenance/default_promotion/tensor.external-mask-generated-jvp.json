@@ -1,0 +1,20 @@
+{
+  "id": "tensor.external-mask-generated-jvp",
+  "classification": "retained-opt-in",
+  "controls": [
+    "tensor-ad:linearize.allow_external_mask_where"
+  ],
+  "owner_issues": [
+    2137,
+    2111
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/ad_program.py"
+  ],
+  "rationale": "First-order generated JVP for fixed external Boolean masks on generic finite FP64 arrays remains explicit. All live primal and forward domain checks are retained; only materializing native CPU is qualified. Default Boolean rejection and non-selection generated equations remain unchanged.",
+  "revisit_condition": "Broader dtype, backend, higher-order or public compiled AD admission requires separate source-matched independent qualification and ownership review.",
+  "evidence": [
+    "tests/python/test_tensor_where_jvp_program.py",
+    "docs/developer/tensor_ir.md"
+  ]
+}

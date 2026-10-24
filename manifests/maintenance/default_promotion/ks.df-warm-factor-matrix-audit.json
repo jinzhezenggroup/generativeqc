@@ -1,0 +1,21 @@
+{
+  "id": "ks.df-warm-factor-matrix-audit",
+  "classification": "diagnostic-test-only",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_CUDA_KS_WARM_FACTOR_AUDIT"
+  ],
+  "owner_issues": [
+    2474
+  ],
+  "sources": [
+    "src/dft/cuda_ks.cpp"
+  ],
+  "rationale": "Explicit opt-in adds an independent dense K/full-Fock comparison at the actual first occupied cold or warm build. Its temporary host matrices, transfers, extra contractions and profiler fences are diagnostic work excluded from clean endpoint timing; the audit stays off by default.",
+  "revisit_condition": "Keep numerical matrix validation separate from production replay and clean performance evidence; do not promote the diagnostic overhead as part of the execution policy.",
+  "evidence": [
+    "docs/developer/ks_df_warm_seed.md",
+    "benchmarks/results/ks-df-warm-factor-20261015/publication.json",
+    "tests/python/test_ks_df_warm_factor_benchmark.py",
+    "issue:#2474"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "generated-df-values-142",
+  "owner": "generated-df-values-142",
+  "reason": "Reviewed retained large evidence for Generated DF value promotion (#142). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/generated-df-values-142/README.md",
+  "files": []
+}

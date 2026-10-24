@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "exact-geometry-response-20261014",
+  "owner": "bounded exact-density XC geometry response qualification",
+  "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
+  "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
+      "family": "exact-geometry-response-20261014",
+      "bytes": 206880,
+      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    }
+  ]
+}

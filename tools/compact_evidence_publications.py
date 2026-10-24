@@ -504,21 +504,16 @@ def compact_publication(
     return plan.changes
 
 
-def _review_bytes(
-    changes: list[tuple[str, str, bytes]], originals: dict[str, bytes]
-) -> bytes:
-    _regular(REVIEW, ROOT)
-    review = decode_storage_json(_read(REVIEW))
-    if (
-        not isinstance(review, dict)
-        or review.get("schema") != "generativeqc.legacy-large-evidence-review.v1"
-        or type(review.get("threshold_bytes")) is not int
-        or review["threshold_bytes"] <= 0
-        or not isinstance(review.get("files"), list)
-    ):
-        raise ValueError("unsupported legacy review metadata")
+def _updated_review_rows(
+    existing: list[dict],
+    changes: list[tuple[str, str, bytes]],
+    originals: dict[str, bytes],
+    threshold: int,
+) -> list[dict]:
+    if type(threshold) is not int or threshold <= 0:
+        raise ValueError("invalid legacy review threshold")
     rows = {}
-    for row in review["files"]:
+    for row in existing:
         if not isinstance(row, dict):
             raise TypeError("invalid legacy review row")
         name = safe_relative(row.get("path"))
@@ -532,15 +527,87 @@ def _review_bytes(
             or row.get("bytes") != len(originals[old])
         ):
             raise ValueError(f"stale legacy review identity: {old}")
-        if len(data) >= review["threshold_bytes"]:
+        if len(data) >= threshold:
             if row is None:
                 raise ValueError(
                     f"missing legacy review row for compressed evidence: {old}"
                 )
             row.update(path=new, bytes=len(data), sha256=digest(data))
             rows[new] = row
-    review["files"] = sorted(rows.values(), key=lambda row: row["path"])
+    return sorted(rows.values(), key=lambda row: row["path"])
+
+
+def _review_bytes(
+    changes: list[tuple[str, str, bytes]], originals: dict[str, bytes]
+) -> bytes:
+    """Preserve v1 fixture and historical compaction compatibility."""
+    _regular(REVIEW, ROOT)
+    review = decode_storage_json(_read(REVIEW))
+    if (
+        not isinstance(review, dict)
+        or review.get("schema") != "generativeqc.legacy-large-evidence-review.v1"
+        or not isinstance(review.get("files"), list)
+    ):
+        raise ValueError("unsupported legacy review metadata")
+    review["files"] = _updated_review_rows(
+        review["files"], changes, originals, review.get("threshold_bytes")
+    )
     return json_bytes(review)
+
+
+def _review_updates(
+    changes: list[tuple[str, str, bytes]], originals: dict[str, bytes]
+) -> dict[str, bytes]:
+    """Update only the owning family shard, never a shared mutable inventory."""
+    _regular(REVIEW, ROOT)
+    review_name = REVIEW.relative_to(ROOT).as_posix()
+    originals[review_name] = _read(REVIEW)
+    review = decode_storage_json(originals[review_name])
+    if not isinstance(review, dict):
+        raise TypeError("unsupported legacy review metadata")
+    if review.get("schema") == "generativeqc.legacy-large-evidence-review.v1":
+        return {review_name: _review_bytes(changes, originals)}
+    if review.get("schema") != "generativeqc.legacy-large-evidence-index.v2":
+        raise ValueError("unsupported legacy review index")
+    directory = review.get("directory")
+    if (
+        not isinstance(directory, str)
+        or not directory.startswith("benchmarks/")
+        or Path(directory).is_absolute()
+        or ".." in Path(directory).parts
+    ):
+        raise ValueError("invalid legacy review shard directory")
+    by_family: dict[str, list[tuple[str, str, bytes]]] = {}
+    for old, new, data in changes:
+        if not old.startswith("benchmarks/results/") or not new.startswith(
+            "benchmarks/results/"
+        ):
+            raise ValueError("review update outside benchmark results")
+        old_family = old.split("/")[2]
+        new_family = new.split("/")[2]
+        if old_family != new_family:
+            raise ValueError("compaction cannot transfer evidence between families")
+        by_family.setdefault(old_family, []).append((old, new, data))
+    updates: dict[str, bytes] = {}
+    for family, family_changes in sorted(by_family.items()):
+        name = f"{directory}/{family}.json"
+        shard_path = ROOT / name
+        _regular(shard_path, ROOT)
+        original = _read(shard_path)
+        originals[name] = original
+        shard = decode_storage_json(original)
+        if (
+            not isinstance(shard, dict)
+            or shard.get("schema") != "generativeqc.legacy-large-evidence-family.v1"
+            or shard.get("family") != family
+            or not isinstance(shard.get("files"), list)
+        ):
+            raise ValueError(f"invalid legacy review family shard: {name}")
+        shard["files"] = _updated_review_rows(
+            shard["files"], family_changes, originals, review.get("threshold_bytes")
+        )
+        updates[name] = json_bytes(shard)
+    return updates
 
 
 def _manifest_bytes(plan: Plan) -> bytes:
@@ -706,10 +773,9 @@ def main(argv: list[str] | None = None) -> None:
             f"compressed evidence publications: {len(plans)} eligible manifests, up to date"
         )
         return
-    review_name = REVIEW.relative_to(ROOT).as_posix()
-    originals[review_name] = _read(REVIEW)
-    budget.add(len(originals[review_name]), len(originals[review_name]))
-    next_review = _review_bytes(changes, originals)
+    review_updates = _review_updates(changes, originals)
+    for name in sorted(review_updates):
+        budget.add(len(originals[name]), len(originals[name]))
     # Hash-pinned exceptional/custom consumers require their separate storage
     # adapter. Do not silently change that policy or claim they were migrated.
     policy_path = ROOT / "benchmarks/evidence-policy.json"
@@ -739,8 +805,9 @@ def main(argv: list[str] | None = None) -> None:
         if plan.changes:
             name = plan.manifest_path.relative_to(ROOT).as_posix()
             all_changes.append((name, name, _manifest_bytes(plan)))
-    if next_review != originals[review_name]:
-        all_changes.append((review_name, review_name, next_review))
+    for name, next_review in sorted(review_updates.items()):
+        if next_review != originals[name]:
+            all_changes.append((name, name, next_review))
     if any(old in policy.get("exceptions", {}) for old, _new, _raw in all_changes):
         raise ValueError(
             "hash-pinned retention exception needs explicit storage migration"

@@ -1,0 +1,22 @@
+{
+  "id": "tensor.shared-streamed-reductions",
+  "classification": "needs-qualification",
+  "controls": [
+    "tensor-schedule:shared_streamed_reductions"
+  ],
+  "owner_issues": [
+    783
+  ],
+  "sources": [
+    "python/generativeqc_compiler/tensor/cuda_plan.py"
+  ],
+  "rationale": "Shared producer reuse remains explicitly selected and defaults off. Coordinate, precision, independence, readiness, storage and bounded expansion/resource proofs admit only legal groups; other groups retain unfused execution. Source-bound H200 numerical/replay/alias/derivative evidence covers the retained synthetic (T) domain, but the 8x16 full lifecycle is about 9.6% slower than default. Prior instrumented work counters are separate artifacts, and full SCF/CCSD, molecular forces and parent production acceptance remain unqualified.",
+  "revisit_condition": "Reconsider promotion only after independent source/device/workload-bound numerical and resource qualification plus significant interleaved complete production endpoint evidence. Preserve unfused fallback, exact execution-partition identity and the default-off policy on every unsupported or stale context; lower launch/work counts alone are insufficient.",
+  "evidence": [
+    "issue:#783",
+    "pr:#2408",
+    "docs/developer/tensor_cuda.md",
+    "benchmarks/results/shared-streamed-reductions-20261013/README.md",
+    ".agents/notes/implemented/performance/2026-10-13-shared-streamed-reduction-lowering.md"
+  ]
+}

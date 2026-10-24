@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "vv10-wide-pair-20261014",
+  "owner": "experimental large-domain VV10 pair schedule",
+  "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
+  "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
+      "family": "vv10-wide-pair-20261014",
+      "bytes": 183856,
+      "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
+    }
+  ]
+}

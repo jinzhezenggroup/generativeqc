@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "pbe0-restricted-point-default-20261010",
+  "owner": "producer-bound restricted PBE0 complete default-route qualification",
+  "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
+  "review_document": "benchmarks/results/pbe0-restricted-point-default-20261010/README.md",
+  "files": []
+}

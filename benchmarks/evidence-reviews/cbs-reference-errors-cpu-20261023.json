@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cbs-reference-errors-cpu-20261023",
+  "owner": "issue2681 bounded frozen-source native CPU reference-error slice",
+  "reason": "Complete independent H2/water records retain all full-precision native endpoint returns, original progress/logs, modes, source/library/build provenance and failed capacity preflights. All original raw bytes remain recoverable; no historical rows, thresholds, scientific gates, per-file or review budgets are changed.",
+  "review_document": "benchmarks/results/cbs-reference-errors-cpu-20261023/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 168804,
+      "sha256": "8ddf5dcbb642f7a298dfc92457b4b1db4a3c18b975c69e73c79dfd4a69f85d15",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
+    },
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 263412,
+      "sha256": "8cd40f90369a130b13e229f1a6ec444ee6164e015dd586875ced9f202999339e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
+    }
+  ]
+}

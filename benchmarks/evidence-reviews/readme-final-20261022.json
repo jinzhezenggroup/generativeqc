@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "readme-final-20261022",
+  "owner": "README complete default-grid E/F refresh after DF and cold-SCF repairs",
+  "reason": "Retain all 192 source-matched populations and 768 complete E/F calls, unchanged independent oracle receipts, executed controls and Fast solve work, all 18 accuracy failures, final geometry tests and sanitizer provenance. Superseded timing payloads have verified published-Git recovery; duplicate older oracle inputs remain in the successor tree. No numerical waiver, external archive or increased budget.",
+  "review_document": "benchmarks/results/readme-final-20261022/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/readme-final-20261022/fast.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 229144,
+      "sha256": "cb7f8aae0a10ff4c9086c85211b1a37484400f12a82ba809749b04bba602e220",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/gpu4pyscf.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 182196,
+      "sha256": "a425188614661fe2205118f95624ce69a7ebb3e8f5c6b37d1c47827944dbb2f7",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    },
+    {
+      "path": "benchmarks/results/readme-final-20261022/standard.json.xz",
+      "family": "readme-final-20261022",
+      "bytes": 212484,
+      "sha256": "4c35332c306bc2ea410e543da8e49da703c02cb852eb0846a99448b0cd451e77",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete current-source endpoint timings, E/F arrays, actual controls and semantic work, retaining every accuracy failure"
+    }
+  ]
+}

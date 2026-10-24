@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ecp-policy-171",
+  "owner": "ecp-policy-171",
+  "reason": "Reviewed retained large evidence for ECP generated admission policy qualification. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/ecp-policy-171/README.md",
+  "files": []
+}

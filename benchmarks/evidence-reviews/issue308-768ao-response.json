@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue308-768ao-response",
+  "owner": "issue308-768ao-response",
+  "reason": "Reviewed retained large evidence for Fix the 768-AO response scaling cliff. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue308-768ao-response/README.md",
+  "files": []
+}

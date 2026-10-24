@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue394-deferred",
+  "owner": "issue394-deferred",
+  "reason": "Reviewed retained large evidence for Deferred SSS Rys prototype. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue394-deferred/README.md",
+  "files": []
+}

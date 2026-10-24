@@ -1,0 +1,23 @@
+{
+  "id": "df.value-candidates",
+  "classification": "negative-evidence",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_VALUE_RAW_MAPPING",
+    "hf-runtime:GENERATIVEQC_DF_VALUE_MATH"
+  ],
+  "owner_issues": [
+    405,
+    409
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py"
+  ],
+  "rationale": "Alternative generated DF value scalar math and raw primitive-lane candidates remain explicit after retained cold complete-endpoint regressions. The separate prepared-Hermite entry covers automatic packed-source reuse; it does not promote these alternatives.",
+  "revisit_condition": "Reopen only with new complete cold/warm/changed-geometry evidence that beats the current route without changing the scientific model or force gates.",
+  "evidence": [
+    "issue:#405",
+    "issue:#409",
+    "pr:#410",
+    "docs:docs/developer/df_tuning.md"
+  ]
+}

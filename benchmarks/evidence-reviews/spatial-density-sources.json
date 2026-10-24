@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "spatial-density-sources",
+  "owner": "spatial-density-sources",
+  "reason": "Reviewed retained large evidence for Prepared spatial density sources (#235 C1 / #299). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/spatial-density-sources/README.md",
+  "files": []
+}

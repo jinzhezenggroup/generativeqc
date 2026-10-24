@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "weighted-eri-144",
+  "owner": "weighted-eri-144",
+  "reason": "Reviewed retained large evidence for Weighted ERI derivative gates (#144). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/weighted-eri-144/README.md",
+  "files": []
+}

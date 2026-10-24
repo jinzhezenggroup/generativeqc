@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue377-379-df",
+  "owner": "issue377-379-df",
+  "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue377-379-df/README.md",
+  "files": [
+    {
+      "bytes": 944957,
+      "classification": "test-reference-input",
+      "family": "issue377-379-df",
+      "path": "benchmarks/results/issue377-379-df/inputs/768-occupied-coefficients.npz",
+      "role": "reference-input",
+      "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
+    }
+  ]
+}

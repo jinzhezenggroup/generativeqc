@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue206-device-response",
+  "owner": "issue206-device-response",
+  "reason": "Reviewed retained large evidence for Device response weights for retained DF values (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+  "review_document": "benchmarks/results/issue206-device-response/README.md",
+  "files": []
+}
