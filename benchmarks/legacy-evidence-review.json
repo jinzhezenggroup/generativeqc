@@ -12,7 +12,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue308-device-diis": {
@@ -61,7 +61,7 @@
       "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -152,7 +152,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "df-md-charge-splits-20261023": {
@@ -366,6 +366,11 @@
       "owner": "SCF/DFT convergence and complete-endpoint diagnosis",
       "reason": "Retain all 76 source-bound cold/warm populations, independent force references, four native-image identities and three rejected solver patches. Includes both guarded Fast force failures and three fresh alternating confirmation rounds. Full transient logs stay in ignored task storage; no numerical gate or storage budget changes.",
       "review_document": "benchmarks/results/scf-convergence-probes-20261024/README.md"
+    },
+    "xc-bounded-cross-20261024": {
+      "owner": "bounded FP64 XC cross-product overflow proof",
+      "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
+      "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
     },
     "xc-spatial-bisection-20261023": {
       "owner": "Explicit spatial bisection complete energy and force endpoints",
@@ -829,6 +834,22 @@
       "role": "Complete solver trajectories, independent force checks, rejected attempts, source reconstruction and confirmation samples",
       "bytes": 472836,
       "sha256": "28e06351935f9b09d39ad637f0589b95c28becd8a8fec6ebd9393d7ee3008dbb"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-and-independent-moved-references",
+      "bytes": 534772,
+      "sha256": "97f18093e34c5559e7e47a16e83a371a581f421d2c44431dd0fd796f3dbb421f"
+    },
+    {
+      "path": "benchmarks/results/xc-bounded-cross-20261024/provenance.json.xz",
+      "family": "xc-bounded-cross-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-build-test-and-execution-provenance",
+      "bytes": 597596,
+      "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
       "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",

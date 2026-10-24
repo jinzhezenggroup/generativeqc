@@ -315,25 +315,27 @@ void close(double value,double expected) {
 _NUMERICS = r"""
 using namespace generativeqc::dft::cuda_xc_detail;
 void check_cross_fma_range_fallback() {
-  constexpr I active=16,count=33,panel=active*count;
+  constexpr I active=16,count=49,panel=active*count;
   // Exercise both sides of a shared-panel boundary and the partial last
   // panel. Cancellation must recover the finite ordered sum even when an
   // earlier panel supplied the accumulator that triggers the overflow.
   for (I point : {0,14,15,16,30,31})
+    for (I distance : {I{1}, I{33}}) {
+    if (point + distance >= count) continue;
   for (int sign : {-1,1}) for (bool swapped : {false,true}) {
     const double large=sign*0x1.8p1023,leg=sign*0x1p1022;
     std::vector<double> ao(4*panel),coefficients(4*count),weights(count,1.0),
         work(panel),potential(active*active);
-    const I first=point*active,second=first+active;
+    const I first=point*active,second=first+distance*active;
     ao[first]=1.0;
     ao[panel+first+1]=1.0;
     coefficients[count+point]=large;
     ao[second]=ao[second+1]=1.0;
     ao[panel+second]=swapped ? 1.0 : -1.0;
     ao[panel+second+1]=swapped ? -1.0 : 1.0;
-    coefficients[count+point+1]=leg;
+    coefficients[count+point+distance]=leg;
     int error=0;
-    launch({2,1,1},{128,1,1},[&] {
+    launch({7,1,1},{128,1,1},[&] {
       compact_potential_panels_body(ao.data(),coefficients.data(),weights.data(),
           active,count,1,4,1,work.data(),&error);
     });
@@ -352,6 +354,7 @@ void check_cross_fma_range_fallback() {
     assert(potential[0]==(swapped ? 2*leg : -2*leg));
     assert(potential[active+1]==(swapped ? -2*leg : 2*leg));
     for (double value : potential) assert(std::isfinite(value));
+  }
   }
 }
 
