@@ -10,6 +10,11 @@
       "reason": "Full source/SDK and scientific environment manifests retain exact dependency bytes, Git modes/OIDs, compiler commands and original identities for the bounded dual-engine cohort; no executable SDK binaries, policy change or parent-scope promotion.",
       "review_document": "benchmarks/results/direct-phase-moved-20261023/README.md"
     },
+    "fitted-range-cold-20261024": {
+      "owner": "bounded fitted-primary exact range cold endpoint qualification",
+      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
+      "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md"
+    },
     "issue377-379-df": {
       "owner": "issue377-379-df",
       "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -372,10 +377,10 @@
       "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
       "review_document": "benchmarks/results/xc-bounded-cross-20261024/README.md"
     },
-    "fitted-range-cold-20261024": {
-      "owner": "bounded fitted-primary exact range cold endpoint qualification",
-      "reason": "Lossless original receipts retain every pilot, five alternating GPU4 pairs, moved work tree, failed larger endpoint and independently qualified capacity-fix bridge separately; exact source/binary provenance and independent references remain reconstructible without changing storage caps. The separate 66-call current-parent bridge retains its legacy-control mismatch explicitly and does not claim default performance.",
-      "review_document": "benchmarks/results/fitted-range-cold-20261024/README.md"
+    "pbe0-ao-batch-capacity-20261024": {
+      "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
+      "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
+      "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
     }
   },
   "files": [
@@ -402,6 +407,22 @@
       "role": "source-sdk-build-provenance",
       "bytes": 863856,
       "sha256": "09b6d6277fa2a5d60f5a8775ef425dd81cf8670a5573ce3a11954f713fca39eb"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
+      "family": "fitted-range-cold-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
+      "bytes": 587736,
+      "sha256": "46b5560fe1a50cc40c50f4d45788ffe19475a6f747387ae439333bb03598067b"
+    },
+    {
+      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
+      "family": "fitted-range-cold-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "current-parent-complete-observables-and-source-build-test-receipts",
+      "bytes": 717272,
+      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e"
     },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
@@ -852,20 +873,12 @@
       "sha256": "8d7d5d6f97d4291f924a62e805448dee854835d50e546b8f6ced839345cf1121"
     },
     {
-      "path": "benchmarks/results/fitted-range-cold-20261024/provenance.json.xz",
-      "family": "fitted-range-cold-20261024",
+      "path": "benchmarks/results/pbe0-ao-batch-capacity-20261024/receipts.json.xz",
+      "family": "pbe0-ao-batch-capacity-20261024",
       "classification": "required-compact-accepted-evidence",
-      "role": "source-reconstruction-work-and-validation-receipts-including-larger-failure",
-      "bytes": 587736,
-      "sha256": "46b5560fe1a50cc40c50f4d45788ffe19475a6f747387ae439333bb03598067b"
-    },
-    {
-      "path": "benchmarks/results/fitted-range-cold-20261024/integration.json.xz",
-      "family": "fitted-range-cold-20261024",
-      "classification": "required-compact-accepted-evidence",
-      "role": "current-parent-complete-observables-and-source-build-test-receipts",
-      "bytes": 717272,
-      "sha256": "ab0d814cb3d118e1116c8b5ed5e49d3979eaefb0a59390070db40061d164703e"
+      "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
+      "bytes": 865196,
+      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

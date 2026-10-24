@@ -1949,8 +1949,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         const auto point_batch_tiles = point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 32);
         if (point_batch_tiles > 1) {
           constexpr std::size_t incumbent_point_batch_budget = 32 * 1024 * 1024;
+          // GGA keeps four AO jets even though its density product needs only
+          // one. Charge the optional capacity by the larger live panel width
+          // so AO storage does not collapse otherwise eligible point batches.
+          // Explicit caps and the bounded allocation retry below stay exact.
           const auto automatic_point_batch_budget =
-              product(incumbent_point_batch_budget, xc_layout.work_jets);
+              product(incumbent_point_batch_budget, std::max(xc_layout.jets, xc_layout.work_jets));
           const auto point_batch_budget =
               point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", automatic_point_batch_budget);
           const bool explicit_point_batch_budget =
@@ -2916,6 +2920,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::TraceOperation trace("cuda_ks_xc_shared", stream, {1, n, 0, false, false});
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
+      // Report retained capacity separately from semantic AO work. These
+      // host-side plan facts add no device counter, launch or synchronization.
+      const auto& point_batch = xc->point_batch_plan();
+      runtime::cuda_trace::trace_counter("xc_point_batch_tiles", point_batch.tiles);
+      runtime::cuda_trace::trace_counter("xc_point_batch_bytes", point_batch.device_bytes);
+      runtime::cuda_trace::trace_counter("xc_point_ao_visits", prepared_ao_work.point_ao_visits);
+      runtime::cuda_trace::trace_counter("xc_point_ao_square_sum",
+                                         prepared_ao_work.point_ao_square_sum);
       CudaXcOccupiedDensity occupied_frame;
       if (occupied_xc_requested && occupied_xc_frame_ready && !device_chunk_mode &&
           !device_nonlocal && !precision_schedule.any_lower_precision()) {
