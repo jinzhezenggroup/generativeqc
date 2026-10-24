@@ -34,6 +34,10 @@ def require(condition: object, context: object) -> None:
 
 def describe(values: list[float]) -> dict:
     """Keep every sample; MAD defines a noise floor, not a confidence interval."""
+    require(
+        values and all(np.isfinite(v) and v > 0 for v in values),
+        "invalid complete-endpoint timing",
+    )
     median = statistics.median(values)
     return {
         "values": values,
@@ -66,6 +70,244 @@ def comparison(arms: dict) -> dict:
             else {}
         ),
     }
+
+
+def check_confirmation(
+    records: dict, libraries: dict, oracles: dict, reuse: dict
+) -> dict:
+    """Keep the prespecified five-pair confirmation separate from three rounds."""
+    expected = {
+        f"r{r}-{arm}-pbe0.json" for r in range(5) for arm in ("master", "candidate")
+    }
+    require(set(records) == expected, "incomplete confirmation population")
+    qualification = {}
+    for name, record in records.items():
+        require(record["status"] == "complete", name)
+        require([s["phase"] for s in record["samples"]] == ["cold", "warm"], name)
+        arm = "candidate" if "-candidate-" in name else "master"
+        require(record["source_revision"] == libraries[arm]["revision"], name)
+        for key, stored in (
+            ("library_sha256", "sha256"),
+            ("source_identity", "source_identity"),
+        ):
+            require(record["native_build"][key] == libraries[arm][stored], (name, key))
+        result = qualify([record], oracles, reference_reuse=reuse)[0]
+        require(result["status"] == "qualified", (name, result))
+        qualification[name] = result
+    for r in range(5):
+        left, right = (
+            records[f"r{r}-{arm}-pbe0.json"] for arm in ("master", "candidate")
+        )
+        for key in ("geometry_bohr", "orbital_basis", "protocol", "thread_controls"):
+            require(left[key] == right[key], (r, key))
+        for ls, rs in zip(left["samples"], right["samples"], strict=True):
+            for key in ("settings", "iterations", "fock_builds"):
+                require(ls[key] == rs[key], (r, key))
+            # Discovery wall time is an observation, not a semantic work count.
+            lw, rw = (
+                s["force_work"]["resident_ao_selection"]["work"] for s in (ls, rs)
+            )
+            require(lw.keys() == rw.keys(), (r, "missing force work"))
+            for key in lw:
+                if key != "discovery_seconds":
+                    require(lw[key] == rw[key], (r, "changed force work", key))
+    timing = {}
+    for i, phase in enumerate(("cold", "warm")):
+        timing[phase] = comparison(
+            {
+                arm: describe(
+                    [
+                        records[f"r{r}-{arm}-pbe0.json"]["samples"][i]["seconds"]
+                        for r in range(5)
+                    ]
+                )
+                for arm in ("master", "candidate")
+            }
+        )
+    return {"qualification": qualification, "timing": timing, "qualified_calls": 20}
+
+
+def check_integration(data: dict, oracles: dict, reuse: dict, files: dict) -> dict:
+    """Qualify the later current-master composition without pooling cohorts."""
+    records = data["records"]
+    expected = {
+        f"r{r}-{arm}-{method}.json"
+        for r in range(3)
+        for arm in ("master", "candidate", "gpu4pyscf")
+        for method in ("pbe0", "pbe")
+    }
+    require(set(records) == expected, "incomplete current-master cohort")
+    inventory = data["source_attestation"]["inventory"]
+    for arm in ("master", "candidate"):
+        inputs = json.loads(files[f"integration-{arm}-inputs.json"])
+        digest = hashlib.sha256(
+            "".join(f"{p}:{inputs['files'][p]}\n" for p in inventory).encode()
+        ).hexdigest()
+        require(
+            digest
+            == data["source_attestation"]["expected"][arm]
+            == data["libraries"][arm]["source_identity"],
+            (arm, "binary does not match the measured source inventory"),
+        )
+    qualification = {}
+    for name, record in records.items():
+        require(record["status"] == "complete", name)
+        require([s["phase"] for s in record["samples"]] == ["cold", "warm"], name)
+        result = qualify([record], oracles, reference_reuse=reuse)[0]
+        require(result["status"] == "qualified", (name, result))
+        qualification[name] = result
+        if record["arm"] != "gpu4pyscf":
+            arm = "candidate" if "-candidate-" in name else "master"
+            require(
+                record["source_revision"] == data["libraries"][arm]["revision"], name
+            )
+            for key, stored in (
+                ("library_sha256", "sha256"),
+                ("source_identity", "source_identity"),
+            ):
+                require(
+                    record["native_build"][key] == data["libraries"][arm][stored],
+                    (name, key),
+                )
+        for sample in record["samples"]:
+            work = sample.get("force_work", {})
+            for kind, field in (
+                ("device", "additional_device_peak_bound"),
+                ("host", "additional_host_numeric_bound"),
+            ):
+                cap = work.get(f"additional_{kind}_budget")
+                if field in work and cap is not None:
+                    require(work[field] <= cap, (name, field))
+    timing = {}
+    for method in ("pbe0", "pbe"):
+        timing[method] = {}
+        for phase_index, phase in enumerate(("cold", "warm")):
+            arms = {}
+            for arm in ("master", "candidate", "gpu4pyscf"):
+                samples = [
+                    records[f"r{r}-{arm}-{method}.json"]["samples"][phase_index]
+                    for r in range(3)
+                ]
+                arms[arm] = {
+                    **describe([s["seconds"] for s in samples]),
+                    "iterations": [s["iterations"] for s in samples],
+                    "fock_builds": [s.get("fock_builds") for s in samples],
+                }
+            timing[method][phase] = comparison(arms)
+        for r in range(3):
+            left, right = (
+                records[f"r{r}-{arm}-{method}.json"] for arm in ("master", "candidate")
+            )
+            for key in (
+                "geometry_bohr",
+                "method",
+                "mode",
+                "orbital_basis",
+                "basis_representation",
+                "charge",
+                "spin",
+                "thread_controls",
+                "runner_sha256",
+                "protocol",
+            ):
+                require(left[key] == right[key], (method, r, key))
+            for ls, rs in zip(left["samples"], right["samples"], strict=True):
+                for key in ("settings", "iterations", "fock_builds"):
+                    require(ls[key] == rs[key], (method, r, key))
+                lw, rw = (
+                    s["force_work"]["resident_ao_selection"]["work"] for s in (ls, rs)
+                )
+                for key in (
+                    "discovery_ao_jet_values",
+                    "point_ao_visits",
+                    "point_ao_square_sum",
+                    "tile_count",
+                    "discoveries",
+                    "retained_map_bytes",
+                    "dense_budget_tiles",
+                ):
+                    require(lw[key] == rw[key], (method, r, key))
+    require(timing["pbe"]["cold"]["qualified_gain"], "current PBE cold gain floor")
+    moved = check_moved(data["moved"], data["libraries"]["candidate"]["sha256"])
+    # A timestamp-stale baseline invalidates the entire earlier composition
+    # comparison. Retain its numerical returns and the interrupted empty arm;
+    # independent scientific gates cannot repair incorrect source provenance.
+    quarantined = data["quarantined_records"]
+    expected_failed = {
+        f"r0-{arm}-{method}.json"
+        for arm in ("master", "candidate", "gpu4pyscf")
+        for method in ("pbe0", "pbe")
+    } | {"r1-candidate-pbe0.json", "r1-gpu4pyscf-pbe0.json"}
+    require(set(quarantined) == expected_failed, "missing quarantined population")
+    quarantined_numerics = {}
+    for name, record in quarantined.items():
+        if name == "r1-gpu4pyscf-pbe0.json":
+            require(record["status"] == "running" and record["samples"] == [], name)
+            continue
+        require(record["status"] == "complete", name)
+        result = qualify([record], oracles, reference_reuse=reuse)[0]
+        require(result["status"] == "qualified", (name, result))
+        quarantined_numerics[name] = result
+        if "-master-" in name:
+            require(
+                record["native_build"]["source_identity"]
+                != data["libraries"]["master"]["source_identity"],
+                "lost stale-baseline evidence",
+            )
+    return {
+        "qualification": qualification,
+        "timing": timing,
+        "moved": moved,
+        "confirmation": check_confirmation(
+            data["confirmation"], data["libraries"], oracles, reuse
+        ),
+        "qualified_static_calls": 36,
+        "qualified_moved_calls": 3,
+        "quarantined_numerics": quarantined_numerics,
+        "quarantined_provenance_accepted": False,
+    }
+
+
+def check_moved(moved: dict, binary: str) -> list[dict]:
+    """Recompute every tighter moved-grid E/F gate from independent vectors."""
+    require(moved["status"] == "complete", "moved endpoint incomplete")
+    require(moved["native_build"]["library_sha256"] == binary, "moved binary mismatch")
+    require(
+        [r["phase"] for r in moved["samples"]] == ["cold", "warm", "moved"],
+        "missing moved population",
+    )
+    require(
+        [r["geometry"] for r in moved["samples"]] == ["original", "original", "moved"],
+        "moved sample geometry mismatch",
+    )
+    require(
+        moved["gates"]
+        == {"energy_per_atom": 2.5e-6, "force_max": 2.5e-5, "force_rms": 7.5e-6},
+        "changed moved gates",
+    )
+    results = []
+    for row in moved["samples"]:
+        oracle = moved["references"]["moved" if row["phase"] == "moved" else "original"]
+        forces, reference_forces = (
+            np.asarray(row["forces"]),
+            np.asarray(oracle["forces"]),
+        )
+        require(
+            forces.shape == reference_forces.shape == (96, 3),
+            "invalid moved force shape",
+        )
+        delta = forces - reference_forces
+        errors = {
+            "energy_per_atom": abs(row["energy"] - oracle["energy"]) / 96,
+            "force_max": float(np.max(np.abs(delta))),
+            "force_rms": float(np.sqrt(np.mean(delta**2))),
+        }
+        require(
+            all(value <= moved["gates"][key] for key, value in errors.items()),
+            (row["phase"], errors),
+        )
+        results.append({"phase": row["phase"], "errors": errors})
+    return results
 
 
 def reproduce(data: dict) -> dict:
@@ -231,14 +473,10 @@ def reproduce(data: dict) -> dict:
             require(arms["master"][key] == arms["candidate"][key], (case, key))
         held_out[case] = {}
         for phase in ("cold", "warm"):
-            rows = {
-                arm: sample(f"holdouts/{arm}-{case}.json", phase) for arm in arms
-            }
+            rows = {arm: sample(f"holdouts/{arm}-{case}.json", phase) for arm in arms}
             for key in ("settings", "iterations", "fock_builds"):
                 require(rows["master"][key] == rows["candidate"][key], (case, key))
-            held_out[case][phase] = {
-                arm: row["seconds"] for arm, row in rows.items()
-            }
+            held_out[case][phase] = {arm: row["seconds"] for arm, row in rows.items()}
     for method in ("pbe0", "pbe"):
         require(timing[method]["cold"]["qualified_gain"], (method, "cold gain floor"))
     pilot = {}
@@ -285,50 +523,13 @@ def reproduce(data: dict) -> dict:
         "capacity changed semantic AO work",
     )
 
-    moved = data["moved"]
-    require(moved["status"] == "complete", "moved endpoint incomplete")
-    require(
-        moved["native_build"]["library_sha256"]
-        == data["libraries"]["candidate"]["sha256"],
-        "moved binary mismatch",
+    moved_errors = check_moved(data["moved"], data["libraries"]["candidate"]["sha256"])
+    integration = check_integration(
+        data["integration"], oracles, reuse, data["retained_files"]
     )
-    require(
-        [r["phase"] for r in moved["samples"]] == ["cold", "warm", "moved"],
-        "missing moved population",
-    )
-    require(
-        [r["geometry"] for r in moved["samples"]] == ["original", "original", "moved"],
-        "moved sample geometry mismatch",
-    )
-    require(
-        moved["gates"]
-        == {"energy_per_atom": 2.5e-6, "force_max": 2.5e-5, "force_rms": 7.5e-6},
-        "changed moved gates",
-    )
-    moved_errors = []
-    for row in moved["samples"]:
-        oracle = moved["references"]["moved" if row["phase"] == "moved" else "original"]
-        forces, reference_forces = (
-            np.asarray(row["forces"]),
-            np.asarray(oracle["forces"]),
-        )
-        require(
-            forces.shape == reference_forces.shape == (96, 3),
-            "invalid moved force shape",
-        )
-        delta = forces - reference_forces
-        errors = {
-            "energy_per_atom": abs(row["energy"] - oracle["energy"]) / 96,
-            "force_max": float(np.max(np.abs(delta))),
-            "force_rms": float(np.sqrt(np.mean(delta**2))),
-        }
-        require(
-            all(value <= moved["gates"][key] for key, value in errors.items()),
-            (row["phase"], errors),
-        )
-        moved_errors.append({"phase": row["phase"], "errors": errors})
     return {
         "qualification": qualifications,
+        "integration": integration,
         "resources": resources,
         "timing": timing,
         "held_out": held_out,
@@ -347,8 +548,7 @@ def main() -> None:
     manifest = json.loads((ROOT / "manifest.json").read_text())
     for name, digest in manifest["reference_dependencies"].items():
         require(
-            hashlib.sha256((ROOT.parents[2] / name).read_bytes()).hexdigest()
-            == digest,
+            hashlib.sha256((ROOT.parents[2] / name).read_bytes()).hexdigest() == digest,
             (name, "reference dependency hash mismatch"),
         )
     raw = (ROOT / "receipts.json.xz").read_bytes()

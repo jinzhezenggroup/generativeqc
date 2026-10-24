@@ -1,7 +1,7 @@
 {
   "schema": "generativeqc.xc-live-panel-capacity-manifest.v1",
-  "receipts_sha256": "6fe0ffe976f2cdaf2ecb2fdca4070d8fd8693bf625bdb691feaaae22b59b5edc",
-  "receipts_bytes": 731436,
+  "receipts_sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e",
+  "receipts_bytes": 865196,
   "libraries": {
     "candidate": {
       "revision": "48918670f59a8e10c254c822565a17796aa42f54",
@@ -19,7 +19,7 @@
     "qualified_patch_sha256": "44a47998047c9f7fe0cab1e10f412c2787ab2fe928b67d1ac8c36060fa70f8e9",
     "qualified_inputs_sha256": "f1d8837ac6ae1e7569e38f254772ab19066876d2031d6e557b853b88e53424b2",
     "production_file_sha256": "c702d5f9e16ec0335daaf3f03293c6e7f3a498d2e88006599ba3b778d7e6796b",
-    "note": "Measured production bytes match this branch. Final test helper/lifecycle fixes and report edits postdate the measured binary."
+    "note": "Original frozen source is qualified.patch on 48918670f. Current-master composition is 27a977ef4 on 71504dc55, with independent source-inventory attestation; only cuda_ks.cpp differs in production. Final report/replay edits postdate both measured images."
   },
   "reference_dependencies": {
     "benchmarks/results/readme-final-20261022/oracles.json.xz": "d61a3e8ba0a8f8a8c08ee4c4b30c8e3e397e67863b8d75e7ba974e90cf0f85a4",
@@ -66,6 +66,18 @@
       "bytes": 1879045,
       "sha256": "a1ccb3d92a54df3535b91a8e52db21eca3c469265a97e97bfb62c953a2ff64cc"
     },
+    "build-integration-repair.log": {
+      "bytes": 9967,
+      "sha256": "5950e9d428b5289184915ebcad251a8b5df7c1f01150c02b6bdfbe5c3ef55d56"
+    },
+    "build-integration-v1.log": {
+      "bytes": 1903577,
+      "sha256": "6169cd9c80f0e60e73de40bf5ffb79040fcc9720ff96927882117a6cc14bdf0b"
+    },
+    "build-integration.log": {
+      "bytes": 1903577,
+      "sha256": "6169cd9c80f0e60e73de40bf5ffb79040fcc9720ff96927882117a6cc14bdf0b"
+    },
     "build-qualified.log": {
       "bytes": 1777,
       "sha256": "3521430ec02749abc7f3e443a12f50d0c34949ee4da79514db338efef5d6b5cb"
@@ -81,6 +93,22 @@
     "final-source.tar": {
       "bytes": 174100480,
       "sha256": "9888d32b87fcaa008012cbac534fe11ed1b81849b53ec63773f402e20bf76dcc"
+    },
+    "integration-candidate-build-commands.txt": {
+      "bytes": 1688765,
+      "sha256": "ae31d10fc6bed02028eb614e04952cc6ea4fd96c2c8a0a0be66ee568beb3f4fa"
+    },
+    "integration-candidate-source.tar": {
+      "bytes": 165580800,
+      "sha256": "8452b57a7d491912c2b516d6444ee0f0ff840b103469cd6602dbbc23d29eb5d3"
+    },
+    "integration-master-build-commands.txt": {
+      "bytes": 1688765,
+      "sha256": "ae31d10fc6bed02028eb614e04952cc6ea4fd96c2c8a0a0be66ee568beb3f4fa"
+    },
+    "integration-master-source.tar": {
+      "bytes": 164802560,
+      "sha256": "7b6047a4be5b13b2cf11b257ff2b687caacbdaa01475c79c8d9215af04080b33"
     },
     "profiles/batch128-pbe0.json.pstats": {
       "bytes": 271136,
@@ -146,5 +174,30 @@
       "bytes": 174100480,
       "sha256": "3ab2b0a14cab7c55eca23fe73aec58ec764d366307d787b94140f89cf904b4b8"
     }
+  },
+  "integration": {
+    "libraries": {
+      "candidate": {
+        "revision": "27a977ef4e330852d7c56f44beb31a1bf0e239ed",
+        "sha256": "d198f0e4f7cceb48445bace1092987a5ecf8454db708d357adbe7bc716414a3b",
+        "source_identity": "433e27c10426bb6b8e2da889a6bea117604b51f3841acd4c827bdb247d4fe054"
+      },
+      "master": {
+        "revision": "71504dc55f8b79d77cf3a88e941fb668df94a7fb",
+        "sha256": "efe37202f32ec929f9b827a1003198953e928a20004757e82fe26dd548350cae",
+        "source_identity": "a57ff2cdb2f167ef1e915024ff9ae39de0c522f7269ecbaa3924e5e93ea16deb"
+      }
+    },
+    "source_attestation_expected": {
+      "candidate": "433e27c10426bb6b8e2da889a6bea117604b51f3841acd4c827bdb247d4fe054",
+      "master": "a57ff2cdb2f167ef1e915024ff9ae39de0c522f7269ecbaa3924e5e93ea16deb"
+    },
+    "static_records": 18,
+    "moved_calls": 3,
+    "confirmation_records": 10,
+    "quarantined_complete_records": 7,
+    "quarantined_interrupted_zero_sample_records": 1,
+    "accepted_calls_total_including_original": 156,
+    "quarantined_numerically_checked_calls": 14
   }
 }

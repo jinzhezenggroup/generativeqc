@@ -364,7 +364,7 @@
     },
     "pbe0-ao-batch-capacity-20261024": {
       "owner": "GGA live-panel XC capacity and complete cold DFT qualification",
-      "reason": "Lossless bundle retains all 97 independently qualified E/F calls, the failed zero-sample packaging attempt, separate headline/pilot/profile/held-out/moved populations, source and binary identities, complete original vectors, failure diagnostics and validation provenance. Raw source tarballs, profiler databases and large build logs stay ignored with exact digests. No sample replacement, source relabeling, external archive or budget increase.",
+      "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
     }
   },
@@ -822,8 +822,8 @@
       "family": "pbe0-ao-batch-capacity-20261024",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
-      "bytes": 731436,
-      "sha256": "6fe0ffe976f2cdaf2ecb2fdca4070d8fd8693bf625bdb691feaaae22b59b5edc"
+      "bytes": 865196,
+      "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

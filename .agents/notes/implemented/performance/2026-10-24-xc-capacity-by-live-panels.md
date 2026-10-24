@@ -77,6 +77,35 @@ it survives SCF/gradient. Both failures were reproduced on frozen master; no
 production numerical change or weaker gate was needed. Keep these diagnoses
 to avoid mistaking them for future capacity regressions.
 
+## Current-master composition and archive timestamps
+
+The earlier source-matched cohort remains a separate historical measurement.
+Before opening the PR, #2676 and #2743 had landed, so the branch was rebased on
+`71504dc55` and a separate paired cohort was required for the composed default.
+
+The first composition baseline was invalid: extracting an older Git archive
+into an incremental build preserved older source mtimes, so Ninja retained the
+previous candidate object and source identity. Binary SHA/source-identity checks
+caught it before acceptance. Stop the owned job and quarantine its seven
+complete records and interrupted empty arm, including all returned vectors.
+Do not pool them with either valid cohort, even when their independent E/F
+checks pass. The final candidate had already rebuilt all inputs; exact source
+inventories show only `cuda_ks.cpp` differs from current master. Restore master
+bytes, force that translation unit to rebuild, and verify the loaded identity
+against a fresh digest of the exact scientific source inventory before rerunning.
+The valid current-master three rounds give PBE0 21.6290 -> 21.3102 seconds
+(1.47%, below the unchanged 2% floor), with a 0.9281-second gap to GPU4PySCF.
+A separate prespecified five-pair confirmation gives 21.6430 -> 21.2241 seconds
+(1.94%, also below the floor). Keep both inconclusive current PBE0 outcomes;
+current PBE cold improves 2.56% above its 2% floor. All 156 source-qualified
+E/F calls and all 14 numerical returns from the quarantined attempt pass their
+independent scientific gates. Current validation adds 34 GPU force/occupied
+tests, 147 host cases and zero-error memcheck/synccheck.
+
+Compiler caches need not be cleared: source restoration timestamps, rather than
+incorrect cache contents, caused the reuse. Prefer isolated build trees or
+explicit invalidation when restoring backdated source archives.
+
 ## Revisit when
 
 Use other devices or resource shapes to refine optional admission. More arena

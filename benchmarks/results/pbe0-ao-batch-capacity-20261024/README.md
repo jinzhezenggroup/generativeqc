@@ -2,11 +2,61 @@
 
 GGA retains four AO jets but only one density-product jet. Sizing the optional
 XC arena from the larger live panel admits 32 original point tiles instead of
-8 on water-96. The three-round complete PBE0 cold median improves **2.44%**,
-from **21.6781 to 21.1493 seconds**. Stock GPU4PySCF measures **20.3093 seconds**:
-the remaining gap is **0.8400 seconds / 4.14%** on this RTX 5090 cohort.
+8 on water-96. This report retains the original frozen qualification and a
+separate composition with current master after #2676/#2743 landed.
 
-## Endpoint and population
+## Current-master composition
+
+Three rotating fresh-process rounds compare master `71504dc55`, candidate
+`27a977ef4` and stock GPU4PySCF. All source/binary identities are independently
+bound to their exact scientific input inventories. Endpoint settings, force
+work and native Fock counts match the original protocol below.
+
+| Complete endpoint | Current master median (s) | Candidate median (s) | GPU4PySCF median (s) | Native improvement |
+| --- | ---: | ---: | ---: | ---: |
+| PBE0 cold | 21.628970 | 21.310210 | 20.382071 | 1.47%, below 2% floor |
+| PBE cold | 17.717633 | 17.264743 | 16.205765 | 2.56%, above 2% floor |
+| PBE0 warm | 6.833278 | 6.755254 | 6.784568 | below 2% floor |
+| PBE warm | 5.312277 | 5.269002 | 5.623311 | below 2% floor |
+
+The observed current-master PBE0 gap is **0.9281 seconds / 4.55%**. Its
+three-round native improvement does not clear the prespecified floor. PBE's
+cold gain does clear it. The earlier 0.8400-second gap below belongs to its
+own frozen cohort and is not substituted for this current-source result.
+
+A separate five-pair PBE0 confirmation was prespecified after observing the
+below-floor three-round gain, with unchanged binaries, settings and the same
+floor. It alternates fresh master/candidate processes and never pools prior
+samples or combines its native timings with an earlier GPU4PySCF population.
+Its cold medians are **21.642982 / 21.224130 seconds**, an observed **1.94%**
+improvement, also below the unchanged 2% floor. All ten records / 20 E/F calls
+pass the independent gates. The 21.5321-second candidate sample is retained.
+Current-source PBE0 cold speedup remains unqualified by this performance floor;
+the promotion has a qualified current-source PBE cold gain and the separately
+qualified original PBE0 cohort. No universal or current PBE0 speedup is claimed.
+
+All 36 current-source static E/F calls and three original/warm/moved calls
+pass their unchanged independent gates. Current-source validation repeats
+147 host tests, all 34 public native force/occupied-default GPU tests, three
+native point/ragged/spatial suites and both zero-error sanitizers.
+
+The first composition attempt exposed a timestamp-stale incremental build:
+restoring an older Git archive left the old candidate object in the supposed
+master library. The loaded hash/identity revealed the mismatch before
+acceptance. Its seven complete two-call records and interrupted zero-call arm
+remain under `integration.quarantined_records`; every returned E/F vector also
+passes the independent numerical gates, but the entire comparison is rejected
+for source provenance. None of these timings enter a valid median. Master was
+rebuilt after forcing its sole differing production translation unit, then its
+scientific source digest was independently verified against the loaded binary.
+The candidate's fully rebuilt bytes stayed unchanged. The original frozen
+cohort was unaffected. Both build attempts and repair protocol remain retained.
+
+## Original frozen endpoint population
+
+The original three-round PBE0 cold median improves **2.44%**, from **21.6781 to
+21.1493 seconds**. Stock GPU4PySCF measures **20.3093 seconds**, a gap of
+**0.8400 seconds / 4.14%** in that cohort.
 
 Each fresh process times constructor, preparation, SCF, full analytic forces
 and host publication, followed by one frozen same-owner warm call. Imports and
@@ -100,7 +150,10 @@ The largest paired native headline energy/force differences are
 Three additional PBE0/96 cold/warm/moved calls use fresh tighter matched-grid
 GPU4PySCF references after timing. Their gates remain `2.5e-6`, `2.5e-5`,
 `7.5e-6`; maximum measured errors are `6.869e-13 Eh/atom`,
-`9.349e-7 max` and `2.053e-7 RMS Eh/Bohr`. All **97 calls** pass.
+`9.349e-7 max` and `2.053e-7 RMS Eh/Bohr`. All **97 calls** in the original cohort pass. Including the separate current
+composition and confirmation, **156 source-qualified calls** pass. The 14
+returned calls from the quarantined build attempt pass numerical gates but
+remain excluded from source/performance acceptance.
 
 Validation retained in the bundle:
 
@@ -145,7 +198,9 @@ the candidate is `48918670f59a8e10c254c822565a17796aa42f54` plus the retained
 `qualified.patch`. Between those revisions, runtime/build differences affect
 CLI code and CLI test registration only; relevant DFT/compiler code is unchanged.
 The baseline keeps its original identity. Final test-only fixes and report
-edits postdate measurement; measured production source is unchanged.
+edits postdate the original measurement. Current-master composition has its
+own full input inventories, libraries and exact-source attestation; only
+`src/dft/cuda_ks.cpp` differs between its production source trees.
 
 [`manifest.json`](manifest.json) pins both core libraries, the receipt archive,
 reference dependencies and raw artifact inventory. `retained_files` contains
@@ -168,8 +223,9 @@ PYTHONPATH=python:. python -O benchmarks/results/pbe0-ao-batch-capacity-20261024
 Replay verifies the exact population (including the failed attempt), every
 independent E/F gate, binary identities, paired settings/Fock work, resource
 bounds, trace capacity/unchanged AO work, moved calls and claimed cold gain
-floors. Manual negative cases for a missing population, wrong binary, bad
-energy, missing moved call and omitted failure must fail closed under `-O`.
+floors. Manual negative cases for missing populations, wrong binaries, bad energy,
+missing moved calls and omitted failures fail closed under `-O`, including
+the current-master cohort.
 These historical source identities are opt-in evidence, not permanent tests
 of production function spelling.
 
