@@ -227,6 +227,11 @@
       "lossless_record": "benchmarks/results/local-autotune-136/evidence.json.xz",
       "recovery_manifest": "benchmarks/results/unified-k-work-20261009/storage-recovery.json"
     },
+    "cbs-reference-errors-cpu-20261023": {
+      "owner": "issue2681 bounded frozen-source native CPU reference-error slice",
+      "reason": "Complete independent H2/water records retain all full-precision native endpoint returns, original progress/logs, modes, source/library/build provenance and failed capacity preflights. All original raw bytes remain recoverable; no historical rows, thresholds, scientific gates, per-file or review budgets are changed.",
+      "review_document": "benchmarks/results/cbs-reference-errors-cpu-20261023/README.md"
+    },
     "cpu-eri-coulomb-20261001": {
       "owner": "cpu-eri-coulomb-20261001",
       "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
@@ -375,6 +380,22 @@
       "role": "default-solver-qualification-with-retained-model-error-failures",
       "bytes": 148780,
       "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
+    },
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 168804,
+      "sha256": "8ddf5dcbb642f7a298dfc92457b4b1db4a3c18b975c69e73c79dfd4a69f85d15",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
+    },
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 263412,
+      "sha256": "8cd40f90369a130b13e229f1a6ec444ee6164e015dd586875ced9f202999339e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
