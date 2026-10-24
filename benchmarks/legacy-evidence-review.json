@@ -346,6 +346,11 @@
       "owner": "independent optional physical-validation GEMM qualification",
       "reason": "Lossless complete endpoint records retain all 328 independently checked calls, paired work and statistics, moved references, full measured source inputs, build and sanitizer evidence, and failed attempts. Historical JSON compression preserves every original byte without changing storage limits.",
       "review_document": "benchmarks/results/scf-validation-gemm-20261024/README.md"
+    },
+    "wb-range-reuse-20261023": {
+      "owner": "Bounded WB full cold energy and force endpoint qualification",
+      "reason": "Lossless full native/GPU4 paired and moved trajectories, exact source inventory delta and cache/build/validation provenance. Historical receipts are compacted with byte-exact restoration; no storage cap changes.",
+      "review_document": "benchmarks/results/wb-range-reuse-20261023/README.md"
     }
   },
   "files": [
@@ -764,6 +769,14 @@
       "role": "complete-source-build-test-and-execution-provenance",
       "bytes": 608544,
       "sha256": "0ddb9f78f3a8b4fdb6545d18cb6a77569c6660a039afcf93028292a41fd431d0"
+    },
+    {
+      "path": "benchmarks/results/wb-range-reuse-20261023/receipts.json.xz",
+      "family": "wb-range-reuse-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 246592,
+      "sha256": "c5dec36131a0344ff6aa61e1e1e76bbf34b23955c31515c7efa24d7c7f1bd79a"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

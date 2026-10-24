@@ -195,12 +195,12 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   try {
     // Growing the optional recurrence stack can reserve device memory too.
     // Keep that failure on the same bounded fallback path as explicit buffers.
-    // Through-d value and derivative consumers are qualified at 32 KiB. The
+    // Through-d value and derivative consumers are qualified at 16 KiB. The
     // larger f/unknown ceiling otherwise costs several GiB of driver backing
     // on large GPUs, even when the selected recurrence never needs it.
     const auto required_stack =
         plan->batch.direct_maximum_shell_angular <= 2
-            ? std::min(schedule.cuda_stack_limit_bytes, std::size_t{32} << 10)
+            ? std::min(schedule.cuda_stack_limit_bytes, std::size_t{16} << 10)
             : schedule.cuda_stack_limit_bytes;
     // CUDA limits are context-wide: never lower another live owner's limit.
     check(runtime::cuda_ensure_stack_limit(required_stack));
