@@ -1,5 +1,10 @@
 {
   "families": {
+    "h100-paper-environment-20261024": {
+      "owner": "#2726 H100 environment/setup source inventory",
+      "reason": "Lossless reconstructed source-tree file, mode and SHA inventories bind the two frozen SDK builds and actual setup source checks. Storage/source-integrity retention only, not numerical, full-scientific or hardware-only acceptance; the historical HF 5852-file package remains unavailable.",
+      "review_document": "benchmarks/results/h100-paper-environment-20261024/README.md"
+    },
     "ks-resident-final-validation-default-20261011": {
       "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
@@ -45,11 +50,6 @@
       "reason": "Reviewed retained large evidence for Weighted ERI derivative gates (#144). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/weighted-eri-144/README.md"
     },
-    "issue283-host-response": {
-      "owner": "issue283-host-response",
-      "reason": "Reviewed retained large evidence for Host DF response traversal (#283). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/issue283-host-response/README.md"
-    },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
       "reason": "Retain unchanged Direct/DF numerical summaries required by current README compositions. The complete superseded 15-file report, original manifest, source reconstruction and ancillary receipts are recoverable from merged commit 449cd63ccfbdb298c97b78f3c2d85edff0041310 via the hash/size-pinned snapshot, fully restored and verified before retirement. No live samples, gates, source identities or repository budget are changed.",
@@ -94,6 +94,11 @@
       "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
       "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
       "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md"
+    },
+    "xc-spatial-bisection-20261023": {
+      "owner": "Explicit spatial bisection complete energy and force endpoints",
+      "reason": "Lossless all-repeat numerical vectors, paired and moved endpoints, authenticated source delta and compiler/cache/device validation. Historical endpoint receipts compact losslessly; caps unchanged.",
+      "review_document": "benchmarks/results/xc-spatial-bisection-20261023/README.md"
     },
     "spatial-density-sources": {
       "owner": "spatial-density-sources",
@@ -165,6 +170,11 @@
       "reason": "Retains every independent complete energy/force receipt, separate historical and integrated source cohorts, exact source inventories and reconstruction patch, sanitizer and cache provenance. Lossless compression preserves full vectors and work counts without relaxing any storage or numerical gate.",
       "review_document": "benchmarks/results/df-md-charge-splits-20261023/README.md"
     },
+    "df-charge-partitions-20261024": {
+      "owner": "bounded automatic SM 12.0 DF charge-source partitions",
+      "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
+      "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
+    },
     "issue206-metric-gemv": {
       "owner": "issue206-metric-gemv",
       "reason": "Reviewed retained large evidence for FP64 cuBLAS metric response dots (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -224,6 +234,11 @@
       "owner": "bounded native CUDA WB97M-V Hessian dispatch qualification",
       "reason": "Lossless complete paired matrices, fresh-process phase timings, semantic work, sampled-device memory, old/new controls, larger native-only runs, and canceled/failed harness attempts are retained. Numerical acceptance only: dimer Hessian-only latency remains slower than GPU4PySCF, grids are not chemically converged, and mixed GPU placements are explicit. Historical evidence is compressed without changing decoded bytes; no storage-budget increase or broad performance promotion.",
       "review_document": "benchmarks/results/wb97mv-hessian-dispatch-20261017/README.md"
+    },
+    "wb97mv-hessian-response-reuse-20261017": {
+      "owner": "bounded CPKS reuse and compiler-AD grid reduction qualification",
+      "reason": "Lossless records retain all 32 final fresh-process paired endpoints, native-only larger controls, complete matrices, independent oracles, semantic work, sampled memory, bounded fallback and sanitizer receipts, and failed/interrupted intermediate attempts. Observed preparation-plus-Hessian wins apply only to coarse diagnostic grids; larger reference SCF failures remain explicit. Source/binary/cache/profile provenance is separate. No broad performance promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/wb97mv-hessian-response-reuse-20261017/README.md"
     },
     "df-raw-coulomb-20261023": {
       "owner": "bounded raw Coulomb complete cold endpoint qualification",
@@ -292,11 +307,6 @@
       "reason": "Lossless consolidated 144 native and 72 independent reference endpoint records, including all cold/moved regressions, with exact source/binary/job and resource/work receipts. Consolidation avoids duplicate per-record metadata; no profiler trace, binary, or relaxed storage limit is included.",
       "review_document": "benchmarks/results/pbe0-resident-tiles-20261003/README.md"
     },
-    "ecp-projector-171": {
-      "owner": "ecp-projector-171",
-      "reason": "Reviewed retained large evidence for Generated scalar ECP radial/projector migration. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/ecp-projector-171/README.md"
-    },
     "cg01": {
       "owner": "cg01",
       "reason": "Reviewed retained large evidence for CG01 protocol evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -326,11 +336,6 @@
       "owner": "default auxiliary-g response partition qualification",
       "reason": "Lossless original20 complete endpoint samples, dense independent references, baseline comparisons,34-test GPU result and failed packaging attempt, source/library/cache identities and executed shell/g-remainder work trace. No external archive or increased storage budget. Six existing evidence payloads are losslessly compressed to keep the aggregate cap.",
       "review_document": "benchmarks/results/df-g-shell-20261021/README.md"
-    },
-    "ecp-consumers-171": {
-      "owner": "ecp-consumers-171",
-      "reason": "Reviewed retained large evidence for Generated ECP AO and fixed-weight consumers. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/ecp-consumers-171/README.md"
     },
     "readme-refresh-20261015": {
       "owner": "Combined PR #2531 + #2532 native HF/DFT README endpoint refresh",
@@ -382,6 +387,11 @@
       "reason": "Lossless bundle retains all 156 source-qualified E/F calls, 14 numerically checked but provenance-quarantined calls, both zero-sample failed/interrupted attempts, separate historical/current/confirmation cohorts, source/binary bindings and full validation provenance. Both current PBE0 cohorts remain below their predeclared gain floor; no samples or negative outcomes are discarded. Raw source tarballs, profiles and large build logs remain ignored with exact digests. No external archive or budget increase.",
       "review_document": "benchmarks/results/pbe0-ao-batch-capacity-20261024/README.md"
     },
+    "fast-source-floor-20261024": {
+      "owner": "Fast hybrid proposal-source floor refinement",
+      "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
+      "review_document": "benchmarks/results/fast-source-floor-20261024/README.md"
+    },
     "host-lr-eri-20261025": {
       "owner": "opt-in host LR ERI endpoint experiment",
       "reason": "Lossless receipts retain all six same-source formal A/B/C endpoints, separate primers and profiling populations, independent-reference qualification inputs, actual LR work and transfer counts, source/build/test provenance, and the 96-atom host-admission limitation. Large profiler databases remain ignored; no storage limit or default policy changes.",
@@ -389,6 +399,22 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/cbs-source-inventory.json.xz",
+      "family": "h100-paper-environment-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
+      "bytes": 542228,
+      "sha256": "591f5808dccf9e5e8189744fb46d01995cc50986d7aa22b514cbec4241829bad"
+    },
+    {
+      "path": "benchmarks/results/h100-paper-environment-20261024/hf-source-inventory.json.xz",
+      "family": "h100-paper-environment-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete reconstructed source/build integrity inventory; not numerical or hardware-only acceptance",
+      "bytes": 541844,
+      "sha256": "12b9b745a0cd36d737f0d910369e8c9fc83cfca4333e43f6a1fb4a7960c1ec25"
+    },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
       "family": "bounded-dft-schedules-2475-2479",
@@ -550,6 +576,14 @@
       "sha256": "e2c3f4a7d368283d73c5b49837a551eeb94373bb4cabb3ae8d135cdf0de5a39d"
     },
     {
+      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "family": "df-charge-partitions-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
+      "bytes": 392256,
+      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
+    },
+    {
       "path": "benchmarks/results/df-one-electron-schedule-20261023/receipts.json.xz",
       "family": "df-one-electron-schedule-20261023",
       "classification": "required-compact-accepted-evidence",
@@ -574,22 +608,6 @@
       "sha256": "83de463aaedb1c0925bd8b3c18c8c6d69e9b300018a5f6231c3bf09571ab3540"
     },
     {
-      "bytes": 485607,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-consumers-171",
-      "path": "benchmarks/results/ecp-consumers-171/raw-evidence.zip",
-      "role": "legacy-evidence-archive",
-      "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c"
-    },
-    {
-      "bytes": 142575,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ecp-projector-171",
-      "path": "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip",
-      "role": "legacy-evidence-archive",
-      "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
-    },
-    {
       "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
       "family": "exact-geometry-response-20261014",
       "bytes": 206880,
@@ -612,14 +630,6 @@
       "role": "source-bound-endpoint-observables-and-paired-qualification",
       "bytes": 284472,
       "sha256": "d58ebd738bc48dc50d7d5dfd7174832c7664c03957190c56d062420ba97c6e25"
-    },
-    {
-      "bytes": 143684,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue283-host-response",
-      "path": "benchmarks/results/issue283-host-response/raw-evidence.zip",
-      "role": "legacy-evidence-archive",
-      "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9"
     },
     {
       "bytes": 944957,
@@ -716,6 +726,14 @@
       "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
       "role": "decision-or-audit-record",
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
+    },
+    {
+      "path": "benchmarks/results/xc-spatial-bisection-20261023/receipts.json.xz",
+      "family": "xc-spatial-bisection-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 501368,
+      "sha256": "b9a165ea339ae5a3cfe7af3836a6ec6651b7c1eabd2d6ce68454c4dec6983750"
     },
     {
       "path": "benchmarks/results/r2scan3c-final-validation-20261015/observations.json.xz",
@@ -822,6 +840,14 @@
       "role": "Complete endpoint matrices, phase/work/memory observations, native controls, coupled parity and retained negative attempts"
     },
     {
+      "path": "benchmarks/results/wb97mv-hessian-response-reuse-20261017/samples.json.xz",
+      "family": "wb97mv-hessian-response-reuse-20261017",
+      "bytes": 201812,
+      "sha256": "222b07389f63eccb2808c0bb5f95dce97ea482ca1c1c8ae90fd9a53c3189659e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound complete paired matrices, preparation-plus-Hessian and endpoint samples, work/memory, independent oracles, full fallback parity and retained negative attempts"
+    },
+    {
       "path": "benchmarks/results/scf-validation-gemm-20261024/endpoints.json.xz",
       "family": "scf-validation-gemm-20261024",
       "classification": "required-compact-accepted-evidence",
@@ -884,6 +910,22 @@
       "role": "Complete source-matched endpoints, independent references, bounded work and retained failure/validation provenance",
       "bytes": 865196,
       "sha256": "df708769d44b85aa1083093336494d066ca17e0aa1c9f51a3a674dcac1ccab4e"
+    },
+    {
+      "path": "benchmarks/results/fast-source-floor-20261024/qualification.json.xz",
+      "family": "fast-source-floor-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-bound-endpoints-pilots-failures-and-paired-qualification",
+      "bytes": 331896,
+      "sha256": "4c4417db1ef655032ce4a0eebb455944c59883aaa5ca3bf0618545abafa0d789"
+    },
+    {
+      "path": "benchmarks/results/fast-source-floor-20261024/integration.json.xz",
+      "family": "fast-source-floor-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "integrated-source-endpoints-with-authenticated-reference-reuse",
+      "bytes": 145788,
+      "sha256": "003b9fbf7fe750c6585b90349bd40c02a2b2a40da40e310e5a5ff35c7101b081"
     },
     {
       "path": "benchmarks/results/host-lr-eri-20261025/measurements.json.xz",

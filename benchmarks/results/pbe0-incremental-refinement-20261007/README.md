@@ -37,7 +37,7 @@ null, while its diagnostic and actual full/delta/final counts retain 37 builds.
 `fixed-off-2` was interrupted before a result after rejecting that repair.
 `merged-gate4-1` is an interrupted 1e-4 admission-threshold trial, not part of the
 zero-threshold repair qualification. Interrupted raw records retain their
-original `running` status, with explicit disposition/reason in `summary.json`.
+original `running` status, with explicit disposition/reason in `summary.json.xz`.
 
 ## Science and timing boundary
 
@@ -127,3 +127,21 @@ srun --partition=main --gres=gpu:5090:1 --nodelist=node1 --nodes=1 --ntasks=1 \
 
 The durable decision and rejected alternatives are documented in
 `.agents/notes/implemented/numerics/2026-10-07-incremental-ks-full-energy-refinement.md`.
+
+
+## Lossless summary storage (2026-10-15)
+
+The complete summary is stored as `summary.json.xz` (3,056 bytes). XZ decoding
+recovers all 31,141 original bytes, including failed/interrupted dispositions,
+full-precision samples and numerical gates; no measurement or claim changed.
+The shared record reader handles it offline, and the publication inventory
+authenticates the stored member. All raw samples, validation, source patches
+and frozen measurement tools remain unchanged.
+
+Original SHA-256:
+`53869b8c26a3e878055d7bc6428e0f6cb0824757df24287591c90c0e109a47d4`.
+Stored XZ SHA-256:
+`63b445e44a0218669a18428f081b39b9f1d11068cdb3496d0e71d51ccb7d813d`.
+The [original summary at the merged revision](https://github.com/jinzhezenggroup/generativeqc/blob/764a9a71d559245bd23966739c2504c7c865b746/benchmarks/results/pbe0-incremental-refinement-20261007/summary.json)
+is an additional immutable recovery source. The ordinary verifier uses the
+current compressed bytes and does not need a history fetch.

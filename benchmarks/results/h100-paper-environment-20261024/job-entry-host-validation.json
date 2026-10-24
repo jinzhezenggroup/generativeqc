@@ -1,0 +1,8 @@
+{
+  "path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/job-entry.sh",
+  "sha256": "dd9ced61e6eb8ec60cc6da39bf248b2d3c94041f519944180ba8a4883ae559fe",
+  "bash_n_returncode": 0,
+  "stderr": "",
+  "output_root_exists": false,
+  "scope": "syntax check only; entry not executed; no GPU/endpoints"
+}

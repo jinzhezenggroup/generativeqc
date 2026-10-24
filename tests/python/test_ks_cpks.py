@@ -523,3 +523,48 @@ def test_native_reference_weights_failure_preserves_output(
     assert result["actions"] == 0
     assert np.all(np.array(result["density"]) == 9817)
     assert np.all(np.array(result["weights"]) == -3277)
+
+
+@pytest.mark.parametrize("nao,counts", CASES)
+@pytest.mark.parametrize("layout", ["row", "column"])
+def test_cached_operator_reuse_against_displaced_scf(
+    cpks_probe: Path, nao: int, counts: tuple[int, ...], layout: str
+) -> None:
+    """A reused physical operator must solve both spin channels and gauges."""
+    model = _model(nao, counts, degenerate=True)
+    result = _native(cpks_probe, model, mode="cached-reuse", layout=layout)
+    assert result["cuda_error"] == 0 and result["converged"], result
+    assert result["residual"] <= result["tolerance"]
+    dimension = sum(count * (nao - count) for count in counts)
+    assert result["cached_columns"] == dimension
+    assert result["physical_checks"] == (2 if dimension else 0)
+    for key, expected in zip(("density", "weights"), _oracle(model, 1e-4), strict=True):
+        np.testing.assert_allclose(
+            np.array(result[key]).reshape(expected.shape),
+            expected,
+            atol=3e-8,
+            rtol=3e-7,
+        )
+
+
+@pytest.mark.parametrize("mode", ["cached-short", "cached-alias", "cached-stale"])
+def test_cached_operator_storage_and_identity_rejection(
+    cpks_probe: Path, mode: str
+) -> None:
+    """Neither an invalid arena nor a new immutable frame authorizes reuse."""
+    result = _native(cpks_probe, _model(4, (2, 1)), mode=mode)
+    assert result["cuda_error"] != 0
+    assert np.all(np.array(result["density"]) == 9817)
+    assert np.all(np.array(result["weights"]) == -3277)
+
+
+def test_cached_operator_checks_physical_not_just_materialized_residual(
+    cpks_probe: Path,
+) -> None:
+    """A deliberately nonlinear provider must not pass a cached-only residual."""
+    result = _native(cpks_probe, _model(4, (2, 1)), mode="cached-nonlinear")
+    assert result["cuda_error"] == 0
+    assert not result["converged"]
+    assert result["physical_checks"] == 1
+    assert np.all(np.array(result["density"]) == 9817)
+    assert np.all(np.array(result["weights"]) == -3277)

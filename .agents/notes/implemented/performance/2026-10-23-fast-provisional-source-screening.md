@@ -108,3 +108,9 @@ retains all numerical arrays, source identities and reproducible gates. Final
 core SHA256 is `378e026ff3ea23ff48987147df8aa1795d881728e3fd1657c52389a00bb3fb90`.
 The recorded production inputs match the branch; later note/receipt edits do
 not change the measured runtime.
+
+## Follow-up
+
+The [2026-10-24 source-work qualification](2026-10-24-fast-proposal-source-work.md)
+supersedes the proposal predicate with `1e-7`. The evidence and decision above
+remain the historical `1e-8` qualification.

@@ -231,7 +231,7 @@ def main() -> None:
     }
     validate_publication(manifest, files)
     actual = analyze()
-    require(actual == load_record(ROOT / "summary.json"), "stored summary drift")
+    require(actual == load_record(ROOT / "summary.json.xz"), "stored summary drift")
     print(
         json.dumps(
             {

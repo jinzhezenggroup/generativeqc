@@ -23,10 +23,17 @@ PREFIX = r"""
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "scf/cuda_value_work.hpp"
+using cudaStream_t = void*;
+using cudaStreamCaptureStatus = int;
+constexpr int cudaStreamCaptureStatusNone = 0, cudaStreamCaptureStatusInvalidated = 2;
+constexpr int cudaSuccess = 0;
+int cudaStreamIsCapturing(cudaStream_t, int* capture) { *capture = cudaStreamCaptureStatusNone; return cudaSuccess; }
 constexpr unsigned kCudaKsChunkCapacity = 2;
 std::vector<std::string> events;
 std::string fail_phase;
@@ -42,6 +49,7 @@ void check(int status, const std::string& = {}) {
 }
 int cudaGetLastError() { return 0; }
 namespace scf {
+using generativeqc::scf::observe_cuda_value_dispatch;
 template<class... T> generativeqc_status enqueue_prepared_cuda_rsh_values(T&&...) {
   event("fused"); return fused_status;
 }
@@ -82,6 +90,10 @@ void assemble_fock(void*, std::size_t, unsigned, double*, double*, double*, doub
 }
 }
 struct Owner {
+  struct { struct {
+    generativeqc::scf::CoulombExchangeWork coulomb_exchange_work =
+        generativeqc::scf::CoulombExchangeWork::empty();
+  } dft_diagnostic; } output;
   int provider = 0, correction = 0, *range_correction = &correction;
   bool has_range_correction = true, device_nonlocal = true;
   Xc xc_owner;
@@ -164,7 +176,8 @@ def submission_probe(
     body = source[start:end] + "  }\n"
     # Execute the production delegation as well, so pair failures still cross
     # the same submission boundary after the cache helper was introduced.
-    pairs = cpp_function_definition(source, "enqueue_nonlocal_pairs")
+    pairs = cpp_function_definition(source, "observe_value_dispatch")
+    pairs += cpp_function_definition(source, "enqueue_nonlocal_pairs")
     folder = tmp_path_factory.mktemp("ks-rsh-nonlocal-join")
     unit, binary = folder / "probe.cpp", folder / "probe"
     unit.write_text(PREFIX + pairs + body + DRIVER)
@@ -178,6 +191,8 @@ def submission_probe(
             "-Werror",
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(ROOT / "src"),
         ],
         compile_timeout=45,
         link_timeout=45,

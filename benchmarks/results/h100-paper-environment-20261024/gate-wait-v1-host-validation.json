@@ -1,0 +1,22 @@
+{
+  "scope": "synthetic CPU gate/owned-process tests only; no real allocation or endpoint science",
+  "gate_path": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/gate-wait-v1/gate_wait.py",
+  "gate_sha256": "6fe47489440dbc3975032eb75d9825cd25a3b6c017f44b1433afceeb7405f0f5",
+  "build_support_sha256": "8df2f022d90ffe47b71264446842456d5b5abcbfcf9742b81cb235b313c51bad",
+  "results": [
+    {
+      "options": [],
+      "returncode": 0,
+      "stdout": "{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:53.456401+00:00\", \"pid\": 3932539, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"92b832a16fd770b65fb8e8ac50222d7a8edee81599256b8d1973b4527eff7e86\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:53.519091+00:00\", \"pid\": 3932539, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"da0b8bd1a13fda1bb7ae6b109839edc829aff331f1d13551c9b107fbf802dd76\", \"wait_cap_seconds\": 2, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:53.801460+00:00\", \"pid\": 3932539, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"cff49ee7a5efab94653231901817c6987c0e4e809d16b6e89ac07fd2320da665\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.567s\n\nOK\n"
+    },
+    {
+      "options": [
+        "-O"
+      ],
+      "returncode": 0,
+      "stdout": "{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:54.287091+00:00\", \"pid\": 3932556, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"3f0f805c6524ac56b92a39a9e434a855134fe38b5b4c7db062dae66d07b8cc38\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:54.344071+00:00\", \"pid\": 3932556, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"e11a5c8a8adcc4a2631b34b33c1695e86b7f11c6288411e746e7f6809d14c81c\", \"wait_cap_seconds\": 2, \"endpoints_started\": 0}\n{\"schema\": \"generativeqc.h100-environment-gate-preflight.v1\", \"scope\": \"device/host only; no endpoint before root release\", \"observed_utc\": \"2026-10-24T08:21:54.626979+00:00\", \"pid\": 3932556, \"device\": {\"fixture\": \"CPU synthetic only\", \"hostname\": \"fixture\"}, \"environment\": {\"fixture\": true}, \"adapter_sha256\": \"78b474e0366fbfbc8e934a7b99622d2a550aeb73ab1c9162a88b895f913c0a5d\", \"prepared_plan_sha256\": \"b8d64725b3bac6dce8fdfc9358df77c8d6f1c529fc5fb9b93cb7e6dcafdba904\", \"wait_cap_seconds\": 0.05, \"endpoints_started\": 0}\n",
+      "stderr": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.521s\n\nOK\n"
+    }
+  ]
+}

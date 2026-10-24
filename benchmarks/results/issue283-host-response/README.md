@@ -1,5 +1,15 @@
 # Host DF response traversal (#283)
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue283-host-response/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/issue283-host-response/raw-evidence.zip
+```
+
+
 The largest force component in the zero-budget compatibility route was the
 host response-weight matrix products. Interchanging independent column and
 reduction loops makes the inner traversal contiguous. Every output still
@@ -52,7 +62,7 @@ duplicate implementation-mirroring test.
 Restore the raw records into a new directory, from the repository root:
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/issue283-host-response \
+python -m tools.unpack_evidence benchmarks/results/issue283-host-response --archive .artifacts/retention-archives-20261024/issue283-host-response/raw-evidence.zip \
   --output build/issue283-host-response-restored
 ```
 

@@ -16,6 +16,15 @@ namespace {
 namespace aot = hessian_aot;
 namespace maps = generativeqc_wb97mv_nuclear_jk_ad;
 using Shell = integrals::CudaOneElectronShell;
+using Quartet = std::array<std::size_t, 4>;
+constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
+                                                               {{1, 0, 2, 3}},
+                                                               {{0, 1, 3, 2}},
+                                                               {{1, 0, 3, 2}},
+                                                               {{2, 3, 0, 1}},
+                                                               {{3, 2, 0, 1}},
+                                                               {{2, 3, 1, 0}},
+                                                               {{3, 2, 1, 0}}}};
 
 struct DeviceGroup {
   Shell shells[4];
@@ -39,6 +48,13 @@ struct Group {
   DeviceGroup device;
   std::size_t radials{}, closure{}, resident_offset{}, resident_source{};
 };
+std::size_t projection_bound(const DeviceGroup& group) {
+  auto terms = group.quartets;
+  for (const auto& shell : group.shells)
+    if (shell.angular > 1 && shell.ao_count != (shell.angular + 1) * (shell.angular + 2) / 2)
+      terms *= 3;
+  return terms;
+}
 struct Layout {
   std::size_t bytes{}, matrix{}, panels{}, basis_elements{}, groups{}, tiles{}, shells{}, records{},
       raw{}, cache{}, projected{}, candidates{}, status{}, max_components{}, max_quartets{},
@@ -74,6 +90,12 @@ struct Schedule {
   std::vector<ProjectionRun> projection_runs;
   std::vector<std::size_t> reduction_offsets;
   std::vector<ReductionEntry> reduction_entries;
+  std::vector<Schedule> windows;
+  std::vector<DeviceGroup> device_groups;
+  std::vector<DeviceTile> device_tiles;
+  std::vector<aot::FactorizedIntegralBatch> inputs;
+  std::size_t ordered_groups{}, source_groups{};
+  const char* refusal{"shape, topology, or options"};
 };
 
 bool multiply(std::size_t first, std::size_t second, std::size_t& result) {
@@ -95,7 +117,9 @@ bool append(Layout& plan, std::size_t count, std::size_t width, std::size_t& off
   plan.bytes = (plan.bytes + bytes + 255) / 256 * 256;
   return true;
 }
-unsigned cartesian_count(unsigned angular) { return (angular + 1) * (angular + 2) / 2; }
+__host__ __device__ unsigned cartesian_count(unsigned angular) {
+  return (angular + 1) * (angular + 2) / 2;
+}
 unsigned blocks(std::size_t count) { return std::min<std::size_t>((count - 1) / 128 + 1, 65535); }
 
 void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& options,
@@ -104,9 +128,6 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
   if (!plan.resident_bytes || !options.max_batch_workspace_bytes ||
       !options.max_batch_projection_bytes)
     return;
-  // Large public shell products already have useful multi-CTA projection.
-  // Keep that schedule rather than serializing them into a single batch CTA.
-  if (plan.max_quartets > 128) return;
   for (const auto& tile : schedule.tiles)
     if (!tile.program->integral_batch) return;
   auto candidate = plan;
@@ -242,8 +263,9 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
   plan = candidate;
 }
 
-cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
-                     const CudaWb97mvJkOptions& options, Schedule& result) {
+cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
+                             const CudaWb97mvJkOptions& options, Schedule& result,
+                             std::span<const Quartet> selection = {}) {
   auto& plan = result.plan;
   if (!shape.atoms || !shape.primitives || !shape.nao || shells.empty() ||
       (shape.spins != 1 && shape.spins != 2) || !options.radial_tile || options.radial_tile > 64 ||
@@ -271,6 +293,7 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
       return cudaErrorInvalidValue;
   }
   if (primitive_begin != shape.primitives || ao_begin != shape.nao) return cudaErrorInvalidValue;
+  result.refusal = "ordered group bound";
   std::vector<maps::Kernel> kernels;
   switch (options.part) {
     case CudaWb97mvJkPart::exact:
@@ -295,86 +318,104 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
       return cudaErrorInvalidValue;
   }
   count = kernels.size();
-  for (unsigned slot = 0; slot < 4; ++slot)
-    if (!multiply(count, shells.size(), count)) return cudaErrorInvalidValue;
+  if (selection.empty()) {
+    for (unsigned slot = 0; slot < 4; ++slot)
+      if (!multiply(count, shells.size(), count)) return cudaErrorInvalidValue;
+  } else if (!multiply(count, selection.size(), count)) {
+    return cudaErrorInvalidValue;
+  }
   if (count > options.max_groups) return cudaErrorInvalidValue;
   result.groups.reserve(count);
   // Complete ordered closure, not symmetry reconstruction. Each package is
   // scanned once per selected angular tuple and method part, never per radial.
-  for (const auto& first : shells)
-    for (const auto& second : shells)
-      for (const auto& third : shells)
-        for (const auto& fourth : shells)
-          for (const auto kernel : kernels) {
-            Group group{{{first, second, third, fourth}, {}, 1, 1, kernel}, 1, 0};
-            const auto selected = static_cast<std::size_t>(kernel);
-            auto key = selected;
-            for (unsigned slot = 0; slot < 4; ++slot) {
-              const auto& shell = group.device.shells[slot];
-              group.device.atoms[slot] = shell.atom;
-              key = key * 4 + shell.angular;
-              if (!multiply(group.radials, shell.primitive_count, group.radials) ||
-                  !multiply(group.device.components, cartesian_count(shell.angular),
-                            group.device.components) ||
-                  !multiply(group.device.quartets, shell.ao_count, group.device.quartets))
-                return cudaErrorInvalidValue;
-            }
-            group.closure = key;
-            auto& closure = result.closure[key];
-            if (closure.empty()) {
-              std::array<bool, 10000> covered{};
-              for (const auto& program : aot::programs()) {
-                const auto& signature = program.signature;
-                if (program.kind != aot::Kind::integral || signature.family != "eri" ||
-                    signature.angular.size() != 4 || signature.radial != maps::radial[selected])
-                  continue;
-                bool matches = true;
-                for (unsigned slot = 0; slot < 4; ++slot)
-                  matches &= signature.angular[slot] == group.device.shells[slot].angular;
-                if (!matches) continue;
-                if (signature.omega != maps::omega[selected] || !program.integral ||
-                    program.centers != 4 || program.record_stride != 17 || program.outputs != 25 ||
-                    program.components.empty() || program.components.size() > 16)
-                  return cudaErrorNotSupported;
-                Tile tile{&program, {}};
-                tile.device.count = program.components.size();
-                for (unsigned index = 0; index < tile.device.count; ++index) {
-                  const auto component = program.components[index];
-                  if (component >= group.device.components || covered[component])
-                    return cudaErrorNotSupported;
-                  covered[component] = true;
-                  tile.device.components[index] = component;
-                }
-                closure.push_back(result.tiles.size());
-                result.tiles.push_back(tile);
-              }
-              if (!std::all_of(covered.begin(), covered.begin() + group.device.components,
-                               [](bool value) { return value; }))
-                return cudaErrorNotSupported;
-            }
-            const auto chunks = (group.radials - 1) / options.radial_tile + 1;
-            if (!multiply(group.radials, group.device.components, count) ||
-                !add(plan.components, count) || !multiply(group.device.quartets, 81, count) ||
-                !add(plan.projections, count) ||
-                !multiply(group.device.quartets, 25 + 8 * shape.spins, count) ||
-                !add(plan.reductions, count) || !multiply(group.device.components, 25, count) ||
-                !multiply(count, chunks, count) || !add(plan.reductions, count) ||
-                !multiply(group.radials, closure.size(), count) ||
-                !add(plan.radial_records, count) ||
-                plan.components > options.max_primitive_component_evaluations ||
-                plan.projections > options.max_projection_terms ||
-                plan.reductions > options.max_reduction_terms)
-              return cudaErrorInvalidValue;
-            plan.max_components = std::max(plan.max_components, group.device.components);
-            plan.max_quartets = std::max(plan.max_quartets, group.device.quartets);
-            std::size_t stride = 1;
-            for (unsigned slot = 4; slot-- > 0;) {
-              group.device.cache_strides[slot] = stride;
-              stride *= cartesian_count(group.device.shells[slot].angular);
-            }
-            result.groups.push_back(group);
+  const auto quartets = count / kernels.size();
+  for (std::size_t index = 0; index < quartets; ++index)
+    for (const auto kernel : kernels) {
+      Quartet indices{};
+      if (selection.empty()) {
+        auto remaining = index;
+        for (unsigned slot = 4; slot-- > 0;) {
+          indices[slot] = remaining % shells.size();
+          remaining /= shells.size();
+        }
+      } else {
+        indices = selection[index];
+      }
+      Group group{{{shells[indices[0]], shells[indices[1]], shells[indices[2]], shells[indices[3]]},
+                   {},
+                   1,
+                   1,
+                   kernel},
+                  1,
+                  0};
+      const auto selected = static_cast<std::size_t>(kernel);
+      auto key = selected;
+      for (unsigned slot = 0; slot < 4; ++slot) {
+        const auto& shell = group.device.shells[slot];
+        group.device.atoms[slot] = shell.atom;
+        key = key * 4 + shell.angular;
+        if (!multiply(group.radials, shell.primitive_count, group.radials) ||
+            !multiply(group.device.components, cartesian_count(shell.angular),
+                      group.device.components) ||
+            !multiply(group.device.quartets, shell.ao_count, group.device.quartets))
+          return cudaErrorInvalidValue;
+      }
+      group.closure = key;
+      auto& closure = result.closure[key];
+      if (closure.empty()) {
+        std::array<bool, 10000> covered{};
+        for (const auto& program : aot::programs()) {
+          const auto& signature = program.signature;
+          if (program.kind != aot::Kind::integral || signature.family != "eri" ||
+              signature.angular.size() != 4 || signature.radial != maps::radial[selected])
+            continue;
+          bool matches = true;
+          for (unsigned slot = 0; slot < 4; ++slot)
+            matches &= signature.angular[slot] == group.device.shells[slot].angular;
+          if (!matches) continue;
+          if (signature.omega != maps::omega[selected] || !program.integral ||
+              program.centers != 4 || program.record_stride != 17 || program.outputs != 25 ||
+              program.components.empty() || program.components.size() > 16)
+            return cudaErrorNotSupported;
+          Tile tile{&program, {}};
+          tile.device.count = program.components.size();
+          for (unsigned index = 0; index < tile.device.count; ++index) {
+            const auto component = program.components[index];
+            if (component >= group.device.components || covered[component])
+              return cudaErrorNotSupported;
+            covered[component] = true;
+            tile.device.components[index] = component;
           }
+          closure.push_back(result.tiles.size());
+          result.tiles.push_back(tile);
+        }
+        if (!std::all_of(covered.begin(), covered.begin() + group.device.components,
+                         [](bool value) { return value; }))
+          return cudaErrorNotSupported;
+      }
+      const auto chunks = (group.radials - 1) / options.radial_tile + 1;
+      result.refusal = "primitive, projection, or reduction work bound";
+      if (!multiply(group.radials, group.device.components, count) ||
+          !add(plan.components, count) || !add(plan.projections, projection_bound(group.device)) ||
+          !multiply(group.device.quartets, 25 + 8 * shape.spins, count) ||
+          !add(plan.reductions, count) || !multiply(group.device.components, 25, count) ||
+          !multiply(count, chunks, count) || !add(plan.reductions, count) ||
+          !multiply(group.radials, closure.size(), count) || !add(plan.radial_records, count) ||
+          (selection.empty() && plan.components > options.max_primitive_component_evaluations) ||
+          plan.projections > options.max_projection_terms ||
+          plan.reductions > options.max_reduction_terms)
+        return cudaErrorInvalidValue;
+      plan.max_components = std::max(plan.max_components, group.device.components);
+      plan.max_quartets = std::max(plan.max_quartets, group.device.quartets);
+      std::size_t stride = 1;
+      for (unsigned slot = 4; slot-- > 0;) {
+        group.device.cache_strides[slot] = stride;
+        stride *= cartesian_count(group.device.shells[slot].angular);
+      }
+      result.groups.push_back(group);
+    }
   plan.candidate_count = 1;
+  result.refusal = "minimum ordered arena bound";
   if (!multiply(plan.panels, 2, count) || !add(plan.candidate_count, count) ||
       !multiply(shape.atoms, 6, count) || !add(plan.candidate_count, count) ||
       !append(plan, result.groups.size(), sizeof(DeviceGroup), plan.groups) ||
@@ -393,14 +434,6 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
   auto resident_plan = plan;
   std::size_t fields{};
   bool representable = true;
-  constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
-                                                                 {{1, 0, 2, 3}},
-                                                                 {{0, 1, 3, 2}},
-                                                                 {{1, 0, 3, 2}},
-                                                                 {{2, 3, 0, 1}},
-                                                                 {{3, 2, 0, 1}},
-                                                                 {{2, 3, 1, 0}},
-                                                                 {{3, 2, 1, 0}}}};
   std::map<std::array<std::size_t, 5>, std::size_t> sources;
   for (std::size_t index = 0; index < result.groups.size(); ++index) {
     auto& group = result.groups[index];
@@ -464,6 +497,112 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
     }
   }
   batch_schedule(shape, options, result);
+  for (std::size_t index = 0; index < result.groups.size(); ++index)
+    if (!plan.resident_bytes || result.groups[index].resident_source == index)
+      ++result.source_groups;
+  return cudaSuccess;
+}
+
+cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
+                     const CudaWb97mvJkOptions& options, Schedule& result) {
+  const auto original = ordered_schedule(shape, shells, options, result);
+  if (original != cudaErrorInvalidValue || !options.source_tile || !options.max_source_groups ||
+      !options.max_batch_workspace_bytes || !options.max_batch_projection_bytes)
+    return original;
+  Layout shared;
+  shared.candidate_count = 1;
+  std::size_t panels{}, vectors{};
+  if (!multiply(result.plan.panels, 2, panels) || !multiply(shape.atoms, 6, vectors) ||
+      !add(shared.candidate_count, panels) || !add(shared.candidate_count, vectors) ||
+      !append(shared, shared.candidate_count, sizeof(double), shared.candidates) ||
+      !append(shared, 2, sizeof(int), shared.status) || shared.bytes >= options.max_workspace_bytes)
+    return original;
+  result = {};
+  result.refusal = "canonical source group bound";
+  std::size_t pairs{}, sources{};
+  if (!multiply(shells.size(), shells.size() + 1, pairs)) return original;
+  pairs /= 2;
+  if (!multiply(pairs, pairs + 1, sources)) return original;
+  sources /= 2;
+  const auto kernels = options.part == CudaWb97mvJkPart::exact ? 2 : 1;
+  if (!multiply(sources, kernels, sources) || sources > options.max_source_groups) return original;
+  std::vector<Quartet> pending;
+  auto tile_options = options;
+  tile_options.max_workspace_bytes -= shared.bytes;
+  tile_options.max_resident_integral_bytes = tile_options.max_workspace_bytes;
+  const auto flush = [&](auto&& self, std::span<const Quartet> canonical) -> cudaError_t {
+    if (canonical.empty()) return cudaSuccess;
+    std::vector<Quartet> selected;
+    for (const auto& source : canonical) {
+      std::array<Quartet, 8> orbit;
+      for (unsigned index = 0; index < permutations.size(); ++index)
+        for (unsigned slot = 0; slot < 4; ++slot)
+          orbit[index][slot] = source[permutations[index][slot]];
+      std::sort(orbit.begin(), orbit.end());
+      selected.insert(selected.end(), orbit.begin(), std::unique(orbit.begin(), orbit.end()));
+    }
+    std::sort(selected.begin(), selected.end());
+    Schedule window;
+    auto error = ordered_schedule(shape, shells, tile_options, window, selected);
+    result.refusal = window.refusal;
+    // A tile must reuse each canonical source. Never turn a capacity fallback
+    // into eightfold primitive replay or hundreds of thousands of launches.
+    if (error == cudaSuccess && (!window.plan.resident_bytes || !window.plan.batch_bytes)) {
+      result.refusal = "canonical tile resident/batch arena admission";
+      error = cudaErrorInvalidValue;
+    }
+    if (error == cudaErrorInvalidValue && canonical.size() > 1) {
+      const auto half = canonical.size() / 2;
+      error = self(self, canonical.first(half));
+      return error == cudaSuccess ? self(self, canonical.subspan(half)) : error;
+    }
+    if (error != cudaSuccess) return error;
+    auto& plan = result.plan;
+    result.refusal = "aggregate canonical primitive, projection, or reduction work bound";
+    if (!add(plan.components, window.plan.components) ||
+        !add(plan.projections, window.plan.projections) ||
+        !add(plan.reductions, window.plan.reductions) ||
+        !add(plan.radial_records, window.plan.radial_records) ||
+        plan.components > options.max_primitive_component_evaluations ||
+        plan.projections > options.max_projection_terms ||
+        plan.reductions > options.max_reduction_terms)
+      return cudaErrorInvalidValue;
+    plan.bytes = std::max(plan.bytes, window.plan.bytes);
+    plan.batch_bytes = std::max(plan.batch_bytes, window.plan.batch_bytes);
+    result.ordered_groups += window.groups.size();
+    result.windows.push_back(std::move(window));
+    return cudaSuccess;
+  };
+  for (std::size_t first = 0; first < shells.size(); ++first)
+    for (std::size_t second = first; second < shells.size(); ++second)
+      for (std::size_t third = first; third < shells.size(); ++third)
+        for (std::size_t fourth = third == first ? second : third; fourth < shells.size();
+             ++fourth) {
+          pending.push_back({first, second, third, fourth});
+          if (pending.size() == options.source_tile) {
+            const auto error = flush(flush, pending);
+            if (error != cudaSuccess) return error;
+            pending.clear();
+          }
+        }
+  const auto error = flush(flush, pending);
+  if (error != cudaSuccess) return error;
+  if (result.windows.empty()) return cudaErrorInvalidValue;
+  auto& plan = result.plan;
+  const auto first = result.windows.front().plan;
+  plan.matrix = first.matrix;
+  plan.panels = first.panels;
+  plan.basis_elements = first.basis_elements;
+  plan.candidate_count = first.candidate_count;
+  result.refusal = "aggregate tiled arena bound";
+  if (!append(plan, plan.candidate_count, sizeof(double), plan.candidates) ||
+      !append(plan, 2, sizeof(int), plan.status) || plan.bytes > options.max_workspace_bytes)
+    return cudaErrorInvalidValue;
+  for (auto& window : result.windows) {
+    window.plan.candidates = plan.candidates;
+    window.plan.status = plan.status;
+  }
+  result.source_groups = sources;
   return cudaSuccess;
 }
 
@@ -530,8 +669,10 @@ __global__ void validate_basis(CudaWb97mvJkShape shape, const Shell* shells, std
     const auto shell = shells[index];
     for (std::size_t orbital = 0; orbital < shell.ao_count; ++orbital) {
       const auto* record = aos + 16 * (shell.ao_begin + orbital);
+      const auto terms =
+          shell.angular > 1 && shell.ao_count != cartesian_count(shell.angular) ? 3 : 1;
       if (record[0] != shell.atom || record[1] != shell.primitive_begin ||
-          record[2] != shell.primitive_count || record[3] < 1 || record[3] > 3 ||
+          record[2] != shell.primitive_count || record[3] < 1 || record[3] > terms ||
           floor(record[3]) != record[3]) {
         atomicExch(status, 1);
         continue;
@@ -864,6 +1005,49 @@ __global__ void reduce_group(CudaWb97mvJkShape shape, const DeviceGroup* group,
   reduce_vectors(shape, group, projected, candidate, status);
   if (threadIdx.x == 0) reduce_energy(group, projected, candidate, status);
 }
+
+void stage_schedule(Schedule& schedule, void* workspace, const double* basis) {
+  auto* base = static_cast<char*>(workspace);
+  const auto& plan = schedule.plan;
+  for (const auto& group : schedule.groups) schedule.device_groups.push_back(group.device);
+  for (const auto& tile : schedule.tiles) schedule.device_tiles.push_back(tile.device);
+  for (const auto& batch : schedule.batches) {
+    aot::FactorizedIntegralBatch input;
+    input.records = reinterpret_cast<double*>(base + plan.batch_records) + batch.record;
+    input.count = batch.count;
+    input.output = reinterpret_cast<double*>(base + plan.batch_raw) + batch.raw;
+    input.coordinates = basis;
+    std::copy_n(schedule.groups[batch.group].device.atoms, 4, input.atoms);
+    schedule.inputs.push_back(input);
+  }
+}
+
+cudaError_t upload_schedule(const Schedule& schedule, CudaWb97mvJkShape shape, const double* basis,
+                            void* workspace, int* status, cudaStream_t stream) {
+  auto* base = static_cast<char*>(workspace);
+  const auto& plan = schedule.plan;
+  auto error = cudaSuccess;
+  const auto upload = [&](const auto& values, std::size_t offset) {
+    if (error == cudaSuccess && !values.empty())
+      error = cudaMemcpyAsync(base + offset, values.data(), values.size() * sizeof(values[0]),
+                              cudaMemcpyHostToDevice, stream);
+  };
+  upload(schedule.device_groups, plan.groups);
+  upload(schedule.device_tiles, plan.tiles);
+  if (plan.batch_bytes) {
+    upload(schedule.inputs, plan.batch_inputs);
+    upload(schedule.batch_reductions, plan.batch_reductions);
+    upload(schedule.reduction_offsets, plan.reduction_offsets);
+    upload(schedule.reduction_entries, plan.reduction_entries);
+    if (error == cudaSuccess) {
+      build_batch_records<<<std::min<std::size_t>(schedule.groups.size(), 65535), 128, 0, stream>>>(
+          shape, reinterpret_cast<const DeviceGroup*>(base + plan.groups), schedule.groups.size(),
+          basis, reinterpret_cast<double*>(base + plan.batch_records), status);
+      error = cudaGetLastError();
+    }
+  }
+  return error;
+}
 }  // namespace
 
 struct CudaWb97mvNuclearJk::Impl {
@@ -891,12 +1075,22 @@ struct CudaWb97mvNuclearJk::Impl {
 };
 
 cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
-                                     const CudaWb97mvJkOptions& options,
-                                     std::size_t& bytes) noexcept {
+                                     const CudaWb97mvJkOptions& options, std::size_t& bytes,
+                                     std::string* detail) noexcept {
   bytes = 0;
   try {
     Schedule selected;
     const auto error = schedule(shape, shells, options, selected);
+    if (detail) {
+      if (error == cudaSuccess)
+        detail->clear();
+      else
+        *detail = std::string(selected.refusal) +
+                  " (components=" + std::to_string(selected.plan.components) +
+                  ", projections=" + std::to_string(selected.plan.projections) +
+                  ", reductions=" + std::to_string(selected.plan.reductions) +
+                  ", bytes=" + std::to_string(selected.plan.bytes) + ")";
+    }
     if (error == cudaSuccess) bytes = selected.plan.bytes;
     return error;
   } catch (...) {
@@ -942,25 +1136,22 @@ cudaError_t CudaWb97mvNuclearJk::prepare(const CudaWb97mvJkShape& shape,
       state.ready = false;
       return error;
     }
+    if (state.schedule.windows.empty())
+      stage_schedule(state.schedule, workspace, reference.basis);
+    else
+      for (auto& window : state.schedule.windows)
+        stage_schedule(window, workspace, reference.basis);
     const auto& layout = state.schedule.plan;
+    const auto& initial =
+        state.schedule.windows.empty() ? state.schedule : state.schedule.windows.front();
     const auto stream = reference.stream;
     auto* base = static_cast<char*>(workspace);
     auto* status = reinterpret_cast<int*>(base + layout.status);
-    auto* device_groups = reinterpret_cast<DeviceGroup*>(base + layout.groups);
-    auto* device_tiles = reinterpret_cast<DeviceTile*>(base + layout.tiles);
-    auto* device_shells = reinterpret_cast<Shell*>(base + layout.shells);
+    auto* device_shells = reinterpret_cast<Shell*>(base + initial.plan.shells);
     error = cudaMemsetAsync(status, 0, sizeof(int), stream);
     if (error == cudaSuccess)
       error = cudaMemcpyAsync(device_shells, shells.data(), shells.size_bytes(),
                               cudaMemcpyHostToDevice, stream);
-    for (std::size_t index = 0; index < state.schedule.groups.size() && error == cudaSuccess;
-         ++index)
-      error = cudaMemcpyAsync(device_groups + index, &state.schedule.groups[index].device,
-                              sizeof(DeviceGroup), cudaMemcpyHostToDevice, stream);
-    for (std::size_t index = 0; index < state.schedule.tiles.size() && error == cudaSuccess;
-         ++index)
-      error = cudaMemcpyAsync(device_tiles + index, &state.schedule.tiles[index].device,
-                              sizeof(DeviceTile), cudaMemcpyHostToDevice, stream);
     if (error == cudaSuccess) {
       finite_values<<<blocks(layout.basis_elements), 128, 0, stream>>>(
           reference.basis, layout.basis_elements, status);
@@ -974,51 +1165,24 @@ cudaError_t CudaWb97mvNuclearJk::prepare(const CudaWb97mvJkShape& shape,
       error = cudaGetLastError();
       error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
     }
-    if (error == cudaSuccess && layout.batch_bytes) {
-      std::vector<aot::FactorizedIntegralBatch> batches;
-      batches.reserve(state.schedule.batches.size());
-      for (const auto& batch : state.schedule.batches) {
-        aot::FactorizedIntegralBatch input;
-        input.records = reinterpret_cast<double*>(base + layout.batch_records) + batch.record;
-        input.count = batch.count;
-        input.output = reinterpret_cast<double*>(base + layout.batch_raw) + batch.raw;
-        input.coordinates = reference.basis;
-        std::copy_n(state.schedule.groups[batch.group].device.atoms, 4, input.atoms);
-        batches.push_back(input);
-      }
-      error = cudaMemcpyAsync(base + layout.batch_inputs, batches.data(),
-                              batches.size() * sizeof(batches[0]), cudaMemcpyHostToDevice, stream);
-      if (error == cudaSuccess)
-        error =
-            cudaMemcpyAsync(base + layout.batch_reductions, state.schedule.batch_reductions.data(),
-                            state.schedule.batch_reductions.size() * sizeof(BatchReduction),
-                            cudaMemcpyHostToDevice, stream);
-      if (error == cudaSuccess)
-        error = cudaMemcpyAsync(base + layout.reduction_offsets,
-                                state.schedule.reduction_offsets.data(),
-                                state.schedule.reduction_offsets.size() * sizeof(std::size_t),
-                                cudaMemcpyHostToDevice, stream);
-      if (error == cudaSuccess)
-        error = cudaMemcpyAsync(base + layout.reduction_entries,
-                                state.schedule.reduction_entries.data(),
-                                state.schedule.reduction_entries.size() * sizeof(ReductionEntry),
-                                cudaMemcpyHostToDevice, stream);
-      if (error == cudaSuccess) {
-        build_batch_records<<<std::min<std::size_t>(state.schedule.groups.size(), 65535), 128, 0,
-                              stream>>>(
-            shape, device_groups, state.schedule.groups.size(), reference.basis,
-            reinterpret_cast<double*>(base + layout.batch_records), status);
-        error = cudaGetLastError();
-      }
+    if (error == cudaSuccess && state.schedule.windows.empty()) {
+      error = upload_schedule(state.schedule, shape, reference.basis, workspace, status, stream);
       error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
     }
     if (error == cudaSuccess) error = state.authenticate(stream);
     state.ready = error == cudaSuccess;
     if (state.ready)
-      state.work = {layout.bytes,      state.schedule.groups.size(), layout.radial_records,
-                    layout.components, layout.projections,           layout.reductions};
+      state.work = {layout.bytes,
+                    state.schedule.windows.empty() ? state.schedule.groups.size()
+                                                   : state.schedule.ordered_groups,
+                    layout.radial_records,
+                    layout.components,
+                    layout.projections,
+                    layout.reductions};
     if (state.ready) state.work.resident_integral_bytes = layout.resident_bytes;
     if (state.ready) state.work.batched_workspace_bytes = layout.batch_bytes;
+    if (state.ready) state.work.streaming_tiles = state.schedule.windows.size();
+    if (state.ready) state.work.source_groups = state.schedule.source_groups;
     return error;
   } catch (...) {
     impl_->ready = false;
@@ -1070,13 +1234,7 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
     return cudaErrorInvalidValue;
   auto* base = static_cast<char*>(state.workspace);
   auto* status = reinterpret_cast<int*>(base + plan.status);
-  auto* records = reinterpret_cast<double*>(base + plan.records);
-  auto* raw = reinterpret_cast<double*>(base + plan.raw);
-  auto* streaming_cache = reinterpret_cast<double*>(base + plan.cache);
-  auto* projected = reinterpret_cast<double*>(base + plan.projected);
   auto* candidate = reinterpret_cast<double*>(base + plan.candidates);
-  const auto* groups = reinterpret_cast<DeviceGroup*>(base + plan.groups);
-  const auto* tiles = reinterpret_cast<DeviceTile*>(base + plan.tiles);
   error = cudaMemsetAsync(status, 0, 2 * sizeof(int), stream);
   if (error == cudaSuccess) {
     finite_values<<<blocks(3 * shape.atoms), 128, 0, stream>>>(direction, 3 * shape.atoms, status);
@@ -1105,98 +1263,117 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
   else
     ++state.work.integral_source_builds;
   error = cudaMemsetAsync(candidate, 0, plan.candidate_count * sizeof(double), stream);
-  if (plan.batch_bytes && error == cudaSuccess) {
-    auto* batches = reinterpret_cast<aot::FactorizedIntegralBatch*>(base + plan.batch_inputs);
-    auto* resident = reinterpret_cast<double*>(base + plan.resident);
-    if (!reuse) {
-      for (const auto& run : state.schedule.batch_runs) {
-        const auto& tile = state.schedule.tiles[run.tile];
-        error = static_cast<cudaError_t>(tile.program->integral_batch(
-            batches + run.first, run.count, direction, status, stream));
+  const auto run_schedule = [&](const Schedule& selected) {
+    const auto& plan = selected.plan;
+    auto* records = reinterpret_cast<double*>(base + plan.records);
+    auto* raw = reinterpret_cast<double*>(base + plan.raw);
+    auto* streaming_cache = reinterpret_cast<double*>(base + plan.cache);
+    auto* projected = reinterpret_cast<double*>(base + plan.projected);
+    const auto* groups = reinterpret_cast<DeviceGroup*>(base + plan.groups);
+    const auto* tiles = reinterpret_cast<DeviceTile*>(base + plan.tiles);
+    if (!state.schedule.windows.empty() && error == cudaSuccess)
+      error = upload_schedule(selected, shape, reference.basis, state.workspace, status, stream);
+    if (plan.batch_bytes && error == cudaSuccess) {
+      auto* batches = reinterpret_cast<aot::FactorizedIntegralBatch*>(base + plan.batch_inputs);
+      auto* resident = reinterpret_cast<double*>(base + plan.resident);
+      if (!reuse) {
+        for (const auto& run : selected.batch_runs) {
+          const auto& tile = selected.tiles[run.tile];
+          error = static_cast<cudaError_t>(tile.program->integral_batch(
+              batches + run.first, run.count, direction, status, stream));
+          if (error != cudaSuccess) break;
+          ++state.work.integral_launches;
+          for (std::size_t index = run.first; index < run.first + run.count; ++index)
+            state.work.component_evaluations += selected.batches[index].count * tile.device.count;
+        }
+        if (error == cudaSuccess) {
+          accumulate_batches<<<std::min<std::size_t>(selected.batch_reductions.size(), 65535), 128,
+                               0, stream>>>(
+              groups, tiles, batches,
+              reinterpret_cast<const BatchReduction*>(base + plan.batch_reductions),
+              selected.batch_reductions.size(), resident, status);
+          error = cudaGetLastError();
+          for (const auto& batch : selected.batches)
+            state.work.reduction_terms += 25 * selected.tiles[batch.tile].device.count;
+        }
+      }
+      for (const auto& run : selected.projection_runs) {
         if (error != cudaSuccess) break;
-        ++state.work.integral_launches;
+        project_batches<<<std::min<std::size_t>(run.count, 65535), 128, 0, stream>>>(
+            shape, groups, run.first, run.count, run.offset, reference.basis, direction, density,
+            delta_density, resident, reinterpret_cast<double*>(base + plan.batch_projected),
+            status);
+        error = cudaGetLastError();
+        ++state.work.projection_launches;
+        if (error != cudaSuccess) break;
+        reduce_batches<<<std::min<std::size_t>((plan.candidate_count - 1) / 4 + 1, 65535), 128, 0,
+                         stream>>>(
+            shape, groups, reinterpret_cast<const std::size_t*>(base + plan.reduction_offsets),
+            reinterpret_cast<const ReductionEntry*>(base + plan.reduction_entries),
+            reinterpret_cast<const double*>(base + plan.batch_projected), run.first, run.count,
+            run.offset, plan.candidate_count, candidate, status);
+        error = cudaGetLastError();
+        ++state.work.reduction_launches;
         for (std::size_t index = run.first; index < run.first + run.count; ++index)
-          state.work.component_evaluations +=
-              state.schedule.batches[index].count * tile.device.count;
+          state.work.reduction_terms +=
+              selected.groups[index].device.quartets * (25 + 8 * shape.spins);
+      }
+      state.work.projection_terms_bound += plan.projections;
+    }
+    for (std::size_t index = 0;
+         !plan.batch_bytes && index < selected.groups.size() && error == cudaSuccess; ++index) {
+      const auto& group = selected.groups[index];
+      auto* cache = plan.resident_bytes
+                        ? reinterpret_cast<double*>(base + plan.resident) + group.resident_offset
+                        : streaming_cache;
+      const bool build = !reuse && (!plan.resident_bytes || group.resident_source == index);
+      if (build)
+        error = cudaMemsetAsync(cache, 0, group.device.components * 25 * sizeof(double), stream);
+      for (const auto tile_index : selected.closure[group.closure]) {
+        if (!build) break;
+        const auto& tile = selected.tiles[tile_index];
+        for (std::size_t begin = 0; begin < group.radials && error == cudaSuccess;) {
+          const auto count = std::min(state.options.radial_tile, group.radials - begin);
+          build_records<<<1, 128, 0, stream>>>(shape, groups + index, reference.basis, begin, count,
+                                               records, status);
+          error = cudaGetLastError();
+          if (error == cudaSuccess)
+            error = static_cast<cudaError_t>(tile.program->integral(
+                records, count, groups[index].atoms, direction, raw, status, stream));
+          if (error == cudaSuccess) {
+            state.work.component_evaluations += count * tile.device.count;
+            ++state.work.integral_launches;
+            accumulate<<<1, 128, 0, stream>>>(groups + index, tiles + tile_index, raw, cache,
+                                              status);
+            error = cudaGetLastError();
+            state.work.reduction_terms += 25 * tile.device.count;
+          }
+          begin += count;
+        }
       }
       if (error == cudaSuccess) {
-        accumulate_batches<<<std::min<std::size_t>(state.schedule.batch_reductions.size(), 65535),
-                             128, 0, stream>>>(
-            groups, tiles, batches,
-            reinterpret_cast<const BatchReduction*>(base + plan.batch_reductions),
-            state.schedule.batch_reductions.size(), resident, status);
+        project<<<blocks(group.device.quartets), 128, 0, stream>>>(
+            shape, groups + index, reference.basis, direction, density, delta_density, cache,
+            projected, status);
         error = cudaGetLastError();
-        for (const auto& batch : state.schedule.batches)
-          state.work.reduction_terms += 25 * state.schedule.tiles[batch.tile].device.count;
+        state.work.projection_terms_bound += projection_bound(group.device);
+        ++state.work.projection_launches;
+      }
+      if (error == cudaSuccess) {
+        reduce_group<<<1, 128, 0, stream>>>(shape, groups + index, projected, candidate, status);
+        error = cudaGetLastError();
+        state.work.reduction_terms += group.device.quartets * (25 + 8 * shape.spins);
+        ++state.work.reduction_launches;
       }
     }
-    for (const auto& run : state.schedule.projection_runs) {
+  };
+  if (state.schedule.windows.empty())
+    run_schedule(state.schedule);
+  else
+    for (const auto& window : state.schedule.windows) {
       if (error != cudaSuccess) break;
-      project_batches<<<std::min<std::size_t>(run.count, 65535), 128, 0, stream>>>(
-          shape, groups, run.first, run.count, run.offset, reference.basis, direction, density,
-          delta_density, resident, reinterpret_cast<double*>(base + plan.batch_projected), status);
-      error = cudaGetLastError();
-      ++state.work.projection_launches;
-      if (error != cudaSuccess) break;
-      reduce_batches<<<std::min<std::size_t>((plan.candidate_count - 1) / 4 + 1, 65535), 128, 0,
-                       stream>>>(
-          shape, groups, reinterpret_cast<const std::size_t*>(base + plan.reduction_offsets),
-          reinterpret_cast<const ReductionEntry*>(base + plan.reduction_entries),
-          reinterpret_cast<const double*>(base + plan.batch_projected), run.first, run.count,
-          run.offset, plan.candidate_count, candidate, status);
-      error = cudaGetLastError();
-      ++state.work.reduction_launches;
-      for (std::size_t index = run.first; index < run.first + run.count; ++index)
-        state.work.reduction_terms +=
-            state.schedule.groups[index].device.quartets * (25 + 8 * shape.spins);
+      run_schedule(window);
     }
-    state.work.projection_terms_bound += plan.projections;
-  }
-  for (std::size_t index = 0;
-       !plan.batch_bytes && index < state.schedule.groups.size() && error == cudaSuccess; ++index) {
-    const auto& group = state.schedule.groups[index];
-    auto* cache = plan.resident_bytes
-                      ? reinterpret_cast<double*>(base + plan.resident) + group.resident_offset
-                      : streaming_cache;
-    const bool build = !reuse && (!plan.resident_bytes || group.resident_source == index);
-    if (build)
-      error = cudaMemsetAsync(cache, 0, group.device.components * 25 * sizeof(double), stream);
-    for (const auto tile_index : state.schedule.closure[group.closure]) {
-      if (!build) break;
-      const auto& tile = state.schedule.tiles[tile_index];
-      for (std::size_t begin = 0; begin < group.radials && error == cudaSuccess;) {
-        const auto count = std::min(state.options.radial_tile, group.radials - begin);
-        build_records<<<1, 128, 0, stream>>>(shape, groups + index, reference.basis, begin, count,
-                                             records, status);
-        error = cudaGetLastError();
-        if (error == cudaSuccess)
-          error = static_cast<cudaError_t>(tile.program->integral(
-              records, count, groups[index].atoms, direction, raw, status, stream));
-        if (error == cudaSuccess) {
-          state.work.component_evaluations += count * tile.device.count;
-          ++state.work.integral_launches;
-          accumulate<<<1, 128, 0, stream>>>(groups + index, tiles + tile_index, raw, cache, status);
-          error = cudaGetLastError();
-          state.work.reduction_terms += 25 * tile.device.count;
-        }
-        begin += count;
-      }
-    }
-    if (error == cudaSuccess) {
-      project<<<blocks(group.device.quartets), 128, 0, stream>>>(
-          shape, groups + index, reference.basis, direction, density, delta_density, cache,
-          projected, status);
-      error = cudaGetLastError();
-      state.work.projection_terms_bound += 81 * group.device.quartets;
-      ++state.work.projection_launches;
-    }
-    if (error == cudaSuccess) {
-      reduce_group<<<1, 128, 0, stream>>>(shape, groups + index, projected, candidate, status);
-      error = cudaGetLastError();
-      state.work.reduction_terms += group.device.quartets * (25 + 8 * shape.spins);
-      ++state.work.reduction_launches;
-    }
-  }
   for (unsigned panel = 0; panel < 2 && error == cudaSuccess; ++panel) {
     symmetric<<<blocks(plan.panels), 128, 0, stream>>>(
         candidate + 1 + panel * plan.panels, shape.nao, shape.spins,

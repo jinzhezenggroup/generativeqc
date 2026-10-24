@@ -110,6 +110,10 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   CudaWb97mvJkOptions options;
   options.part = static_cast<CudaWb97mvJkPart>(header[4]);
   options.radial_tile = header[5];
+  if (cache_mode == "tiled") {
+    options.max_groups = 16;
+    options.source_tile = 1;
+  }
   if (cache_mode == "batch-chunked") options.max_batch_projection_bytes = 32ULL << 10;
   if (cache_mode == "projection-budgeted") options.max_batch_projection_bytes = 1;
   if (cache_mode == "streamed" || cache_mode == "budgeted") {
@@ -346,6 +350,8 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
             << ",\"components\":" << receipt.component_evaluations
             << ",\"resident_bytes\":" << receipt.resident_integral_bytes
             << ",\"batch_bytes\":" << receipt.batched_workspace_bytes
+            << ",\"streaming_tiles\":" << receipt.streaming_tiles
+            << ",\"source_groups\":" << receipt.source_groups
             << ",\"integral_launches\":" << receipt.integral_launches
             << ",\"projection_launches\":" << receipt.projection_launches
             << ",\"reduction_launches\":" << receipt.reduction_launches
@@ -360,7 +366,7 @@ int main(int argc, char** argv) {
     const std::string mode = argc == 4 ? argv[3] : "resident";
     require(mode == "resident" || mode == "streamed" || mode == "budgeted" || mode == "unbatched" ||
                 mode == "batch-budgeted" || mode == "batch-chunked" ||
-                mode == "projection-budgeted",
+                mode == "projection-budgeted" || mode == "tiled",
             "invalid cache mode");
     run(argv[1], argv[2], mode);
     return 0;

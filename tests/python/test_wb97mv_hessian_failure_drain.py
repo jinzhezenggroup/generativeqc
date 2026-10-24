@@ -80,7 +80,8 @@ struct{unsigned published_hvps=0,published_hessians=0;}receipt;
 Owner(){fock.primary=&primary;}
 template<class T=double>T* at(std::size_t p){return reinterpret_cast<T*>(storage+p);}
 int admit(const double*,double*,bool,cudaStream_t){return q::reject?23:0;}
-int compute(CudaKsWb97mvHessianResult& r){
+int prepare_frozen_exact(){return 0;}
+int compute(CudaKsWb97mvHessianResult& r,bool=false,std::size_t=0){
 if(q::throw_compute)throw std::runtime_error("child exception");
 auto e=cudaMemsetAsync(at(candidate),0,2*sizeof(double),stream);if(e)return e;
 if(!q::converge){r.status=CudaKsWb97mvHessianStatus::response_not_converged;return 0;}

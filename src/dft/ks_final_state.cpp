@@ -247,12 +247,32 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::solver::FinalStateOperations* operations) {
   output = {};
   detail.clear();
-  if (physical.identity != current || candidate.identity != current || !physical.physical ||
-      physical.density.size() != current.model.spins ||
-      physical.fock.size() != current.model.spins ||
-      candidate.spins.size() != current.model.spins ||
-      candidate.fock_density_generation != current.determinant.factor.density_generation) {
-    detail = "invalid KS final-state identity, model, physical state or spin shape";
+  if (physical.identity != current) {
+    detail = "invalid KS final state: physical identity mismatch";
+    return false;
+  }
+  if (candidate.identity != current) {
+    detail = "invalid KS final state: orbital identity mismatch";
+    return false;
+  }
+  if (!physical.physical) {
+    detail = "invalid KS final state: physical state not established";
+    return false;
+  }
+  if (physical.density.size() != current.model.spins) {
+    detail = "invalid KS final state: density spin shape mismatch";
+    return false;
+  }
+  if (physical.fock.size() != current.model.spins) {
+    detail = "invalid KS final state: Fock spin shape mismatch";
+    return false;
+  }
+  if (candidate.spins.size() != current.model.spins) {
+    detail = "invalid KS final state: orbital spin shape mismatch";
+    return false;
+  }
+  if (candidate.fock_density_generation != current.determinant.factor.density_generation) {
+    detail = "invalid KS final state: Fock-density generation mismatch";
     return false;
   }
 

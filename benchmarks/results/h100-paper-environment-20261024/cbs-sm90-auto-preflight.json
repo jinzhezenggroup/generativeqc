@@ -1,0 +1,15 @@
+[
+  {
+    "command": [
+      "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/env/bin/python",
+      "-B",
+      "-c",
+      "from pathlib import Path;from generativeqc_compiler.integral.production_profile import resolve_production_profile;print(resolve_production_profile(Path('python/generativeqc_compiler/integral/production_shell_classes.json'),architecture='sm_90',profile='auto'))"
+    ],
+    "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/cbs-qualified",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/cbs-qualified/python/generativeqc_compiler/integral/production_profile.py\", line 612, in resolve_production_profile\n    profile_name, profile_payload, match = _resolve_profile_payload(\n                                           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/source/cbs-qualified/python/generativeqc_compiler/integral/production_profile.py\", line 206, in _resolve_profile_payload\n    raise ValueError(\nValueError: no tuned or compatible production profile for sm_90; request 'portable_cuda' explicitly to use the generic CUDA path\n",
+    "scope": "corrected host profile API preflight; previous harness misspelled load_production_profile preserved separately; not SDK build/H100 execution"
+  }
+]

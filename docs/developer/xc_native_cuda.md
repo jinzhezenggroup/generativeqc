@@ -203,6 +203,98 @@ its buffers to the retained launcher; graph replay retains that entry.
 Unsupported functional/response pairs fail during preparation. See the
 [consumer specialization decision](../../.agents/notes/implemented/performance/2026-09-23-xc-point-consumers.md).
 
+The PBE physical and admitted signed-response point entries also have an
+experimental family-specialized lowering of the same canonical point algebra.
+`GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION=1` selects it when an owner is
+prepared; `0` or an unset value keeps the generic entry. Other families keep
+the generic entry. Invalid switch values fail when preparing a PBE owner. Batched PBE
+points inherit the prepared physical entry's identity, including after a
+changed-geometry owner is prepared. This switch does not change point tiles,
+batch admission, AO maps, precision, or the independent exact-exchange J/K
+provider. It is not a performance default pending source-matched device and
+complete-endpoint qualification.
+
+For RKS physical evaluations, the default-on
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN` policy already binds the admitted functional.
+Both PBE family-switch settings then share that method-bound equal-spin
+consumer. Disabling equal-spin exposes the ordinary generic versus specialized
+PBE comparison; UKS and supported response keep their separate family policy.
+No duplicate equal-spin kernel is introduced by the PBE switch.
+
+The compiled host policy contract applies the independent 97-point SCF gate to
+ordinary consumers. The shared subnormal-ratio repair also applies the wider
+87-point independent gate to ordinary and equal-spin physical consumers and the
+bound PBE0 entry at the original strict tolerance. Every emitted RKS/UKS,
+generic/specialized and serial/batched route must satisfy that oracle; policy
+parity alone does not establish independent accuracy. Original failing receipts
+retain their old source identity. Signed-response tail qualification separately
+uses derivatives of the original energy at 450/550 decimal digits.
+The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
+
+The point-family campaign uses schema v3 and fixes `--equal-spin` identically
+for both RKS arms. Its default `0` is an explicit opt-out diagnostic, while `1`
+records that the physical family difference is superseded. Both retain the same
+tile/map/reduction/workspace/precision contracts and full E+F evidence gates.
+The v1/v2 readers preserve historical evidence. Requested policy fields do not
+substitute for actual GPU consumer identity or production endpoint qualification.
+Current promotion requires explicit v3 producer/policy provenance; relabeling
+or stripping fields cannot turn a shared equal-spin or unknown legacy consumer
+into promotion evidence.
+
+The producer requests a fixed 256-point force tile through the selected Python
+force composition entry before active-AO policy resolution and execution. It
+requires an integer `grid_tile_points_requested=256` and an `explicit` schedule
+in each actual force receipt. A prepared native-force route that bypasses that
+entry is unsupported by this campaign unless it supplies the requested receipt;
+the producer cannot reuse a previous call's work. Normal public force calls
+retain their budget-selected policy. A fixed request does not establish phased
+route support: the independent consumer still requires the original absolute
+phase/work counts and complete endpoint qualification.
+
+The producer retains constructor, owner preparation and initial E+F timestamp
+segments, their own-work sum, observed span and excluded interleaving/provenance
+gaps. Preparation/setup durations retain their earlier meanings. Moved setup
+measures coordinate rebuilding inside execute without charging the initial
+constructor again. These segments do not provide continuous cold wallclock
+qualification; the consumer independently checks their types and totals.
+
+`benchmarks/pbe0_xc_cold_pairs.py` separately measures fresh-process cold E+F.
+Each observation starts a new interpreter, CUDA context, Calculator, owner and
+density. Primary wallclock runs from process launch through successful process
+completion, including provenance collection and cleanup. Synchronized E/F
+delivery is retained as a separate interval and cannot replace full cold time.
+The explicit `--sdk-source`, loaded library, complete native identity, worker,
+consumer, basis and independent reference are frozen for the campaign. The
+collector may be newer than the SDK; its independent consumer is loaded from
+the collector tree, while production modules come from the frozen SDK.
+Output must be a new file; existing files and input aliases are rejected before
+collection. Collector and consumer refuse Python's `-O`/`-OO` modes so required
+validation cannot be optimized away. Journal errors preserve the primary failure.
+CLI admission protects the historical results trees of both collector and SDK
+before allocation checks, provenance or scientific imports.
+Deploy the collector with its sibling `_retention.py`; its hash is frozen with
+the independent tools, without editing the SDK checkout.
+
+The cold consumer requires original 48/96-atom vectors at `1e-8 Eh` and
+`1e-7 Eh/bohr`, fixed SCF/force256, the original absolute phased work, converged
+full FP64 single-stage PBE0 histories, observed J/K work and equal semantic work
+between arms. Actual precision, operator timeline and cold restart provenance
+are checked. A newly generated native MINAO/Hückel density is a supported cold
+guess; `initial_density_used` alone does not identify warm replay. Retained,
+retried or provisional solves are rejected. Unknown J/K work is incomplete
+evidence. Five complete pairs per
+geometry are required; `--feasibility --repeats 1` only audits readiness and
+cannot establish cold profitability. Both geometries start fresh owners; a
+fresh solve at moved coordinates is distinct from the retained-owner moved
+campaign. Failed children retain negative receipts and are reaped. Profiling
+runs separately from clean timing; this tool does not collect dynamic traffic.
+
+`verify_point_family_pairs` audits independent E/F vectors and fixed work even
+when the measured specialization has no significant endpoint improvement. Its
+successful evidence audit does not qualify a performance default. Promotion
+requires the additional `require_improvement=True` gate for both warm and moved
+replays, along with the remaining source-matched device and cold endpoint gates.
+
 ### Bounded independent point submissions
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:

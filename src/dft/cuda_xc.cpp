@@ -391,6 +391,11 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
 
 bool CudaXcPlan::prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
                                       std::size_t device_budget) {
+  return prepare_spatial_grid(grid, host_budget, device_budget, false);
+}
+
+bool CudaXcPlan::prepare_spatial_grid(const MolecularGrid& grid, std::size_t host_budget,
+                                      std::size_t device_budget, bool recursive_bisection) {
   check_device();
   if (evaluation_started_ || layout_.local_ao || point_batch_arena_ || spatial_grid_)
     throw std::logic_error("spatial XC ordering requires an unused unmapped owner");
@@ -430,7 +435,8 @@ bool CudaXcPlan::prepare_spatial_grid(const MolecularGrid& grid, std::size_t hos
   // drain. Publish no pointer or accounting until the whole permutation lands.
   std::vector<double> staging;
   try {
-    const auto order = spatial_grid_order(grid);
+    const auto order = recursive_bisection ? bisected_grid_order(grid, layout_.tile_points)
+                                           : spatial_grid_order(grid);
     staging.resize(4 * n);
     for (std::size_t p = 0; p < n; ++p) {
       std::copy_n(grid.points().data() + 3 * order[p], 3, staging.data() + 3 * p);
@@ -472,7 +478,8 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
                                                              device_budget, compact, ragged);
   if (plan.tiles == 1) return;
-  const auto launcher = cuda_xc_detail::resolve_point_batch_launcher(layout_.functional);
+  const auto launcher =
+      cuda_xc_detail::resolve_point_batch_launcher(layout_.functional, point_launcher_);
   double* arena = nullptr;
   bool host_oom = false;
   const auto status = generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&arena),

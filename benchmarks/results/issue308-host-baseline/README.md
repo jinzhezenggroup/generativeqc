@@ -1,5 +1,15 @@
 # #308 host-eigensolve baseline, first #206 increment
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue308-host-baseline/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/issue308-host-baseline/raw-evidence.zip
+```
+
+
 No optimization is included. This records the baseline before #309/#310/#311,
 using `15d6936390723edf9e9eb0c91fecde4390490573` plus the exact
 `measured-source.patch` retained in `raw-evidence.zip`. Every sample identifies that patch and the actual
@@ -65,7 +75,7 @@ expanded copies. `summary.json` and this README remain directly reviewable.
 The retention change reruns no scientific experiment and changes no result.
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/issue308-host-baseline \
+python -m tools.unpack_evidence benchmarks/results/issue308-host-baseline --archive .artifacts/retention-archives-20261024/issue308-host-baseline/raw-evidence.zip \
   --output /tmp/issue308-baseline-evidence
 ```
 

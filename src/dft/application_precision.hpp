@@ -149,10 +149,12 @@ inline bool default_mixed_source_proposal(std::size_t aos, std::size_t atoms) no
  * with a fresh FP64 closing pair. The primary provider's screening is unchanged;
  * its strict tail and derivatives cannot borrow this proposal-only lease.
  * Unscreened inputs and unsupported owners retain their prepared predicate.
+ * The 1e-7 proposal floor reduces source work without adding strict Focks in
+ * the qualified endpoints; stronger floors can erase savings through refinement.
  */
 inline double mixed_source_proposal_screening(bool requested, bool eligible,
                                               double prepared) noexcept {
-  return requested && eligible && prepared > 0.0 && prepared < 1e-8 ? 1e-8 : prepared;
+  return requested && eligible && prepared > 0.0 && prepared < 1e-7 ? 1e-7 : prepared;
 }
 
 /** Separate proposal allowance for local pure-J DF. This authorizes shared

@@ -1,5 +1,15 @@
 # RCCSD GPU solver review validation
 
+**Checkout retention (2026-10-24).** The historical `raw-evidence.zip` is preserved in existing Git history rather than in the current checkout. Its byte count and SHA-256 are pinned by the [historical snapshot](../retention-archives-20261024/snapshot.manifest.json); scientific summaries and the per-member manifest stay here. Restore to ignored storage before unpacking:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/rccsd-149-bc-review/raw-evidence.zip \
+  --manifest benchmarks/results/retention-archives-20261024/snapshot.manifest.json \
+  --output .artifacts/retention-archives-20261024/rccsd-149-bc-review/raw-evidence.zip
+```
+
+
 Clean source `b7dcace8263b5a12b5aa9639c47679317fb71cae`, CUDA 12.9.86,
 sm_120, RTX 5090. GPU execution used finite Slurm allocations on `main` with
 `--gres=gpu:5090:1`, preserving scheduler device visibility.
@@ -18,7 +28,7 @@ allocating a CUDA execution context or claiming numerical acceptance.
 `summary.json` retains the numerical maxima; the archive retains every
 result, replay state, source/toolchain manifest, test output and reproduction
 script. Verify it with `python -m tools.unpack_evidence
-benchmarks/results/rccsd-149-bc-review`.
+benchmarks/results/rccsd-149-bc-review --archive .artifacts/retention-archives-20261024/rccsd-149-bc-review/raw-evidence.zip`.
 
 This qualifies correctness of the experimental host-controlled facade only.
 It does not complete #149 B/C: the resident iteration and native registry/API

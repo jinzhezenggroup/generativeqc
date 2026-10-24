@@ -1,0 +1,11 @@
+[
+  {
+    "attempt": "manual-attempt2",
+    "pid": 2763721,
+    "start_ticks": "1707837573",
+    "script": "/inspire/ssd/project/chemicalreaction/czxs25220150/h100-paper-environment-20261024/scripts/build-supervisor-attempt2.py",
+    "script_sha256": "fc64eaf94558f981fff38654d5184c27c1d215f907014ef70f71c393811b9a65",
+    "prelaunch_hosttests": "...\n----------------------------------------------------------------------\nRan 3 tests in 0.003s\n\nOK\n",
+    "scope": "CPU configure/build only; no GPU/science"
+  }
+]
