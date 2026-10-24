@@ -55,6 +55,7 @@ class RuntimeTests(unittest.TestCase):
             "GENERATIVEQC_PROFILE_CACHE": str(self.root / "cache"),
             "GENERATIVEQC_PROFILE": "off",
         }
+        self.env.pop("GQC_TEST_CAPTURE_SCF", None)
 
     def cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -169,6 +170,136 @@ class RuntimeTests(unittest.TestCase):
             for name in ("libgenerativeqc.so", "manifest.json", "evidence.json")
         }
         (directory / "profile.json").write_text(json.dumps(profile))
+
+    def test_run_and_optimize_scf_controls_reach_native_preparation(self) -> None:
+        """Capture public descriptors, then exit before any scientific execution."""
+        if (
+            sys.platform != "linux"
+            or os.environ.get("GENERATIVEQC_TEST_MONOLITHIC") == "1"
+        ):
+            self.skipTest("SCF capture requires the Linux shared-core CLI")
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        self.env["GQC_TEST_CAPTURE_SCF"] = "1"
+        for command in ("run", "optimize"):
+            for method in (
+                "rhf",
+                "uhf",
+                "pbe-rks",
+                "pbe-uks",
+                "mp2",
+                "ump2",
+                "rccsd",
+                "gfn2-xtb",
+            ):
+                correlated = method in ("mp2", "ump2", "rccsd")
+                energy, density = (1e-12, 1e-10) if correlated else (1e-10, 1e-8)
+                screening = 0.0 if correlated or method == "gfn2-xtb" else 1e-14
+                cases = (
+                    ((), energy, density, screening, 100),
+                    (("--energy-tolerance", "3e-11"), 3e-11, density, screening, 100),
+                    (("--density-tolerance", "7e-9"), energy, 7e-9, screening, 100),
+                    (
+                        (
+                            "--energy-tolerance",
+                            "3e-11",
+                            "--density-tolerance",
+                            "7e-9",
+                            "--max-iterations",
+                            "17",
+                        ),
+                        3e-11,
+                        7e-9,
+                        screening,
+                        17,
+                    ),
+                )
+                for (
+                    arguments,
+                    expected_energy,
+                    expected_density,
+                    expected_screening,
+                    iterations,
+                ) in cases:
+                    with self.subTest(
+                        command=command, method=method, arguments=arguments
+                    ):
+                        run = self.cli(
+                            command,
+                            str(SOURCE / "tests/data/h2_bohr.xyz"),
+                            "--units",
+                            "bohr",
+                            "--method",
+                            method,
+                            "--backend",
+                            "cpu",
+                            *(("--stages", method) if command == "optimize" else ()),
+                            *arguments,
+                        )
+                        self.assertEqual(run.returncode, 86, run.stdout + run.stderr)
+                        self.assertEqual(
+                            json.loads(run.stderr),
+                            {
+                                "energy_tolerance": expected_energy,
+                                "density_tolerance": expected_density,
+                                "screening_tolerance": expected_screening,
+                                "max_iterations": iterations,
+                            },
+                        )
+
+    def test_resources_scf_controls_and_cuda_admission(self) -> None:
+        """Check dry-run controls and inputs to both CUDA HF admission paths."""
+        if (
+            sys.platform != "linux"
+            or os.environ.get("GENERATIVEQC_TEST_MONOLITHIC") == "1"
+        ):
+            self.skipTest("SCF capture requires the Linux shared-core CLI")
+        self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
+        self.env["GQC_TEST_CAPTURE_SCF"] = "1"
+        cases = (
+            ((), 1e-10, 1e-8),
+            (("--energy-tolerance", "3e-11"), 3e-11, 1e-8),
+            (("--density-tolerance", "7e-9"), 1e-10, 7e-9),
+            (
+                ("--energy-tolerance", "3e-11", "--density-tolerance", "7e-9"),
+                3e-11,
+                7e-9,
+            ),
+        )
+        for method in ("rhf", "uhf", *KS_INVENTORY_METHODS):
+            backends = (
+                ("cpu", "cuda", "cuda-df") if method in ("rhf", "uhf") else ("cpu",)
+            )
+            for backend in backends:
+                for arguments, energy, density in cases:
+                    with self.subTest(
+                        method=method, backend=backend, arguments=arguments
+                    ):
+                        run = self.resources(
+                            "--method",
+                            method,
+                            "--backend",
+                            "cpu" if backend == "cpu" else "cuda",
+                            *(
+                                ("--density-fitting", "cuda")
+                                if backend == "cuda-df"
+                                else ()
+                            ),
+                            *arguments,
+                        )
+                        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                        controls = json.loads(run.stdout)["controls"]
+                        self.assertEqual(controls["energy_tolerance"], energy)
+                        self.assertEqual(controls["density_tolerance"], density)
+                        self.assertEqual(controls["screening_tolerance"], 1e-14)
+                        self.assertEqual(controls["max_iterations"], 100)
+                        if backend != "cpu":
+                            self.assertEqual(
+                                json.loads(run.stderr),
+                                {
+                                    "energy_tolerance": energy,
+                                    "screening_tolerance": 1e-14,
+                                },
+                            )
 
     def test_canonical_json_matches_python(self) -> None:
         generator = random.Random(20261011)

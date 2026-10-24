@@ -110,7 +110,33 @@ void one_case(unsigned capacity, std::size_t elements, bool normalized) {
   }
 }
 
+void continuation_cases() {
+  using generativeqc::tensor::generated::ordered_history_dot;
+  for (std::size_t elements : {0U, 1U, 255U, 256U, 257U, 1025U}) {
+    std::vector<double> left(elements), right(elements);
+    for (std::size_t i = 0; i < elements; ++i) {
+      left[i] = std::sin(0.13 * (i + 1));
+      right[i] = std::cos(0.07 * (i + 2));
+    }
+    for (double seed : {0.0, -0.03125}) {
+      double expected = seed;
+      for (std::size_t i = 0; i < elements; ++i) expected += left[i] * right[i];
+      for (std::size_t width : {1U, 7U, 256U}) {
+        double actual = seed;
+        for (std::size_t begin = 0; begin < elements; begin += width)
+          actual = ordered_history_dot(left.data() + begin, right.data() + begin,
+                                       std::min(width, elements - begin), actual);
+        if (!same(actual, expected))
+          throw std::runtime_error("transport tiles reassociated the ordered dot");
+      }
+      if (!same(ordered_history_dot(left.data(), right.data(), elements, seed), expected))
+        throw std::runtime_error("ordered continuation changed the scalar recurrence");
+    }
+  }
+}
+
 int main() {
+  continuation_cases();
   unsigned cases = 0;
   for (unsigned capacity = 2; capacity <= 64; ++capacity)
     for (std::size_t elements : {1U, 9U, 37U})

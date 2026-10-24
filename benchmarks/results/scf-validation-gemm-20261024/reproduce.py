@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import lzma
+from collections import Counter
 from pathlib import Path
 from statistics import median
 
@@ -13,6 +14,34 @@ from benchmarks.readme_defaults_report import load_records
 
 ROOT = Path(__file__).resolve().parent
 METHODS = ("pbe", "pbe0", "b3lyp", "r2scan", "r2scan-3c", "m06-2x", "wb97m-v")
+
+
+def validate_populations(decoded: dict) -> None:
+    """Require every claimed method/mode/arm, without duplicate replacements."""
+    expected_cohorts = set()
+    for mode in ("df", "direct"):
+        for kind in ("pairs", "matrix", "moved"):
+            cohort = (
+                f"validation-gemm-pr-moved-{mode}" if kind == "moved"
+                else f"validation-gemm-pr-gemm-{kind}-{mode}"
+            )
+            expected_cohorts.add(cohort)
+            records = decoded[cohort].values()
+            if kind == "pairs":
+                actual = Counter((r["method"], r["mode"], r["arm"],
+                                  r["validation_gemm_control"]["selection"])
+                                 for r in records)
+                expected = Counter({(m, mode, "standard", a): 5
+                                    for m in ("pbe", "pbe0", "r2scan-3c")
+                                    for a in ("0", "1")})
+            else:
+                actual = Counter((r["method"], r["mode"], r["arm"])
+                                 for r in records)
+                methods = METHODS if kind == "matrix" else ("pbe", "r2scan-3c")
+                expected = Counter({(m, mode, a): 1 for m in methods
+                                    for a in ("standard", "fast")})
+            assert actual == expected, (cohort, actual, expected)
+    assert set(decoded) == expected_cohorts, set(decoded)
 
 
 def read(name: str) -> dict:
@@ -77,6 +106,7 @@ def main() -> None:
             report["qualification"][key] = verdict
             report["qualified_calls"] += len(record["samples"])
             report["work"][key] = [(s["phase"], s["iterations"], s["fock_builds"]) for s in record["samples"]]
+    validate_populations(decoded)
     assert report["qualified_calls"] == packet["complete_calls"] == 328
     for mode in ("df", "direct"):
         matrix = decoded[f"validation-gemm-pr-gemm-matrix-{mode}"]

@@ -1264,36 +1264,40 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
   // instead use its complete shape-derived response floor if that is what
   // admits a resident value owner within this unchanged total envelope.
   const auto preferred = std::max(response_floor, budget.total_bytes / 5);
+  auto fallback = budget;
   for (const auto response : {preferred, response_floor}) {
     if (response != preferred && (restricted_rank || !allow_zero_rank_coulomb)) break;
     if (response >= budget.response_bytes || response >= budget.total_bytes) continue;
     const auto value = budget.total_bytes - response;
     try {
-      (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
-                                              source_device_bytes, 0, false);
+      const auto plan = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                                          source_device_bytes, 0, false);
+      auto result = budget;
+      result.value_bytes = value;
+      result.response_bytes = response;
+      if (plan.value_storage.rank_capacity >= restricted_rank) return result;
+      // The optional-U planner can return packed B with rank zero. Keep that
+      // valid bounded fallback, but do not mistake it for the requested final
+      // occupied projection: losing U multiplies downstream force work.
+      fallback = result;
     } catch (const DensityFittingBudgetError&) {
       continue;
     }
-    auto result = budget;
-    result.value_bytes = value;
-    result.response_bytes = response;
-    return result;
   }
   // A geometry rebuild observes persistent CUDA modules and force arenas that
   // were absent from the first preparation. The generic fractional margin can
-  // then drop an otherwise feasible packed B and multiply every subsequent J
-  // build's work. For this method-authenticated pure-J owner only, borrow just
-  // the minimum resident allowance from that extra margin. The absolute live
-  // headroom, explicit limits and complete response floor remain hard bounds.
-  if (!restricted_rank && allow_zero_rank_coulomb &&
-      budget.observed_free_bytes > budget.reserved_headroom_bytes) {
+  // then drop packed B or its complete method-owned U and multiply later
+  // value/force work. Borrow only the minimum authenticated resident allowance
+  // from that fractional margin. The observed free bytes, absolute reserved
+  // headroom, explicit caps and complete response floor remain hard bounds.
+  if (budget.observed_free_bytes > budget.reserved_headroom_bytes) {
     const auto available = budget.observed_free_bytes - budget.reserved_headroom_bytes;
     if (available > response_floor && available > budget.total_bytes) {
       const auto fits = [&](std::size_t value) {
         try {
-          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value, source_device_bytes, 0,
-                                                  false);
-          return true;
+          const auto plan = plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                                              source_device_bytes, 0, false);
+          return plan.value_storage.rank_capacity >= restricted_rank;
         } catch (const DensityFittingBudgetError&) {
           return false;
         }
@@ -1301,8 +1305,9 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       auto upper = available - response_floor;
       if (fits(upper)) {
         // Reuse the actual planner rather than duplicating its allocation
-        // formula. Rank zero has monotone resident admission; byte bisection
-        // spends no GPU work and preserves the smallest sufficient allowance.
+        // formula. Complete B/U admission is monotone even when the planner
+        // can drop optional U. Bisection charges the smallest sufficient value
+        // allowance and performs no device work or allocation probes.
         std::size_t lower = 1;
         while (lower < upper) {
           const auto middle = lower + (upper - lower) / 2;
@@ -1319,7 +1324,7 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       }
     }
   }
-  return budget;
+  return fallback;
 }
 
 DensityFittingTilePlan plan_requested_density_fitting_tiles(

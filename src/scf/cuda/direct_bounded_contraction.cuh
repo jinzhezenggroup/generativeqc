@@ -85,17 +85,18 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
 #undef GENERATIVEQC_BOUNDED_FORCE_CASE
 }
 
-template <bool Unrestricted>
+template <bool Unrestricted, unsigned MaximumAngularOrder = 12>
 __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_scaled(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* forces, double exchange_coefficient,
     generativeqc::integrals::CoulombRange range, double omega, std::size_t subtile, unsigned lane) {
-#define GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(order)                                            \
-  case order:                                                                                   \
-    contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
-        batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
-        exchange_coefficient, range, omega, subtile, lane);                                     \
+#define GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(order)                                              \
+  case order:                                                                                     \
+    if constexpr (order <= MaximumAngularOrder)                                                   \
+      contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
+          batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
+          exchange_coefficient, range, omega, subtile, lane);                                     \
     break
   switch (angular_order) {
     GENERATIVEQC_BOUNDED_RANGE_FORCE_CASE(0);
@@ -125,7 +126,8 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_
  * operator family and omega as constants. Custom/undeclared omega values continue
  * through contract_bounded_direct_force_subtile_range_scaled().
  */
-template <bool Unrestricted, generativeqc::integrals::CoulombRange Range, int OmegaMilli>
+template <bool Unrestricted, generativeqc::integrals::CoulombRange Range, int OmegaMilli,
+          unsigned MaximumAngularOrder = 12>
 __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_aot_scaled(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
@@ -135,11 +137,12 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_range_
                 Range == generativeqc::integrals::CoulombRange::Long);
   static_assert(OmegaMilli > 0);
   constexpr double omega = static_cast<double>(OmegaMilli) / 1000.0;
-#define GENERATIVEQC_BOUNDED_RANGE_AOT_FORCE_CASE(order)                                        \
-  case order:                                                                                   \
-    contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
-        batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
-        exchange_coefficient, Range, omega, subtile, lane);                                     \
+#define GENERATIVEQC_BOUNDED_RANGE_AOT_FORCE_CASE(order)                                          \
+  case order:                                                                                     \
+    if constexpr (order <= MaximumAngularOrder)                                                   \
+      contract_two_electron_force_quartet_subtile_range_scaled<Unrestricted, order>(              \
+          batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
+          exchange_coefficient, Range, omega, subtile, lane);                                     \
     break
   switch (angular_order) {
     GENERATIVEQC_BOUNDED_RANGE_AOT_FORCE_CASE(0);

@@ -69,16 +69,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     range_body = " ".join(consumer[range_begin:range_end].split())
     assert "detail::BoundedDirectBlockDomain block_domain" in range_body
     assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
-    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
-    bounded_begin = bounded.index(
-        "void launch_bounded_direct_range_exchange_force_kernel("
-    )
-    bounded_end = bounded.index(
-        "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
-    )
-    bounded_body = " ".join(bounded[bounded_begin:bounded_end].split())
-    assert "detail::BoundedDirectBlockDomain block_domain" in bounded_body
-    assert bounded_body.count("false, true, block_domain);") == 2
+    # Compiled range-dispatch tests cover domain/omega/force-purpose forwarding
+    # for every admitted basis bound; the number of template launches is not ABI.
 
 
 def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:

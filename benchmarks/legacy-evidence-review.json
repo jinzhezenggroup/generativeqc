@@ -5,6 +5,11 @@
       "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
       "review_document": "benchmarks/results/ks-resident-final-validation-default-20261011/README.md"
     },
+    "direct-phase-moved-20261023": {
+      "owner": "#2678 source-matched Direct PBE0/48 public-observable E+F slice",
+      "reason": "Full source/SDK and scientific environment manifests retain exact dependency bytes, Git modes/OIDs, compiler commands and original identities for the bounded dual-engine cohort; no executable SDK binaries, policy change or parent-scope promotion.",
+      "review_document": "benchmarks/results/direct-phase-moved-20261023/README.md"
+    },
     "issue377-379-df": {
       "owner": "issue377-379-df",
       "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -227,6 +232,11 @@
       "lossless_record": "benchmarks/results/local-autotune-136/evidence.json.xz",
       "recovery_manifest": "benchmarks/results/unified-k-work-20261009/storage-recovery.json"
     },
+    "cbs-reference-errors-cpu-20261023": {
+      "owner": "issue2681 bounded frozen-source native CPU reference-error slice",
+      "reason": "Complete independent H2/water records retain all full-precision native endpoint returns, original progress/logs, modes, source/library/build provenance and failed capacity preflights. All original raw bytes remain recoverable; no historical rows, thresholds, scientific gates, per-file or review budgets are changed.",
+      "review_document": "benchmarks/results/cbs-reference-errors-cpu-20261023/README.md"
+    },
     "cpu-eri-coulomb-20261001": {
       "owner": "cpu-eri-coulomb-20261001",
       "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
@@ -342,6 +352,16 @@
       "reason": "Lossless complete endpoint records retain all 328 independently checked calls, paired work and statistics, moved references, full measured source inputs, build and sanitizer evidence, and failed attempts. Historical JSON compression preserves every original byte without changing storage limits.",
       "review_document": "benchmarks/results/scf-validation-gemm-20261024/README.md"
     },
+    "wb-range-reuse-20261023": {
+      "owner": "Bounded WB full cold energy and force endpoint qualification",
+      "reason": "Lossless full native/GPU4 paired and moved trajectories, exact source inventory delta and cache/build/validation provenance. Historical receipts are compacted with byte-exact restoration; no storage cap changes.",
+      "review_document": "benchmarks/results/wb-range-reuse-20261023/README.md"
+    },
+    "occupied-xc-default-20261024": {
+      "owner": "CUDA KS / occupied-XC maintainers (#2703)",
+      "review_document": "benchmarks/results/occupied-xc-default-20261024/README.md",
+      "reason": "Lossless complete observables, all noisy and failed-control cohorts, independent qualification inputs, frozen source/binary bindings and exact protocols are needed to recheck the guarded occupied-XC default. A 730016-byte XZ bundle avoids copying full source tarballs, binaries and Nsight databases into Git; those stay in the existing ignored qualification archive. No acceptance samples or numerical gates are removed."
+    },
     "xc-bounded-cross-20261024": {
       "owner": "bounded FP64 XC cross-product overflow proof",
       "reason": "Lossless evidence retains all 352 independently qualified complete calls, full forces, moved references, both measured source manifests, native arithmetic/resource/sanitizer qualification and execution recipes. Thirty-three older JSON records are compressed without changing decoded bytes or storage limits.",
@@ -356,6 +376,22 @@
       "role": "diagnostic-and-validation-receipts",
       "bytes": 140660,
       "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "benchmarks/results/direct-phase-moved-20261023/scientific-environment.json.xz",
+      "family": "direct-phase-moved-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "scientific-environment-provenance",
+      "bytes": 610368,
+      "sha256": "243fc173c6cfa04e214abf08cb7ac407216a9df931ab3251cfecdd47bd4d6b77"
+    },
+    {
+      "path": "benchmarks/results/direct-phase-moved-20261023/sdk.json.xz",
+      "family": "direct-phase-moved-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "source-sdk-build-provenance",
+      "bytes": 863856,
+      "sha256": "09b6d6277fa2a5d60f5a8775ef425dd81cf8670a5573ce3a11954f713fca39eb"
     },
     {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
@@ -380,6 +416,22 @@
       "role": "default-solver-qualification-with-retained-model-error-failures",
       "bytes": 148780,
       "sha256": "08387a9d95d372d819f0574e8c86a5261cffb90bc3cd0ba58aefdacf4a4d4350"
+    },
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-water.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 168804,
+      "sha256": "8ddf5dcbb642f7a298dfc92457b4b1db4a3c18b975c69e73c79dfd4a69f85d15",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
+    },
+    {
+      "path": "benchmarks/results/cbs-reference-errors-cpu-20261023/raw-h2.json.xz",
+      "family": "cbs-reference-errors-cpu-20261023",
+      "bytes": 263412,
+      "sha256": "8cd40f90369a130b13e229f1a6ec444ee6164e015dd586875ced9f202999339e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "lossless original CPU fixture endpoints, complete progress/logs, inputs and process/mode identities"
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
@@ -748,6 +800,22 @@
       "role": "complete-source-build-test-and-execution-provenance",
       "bytes": 608544,
       "sha256": "0ddb9f78f3a8b4fdb6545d18cb6a77569c6660a039afcf93028292a41fd431d0"
+    },
+    {
+      "path": "benchmarks/results/wb-range-reuse-20261023/receipts.json.xz",
+      "family": "wb-range-reuse-20261023",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete independently qualified endpoints, moved controls, exact source delta and validation provenance",
+      "bytes": 246592,
+      "sha256": "c5dec36131a0344ff6aa61e1e1e76bbf34b23955c31515c7efa24d7c7f1bd79a"
+    },
+    {
+      "path": "benchmarks/results/occupied-xc-default-20261024/receipts.json.xz",
+      "family": "occupied-xc-default-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete E/F receipts, source manifests, tests, protocols and selected trace evidence for default promotion; includes original noisy cohorts and initial failed policy assertion.",
+      "bytes": 730016,
+      "sha256": "485742900892278eee58d927c699711ba336d1fb5d14da352648fda98482546d"
     },
     {
       "path": "benchmarks/results/xc-bounded-cross-20261024/endpoints.json.xz",

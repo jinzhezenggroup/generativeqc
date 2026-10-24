@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "diis_affine_fixture.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
 
 namespace {
@@ -298,6 +299,59 @@ void check_normalized_retirement(unsigned spins) {
       throw std::runtime_error("dependent DIIS fallback changed effective Fock");
   }
 }
+/** Replay an independently captured metric through the production CUDA solve.
+ * A Fock common to all histories must survive affine extrapolation unchanged,
+ * even across wrapped retirement. Poisoned metrics must retain current Fock.
+ */
+void check_affine_retirement(unsigned spins, unsigned head, bool poisoned) {
+  constexpr unsigned n = 3, history = 4, batch = 2;
+  const unsigned count = poisoned ? 2 : 3;
+  const unsigned first = (head + 1 + history - count) % history;
+  const std::size_t elements = n * n * spins;
+  const double poison = std::numeric_limits<double>::quiet_NaN();
+  std::vector<double> current(batch * elements, poison);
+  std::vector<double> stored(batch * history * elements, poison);
+  std::vector<double> gram(batch * history * history, poison);
+  std::fill_n(current.begin(), elements, 7.0);
+  for (unsigned row = 0; row < count; ++row) {
+    const auto slot = (first + row) % history;
+    std::fill_n(stored.begin() + slot * elements, elements, 7.0);
+    for (unsigned column = 0; column < count; ++column)
+      if (!poisoned)
+        gram[slot * history + (first + column) % history] =
+            ill_conditioned_diis_gram[row * 3 + column];
+  }
+  Device<double> d_fock(current), d_residual(current), d_fock_history(stored);
+  Device<double> d_residual_history(stored), d_gram(gram);
+  Device<double> d_linear(std::vector<double>(batch * (history + 1) * (history + 1)));
+  Device<double> d_coefficients(std::vector<double>(batch * (history + 1), poison));
+  Device<double> d_effective(std::vector<double>(batch * elements, -9876));
+  Device<std::uint8_t> d_active(std::vector<std::uint8_t>{1, 0});
+  Device<std::uint32_t> d_count(std::vector<std::uint32_t>{count - 1, 0});
+  Device<std::uint32_t> d_head(std::vector<std::uint32_t>{head, 0});
+  generativeqc::scf::cuda_execution::launch_update_diis_kernel(
+      batch, 32, 0, nullptr, batch, n, spins, history, d_fock.data, d_residual.data, d_active.data,
+      d_fock_history.data, d_residual_history.data, d_linear.data, d_coefficients.data,
+      d_count.data, d_head.data, d_effective.data, true, false, nullptr, 0, d_gram.data);
+  check(cudaGetLastError());
+  std::vector<double> effective(batch * elements);
+  std::vector<std::uint32_t> counts(batch), heads(batch);
+  check(cudaMemcpy(effective.data(), d_effective.data, effective.size() * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  check(cudaMemcpy(counts.data(), d_count.data, batch * sizeof(std::uint32_t),
+                   cudaMemcpyDeviceToHost));
+  check(
+      cudaMemcpy(heads.data(), d_head.data, batch * sizeof(std::uint32_t), cudaMemcpyDeviceToHost));
+  if (counts != std::vector<std::uint32_t>{count, 0} ||
+      heads != std::vector<std::uint32_t>{(head + 1) % history, 0})
+    throw std::runtime_error(
+        "affine solve unnecessarily retired history or changed an inactive ring");
+  for (std::size_t i = 0; i < effective.size(); ++i) {
+    const double expected = i < elements ? 7.0 : -9876;
+    if (!std::isfinite(effective[i]) || std::abs(effective[i] - expected) > 1e-10)
+      throw std::runtime_error("affine DIIS changed a common Fock or inactive neighbor");
+  }
+}
 }  // namespace
 
 int main() {
@@ -318,6 +372,8 @@ int main() {
     for (unsigned spins : {1U, 2U}) {
       check_incremental_history(spins);
       check_normalized_retirement(spins);
+      for (unsigned head : {0U, 2U, 3U})
+        for (bool poisoned : {false, true}) check_affine_retirement(spins, head, poisoned);
     }
     std::cout << "validated DIIS partials and incremental circular histories\n";
   } catch (const std::exception& error) {
