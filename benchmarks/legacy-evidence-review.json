@@ -12,7 +12,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue308-device-diis": {
@@ -61,7 +61,7 @@
       "review_document": "benchmarks/results/df-one-step-warm-20260926/README.md"
     },
     "bounded-dft-schedules-2475-2479": {
-      "owner": "bounded DFT scheduling qualification for #2475–#2479",
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
       "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
       "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     },
@@ -157,7 +157,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "df-md-charge-splits-20261023": {
@@ -386,6 +386,11 @@
       "owner": "Fast hybrid proposal-source floor refinement",
       "reason": "Two separate source-bound cohorts retain all 366 complete E/F endpoints, shared independent references, source/binary/AOT identities and semantic work. All 69 pilot endpoints and 15 pre-execution setup failures remain separate. Explicit replay gates survive optimized Python; existing storage limits are unchanged.",
       "review_document": "benchmarks/results/fast-source-floor-20261024/README.md"
+    },
+    "df-charge-partitions-20261024": {
+      "owner": "bounded automatic SM 12.0 DF charge-source partitions",
+      "reason": "Lossless complete 242-call/83-record qualification retains all paired populations, seven-method Standard/Fast Direct/DF and moved/larger/profiled endpoints, complete force vectors and independent reference receipts. Source manifests reconstruct byte-exactly from the retained bounded-XC base; all original failed attempts remain in provenance. Six historical JSONs are losslessly gzip-compressed within unchanged storage caps.",
+      "review_document": "benchmarks/results/df-charge-partitions-20261024/README.md"
     }
   },
   "files": [
@@ -892,6 +897,14 @@
       "role": "integrated-source-endpoints-with-authenticated-reference-reuse",
       "bytes": 145788,
       "sha256": "003b9fbf7fe750c6585b90349bd40c02a2b2a40da40e310e5a5ff35c7101b081"
+    },
+    {
+      "path": "benchmarks/results/df-charge-partitions-20261024/endpoints.json.xz",
+      "family": "df-charge-partitions-20261024",
+      "classification": "required-compact-accepted-evidence",
+      "role": "complete-endpoints-independent-moved-and-larger-reference-contracts",
+      "bytes": 392256,
+      "sha256": "49175505473966880804d22ff7b8c1b5d882dd50e2db104fa7a534790df79715"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
